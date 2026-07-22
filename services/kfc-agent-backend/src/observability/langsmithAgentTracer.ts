@@ -1,8 +1,15 @@
 import { Client, RunTree } from 'langsmith';
 import { getLangchainCallbacks } from 'langsmith/langchain';
 import { withRunTree } from 'langsmith/traceable';
+import { BaseCallbackHandler } from '@langchain/core/callbacks/base';
 import type { Callbacks } from '@langchain/core/callbacks/manager';
-import type { AgentTraceSpan, AgentTraceSpanInput, AgentTracer } from './agentTracing.js';
+import { awaitAllCallbacks } from '@langchain/core/callbacks/promises';
+import { LangChainTracer } from '@langchain/core/tracers/tracer_langchain';
+import type {
+  AgentTraceSpan,
+  AgentTraceSpanInput,
+  AgentTracer,
+} from './agentTracing.js';
 
 export interface LangSmithRunConfig {
   name: string;
@@ -12,6 +19,7 @@ export interface LangSmithRunConfig {
   tags?: string[];
   project_name?: string;
   client?: Client;
+  tracingEnabled?: boolean;
 }
 
 export interface LangSmithRunLike {
@@ -32,203 +40,314 @@ export interface LangSmithAgentTracerOptions {
   autoBatchTracing?: boolean;
 }
 
-const traceFailureError = 'agent_trace_failed_closed';
-const opaqueCorrelationIdPattern =
-  /^[A-Za-z0-9][A-Za-z0-9._:/-]{0,255}$/u;
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return (
-    typeof value === 'object' &&
-    value !== null &&
-    !Array.isArray(value)
-  );
-}
-
-function safeRawEventMetadata(
-  value: unknown,
-): Record<string, unknown> | undefined {
-  if (
-    !isRecord(value) ||
-    value.type !== 'record' ||
-    typeof value.count !== 'number' ||
-    !Number.isSafeInteger(value.count) ||
-    value.count < 0 ||
-    typeof value.digest !== 'string' ||
-    !/^[0-9a-f]{64}$/u.test(value.digest)
-  ) {
-    return undefined;
-  }
-  return {
-    type: value.type,
-    count: value.count,
-    digest: value.digest,
-  };
-}
-
-function privacySafeLangSmithMetadata(
-  metadata: Record<string, unknown>,
-): Record<string, unknown> {
-  const safe: Record<string, unknown> = {};
-  for (const key of ['session_id', 'scenarioId'] as const) {
-    if (
-      typeof metadata[key] === 'string' &&
-      opaqueCorrelationIdPattern.test(metadata[key])
-    ) {
-      safe[key] = metadata[key];
-    }
-  }
-  if (
-    typeof metadata.session_id_digest === 'string' &&
-    /^[0-9a-f]{64}$/u.test(metadata.session_id_digest)
-  ) {
-    safe.session_id_digest = metadata.session_id_digest;
-  }
-  if (metadata.probeRunId === null) {
-    safe.probeRunId = metadata.probeRunId;
-  } else if (
-    typeof metadata.probeRunId === 'string' &&
-    opaqueCorrelationIdPattern.test(metadata.probeRunId)
-  ) {
-    safe.probeRunId = metadata.probeRunId;
-  }
-  const rawEvent = safeRawEventMetadata(metadata.rawEvent);
-  if (rawEvent) safe.rawEvent = rawEvent;
-  return safe;
-}
-
-function privacySafeLangSmithError(
-  values: Record<string, unknown>,
-): Record<string, unknown> {
-  return Object.hasOwn(values, 'error')
-    ? { error: traceFailureError }
-    : {};
-}
-
-const safeProviderAttemptPurposes = new Set([
-  'agent_decision',
-  'response_composition',
-]);
-const safeProviderAttemptOutcomes = new Set([
-  'error',
-  'invalid_response',
-  'success',
-]);
-const safeProviderErrorClasses = new Set([
-  'aborted',
-  'client_error',
-  'network_error',
-  'rate_limited',
-  'server_error',
-  'timeout',
-  'unknown',
-]);
-const safeSpanStatuses = new Set([
-  'completed',
-  'interrupted',
-  'paused',
-]);
-const safeExecutionOutcomes = new Set([
-  'error',
-  'success',
-]);
-const safeGraphDestinations = new Set([
-  '__end__',
-  'call_model',
-  'execute_tools',
-  'execute_trusted_action',
-  'fail_closed',
-  'finalize_response',
-  'persist_and_project',
-  'prepare_structured_action',
-  'record_provider_retry',
-  'record_semantic_correction',
-  'request_approval',
-  'revalidate_approval',
-  'validate_tool_calls',
-]);
-
-function safeBoundedInteger(
-  value: unknown,
-  maximum: number,
-): number | undefined {
-  return (
-      typeof value === 'number' &&
-      Number.isSafeInteger(value) &&
-      value >= 0 &&
-      value <= maximum
-    )
-    ? value
-    : undefined;
-}
-
-function copySafeEnum(
-  target: Record<string, unknown>,
-  source: Record<string, unknown>,
-  key: string,
-  allowed: ReadonlySet<string>,
-): void {
-  const value = source[key];
-  if (typeof value === 'string' && allowed.has(value)) {
-    target[key] = value;
-  }
-}
-
-/**
- * LangSmith applies this function to every explicit span and native callback
- * output before transport. Keep only bounded control-flow evidence. Raw model
- * generations, customer prose, tool arguments/results, state, and errors are
- * intentionally dropped even if a caller accidentally supplies them.
- */
-export function privacySafeLangSmithOutputs(
-  outputs: Record<string, unknown>,
-): Record<string, unknown> {
-  const safe: Record<string, unknown> = {};
-  const attempt = safeBoundedInteger(outputs.attempt, 6);
-  if (attempt !== undefined) safe.attempt = attempt;
-  const toolCallCount = safeBoundedInteger(outputs.toolCallCount, 100);
-  if (toolCallCount !== undefined) safe.toolCallCount = toolCallCount;
-  for (const key of [
-    'emittedFailure',
-    'emittedValidationError',
-    'retryable',
-  ] as const) {
-    if (typeof outputs[key] === 'boolean') safe[key] = outputs[key];
-  }
-  copySafeEnum(
-    safe,
-    outputs,
-    'purpose',
-    safeProviderAttemptPurposes,
-  );
-  copySafeEnum(
-    safe,
-    outputs,
-    'outcome',
-    safeProviderAttemptOutcomes,
-  );
-  copySafeEnum(
-    safe,
-    outputs,
-    'errorClass',
-    safeProviderErrorClasses,
-  );
-  copySafeEnum(safe, outputs, 'status', safeSpanStatuses);
-  copySafeEnum(
-    safe,
-    outputs,
-    'executionOutcome',
-    safeExecutionOutcomes,
-  );
-  copySafeEnum(
-    safe,
-    outputs,
-    'destination',
-    safeGraphDestinations,
-  );
-  return safe;
-}
-
 type PendingTraceOperation = () => Promise<void>;
+
+function traceError(error: unknown): string {
+  if (error instanceof Error) return error.stack ?? error.message;
+  return String(error);
+}
+
+type NativeRun = ReturnType<LangChainTracer['_addRunToRunMap']>;
+
+interface NativeLifecycleState {
+  preferredTracer: LangChainTracer;
+  run?: NativeRun;
+  start?: Promise<unknown>;
+  terminal?: Promise<unknown>;
+}
+
+class NativeLifecycleCoordinator {
+  private readonly states = new Map<string, NativeLifecycleState>();
+
+  create(
+    runId: string,
+    tracer: LangChainTracer,
+    create: () => NativeRun,
+  ): NativeRun {
+    const existing = this.states.get(runId);
+    if (existing) {
+      existing.preferredTracer = tracer;
+      if (existing.run) return existing.run;
+      const run = create();
+      existing.run = run;
+      return run;
+    }
+
+    const run = create();
+    this.states.set(runId, { preferredTracer: tracer, run });
+    return run;
+  }
+
+  start<T>(
+    runId: string,
+    tracer: LangChainTracer,
+    invoke: (preferredTracer: LangChainTracer) => Promise<T>,
+  ): Promise<T> {
+    const state = this.state(runId, tracer);
+    state.start ??= invoke(state.preferredTracer);
+    return state.start as Promise<T>;
+  }
+
+  terminal<T>(
+    runId: string,
+    tracer: LangChainTracer,
+    invoke: (preferredTracer: LangChainTracer) => Promise<T>,
+  ): Promise<T> {
+    const state = this.state(runId, tracer);
+    state.terminal ??= invoke(state.preferredTracer);
+    return state.terminal as Promise<T>;
+  }
+
+  private state(runId: string, tracer: LangChainTracer): NativeLifecycleState {
+    const existing = this.states.get(runId);
+    if (existing) return existing;
+    const state = { preferredTracer: tracer };
+    this.states.set(runId, state);
+    return state;
+  }
+}
+
+class NativeLifecycleLangChainTracer extends BaseCallbackHandler {
+  override readonly name = 'langchain_tracer';
+
+  constructor(
+    private readonly tracer: LangChainTracer,
+    private readonly lifecycle: NativeLifecycleCoordinator,
+  ) {
+    super({
+      ignoreLLM: tracer.ignoreLLM,
+      ignoreChain: tracer.ignoreChain,
+      ignoreAgent: tracer.ignoreAgent,
+      ignoreRetriever: tracer.ignoreRetriever,
+      ignoreCustomEvent: tracer.ignoreCustomEvent,
+      raiseError: tracer.raiseError,
+      _awaitHandler: tracer.awaitHandlers,
+    });
+  }
+
+  copyWithTracingConfig(
+    input: Parameters<LangChainTracer['copyWithTracingConfig']>[0],
+  ): NativeLifecycleLangChainTracer {
+    return new NativeLifecycleLangChainTracer(
+      this.tracer.copyWithTracingConfig(input),
+      this.lifecycle,
+    );
+  }
+
+  getRunTreeWithTracingConfig(
+    ...args: Parameters<LangChainTracer['getRunTreeWithTracingConfig']>
+  ): ReturnType<LangChainTracer['getRunTreeWithTracingConfig']> {
+    return this.tracer.getRunTreeWithTracingConfig(...args);
+  }
+
+  updateFromRunTree(
+    ...args: Parameters<LangChainTracer['updateFromRunTree']>
+  ): ReturnType<LangChainTracer['updateFromRunTree']> {
+    return this.tracer.updateFromRunTree(...args);
+  }
+
+  _addRunToRunMap(
+    ...args: Parameters<LangChainTracer['_addRunToRunMap']>
+  ): ReturnType<LangChainTracer['_addRunToRunMap']> {
+    return this.tracer._addRunToRunMap(...args);
+  }
+
+  _createRunForLLMStart(
+    ...args: Parameters<LangChainTracer['_createRunForLLMStart']>
+  ): ReturnType<LangChainTracer['_createRunForLLMStart']> {
+    return this.lifecycle.create(args[2], this.tracer, () =>
+      this.tracer._createRunForLLMStart(...args),
+    );
+  }
+
+  override handleLLMStart(
+    ...args: Parameters<LangChainTracer['handleLLMStart']>
+  ): ReturnType<LangChainTracer['handleLLMStart']> {
+    return this.lifecycle.start(args[2], this.tracer, (tracer) =>
+      tracer.handleLLMStart(...args),
+    );
+  }
+
+  _createRunForChatModelStart(
+    ...args: Parameters<LangChainTracer['_createRunForChatModelStart']>
+  ): ReturnType<LangChainTracer['_createRunForChatModelStart']> {
+    return this.lifecycle.create(args[2], this.tracer, () =>
+      this.tracer._createRunForChatModelStart(...args),
+    );
+  }
+
+  override handleChatModelStart(
+    ...args: Parameters<LangChainTracer['handleChatModelStart']>
+  ): ReturnType<LangChainTracer['handleChatModelStart']> {
+    return this.lifecycle.start(args[2], this.tracer, (tracer) =>
+      tracer.handleChatModelStart(...args),
+    );
+  }
+
+  override handleLLMEnd(
+    ...args: Parameters<LangChainTracer['handleLLMEnd']>
+  ): ReturnType<LangChainTracer['handleLLMEnd']> {
+    return this.lifecycle.terminal(args[1], this.tracer, (tracer) =>
+      tracer.handleLLMEnd(...args),
+    );
+  }
+
+  override handleLLMError(
+    ...args: Parameters<LangChainTracer['handleLLMError']>
+  ): ReturnType<LangChainTracer['handleLLMError']> {
+    return this.lifecycle.terminal(args[1], this.tracer, (tracer) =>
+      tracer.handleLLMError(...args),
+    );
+  }
+
+  _createRunForChainStart(
+    ...args: Parameters<LangChainTracer['_createRunForChainStart']>
+  ): ReturnType<LangChainTracer['_createRunForChainStart']> {
+    return this.lifecycle.create(args[2], this.tracer, () =>
+      this.tracer._createRunForChainStart(...args),
+    );
+  }
+
+  override handleChainStart(
+    ...args: Parameters<LangChainTracer['handleChainStart']>
+  ): ReturnType<LangChainTracer['handleChainStart']> {
+    return this.lifecycle.start(args[2], this.tracer, (tracer) =>
+      tracer.handleChainStart(...args),
+    );
+  }
+
+  override handleChainEnd(
+    ...args: Parameters<LangChainTracer['handleChainEnd']>
+  ): ReturnType<LangChainTracer['handleChainEnd']> {
+    return this.lifecycle.terminal(args[1], this.tracer, (tracer) =>
+      tracer.handleChainEnd(...args),
+    );
+  }
+
+  override handleChainError(
+    ...args: Parameters<LangChainTracer['handleChainError']>
+  ): ReturnType<LangChainTracer['handleChainError']> {
+    return this.lifecycle.terminal(args[1], this.tracer, (tracer) =>
+      tracer.handleChainError(...args),
+    );
+  }
+
+  _createRunForToolStart(
+    ...args: Parameters<LangChainTracer['_createRunForToolStart']>
+  ): ReturnType<LangChainTracer['_createRunForToolStart']> {
+    return this.lifecycle.create(args[2], this.tracer, () =>
+      this.tracer._createRunForToolStart(...args),
+    );
+  }
+
+  override handleToolStart(
+    ...args: Parameters<LangChainTracer['handleToolStart']>
+  ): ReturnType<LangChainTracer['handleToolStart']> {
+    return this.lifecycle.start(args[2], this.tracer, (tracer) =>
+      tracer.handleToolStart(...args),
+    );
+  }
+
+  override handleToolEnd(
+    ...args: Parameters<LangChainTracer['handleToolEnd']>
+  ): ReturnType<LangChainTracer['handleToolEnd']> {
+    return this.lifecycle.terminal(args[1], this.tracer, (tracer) =>
+      tracer.handleToolEnd(...args),
+    );
+  }
+
+  override handleToolError(
+    ...args: Parameters<LangChainTracer['handleToolError']>
+  ): ReturnType<LangChainTracer['handleToolError']> {
+    return this.lifecycle.terminal(args[1], this.tracer, (tracer) =>
+      tracer.handleToolError(...args),
+    );
+  }
+
+  _createRunForRetrieverStart(
+    ...args: Parameters<LangChainTracer['_createRunForRetrieverStart']>
+  ): ReturnType<LangChainTracer['_createRunForRetrieverStart']> {
+    return this.lifecycle.create(args[2], this.tracer, () =>
+      this.tracer._createRunForRetrieverStart(...args),
+    );
+  }
+
+  override handleRetrieverStart(
+    ...args: Parameters<LangChainTracer['handleRetrieverStart']>
+  ): ReturnType<LangChainTracer['handleRetrieverStart']> {
+    return this.lifecycle.start(args[2], this.tracer, (tracer) =>
+      tracer.handleRetrieverStart(...args),
+    );
+  }
+
+  override handleRetrieverEnd(
+    ...args: Parameters<LangChainTracer['handleRetrieverEnd']>
+  ): ReturnType<LangChainTracer['handleRetrieverEnd']> {
+    return this.lifecycle.terminal(args[1], this.tracer, (tracer) =>
+      tracer.handleRetrieverEnd(...args),
+    );
+  }
+
+  override handleRetrieverError(
+    ...args: Parameters<LangChainTracer['handleRetrieverError']>
+  ): ReturnType<LangChainTracer['handleRetrieverError']> {
+    return this.lifecycle.terminal(args[1], this.tracer, (tracer) =>
+      tracer.handleRetrieverError(...args),
+    );
+  }
+
+  override handleAgentAction(
+    ...args: Parameters<LangChainTracer['handleAgentAction']>
+  ): ReturnType<LangChainTracer['handleAgentAction']> {
+    return this.tracer.handleAgentAction(...args);
+  }
+
+  override handleAgentEnd(
+    ...args: Parameters<LangChainTracer['handleAgentEnd']>
+  ): ReturnType<LangChainTracer['handleAgentEnd']> {
+    return this.tracer.handleAgentEnd(...args);
+  }
+
+  override handleText(
+    ...args: Parameters<LangChainTracer['handleText']>
+  ): ReturnType<LangChainTracer['handleText']> {
+    return this.tracer.handleText(...args);
+  }
+
+  override handleLLMNewToken(
+    ...args: Parameters<LangChainTracer['handleLLMNewToken']>
+  ): ReturnType<LangChainTracer['handleLLMNewToken']> {
+    return this.tracer.handleLLMNewToken(...args);
+  }
+}
+
+function stabilizeLangChainCallbacks(
+  callbacks: Callbacks | undefined,
+): Callbacks | undefined {
+  if (!callbacks) return undefined;
+  const lifecycle = new NativeLifecycleCoordinator();
+  const wrappers = new WeakMap<
+    LangChainTracer,
+    NativeLifecycleLangChainTracer
+  >();
+  const wrap = (handler: unknown): unknown => {
+    if (!(handler instanceof LangChainTracer)) return handler;
+    const existing = wrappers.get(handler);
+    if (existing) return existing;
+    const wrapper = new NativeLifecycleLangChainTracer(handler, lifecycle);
+    wrappers.set(handler, wrapper);
+    return wrapper;
+  };
+
+  if (Array.isArray(callbacks)) return callbacks.map(wrap) as Callbacks;
+  callbacks.handlers = callbacks.handlers.map(
+    wrap,
+  ) as typeof callbacks.handlers;
+  callbacks.inheritableHandlers = callbacks.inheritableHandlers.map(
+    wrap,
+  ) as typeof callbacks.inheritableHandlers;
+  return callbacks;
+}
 
 class LangSmithTraceSpan implements AgentTraceSpan {
   constructor(
@@ -241,8 +360,8 @@ class LangSmithTraceSpan implements AgentTraceSpan {
       name: input.name,
       run_type: input.runType,
       inputs: input.inputs,
-      metadata: privacySafeLangSmithMetadata(input.metadata ?? {}),
-      tags: [],
+      metadata: input.metadata,
+      tags: input.tags,
     });
     this.enqueue(() => child.postRun());
     return new LangSmithTraceSpan(child, this.enqueue);
@@ -257,11 +376,8 @@ class LangSmithTraceSpan implements AgentTraceSpan {
     });
   }
 
-  async fail(_error: unknown): Promise<void> {
-    const endOperation = this.run.end(
-      undefined,
-      traceFailureError,
-    );
+  async fail(error: unknown): Promise<void> {
+    const endOperation = this.run.end(undefined, traceError(error));
     void endOperation.catch(() => undefined);
     this.enqueue(async () => {
       await endOperation;
@@ -270,7 +386,8 @@ class LangSmithTraceSpan implements AgentTraceSpan {
   }
 
   async langchainCallbacks(): Promise<Callbacks | undefined> {
-    return this.run instanceof RunTree ? getLangchainCallbacks(this.run) : undefined;
+    if (!(this.run instanceof RunTree)) return undefined;
+    return stabilizeLangChainCallbacks(await getLangchainCallbacks(this.run));
   }
 
   async withActiveTrace<T>(fn: () => Promise<T>): Promise<T> {
@@ -296,27 +413,28 @@ export class LangSmithAgentTracer implements AgentTracer {
       tracingSamplingRate: options.samplingRate,
       fetchImplementation: options.fetchImplementation,
       autoBatchTracing: options.autoBatchTracing,
-      hideInputs: true,
-      hideOutputs: privacySafeLangSmithOutputs,
-      hideMetadata: privacySafeLangSmithMetadata,
-      anonymizer: privacySafeLangSmithError,
-      omitTracedRuntimeInfo: true,
     });
     this.createRoot = (config) => new RunTree({ ...config, client });
-    this.flushPending = options.flush ?? (() => client.awaitPendingTraceBatches());
+    this.flushPending =
+      options.flush ?? (() => client.awaitPendingTraceBatches());
   }
 
-  async startTurn(input: Omit<AgentTraceSpanInput, 'runType'>): Promise<AgentTraceSpan> {
+  async startTurn(
+    input: Omit<AgentTraceSpanInput, 'runType'>,
+  ): Promise<AgentTraceSpan> {
     const root = this.createRoot({
       name: input.name,
       run_type: 'chain',
       inputs: input.inputs,
-      metadata: privacySafeLangSmithMetadata(input.metadata ?? {}),
-      tags: [],
+      metadata: input.metadata,
+      tags: input.tags,
       project_name: this.options.projectName,
+      tracingEnabled: true,
     });
     this.pendingOperations.push(() => root.postRun());
-    return new LangSmithTraceSpan(root, (operation) => this.pendingOperations.push(operation));
+    return new LangSmithTraceSpan(root, (operation) =>
+      this.pendingOperations.push(operation),
+    );
   }
 
   async flush(): Promise<void> {
@@ -329,6 +447,11 @@ export class LangSmithAgentTracer implements AgentTracer {
       } catch (error) {
         firstError ??= error;
       }
+    }
+    try {
+      await awaitAllCallbacks();
+    } catch (error) {
+      firstError ??= error;
     }
     try {
       await this.flushPending?.();

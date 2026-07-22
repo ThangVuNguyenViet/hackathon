@@ -53,6 +53,7 @@ import {
   isKfcGenUiAttachment,
 } from "../genui/kfcGenUi.js";
 import { runAgentTurn } from "../graph/buildGraph.js";
+import { AgentTurnExecutionError } from "../agent/agentStateGraphRunner.js";
 import type { AgentGraphState } from "../graph/state.js";
 import {
   calculateMonitorSessionIntelligence,
@@ -852,21 +853,36 @@ export function createRouteMessengerRuntime(input: { options: RouteOptions; stor
             errorCode: delivery.errorCode ?? "assistant_reply_delivery_failed",
             errorMessage: delivery.errorMessage,
           };
-    } catch {
-      const errorMessage = "Agent run processing failed";
+    } catch (error) {
+      const errorCode =
+        error instanceof AgentTurnExecutionError
+          ? error.code
+          : "agent_run_processing_failed";
+      const errorMessage =
+        error instanceof AgentTurnExecutionError
+          ? error.code
+          : "Agent run processing failed";
       const failed = await updateExecutingRun({
         status: "failed",
         deliveryStatus: "failed",
-        errorCode: "agent_run_processing_failed",
+        errorCode,
         errorMessage,
         completedAt: new Date().toISOString(),
       });
       if (failed.status !== "committed") {
         return { status: "skipped", errorCode: "stale_agent_run" };
       }
+      for (const turn of linkedTurns) {
+        await store.markPendingCustomerTurnIgnored(turn.turnId, run.id);
+        await store.markWebhookDeliveryFailed(
+          run.channel,
+          turn.externalMessageId,
+          errorCode,
+        );
+      }
       return {
         status: "failed",
-        errorCode: "agent_run_processing_failed",
+        errorCode,
         errorMessage,
       };
     } finally {

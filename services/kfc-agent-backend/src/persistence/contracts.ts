@@ -745,6 +745,7 @@ export interface ConversationStore {
   upsertPendingCustomerTurn(input: PendingCustomerTurnInput): Promise<UpsertPendingCustomerTurnResult>;
   listPendingCustomerTurns(sessionId: string): Promise<PendingCustomerTurn[]>;
   markPendingCustomerTurnClaimed(turnId: string, runId: string): Promise<PendingCustomerTurn>;
+  markPendingCustomerTurnIgnored(turnId: string, runId: string): Promise<PendingCustomerTurn>;
   createAgentRun(input: CreateAgentRunInput): Promise<AgentRun>;
   claimAgentRun(input: CreateAgentRunInput): Promise<ClaimAgentRunResult>;
   updateAgentRun(runId: string, patch: AgentRunPatch): Promise<AgentRun>;

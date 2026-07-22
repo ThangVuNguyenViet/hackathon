@@ -14,6 +14,7 @@ import type {
   GeneratedStoreAvailability,
 } from '../fixtures/schema.js';
 import { loadGeneratedFixtures } from '../fixtures/loadFixtures.js';
+import { parsePaymentSurface } from '../domain/paymentSurface.js';
 import type { MenuModifierGroup } from '../domain/types.js';
 import type {
   ContentEvidence,
@@ -70,7 +71,9 @@ type MenuItemWithProvenance = Omit<GeneratedMenuItem, 'provenance'> & {
   hasModifiers: boolean;
   modifierGroups?: MenuModifierGroup[];
 };
-type StoreWithProvenance = Omit<GeneratedStore, 'provenance'> & { provenance: SourceProvenance };
+type StoreWithProvenance = Omit<GeneratedStore, 'provenance'> & {
+  provenance: SourceProvenance;
+};
 type DispositionAvailability = GeneratedStoreAvailability[Disposition];
 
 function menuItemWithModifierData(
@@ -101,18 +104,26 @@ function parseFixtureDate(value: string): string | undefined {
   return /^\d{4}-\d{2}-\d{2}$/.test(value) ? value : undefined;
 }
 
-function minimumOrderVnd(value: GeneratedPromotionVoucherOffer['minimumOrderVnd']): number {
+function minimumOrderVnd(
+  value: GeneratedPromotionVoucherOffer['minimumOrderVnd'],
+): number {
   return typeof value === 'number' ? value : 0;
 }
 
-function matchesOfferText(offer: GeneratedPromotionVoucherOffer, query: string): boolean {
+function matchesOfferText(
+  offer: GeneratedPromotionVoucherOffer,
+  query: string,
+): boolean {
   return includesAll(
     `${offer.campaign} ${offer.offerName} ${offer.offerType} ${offer.partnerBrand} ${offer.appliesTo} ${offer.evidenceText} ${offer.publicCode}`,
     query,
   );
 }
 
-function matchesOfferChannel(offer: GeneratedPromotionVoucherOffer, channel?: string): boolean {
+function matchesOfferChannel(
+  offer: GeneratedPromotionVoucherOffer,
+  channel?: string,
+): boolean {
   if (!channel) return true;
   if (!offer.channel.trim()) return true;
   return includesAll(offer.channel, channel);
@@ -126,15 +137,32 @@ function missingAvailabilitySource(storeId: string): SourceProvenance {
   };
 }
 
+function menuQueryAlternatives(query: string): string[] {
+  return normalizeSearchText(query)
+    .trim()
+    .split(/\s+or\s+/u)
+    .map((alternative) => alternative.trim())
+    .filter(Boolean);
+}
+
 export class OrderingDataService {
   private readonly menuByCode: Map<string, GeneratedMenuItem>;
   private readonly menuByItemId: Map<string, GeneratedMenuItem>;
   private readonly modifierByItemId: Map<string, GeneratedMenuModifier>;
   private readonly storesById: Map<string, GeneratedStore>;
-  private readonly availabilityByStoreId: Map<string, GeneratedStoreAvailability>;
+  private readonly availabilityByStoreId: Map<
+    string,
+    GeneratedStoreAvailability
+  >;
   private readonly offersById: Map<string, GeneratedPromotionVoucherOffer>;
-  private readonly membershipRewardsById: Map<string, GeneratedMembershipRewardOffer>;
-  private readonly membershipWalletById: Map<string, GeneratedMembershipWalletVoucher>;
+  private readonly membershipRewardsById: Map<
+    string,
+    GeneratedMembershipRewardOffer
+  >;
+  private readonly membershipWalletById: Map<
+    string,
+    GeneratedMembershipWalletVoucher
+  >;
   private readonly paymentMethodById: Map<string, GeneratedPaymentMethod>;
   private readonly currentDate: string;
 
@@ -142,14 +170,36 @@ export class OrderingDataService {
     private readonly fixtures: GeneratedFixtures,
     options: OrderingDataServiceOptions = {},
   ) {
-    this.menuByCode = new Map(fixtures.menuItems.map((item) => [item.code, item]));
-    this.menuByItemId = new Map(fixtures.menuItems.map((item) => [item.itemId, item]));
-    this.modifierByItemId = new Map(fixtures.menuModifiers.map((modifier) => [modifier.itemId, modifier]));
-    this.storesById = new Map(fixtures.stores.map((store) => [store.storeId, store]));
-    this.availabilityByStoreId = new Map(fixtures.storeAvailability.map((availability) => [availability.storeId, availability]));
-    this.offersById = new Map(fixtures.promotionVoucherOffers.map((offer) => [offer.offerId, offer]));
-    this.membershipRewardsById = new Map(fixtures.membershipRewardOffers.map((offer) => [offer.rewardId, offer]));
-    this.membershipWalletById = new Map(fixtures.membershipWalletVouchers.map((voucher) => [voucher.voucherId, voucher]));
+    this.menuByCode = new Map(
+      fixtures.menuItems.map((item) => [item.code, item]),
+    );
+    this.menuByItemId = new Map(
+      fixtures.menuItems.map((item) => [item.itemId, item]),
+    );
+    this.modifierByItemId = new Map(
+      fixtures.menuModifiers.map((modifier) => [modifier.itemId, modifier]),
+    );
+    this.storesById = new Map(
+      fixtures.stores.map((store) => [store.storeId, store]),
+    );
+    this.availabilityByStoreId = new Map(
+      fixtures.storeAvailability.map((availability) => [
+        availability.storeId,
+        availability,
+      ]),
+    );
+    this.offersById = new Map(
+      fixtures.promotionVoucherOffers.map((offer) => [offer.offerId, offer]),
+    );
+    this.membershipRewardsById = new Map(
+      fixtures.membershipRewardOffers.map((offer) => [offer.rewardId, offer]),
+    );
+    this.membershipWalletById = new Map(
+      fixtures.membershipWalletVouchers.map((voucher) => [
+        voucher.voucherId,
+        voucher,
+      ]),
+    );
     this.paymentMethodById = new Map(
       fixtures.paymentMethods.map((method) => [method.methodId, method]),
     );
@@ -159,23 +209,71 @@ export class OrderingDataService {
   searchMenu(query: string): MenuItemWithProvenance[] {
     if (!query.trim()) {
       return this.fixtures.menuItems.map((item) =>
-        menuItemWithModifierData(item, this.modifierByItemId.get(item.itemId), false));
+        menuItemWithModifierData(
+          item,
+          this.modifierByItemId.get(item.itemId),
+          false,
+        ),
+      );
     }
 
+    const queryAlternatives = menuQueryAlternatives(query);
+    const directSearchText = (item: GeneratedMenuItem) =>
+      `${item.name} ${item.code} ${item.itemId} ${item.posItemId} ${item.productCode}`;
+    const alternativesWithDirectMatches = new Set(
+      queryAlternatives.length > 1
+        ? queryAlternatives.filter((alternative) =>
+            this.fixtures.menuItems.some((item) =>
+              includesAll(directSearchText(item), alternative),
+            ),
+          )
+        : [],
+    );
     return this.fixtures.menuItems
-      .filter((item) => includesAll(
-        `${item.name} ${item.description} ${item.category} ${item.productCode} ${modifierSearchText(this.modifierByItemId.get(item.itemId))}`,
-        query,
-      ))
-      .map((item, fixtureIndex) => ({ item, fixtureIndex, relevance: menuSearchRelevance(item, query) }))
-      .sort((left, right) => right.relevance - left.relevance || left.fixtureIndex - right.fixtureIndex)
-      .map(({ item }) => menuItemWithModifierData(item, this.modifierByItemId.get(item.itemId), true));
+      .filter((item) => {
+        const directText = directSearchText(item);
+        const searchText = `${directText} ${item.description} ${item.category} ${modifierSearchText(this.modifierByItemId.get(item.itemId))}`;
+        return queryAlternatives.some((alternative) =>
+          includesAll(
+            alternativesWithDirectMatches.has(alternative)
+              ? directText
+              : searchText,
+            alternative,
+          ),
+        );
+      })
+      .map((item, fixtureIndex) => ({
+        item,
+        fixtureIndex,
+        relevance: Math.max(
+          ...queryAlternatives.map((alternative) =>
+            menuSearchRelevance(item, alternative),
+          ),
+        ),
+      }))
+      .sort(
+        (left, right) =>
+          right.relevance - left.relevance ||
+          left.fixtureIndex - right.fixtureIndex,
+      )
+      .map(({ item }) =>
+        menuItemWithModifierData(
+          item,
+          this.modifierByItemId.get(item.itemId),
+          true,
+        ),
+      );
   }
 
   getMenuItem(itemIdOrCode: string): MenuItemWithProvenance | undefined {
-    const item = this.menuByCode.get(itemIdOrCode) ?? this.menuByItemId.get(itemIdOrCode);
+    const item =
+      this.menuByCode.get(itemIdOrCode) ?? this.menuByItemId.get(itemIdOrCode);
     return item
-      ? menuItemWithModifierData(item, this.modifierByItemId.get(item.itemId), true)
+      ? menuItemWithModifierData(
+          item,
+          this.modifierByItemId.get(item.itemId),
+          true,
+        )
       : undefined;
   }
 
@@ -187,26 +285,48 @@ export class OrderingDataService {
   recommendAddOns(): MenuItemWithProvenance[] {
     return this.fixtures.menuItems
       .filter((item) => item.available)
-      .map((item) => menuItemWithModifierData(item, this.modifierByItemId.get(item.itemId), false));
+      .map((item) =>
+        menuItemWithModifierData(
+          item,
+          this.modifierByItemId.get(item.itemId),
+          false,
+        ),
+      );
   }
 
   searchStores(input: StoreSearchInput): StoreWithProvenance[] {
-    const query = [input.query, input.city, input.district].filter(Boolean).join(' ');
+    const query = [input.query, input.city, input.district]
+      .filter(Boolean)
+      .join(' ');
     const matched = this.fixtures.stores.filter((store) =>
-      query.length === 0 ? true : includesAll(`${store.name} ${store.address} ${store.city}`, query),
+      query.length === 0
+        ? true
+        : includesAll(`${store.name} ${store.address} ${store.city}`, query),
     );
-    return matched.map((store) => ({ ...store, provenance: storeProvenance(store) }));
+    return matched.map((store) => ({
+      ...store,
+      provenance: storeProvenance(store),
+    }));
   }
 
-  getStoreAvailability(storeId: string, disposition: Disposition): GeneratedStoreAvailability[Disposition] | undefined {
+  getStoreAvailability(
+    storeId: string,
+    disposition: Disposition,
+  ): GeneratedStoreAvailability[Disposition] | undefined {
     return this.availabilityByStoreId.get(storeId)?.[disposition];
   }
 
   checkItemsAvailable(input: AvailabilityInput): ItemAvailabilityResult {
     const availability = this.availabilityByStoreId.get(input.storeId);
-    const source = availability ? availabilityProvenance(availability) : missingAvailabilitySource(input.storeId);
-    const disposition = availability?.[input.disposition] as DispositionAvailability | undefined;
-    if (!availability || !this.hasCompleteDispositionAvailability(disposition)) {
+    const source = availability
+      ? availabilityProvenance(availability)
+      : missingAvailabilitySource(input.storeId);
+    const disposition = availability?.[input.disposition] as
+      DispositionAvailability | undefined;
+    if (
+      !availability ||
+      !this.hasCompleteDispositionAvailability(disposition)
+    ) {
       return {
         ok: false,
         checkedItemIds: input.itemIds,
@@ -216,32 +336,49 @@ export class OrderingDataService {
       };
     }
     const excluded = new Set(disposition?.excludedItemIds ?? []);
-    const blockedTimeslotItems = new Set((disposition?.timeslotExclusions ?? []).map((rule) => rule.itemId));
+    const blockedTimeslotItems = new Set(
+      (disposition?.timeslotExclusions ?? []).map((rule) => rule.itemId),
+    );
     return {
-      ok: input.itemIds.every((itemId) => !excluded.has(itemId) && !blockedTimeslotItems.has(itemId)),
+      ok: input.itemIds.every(
+        (itemId) => !excluded.has(itemId) && !blockedTimeslotItems.has(itemId),
+      ),
       checkedItemIds: input.itemIds,
-      unavailableItemIds: input.itemIds.filter((itemId) => excluded.has(itemId)),
-      blockedTimeslotItemIds: input.itemIds.filter((itemId) => blockedTimeslotItems.has(itemId)),
+      unavailableItemIds: input.itemIds.filter((itemId) =>
+        excluded.has(itemId),
+      ),
+      blockedTimeslotItemIds: input.itemIds.filter((itemId) =>
+        blockedTimeslotItems.has(itemId),
+      ),
       source,
     };
   }
 
-  searchPromotionOffers(input: PromotionSearchInput): GeneratedPromotionVoucherOffer[] {
+  searchPromotionOffers(
+    input: PromotionSearchInput,
+  ): GeneratedPromotionVoucherOffer[] {
     const activeOffers = this.fixtures.promotionVoucherOffers.filter(
       (offer) =>
         this.isOfferActive(offer) &&
         matchesOfferChannel(offer, input.channel) &&
-        (input.subtotalVnd === undefined || input.subtotalVnd >= minimumOrderVnd(offer.minimumOrderVnd)),
+        (input.subtotalVnd === undefined ||
+          input.subtotalVnd >= minimumOrderVnd(offer.minimumOrderVnd)),
     );
-    const matchedOffers = activeOffers.filter((offer) => matchesOfferText(offer, input.query));
+    const matchedOffers = activeOffers.filter((offer) =>
+      matchesOfferText(offer, input.query),
+    );
     return input.query.trim() ? matchedOffers : activeOffers;
   }
 
-  explainPromotion(offerId: string): GeneratedPromotionVoucherOffer | undefined {
+  explainPromotion(
+    offerId: string,
+  ): GeneratedPromotionVoucherOffer | undefined {
     return this.offersById.get(offerId);
   }
 
-  validateVoucherInput(input: VoucherValidationInput): PromotionValidationResult {
+  validateVoucherInput(
+    input: VoucherValidationInput,
+  ): PromotionValidationResult {
     const normalizedInput = normalizeSearchText(input.inputCodeOrText);
     const matchingPublicCode = this.fixtures.promotionVoucherOffers.find(
       (offer) =>
@@ -275,12 +412,17 @@ export class OrderingDataService {
         ok: true,
         reason: 'validated',
         publicCode: matchingPublicCode.publicCode,
-        discountVnd: typeof matchingPublicCode.discountAmountVnd === 'number' ? matchingPublicCode.discountAmountVnd : 0,
+        discountVnd:
+          typeof matchingPublicCode.discountAmountVnd === 'number'
+            ? matchingPublicCode.discountAmountVnd
+            : 0,
         source: offerProvenance(matchingPublicCode),
       };
     }
 
-    const matchingOffer = this.fixtures.promotionVoucherOffers.find((offer) => matchesOfferText(offer, input.inputCodeOrText));
+    const matchingOffer = this.fixtures.promotionVoucherOffers.find((offer) =>
+      matchesOfferText(offer, input.inputCodeOrText),
+    );
     if (!matchingOffer) {
       return {
         ok: false,
@@ -324,11 +466,16 @@ export class OrderingDataService {
     };
   }
 
-  listContentEvidence(kind: ContentEvidence['kind'] | 'all'): ContentEvidence[] {
+  listContentEvidence(
+    kind: ContentEvidence['kind'] | 'all',
+  ): ContentEvidence[] {
     const pages = this.fixtures.contentPages.filter((page) => {
       const pageKind = contentKind(page);
-      return (kind === 'all' || pageKind === kind)
-        && (!['policy', 'allergen'].includes(pageKind) || page.approvalStatus === 'approved');
+      return (
+        (kind === 'all' || pageKind === kind) &&
+        (!['policy', 'allergen'].includes(pageKind) ||
+          page.approvalStatus === 'approved')
+      );
     });
     return pages.map((page) => ({
       id: page.id,
@@ -347,7 +494,10 @@ export class OrderingDataService {
     }));
   }
 
-  searchContent(kind: ContentEvidence['kind'] | 'all', _query: string): ContentEvidence[] {
+  searchContent(
+    kind: ContentEvidence['kind'] | 'all',
+    _query: string,
+  ): ContentEvidence[] {
     return this.listContentEvidence(kind).slice(0, 3);
   }
 
@@ -355,9 +505,14 @@ export class OrderingDataService {
     return this.searchContent('allergen', query);
   }
 
-  listPaymentMethods(input: { query?: string; paymentSurface?: string } = {}): GeneratedPaymentMethod[] {
+  listPaymentMethods(
+    input: { query?: string; paymentSurface?: unknown } = {},
+  ): GeneratedPaymentMethod[] {
+    const paymentSurface = input.paymentSurface
+      ? parsePaymentSurface(input.paymentSurface)
+      : undefined;
     const bySurface = this.fixtures.paymentMethods.filter((method) =>
-      input.paymentSurface ? method.paymentSurface === input.paymentSurface : true,
+      paymentSurface ? method.paymentSurface === paymentSurface : true,
     );
     const selected = input.query?.trim()
       ? bySurface.filter((method) =>
@@ -376,12 +531,19 @@ export class OrderingDataService {
         )
       : bySurface;
 
-    return selected.map((method) => ({ ...method, provenance: paymentMethodProvenance(method) }));
+    return selected.map((method) => ({
+      ...method,
+      provenance: paymentMethodProvenance(method),
+    }));
   }
 
-  getPaymentMethodForLink(methodId: string): GeneratedPaymentMethod | undefined {
+  getPaymentMethodForLink(
+    methodId: string,
+  ): GeneratedPaymentMethod | undefined {
     const fixture = this.paymentMethodById.get(methodId);
-    return fixture ? { ...fixture, provenance: paymentMethodProvenance(fixture) } : undefined;
+    return fixture
+      ? { ...fixture, provenance: paymentMethodProvenance(fixture) }
+      : undefined;
   }
 
   getMembershipProfile(): GeneratedMembershipProfileSnapshot | undefined {
@@ -391,28 +553,45 @@ export class OrderingDataService {
   listMembershipRewards(query?: string): GeneratedMembershipRewardOffer[] {
     if (!query?.trim()) return this.fixtures.membershipRewardOffers;
     const matched = this.fixtures.membershipRewardOffers.filter((offer) =>
-      includesAll(`${offer.name} ${offer.brand} ${offer.offerType} ${offer.eligibilityText} ${offer.evidenceText} ${offer.channels.join(' ')}`, query),
+      includesAll(
+        `${offer.name} ${offer.brand} ${offer.offerType} ${offer.eligibilityText} ${offer.evidenceText} ${offer.channels.join(' ')}`,
+        query,
+      ),
     );
     return matched;
   }
 
   listMembershipWallet(status?: string): GeneratedMembershipWalletVoucher[] {
     return this.fixtures.membershipWalletVouchers.filter((voucher) =>
-      status ? normalizeSearchText(voucher.status) === normalizeSearchText(status) : true,
+      status
+        ? normalizeSearchText(voucher.status) === normalizeSearchText(status)
+        : true,
     );
   }
 
-  getMembershipPointHistory(days?: number): GeneratedMembershipPointHistorySnapshot | undefined {
+  getMembershipPointHistory(
+    days?: number,
+  ): GeneratedMembershipPointHistorySnapshot | undefined {
     const snapshots = this.fixtures.membershipPointHistorySnapshots;
     if (days === undefined) return snapshots[0];
-    return snapshots.find((snapshot) => snapshot.filterWindowDays === days) ?? snapshots[0];
+    return (
+      snapshots.find((snapshot) => snapshot.filterWindowDays === days) ??
+      snapshots[0]
+    );
   }
 
-  listMembershipTools(sideEffect?: GeneratedMembershipToolDefinition['sideEffect']): GeneratedMembershipToolDefinition[] {
-    return this.fixtures.membershipToolDefinitions.filter((tool) => (sideEffect ? tool.sideEffect === sideEffect : true));
+  listMembershipTools(
+    sideEffect?: GeneratedMembershipToolDefinition['sideEffect'],
+  ): GeneratedMembershipToolDefinition[] {
+    return this.fixtures.membershipToolDefinitions.filter((tool) =>
+      sideEffect ? tool.sideEffect === sideEffect : true,
+    );
   }
 
-  acquireMembershipVoucher(input: { rewardId: string; confirmed: boolean }): MembershipActionResult | undefined {
+  acquireMembershipVoucher(input: {
+    rewardId: string;
+    confirmed: boolean;
+  }): MembershipActionResult | undefined {
     const reward = this.membershipRewardsById.get(input.rewardId);
     if (!reward) return undefined;
     return {
@@ -427,7 +606,11 @@ export class OrderingDataService {
     };
   }
 
-  redeemMembershipReward(input: { voucherId: string; channel?: string; confirmed: boolean }): MembershipActionResult | undefined {
+  redeemMembershipReward(input: {
+    voucherId: string;
+    channel?: string;
+    confirmed: boolean;
+  }): MembershipActionResult | undefined {
     const voucher = this.membershipWalletById.get(input.voucherId);
     if (!voucher) return undefined;
     const channel = input.channel ? ` on ${input.channel}` : '';
@@ -446,7 +629,10 @@ export class OrderingDataService {
   private hasCompleteDispositionAvailability(
     disposition: Partial<DispositionAvailability> | undefined,
   ): disposition is DispositionAvailability {
-    return Array.isArray(disposition?.excludedItemIds) && Array.isArray(disposition?.timeslotExclusions);
+    return (
+      Array.isArray(disposition?.excludedItemIds) &&
+      Array.isArray(disposition?.timeslotExclusions)
+    );
   }
 
   private isOfferActive(offer: GeneratedPromotionVoucherOffer): boolean {
@@ -463,6 +649,8 @@ export class OrderingDataService {
   }
 }
 
-export async function loadOrderingDataService(rootDir: string): Promise<OrderingDataService> {
+export async function loadOrderingDataService(
+  rootDir: string,
+): Promise<OrderingDataService> {
   return new OrderingDataService(await loadGeneratedFixtures(rootDir));
 }

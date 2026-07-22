@@ -19,12 +19,8 @@ import {
   type AgentTurnExternalCallScope,
   type SingleAgentRuntimeContext,
 } from '../../src/agent/singleAgentRuntime.js';
-import type {
-  ExternalCallContext,
-} from '../../src/clients/interfaces.js';
-import {
-  GROUNDED_RESPONSE_TOOL_NAME,
-} from '../../src/agent/responseGrounding.js';
+import type { ExternalCallContext } from '../../src/clients/interfaces.js';
+import { GROUNDED_RESPONSE_TOOL_NAME } from '../../src/agent/responseGrounding.js';
 import {
   STRUCTURED_RESPONSE_CORRECTION_MESSAGE_ID,
   STRUCTURED_RESPONSE_REFERENCE_MESSAGE_ID,
@@ -48,24 +44,16 @@ import {
   createCommerceApprovalReceipt,
   digestCommerceAction,
 } from '../../src/ordering/approvalReceipt.js';
-import {
-  createCommerceApprovalExecutionFence,
-} from '../../src/ordering/approvalExecutionFence.js';
-import {
-  buildCurrentAgentApprovalBinding,
-} from '../../src/ordering/agentToolExecutor.js';
+import { createCommerceApprovalExecutionFence } from '../../src/ordering/approvalExecutionFence.js';
+import { buildCurrentAgentApprovalBinding } from '../../src/ordering/agentToolExecutor.js';
 import { MemoryStore } from '../../src/persistence/memoryStore.js';
-import type {
-  CreateConfirmationPauseInput,
-} from '../../src/persistence/contracts.js';
+import type { CreateConfirmationPauseInput } from '../../src/persistence/contracts.js';
 import type { CustomerAccessScope } from '../../src/domain/types.js';
 import {
   agentCheckpointThreadId,
   langGraphConfigForRun,
 } from '../../src/session/sessionContext.js';
-import {
-  controlledCustomerAccess,
-} from '../fixtures/controlledCustomerAccess.js';
+import { controlledCustomerAccess } from '../fixtures/controlledCustomerAccess.js';
 import {
   groundedResponseClaims,
   groundedResponseModelReply,
@@ -198,8 +186,7 @@ async function authenticatedResume(
   deadlineMs: number,
   decision: 'approve' | 'reject' = 'reject',
 ) {
-  const signingSecret =
-    'state-graph-resume-signing-secret-at-least-32-bytes';
+  const signingSecret = 'state-graph-resume-signing-secret-at-least-32-bytes';
   const commerceReceipt = await createCommerceApprovalReceipt({
     binding: record.approvalBinding,
     secret: signingSecret,
@@ -222,8 +209,7 @@ async function authenticatedResume(
       checkpointId: record.checkpointId,
       bindingFingerprint: approvalBindingDigest,
       approvalBindingDigest,
-      providerIdempotencyKey:
-        `confirmation:${record.requestId}:${record.action.toolName}:test`,
+      providerIdempotencyKey: `confirmation:${record.requestId}:${record.action.toolName}:test`,
       attempt: 1,
       leaseToken: crypto.randomUUID(),
     },
@@ -252,12 +238,14 @@ async function authenticatedResume(
 function verifiedCart() {
   return {
     id: 'cart-structured',
-    items: [{
-      itemCode: '20751',
-      name: 'Verified item',
-      quantity: 1,
-      unitPriceVnd: 99_000,
-    }],
+    items: [
+      {
+        itemCode: '20751',
+        name: 'Verified item',
+        quantity: 1,
+        unitPriceVnd: 99_000,
+      },
+    ],
     subtotalVnd: 99_000,
     discountVnd: 0,
     deliveryFeeVnd: 0,
@@ -295,9 +283,9 @@ function structuredGroundedResponse(
   customerText: string,
 ): AIMessage {
   return groundedResponseModelReply({
-      customerText,
-      selectedActionResponse: structuredActionReference(messages),
-    })(messages);
+    customerText,
+    selectedActionResponse: structuredActionReference(messages),
+  })(messages);
 }
 
 function captureBoundInvocationSignals(
@@ -332,18 +320,29 @@ function boundToolNames(tools: unknown): string[] {
   });
 }
 
-function isObjectRecord(
-  value: unknown,
-): value is Record<string, unknown> {
-  return typeof value === 'object' &&
-    value !== null &&
-    !Array.isArray(value);
+function isObjectRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
-function objectRecord(
-  value: unknown,
-): Record<string, unknown> | undefined {
+function objectRecord(value: unknown): Record<string, unknown> | undefined {
   return isObjectRecord(value) ? value : undefined;
+}
+
+function modelPublicationDigest(messages: readonly BaseMessage[]): string {
+  for (const message of [...messages].reverse()) {
+    if (typeof message.content !== 'string') continue;
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(message.content);
+    } catch {
+      continue;
+    }
+    const publication = objectRecord(objectRecord(parsed)?.publication);
+    if (typeof publication?.projectionDigest === 'string') {
+      return publication.projectionDigest;
+    }
+  }
+  throw new Error('model_publication_digest_missing');
 }
 
 function boundSelectedActionSchema(tools: unknown): unknown {
@@ -377,16 +376,17 @@ async function invokeGraphDirect(
     checkpointRunId: string;
   },
   options: {
-  deadlineMs?: number;
-  externalCallScope?: AgentTurnExternalCallScope;
-  turnTrace?: AgentTraceSpan;
+    deadlineMs?: number;
+    externalCallScope?: AgentTurnExternalCallScope;
+    turnTrace?: AgentTraceSpan;
   },
 ) {
-  const turnTrace = options.turnTrace ??
-    await createNoopAgentTracer().startTurn({
+  const turnTrace =
+    options.turnTrace ??
+    (await createNoopAgentTracer().startTurn({
       name: 'state_graph_direct_test',
       inputs: {},
-    });
+    }));
   const externalCallScope =
     options.externalCallScope ??
     createAgentTurnExternalCallScope(options.deadlineMs);
@@ -401,15 +401,18 @@ async function invokeGraphDirect(
         abortExternalCalls: externalCallScope.abort,
         disposeExternalCalls: externalCallScope.dispose,
       }),
-    }).invoke({
-      sessionId: input.sessionId,
-      customerId: input.customerId,
-      channel: input.channel,
-      text: input.text,
-      externalMessageId: input.externalMessageId ?? null,
-      metadata: null,
-      messages: [],
-    }, directGraphConfig(input));
+    }).invoke(
+      {
+        sessionId: input.sessionId,
+        customerId: input.customerId,
+        channel: input.channel,
+        text: input.text,
+        externalMessageId: input.externalMessageId ?? null,
+        metadata: null,
+        messages: [],
+      },
+      directGraphConfig(input),
+    );
   } finally {
     externalCallScope.dispose();
   }
@@ -420,87 +423,83 @@ describe('KFC agent StateGraph', () => {
     vi.useRealTimers();
   });
 
-  it('owns the complete model, tool, approval, retry, and persistence loop', () => {
+  it('uses one nested createAgent semantic loop inside the deterministic outer workflow', () => {
     const graph = createKfcAgentStateGraph({
       model: fakeModel(),
       checkpointer: new MemorySaver(),
-    }).getGraph().toJSON();
+    })
+      .getGraph()
+      .toJSON();
 
     expect(graph.nodes.map(({ id }: { id: string }) => id).sort()).toEqual(
       ['__start__', ...KFC_AGENT_GRAPH_NODE_NAMES, '__end__'].sort(),
     );
     expect(
-      graph.edges.map(
-        ({ source, target }: { source: string; target: string }) =>
-          `${source}->${target}`,
-      ).sort(),
+      graph.edges
+        .map(
+          ({ source, target }: { source: string; target: string }) =>
+            `${source}->${target}`,
+        )
+        .sort(),
     ).toEqual([
       '__start__->load_context',
-      'call_model->fail_closed',
-      'call_model->finalize_response',
-      'call_model->record_provider_retry',
-      'call_model->validate_tool_calls',
-      'execute_tools->call_model',
-      'execute_tools->execute_tools',
-      'execute_tools->fail_closed',
-      'execute_tools->record_semantic_correction',
-      'execute_tools->request_approval',
-      'execute_trusted_action->call_model',
       'execute_trusted_action->fail_closed',
       'execute_trusted_action->prepare_structured_action',
+      'execute_trusted_action->semantic_agent',
       'fail_closed->persist_and_project',
-      'finalize_response->fail_closed',
-      'finalize_response->persist_and_project',
-      'finalize_response->record_semantic_correction',
-      'load_context->call_model',
       'load_context->fail_closed',
       'load_context->prepare_structured_action',
+      'load_context->semantic_agent',
       'persist_and_project->__end__',
-      'prepare_structured_action->call_model',
       'prepare_structured_action->execute_trusted_action',
       'prepare_structured_action->fail_closed',
       'prepare_structured_action->request_approval',
-      'record_provider_retry->call_model',
-      'record_provider_retry->fail_closed',
-      'record_semantic_correction->call_model',
-      'record_semantic_correction->fail_closed',
+      'prepare_structured_action->semantic_agent',
       'request_approval->revalidate_approval',
-      'revalidate_approval->call_model',
-      'revalidate_approval->execute_tools',
       'revalidate_approval->execute_trusted_action',
       'revalidate_approval->fail_closed',
       'revalidate_approval->request_approval',
-      'validate_tool_calls->execute_tools',
-      'validate_tool_calls->fail_closed',
-      'validate_tool_calls->finalize_response',
-      'validate_tool_calls->record_semantic_correction',
-      'validate_tool_calls->request_approval',
+      'revalidate_approval->semantic_agent',
+      'semantic_agent->fail_closed',
+      'semantic_agent->validate_publication',
+      'validate_publication->fail_closed',
+      'validate_publication->persist_and_project',
     ]);
+    expect(graph.nodes.map(({ id }: { id: string }) => id)).not.toEqual(
+      expect.arrayContaining([
+        'call_model',
+        'validate_tool_calls',
+        'record_semantic_correction',
+        'execute_tools',
+        'record_provider_retry',
+        'finalize_response',
+      ]),
+    );
   });
 
   it('advertises only the current public lifecycle tool profile', async () => {
-    const model = fakeModel().respond(groundedResponseModelReply({
-      customerText: 'How can I help?',
-    }));
+    const model = fakeModel().respond(
+      groundedResponseModelReply({
+        customerText: 'How can I help?',
+      }),
+    );
     const bindings: Array<{
       names: string[];
       selectedActionSchema: unknown;
       toolChoice: unknown;
     }> = [];
     const modelWithOptions: ToolBindingModel = model;
-    const bindTools =
-      modelWithOptions.bindTools.bind(modelWithOptions);
-    vi.spyOn(modelWithOptions, 'bindTools').mockImplementation((
-      tools,
-      options,
-    ) => {
-      bindings.push({
-        names: boundToolNames(tools),
-        selectedActionSchema: boundSelectedActionSchema(tools),
-        toolChoice: options?.tool_choice,
-      });
-      return bindTools(tools, options);
-    });
+    const bindTools = modelWithOptions.bindTools.bind(modelWithOptions);
+    vi.spyOn(modelWithOptions, 'bindTools').mockImplementation(
+      (tools, options) => {
+        bindings.push({
+          names: boundToolNames(tools),
+          selectedActionSchema: boundSelectedActionSchema(tools),
+          toolChoice: options?.tool_choice,
+        });
+        return bindTools(tools, options);
+      },
+    );
 
     const result = await invokeGraphDirect(
       turnInput(model, 'state-graph-public-tool-profile'),
@@ -508,40 +507,29 @@ describe('KFC agent StateGraph', () => {
     );
 
     expect(result.failure).toBeNull();
-    expect(bindings[0]).toEqual({
-      names: [GROUNDED_RESPONSE_TOOL_NAME],
-      selectedActionSchema: expect.objectContaining({
-        type: 'object',
-        additionalProperties: false,
-      }),
-      toolChoice: GROUNDED_RESPONSE_TOOL_NAME,
-    });
-    expect(bindings[0]?.selectedActionSchema)
-      .not.toHaveProperty('anyOf');
-    const planningProfile = bindings.find(
-      ({ names }) => names.length > 1,
+    const planningProfile = bindings.find(({ names }) =>
+      names.includes('searchMenu'),
     );
-    expect(planningProfile?.toolChoice).toEqual({
-      type: 'allowed_tools',
-      mode: 'required',
-      tools: planningProfile?.names.map((name) => ({
-        type: 'function',
-        name,
-      })),
+    expect(planningProfile).toEqual({
+      names: [
+        'searchMenu',
+        'findStores',
+        'searchPromotions',
+        'listPaymentMethods',
+        'searchContentPolicy',
+        'answerAllergenQuestion',
+        'collectInvoice',
+      ],
+      selectedActionSchema: undefined,
+      toolChoice: undefined,
     });
-    expect(planningProfile?.selectedActionSchema).toEqual({
-      type: 'null',
-    });
-    expect(planningProfile?.names).toEqual([
-      'searchMenu',
-      'findStores',
-      'searchPromotions',
-      'listPaymentMethods',
-      'searchContentPolicy',
-      'answerAllergenQuestion',
-      'collectInvoice',
-      GROUNDED_RESPONSE_TOOL_NAME,
-    ]);
+    expect(bindings).not.toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          names: expect.arrayContaining([GROUNDED_RESPONSE_TOOL_NAME]),
+        }),
+      ]),
+    );
   });
 
   it('rejects a model-authored call that was not advertised', async () => {
@@ -558,26 +546,27 @@ describe('KFC agent StateGraph', () => {
 
     const result = await invokeGraphDirect(input, {});
 
-    expect(result.failure).toBe(
-      'agent_semantic_correction_limit_exceeded',
-    );
+    expect(result.failure).toBe('agent_authored_tool_batch_invalid');
+    expect(result.semanticCorrections).toBe(0);
     expect(result.currentTurnToolTrace).toEqual([]);
-    expect(
-      bindings.filter((names) => names.length > 1),
-    ).not.toEqual(expect.arrayContaining([
-      expect.arrayContaining(['getSavedAddresses']),
-    ]));
+    expect(bindings.filter((names) => names.length > 1)).not.toEqual(
+      expect.arrayContaining([expect.arrayContaining(['getSavedAddresses'])]),
+    );
   });
 
   it('expands the next model tool profile from verified menu state', async () => {
     const model = fakeModel()
-      .respondWithTools([{
-        name: 'searchMenu',
-        args: { scope: 'all', query: null },
-      }])
-      .respond(groundedResponseModelReply({
-        customerText: 'The menu is ready.',
-      }));
+      .respondWithTools([
+        {
+          name: 'searchMenu',
+          args: { scope: 'all', query: null },
+        },
+      ])
+      .respond(
+        groundedResponseModelReply({
+          customerText: 'The menu is ready.',
+        }),
+      );
     const bindings: string[][] = [];
     const bindTools = model.bindTools.bind(model);
     vi.spyOn(model, 'bindTools').mockImplementation((tools) => {
@@ -590,26 +579,36 @@ describe('KFC agent StateGraph', () => {
       {},
     );
 
+    const secondModelDigest = modelPublicationDigest(
+      model.calls[1]?.messages ?? [],
+    );
+    expect(secondModelDigest).toBe(
+      result.modelPublicationBundle?.projectionDigest,
+    );
+    expect(result.responseProjectionDigest).toBe(secondModelDigest);
     expect(result.failure).toBeNull();
-    expect(result.currentTurnToolTrace.map(({ toolName }) => toolName))
-      .toEqual(['searchMenu']);
+    expect(result.currentTurnToolTrace.map(({ toolName }) => toolName)).toEqual(
+      ['searchMenu'],
+    );
     const planningProfiles = bindings.filter((names) => names.length > 1);
     expect(planningProfiles).toHaveLength(2);
-    expect(planningProfiles[0]).not.toEqual(expect.arrayContaining([
-      'getItemDetails',
-      'getModifierOptions',
-      'updateCart',
-    ]));
-    expect(planningProfiles[1]).toEqual(expect.arrayContaining([
-      'getItemDetails',
-      'getModifierOptions',
-      'updateCart',
-    ]));
-    expect(planningProfiles[1]).not.toEqual(expect.arrayContaining([
-      'searchMenu',
-      'findStores',
-      'searchPromotions',
-    ]));
+    expect(planningProfiles[0]).not.toEqual(
+      expect.arrayContaining([
+        'getItemDetails',
+        'getModifierOptions',
+        'updateCart',
+      ]),
+    );
+    expect(planningProfiles[1]).toEqual(
+      expect.arrayContaining([
+        'getItemDetails',
+        'getModifierOptions',
+        'updateCart',
+      ]),
+    );
+    expect(planningProfiles[1]).toEqual(
+      expect.arrayContaining(['searchMenu', 'findStores', 'searchPromotions']),
+    );
   });
 
   it('uses only the response-bound model for presentation actions', async () => {
@@ -629,23 +628,19 @@ describe('KFC agent StateGraph', () => {
       toolChoice: unknown;
     }> = [];
     const modelWithOptions: ToolBindingModel = baseModel;
-    vi.spyOn(modelWithOptions, 'bindTools').mockImplementation((
-      tools,
-      options,
-    ) => {
-      const names = boundToolNames(tools);
-      bindings.push({
-        names,
-        selectedActionSchema: boundSelectedActionSchema(tools),
-        toolChoice: options?.tool_choice,
-      });
-      return (
-        names.length === 1 &&
-        names[0] === GROUNDED_RESPONSE_TOOL_NAME
-          ? responseModel
-          : planningModel
-      ) as ReturnType<NonNullable<typeof baseModel.bindTools>>;
-    });
+    vi.spyOn(modelWithOptions, 'bindTools').mockImplementation(
+      (tools, options) => {
+        const names = boundToolNames(tools);
+        bindings.push({
+          names,
+          selectedActionSchema: boundSelectedActionSchema(tools),
+          toolChoice: options?.tool_choice,
+        });
+        return (
+          names.length === 0 ? responseModel : planningModel
+        ) as ReturnType<NonNullable<typeof baseModel.bindTools>>;
+      },
+    );
     const input = turnInput(baseModel, 'state-graph-structured-edit-cart');
     const cart = verifiedCart();
     await seedCurrentUserTurn(input);
@@ -669,16 +664,13 @@ describe('KFC agent StateGraph', () => {
 
     expect(planningModel.callCount).toBe(0);
     expect(responseModel.callCount).toBe(1);
-    expect(bindings).toEqual([{
-      names: [GROUNDED_RESPONSE_TOOL_NAME],
-      selectedActionSchema: expect.objectContaining({
-        type: 'object',
-        additionalProperties: false,
-      }),
-      toolChoice: GROUNDED_RESPONSE_TOOL_NAME,
-    }]);
-    expect(bindings[0]?.selectedActionSchema)
-      .not.toHaveProperty('anyOf');
+    expect(bindings).toEqual([
+      {
+        names: [],
+        selectedActionSchema: undefined,
+        toolChoice: undefined,
+      },
+    ]);
     expect(responseModel.calls[0]?.messages.some(isToolMessage)).toBe(false);
     expect(output.genUi?.widgetKind).toBe('cartBuilder');
     expect(output.state.trustedPresentation).toEqual({
@@ -693,9 +685,11 @@ describe('KFC agent StateGraph', () => {
       new AIMessage('planning must not run'),
     );
     const responseModel = fakeModel()
-      .respond(Object.assign(new Error('temporary response outage'), {
-        status: 503,
-      }))
+      .respond(
+        Object.assign(new Error('temporary response outage'), {
+          status: 503,
+        }),
+      )
       .respond((messages) => {
         return structuredGroundedResponse(
           messages,
@@ -703,15 +697,12 @@ describe('KFC agent StateGraph', () => {
         );
       });
     vi.spyOn(baseModel, 'bindTools').mockImplementation((tools) => {
-      const names = (tools as Array<{ name?: string }>).flatMap(
-        ({ name }) => name ? [name] : [],
+      const names = (tools as Array<{ name?: string }>).flatMap(({ name }) =>
+        name ? [name] : [],
       );
-      return (
-        names.length === 1 &&
-        names[0] === GROUNDED_RESPONSE_TOOL_NAME
-          ? responseModel
-          : planningModel
-      ) as ReturnType<NonNullable<typeof baseModel.bindTools>>;
+      return (names.length === 0 ? responseModel : planningModel) as ReturnType<
+        NonNullable<typeof baseModel.bindTools>
+      >;
     });
     const input = turnInput(baseModel, 'structured-response-retry');
     const cart = verifiedCart();
@@ -737,25 +728,15 @@ describe('KFC agent StateGraph', () => {
       }),
     });
 
-    expect(output.responseText).toBe(
-      'Your verified cart is ready to edit.',
-    );
+    expect(output.responseText).toBe('Your verified cart is ready to edit.');
     expect(planningModel.callCount).toBe(0);
     expect(responseModel.callCount).toBe(2);
-    expect(observations).toEqual([
-      'response_composition',
-      'response_composition',
-    ]);
+    expect(observations).toEqual(['response_composition']);
   });
 
   it('resumes an approved trusted payment action exactly once through call_model', async () => {
-    const baseModel = fakeModel();
-    const planningModel = fakeModel().respond(
-      new AIMessage('planning must not run'),
-    );
-    let selectedActionResponse:
-      SelectedActionResponseReference | undefined;
-    const responseModel = fakeModel().respond((messages) => {
+    let selectedActionResponse: SelectedActionResponseReference | undefined;
+    const model = fakeModel().respond((messages) => {
       selectedActionResponse = structuredActionReference(messages);
       return structuredGroundedResponse(
         messages,
@@ -763,26 +744,16 @@ describe('KFC agent StateGraph', () => {
       );
     });
     const bindings: string[][] = [];
-    vi.spyOn(baseModel, 'bindTools').mockImplementation((tools) => {
-      const names = (tools as Array<{ name?: string }>).flatMap(
-        ({ name }) => name ? [name] : [],
-      );
-      bindings.push(names);
-      return (
-        names.length === 1 &&
-        names[0] === GROUNDED_RESPONSE_TOOL_NAME
-          ? responseModel
-          : planningModel
-      ) as ReturnType<NonNullable<typeof baseModel.bindTools>>;
+    const bindTools = model.bindTools.bind(model);
+    vi.spyOn(model, 'bindTools').mockImplementation((tools) => {
+      bindings.push(boundToolNames(tools));
+      return bindTools(tools);
     });
     const input = authenticatedTurnInput(
-      baseModel,
+      model,
       'state-graph-trusted-payment-approval',
     );
-    input.accessContext.authorizedScopes.push(
-      'payment:read',
-      'payment:write',
-    );
+    input.accessContext.authorizedScopes.push('payment:read', 'payment:write');
     await seedCurrentUserTurn(input);
     const cart = verifiedCart();
     const order = {
@@ -794,15 +765,12 @@ describe('KFC agent StateGraph', () => {
       createdAt: '2026-07-20T00:00:00.000Z',
     };
     const paymentMethod = createTestFixtures().paymentMethods[0]!;
-    const collectionKey =
-      'state-graph-trusted-payment-collection';
+    const collectionKey = 'state-graph-trusted-payment-collection';
     const selectedPaymentMethod = {
       methodId: paymentMethod.methodId,
       collectionKey,
-      collectionRevision:
-        'state-graph-trusted-payment-collection-revision',
-      providerRevision:
-        input.clients.confirmationAuthority!.providerRevision,
+      collectionRevision: 'state-graph-trusted-payment-collection-revision',
+      providerRevision: input.clients.confirmationAuthority!.providerRevision,
     };
     const verifiedState = {
       cart,
@@ -817,8 +785,7 @@ describe('KFC agent StateGraph', () => {
           [collectionKey]: {
             key: collectionKey,
             revision: selectedPaymentMethod.collectionRevision,
-            providerRevision:
-              selectedPaymentMethod.providerRevision,
+            providerRevision: selectedPaymentMethod.providerRevision,
             result: {
               items: [paymentMethod],
               total: 1,
@@ -838,17 +805,15 @@ describe('KFC agent StateGraph', () => {
       input.clients.payment,
       'createPaymentLink',
     );
-    const trustedCustomerAction =
-      createTrustedCustomerActionEnvelope({
-        source: 'kfc_genui_action',
-        assistantTurnId: 'assistant-trusted-payment-approval',
-        attachmentId: 'attachment-trusted-payment-approval',
-        actionDigest: 'd'.repeat(64),
-        verifiedRevision:
-          kfcGenUiVerifiedStateRevision(verifiedState),
-        lifecycle: 'one_shot',
-        command: { kind: 'continue_payment' },
-      });
+    const trustedCustomerAction = createTrustedCustomerActionEnvelope({
+      source: 'kfc_genui_action',
+      assistantTurnId: 'assistant-trusted-payment-approval',
+      attachmentId: 'attachment-trusted-payment-approval',
+      actionDigest: 'd'.repeat(64),
+      verifiedRevision: kfcGenUiVerifiedStateRevision(verifiedState),
+      lifecycle: 'one_shot',
+      command: { kind: 'continue_payment' },
+    });
 
     const paused = await runAgentTurn({
       ...input,
@@ -856,14 +821,9 @@ describe('KFC agent StateGraph', () => {
     });
     const record = canonicalConfirmationRecord(paused);
     expect(createPaymentLink).not.toHaveBeenCalled();
-    expect(planningModel.callCount).toBe(0);
-    expect(responseModel.callCount).toBe(0);
+    expect(model.callCount).toBe(0);
 
-    const resume = await authenticatedResume(
-      record,
-      1_000,
-      'approve',
-    );
+    const resume = await authenticatedResume(record, 1_000, 'approve');
     let output;
     try {
       output = await runAgentTurn({
@@ -876,12 +836,9 @@ describe('KFC agent StateGraph', () => {
     }
 
     expect(createPaymentLink).toHaveBeenCalledOnce();
-    expect(planningModel.callCount).toBe(0);
-    expect(responseModel.callCount).toBe(1);
-    expect(bindings).toEqual([[GROUNDED_RESPONSE_TOOL_NAME]]);
-    expect(output.responseText).toBe(
-      'The verified payment link is ready.',
-    );
+    expect(model.callCount).toBe(1);
+    expect(bindings).toEqual([[]]);
+    expect(output.responseText).toBe('The verified payment link is ready.');
     expect(output.state.paymentAttempt).toMatchObject({
       orderId: order.id,
       method: selectedPaymentMethod.methodId,
@@ -897,14 +854,11 @@ describe('KFC agent StateGraph', () => {
   it.each([
     [
       'invalid typed output',
-      new AIMessage({
-        content: '',
-        tool_calls: [{
-          id: 'invalid-grounded-response',
-          name: GROUNDED_RESPONSE_TOOL_NAME,
-          args: { customerText: 'Missing claims.' },
-        }],
-      }),
+      new AIMessage(
+        JSON.stringify({
+          customerText: 'Missing claims.',
+        }),
+      ),
     ],
     [
       'plain response',
@@ -926,14 +880,11 @@ describe('KFC agent StateGraph', () => {
           );
         });
       vi.spyOn(baseModel, 'bindTools').mockImplementation((tools) => {
-        const names = (tools as Array<{ name?: string }>).flatMap(
-          ({ name }) => name ? [name] : [],
+        const names = (tools as Array<{ name?: string }>).flatMap(({ name }) =>
+          name ? [name] : [],
         );
         return (
-          names.length === 1 &&
-          names[0] === GROUNDED_RESPONSE_TOOL_NAME
-            ? responseModel
-            : planningModel
+          names.length === 0 ? responseModel : planningModel
         ) as ReturnType<NonNullable<typeof baseModel.bindTools>>;
       });
       const input = turnInput(
@@ -967,25 +918,20 @@ describe('KFC agent StateGraph', () => {
       expect(responseModel.calls[1]?.messages.some(isToolMessage)).toBe(false);
       expect(responseModel.calls[1]?.messages).toContainEqual(
         expect.objectContaining({
-          id: STRUCTURED_RESPONSE_CORRECTION_MESSAGE_ID,
+          content: expect.stringContaining('provider-native structured output'),
         }),
       );
-      expect(
-        responseModel.calls[1]?.messages.some(
-          (message) =>
-            isSystemMessage(message) &&
-            message.id === STRUCTURED_RESPONSE_CORRECTION_MESSAGE_ID,
-        ),
-      ).toBe(true);
     },
   );
 
   it('reuses verified menu GenUI only when the current verified response cites its collection', async () => {
     const claims = groundedResponseClaims({
-      evidenceReferences: [{
-        evidenceId: 'active_collection:searchMenu',
-        claimKinds: ['product', 'price', 'status'],
-      }],
+      evidenceReferences: [
+        {
+          evidenceId: 'active_collection:searchMenu',
+          claimKinds: ['product', 'price', 'status'],
+        },
+      ],
     });
     const model = fakeModel().respond(
       groundedResponseModelReply({
@@ -997,16 +943,18 @@ describe('KFC agent StateGraph', () => {
       ...turnInput(model, 'state-graph-menu-response-authority'),
       responseProfile: 'genui' as const,
     };
-    const items = [{
-      code: '41140',
-      name: 'Burger Tôm',
-      description: 'Burger tôm',
-      category: 'Burger',
-      priceVnd: 45_000,
-      originalPriceVnd: null,
-      imageUrl: '',
-      available: false,
-    }];
+    const items = [
+      {
+        code: '41140',
+        name: 'Burger Tôm',
+        description: 'Burger tôm',
+        category: 'Burger',
+        priceVnd: 45_000,
+        originalPriceVnd: null,
+        imageUrl: '',
+        available: false,
+      },
+    ];
     const menu = {
       key: 'menu:unavailable',
       revision: 'menu-revision',
@@ -1044,19 +992,23 @@ describe('KFC agent StateGraph', () => {
     expect(result.output?.genUi).toMatchObject({
       widgetKind: 'smartMenuPicker',
       data: {
-        items: [expect.objectContaining({
-          code: '41140',
-          available: false,
-        })],
+        items: [
+          expect.objectContaining({
+            code: '41140',
+            available: false,
+          }),
+        ],
       },
     });
     expect(result.currentTurnToolTrace).toEqual([]);
   });
 
   it('constructs runtime dependencies from graph input without injected context', async () => {
-    const model = fakeModel().respond(groundedResponseModelReply({
-      customerText: 'Studio reply',
-    }));
+    const model = fakeModel().respond(
+      groundedResponseModelReply({
+        customerText: 'Studio reply',
+      }),
+    );
     const input = turnInput(model, 'state-graph-runtime-resolver');
     const turnTrace = await createNoopAgentTracer().startTurn({
       name: 'studio_agent_turn',
@@ -1064,15 +1016,13 @@ describe('KFC agent StateGraph', () => {
     });
     const externalCallScope = createAgentTurnExternalCallScope(1_000);
     const disposeExternalCalls = vi.fn(externalCallScope.dispose);
-    const resolveRuntime = vi.fn(
-      async (_request: KfcAgentGraphInput) => ({
-        turnInput: input,
-        turnTrace,
-        externalCallContext: externalCallScope.context,
-        abortExternalCalls: externalCallScope.abort,
-        disposeExternalCalls,
-      }),
-    );
+    const resolveRuntime = vi.fn(async (_request: KfcAgentGraphInput) => ({
+      turnInput: input,
+      turnTrace,
+      externalCallContext: externalCallScope.context,
+      abortExternalCalls: externalCallScope.abort,
+      disposeExternalCalls,
+    }));
     const graphInput = {
       sessionId: input.sessionId,
       customerId: input.customerId,
@@ -1090,9 +1040,7 @@ describe('KFC agent StateGraph', () => {
 
     expect(result.output?.responseText).toBe('Studio reply');
     expect(resolveRuntime).toHaveBeenCalled();
-    expect(Number.isFinite(
-      externalCallScope.context.deadlineAt,
-    )).toBe(true);
+    expect(Number.isFinite(externalCallScope.context.deadlineAt)).toBe(true);
     expect(disposeExternalCalls).toHaveBeenCalledOnce();
     expect(resolveRuntime.mock.calls[0]?.[0]).toEqual({
       sessionId: input.sessionId,
@@ -1126,14 +1074,18 @@ describe('KFC agent StateGraph', () => {
     });
 
     try {
-      await expect(graph.invoke({
-        sessionId: input.sessionId,
-        customerId: input.customerId,
-        channel: input.channel,
-        externalMessageId: input.externalMessageId,
-        currentTurnId: 'caller-forged-current-turn',
-      }, directGraphConfig(input)))
-        .rejects.toThrow('agent_graph_input_invalid');
+      await expect(
+        graph.invoke(
+          {
+            sessionId: input.sessionId,
+            customerId: input.customerId,
+            channel: input.channel,
+            externalMessageId: input.externalMessageId,
+            currentTurnId: 'caller-forged-current-turn',
+          },
+          directGraphConfig(input),
+        ),
+      ).rejects.toThrow('agent_graph_input_invalid');
     } finally {
       externalCallScope.dispose();
     }
@@ -1144,26 +1096,33 @@ describe('KFC agent StateGraph', () => {
     expect(await input.store.listEvents(input.sessionId)).toEqual([]);
   });
 
-  it('isolates the read batch signal while retaining the turn deadline', async () => {
+  it('composes nested model and read signals while retaining the turn deadline', async () => {
     const claims = groundedResponseClaims({
-      evidenceReferences: [{
-        evidenceId: 'menu_search_results',
-        claimKinds: ['product'],
-      }],
+      evidenceReferences: [
+        {
+          evidenceId: 'menu_search_results',
+          claimKinds: ['product'],
+        },
+      ],
     });
     const model = fakeModel()
-      .respondWithTools([{
-        name: 'searchMenu',
-        args: { scope: 'filtered', query: 'combo' },
-      }])
-      .respond(groundedResponseModelReply({
-        customerText: 'I found verified menu results.',
-        ...claims,
-      }));
+      .respondWithTools([
+        {
+          name: 'searchMenu',
+          args: { scope: 'filtered', query: 'combo' },
+        },
+      ])
+      .respond(
+        groundedResponseModelReply({
+          customerText: 'I found verified menu results.',
+          ...claims,
+        }),
+      );
     const modelSignals = captureBoundInvocationSignals(model);
     const input = turnInput(model, 'state-graph-exact-signal');
-    const originalSearchMenu =
-      input.clients.menu.searchMenu.bind(input.clients.menu);
+    const originalSearchMenu = input.clients.menu.searchMenu.bind(
+      input.clients.menu,
+    );
     let commerceContext: ExternalCallContext | undefined;
     input.clients.menu.searchMenu = vi.fn(async (query, context) => {
       commerceContext = context;
@@ -1178,22 +1137,21 @@ describe('KFC agent StateGraph', () => {
     expect(result.output?.responseText).toContain(
       'I found verified menu results.',
     );
-    expect(modelSignals[0]).toBe(
-      externalCallScope.context.signal,
-    );
-    expect(commerceContext?.signal).not.toBe(
-      externalCallScope.context.signal,
-    );
+    expect(modelSignals[0]).toBeDefined();
+    expect(modelSignals[0]).not.toBe(externalCallScope.context.signal);
+    expect(commerceContext?.signal).not.toBe(externalCallScope.context.signal);
     expect(commerceContext?.deadlineAt).toBe(
       externalCallScope.context.deadlineAt,
     );
   });
 
   it('routes thrown tool errors through fail-closed persistence', async () => {
-    const model = fakeModel().respondWithTools([{
-      name: 'searchMenu',
-      args: { scope: 'filtered', query: 'combo' },
-    }]);
+    const model = fakeModel().respondWithTools([
+      {
+        name: 'searchMenu',
+        args: { scope: 'filtered', query: 'combo' },
+      },
+    ]);
     const input = turnInput(model, 'state-graph-tool-error');
     input.clients.menu.searchMenu = async () => {
       throw new Error('provider exploded');
@@ -1211,10 +1169,12 @@ describe('KFC agent StateGraph', () => {
 
   it('routes thrown approval revalidation errors through fail-closed persistence', async () => {
     const model = fakeModel()
-      .respondWithTools([{
-        name: 'handoff',
-        args: { reasons: ['customer requested support'] },
-      }])
+      .respondWithTools([
+        {
+          name: 'handoff',
+          args: { reasons: ['customer requested support'] },
+        },
+      ])
       .respond(new AIMessage('Order creation cancelled.'));
     const input = approvalTurnInput(
       model,
@@ -1223,23 +1183,26 @@ describe('KFC agent StateGraph', () => {
     );
     const paused = await runAgentTurn(input);
     const record = canonicalConfirmationRecord(paused);
-    const revalidate = vi.fn(async (
-      _providerBinding:
-        Parameters<
+    const revalidate = vi.fn(
+      async (
+        _providerBinding: Parameters<
           NonNullable<typeof input.clients.confirmationAuthority>['revalidate']
         >[0],
-      _externalCallContext: ExternalCallContext,
-    ) => {
-      throw new Error('provider exploded');
-    });
+        _externalCallContext: ExternalCallContext,
+      ) => {
+        throw new Error('provider exploded');
+      },
+    );
     input.clients.confirmationAuthority!.revalidate = revalidate;
-    const resume = await authenticatedResume(record, 1_000);
+    const resume = await authenticatedResume(record, 1_000, 'approve');
 
     try {
-      await expect(runAgentTurn({
-        ...input,
-        confirmationResume: resume.confirmationResume,
-      })).rejects.toThrow('agent_approval_receipt_binding_mismatch');
+      await expect(
+        runAgentTurn({
+          ...input,
+          confirmationResume: resume.confirmationResume,
+        }),
+      ).rejects.toThrow('agent_approval_receipt_binding_mismatch');
     } finally {
       resume.externalCallScope.dispose();
     }
@@ -1256,13 +1219,17 @@ describe('KFC agent StateGraph', () => {
 
   it('starts approval resume with a fresh finite external-call deadline', async () => {
     const model = fakeModel()
-      .respondWithTools([{
-        name: 'handoff',
-        args: { reasons: ['customer requested support'] },
-      }])
-      .respond(groundedResponseModelReply({
-        customerText: 'I left the verified order unsubmitted.',
-      }));
+      .respondWithTools([
+        {
+          name: 'handoff',
+          args: { reasons: ['customer requested support'] },
+        },
+      ])
+      .respond(
+        groundedResponseModelReply({
+          customerText: 'I left the verified order unsubmitted.',
+        }),
+      );
     const modelSignals = captureBoundInvocationSignals(model);
     const input = {
       ...approvalTurnInput(
@@ -1280,7 +1247,7 @@ describe('KFC agent StateGraph', () => {
 
     await new Promise((resolve) => setTimeout(resolve, 275));
     const resumeStartedAt = Date.now();
-    const resume = await authenticatedResume(record, 250);
+    const resume = await authenticatedResume(record, 250, 'approve');
     let output;
     try {
       output = await runAgentTurn({
@@ -1291,28 +1258,29 @@ describe('KFC agent StateGraph', () => {
       resume.externalCallScope.dispose();
     }
 
-    expect(output.responseText).toBe(
-      'I left the verified order unsubmitted.',
-    );
+    expect(output.responseText).toBe('I left the verified order unsubmitted.');
     expect(revalidate).toHaveBeenCalledOnce();
     const resumeContext = revalidate.mock.calls[0]?.[1];
     expect(resumeContext).toBe(resume.externalCallScope.context);
     expect(resumeContext?.deadlineAt).toBeGreaterThan(resumeStartedAt);
-    expect(modelSignals.at(-1)).toBe(
-      resumeContext?.signal,
-    );
+    expect(modelSignals.at(-1)).not.toBe(modelSignals[0]);
+    expect(modelSignals.at(-1)?.aborted).toBe(false);
   });
 
   it('refreshes the checkpoint deadline on a raw Studio-style resume', async () => {
     vi.useFakeTimers();
     const model = fakeModel()
-      .respondWithTools([{
-        name: 'handoff',
-        args: { reasons: ['customer requested support'] },
-      }])
-      .respond(groundedResponseModelReply({
-        customerText: 'I left the verified order unsubmitted.',
-      }));
+      .respondWithTools([
+        {
+          name: 'handoff',
+          args: { reasons: ['customer requested support'] },
+        },
+      ])
+      .respond(
+        groundedResponseModelReply({
+          customerText: 'I left the verified order unsubmitted.',
+        }),
+      );
     const modelSignals = captureBoundInvocationSignals(model);
     const baseInput = {
       ...approvalTurnInput(
@@ -1358,15 +1326,18 @@ describe('KFC agent StateGraph', () => {
       resolveRuntime,
     });
     const config = directGraphConfig(baseInput);
-    const paused = await graph.invoke({
-      sessionId: baseInput.sessionId,
-      customerId: baseInput.customerId,
-      channel: baseInput.channel,
-      text: baseInput.text,
-      externalMessageId: baseInput.externalMessageId,
-      metadata: null,
-      messages: [],
-    }, config);
+    const paused = await graph.invoke(
+      {
+        sessionId: baseInput.sessionId,
+        customerId: baseInput.customerId,
+        channel: baseInput.channel,
+        text: baseInput.text,
+        externalMessageId: baseInput.externalMessageId,
+        metadata: null,
+        messages: [],
+      },
+      config,
+    );
     const pausedState = paused.domainState!;
     const action = {
       toolName: 'handoff' as const,
@@ -1387,7 +1358,7 @@ describe('KFC agent StateGraph', () => {
             authenticatedSubject: baseInput.accessContext.kfcSubjectRef,
             authenticationEvidenceRef:
               baseInput.accessContext.authenticationEvidence.state ===
-                'verified'
+              'verified'
                 ? baseInput.accessContext.authenticationEvidence.evidenceRef
                 : 'missing',
           },
@@ -1418,9 +1389,7 @@ describe('KFC agent StateGraph', () => {
       decision: 'reject',
       receiptId: baseInput.confirmationRequestId,
     });
-    const approvalBindingDigest = await digestCommerceAction(
-      approvalBinding,
-    );
+    const approvalBindingDigest = await digestCommerceAction(approvalBinding);
     const pausedCheckpoint = await baseInput.checkpointer.getTuple(config);
     const pausedCheckpointConfig = pausedCheckpoint?.config.configurable;
     if (!pausedCheckpoint || !pausedCheckpointConfig) {
@@ -1439,8 +1408,7 @@ describe('KFC agent StateGraph', () => {
         checkpointId: pausedCheckpoint.checkpoint.id,
         bindingFingerprint: approvalBindingDigest,
         approvalBindingDigest,
-        providerIdempotencyKey:
-          `confirmation:${commerceReceipt.receiptId}:handoff:test`,
+        providerIdempotencyKey: `confirmation:${commerceReceipt.receiptId}:handoff:test`,
         attempt: 1,
         leaseToken: crypto.randomUUID(),
       },
@@ -1460,9 +1428,12 @@ describe('KFC agent StateGraph', () => {
     await vi.advanceTimersByTimeAsync(40);
     expect(paused.failure).toBeNull();
     expect(paused.turnDeadlineAt).toBeLessThanOrEqual(Date.now());
-    const resumed = await graph.invoke(new Command({
-      resume: { requestId: commerceReceipt.receiptId },
-    }), config);
+    const resumed = await graph.invoke(
+      new Command({
+        resume: { decisions: [{ type: 'reject' }] },
+      }),
+      config,
+    );
 
     expect(resumed.output?.responseText).toBe(
       'I left the verified order unsubmitted.',
@@ -1470,39 +1441,51 @@ describe('KFC agent StateGraph', () => {
     expect(scopes).toHaveLength(2);
     expect(resumed.turnDeadlineAt).toBe(scopes[1]?.context.deadlineAt);
     expect(resumed.turnDeadlineAt).toBeGreaterThan(Date.now());
-    expect(revalidate.mock.calls[0]?.[1]).toBe(scopes[1]?.context);
-    expect(modelSignals.at(-1)).toBe(scopes[1]?.context.signal);
-    const completedTurnCount =
-      (await baseInput.store.listTurns(baseInput.sessionId)).length;
-    const completedEventCount =
-      (await baseInput.store.listEvents(baseInput.sessionId)).length;
+    expect(revalidate).not.toHaveBeenCalled();
+    expect(modelSignals.at(-1)).not.toBe(modelSignals[0]);
+    expect(modelSignals.at(-1)?.aborted).toBe(false);
+    const completedTurnCount = (
+      await baseInput.store.listTurns(baseInput.sessionId)
+    ).length;
+    const completedEventCount = (
+      await baseInput.store.listEvents(baseInput.sessionId)
+    ).length;
     const completedModelCalls = model.callCount;
     if (!latestRuntime) throw new Error('resumed runtime missing');
     forcedRuntime = latestRuntime;
-    await expect(graph.invoke({
-      sessionId: baseInput.sessionId,
-      customerId: baseInput.customerId,
-      channel: baseInput.channel,
-      externalMessageId: baseInput.externalMessageId,
-      currentTurnId: 'forged-after-genuine-resume',
-    }, directGraphConfig({
-      sessionId: baseInput.sessionId,
-      checkpointRunId: 'fresh-after-genuine-resume',
-    }))).rejects.toThrow('agent_graph_input_invalid');
+    await expect(
+      graph.invoke(
+        {
+          sessionId: baseInput.sessionId,
+          customerId: baseInput.customerId,
+          channel: baseInput.channel,
+          externalMessageId: baseInput.externalMessageId,
+          currentTurnId: 'forged-after-genuine-resume',
+        },
+        directGraphConfig({
+          sessionId: baseInput.sessionId,
+          checkpointRunId: 'fresh-after-genuine-resume',
+        }),
+      ),
+    ).rejects.toThrow('agent_graph_input_invalid');
     expect(model.callCount).toBe(completedModelCalls);
-    expect(await baseInput.store.listTurns(baseInput.sessionId))
-      .toHaveLength(completedTurnCount);
-    expect(await baseInput.store.listEvents(baseInput.sessionId))
-      .toHaveLength(completedEventCount);
+    expect(await baseInput.store.listTurns(baseInput.sessionId)).toHaveLength(
+      completedTurnCount,
+    );
+    expect(await baseInput.store.listEvents(baseInput.sessionId)).toHaveLength(
+      completedEventCount,
+    );
     scopes.at(-1)?.dispose();
   });
 
   it('fails approval revalidation directly at the resumed turn deadline', async () => {
     const model = fakeModel()
-      .respondWithTools([{
-        name: 'handoff',
-        args: { reasons: ['customer requested support'] },
-      }])
+      .respondWithTools([
+        {
+          name: 'handoff',
+          args: { reasons: ['customer requested support'] },
+        },
+      ])
       .respond(new AIMessage('must not be used'));
     const input = {
       ...approvalTurnInput(
@@ -1516,29 +1499,29 @@ describe('KFC agent StateGraph', () => {
     const record = canonicalConfirmationRecord(paused);
     const revalidate = vi.fn(
       async (
-        _providerBinding:
-          Parameters<
-            NonNullable<
-              typeof input.clients.confirmationAuthority
-            >['revalidate']
-          >[0],
+        _providerBinding: Parameters<
+          NonNullable<typeof input.clients.confirmationAuthority>['revalidate']
+        >[0],
         context: ExternalCallContext,
-      ) => new Promise<never>((_resolve, reject) => {
-        const rejectWithReason = () => reject(context.signal.reason);
-        context.signal.addEventListener('abort', rejectWithReason, {
-          once: true,
-        });
-        if (context.signal.aborted) rejectWithReason();
-      }),
+      ) =>
+        new Promise<never>((_resolve, reject) => {
+          const rejectWithReason = () => reject(context.signal.reason);
+          context.signal.addEventListener('abort', rejectWithReason, {
+            once: true,
+          });
+          if (context.signal.aborted) rejectWithReason();
+        }),
     );
     input.clients.confirmationAuthority!.revalidate = revalidate;
-    const resume = await authenticatedResume(record, 100);
+    const resume = await authenticatedResume(record, 100, 'approve');
 
     try {
-      await expect(runAgentTurn({
-        ...input,
-        confirmationResume: resume.confirmationResume,
-      })).rejects.toThrow('agent_turn_deadline_exceeded');
+      await expect(
+        runAgentTurn({
+          ...input,
+          confirmationResume: resume.confirmationResume,
+        }),
+      ).rejects.toThrow('agent_turn_deadline_exceeded');
     } finally {
       resume.externalCallScope.dispose();
     }
@@ -1616,16 +1599,17 @@ describe('KFC agent StateGraph', () => {
   it('aborts an in-flight provider call at the turn deadline', async () => {
     const model = fakeModel();
     const generate = vi.spyOn(model, '_generate').mockImplementation(
-      (_messages, options) => new Promise<never>((_resolve, reject) => {
-        const signal = options?.signal;
-        if (!signal) {
-          reject(new Error('provider_abort_signal_missing'));
-          return;
-        }
-        const rejectWithReason = () => reject(signal.reason);
-        signal.addEventListener('abort', rejectWithReason, { once: true });
-        if (signal.aborted) rejectWithReason();
-      }),
+      (_messages, options) =>
+        new Promise<never>((_resolve, reject) => {
+          const signal = options?.signal;
+          if (!signal) {
+            reject(new Error('provider_abort_signal_missing'));
+            return;
+          }
+          const rejectWithReason = () => reject(signal.reason);
+          signal.addEventListener('abort', rejectWithReason, { once: true });
+          if (signal.aborted) rejectWithReason();
+        }),
     );
     vi.spyOn(model, 'bindTools').mockReturnValue(model);
     const input = {
@@ -1643,6 +1627,92 @@ describe('KFC agent StateGraph', () => {
     );
     expect(failure?.payload).toEqual({
       errorCode: 'agent_turn_deadline_exceeded',
+    });
+  });
+
+  it('preserves an established deadline failure when its audit commit is stale', async () => {
+    const model = fakeModel();
+    const generate = vi.spyOn(model, '_generate').mockImplementation(
+      (_messages, options) =>
+        new Promise<never>((_resolve, reject) => {
+          const signal = options?.signal;
+          if (!signal) {
+            reject(new Error('provider_abort_signal_missing'));
+            return;
+          }
+          const rejectWithReason = () => reject(signal.reason);
+          signal.addEventListener('abort', rejectWithReason, { once: true });
+          if (signal.aborted) rejectWithReason();
+        }),
+    );
+    vi.spyOn(model, 'bindTools').mockReturnValue(model);
+    const commitFence = {
+      kind: 'agent_run' as const,
+      runId: 'state-graph-stale-deadline-audit-run',
+      generation: 7,
+      sessionAuthorityGeneration: 11,
+      executionAttempt: 2,
+      executionLeaseToken: 'state-graph-stale-deadline-audit-token',
+    };
+    const input = {
+      ...turnInput(model, 'state-graph-stale-deadline-audit'),
+      runGuard: {
+        isCurrent: vi.fn(async () => true),
+        commitFence,
+      },
+    };
+    const appendEventIfRunCurrent = vi
+      .spyOn(input.store, 'appendEventIfRunCurrent')
+      .mockResolvedValue({ status: 'stale' });
+
+    const result = await invokeGraphDirect(input, { deadlineMs: 100 });
+
+    expect(result.failure).toBe('agent_turn_deadline_exceeded');
+    expect(generate).toHaveBeenCalledOnce();
+    expect(appendEventIfRunCurrent).toHaveBeenCalledWith({
+      sessionId: input.sessionId,
+      sourceType: 'agent:failed_closed',
+      payload: { errorCode: 'agent_turn_deadline_exceeded' },
+      fence: commitFence,
+    });
+  });
+
+  it('keeps stale ownership before the deadline classified as cancellation', async () => {
+    const model = fakeModel()
+      .respond(new AIMessage('invalid ungrounded response'))
+      .respond(new AIMessage('still invalid'));
+    const commitFence = {
+      kind: 'operation_lease' as const,
+      requestId: 'state-graph-stale-owner-request',
+      operation: 'confirmation_resume',
+      bindingFingerprint: 'state-graph-stale-owner-fingerprint',
+      attempt: 3,
+      leaseToken: 'state-graph-stale-owner-token',
+      sessionAuthorityGeneration: 13,
+    };
+    const input = {
+      ...turnInput(model, 'state-graph-stale-owner-before-deadline'),
+      runGuard: {
+        isCurrent: vi.fn(async () => true),
+        commitFence,
+      },
+    };
+    const appendEventIfRunCurrent = vi
+      .spyOn(input.store, 'appendEventIfRunCurrent')
+      .mockResolvedValue({ status: 'stale' });
+    const externalCallScope = createAgentTurnExternalCallScope(10_000);
+
+    const result = await invokeGraphDirect(input, { externalCallScope });
+
+    expect(result.failure).toBe('customer_run_cancelled');
+    expect(externalCallScope.context.signal.reason).toEqual(
+      expect.objectContaining({ name: 'AbortError' }),
+    );
+    expect(appendEventIfRunCurrent).toHaveBeenCalledWith({
+      sessionId: input.sessionId,
+      sourceType: 'agent:failed_closed',
+      payload: { errorCode: 'agent_semantic_correction_limit_exceeded' },
+      fence: commitFence,
     });
   });
 
@@ -1700,12 +1770,12 @@ describe('KFC agent StateGraph', () => {
     });
     expect(dispatchedContext?.signal.aborted).toBe(true);
     const events = await input.store.listEvents(input.sessionId);
-    expect(events.filter(
-      ({ sourceType }) => sourceType === 'agent:failed_closed',
-    )).toHaveLength(1);
-    expect(events.filter(
-      ({ sourceType }) => sourceType === 'graph:verified_state',
-    )).toHaveLength(1);
+    expect(
+      events.filter(({ sourceType }) => sourceType === 'agent:failed_closed'),
+    ).toHaveLength(1);
+    expect(
+      events.filter(({ sourceType }) => sourceType === 'graph:verified_state'),
+    ).toHaveLength(1);
   });
 
   it('rechecks run ownership after the planning observer before model dispatch', async () => {
@@ -1729,10 +1799,12 @@ describe('KFC agent StateGraph', () => {
 
   it('rechecks run ownership after the tool observer before commerce dispatch', async () => {
     let current = true;
-    const model = fakeModel().respondWithTools([{
-      name: 'searchMenu',
-      args: { scope: 'filtered', query: 'combo' },
-    }]);
+    const model = fakeModel().respondWithTools([
+      {
+        name: 'searchMenu',
+        args: { scope: 'filtered', query: 'combo' },
+      },
+    ]);
     const input = {
       ...turnInput(model, 'state-graph-observer-superseded-tool'),
       runGuard: { isCurrent: vi.fn(async () => current) },
@@ -1755,37 +1827,35 @@ describe('KFC agent StateGraph', () => {
   it('preserves authorized nullable address fields for provider dispatch and trace projection', async () => {
     const responseClaims = groundedResponseClaims();
     const model = fakeModel()
-      .respondWithTools([{
-        name: 'quoteFulfillment',
-        args: {
-          address: {
-            label: null,
-            line1: '60 Đ. Phạm Văn Nghị',
-            district: 'Quận 7',
-            city: 'Hồ Chí Minh',
+      .respondWithTools([
+        {
+          name: 'quoteFulfillment',
+          args: {
+            address: {
+              label: null,
+              line1: '60 Đ. Phạm Văn Nghị',
+              district: 'Quận 7',
+              city: 'Hồ Chí Minh',
+            },
+            method: 'delivery',
           },
-          method: 'delivery',
         },
-      }])
-      .respond(groundedResponseModelReply({
-        customerText: 'Okay.',
-        ...responseClaims,
-      }));
-    const input = turnInput(
-      model,
-      'state-graph-canonical-tool-arguments',
-    );
-    input.text =
-      'Giao tới 60 Đ. Phạm Văn Nghị, Quận 7, Hồ Chí Minh.';
+      ])
+      .respond(
+        groundedResponseModelReply({
+          customerText: 'Okay.',
+          ...responseClaims,
+        }),
+      );
+    const input = turnInput(model, 'state-graph-canonical-tool-arguments');
+    input.text = 'Giao tới 60 Đ. Phạm Văn Nghị, Quận 7, Hồ Chí Minh.';
     await input.store.appendEvent(input.sessionId, 'graph:verified_state', {
       verifiedState: {
         cart: verifiedCart(),
         toolTrace: [],
       },
     });
-    const quoteFulfillment = vi.fn(
-      input.clients.fulfillment.quoteFulfillment,
-    );
+    const quoteFulfillment = vi.fn(input.clients.fulfillment.quoteFulfillment);
     input.clients.fulfillment.quoteFulfillment = quoteFulfillment;
 
     const result = await invokeGraphDirect(input, {});
@@ -1818,6 +1888,7 @@ describe('KFC agent StateGraph', () => {
             city: 'Hồ Chí Minh',
           },
           method: 'delivery',
+          itemCodes: ['20751'],
         },
         publicationEvidenceAudit: expect.objectContaining({
           argumentsDigest: await stateRevision({
@@ -1828,6 +1899,7 @@ describe('KFC agent StateGraph', () => {
               city: 'Hồ Chí Minh',
             },
             method: 'delivery',
+            itemCodes: ['20751'],
           }),
         }),
       }),
@@ -1848,28 +1920,34 @@ describe('KFC agent StateGraph', () => {
 
     expect(result.failure).toBe('agent_turn_deadline_exceeded');
     expect(result.messages.some(isAIMessage)).toBe(false);
-    expect(result.providerAttempts).toBe(0);
+    expect(result.providerAttempts).toBe(1);
     expect(result.providerAttemptEvidence).toEqual([]);
   });
 
-  it('keeps verified state transactional when cancellation occurs during observation', async () => {
+  it('retains committed verified reads when cancellation occurs during post-commit observation', async () => {
     let current = true;
     let verifiedStateObservations = 0;
     const model = fakeModel()
-      .respondWithTools([{
-        name: 'searchMenu',
-        args: { scope: 'all', query: null },
-      }])
-      .respondWithTools([{
-        name: 'updateCart',
-        args: {
-          changes: [{
-            itemCode: '20751',
-            quantity: 1,
-            modifiers: [],
-          }],
+      .respondWithTools([
+        {
+          name: 'searchMenu',
+          args: { scope: 'all', query: null },
         },
-      }]);
+      ])
+      .respondWithTools([
+        {
+          name: 'updateCart',
+          args: {
+            changes: [
+              {
+                itemCode: '20751',
+                quantity: 1,
+                modifiers: [],
+              },
+            ],
+          },
+        },
+      ]);
     const baseInput = turnInput(
       model,
       'state-graph-transactional-cancellation',
@@ -1903,8 +1981,7 @@ describe('KFC agent StateGraph', () => {
         commitFence: {
           kind: 'customer_run' as const,
           runId,
-          sessionAuthorityGeneration:
-            run.sessionAuthorityGeneration,
+          sessionAuthorityGeneration: run.sessionAuthorityGeneration,
         },
       },
       observeRun: vi.fn(async ({ kind }) => {
@@ -1925,10 +2002,12 @@ describe('KFC agent StateGraph', () => {
 
     expect(result.failure).toBe('customer_run_cancelled');
     expect(result.domainState?.cart).toBeUndefined();
-    expect(result.domainState?.toolTrace?.map(({ toolName }) => toolName))
-      .toEqual(['searchMenu']);
-    expect(result.currentTurnToolTrace.map(({ toolName }) => toolName))
-      .toEqual(['searchMenu']);
+    expect(
+      result.domainState?.toolTrace?.map(({ toolName }) => toolName),
+    ).toEqual(['searchMenu']);
+    expect(result.currentTurnToolTrace.map(({ toolName }) => toolName)).toEqual(
+      ['searchMenu'],
+    );
     const snapshots = (await input.store.listEvents(input.sessionId)).filter(
       ({ sourceType }) => sourceType === 'graph:verified_state',
     );
@@ -1938,14 +2017,14 @@ describe('KFC agent StateGraph', () => {
       undefined,
     );
     expect(
-      (await input.store.listTurns(input.sessionId))
-        .filter(({ role }) => role === 'user'),
+      (await input.store.listTurns(input.sessionId)).filter(
+        ({ role }) => role === 'user',
+      ),
     ).toHaveLength(1);
     expect(
-      (await input.store.listEvents(input.sessionId))
-        .filter(
-          ({ sourceType }) => sourceType === 'conversation_turn:user',
-        ),
+      (await input.store.listEvents(input.sessionId)).filter(
+        ({ sourceType }) => sourceType === 'conversation_turn:user',
+      ),
     ).toHaveLength(1);
     expect(externalCallScope.context.signal.aborted).toBe(true);
   });

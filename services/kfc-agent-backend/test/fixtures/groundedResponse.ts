@@ -11,6 +11,7 @@ import {
 } from '../../src/agent/responseGrounding.js';
 import {
   responseClaimKindSchema,
+  type ResponseEvidenceLimitation,
 } from '../../src/agent/responseEvidenceContracts.js';
 import type {
   SelectedActionResponseReference,
@@ -41,10 +42,12 @@ export function groundedResponseClaims(input: {
     evidenceId: string;
     claimKinds: ResponseClaimKind[];
   }>;
+  disclosedLimitations?: ResponseEvidenceLimitation[];
   hasUnsupportedFactualClaim?: boolean;
 } = {}): ResponseFactualClaims {
   return {
     evidenceReferences: input.evidenceReferences ?? [],
+    disclosedLimitations: input.disclosedLimitations ?? [],
     hasUnsupportedFactualClaim:
       input.hasUnsupportedFactualClaim ?? false,
   };
@@ -57,6 +60,7 @@ export function groundedResponseToolCall(input: {
     evidenceId: string;
     claimKinds: ResponseClaimKind[];
   }>;
+  disclosedLimitations?: ResponseEvidenceLimitation[];
   hasUnsupportedFactualClaim?: boolean;
   publicationDeclaration?: {
     semanticRelevance: 'aligned' | 'misaligned';
@@ -131,6 +135,7 @@ function evidenceReferences(
 export function groundedResponseModelReply(input: {
   customerText: string;
   evidenceReferences?: EvidenceReferenceInput;
+  disclosedLimitations?: ResponseEvidenceLimitation[];
   hasUnsupportedFactualClaim?: boolean;
   publicationDeclaration?: {
     semanticRelevance: 'aligned' | 'misaligned';
@@ -151,18 +156,24 @@ export function groundedResponseModelReply(input: {
 }): (messages: BaseMessage[]) => AIMessage {
   return (messages) => {
     const publication = publicationSnapshot(messages);
-    return (
-    new AIMessage({
-      content: '',
-      tool_calls: [groundedResponseToolCall({
-        ...input,
+    return new AIMessage(JSON.stringify({
+      customerText: input.customerText,
+      projectionDigest: publication.projectionDigest,
+      factualClaims: groundedResponseClaims({
         evidenceReferences: evidenceReferences(
           input.evidenceReferences,
           publication,
         ),
-        projectionDigest: publication.projectionDigest,
-      })],
-    })
-    );
+        disclosedLimitations: input.disclosedLimitations,
+        hasUnsupportedFactualClaim: input.hasUnsupportedFactualClaim,
+      }),
+      publicationDeclaration: input.publicationDeclaration ?? {
+        semanticRelevance: 'aligned',
+        privateDataDisclosure: 'none',
+        disclosureAuthorities: [],
+        disclosesInternalMetadata: false,
+      },
+      selectedActionResponse: input.selectedActionResponse ?? null,
+    }));
   };
 }

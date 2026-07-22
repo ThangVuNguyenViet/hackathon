@@ -19,12 +19,8 @@ import {
   buildSelectedActionGraphAuthorities,
   validateSelectedActionGroundedResponse,
 } from '../../src/agent/selectedActionResponseBoundary.js';
-import {
-  createTrustedCustomerActionEnvelope,
-} from '../../src/domain/customerCommand.js';
-import {
-  kfcGenUiVerifiedStateRevision,
-} from '../../src/genui/kfcGenUi.js';
+import { createTrustedCustomerActionEnvelope } from '../../src/domain/customerCommand.js';
+import { kfcGenUiVerifiedStateRevision } from '../../src/genui/kfcGenUi.js';
 import type { AgentGraphState } from '../../src/graph/state.js';
 import { stateRevision } from '../../src/graph/turnSupport.js';
 import { DashboardEventBus } from '../../src/dashboard/eventBus.js';
@@ -35,20 +31,21 @@ import {
   createAgentTurnExternalCallScope,
   type SingleAgentRuntimeContext,
 } from '../../src/agent/singleAgentRuntime.js';
-import {
-  assertPublicationCommitAuthority,
-} from '../../src/agent/agentPublicationCommitAuthority.js';
+import { assertPublicationCommitAuthority } from '../../src/agent/agentPublicationCommitAuthority.js';
 import {
   modelPublicationContext,
+  modelPublicationContextWithDiagnostics,
 } from '../../src/agent/agentPublicationRuntime.js';
 import {
   issueResponsePublicationAttestation,
   responsePublicationAttestationSchema,
+  validateResponsePublicationDeclarationConsistency,
 } from '../../src/agent/responsePrivacyAttestation.js';
 import { createTestFixtures } from '../fixtures/testFixtures.js';
-import {
-  controlledCustomerAccess,
-} from '../fixtures/controlledCustomerAccess.js';
+import { controlledCustomerAccess } from '../fixtures/controlledCustomerAccess.js';
+import { OrderingDataService } from '../../src/ordering/orderingDataService.js';
+import type { ToolTraceEntry } from '../../src/ordering/types.js';
+import { loadGeneratedFixtures } from '../../src/fixtures/loadFixtures.js';
 
 const currentUserMessage = 'Show my current cart';
 const customerText = 'Your current cart has one item.';
@@ -74,12 +71,14 @@ function publicationState(): AgentGraphState {
     recentTurns: [currentUserTurn],
     cart: {
       id: 'publication-grounding-cart',
-      items: [{
-        itemCode: 'item-current',
-        name: 'Current item',
-        quantity: 1,
-        unitPriceVnd: 50_000,
-      }],
+      items: [
+        {
+          itemCode: 'item-current',
+          name: 'Current item',
+          quantity: 1,
+          unitPriceVnd: 50_000,
+        },
+      ],
       subtotalVnd: 50_000,
       discountVnd: 0,
       deliveryFeeVnd: 0,
@@ -132,11 +131,69 @@ async function privatePublicationBundle(): Promise<ModelPublicationBundle> {
   return buildModelPublicationBundle({ state, authority });
 }
 
+async function boundedCatalogPublicationBundle(): Promise<ModelPublicationBundle> {
+  const state = publicationState();
+  const item = new OrderingDataService(createTestFixtures()).getMenuItem(
+    '20751',
+  );
+  if (!item) throw new Error('menu fixture missing');
+  const collectionKey = 'menu:all';
+  state.activeCollectionKeys = { searchMenu: collectionKey };
+  state.verifiedCollections = {
+    searchMenu: {
+      [collectionKey]: {
+        key: collectionKey,
+        revision: 'catalog-revision',
+        providerRevision: 'catalog-provider-revision',
+        result: {
+          items: [item],
+          total: 1,
+          returned: 1,
+          complete: true,
+          scope: { scope: 'all' },
+        },
+      },
+    },
+  };
+  return publicationBundle(state);
+}
+
+async function compositeCatalogPublicationBundle(): Promise<ModelPublicationBundle> {
+  const state = publicationState();
+  const fixtures = await loadGeneratedFixtures(process.cwd());
+  const item = new OrderingDataService(fixtures, {
+    currentDate: '2026-07-13',
+  }).getMenuItem('20709');
+  if (!item) throw new Error('composite menu fixture missing');
+  const collectionKey = 'menu:20709';
+  state.activeCollectionKeys = { searchMenu: collectionKey };
+  state.verifiedCollections = {
+    searchMenu: {
+      [collectionKey]: {
+        key: collectionKey,
+        revision: 'composite-catalog-revision',
+        providerRevision: 'composite-catalog-provider-revision',
+        result: {
+          items: [item],
+          total: 1,
+          returned: 1,
+          complete: true,
+          scope: { scope: 'filtered', query: '20709' },
+        },
+      },
+    },
+  };
+  return publicationBundle(state);
+}
+
 const claims: ResponseFactualClaims = {
-  evidenceReferences: [{
-    evidenceId: 'cart',
-    claimKinds: ['product', 'price'],
-  }],
+  evidenceReferences: [
+    {
+      evidenceId: 'cart',
+      claimKinds: ['product', 'price'],
+    },
+  ],
+  disclosedLimitations: [],
   hasUnsupportedFactualClaim: false,
 };
 
@@ -176,9 +233,7 @@ function groundedResponse(
   };
 }
 
-async function runtime(
-  state: AgentGraphState,
-): Promise<{
+async function runtime(state: AgentGraphState): Promise<{
   runtime: SingleAgentRuntimeContext;
   dispose: () => void;
 }> {
@@ -242,6 +297,92 @@ async function selectedActionBoundaryFixture() {
 }
 
 describe('response publication boundary', () => {
+  it('materializes repeated publication values once in a prompt-only value table', () => {
+    const sentinel = `unique-menu-payload-${'x'.repeat(512)}`;
+    const items = [{ code: 'item-1', name: sentinel }];
+    const collection = {
+      items,
+      total: 1,
+      returned: 1,
+      complete: true,
+      scope: { scope: 'all' },
+    };
+    const bundle = {
+      schemaVersion: 'kfc-model-publication-v1',
+      modelState: {
+        activeCollections: { searchMenu: collection },
+        menuSearchResults: items,
+      },
+      evidence: [
+        {
+          evidenceId: 'active_collection:searchMenu',
+          claimKinds: ['menu'],
+          requiredLimitations: [],
+          value: collection,
+          officialSource: false,
+          publicationAuthority: 'verified_state',
+          privateData: false,
+        },
+        {
+          evidenceId: 'menu_search_results',
+          claimKinds: ['menu'],
+          requiredLimitations: [],
+          value: items,
+          officialSource: false,
+          publicationAuthority: 'verified_state',
+          privateData: false,
+        },
+        {
+          evidenceId: `current:searchMenu:${'a'.repeat(64)}`,
+          claimKinds: ['menu'],
+          requiredLimitations: [],
+          value: collection,
+          officialSource: false,
+          publicationAuthority: 'current_turn_execution',
+          privateData: false,
+        },
+      ],
+      allowedEvidenceIds: [
+        'active_collection:searchMenu',
+        'menu_search_results',
+        `current:searchMenu:${'a'.repeat(64)}`,
+      ],
+      projectionDigest: 'b'.repeat(64),
+      lifecycle: {
+        currentUserMessageDigest: 'c'.repeat(64),
+      },
+    } as unknown as ModelPublicationBundle;
+    const before = structuredClone(bundle);
+
+    const projection = modelPublicationContextWithDiagnostics(bundle, null);
+    const serialized = projection.serialized;
+    const context = JSON.parse(serialized) as {
+      publication: {
+        valueTable: Record<string, unknown>;
+        modelState: unknown;
+        evidence: Array<{ value: unknown }>;
+      };
+    };
+
+    expect(Object.keys(context.publication.valueTable).length).toBeGreaterThan(
+      0,
+    );
+    expect(projection.diagnostics).toMatchObject({
+      uniqueValueCount: expect.any(Number),
+      referenceCount: expect.any(Number),
+      originalPublicationBytes: expect.any(Number),
+      compactPublicationBytes: expect.any(Number),
+      bytesSaved: expect.any(Number),
+    });
+    expect(projection.diagnostics.referenceCount).toBeGreaterThan(0);
+    expect(projection.diagnostics.bytesSaved).toBeGreaterThan(0);
+    expect(serialized.split(sentinel)).toHaveLength(2);
+    expect(JSON.stringify(bundle)).toBe(JSON.stringify(before));
+    expect(bundle.modelState).toEqual(before.modelState);
+    expect(bundle.evidence).toEqual(before.evidence);
+    expect(bundle.projectionDigest).toBe(before.projectionDigest);
+  });
+
   it('publishes the exact private-evidence declaration contract to the model', async () => {
     const bundle = await privatePublicationBundle();
     const privateEvidenceIds = bundle.evidence
@@ -249,26 +390,42 @@ describe('response publication boundary', () => {
       .map(({ evidenceId }) => evidenceId);
     expect(privateEvidenceIds.length).toBeGreaterThan(0);
 
-    const context = z.object({
-      publication: z.object({
-        evidence: z.array(z.object({
-          evidenceId: z.string(),
-          privateData: z.boolean(),
-        }).passthrough()),
-      }).passthrough(),
-      responseContract: z.object({
-        requiredShape: z.object({
-          publicationDeclaration: z.unknown(),
-        }).passthrough(),
-      }).passthrough(),
-    }).passthrough().parse(
-      JSON.parse(modelPublicationContext(bundle, null)),
-    );
+    const context = z
+      .object({
+        publication: z
+          .object({
+            evidence: z.array(
+              z
+                .object({
+                  evidenceId: z.string(),
+                  privateData: z.boolean(),
+                })
+                .passthrough(),
+            ),
+            privateEvidenceIds: z.array(z.string()),
+          })
+          .passthrough(),
+        responseContract: z
+          .object({
+            requiredShape: z
+              .object({
+                publicationDeclaration: z.unknown(),
+              })
+              .passthrough(),
+          })
+          .passthrough(),
+      })
+      .passthrough()
+      .parse(JSON.parse(modelPublicationContext(bundle, null)));
 
-    expect(context.publication.evidence
-      .filter(({ privateData }) => privateData)
-      .map(({ evidenceId }) => evidenceId))
-      .toEqual(privateEvidenceIds);
+    expect(
+      context.publication.evidence
+        .filter(({ privateData }) => privateData)
+        .map(({ evidenceId }) => evidenceId),
+    ).toEqual(privateEvidenceIds);
+    expect(context.publication.privateEvidenceIds).toEqual(
+      [...new Set(privateEvidenceIds)].sort(),
+    );
     expect(
       context.responseContract.requiredShape.publicationDeclaration,
     ).toEqual({
@@ -284,6 +441,51 @@ describe('response publication boundary', () => {
       disclosesInternalMetadata: 'boolean',
     });
   });
+
+  it('publishes customerText as the direct assistant answer contract', async () => {
+    const bundle = await privatePublicationBundle();
+    const context = z
+      .object({
+        responseContract: z
+          .object({
+            requiredShape: z
+              .object({
+                customerText: z.string(),
+              })
+              .passthrough(),
+          })
+          .passthrough(),
+      })
+      .passthrough()
+      .parse(JSON.parse(modelPublicationContext(bundle, null)));
+
+    expect(context.responseContract.requiredShape.customerText).toBe(
+      'Directly answer the latest customer request as the assistant using relevant verified publication evidence. Write only customer-useful prose in the customer language. Never expose schema field names, enum values, evidence identifiers, source labels, validation bookkeeping, tool terminology, or graph state terminology. Render uncertainty naturally without copying internal labels. If the customer asks for advice without an action, comply silently instead of repeating that no cart or order change occurred. Do not copy, concatenate, or merely restate customer messages or the conversation transcript.',
+    );
+  });
+
+  it('publishes the factual evidence citation contract', async () => {
+    const bundle = await privatePublicationBundle();
+    const context = z
+      .object({
+        responseContract: z.object({
+          requiredShape: z.object({
+            factualClaims: z.object({
+              evidenceReferences: z.string(),
+            }),
+          }),
+        }),
+      })
+      .passthrough()
+      .parse(JSON.parse(modelPublicationContext(bundle, null)));
+
+    expect(
+      context.responseContract.requiredShape.factualClaims.evidenceReferences,
+    ).toBe(
+      'For every factual claim in customerText, cite matching allowed current publication evidence. A factual answer about products, prices, composition, modifiers, availability, policies, orders, payments, membership, or tool outcomes requires at least one matching evidence reference. If required evidence is absent, call relevant read tools before returning this response; customer and prior assistant messages are not evidence.',
+    );
+  });
+
   it('revalidates exact access, evidence, and projection at the commit boundary', async () => {
     const setup = async () => {
       const state = publicationState();
@@ -336,41 +538,40 @@ describe('response publication boundary', () => {
 
     const scopeRevoked = await setup();
     scopeRevoked.accessContext.authorizedScopes.splice(0);
-    await expect(assertPublicationCommitAuthority({
-      ...scopeRevoked,
-      currentTurnEvidence: [],
-      responseText: customerText,
-    })).rejects.toThrow(
-      'agent_model_publication_authority_invalid',
-    );
+    await expect(
+      assertPublicationCommitAuthority({
+        ...scopeRevoked,
+        currentTurnEvidence: [],
+        responseText: customerText,
+      }),
+    ).rejects.toThrow('agent_model_publication_authority_invalid');
 
     const evidenceRevoked = await setup();
     if (
-      evidenceRevoked.accessContext.authenticationEvidence.state !==
-        'verified'
+      evidenceRevoked.accessContext.authenticationEvidence.state !== 'verified'
     ) {
       throw new Error('verified authentication evidence missing');
     }
     evidenceRevoked.accessContext.authenticationEvidence.evidenceRef =
       'revoked-authentication-evidence';
-    await expect(assertPublicationCommitAuthority({
-      ...evidenceRevoked,
-      currentTurnEvidence: [],
-      responseText: customerText,
-    })).rejects.toThrow(
-      'agent_model_publication_authority_invalid',
-    );
+    await expect(
+      assertPublicationCommitAuthority({
+        ...evidenceRevoked,
+        currentTurnEvidence: [],
+        responseText: customerText,
+      }),
+    ).rejects.toThrow('agent_model_publication_authority_invalid');
 
     const projectionChanged = await setup();
     if (!projectionChanged.state.cart) throw new Error('cart missing');
     projectionChanged.state.cart.totalVnd += 1;
-    await expect(assertPublicationCommitAuthority({
-      ...projectionChanged,
-      currentTurnEvidence: [],
-      responseText: customerText,
-    })).rejects.toThrow(
-      'agent_model_publication_authority_invalid',
-    );
+    await expect(
+      assertPublicationCommitAuthority({
+        ...projectionChanged,
+        currentTurnEvidence: [],
+        responseText: customerText,
+      }),
+    ).rejects.toThrow('agent_model_publication_authority_invalid');
   });
 
   it('does not invoke the model after async message construction loses run ownership', async () => {
@@ -414,10 +615,12 @@ describe('response publication boundary', () => {
   it('accepts author output only for the exact issued bundle and digest', async () => {
     const bundle = await publicationBundle();
 
-    expect(validateGroundedResponse({
-      raw: groundedResponse(bundle),
-      bundle,
-    })).toEqual({
+    expect(
+      validateGroundedResponse({
+        raw: groundedResponse(bundle),
+        bundle,
+      }),
+    ).toEqual({
       ok: true,
       customerText,
       projectionDigest: bundle.projectionDigest,
@@ -430,20 +633,24 @@ describe('response publication boundary', () => {
       },
     });
 
-    expect(validateGroundedResponse({
-      raw: groundedResponse(bundle, {
-        projectionDigest: 'a'.repeat(64),
+    expect(
+      validateGroundedResponse({
+        raw: groundedResponse(bundle, {
+          projectionDigest: 'a'.repeat(64),
+        }),
+        bundle,
       }),
-      bundle,
-    })).toEqual({
+    ).toEqual({
       ok: false,
       errorCode: 'agent_model_publication_reference_invalid',
     });
 
-    expect(validateGroundedResponse({
-      raw: groundedResponse(bundle),
-      bundle: { ...bundle },
-    })).toEqual({
+    expect(
+      validateGroundedResponse({
+        raw: groundedResponse(bundle),
+        bundle: { ...bundle },
+      }),
+    ).toEqual({
       ok: false,
       errorCode: 'agent_model_publication_reference_invalid',
     });
@@ -456,10 +663,12 @@ describe('response publication boundary', () => {
     };
     delete missingSelectedAction.selectedActionResponse;
 
-    expect(validateGroundedResponse({
-      raw: missingSelectedAction,
-      bundle,
-    })).toEqual({
+    expect(
+      validateGroundedResponse({
+        raw: missingSelectedAction,
+        bundle,
+      }),
+    ).toEqual({
       ok: false,
       errorCode: 'agent_grounded_response_invalid',
     });
@@ -468,53 +677,363 @@ describe('response publication boundary', () => {
   it('validates factual references only against bundle evidence', async () => {
     const bundle = await publicationBundle();
 
-    expect(validateGroundedResponse({
-      raw: groundedResponse(bundle, {
-        factualClaims: {
-          evidenceReferences: [{
-            evidenceId: 'customer_context',
-            claimKinds: ['product'],
-          }],
-          hasUnsupportedFactualClaim: false,
-        },
+    expect(
+      validateGroundedResponse({
+        raw: groundedResponse(bundle, {
+          factualClaims: {
+            evidenceReferences: [
+              {
+                evidenceId: 'customer_context',
+                claimKinds: ['product'],
+              },
+            ],
+            disclosedLimitations: [],
+            hasUnsupportedFactualClaim: false,
+          },
+        }),
+        bundle,
       }),
-      bundle,
-    })).toEqual({
+    ).toEqual({
       ok: false,
       errorCode: 'agent_response_evidence_mismatch',
     });
 
-    expect(validateGroundedResponse({
-      raw: groundedResponse(bundle, {
-        factualClaims: {
-          evidenceReferences: [{
-            evidenceId: 'cart',
-            claimKinds: ['order_id'],
-          }],
-          hasUnsupportedFactualClaim: false,
-        },
+    expect(
+      validateGroundedResponse({
+        raw: groundedResponse(bundle, {
+          factualClaims: {
+            evidenceReferences: [
+              {
+                evidenceId: 'cart',
+                claimKinds: ['order_id'],
+              },
+            ],
+            disclosedLimitations: [],
+            hasUnsupportedFactualClaim: false,
+          },
+        }),
+        bundle,
       }),
-      bundle,
-    })).toEqual({
+    ).toEqual({
       ok: false,
       errorCode: 'agent_response_evidence_mismatch',
     });
   });
 
+  it('requires disclosure when cited evidence has bounded subject or aspect coverage', async () => {
+    const bundle = await boundedCatalogPublicationBundle();
+    const evidenceReference = {
+      evidenceId: 'active_collection:searchMenu',
+      claimKinds: ['modifier'],
+    };
 
+    expect(
+      validateGroundedResponse({
+        raw: groundedResponse(bundle, {
+          factualClaims: {
+            evidenceReferences: [evidenceReference],
+            disclosedLimitations: [],
+            hasUnsupportedFactualClaim: false,
+          },
+        }),
+        bundle,
+      }),
+    ).toEqual({
+      ok: false,
+      errorCode: 'agent_response_evidence_limitation_mismatch',
+    });
 
+    const disclosure = {
+      limitationId: 'uncited_subjects_or_aspects_unknown',
+      coverageStatus: 'unknown_or_unverified',
+      evidenceSubject: 'Combo Hợp Gu 99K',
+      customerCriterion: 'not spicy',
+      unverifiedAspect: 'spice level',
+      customerDisclosure:
+        'Whether Combo Hợp Gu 99K is not spicy is unverified because its spice level is unknown.',
+    };
+    const genericDisclosure = {
+      ...disclosure,
+      evidenceSubject: 'uncited subjects or aspects',
+      customerCriterion: 'unknown or unverified',
+      unverifiedAspect: 'unknown or unverified',
+      customerDisclosure:
+        'Uncited subjects or aspects are unknown or unverified.',
+    };
+    const offQuestionDisclosure = {
+      ...disclosure,
+      customerCriterion: 'modifier options beyond defaults',
+      unverifiedAspect: 'modifier options beyond defaults',
+      customerDisclosure:
+        'Combo Hợp Gu 99K modifier options beyond defaults are unverified.',
+    };
+    expect(
+      validateGroundedResponse({
+        raw: groundedResponse(bundle, {
+          customerText: genericDisclosure.customerDisclosure,
+          factualClaims: {
+            evidenceReferences: [evidenceReference],
+            disclosedLimitations: [genericDisclosure],
+            hasUnsupportedFactualClaim: false,
+          },
+        }),
+        bundle,
+      }),
+    ).toEqual({
+      ok: false,
+      errorCode: 'agent_response_evidence_limitation_mismatch',
+    });
 
+    expect(
+      validateGroundedResponse({
+        raw: groundedResponse(bundle, {
+          customerText: offQuestionDisclosure.customerDisclosure,
+          factualClaims: {
+            evidenceReferences: [evidenceReference],
+            disclosedLimitations: [offQuestionDisclosure],
+            hasUnsupportedFactualClaim: false,
+          },
+        }),
+        bundle,
+        currentUserMessage: 'I want something not spicy.',
+      }),
+    ).toEqual({
+      ok: false,
+      errorCode: 'agent_response_evidence_limitation_mismatch',
+    });
 
+    expect(
+      validateGroundedResponse({
+        raw: groundedResponse(bundle, {
+          factualClaims: {
+            evidenceReferences: [evidenceReference],
+            disclosedLimitations: [disclosure],
+            hasUnsupportedFactualClaim: false,
+          },
+        }),
+        bundle,
+        currentUserMessage: 'I want something not spicy.',
+      }),
+    ).toEqual({
+      ok: false,
+      errorCode: 'agent_response_evidence_limitation_mismatch',
+    });
+
+    expect(
+      validateGroundedResponse({
+        raw: groundedResponse(bundle, {
+          customerText: disclosure.customerDisclosure,
+          factualClaims: {
+            evidenceReferences: [evidenceReference],
+            disclosedLimitations: [disclosure],
+            hasUnsupportedFactualClaim: false,
+          },
+        }),
+        bundle,
+        currentUserMessage: 'I want something not spicy.',
+      }),
+    ).toEqual({
+      ok: false,
+      errorCode: 'agent_response_evidence_limitation_mismatch',
+    });
+
+    const modifierDisclosure = {
+      ...disclosure,
+      evidenceSubject: 'Pepsi Không Calo',
+      customerCriterion: 'caffeine-free',
+      unverifiedAspect: 'caffeine content',
+      customerDisclosure:
+        'The available menu does not state the caffeine content of Pepsi Không Calo, so I cannot verify whether it is caffeine-free.',
+    };
+    expect(
+      validateGroundedResponse({
+        raw: groundedResponse(bundle, {
+          customerText: modifierDisclosure.customerDisclosure,
+          factualClaims: {
+            evidenceReferences: [evidenceReference],
+            disclosedLimitations: [modifierDisclosure],
+            hasUnsupportedFactualClaim: false,
+          },
+        }),
+        bundle,
+        currentUserMessage: 'I want a caffeine-free drink.',
+      }),
+    ).toMatchObject({ ok: true });
+
+    expect(
+      validateGroundedResponse({
+        raw: groundedResponse(bundle, {
+          factualClaims: {
+            evidenceReferences: [
+              {
+                evidenceId: 'active_collection:searchMenu',
+                claimKinds: ['price'],
+              },
+            ],
+            disclosedLimitations: [],
+            hasUnsupportedFactualClaim: false,
+          },
+        }),
+        bundle,
+      }),
+    ).toMatchObject({ ok: true });
+
+    expect(
+      validateGroundedResponse({
+        raw: groundedResponse(bundle),
+        bundle,
+      }),
+    ).toMatchObject({ ok: true });
+  });
+
+  it('rejects closed-world contract tokens in customer-facing responses', async () => {
+    const bundle = await publicationBundle();
+    const invalidCustomerTexts = [
+      'Trạng thái hiện tại là unknown_or_unverified.',
+      'The unverifiedAspect is spice level.',
+      'I used evidenceSubject and customerCriterion to answer.',
+      'The limitation is uncited_subjects_or_aspects_unknown.',
+      'The subjectScope is included_modifier_option_name.',
+    ];
+
+    for (const invalidCustomerText of invalidCustomerTexts) {
+      expect(
+        validateGroundedResponse({
+          raw: groundedResponse(bundle, {
+            customerText: invalidCustomerText,
+          }),
+          bundle,
+        }),
+      ).toEqual({
+        ok: false,
+        errorCode: 'agent_response_customer_language_invalid',
+      });
+    }
+
+    expect(
+      validateGroundedResponse({
+        raw: groundedResponse(bundle, {
+          customerText:
+            'Mình chưa có đủ thông tin để khẳng định phần này có cay hay không.',
+        }),
+        bundle,
+      }),
+    ).toMatchObject({ ok: true });
+
+    const privateBundle = await privatePublicationBundle();
+    const toolTrace: ToolTraceEntry[] = [
+      {
+        toolName: 'listPaymentMethods',
+        arguments: {
+          query: null,
+          paymentSurface: 'web_app',
+        },
+        ok: true,
+        resultSummary: 'payment methods',
+        provenance: [],
+      },
+    ];
+    for (const invalidCustomerText of [
+      'Internal evidence address_draft was used.',
+      'Authority kind publication_evidence was selected.',
+      'The internal reference __kfcPublicationValue_v1 points to value-1.',
+      'This applies to web_app.',
+    ]) {
+      expect(
+        validateGroundedResponse({
+          raw: groundedResponse(privateBundle, {
+            customerText: invalidCustomerText,
+          }),
+          bundle: privateBundle,
+          currentTurnToolTrace: toolTrace,
+        }),
+      ).toEqual({
+        ok: false,
+        errorCode: 'agent_response_customer_language_invalid',
+      });
+    }
+
+    expect(
+      validateGroundedResponse({
+        raw: groundedResponse(privateBundle, {
+          customerText:
+            'Bạn vừa hỏi về web_app; mình cần làm rõ ý bạn trước khi tư vấn.',
+        }),
+        bundle: privateBundle,
+        currentUserMessage: 'web_app là gì?',
+        currentTurnToolTrace: toolTrace,
+      }),
+    ).toMatchObject({ ok: true });
+  });
+
+  it('rejects an optional criterion-matching modifier as the unresolved composite subject', async () => {
+    const bundle = await compositeCatalogPublicationBundle();
+    const evidenceReference = {
+      evidenceId: 'active_collection:searchMenu',
+      claimKinds: ['modifier'],
+    };
+    const invalidDisclosure = {
+      limitationId: 'uncited_subjects_or_aspects_unknown',
+      coverageStatus: 'unknown_or_unverified',
+      evidenceSubject: 'Gà Giòn Không Cay',
+      customerCriterion: 'không cay',
+      unverifiedAspect: 'modifier option availability',
+      customerDisclosure:
+        'Mình chưa có thông tin rõ Gà Giòn Không Cay có cay hay không.',
+    };
+
+    expect(
+      validateGroundedResponse({
+        raw: groundedResponse(bundle, {
+          customerText: invalidDisclosure.customerDisclosure,
+          factualClaims: {
+            evidenceReferences: [evidenceReference],
+            disclosedLimitations: [invalidDisclosure],
+            hasUnsupportedFactualClaim: false,
+          },
+        }),
+        bundle,
+        currentUserMessage: 'Mình muốn ăn không cay thì nên chọn combo nào?',
+      }),
+    ).toEqual({
+      ok: false,
+      errorCode: 'agent_response_evidence_limitation_mismatch',
+    });
+
+    const validDisclosure = {
+      ...invalidDisclosure,
+      evidenceSubject: '1 Miếng Gà Lắc Tiêu Chanh',
+      unverifiedAspect: 'modifier option spice-level coverage',
+      customerDisclosure:
+        'Mình chưa có thông tin rõ 1 Miếng Gà Lắc Tiêu Chanh có cay hay không.',
+    };
+    expect(
+      validateGroundedResponse({
+        raw: groundedResponse(bundle, {
+          customerText: validDisclosure.customerDisclosure,
+          factualClaims: {
+            evidenceReferences: [evidenceReference],
+            disclosedLimitations: [validDisclosure],
+            hasUnsupportedFactualClaim: false,
+          },
+        }),
+        bundle,
+        currentUserMessage: 'Mình muốn ăn không cay thì nên chọn combo nào?',
+      }),
+    ).toMatchObject({ ok: true });
+  });
 
   it('binds the author model publication declaration to trusted response digests', async () => {
     const bundle = await publicationBundle();
 
-    await expect(issueResponsePublicationAttestation({
-      raw: groundedResponse(bundle).publicationDeclaration,
-      bundle,
-      customerText,
-      factualClaims: claims,
-    })).resolves.toEqual({
+    await expect(
+      issueResponsePublicationAttestation({
+        raw: groundedResponse(bundle).publicationDeclaration,
+        bundle,
+        customerText,
+        factualClaims: claims,
+      }),
+    ).resolves.toEqual({
       ok: true,
       responsePublicationSafe: true,
       attestation: {
@@ -557,17 +1076,17 @@ describe('response publication boundary', () => {
         disclosesInternalMetadata: true,
       },
     },
-  ])('fails closed for author-declared $name', async ({
-    declaration,
-  }) => {
+  ])('fails closed for author-declared $name', async ({ declaration }) => {
     const bundle = await publicationBundle();
 
-    await expect(issueResponsePublicationAttestation({
-      raw: declaration,
-      bundle,
-      customerText,
-      factualClaims: claims,
-    })).resolves.toEqual({
+    await expect(
+      issueResponsePublicationAttestation({
+        raw: declaration,
+        bundle,
+        customerText,
+        factualClaims: claims,
+      }),
+    ).resolves.toEqual({
       ok: false,
       errorCode: 'agent_response_publication_rejected',
       responsePublicationSafe: false,
@@ -579,34 +1098,42 @@ describe('response publication boundary', () => {
     const declaration = {
       semanticRelevance: 'aligned' as const,
       privateDataDisclosure: 'authorized' as const,
-      disclosureAuthorities: [{
-        kind: 'current_user_message' as const,
-        messageDigest: bundle.lifecycle.currentUserMessageDigest,
-      }],
+      disclosureAuthorities: [
+        {
+          kind: 'current_user_message' as const,
+          messageDigest: bundle.lifecycle.currentUserMessageDigest,
+        },
+      ],
       disclosesInternalMetadata: false,
     };
 
-    await expect(issueResponsePublicationAttestation({
-      raw: declaration,
-      bundle,
-      customerText,
-      factualClaims: claims,
-    })).resolves.toMatchObject({
+    await expect(
+      issueResponsePublicationAttestation({
+        raw: declaration,
+        bundle,
+        customerText,
+        factualClaims: claims,
+      }),
+    ).resolves.toMatchObject({
       ok: true,
       responsePublicationSafe: true,
     });
-    await expect(issueResponsePublicationAttestation({
-      raw: {
-        ...declaration,
-        disclosureAuthorities: [{
-          kind: 'current_user_message',
-          messageDigest: 'f'.repeat(64),
-        }],
-      },
-      bundle,
-      customerText,
-      factualClaims: claims,
-    })).resolves.toEqual({
+    await expect(
+      issueResponsePublicationAttestation({
+        raw: {
+          ...declaration,
+          disclosureAuthorities: [
+            {
+              kind: 'current_user_message',
+              messageDigest: 'f'.repeat(64),
+            },
+          ],
+        },
+        bundle,
+        customerText,
+        factualClaims: claims,
+      }),
+    ).resolves.toEqual({
       ok: false,
       errorCode: 'agent_response_publication_rejected',
       responsePublicationSafe: false,
@@ -628,10 +1155,12 @@ describe('response publication boundary', () => {
       declaration: {
         semanticRelevance: 'aligned' as const,
         privateDataDisclosure: 'authorized' as const,
-        disclosureAuthorities: [{
-          kind: 'current_user_message' as const,
-          messageDigest: '0'.repeat(64),
-        }],
+        disclosureAuthorities: [
+          {
+            kind: 'current_user_message' as const,
+            messageDigest: '0'.repeat(64),
+          },
+        ],
         disclosesInternalMetadata: false,
       },
     },
@@ -655,61 +1184,212 @@ describe('response publication boundary', () => {
     },
   ])('rejects $name', async ({ declaration }) => {
     const bundle = await privatePublicationBundle();
-    const boundDeclaration = declaration.privateDataDisclosure ===
-        'authorized' &&
-        declaration.disclosureAuthorities[0]?.kind ===
-          'current_user_message'
-      ? {
-          ...declaration,
-          disclosureAuthorities: [{
-            kind: 'current_user_message' as const,
-            messageDigest:
-              bundle.lifecycle.currentUserMessageDigest,
-          }],
-        }
-      : declaration;
+    const boundDeclaration =
+      declaration.privateDataDisclosure === 'authorized' &&
+      declaration.disclosureAuthorities[0]?.kind === 'current_user_message'
+        ? {
+            ...declaration,
+            disclosureAuthorities: [
+              {
+                kind: 'current_user_message' as const,
+                messageDigest: bundle.lifecycle.currentUserMessageDigest,
+              },
+            ],
+          }
+        : declaration;
     const privateClaims: ResponseFactualClaims = {
-      evidenceReferences: [{
-        evidenceId: 'address_draft',
-        claimKinds: ['address'],
-      }],
+      evidenceReferences: [
+        {
+          evidenceId: 'address_draft',
+          claimKinds: ['address'],
+        },
+      ],
+      disclosedLimitations: [],
       hasUnsupportedFactualClaim: false,
     };
 
-    await expect(issueResponsePublicationAttestation({
-      raw: boundDeclaration,
-      bundle,
-      customerText,
-      factualClaims: privateClaims,
-    })).resolves.toEqual({
+    expect(
+      validateResponsePublicationDeclarationConsistency({
+        raw: boundDeclaration,
+        bundle,
+        factualClaims: privateClaims,
+      }),
+    ).toEqual({
+      ok: false,
+      errorCode: 'agent_response_publication_rejected',
+      correctable: true,
+    });
+    await expect(
+      issueResponsePublicationAttestation({
+        raw: boundDeclaration,
+        bundle,
+        customerText,
+        factualClaims: privateClaims,
+      }),
+    ).resolves.toEqual({
       ok: false,
       errorCode: 'agent_response_publication_rejected',
       responsePublicationSafe: false,
     });
   });
 
-  it('accepts only the exact cited private publication evidence authority', async () => {
+  it('classifies an issued public evidence authority as correctable over-declaration', async () => {
+    const bundle = await publicationBundle();
+    const publicEvidence = bundle.evidence.find(
+      ({ privateData }) => !privateData,
+    );
+    if (!publicEvidence) throw new Error('public publication evidence missing');
+    const publicClaims: ResponseFactualClaims = {
+      evidenceReferences: [
+        {
+          evidenceId: publicEvidence.evidenceId,
+          claimKinds: [...publicEvidence.claimKinds],
+        },
+      ],
+      disclosedLimitations: [],
+      hasUnsupportedFactualClaim: false,
+    };
+    const declaration = {
+      semanticRelevance: 'aligned' as const,
+      privateDataDisclosure: 'authorized' as const,
+      disclosureAuthorities: [
+        {
+          kind: 'publication_evidence' as const,
+          evidenceId: publicEvidence.evidenceId,
+        },
+      ],
+      disclosesInternalMetadata: false,
+    };
+
+    expect(
+      validateResponsePublicationDeclarationConsistency({
+        raw: declaration,
+        bundle,
+        factualClaims: publicClaims,
+      }),
+    ).toEqual({
+      ok: false,
+      errorCode: 'agent_response_publication_rejected',
+      correctable: true,
+    });
+    await expect(
+      issueResponsePublicationAttestation({
+        raw: declaration,
+        bundle,
+        customerText,
+        factualClaims: publicClaims,
+      }),
+    ).resolves.toEqual({
+      ok: false,
+      errorCode: 'agent_response_publication_rejected',
+      responsePublicationSafe: false,
+    });
+  });
+
+  it('classifies duplicate issued private evidence authorities as correctable while final attestation stays strict', async () => {
     const bundle = await privatePublicationBundle();
-    await expect(issueResponsePublicationAttestation({
-      raw: {
-        semanticRelevance: 'aligned',
-        privateDataDisclosure: 'authorized',
-        disclosureAuthorities: [{
-          kind: 'publication_evidence',
-          evidenceId: 'address_draft',
-        }],
-        disclosesInternalMetadata: false,
-      },
-      bundle,
-      customerText,
-      factualClaims: {
-        evidenceReferences: [{
+    const privateClaims: ResponseFactualClaims = {
+      evidenceReferences: [
+        {
           evidenceId: 'address_draft',
           claimKinds: ['address'],
-        }],
-        hasUnsupportedFactualClaim: false,
-      },
-    })).resolves.toMatchObject({
+        },
+      ],
+      disclosedLimitations: [],
+      hasUnsupportedFactualClaim: false,
+    };
+    const duplicateAuthority = {
+      kind: 'publication_evidence' as const,
+      evidenceId: 'address_draft',
+    };
+    const declaration = {
+      semanticRelevance: 'aligned' as const,
+      privateDataDisclosure: 'authorized' as const,
+      disclosureAuthorities: [duplicateAuthority, duplicateAuthority],
+      disclosesInternalMetadata: false,
+    };
+
+    expect(
+      validateResponsePublicationDeclarationConsistency({
+        raw: declaration,
+        bundle,
+        factualClaims: privateClaims,
+      }),
+    ).toEqual({
+      ok: false,
+      errorCode: 'agent_response_publication_rejected',
+      correctable: true,
+    });
+    await expect(
+      issueResponsePublicationAttestation({
+        raw: declaration,
+        bundle,
+        customerText,
+        factualClaims: privateClaims,
+      }),
+    ).resolves.toEqual({
+      ok: false,
+      errorCode: 'agent_response_publication_rejected',
+      responsePublicationSafe: false,
+    });
+  });
+
+  it('keeps duplicate fabricated evidence authorities non-correctable', async () => {
+    const bundle = await privatePublicationBundle();
+    const fabricatedAuthority = {
+      kind: 'publication_evidence' as const,
+      evidenceId: 'fabricated-private-evidence',
+    };
+
+    expect(
+      validateResponsePublicationDeclarationConsistency({
+        raw: {
+          semanticRelevance: 'aligned',
+          privateDataDisclosure: 'authorized',
+          disclosureAuthorities: [fabricatedAuthority, fabricatedAuthority],
+          disclosesInternalMetadata: false,
+        },
+        bundle,
+        factualClaims: {
+          evidenceReferences: [],
+        },
+      }),
+    ).toEqual({
+      ok: false,
+      errorCode: 'agent_response_publication_rejected',
+      correctable: false,
+    });
+  });
+
+  it('accepts only the exact cited private publication evidence authority', async () => {
+    const bundle = await privatePublicationBundle();
+    await expect(
+      issueResponsePublicationAttestation({
+        raw: {
+          semanticRelevance: 'aligned',
+          privateDataDisclosure: 'authorized',
+          disclosureAuthorities: [
+            {
+              kind: 'publication_evidence',
+              evidenceId: 'address_draft',
+            },
+          ],
+          disclosesInternalMetadata: false,
+        },
+        bundle,
+        customerText,
+        factualClaims: {
+          evidenceReferences: [
+            {
+              evidenceId: 'address_draft',
+              claimKinds: ['address'],
+            },
+          ],
+          disclosedLimitations: [],
+          hasUnsupportedFactualClaim: false,
+        },
+      }),
+    ).resolves.toMatchObject({
       ok: true,
       responsePublicationSafe: true,
     });
@@ -719,17 +1399,19 @@ describe('response publication boundary', () => {
     const state = publicationState();
     const bundle = await publicationBundle(state);
 
-    expect(validateSelectedActionGroundedResponse({
-      raw: groundedResponse(bundle),
-      publicationBundle: bundle,
-      state,
-      envelope: null,
-      outcome: null,
-      authority: null,
-      currentTurnToolTrace: [],
-      approvalDecision: null,
-      validatedApprovalActionDigest: null,
-    })).toEqual({
+    expect(
+      validateSelectedActionGroundedResponse({
+        raw: groundedResponse(bundle),
+        publicationBundle: bundle,
+        state,
+        envelope: null,
+        outcome: null,
+        authority: null,
+        currentTurnToolTrace: [],
+        approvalDecision: null,
+        validatedApprovalActionDigest: null,
+      }),
+    ).toEqual({
       ok: true,
       customerText,
       projectionDigest: bundle.projectionDigest,
@@ -744,49 +1426,46 @@ describe('response publication boundary', () => {
   });
 
   it('rejects a well-typed selected action without trusted envelope authority', async () => {
-    const {
-      state,
-      bundle,
-      selectedAction,
-    } = await selectedActionBoundaryFixture();
+    const { state, bundle, selectedAction } =
+      await selectedActionBoundaryFixture();
 
-    expect(validateSelectedActionGroundedResponse({
-      raw: groundedResponse(bundle, {
-        selectedActionResponse: selectedAction.reference,
+    expect(
+      validateSelectedActionGroundedResponse({
+        raw: groundedResponse(bundle, {
+          selectedActionResponse: selectedAction.reference,
+        }),
+        publicationBundle: bundle,
+        state,
+        envelope: null,
+        outcome: null,
+        authority: null,
+        currentTurnToolTrace: [],
+        approvalDecision: null,
+        validatedApprovalActionDigest: null,
       }),
-      publicationBundle: bundle,
-      state,
-      envelope: null,
-      outcome: null,
-      authority: null,
-      currentTurnToolTrace: [],
-      approvalDecision: null,
-      validatedApprovalActionDigest: null,
-    })).toEqual({
+    ).toEqual({
       ok: false,
       errorCode: 'selected_action_response_authority_missing',
     });
   });
 
   it('requires the typed selected action when trusted authority is present', async () => {
-    const {
-      state,
-      bundle,
-      envelope,
-      selectedAction,
-    } = await selectedActionBoundaryFixture();
+    const { state, bundle, envelope, selectedAction } =
+      await selectedActionBoundaryFixture();
 
-    expect(validateSelectedActionGroundedResponse({
-      raw: groundedResponse(bundle),
-      publicationBundle: bundle,
-      state,
-      envelope,
-      outcome: 'presentation_ready',
-      authority: selectedAction.authority,
-      currentTurnToolTrace: [],
-      approvalDecision: null,
-      validatedApprovalActionDigest: null,
-    })).toEqual({
+    expect(
+      validateSelectedActionGroundedResponse({
+        raw: groundedResponse(bundle),
+        publicationBundle: bundle,
+        state,
+        envelope,
+        outcome: 'presentation_ready',
+        authority: selectedAction.authority,
+        currentTurnToolTrace: [],
+        approvalDecision: null,
+        validatedApprovalActionDigest: null,
+      }),
+    ).toEqual({
       ok: false,
       errorCode: 'selected_action_response_reference_required',
     });
@@ -827,17 +1506,19 @@ describe('response publication boundary', () => {
     const raw = groundedResponse(bundle, {
       selectedActionResponse: selectedAction.reference,
     });
-    expect(validateSelectedActionGroundedResponse({
-      raw,
-      publicationBundle: bundle,
-      state,
-      envelope,
-      outcome: 'presentation_ready',
-      authority: selectedAction.authority,
-      currentTurnToolTrace: [],
-      approvalDecision: null,
-      validatedApprovalActionDigest: null,
-    })).toMatchObject({ ok: true });
+    expect(
+      validateSelectedActionGroundedResponse({
+        raw,
+        publicationBundle: bundle,
+        state,
+        envelope,
+        outcome: 'presentation_ready',
+        authority: selectedAction.authority,
+        currentTurnToolTrace: [],
+        approvalDecision: null,
+        validatedApprovalActionDigest: null,
+      }),
+    ).toMatchObject({ ok: true });
     const issued = await issueResponsePublicationAttestation({
       raw: raw.publicationDeclaration,
       bundle,
@@ -861,5 +1542,4 @@ describe('response publication boundary', () => {
       'agent_model_publication_authority_invalid',
     );
   });
-
 });

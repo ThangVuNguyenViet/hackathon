@@ -9,57 +9,80 @@ import { fileURLToPath } from 'node:url';
 const profileByProvider = Object.freeze({
   openai: Object.freeze({
     provider: 'openai',
-    model: 'gpt-4.1-mini',
-    profile: 'openai-gpt-4.1-mini-qualification',
+    model: 'gpt-5-mini-2025-08-07',
+    profile: 'openai-gpt-5-mini-2025-08-07-reasoning-low-verbosity-low',
   }),
   google: Object.freeze({
     provider: 'google',
     model: 'gemini-3.1-flash-lite',
-    profile:
-      'google-gemini-3.1-flash-lite-thinking-high-qualification',
+    profile: 'google-gemini-3.1-flash-lite-thinking-high-qualification',
   }),
 });
 
-export const officialOpenAiQualificationBaseUrl =
-  'https://api.openai.com/v1';
-
-const scenarioTurnIndexes = Object.freeze({
-  '01-dat-mon-ro-rang-giao-hang.json': Object.freeze([1, 3, 5, 7, 9, 11]),
-  '02-tu-van-combo-va-upsell.json': Object.freeze([1, 3, 5, 7, 9]),
-  '03-ton-kho-dia-chi-va-cua-hang.json': Object.freeze([1, 3, 5, 7, 9]),
-  '04-sau-khi-dat-don.json': Object.freeze([1, 3, 5, 7, 9, 11, 13, 15]),
-  '05-khieu-nai-va-human-handoff.json': Object.freeze([1, 3, 5, 7, 9]),
-  '06-ngon-ngu-tu-nhien-va-an-toan.json': Object.freeze([1, 3, 5, 7, 9, 11]),
-  '07-ca-nhan-hoa-va-loyalty.json': Object.freeze([1, 3, 5, 7, 9]),
-  '08-thanh-toan-loi-va-don-bat-thuong.json': Object.freeze([1, 3, 5, 7]),
-  '09-phuong-thuc-thanh-toan.json': Object.freeze([1, 3]),
-});
+export const officialOpenAiQualificationBaseUrl = 'https://api.openai.com/v1';
 
 export const mandatoryLiveTextQualification = Object.freeze({
-  inventoryVersion: '2026-07-20.1',
-  inventoryDigest:
-    '9684774444e7b844fab12de0da5b9530035aa8f8cf5b5c275fbebd68e2cb76d5',
   providers: Object.freeze(['openai', 'google']),
   repetitions: 3,
   mode: 'text',
-  scenariosPerExecution: 9,
-  turnEvaluationsPerExecution: 46,
-  totalScenarioRuns: 54,
-  totalTurnEvaluations: 276,
-  scenarioFiles: Object.freeze([
-    '01-dat-mon-ro-rang-giao-hang.json',
-    '02-tu-van-combo-va-upsell.json',
-    '03-ton-kho-dia-chi-va-cua-hang.json',
-    '04-sau-khi-dat-don.json',
-    '05-khieu-nai-va-human-handoff.json',
-    '06-ngon-ngu-tu-nhien-va-an-toan.json',
-    '07-ca-nhan-hoa-va-loyalty.json',
-    '08-thanh-toan-loi-va-don-bat-thuong.json',
-    '09-phuong-thuc-thanh-toan.json',
-  ]),
-  scenarioTurnIndexes,
   profileByProvider,
 });
+
+const advisoryPolicies = new Set([
+  'warning',
+  'evidence_only',
+  'not_applicable',
+]);
+const advisoryStatuses = new Set([
+  'passed',
+  'warning',
+  'inconclusive',
+  'not_run',
+]);
+const advisoryCriteriaByScenario = Object.freeze({
+  '02-tu-van-combo-va-upsell.json': Object.freeze({
+    policy: 'warning',
+    criterionIds: Object.freeze([
+      'advisory.02.group-budget-recommendation',
+      'advisory.02.complete-menu-discovery',
+      'advisory.02.value-consent-arithmetic',
+    ]),
+  }),
+  '03-ton-kho-dia-chi-va-cua-hang.json': Object.freeze({
+    policy: 'warning',
+    criterionIds: Object.freeze(['advisory.03.unavailable-item-boundary']),
+  }),
+  '06-ngon-ngu-tu-nhien-va-an-toan.json': Object.freeze({
+    policy: 'evidence_only',
+    criterionIds: Object.freeze(['advisory.06.ordinary-dietary-preference']),
+  }),
+  '07-ca-nhan-hoa-va-loyalty.json': Object.freeze({
+    policy: 'evidence_only',
+    criterionIds: Object.freeze(['advisory.07.personalization-confirmation']),
+  }),
+  '10-so-sanh-mon-va-giai-thich.json': Object.freeze({
+    policy: 'warning',
+    criterionIds: Object.freeze([
+      'advisory.10.verified-comparison',
+      'advisory.10.non-spicy-recommendation',
+    ]),
+  }),
+  '11-khau-vi-va-di-ung.json': Object.freeze({
+    policy: 'warning',
+    criterionIds: Object.freeze([
+      'advisory.11.preference-evidence',
+      'advisory.11.allergen-safety-boundary',
+    ]),
+  }),
+});
+const confirmationTriggers = new Set([
+  'core_semantic_miss',
+  'high_risk_safety_or_availability_miss',
+]);
+const credentialLikeText = new RegExp(
+  String.raw`(?:\bsk-(?:proj-)?[a-z0-9_-]{6,}\b|\bbearer\s+[a-z0-9._~+/=-]+|\b(?:authorization|api[ _-]?key|access[ _-]?token|refresh[ _-]?token|password|secret|(?:customer|user|order|session|conversation|message|external)[ _-]?(?:id|identifier)|private[ _-]?args)\b["']?\s*(?:(?::|=)\s*|\s+is\s+)(?:"(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'|\S+))`,
+  'iu',
+);
 
 function sha256(bytes) {
   return createHash('sha256').update(bytes).digest('hex');
@@ -91,11 +114,23 @@ function assertIsoTimestamp(value, label) {
   return Date.parse(value);
 }
 
+function assertSafeText(value, label) {
+  if (
+    typeof value !== 'string' ||
+    !value.trim() ||
+    credentialLikeText.test(value)
+  ) {
+    throw new Error(`${label} must be non-empty redacted text`);
+  }
+}
+
 function expectedMatrixKeys() {
-  return mandatoryLiveTextQualification.providers.flatMap((provider) =>
-    Array.from(
-      { length: mandatoryLiveTextQualification.repetitions },
-      (_unused, index) => `${provider}:${index + 1}`,
+  return Array.from(
+    { length: mandatoryLiveTextQualification.repetitions },
+    (_unused, index) => index + 1,
+  ).flatMap((repetition) =>
+    mandatoryLiveTextQualification.providers.map(
+      (provider) => `${provider}:${repetition}`,
     ),
   );
 }
@@ -110,6 +145,28 @@ function assertIdentity(value, expected, label) {
   ) {
     throw new Error(`${label} does not match the repository-pinned profile`);
   }
+}
+
+function assertInventory(value, label) {
+  const inventory = assertObject(value, label);
+  assertExactKeys(
+    inventory,
+    ['digest', 'scenarioCount', 'turnCount', 'version'],
+    label,
+  );
+  if (
+    typeof inventory.version !== 'string' ||
+    !inventory.version ||
+    typeof inventory.digest !== 'string' ||
+    !/^[0-9a-f]{64}$/u.test(inventory.digest) ||
+    !Number.isInteger(inventory.scenarioCount) ||
+    inventory.scenarioCount < 1 ||
+    !Number.isInteger(inventory.turnCount) ||
+    inventory.turnCount < 1
+  ) {
+    throw new Error(`${label} is invalid`);
+  }
+  return inventory;
 }
 
 const executionIdPattern =
@@ -139,10 +196,338 @@ export function qualificationSuiteName(provider, executionId, repetition) {
   );
 }
 
-function assertVitestReport(report, run) {
+function assertOutcomeJudgment(value, label) {
+  const judgment = assertObject(value, label);
+  assertExactKeys(
+    judgment,
+    [
+      'achievedOutcome',
+      'missedExpectations',
+      'passed',
+      'rationale',
+      'safetyIssues',
+      'score',
+    ],
+    label,
+  );
+  if (
+    typeof judgment.passed !== 'boolean' ||
+    !Number.isInteger(judgment.score) ||
+    judgment.score < 0 ||
+    judgment.score > 100 ||
+    !Array.isArray(judgment.missedExpectations) ||
+    !Array.isArray(judgment.safetyIssues)
+  ) {
+    throw new Error(`${label} is invalid`);
+  }
+  assertSafeText(judgment.achievedOutcome, `${label} achievedOutcome`);
+  assertSafeText(judgment.rationale, `${label} rationale`);
+  for (const [index, text] of judgment.missedExpectations.entries()) {
+    assertSafeText(text, `${label} missedExpectations ${index + 1}`);
+  }
+  for (const [index, text] of judgment.safetyIssues.entries()) {
+    assertSafeText(text, `${label} safetyIssues ${index + 1}`);
+  }
+  return judgment;
+}
+
+function assertAdvisoryRecord(value, label, scenarioFile, provider) {
+  const advisory = assertObject(value, label);
+  assertExactKeys(
+    advisory,
+    [
+      'criterionIds',
+      'execution',
+      'infrastructureError',
+      'infrastructureExhausted',
+      'outcomeJudgment',
+      'policy',
+      'semanticConfirmation',
+      'status',
+    ],
+    label,
+  );
+  if (
+    !Array.isArray(advisory.criterionIds) ||
+    !advisoryPolicies.has(advisory.policy) ||
+    !advisoryStatuses.has(advisory.status) ||
+    !['completed', 'deferred', 'not_run'].includes(advisory.execution) ||
+    typeof advisory.infrastructureExhausted !== 'boolean' ||
+    (advisory.infrastructureError !== null &&
+      typeof advisory.infrastructureError !== 'string')
+  ) {
+    throw new Error(
+      `${label} advisory policy, status, or execution is invalid`,
+    );
+  }
+  if (
+    advisory.criterionIds.some(
+      (id) =>
+        typeof id !== 'string' || !/^advisory\.\d{2}\.[a-z0-9-]+$/u.test(id),
+    ) ||
+    new Set(advisory.criterionIds).size !== advisory.criterionIds.length
+  ) {
+    throw new Error(`${label} advisory criterion IDs are invalid`);
+  }
+  const expectedAdvisory = advisoryCriteriaByScenario[scenarioFile];
+  if (
+    expectedAdvisory
+      ? advisory.policy !== expectedAdvisory.policy ||
+        JSON.stringify(advisory.criterionIds) !==
+          JSON.stringify(expectedAdvisory.criterionIds)
+      : advisory.policy !== 'not_applicable' ||
+        advisory.criterionIds.length !== 0
+  ) {
+    throw new Error(
+      `${label} advisory criteria do not match the stable catalog`,
+    );
+  }
+
+  const confirmation = assertObject(
+    advisory.semanticConfirmation,
+    `${label} semantic confirmation`,
+  );
+  assertExactKeys(
+    confirmation,
+    ['attempts', 'finalStatus', 'trigger', 'triggered'],
+    `${label} semantic confirmation`,
+  );
+  if (
+    !Number.isInteger(confirmation.attempts) ||
+    confirmation.attempts < 0 ||
+    confirmation.attempts > 2 ||
+    typeof confirmation.triggered !== 'boolean' ||
+    confirmation.finalStatus !== advisory.status ||
+    (confirmation.triggered
+      ? confirmation.attempts !== 2 ||
+        !confirmationTriggers.has(confirmation.trigger)
+      : confirmation.trigger !== null || confirmation.attempts > 1)
+  ) {
+    throw new Error(`${label} semantic confirmation is incoherent`);
+  }
+
+  if (advisory.policy === 'not_applicable') {
+    if (
+      advisory.execution !== 'not_run' ||
+      advisory.status !== 'not_run' ||
+      advisory.outcomeJudgment !== null ||
+      advisory.infrastructureExhausted ||
+      advisory.infrastructureError !== null ||
+      confirmation.attempts !== 0
+    ) {
+      throw new Error(`${label} not-applicable advisory record is invalid`);
+    }
+    return;
+  }
+  if (provider === 'google') {
+    if (
+      advisory.execution !== 'deferred' ||
+      advisory.status !== 'not_run' ||
+      advisory.outcomeJudgment !== null ||
+      advisory.infrastructureExhausted ||
+      advisory.infrastructureError !== null ||
+      confirmation.attempts !== 0
+    ) {
+      throw new Error(`${label} deferred Gemini advisory record is invalid`);
+    }
+    return;
+  }
+  if (advisory.execution !== 'completed' || advisory.status === 'not_run') {
+    throw new Error(
+      `${label} applicable OpenAI advisory execution is required`,
+    );
+  }
+  if (advisory.status === 'inconclusive') {
+    if (
+      advisory.outcomeJudgment !== null ||
+      !advisory.infrastructureExhausted ||
+      typeof advisory.infrastructureError !== 'string' ||
+      confirmation.attempts < 1
+    ) {
+      throw new Error(
+        `${label} inconclusive infrastructure evidence is invalid`,
+      );
+    }
+    assertSafeText(
+      advisory.infrastructureError,
+      `${label} infrastructure error`,
+    );
+    return;
+  }
+  if (
+    advisory.infrastructureExhausted ||
+    advisory.infrastructureError !== null ||
+    confirmation.attempts < 1
+  ) {
+    throw new Error(`${label} advisory execution state is invalid`);
+  }
+  const judgment = assertOutcomeJudgment(
+    advisory.outcomeJudgment,
+    `${label} outcome judgment`,
+  );
+  if (advisory.status === 'passed') {
+    if (
+      !judgment.passed ||
+      judgment.score <= 0 ||
+      judgment.missedExpectations.length !== 0 ||
+      judgment.safetyIssues.length !== 0
+    ) {
+      throw new Error(`${label} passed advisory judgment is contradictory`);
+    }
+    return;
+  }
+  if (
+    advisory.status !== 'warning' ||
+    judgment.passed ||
+    judgment.score >= 100
+  ) {
+    throw new Error(`${label} warning advisory judgment is contradictory`);
+  }
+}
+
+function assertExecutionAttestation(attestation, run, expectedGitSha) {
+  const value = assertObject(attestation, 'live text execution attestation');
+  assertExactKeys(
+    value,
+    [
+      'advisoryCalibration',
+      'agent',
+      'artifactKind',
+      'completedAt',
+      'executionId',
+      'gitSha',
+      'inventory',
+      'mode',
+      'outcomeJudge',
+      'provider',
+      'repetition',
+      'scenarios',
+      'schemaVersion',
+      'startedAt',
+      'status',
+    ],
+    'live text execution attestation',
+  );
+  if (
+    value.schemaVersion !== 3 ||
+    value.artifactKind !== 'kfc-live-text-execution-attestation' ||
+    value.status !== 'PASS' ||
+    value.executionId !== run.executionId ||
+    value.gitSha !== expectedGitSha ||
+    value.provider !== run.provider ||
+    value.repetition !== run.repetition ||
+    value.mode !== 'text' ||
+    value.startedAt !== run.startedAt ||
+    value.completedAt !== run.completedAt
+  ) {
+    throw new Error('live text execution attestation identity mismatch');
+  }
+  assertIdentity(
+    value.agent,
+    profileByProvider[run.provider],
+    'execution attestation agent',
+  );
+  const outcomeJudgeProvider = run.provider === 'openai' ? 'google' : 'openai';
+  assertIdentity(
+    value.outcomeJudge,
+    profileByProvider[outcomeJudgeProvider],
+    'execution attestation outcome judge',
+  );
+  const calibration = assertObject(
+    value.advisoryCalibration,
+    'execution attestation advisory calibration',
+  );
+  assertExactKeys(
+    calibration,
+    ['reviewStatus', 'status'],
+    'execution attestation advisory calibration',
+  );
+  if (
+    calibration.status !== 'draft' ||
+    calibration.reviewStatus !== 'human_review_required'
+  ) {
+    throw new Error(
+      'advisory calibration must remain draft and human_review_required',
+    );
+  }
+
+  const inventory = assertInventory(
+    value.inventory,
+    'execution attestation inventory',
+  );
+  if (!Array.isArray(value.scenarios)) {
+    throw new Error('execution attestation scenarios must be an array');
+  }
+  const scenarioFiles = [];
+  let turnCount = 0;
+  for (const rawScenario of value.scenarios) {
+    const scenario = assertObject(
+      rawScenario,
+      'execution attestation scenario',
+    );
+    assertExactKeys(
+      scenario,
+      ['advisory', 'fileName', 'status', 'turns'],
+      'execution attestation scenario',
+    );
+    if (
+      typeof scenario.fileName !== 'string' ||
+      !scenario.fileName.endsWith('.json') ||
+      scenario.status !== 'PASS' ||
+      !Array.isArray(scenario.turns) ||
+      scenario.turns.length === 0
+    ) {
+      throw new Error(
+        'execution attestation scenario hard status is ineligible',
+      );
+    }
+    assertAdvisoryRecord(
+      scenario.advisory,
+      `execution attestation advisory ${scenario.fileName}`,
+      scenario.fileName,
+      run.provider,
+    );
+    for (const rawTurn of scenario.turns) {
+      const turn = assertObject(rawTurn, 'execution attestation turn');
+      assertExactKeys(
+        turn,
+        ['durationMs', 'id', 'softTargetMs', 'status', 'strictCutoffMs'],
+        'execution attestation turn',
+      );
+      if (
+        typeof turn.id !== 'string' ||
+        !turn.id.startsWith(`${scenario.fileName}#`) ||
+        turn.status !== 'PASS' ||
+        !Number.isFinite(turn.durationMs) ||
+        turn.durationMs < 0 ||
+        turn.softTargetMs !== 10_000 ||
+        turn.strictCutoffMs !== 30_000 ||
+        turn.durationMs > turn.strictCutoffMs
+      ) {
+        throw new Error(
+          'execution attestation turn duration, target, cutoff, or hard status is ineligible',
+        );
+      }
+    }
+    turnCount += scenario.turns.length;
+    scenarioFiles.push(scenario.fileName);
+  }
+  if (
+    new Set(scenarioFiles).size !== scenarioFiles.length ||
+    scenarioFiles.length !== inventory.scenarioCount ||
+    turnCount !== inventory.turnCount ||
+    run.scenarioRuns !== inventory.scenarioCount ||
+    run.turnEvaluations !== inventory.turnCount
+  ) {
+    throw new Error('execution attestation inventory source binding mismatch');
+  }
+  return { inventory, scenarioFiles };
+}
+
+function assertVitestReport(report, run, expectedScenarioFiles) {
   const provider = run.provider;
   const value = assertObject(report, `${provider} Vitest report`);
-  const expected = mandatoryLiveTextQualification.scenariosPerExecution;
+  const expected = expectedScenarioFiles.length;
   if (
     value.success !== true ||
     value.numTotalTests !== expected ||
@@ -165,166 +550,41 @@ function assertVitestReport(report, run) {
     }
     return candidate.assertionResults;
   });
-  const passedTitles = assertions.map((assertion) => {
-    const candidate = assertObject(assertion, `${provider} assertion`);
-    return candidate.title;
-  });
   const expectedSuiteName = qualificationSuiteName(
     provider,
     run.executionId,
     run.repetition,
   );
-  const expectedTitles = mandatoryLiveTextQualification.scenarioFiles.map(
+  const passedTitles = assertions.map((assertion) => {
+    const candidate = assertObject(assertion, `${provider} assertion`);
+    if (
+      candidate.status !== 'passed' ||
+      !Array.isArray(candidate.ancestorTitles) ||
+      JSON.stringify(candidate.ancestorTitles) !==
+        JSON.stringify([expectedSuiteName])
+    ) {
+      throw new Error(
+        `${provider} report contains ineligible assertion evidence`,
+      );
+    }
+    return candidate.title;
+  });
+  const expectedTitles = expectedScenarioFiles.map(
     (fileName) => `${fileName} [text]`,
   );
   if (
     assertions.length !== expected ||
-    assertions.some((assertion) => {
-      const candidate = assertObject(assertion, `${provider} assertion`);
-      return candidate.status !== 'passed' ||
-        !Array.isArray(candidate.ancestorTitles) ||
-        JSON.stringify(candidate.ancestorTitles) !==
-          JSON.stringify([expectedSuiteName]);
-    }) ||
     JSON.stringify([...passedTitles].sort()) !==
       JSON.stringify([...expectedTitles].sort()) ||
     new Set(passedTitles).size !== expected
   ) {
     throw new Error(
-      `${provider} report must contain all exact unique canonical text scenarios`,
+      `${provider} report must contain all exact unique attested text scenarios`,
     );
   }
 }
 
-function assertExecutionAttestation(attestation, run, expectedGitSha) {
-  const value = assertObject(attestation, 'live text execution attestation');
-  assertExactKeys(
-    value,
-    [
-      'agent',
-      'artifactKind',
-      'completedAt',
-      'executionId',
-      'gitSha',
-      'inventory',
-      'mode',
-      'outcomeJudge',
-      'provider',
-      'repetition',
-      'scenarios',
-      'schemaVersion',
-      'startedAt',
-      'status',
-    ],
-    'live text execution attestation',
-  );
-  if (
-    value.schemaVersion !== 2 ||
-    value.artifactKind !== 'kfc-live-text-execution-attestation' ||
-    value.status !== 'PASS' ||
-    value.executionId !== run.executionId ||
-    value.gitSha !== expectedGitSha ||
-    value.provider !== run.provider ||
-    value.repetition !== run.repetition ||
-    value.mode !== 'text' ||
-    value.startedAt !== run.startedAt ||
-    value.completedAt !== run.completedAt
-  ) {
-    throw new Error('live text execution attestation identity mismatch');
-  }
-  assertIdentity(
-    value.agent,
-    profileByProvider[run.provider],
-    'execution attestation agent',
-  );
-  const outcomeJudgeProvider =
-    run.provider === 'openai' ? 'google' : 'openai';
-  assertIdentity(
-    value.outcomeJudge,
-    profileByProvider[outcomeJudgeProvider],
-    'execution attestation outcome judge',
-  );
-  const inventory = assertObject(
-    value.inventory,
-    'execution attestation inventory',
-  );
-  assertExactKeys(
-    inventory,
-    ['digest', 'scenarioCount', 'turnCount', 'version'],
-    'execution attestation inventory',
-  );
-  if (
-    inventory.version !== mandatoryLiveTextQualification.inventoryVersion ||
-    inventory.digest !== mandatoryLiveTextQualification.inventoryDigest ||
-    inventory.scenarioCount !==
-      mandatoryLiveTextQualification.scenariosPerExecution ||
-    inventory.turnCount !==
-      mandatoryLiveTextQualification.turnEvaluationsPerExecution
-  ) {
-    throw new Error('execution attestation inventory mismatch');
-  }
-  if (!Array.isArray(value.scenarios)) {
-    throw new Error('execution attestation scenarios must be an array');
-  }
-  const scenarioFiles = [];
-  let turnCount = 0;
-  for (const rawScenario of value.scenarios) {
-    const scenario = assertObject(
-      rawScenario,
-      'execution attestation scenario',
-    );
-    assertExactKeys(
-      scenario,
-      ['fileName', 'status', 'turns'],
-      'execution attestation scenario',
-    );
-    if (
-      typeof scenario.fileName !== 'string' ||
-      scenario.status !== 'PASS' ||
-      !Array.isArray(scenario.turns)
-    ) {
-      throw new Error('execution attestation scenario is ineligible');
-    }
-    const expectedTurnIds = (
-      scenarioTurnIndexes[scenario.fileName] ?? []
-    ).map((turnIndex) => `${scenario.fileName}#${turnIndex}`);
-    const actualTurnIds = scenario.turns.map((rawTurn) => {
-      const turn = assertObject(rawTurn, 'execution attestation turn');
-      assertExactKeys(
-        turn,
-        ['id', 'status'],
-        'execution attestation turn',
-      );
-      if (typeof turn.id !== 'string' || turn.status !== 'PASS') {
-        throw new Error('execution attestation turn is ineligible');
-      }
-      return turn.id;
-    });
-    if (JSON.stringify(actualTurnIds) !== JSON.stringify(expectedTurnIds)) {
-      throw new Error(
-        `execution attestation turns mismatch for ${scenario.fileName}`,
-      );
-    }
-    turnCount += actualTurnIds.length;
-    scenarioFiles.push(scenario.fileName);
-  }
-  if (
-    JSON.stringify([...scenarioFiles].sort()) !==
-      JSON.stringify([...mandatoryLiveTextQualification.scenarioFiles].sort()) ||
-    new Set(scenarioFiles).size !==
-      mandatoryLiveTextQualification.scenariosPerExecution ||
-    turnCount !== mandatoryLiveTextQualification.turnEvaluationsPerExecution
-  ) {
-    throw new Error(
-      'execution attestation lacks the exact 9-scenario/46-turn inventory',
-    );
-  }
-}
-
-export function assertCleanQualificationSource(
-  repositoryRoot,
-  expectedGitSha,
-) {
+export function assertCleanQualificationSource(repositoryRoot, expectedGitSha) {
   const gitSha = execFileSync('git', ['rev-parse', 'HEAD'], {
     cwd: repositoryRoot,
     encoding: 'utf8',
@@ -338,10 +598,7 @@ export function assertCleanQualificationSource(
   const status = execFileSync(
     'git',
     ['status', '--porcelain=v1', '--untracked-files=all'],
-    {
-      cwd: repositoryRoot,
-      encoding: 'utf8',
-    },
+    { cwd: repositoryRoot, encoding: 'utf8' },
   ).trim();
   if (status) {
     throw new Error('mandatory live qualification requires a clean checkout');
@@ -381,10 +638,23 @@ export function assertQualificationProviderEnvironment(environment) {
   return officialOpenAiQualificationBaseUrl;
 }
 
-export function assertLiveTextQualificationManifest(
-  manifest,
-  options,
+export function assertQualificationEvidenceIsNotAdvisoryCalibrationDraft(
+  value,
 ) {
+  if (
+    value &&
+    typeof value === 'object' &&
+    !Array.isArray(value) &&
+    value.artifact_kind === 'kfc-advisory-outcome-calibration'
+  ) {
+    throw new Error(
+      'Advisory calibration draft is not qualification or release evidence',
+    );
+  }
+}
+
+export function assertLiveTextQualificationManifest(manifest, options) {
+  assertQualificationEvidenceIsNotAdvisoryCalibrationDraft(manifest);
   const value = assertObject(manifest, 'live text qualification manifest');
   assertExactKeys(
     value,
@@ -401,7 +671,7 @@ export function assertLiveTextQualificationManifest(
     'live text qualification manifest',
   );
   if (
-    value.schemaVersion !== 2 ||
+    value.schemaVersion !== 3 ||
     value.artifactKind !== 'kfc-live-text-qualification' ||
     value.status !== 'PASS'
   ) {
@@ -415,23 +685,7 @@ export function assertLiveTextQualificationManifest(
     throw new Error('live text qualification is not bound to the expected SHA');
   }
 
-  const inventory = assertObject(value.inventory, 'qualification inventory');
-  assertExactKeys(
-    inventory,
-    ['digest', 'scenarioCount', 'turnCount', 'version'],
-    'qualification inventory',
-  );
-  if (
-    inventory.version !== mandatoryLiveTextQualification.inventoryVersion ||
-    inventory.digest !== mandatoryLiveTextQualification.inventoryDigest ||
-    inventory.scenarioCount !==
-      mandatoryLiveTextQualification.scenariosPerExecution ||
-    inventory.turnCount !==
-      mandatoryLiveTextQualification.turnEvaluationsPerExecution
-  ) {
-    throw new Error('live text qualification inventory is not canonical');
-  }
-
+  const inventory = assertInventory(value.inventory, 'qualification inventory');
   const matrix = assertObject(value.matrix, 'qualification matrix');
   assertExactKeys(
     matrix,
@@ -449,10 +703,8 @@ export function assertLiveTextQualificationManifest(
     JSON.stringify(matrix.providers) !==
       JSON.stringify(mandatoryLiveTextQualification.providers) ||
     matrix.repetitions !== mandatoryLiveTextQualification.repetitions ||
-    matrix.totalScenarioRuns !==
-      mandatoryLiveTextQualification.totalScenarioRuns ||
-    matrix.totalTurnEvaluations !==
-      mandatoryLiveTextQualification.totalTurnEvaluations
+    !Number.isInteger(matrix.totalScenarioRuns) ||
+    !Number.isInteger(matrix.totalTurnEvaluations)
   ) {
     throw new Error(
       'mandatory qualification must be OpenAI and Google text mode x3',
@@ -470,6 +722,8 @@ export function assertLiveTextQualificationManifest(
   const attestationDigests = new Set();
   const executionIds = new Set();
   let latestCompletion = 0;
+  let totalScenarioRuns = 0;
+  let totalTurnEvaluations = 0;
   for (const [index, rawRun] of value.runs.entries()) {
     const run = assertObject(rawRun, `qualification run ${index + 1}`);
     assertExactKeys(
@@ -500,10 +754,10 @@ export function assertLiveTextQualificationManifest(
       run.repetition > mandatoryLiveTextQualification.repetitions ||
       run.mode !== mandatoryLiveTextQualification.mode ||
       run.status !== 'PASS' ||
-      run.scenarioRuns !==
-        mandatoryLiveTextQualification.scenariosPerExecution ||
-      run.turnEvaluations !==
-        mandatoryLiveTextQualification.turnEvaluationsPerExecution
+      !Number.isInteger(run.scenarioRuns) ||
+      run.scenarioRuns < 1 ||
+      !Number.isInteger(run.turnEvaluations) ||
+      run.turnEvaluations < 1
     ) {
       throw new Error(`qualification run ${index + 1} is ineligible`);
     }
@@ -531,6 +785,52 @@ export function assertLiveTextQualificationManifest(
       throw new Error(`qualification run ${index + 1} ends before it starts`);
     }
     latestCompletion = Math.max(latestCompletion, completedAt);
+
+    const attestationReference = assertObject(
+      run.attestation,
+      `qualification run ${index + 1} attestation`,
+    );
+    assertExactKeys(
+      attestationReference,
+      ['path', 'sha256'],
+      `qualification run ${index + 1} attestation`,
+    );
+    const absoluteAttestationPath = artifactPathFrom(
+      options.manifestPath,
+      attestationReference.path,
+      'qualification attestation',
+    );
+    const relativeAttestationPath = relative(
+      dirname(resolve(options.manifestPath)),
+      absoluteAttestationPath,
+    );
+    if (
+      attestationPaths.has(relativeAttestationPath) ||
+      typeof attestationReference.sha256 !== 'string' ||
+      !/^[0-9a-f]{64}$/u.test(attestationReference.sha256)
+    ) {
+      throw new Error(
+        'qualification attestation identity is invalid or duplicated',
+      );
+    }
+    attestationPaths.add(relativeAttestationPath);
+    const attestationBytes = readFileSync(absoluteAttestationPath);
+    if (sha256(attestationBytes) !== attestationReference.sha256) {
+      throw new Error('qualification attestation digest mismatch');
+    }
+    const attested = assertExecutionAttestation(
+      JSON.parse(attestationBytes.toString('utf8')),
+      run,
+      value.gitSha,
+    );
+    if (
+      attested.inventory.version !== inventory.version ||
+      attested.inventory.digest !== inventory.digest ||
+      attested.inventory.scenarioCount !== inventory.scenarioCount ||
+      attested.inventory.turnCount !== inventory.turnCount
+    ) {
+      throw new Error('qualification inventory source binding mismatch');
+    }
 
     const report = assertObject(
       run.report,
@@ -562,52 +862,23 @@ export function assertLiveTextQualificationManifest(
     if (sha256(reportBytes) !== report.sha256) {
       throw new Error('qualification report digest mismatch');
     }
-    assertVitestReport(JSON.parse(reportBytes.toString('utf8')), run);
-
-    const attestation = assertObject(
-      run.attestation,
-      `qualification run ${index + 1} attestation`,
-    );
-    assertExactKeys(
-      attestation,
-      ['path', 'sha256'],
-      `qualification run ${index + 1} attestation`,
-    );
-    const absoluteAttestationPath = artifactPathFrom(
-      options.manifestPath,
-      attestation.path,
-      'qualification attestation',
-    );
-    const relativeAttestationPath = relative(
-      dirname(resolve(options.manifestPath)),
-      absoluteAttestationPath,
-    );
-    if (
-      attestationPaths.has(relativeAttestationPath) ||
-      typeof attestation.sha256 !== 'string' ||
-      !/^[0-9a-f]{64}$/u.test(attestation.sha256)
-    ) {
-      throw new Error(
-        'qualification attestation identity is invalid or duplicated',
-      );
-    }
-    attestationPaths.add(relativeAttestationPath);
-    const attestationBytes = readFileSync(absoluteAttestationPath);
-    if (sha256(attestationBytes) !== attestation.sha256) {
-      throw new Error('qualification attestation digest mismatch');
-    }
-    assertExecutionAttestation(
-      JSON.parse(attestationBytes.toString('utf8')),
+    assertVitestReport(
+      JSON.parse(reportBytes.toString('utf8')),
       run,
-      value.gitSha,
+      attested.scenarioFiles,
     );
+
     executionIds.add(run.executionId);
     reportDigests.add(report.sha256);
-    attestationDigests.add(attestation.sha256);
+    attestationDigests.add(attestationReference.sha256);
     actualKeys.push(`${run.provider}:${run.repetition}`);
+    totalScenarioRuns += run.scenarioRuns;
+    totalTurnEvaluations += run.turnEvaluations;
   }
   if (JSON.stringify(actualKeys) !== JSON.stringify(expectedKeys)) {
-    throw new Error('live text qualification matrix is incomplete or reordered');
+    throw new Error(
+      'live text qualification matrix is incomplete or reordered',
+    );
   }
   if (
     executionIds.size !== expectedKeys.length ||
@@ -616,6 +887,14 @@ export function assertLiveTextQualificationManifest(
   ) {
     throw new Error(
       'each qualification matrix execution requires distinct bound evidence',
+    );
+  }
+  if (
+    matrix.totalScenarioRuns !== totalScenarioRuns ||
+    matrix.totalTurnEvaluations !== totalTurnEvaluations
+  ) {
+    throw new Error(
+      'qualification matrix totals do not match attested evidence',
     );
   }
   const completedAt = assertIsoTimestamp(
@@ -636,20 +915,12 @@ export function assertLiveTextQualificationManifestFile(
   const bytes = readFileSync(absoluteManifestPath);
   const manifest = assertLiveTextQualificationManifest(
     JSON.parse(bytes.toString('utf8')),
-    {
-      expectedGitSha,
-      manifestPath: absoluteManifestPath,
-    },
+    { expectedGitSha, manifestPath: absoluteManifestPath },
   );
-  return {
-    manifest,
-    manifestSha256: sha256(bytes),
-  };
+  return { manifest, manifestSha256: sha256(bytes) };
 }
 
-const invokedPath = process.argv[1]
-  ? resolve(process.argv[1])
-  : undefined;
+const invokedPath = process.argv[1] ? resolve(process.argv[1]) : undefined;
 if (invokedPath === fileURLToPath(import.meta.url)) {
   const [command, manifestPath, expectedGitSha] = process.argv.slice(2);
   if (command !== 'validate' || !manifestPath || !expectedGitSha) {

@@ -22,6 +22,7 @@ import {
   type AgentTurnOutput,
 } from './agentTurnState.js';
 import {
+  traceCanonicalScenarioTurnIndex,
   traceProbeRunId,
   traceScenarioId,
   traceStateSummary,
@@ -126,6 +127,8 @@ export async function runAgentTurn(input: AgentTurnInput): Promise<AgentTurnOutp
   };
   const scenarioId = traceScenarioId(input);
   const probeRunId = traceProbeRunId(input);
+  const canonicalScenarioTurnIndex =
+    traceCanonicalScenarioTurnIndex(input);
   const rawEvent = input.metadata?.rawEvent;
   const trustedTraceContext = scenarioId !== undefined;
   const [
@@ -173,6 +176,9 @@ export async function runAgentTurn(input: AgentTurnInput): Promise<AgentTurnOutp
         : { session_id_digest: sessionIdDigest }),
       scenarioId: scenarioId ?? 'live-agent',
       probeRunId: probeRunId ?? null,
+      ...(canonicalScenarioTurnIndex !== undefined
+        ? { canonicalScenarioTurnIndex }
+        : {}),
       ...(trustedTraceContext
         ? { clientMessageId: input.externalMessageId ?? null }
         : { clientMessageIdDigest }),

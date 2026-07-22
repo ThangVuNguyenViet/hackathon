@@ -12,12 +12,8 @@ import {
   type CurrentTurnResponseEvidence,
   type ModelPublicationAuthority,
 } from '../../src/agent/modelPublicationProjection.js';
-import {
-  traceReceiptIsRecoverable,
-} from '../../src/agent/agentPublicationRuntime.js';
-import type {
-  GraphExecutedToolResult,
-} from '../../src/agent/graphExecutedToolResult.js';
+import { traceReceiptIsRecoverable } from '../../src/agent/agentPublicationRuntime.js';
+import type { GraphExecutedToolResult } from '../../src/agent/graphExecutedToolResult.js';
 import type {
   Address,
   Cart,
@@ -35,12 +31,14 @@ import { executePublicationTool } from './model-publication-test-runtime.js';
 function cart(id = 'cart-current'): Cart {
   return {
     id,
-    items: [{
-      itemCode: 'item-1',
-      name: 'Chicken',
-      quantity: 1,
-      unitPriceVnd: 50_000,
-    }],
+    items: [
+      {
+        itemCode: 'item-1',
+        name: 'Chicken',
+        quantity: 1,
+        unitPriceVnd: 50_000,
+      },
+    ],
     subtotalVnd: 50_000,
     discountVnd: 0,
     deliveryFeeVnd: 10_000,
@@ -73,10 +71,7 @@ function address(overrides: Partial<Address> = {}): Address {
   };
 }
 
-function order(
-  status: Order['status'],
-  orderCart = cart(),
-): Order {
+function order(status: Order['status'], orderCart = cart()): Order {
   return {
     id: 'order-private-history',
     cart: orderCart,
@@ -93,9 +88,7 @@ function order(
   };
 }
 
-function state(
-  overrides: Partial<AgentGraphState> = {},
-): AgentGraphState {
+function state(overrides: Partial<AgentGraphState> = {}): AgentGraphState {
   const latestUserMessage =
     overrides.latestUserMessage ?? 'Show the current order';
   const base: AgentGraphState = {
@@ -103,18 +96,20 @@ function state(
     customerId: 'publication-customer',
     channel: 'kfc',
     latestUserMessage,
-    recentTurns: [{
-      id: 'publication-turn',
-      sessionId: 'publication-session',
-      channel: 'kfc',
-      role: 'user',
-      text: latestUserMessage,
-      externalMessageId: 'publication-message',
-      externalUserId: 'publication-user',
-      deliveryStatus: 'received',
-      metadata: null,
-      createdAt: '2026-07-20T00:00:00.000Z',
-    }],
+    recentTurns: [
+      {
+        id: 'publication-turn',
+        sessionId: 'publication-session',
+        channel: 'kfc',
+        role: 'user',
+        text: latestUserMessage,
+        externalMessageId: 'publication-message',
+        externalUserId: 'publication-user',
+        deliveryStatus: 'received',
+        metadata: null,
+        createdAt: '2026-07-20T00:00:00.000Z',
+      },
+    ],
     userConfirmedOrder: false,
     escalationReasons: [],
     retrievedEvidence: [],
@@ -178,9 +173,7 @@ async function responseEvidence(input: {
   publicationAuthority: ModelPublicationAuthority;
   call: PendingToolCall;
   currentAccess?: CustomerAccessContext;
-  clientOptions?: Parameters<
-    typeof executePublicationTool
-  >[0]['clientOptions'];
+  clientOptions?: Parameters<typeof executePublicationTool>[0]['clientOptions'];
   fixtures?: Parameters<typeof executePublicationTool>[0]['fixtures'];
 }) {
   const execution = await executePublicationTool({
@@ -253,26 +246,30 @@ function privateHistoryState(
     customerContext: {
       savedAddresses: [address()],
       recentOrders: [order('completed', historicalCart)],
-      favorites: [{
-        code: 'private-favorite',
-        category: 'private',
-        categoryId: 'private-category',
-        name: 'PRIVATE FAVORITE',
-        description: 'private',
-        priceVnd: 1,
-        originalPriceVnd: null,
-        imageUrl: 'https://example.com/private.png',
-        available: true,
-      }],
+      favorites: [
+        {
+          code: 'private-favorite',
+          category: 'private',
+          categoryId: 'private-category',
+          name: 'PRIVATE FAVORITE',
+          description: 'private',
+          priceVnd: 1,
+          originalPriceVnd: null,
+          imageUrl: 'https://example.com/private.png',
+          available: true,
+        },
+      ],
       loyaltyPoints: 12_345,
     },
-    retrievedEvidence: [{
-      eventId: 'private-event',
-      timestamp: '2026-07-20T00:00:00.000Z',
-      sourceType: 'private-history',
-      confidence: 1,
-      payload: { secret: 'PRIVATE-RETRIEVED-EVIDENCE' },
-    }],
+    retrievedEvidence: [
+      {
+        eventId: 'private-event',
+        timestamp: '2026-07-20T00:00:00.000Z',
+        sourceType: 'private-history',
+        confidence: 1,
+        payload: { secret: 'PRIVATE-RETRIEVED-EVIDENCE' },
+      },
+    ],
   });
 }
 
@@ -305,11 +302,13 @@ function privateActiveState(): AgentGraphState {
         revision: 'membership-revision',
         providerRevision: 'membership-provider-revision',
         result: {
-          items: [{
-            ...fixtureReward,
-            rewardId: 'PRIVATE REWARD ID',
-            name: 'PRIVATE MEMBER REWARD',
-          }],
+          items: [
+            {
+              ...fixtureReward,
+              rewardId: 'PRIVATE REWARD ID',
+              name: 'PRIVATE MEMBER REWARD',
+            },
+          ],
           total: 1,
           returned: 1,
           complete: true,
@@ -498,8 +497,9 @@ describe('model publication projection', () => {
       expect(serialized).not.toContain('private.example/payment-token');
       expect(serialized).not.toContain('PRIVATE-OLD-ORDER-ID');
       expect(durable.order?.status).toBe(status);
-      expect(durable.customerContext?.savedAddresses[0]?.line1)
-        .toBe('PRIVATE OLD LINE 1');
+      expect(durable.customerContext?.savedAddresses[0]?.line1).toBe(
+        'PRIVATE OLD LINE 1',
+      );
     },
   );
 
@@ -507,33 +507,33 @@ describe('model publication projection', () => {
     const activeOrder = order('preparing');
     activeOrder.paymentStatus = 'pending';
     const durable = state({
-        cart: activeOrder.cart,
-        order: activeOrder,
-        address: address({ line1: 'CURRENT LINE 1' }),
-        fulfillment: {
-          method: 'delivery',
-          disposition: 'delivery',
-          storeId: 'store-1',
-          storeName: 'Store 1',
-          feeVnd: 10_000,
-          etaMinutes: 25,
-          availability: {
-            ok: true,
-            checkedItemIds: ['item-1'],
-            unavailableItemIds: [],
-            blockedTimeslotItemIds: [],
-            source: {
-              fixtureMode: 'provider_runtime',
-              sourceFile: 'INTERNAL-SOURCE-FILE',
-            },
+      cart: activeOrder.cart,
+      order: activeOrder,
+      address: address({ line1: 'CURRENT LINE 1' }),
+      fulfillment: {
+        method: 'delivery',
+        disposition: 'delivery',
+        storeId: 'store-1',
+        storeName: 'Store 1',
+        feeVnd: 10_000,
+        etaMinutes: 25,
+        availability: {
+          ok: true,
+          checkedItemIds: ['item-1'],
+          unavailableItemIds: [],
+          blockedTimeslotItemIds: [],
+          source: {
+            fixtureMode: 'provider_runtime',
+            sourceFile: 'INTERNAL-SOURCE-FILE',
           },
         },
-        paymentAttempt: {
-          orderId: activeOrder.id,
-          method: 'method-1',
-          status: 'pending',
-          paymentUrl: 'https://private.example/payment-token',
-        },
+      },
+      paymentAttempt: {
+        orderId: activeOrder.id,
+        method: 'method-1',
+        status: 'pending',
+        paymentUrl: 'https://private.example/payment-token',
+      },
     });
     const publication = await bundle(durable);
 
@@ -562,11 +562,13 @@ describe('model publication projection', () => {
     const submittedOrder = order('preparing');
     submittedOrder.paymentStatus = 'pending';
     const activeCart = cart('new-active-cart');
-    activeCart.items = [{
-      ...activeCart.items[0]!,
-      itemCode: 'item-new-checkout',
-      name: 'New checkout item',
-    }];
+    activeCart.items = [
+      {
+        ...activeCart.items[0]!,
+        itemCode: 'item-new-checkout',
+        name: 'New checkout item',
+      },
+    ];
     const durable = state({
       cart: activeCart,
       order: submittedOrder,
@@ -588,9 +590,7 @@ describe('model publication projection', () => {
     expect(publication.modelState.cart?.id).toBe(activeCart.id);
     expect(publication.modelState).not.toHaveProperty('order');
     expect(publication.modelState).not.toHaveProperty('paymentAttempt');
-    expect(JSON.stringify(publication)).not.toContain(
-      submittedOrder.id,
-    );
+    expect(JSON.stringify(publication)).not.toContain(submittedOrder.id);
     expect(JSON.stringify(publication)).not.toContain('history-token');
     expect(durable.order).toBe(submittedOrder);
     expect(durable.paymentAttempt?.method).toBe('method-history');
@@ -599,15 +599,17 @@ describe('model publication projection', () => {
   it('does not publish an unbound payment attempt for an active order', async () => {
     const activeOrder = order('preparing');
     activeOrder.paymentStatus = 'pending';
-    const publication = await bundle(state({
-      cart: activeOrder.cart,
-      order: activeOrder,
-      paymentAttempt: {
-        method: 'legacy-unbound-method',
-        status: 'pending',
-        paymentUrl: 'https://private.example/unbound-token',
-      },
-    }));
+    const publication = await bundle(
+      state({
+        cart: activeOrder.cart,
+        order: activeOrder,
+        paymentAttempt: {
+          method: 'legacy-unbound-method',
+          status: 'pending',
+          paymentUrl: 'https://private.example/unbound-token',
+        },
+      }),
+    );
 
     expect(publication.modelState).not.toHaveProperty('paymentAttempt');
     expect(publication.lifecycle.payment).toBe('none');
@@ -617,29 +619,31 @@ describe('model publication projection', () => {
   it('retains a structurally distinct active cart beside terminal history', async () => {
     const terminalCart = cart('terminal-cart');
     const activeCart = cart('new-cart');
-    const publication = await bundle(state({
-      cart: activeCart,
-      order: order('completed', terminalCart),
-      address: address(),
-      fulfillment: {
-        method: 'delivery',
-        disposition: 'delivery',
-        storeId: 'terminal-history-store',
-        storeName: 'Terminal History Store',
-        feeVnd: 10_000,
-        etaMinutes: 25,
-        availability: {
-          ok: true,
-          checkedItemIds: ['item-1'],
-          unavailableItemIds: [],
-          blockedTimeslotItemIds: [],
-          source: {
-            fixtureMode: 'provider_runtime',
-            sourceFile: 'terminal-history-source',
+    const publication = await bundle(
+      state({
+        cart: activeCart,
+        order: order('completed', terminalCart),
+        address: address(),
+        fulfillment: {
+          method: 'delivery',
+          disposition: 'delivery',
+          storeId: 'terminal-history-store',
+          storeName: 'Terminal History Store',
+          feeVnd: 10_000,
+          etaMinutes: 25,
+          availability: {
+            ok: true,
+            checkedItemIds: ['item-1'],
+            unavailableItemIds: [],
+            blockedTimeslotItemIds: [],
+            source: {
+              fixtureMode: 'provider_runtime',
+              sourceFile: 'terminal-history-source',
+            },
           },
         },
-      },
-    }));
+      }),
+    );
 
     expect(publication.lifecycle).toMatchObject({
       order: 'terminal_hidden',
@@ -650,9 +654,7 @@ describe('model publication projection', () => {
     expect(publication.modelState).not.toHaveProperty('address');
     expect(publication.modelState).not.toHaveProperty('fulfillment');
     expect(JSON.stringify(publication)).not.toContain('PRIVATE OLD LINE 1');
-    expect(JSON.stringify(publication)).not.toContain(
-      'terminal-history-store',
-    );
+    expect(JSON.stringify(publication)).not.toContain('terminal-history-store');
   });
 
   it('hides prior address and fulfillment when a partial draft changes location', async () => {
@@ -744,20 +746,24 @@ describe('model publication projection', () => {
       menuModifierOptions: {
         name: 'STALE MODIFIER DETAIL',
       } as AgentGraphState['menuModifierOptions'],
-      promotionOffers: [{
-        offerName: 'STALE PROMOTION OFFER',
-      }] as AgentGraphState['promotionOffers'],
+      promotionOffers: [
+        {
+          offerName: 'STALE PROMOTION OFFER',
+        },
+      ] as AgentGraphState['promotionOffers'],
       promotionContext: {
         matchedOfferIds: ['STALE-PROMOTION-CONTEXT'],
         caveats: ['STALE PROMOTION CAVEAT'],
       },
-      contentEvidence: [{
-        kind: 'policy',
-        title: 'STALE POLICY',
-        snippet: 'STALE CONTENT EVIDENCE',
-        sourceUrl: 'https://example.com/stale',
-        sourceFile: 'stale',
-      }],
+      contentEvidence: [
+        {
+          kind: 'policy',
+          title: 'STALE POLICY',
+          snippet: 'STALE CONTENT EVIDENCE',
+          sourceUrl: 'https://example.com/stale',
+          sourceFile: 'stale',
+        },
+      ],
     });
     const publicationAuthority = await authority(durable);
     const withoutCurrentEvidence = await buildModelPublicationBundle({
@@ -773,7 +779,8 @@ describe('model publication projection', () => {
 
     const fixtures = createTestFixtures();
     fixtures.menuItems = fixtures.menuItems.map((item, index) =>
-      index === 0 ? { ...item, name: 'CURRENT MENU DETAIL' } : item);
+      index === 0 ? { ...item, name: 'CURRENT MENU DETAIL' } : item,
+    );
     const currentEvidence = await responseEvidence({
       durable,
       publicationAuthority,
@@ -832,29 +839,43 @@ describe('model publication projection', () => {
     expect(
       publication.evidence.find(
         (entry) => entry.evidenceId === 'active_collection:searchMenu',
-      )?.claimKinds,
-    ).toEqual(['product', 'modifier', 'price', 'source', 'status']);
+      ),
+    ).toMatchObject({
+      claimKinds: ['product', 'modifier', 'price', 'source', 'status'],
+      requiredLimitations: [
+        {
+          limitationId: 'uncited_subjects_or_aspects_unknown',
+          claimKinds: ['modifier'],
+          subjectScope: 'included_modifier_option_name',
+        },
+      ],
+    });
     expect(publication.evidence).not.toContainEqual(
       expect.objectContaining({ evidenceId: 'active_collections' }),
     );
   });
 
   it('uses structural state rather than customer-text classification', async () => {
-    const menu = await bundle(state({
-      cart: cart(),
-      latestUserMessage: 'Show every menu item',
-    }));
-    const complaint = await bundle(state({
-      cart: cart(),
-      latestUserMessage: 'I need help with a complaint',
-    }));
+    const menu = await bundle(
+      state({
+        cart: cart(),
+        latestUserMessage: 'Show every menu item',
+      }),
+    );
+    const complaint = await bundle(
+      state({
+        cart: cart(),
+        latestUserMessage: 'I need help with a complaint',
+      }),
+    );
 
     expect(menu.modelState).toEqual(complaint.modelState);
     expect(menu.lifecycle.cart).toBe('active');
     expect(complaint.lifecycle.cart).toBe('active');
     expect(menu.projectionDigest).not.toBe(complaint.projectionDigest);
-    expect(menu.lifecycle.currentUserMessageDigest)
-      .not.toBe(complaint.lifecycle.currentUserMessageDigest);
+    expect(menu.lifecycle.currentUserMessageDigest).not.toBe(
+      complaint.lifecycle.currentUserMessageDigest,
+    );
   });
 
   it('rejects an authority replayed across sessions with the same text and turn id', async () => {
@@ -865,16 +886,20 @@ describe('model publication projection', () => {
     const other = state({
       sessionId: 'other-session',
       customerId: 'other-customer',
-      recentTurns: [{
-        ...originalTurn,
-        sessionId: 'other-session',
-      }],
+      recentTurns: [
+        {
+          ...originalTurn,
+          sessionId: 'other-session',
+        },
+      ],
     });
 
-    await expect(buildModelPublicationBundle({
-      state: other,
-      authority: originalAuthority,
-    })).rejects.toThrow('model_publication_authority_invalid');
+    await expect(
+      buildModelPublicationBundle({
+        state: other,
+        authority: originalAuthority,
+      }),
+    ).rejects.toThrow('model_publication_authority_invalid');
   });
 
   it('binds exact issued bundle identity and stops private publication at auth expiry', async () => {
@@ -901,31 +926,37 @@ describe('model publication projection', () => {
       });
 
       expect(isIssuedModelPublicationBundle(publication)).toBe(true);
-      expect(JSON.stringify(publication)).toContain(
-        'PRIVATE MEMBER REWARD',
-      );
+      expect(JSON.stringify(publication)).toContain('PRIVATE MEMBER REWARD');
       expect(privateDisclosureEvidenceIds(publication)).toContain(
         'active_collection:listMembershipRewards',
       );
-      expect(validateModelPublicationReference({
-        bundle: publication,
-        projectionDigest: publication.projectionDigest,
-      })).toBe(true);
-      expect(validateModelPublicationReference({
-        bundle: structuredClone(publication),
-        projectionDigest: publication.projectionDigest,
-      })).toBe(false);
-      expect(validateModelPublicationReference({
-        bundle: publication,
-        projectionDigest: '0'.repeat(64),
-      })).toBe(false);
+      expect(
+        validateModelPublicationReference({
+          bundle: publication,
+          projectionDigest: publication.projectionDigest,
+        }),
+      ).toBe(true);
+      expect(
+        validateModelPublicationReference({
+          bundle: structuredClone(publication),
+          projectionDigest: publication.projectionDigest,
+        }),
+      ).toBe(false);
+      expect(
+        validateModelPublicationReference({
+          bundle: publication,
+          projectionDigest: '0'.repeat(64),
+        }),
+      ).toBe(false);
 
       vi.setSystemTime('2026-07-20T00:02:00.000Z');
       expect(isIssuedModelPublicationBundle(publication)).toBe(false);
-      expect(validateModelPublicationReference({
-        bundle: publication,
-        projectionDigest: publication.projectionDigest,
-      })).toBe(false);
+      expect(
+        validateModelPublicationReference({
+          bundle: publication,
+          projectionDigest: publication.projectionDigest,
+        }),
+      ).toBe(false);
 
       const expiredAuthority = await issueModelPublicationAuthority({
         state: durable,
@@ -971,9 +1002,7 @@ describe('model publication projection', () => {
       surfaceSubjectRef: spread.surfaceSubjectRef,
       privateAccess: {
         ...spread.privateAccess,
-        authorizedScopes: [
-          ...spread.privateAccess.authorizedScopes,
-        ].sort(),
+        authorizedScopes: [...spread.privateAccess.authorizedScopes].sort(),
       },
     });
     const descriptorCopy = Object.defineProperties(
@@ -985,10 +1014,12 @@ describe('model publication projection', () => {
       spread as ModelPublicationAuthority,
       descriptorCopy,
     ]) {
-      await expect(buildModelPublicationBundle({
-        state: durable,
-        authority: forged,
-      })).rejects.toThrow('model_publication_authority_invalid');
+      await expect(
+        buildModelPublicationBundle({
+          state: durable,
+          authority: forged,
+        }),
+      ).rejects.toThrow('model_publication_authority_invalid');
     }
   });
 
@@ -1080,12 +1111,12 @@ describe('model publication projection', () => {
     ) as GraphExecutedToolResult;
 
     for (const execution of [forged, copied]) {
-      await expect(buildCurrentTurnResponseEvidence({
-        authority: publicationAuthority,
-        execution,
-      })).rejects.toThrow(
-        'current_turn_response_evidence_source_invalid',
-      );
+      await expect(
+        buildCurrentTurnResponseEvidence({
+          authority: publicationAuthority,
+          execution,
+        }),
+      ).rejects.toThrow('current_turn_response_evidence_source_invalid');
     }
   });
 
@@ -1114,19 +1145,19 @@ describe('model publication projection', () => {
     }));
 
     for (const runtimeAccess of [mismatchedEvidence, mismatchedScopes]) {
-      await expect(executePublicationTool({
-        authority: publicationAuthority,
-        state: durable,
-        accessContext: runtimeAccess,
-        call: {
-          id: crypto.randomUUID(),
-          toolName: 'getSavedAddresses',
-          arguments: {},
-        },
-        clientOptions: { savedAddressesProvider: provider },
-      })).rejects.toThrow(
-        'graph_executed_tool_result_authority_invalid',
-      );
+      await expect(
+        executePublicationTool({
+          authority: publicationAuthority,
+          state: durable,
+          accessContext: runtimeAccess,
+          call: {
+            id: crypto.randomUUID(),
+            toolName: 'getSavedAddresses',
+            arguments: {},
+          },
+          clientOptions: { savedAddressesProvider: provider },
+        }),
+      ).rejects.toThrow('graph_executed_tool_result_authority_invalid');
     }
     expect(provider).not.toHaveBeenCalled();
   });
@@ -1170,11 +1201,13 @@ describe('model publication projection', () => {
     });
     forged.evidenceId = `current:${forged.toolName}:${forged.digest}`;
 
-    await expect(buildModelPublicationBundle({
-      state: durable,
-      authority: publicationAuthority,
-      currentTurnEvidence: [forged],
-    })).rejects.toThrow('current_turn_response_evidence_invalid');
+    await expect(
+      buildModelPublicationBundle({
+        state: durable,
+        authority: publicationAuthority,
+        currentTurnEvidence: [forged],
+      }),
+    ).rejects.toThrow('current_turn_response_evidence_invalid');
   });
 
   it('rejects a descriptor-copied current evidence capability', async () => {
@@ -1202,11 +1235,13 @@ describe('model publication projection', () => {
       Object.getOwnPropertyDescriptors(genuine),
     ) as CurrentTurnResponseEvidence;
 
-    await expect(buildModelPublicationBundle({
-      state: durable,
-      authority: publicationAuthority,
-      currentTurnEvidence: [copied],
-    })).rejects.toThrow('current_turn_response_evidence_invalid');
+    await expect(
+      buildModelPublicationBundle({
+        state: durable,
+        authority: publicationAuthority,
+        currentTurnEvidence: [copied],
+      }),
+    ).rejects.toThrow('current_turn_response_evidence_invalid');
   });
 
   it('rejects duplicate current-turn evidence identities', async () => {
@@ -1230,11 +1265,13 @@ describe('model publication projection', () => {
     });
     if (!evidence) throw new Error('current evidence missing');
 
-    await expect(buildModelPublicationBundle({
-      state: durable,
-      authority: publicationAuthority,
-      currentTurnEvidence: [evidence, evidence],
-    })).rejects.toThrow('current_turn_response_evidence_invalid');
+    await expect(
+      buildModelPublicationBundle({
+        state: durable,
+        authority: publicationAuthority,
+        currentTurnEvidence: [evidence, evidence],
+      }),
+    ).rejects.toThrow('current_turn_response_evidence_invalid');
   });
 
   it('requires the exact authenticated tool scope for private evidence', async () => {
@@ -1248,16 +1285,18 @@ describe('model publication projection', () => {
       accessContext: currentAccess,
     });
 
-    await expect(responseEvidence({
-      durable,
-      publicationAuthority,
-      currentAccess,
-      call: {
-        id: 'tool-call-order-without-order-scope',
-        toolName: 'getRecentOrder',
-        arguments: {},
-      },
-    })).resolves.toBeUndefined();
+    await expect(
+      responseEvidence({
+        durable,
+        publicationAuthority,
+        currentAccess,
+        call: {
+          id: 'tool-call-order-without-order-scope',
+          toolName: 'getRecentOrder',
+          arguments: {},
+        },
+      }),
+    ).resolves.toBeUndefined();
   });
 
   it('does not issue publication authority without verified authentication', async () => {
@@ -1267,11 +1306,13 @@ describe('model publication projection', () => {
     const unverified = accessContext();
     unverified.authenticationState = 'unauthenticated';
 
-    await expect(issueModelPublicationAuthority({
-      state: durable,
-      currentUserTurn,
-      accessContext: unverified,
-    })).rejects.toThrow('model_publication_authority_invalid');
+    await expect(
+      issueModelPublicationAuthority({
+        state: durable,
+        currentUserTurn,
+        accessContext: unverified,
+      }),
+    ).rejects.toThrow('model_publication_authority_invalid');
   });
 
   it('does not issue authority for a different surface subject', async () => {
@@ -1281,11 +1322,13 @@ describe('model publication projection', () => {
     const mismatched = accessContext();
     mismatched.surfaceSubjectRef = 'different-channel-user';
 
-    await expect(issueModelPublicationAuthority({
-      state: durable,
-      currentUserTurn,
-      accessContext: mismatched,
-    })).rejects.toThrow('model_publication_authority_invalid');
+    await expect(
+      issueModelPublicationAuthority({
+        state: durable,
+        currentUserTurn,
+        accessContext: mismatched,
+      }),
+    ).rejects.toThrow('model_publication_authority_invalid');
   });
 
   it('binds an external-channel authority to the exact current surface user', async () => {
@@ -1294,11 +1337,13 @@ describe('model publication projection', () => {
     if (!baseTurn) throw new Error('current user turn missing');
     const durable = state({
       channel: 'messenger',
-      recentTurns: [{
-        ...baseTurn,
-        channel: 'messenger',
-        externalUserId: 'messenger-user-a',
-      }],
+      recentTurns: [
+        {
+          ...baseTurn,
+          channel: 'messenger',
+          externalUserId: 'messenger-user-a',
+        },
+      ],
     });
     const currentUserTurn = durable.recentTurns?.at(-1);
     if (!currentUserTurn) throw new Error('current user turn missing');
@@ -1307,11 +1352,13 @@ describe('model publication projection', () => {
     currentAccess.surfaceSubjectRef = 'messenger-user-a';
     currentAccess.channelAccountLinkState = 'linked';
 
-    await expect(issueModelPublicationAuthority({
-      state: durable,
-      currentUserTurn,
-      accessContext: currentAccess,
-    })).resolves.toMatchObject({
+    await expect(
+      issueModelPublicationAuthority({
+        state: durable,
+        currentUserTurn,
+        accessContext: currentAccess,
+      }),
+    ).resolves.toMatchObject({
       surfaceSubjectRef: 'messenger-user-a',
       privateAccess: {
         state: 'authenticated',
@@ -1320,11 +1367,13 @@ describe('model publication projection', () => {
     });
 
     currentAccess.surfaceSubjectRef = 'messenger-user-b';
-    await expect(issueModelPublicationAuthority({
-      state: durable,
-      currentUserTurn,
-      accessContext: currentAccess,
-    })).rejects.toThrow('model_publication_authority_invalid');
+    await expect(
+      issueModelPublicationAuthority({
+        state: durable,
+        currentUserTurn,
+        accessContext: currentAccess,
+      }),
+    ).rejects.toThrow('model_publication_authority_invalid');
   });
 
   it.each([
@@ -1343,8 +1392,7 @@ describe('model publication projection', () => {
       const publicationAuthority = await authority(durable);
       const evidenceDigest = 'a'.repeat(64);
       const receipt = {
-        schemaVersion:
-          'kfc-checkpoint-tool-evidence-receipt-v2' as const,
+        schemaVersion: 'kfc-checkpoint-tool-evidence-receipt-v2' as const,
         evidenceId: `current:${toolName}:${evidenceDigest}`,
         evidenceDigest,
         toolCallId: `legacy-${toolName}-call`,
@@ -1380,19 +1428,21 @@ describe('model publication projection', () => {
         },
       };
 
-      await expect(traceReceiptIsRecoverable({
-        trace,
-        receipt,
-        currentTurnId: publicationAuthority.currentTurnId,
-        traceIndex: 0,
-      })).resolves.toBe(false);
-      await expect(rehydrateCheckpointSafeCurrentTurnEvidence({
-        authority: publicationAuthority,
-        trace,
-        receipt,
-      })).rejects.toThrow(
-        'checkpoint_current_turn_evidence_unrecoverable',
-      );
+      await expect(
+        traceReceiptIsRecoverable({
+          trace,
+          receipt,
+          currentTurnId: publicationAuthority.currentTurnId,
+          traceIndex: 0,
+        }),
+      ).resolves.toBe(false);
+      await expect(
+        rehydrateCheckpointSafeCurrentTurnEvidence({
+          authority: publicationAuthority,
+          trace,
+          receipt,
+        }),
+      ).rejects.toThrow('checkpoint_current_turn_evidence_unrecoverable');
     },
   );
 
@@ -1440,8 +1490,7 @@ describe('model publication projection', () => {
 
     const successfulReceipt =
       checkpointSafeToolEvidenceReceipt(successfulEvidence);
-    const failedReceipt =
-      checkpointSafeToolEvidenceReceipt(failedEvidence);
+    const failedReceipt = checkpointSafeToolEvidenceReceipt(failedEvidence);
     const serialized = JSON.stringify([successfulReceipt, failedReceipt]);
 
     expect(successfulReceipt).toEqual({
@@ -1470,8 +1519,10 @@ describe('model publication projection', () => {
     expect(serialized).not.toContain('Ho Chi Minh City');
     expect(serialized).not.toContain('private provider diagnostic');
     expect(serialized).not.toContain('saved_addresses_unavailable');
-    expect(() => checkpointSafeToolEvidenceReceipt({
-      ...successfulEvidence,
-    })).toThrow('checkpoint_tool_evidence_receipt_source_invalid');
+    expect(() =>
+      checkpointSafeToolEvidenceReceipt({
+        ...successfulEvidence,
+      }),
+    ).toThrow('checkpoint_tool_evidence_receipt_source_invalid');
   });
 });

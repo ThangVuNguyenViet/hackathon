@@ -7,7 +7,6 @@ import {
   liveQualityInventoryDigest,
 } from '../../src/evaluation/liveQualityDataset.js';
 import {
-  LIVE_QUALITY_CANONICAL_INVENTORY_DIGEST,
   LIVE_QUALITY_DATASET_DESCRIPTION,
   LIVE_QUALITY_DATASET_NAME,
   LIVE_QUALITY_DATASET_SPLIT,
@@ -24,10 +23,11 @@ import {
   evaluateLiveQualityOutput,
   requiresSemanticResponseJudge,
 } from '../../src/evaluation/liveQualityEvaluators.js';
-import type {
-  SemanticResponseJudge,
-} from '../../src/evaluation/semanticResponseJudge.js';
-import { liveQualityDatasetCaseSchema } from '../../src/evaluation/liveQualitySchemas.js';
+import type { SemanticResponseJudge } from '../../src/evaluation/semanticResponseJudge.js';
+import {
+  liveQualityDatasetCaseSchema,
+  liveScenarioCaseSchema,
+} from '../../src/evaluation/liveQualitySchemas.js';
 import {
   liveScenarioCases,
   SCENARIO_COVERAGE_LEDGER_VERSION,
@@ -167,7 +167,19 @@ function datasetCases(): LiveQualityDatasetCase[] {
   });
 }
 
-function refreshFingerprint(testCase: LiveQualityDatasetCase): LiveQualityDatasetCase {
+const activeTurnCount = liveScenarioCases.reduce(
+  (total, scenario) => total + scenario.turnExpectations.length,
+  0,
+);
+const activeCaseCount = activeTurnCount * 2;
+
+function syncCases(client: Client, cases: readonly unknown[]) {
+  return syncLiveQualityDataset(client, cases, liveScenarioCases);
+}
+
+function refreshFingerprint(
+  testCase: LiveQualityDatasetCase,
+): LiveQualityDatasetCase {
   const refreshed = structuredClone(testCase);
   refreshed.metadata.fingerprint = liveQualityCaseFingerprint({
     inputs: refreshed.inputs,
@@ -185,11 +197,14 @@ function refreshFingerprint(testCase: LiveQualityDatasetCase): LiveQualityDatase
   return refreshed;
 }
 
-function ownedExample(testCase: LiveQualityDatasetCase, id: string): FakeExample {
+function ownedExample(
+  testCase: LiveQualityDatasetCase,
+  id: string,
+): FakeExample {
   return {
     id,
-    inputs: structuredClone(testCase.inputs) as unknown as Record<string, unknown>,
-    outputs: structuredClone(testCase.outputs) as unknown as Record<string, unknown>,
+    inputs: { ...structuredClone(testCase.inputs) },
+    outputs: { ...structuredClone(testCase.outputs) },
     metadata: {
       ...structuredClone(testCase.metadata),
       dataset_split: [testCase.split],
@@ -198,14 +213,17 @@ function ownedExample(testCase: LiveQualityDatasetCase, id: string): FakeExample
 }
 
 function findExample(client: FakeLangSmithClient, caseId: string): FakeExample {
-  const example = client.examples.find(({ metadata }) => metadata.caseId === caseId);
+  const example = client.examples.find(
+    ({ metadata }) => metadata.caseId === caseId,
+  );
   if (!example) throw new Error(`missing fake example ${caseId}`);
   return example;
 }
 
 function passingExperimentOutput(): LiveQualityExperimentOutput {
   return {
-    responseText: 'Mình xin lỗi về trải nghiệm này. Bạn cho mình biết thêm chi tiết nhé.',
+    responseText:
+      'Mình xin lỗi về trải nghiệm này. Bạn cho mình biết thêm chi tiết nhé.',
     executedTools: [],
     observations: [],
     stateBefore: {},
@@ -228,16 +246,53 @@ function passingExperimentOutput(): LiveQualityExperimentOutput {
 }
 
 describe('live quality LangSmith dataset', () => {
+  it('strictly validates advisory scenario metadata and criterion uniqueness', () => {
+    const advisoryScenario = liveScenarioCases.find(
+      ({ advisory }) => advisory,
+    )!;
+    expect(() => liveScenarioCaseSchema.parse(advisoryScenario)).not.toThrow();
+
+    const duplicateCriteria = structuredClone(advisoryScenario);
+    duplicateCriteria.advisory!.criteria.push(
+      structuredClone(duplicateCriteria.advisory!.criteria[0]!),
+    );
+    expect(() => liveScenarioCaseSchema.parse(duplicateCriteria)).toThrow(
+      /criterion IDs must be unique/i,
+    );
+
+    const invalidPhase = structuredClone(advisoryScenario);
+    invalidPhase.advisory!.phaseEndTurnIndex = 999;
+    expect(() => liveScenarioCaseSchema.parse(invalidPhase)).toThrow(
+      /phase end must reference a scenario turn/i,
+    );
+
+    const unknownField = {
+      ...structuredClone(advisoryScenario),
+      advisory: {
+        ...structuredClone(advisoryScenario.advisory),
+        unexpected: true,
+      },
+    };
+    expect(() => liveScenarioCaseSchema.parse(unknownField)).toThrow();
+  });
+
   it('derives both modes and stable fingerprints from the repository ledger', () => {
     const first = datasetCases();
     const second = datasetCases();
 
-    expect(first).toHaveLength(92);
-    expect(new Set(first.map(({ inputs }) => inputs.caseId)).size).toBe(92);
-    expect(liveQualityInventoryDigest(first)).toBe(LIVE_QUALITY_CANONICAL_INVENTORY_DIGEST);
-    expect(first.map(({ inputs }) => inputs.mode)).toEqual(expect.arrayContaining(['genui', 'text']));
-    expect(first.map(({ metadata }) => metadata.fingerprint))
-      .toEqual(second.map(({ metadata }) => metadata.fingerprint));
+    expect(first).toHaveLength(activeCaseCount);
+    expect(new Set(first.map(({ inputs }) => inputs.caseId)).size).toBe(
+      activeCaseCount,
+    );
+    expect(liveQualityInventoryDigest(first)).toBe(
+      liveQualityInventoryDigest(second),
+    );
+    expect(first.map(({ inputs }) => inputs.mode)).toEqual(
+      expect.arrayContaining(['genui', 'text']),
+    );
+    expect(first.map(({ metadata }) => metadata.fingerprint)).toEqual(
+      second.map(({ metadata }) => metadata.fingerprint),
+    );
     const changedInventory = structuredClone(liveScenarioCases);
     changedInventory[0]!.turnExpectations[0]!.latency.maxTurnMs += 1;
     const changedFingerprint = buildLiveQualityDatasetCases({
@@ -245,21 +300,28 @@ describe('live quality LangSmith dataset', () => {
       scenarioCases: changedInventory,
     })[0]!.metadata.fingerprint;
     expect(changedFingerprint).not.toBe(first[0]!.metadata.fingerprint);
-    const textCase = first.find(({ inputs }) =>
-      inputs.caseId === '03-ton-kho-dia-chi-va-cua-hang.json#1:text');
-    const genUiCase = first.find(({ inputs }) =>
-      inputs.caseId === '03-ton-kho-dia-chi-va-cua-hang.json#1:genui');
+    const textCase = first.find(
+      ({ inputs }) =>
+        inputs.caseId === '03-ton-kho-dia-chi-va-cua-hang.json#1:text',
+    );
+    const genUiCase = first.find(
+      ({ inputs }) =>
+        inputs.caseId === '03-ton-kho-dia-chi-va-cua-hang.json#1:genui',
+    );
     expect(genUiCase?.outputs.expectation.genUi.required).toBe(true);
     expect(textCase?.outputs.expectation.genUi).toMatchObject({
       required: false,
     });
-    expect(textCase?.outputs.expectation.genUi.requiredDataPaths)
-      .toEqual(genUiCase?.outputs.expectation.genUi.requiredDataPaths);
+    expect(textCase?.outputs.expectation.genUi.requiredDataPaths).toEqual(
+      genUiCase?.outputs.expectation.genUi.requiredDataPaths,
+    );
     for (const scenarioCase of liveScenarioCases) {
       for (const originalExpectation of scenarioCase.turnExpectations) {
         for (const mode of ['genui', 'text'] as const) {
-          const built = first.find(({ inputs }) =>
-            inputs.caseId === `${originalExpectation.id}:${mode}`);
+          const built = first.find(
+            ({ inputs }) =>
+              inputs.caseId === `${originalExpectation.id}:${mode}`,
+          );
           expect(built?.outputs.expectation).toEqual(
             expectationForLiveQualityMode(originalExpectation, mode),
           );
@@ -268,23 +330,41 @@ describe('live quality LangSmith dataset', () => {
     }
   });
 
+  it('accepts a structurally complete inventory without a pinned digest', async () => {
+    const changedInventory = structuredClone(liveScenarioCases);
+    changedInventory[0]!.turnExpectations[0]!.latency.maxTurnMs += 1;
+    const cases = buildLiveQualityDatasetCases({
+      inventoryVersion: SCENARIO_COVERAGE_LEDGER_VERSION,
+      scenarioCases: changedInventory,
+    });
+    const client = new FakeLangSmithClient();
+
+    const result = await syncCases(client as unknown as Client, cases);
+
+    expect(result.created).toHaveLength(cases.length);
+    expect(result.inventoryDigest).toBe(liveQualityInventoryDigest(cases));
+  });
+
   it('creates, updates, skips, and removes only repository-owned examples', async () => {
     const client = new FakeLangSmithClient();
     const cases = datasetCases();
     const testCase = cases[0]!;
-    const first = await syncLiveQualityDataset(client as unknown as Client, cases);
+    const first = await syncCases(client as unknown as Client, cases);
 
-    expect(first.created).toHaveLength(92);
+    expect(first.created).toHaveLength(activeCaseCount);
     expect(first.created).toContain(testCase.inputs.caseId);
     expect(client.readDatasetCalls).toBe(1);
-    expect(client.readDatasetRequests[0]).toEqual({ datasetId: 'dataset-live-quality' });
-    expect(client.examples).toHaveLength(92);
-    const second = await syncLiveQualityDataset(client as unknown as Client, cases);
-    expect(second.unchanged).toHaveLength(92);
+    expect(client.readDatasetRequests[0]).toEqual({
+      datasetId: 'dataset-live-quality',
+    });
+    expect(client.examples).toHaveLength(activeCaseCount);
+    const second = await syncCases(client as unknown as Client, cases);
+    expect(second.unchanged).toHaveLength(activeCaseCount);
     expect(second.unchanged).toContain(testCase.inputs.caseId);
 
-    findExample(client, testCase.inputs.caseId).inputs.customerMessage = 'tampered remote input';
-    const repaired = await syncLiveQualityDataset(client as unknown as Client, cases);
+    findExample(client, testCase.inputs.caseId).inputs.customerMessage =
+      'tampered remote input';
+    const repaired = await syncCases(client as unknown as Client, cases);
     expect(repaired.updated).toEqual([testCase.inputs.caseId]);
 
     client.examples.push({
@@ -307,7 +387,7 @@ describe('live quality LangSmith dataset', () => {
       metadata: { caseId: 'manual-case', sourcePath: LIVE_QUALITY_SOURCE_PATH },
     });
 
-    const third = await syncLiveQualityDataset(client as unknown as Client, cases);
+    const third = await syncCases(client as unknown as Client, cases);
     expect(third.updated).toEqual([]);
     expect(third.deleted).toEqual(['stale-case']);
     expect(client.examples.some(({ id }) => id === 'unowned')).toBe(true);
@@ -335,7 +415,7 @@ describe('live quality LangSmith dataset', () => {
       client.examples.push(ownedExample(datasetCases()[0]!, 'preserved'));
 
       await expect(
-        syncLiveQualityDataset(client as unknown as Client, datasetCases()),
+        syncCases(client as unknown as Client, datasetCases()),
       ).rejects.toThrow('Refusing to synchronize unowned LangSmith dataset');
       expect(client.listExamplesCalls).toBe(0);
       expect(client.examples.map(({ id }) => id)).toEqual(['preserved']);
@@ -349,7 +429,7 @@ describe('live quality LangSmith dataset', () => {
     client.examples.push(ownedExample(datasetCases()[0]!, 'preserved'));
 
     await expect(
-      syncLiveQualityDataset(client as unknown as Client, datasetCases()),
+      syncCases(client as unknown as Client, datasetCases()),
     ).rejects.toThrow('injected read failure');
     expect(client.listExamplesCalls).toBe(0);
     expect(client.createCalls).toEqual([]);
@@ -370,7 +450,7 @@ describe('live quality LangSmith dataset', () => {
     client.examples.push(ownedExample(datasetCases()[0]!, 'preserved'));
 
     await expect(
-      syncLiveQualityDataset(client as unknown as Client, datasetCases()),
+      syncCases(client as unknown as Client, datasetCases()),
     ).rejects.toThrow('Refusing to synchronize unowned LangSmith dataset');
     expect(client.listExamplesCalls).toBe(0);
     expect(client.createCalls).toEqual([]);
@@ -385,9 +465,11 @@ describe('live quality LangSmith dataset', () => {
     client.examples.push(ownedExample(datasetCases()[0]!, 'preserved'));
 
     await expect(
-      syncLiveQualityDataset(client as unknown as Client, datasetCases()),
+      syncCases(client as unknown as Client, datasetCases()),
     ).rejects.toThrow('Refusing LangSmith dataset ID mismatch');
-    expect(client.readDatasetRequests[0]).toEqual({ datasetId: 'dataset-create-response' });
+    expect(client.readDatasetRequests[0]).toEqual({
+      datasetId: 'dataset-create-response',
+    });
     expect(client.listExamplesCalls).toBe(0);
     expect(client.createCalls).toEqual([]);
     expect(client.updateCalls).toEqual([]);
@@ -401,23 +483,30 @@ describe('live quality LangSmith dataset', () => {
     const forgedFingerprint = structuredClone(canonical);
     forgedFingerprint[0]!.metadata.fingerprint = 'forged';
     const invalidMessage = structuredClone(canonical);
-    invalidMessage[0]!.inputs.customerMessage = 'rehashed but not bound to the expectation';
+    invalidMessage[0]!.inputs.customerMessage =
+      'rehashed but not bound to the expectation';
     invalidMessage[0] = refreshFingerprint(invalidMessage[0]!);
     const invalidScenario = structuredClone(canonical);
     invalidScenario[0]!.inputs.scenarioFile = '99-foreign-scenario.json';
     invalidScenario[0] = refreshFingerprint(invalidScenario[0]!);
     const invalidInventoryVersion = structuredClone(canonical);
-    (invalidInventoryVersion[0]!.metadata as { inventoryVersion: string }).inventoryVersion =
-      '2099-01-01.1';
-    invalidInventoryVersion[0] = refreshFingerprint(invalidInventoryVersion[0]!);
+    (
+      invalidInventoryVersion[0]!.metadata as { inventoryVersion: string }
+    ).inventoryVersion = '2099-01-01.1';
+    invalidInventoryVersion[0] = refreshFingerprint(
+      invalidInventoryVersion[0]!,
+    );
     const divergentModes = structuredClone(canonical);
-    const textIndex = divergentModes.findIndex(({ inputs }) =>
-      inputs.caseId === `${testCase.outputs.expectation.id}:text`);
+    const textIndex = divergentModes.findIndex(
+      ({ inputs }) =>
+        inputs.caseId === `${testCase.outputs.expectation.id}:text`,
+    );
     divergentModes[textIndex]!.outputs.expectation.latency.maxTurnMs += 1;
     divergentModes[textIndex] = refreshFingerprint(divergentModes[textIndex]!);
     const forgedPair = structuredClone(canonical);
     for (const [index, candidate] of forgedPair.entries()) {
-      if (candidate.outputs.expectation.id !== testCase.outputs.expectation.id) continue;
+      if (candidate.outputs.expectation.id !== testCase.outputs.expectation.id)
+        continue;
       const forgedTurnId = '99-forged-scenario.json#1';
       candidate.inputs.scenarioFile = '99-forged-scenario.json';
       candidate.inputs.turnIndex = 1;
@@ -447,25 +536,38 @@ describe('live quality LangSmith dataset', () => {
     });
     const missingClaimsForbidden = structuredClone(canonical) as unknown[];
     delete (
-      (missingClaimsForbidden[0] as LiveQualityDatasetCase)
-        .outputs.expectation.claims as { forbidden?: string[] }
+      (missingClaimsForbidden[0] as LiveQualityDatasetCase).outputs.expectation
+        .claims as { forbidden?: string[] }
     ).forbidden;
-    const missingMessengerForbiddenText =
-      structuredClone(canonical) as unknown[];
+    const missingMessengerForbiddenText = structuredClone(
+      canonical,
+    ) as unknown[];
     delete (
-      (missingMessengerForbiddenText[0] as LiveQualityDatasetCase)
-        .outputs.expectation.messenger as { forbiddenText?: string[] }
+      (missingMessengerForbiddenText[0] as LiveQualityDatasetCase).outputs
+        .expectation.messenger as { forbiddenText?: string[] }
     ).forbiddenText;
     const attempts: Array<{ cases: unknown[]; expectedError?: string }> = [
-      { cases: [], expectedError: 'incomplete live quality inventory' },
-      { cases: canonical.slice(0, 1), expectedError: 'incomplete live quality inventory' },
-      { cases: [...canonical, structuredClone(testCase)], expectedError: 'Duplicate live quality case' },
+      {
+        cases: [],
+        expectedError: 'structurally incomplete live quality inventory',
+      },
+      {
+        cases: canonical.slice(0, 1),
+        expectedError: 'structurally incomplete live quality inventory',
+      },
+      {
+        cases: [...canonical, structuredClone(testCase)],
+        expectedError: 'Duplicate live quality case',
+      },
       { cases: forgedFingerprint },
       { cases: invalidMessage },
       { cases: invalidScenario },
       { cases: invalidInventoryVersion },
       { cases: divergentModes },
-      { cases: forgedPair, expectedError: 'non-canonical live quality inventory digest' },
+      {
+        cases: forgedPair,
+        expectedError: 'structurally incomplete live quality inventory',
+      },
       { cases: invalidMode, expectedError: 'inputs.mode' },
       {
         cases: missingClaimsForbidden,
@@ -481,8 +583,9 @@ describe('live quality LangSmith dataset', () => {
       const client = new FakeLangSmithClient();
       client.datasetExists = true;
       client.examples.push(ownedExample(testCase, 'preserved'));
-      await expect(syncLiveQualityDataset(client as unknown as Client, cases))
-        .rejects.toThrow(expectedError);
+      await expect(
+        syncCases(client as unknown as Client, cases),
+      ).rejects.toThrow(expectedError);
       expect(client.hasDatasetCalls).toBe(0);
       expect(client.listExamplesCalls).toBe(0);
       expect(client.examples.map(({ id }) => id)).toEqual(['preserved']);
@@ -496,8 +599,14 @@ describe('live quality LangSmith dataset', () => {
     const testCase = cases[0]!;
     client.examples.push({
       id: 'manual-same-case',
-      inputs: structuredClone(testCase.inputs) as unknown as Record<string, unknown>,
-      outputs: structuredClone(testCase.outputs) as unknown as Record<string, unknown>,
+      inputs: structuredClone(testCase.inputs) as unknown as Record<
+        string,
+        unknown
+      >,
+      outputs: structuredClone(testCase.outputs) as unknown as Record<
+        string,
+        unknown
+      >,
       metadata: {
         caseId: testCase.inputs.caseId,
         schemaVersion: LIVE_QUALITY_SCHEMA_VERSION,
@@ -513,38 +622,42 @@ describe('live quality LangSmith dataset', () => {
       },
     });
 
-    const result = await syncLiveQualityDataset(client as unknown as Client, cases);
+    const result = await syncCases(client as unknown as Client, cases);
 
-    expect(result.created).toHaveLength(92);
+    expect(result.created).toHaveLength(activeCaseCount);
     expect(result.created).toContain(testCase.inputs.caseId);
     expect(result.deleted).toEqual([]);
     expect(client.examples.map(({ id }) => id)).toContain('manual-same-case');
     expect(client.examples.map(({ id }) => id)).toContain('foreign-schema');
-    expect(client.examples).toHaveLength(94);
+    expect(client.examples).toHaveLength(activeCaseCount + 2);
   });
 
   it('repairs inventory metadata, split metadata, and stale-fingerprint content drift', async () => {
     const client = new FakeLangSmithClient();
     const cases = datasetCases();
     const original = cases[0]!;
-    await syncLiveQualityDataset(client as unknown as Client, cases);
+    await syncCases(client as unknown as Client, cases);
 
-    findExample(client, original.inputs.caseId).metadata.inventoryVersion = 'tampered-inventory';
+    findExample(client, original.inputs.caseId).metadata.inventoryVersion =
+      'tampered-inventory';
     expect(
-      (await syncLiveQualityDataset(client as unknown as Client, cases)).updated,
+      (await syncCases(client as unknown as Client, cases)).updated,
     ).toEqual([original.inputs.caseId]);
 
-    findExample(client, original.inputs.caseId).metadata.dataset_split = ['manual'];
+    findExample(client, original.inputs.caseId).metadata.dataset_split = [
+      'manual',
+    ];
     expect(
-      (await syncLiveQualityDataset(client as unknown as Client, cases)).updated,
+      (await syncCases(client as unknown as Client, cases)).updated,
     ).toEqual([original.inputs.caseId]);
 
     const drifted = findExample(client, original.inputs.caseId);
-    (drifted.outputs as unknown as LiveQualityDatasetCase['outputs'])
-      .expectation.latency.maxTurnMs += 1;
+    (
+      drifted.outputs as unknown as LiveQualityDatasetCase['outputs']
+    ).expectation.latency.maxTurnMs += 1;
     expect(drifted.metadata.fingerprint).toBe(original.metadata.fingerprint);
     expect(
-      (await syncLiveQualityDataset(client as unknown as Client, cases)).updated,
+      (await syncCases(client as unknown as Client, cases)).updated,
     ).toEqual([original.inputs.caseId]);
   });
 
@@ -557,14 +670,14 @@ describe('live quality LangSmith dataset', () => {
     stale.inputs.customerMessage = 'stale';
     client.examples.push(stale, ownedExample(testCase, 'z-exact'));
 
-    const result = await syncLiveQualityDataset(client as unknown as Client, cases);
+    const result = await syncCases(client as unknown as Client, cases);
 
     expect(result.unchanged).toEqual([testCase.inputs.caseId]);
-    expect(result.created).toHaveLength(91);
+    expect(result.created).toHaveLength(activeCaseCount - 1);
     expect(result.updated).toEqual([]);
     expect(client.updateCalls).toEqual([]);
     expect(client.deleteCalls).toEqual(['a-stale']);
-    expect(client.examples).toHaveLength(92);
+    expect(client.examples).toHaveLength(activeCaseCount);
     expect(client.examples.some(({ id }) => id === 'z-exact')).toBe(true);
     expect(client.examples.some(({ id }) => id === 'a-stale')).toBe(false);
   });
@@ -582,10 +695,13 @@ describe('live quality LangSmith dataset', () => {
     updateClient.failUpdate = true;
 
     await expect(
-      syncLiveQualityDataset(updateClient as unknown as Client, cases),
+      syncCases(updateClient as unknown as Client, cases),
     ).rejects.toThrow('injected update failure');
     expect(updateClient.deleteCalls).toEqual([]);
-    expect(updateClient.examples.map(({ id }) => id)).toEqual(['a-stale', 'b-stale']);
+    expect(updateClient.examples.map(({ id }) => id)).toEqual([
+      'a-stale',
+      'b-stale',
+    ]);
 
     const createClient = new FakeLangSmithClient();
     createClient.datasetExists = true;
@@ -595,24 +711,30 @@ describe('live quality LangSmith dataset', () => {
     createClient.failCreate = true;
 
     await expect(
-      syncLiveQualityDataset(createClient as unknown as Client, cases),
+      syncCases(createClient as unknown as Client, cases),
     ).rejects.toThrow('injected create failure');
     expect(createClient.deleteCalls).toEqual([]);
-    expect(createClient.examples.map(({ id }) => id)).toEqual(['stale-other-case']);
+    expect(createClient.examples.map(({ id }) => id)).toEqual([
+      'stale-other-case',
+    ]);
   });
 
   it('reuses the local deterministic oracle as LangSmith experiment scores', async () => {
     const cases = datasetCases();
     const testCases = (['text', 'genui'] as const).map((mode) =>
-      cases.find(({ inputs }) =>
-        inputs.caseId ===
-        `05-khieu-nai-va-human-handoff.json#1:${mode}`)!);
+      cases.find(
+        ({ inputs }) =>
+          inputs.caseId === `05-khieu-nai-va-human-handoff.json#1:${mode}`,
+      )!,
+    );
     const output = passingExperimentOutput();
     for (const testCase of testCases) {
-      await expect(createLiveQualityExperimentEvaluator(cases)({
-        inputs: { caseId: testCase.inputs.caseId },
-        outputs: output as unknown as Record<string, unknown>,
-      })).rejects.toThrow(
+      await expect(
+        createLiveQualityExperimentEvaluator(cases)({
+          inputs: { caseId: testCase.inputs.caseId },
+          outputs: output as unknown as Record<string, unknown>,
+        }),
+      ).rejects.toThrow(
         'A semantic response judge is required for this live quality case',
       );
     }
@@ -696,12 +818,14 @@ describe('live quality LangSmith dataset', () => {
           return { passed: true, requirements };
         },
       };
-      await expect(createLiveQualityExperimentEvaluator(cases, {
-        semanticJudge: malformedJudge,
-      })({
-        inputs: { caseId: testCases[0].inputs.caseId },
-        outputs: output as unknown as Record<string, unknown>,
-      })).rejects.toThrow(
+      await expect(
+        createLiveQualityExperimentEvaluator(cases, {
+          semanticJudge: malformedJudge,
+        })({
+          inputs: { caseId: testCases[0].inputs.caseId },
+          outputs: output as unknown as Record<string, unknown>,
+        }),
+      ).rejects.toThrow(
         'Semantic response judgment must cover every expected requirement exactly once',
       );
     }
@@ -709,31 +833,39 @@ describe('live quality LangSmith dataset', () => {
       async judge() {
         return {
           passed: false,
-          requirements: [{
-            requirementId,
-            passed: true,
-            reason: 'satisfied',
-          }],
+          requirements: [
+            {
+              requirementId,
+              passed: true,
+              reason: 'satisfied',
+            },
+          ],
         };
       },
     };
-    await expect(createLiveQualityExperimentEvaluator(cases, {
-      semanticJudge: inconsistentAggregateJudge,
-    })({
-      inputs: { caseId: testCases[0].inputs.caseId },
-      outputs: output as unknown as Record<string, unknown>,
-    })).rejects.toThrow(
+    await expect(
+      createLiveQualityExperimentEvaluator(cases, {
+        semanticJudge: inconsistentAggregateJudge,
+      })({
+        inputs: { caseId: testCases[0].inputs.caseId },
+        outputs: output as unknown as Record<string, unknown>,
+      }),
+    ).rejects.toThrow(
       'Semantic response judgment passed value must equal all requirement results',
     );
-    await expect(passingEvaluator({
-      inputs: { caseId: 'dataset-only-case' },
-      outputs: {},
-    })).rejects.toThrow('Unknown live quality evaluation case');
+    await expect(
+      passingEvaluator({
+        inputs: { caseId: 'dataset-only-case' },
+        outputs: {},
+      }),
+    ).rejects.toThrow('Unknown live quality evaluation case');
   });
 
   it('keeps every acceptance score identical through the local and LangSmith adapters', async () => {
-    const sourceCase = datasetCases().find(({ inputs }) =>
-      inputs.caseId === '05-khieu-nai-va-human-handoff.json#1:text')!;
+    const sourceCase = datasetCases().find(
+      ({ inputs }) =>
+        inputs.caseId === '05-khieu-nai-va-human-handoff.json#1:text',
+    )!;
     const toolTrace = {
       toolName: 'handoff' as const,
       arguments: { reason: 'customer_requested' },
@@ -760,30 +892,32 @@ describe('live quality LangSmith dataset', () => {
       output: LiveQualityExperimentOutput,
     ) => {
       expect(() => liveQualityDatasetCaseSchema.parse(testCase)).not.toThrow();
-      expect(requiresSemanticResponseJudge(testCase.outputs.expectation))
-        .toBe(true);
+      expect(requiresSemanticResponseJudge(testCase.outputs.expectation)).toBe(
+        true,
+      );
       const direct = evaluateLiveQualityOutput(
         testCase.outputs.expectation,
         output,
         testCase.inputs.mode,
       );
-      const adapted = await createLiveQualityExperimentEvaluator(
-        [testCase],
-        { semanticJudge },
-      )({
+      const adapted = await createLiveQualityExperimentEvaluator([testCase], {
+        semanticJudge,
+      })({
         inputs: { caseId: testCase.inputs.caseId },
         outputs: output as unknown as Record<string, unknown>,
       });
       expect(
         adapted.find(({ key }) => key === 'semantic_response'),
       ).toMatchObject({ score: 1, value: true });
-      expect(adapted
-        .filter(({ key }) => key !== 'semantic_response')
-        .map(({ key, value, comment }) => ({
-          key,
-          score: value,
-          ...(comment ? { comment } : {}),
-        }))).toEqual(direct);
+      expect(
+        adapted
+          .filter(({ key }) => key !== 'semantic_response')
+          .map(({ key, value, comment }) => ({
+            key,
+            score: value,
+            ...(comment ? { comment } : {}),
+          })),
+      ).toEqual(direct);
       return direct;
     };
     const caseWith = (
@@ -820,13 +954,15 @@ describe('live quality LangSmith dataset', () => {
       toolOrderGroups: [],
       argumentConstraints: [],
       claims: {
-        required: [{
-          kind: 'semantic_response',
-          requirementId: 'synthetic-response',
-          act: 'acknowledge_complaint_without_invented_resolution',
-          description:
-            'Return a natural customer-facing response without inventing an outcome.',
-        }],
+        required: [
+          {
+            kind: 'semantic_response',
+            requirementId: 'synthetic-response',
+            act: 'acknowledge_complaint_without_invented_resolution',
+            description:
+              'Return a natural customer-facing response without inventing an outcome.',
+          },
+        ],
         forbidden: [],
       },
       providerEvidence: {
@@ -838,36 +974,47 @@ describe('live quality LangSmith dataset', () => {
     };
     const countOutput = passingExperimentOutput();
     countOutput.executedTools = [toolTrace, toolTrace];
-    const countScores = await parity(caseWith('count', 'text', countExpectation), countOutput);
-    expect(countScores.find(({ key }) => key === 'tool_contract')).toMatchObject({
+    const countScores = await parity(
+      caseWith('count', 'text', countExpectation),
+      countOutput,
+    );
+    expect(
+      countScores.find(({ key }) => key === 'tool_contract'),
+    ).toMatchObject({
       score: false,
       comment: expect.stringContaining('observed 2, maximum 1'),
     });
-    expect(countScores.find(({ key }) => key === 'acceptance')?.score).toBe(false);
+    expect(countScores.find(({ key }) => key === 'acceptance')?.score).toBe(
+      false,
+    );
 
     const groundingExpectation: TurnExpectation = {
       ...structuredClone(countExpectation),
       toolCounts: [{ toolName: 'handoff', min: 1, max: 1 }],
       claims: {
-        required: [{
-          kind: 'grounded_tool_outcome',
-          requirementId: 'handoff-outcome',
-          anyOf: ['handoff'],
-          expectedOk: true,
-          resultSummaryOneOf: ['handoff created'],
-          statePaths: ['handoff'],
-          genUiPaths: [],
-          textAnyOf: [],
-        }],
+        required: [
+          {
+            kind: 'grounded_tool_outcome',
+            requirementId: 'handoff-outcome',
+            anyOf: ['handoff'],
+            expectedOk: true,
+            resultSummaryOneOf: ['handoff created'],
+            statePaths: ['handoff'],
+            genUiPaths: [],
+            textAnyOf: [],
+          },
+        ],
         forbidden: [],
       },
     };
     const wrongOutcomeOutput = passingExperimentOutput();
-    wrongOutcomeOutput.executedTools = [{
-      ...toolTrace,
-      ok: false,
-      resultSummary: 'provider_timeout',
-    }];
+    wrongOutcomeOutput.executedTools = [
+      {
+        ...toolTrace,
+        ok: false,
+        resultSummary: 'provider_timeout',
+      },
+    ];
     const wrongOutcomeScores = await parity(
       caseWith('wrong-outcome-grounding', 'text', groundingExpectation),
       wrongOutcomeOutput,
@@ -881,17 +1028,11 @@ describe('live quality LangSmith dataset', () => {
     const missingStateEvidenceOutput = passingExperimentOutput();
     missingStateEvidenceOutput.executedTools = [toolTrace];
     const missingStateEvidenceScores = await parity(
-      caseWith(
-        'missing-state-evidence',
-        'text',
-        groundingExpectation,
-      ),
+      caseWith('missing-state-evidence', 'text', groundingExpectation),
       missingStateEvidenceOutput,
     );
     expect(
-      missingStateEvidenceScores.find(
-        ({ key }) => key === 'grounded_response',
-      ),
+      missingStateEvidenceScores.find(({ key }) => key === 'grounded_response'),
     ).toMatchObject({
       score: false,
       comment: expect.stringContaining('no verified state evidence'),
@@ -915,10 +1056,12 @@ describe('live quality LangSmith dataset', () => {
     const genUiGroundingExpectation: TurnExpectation = {
       ...structuredClone(groundingExpectation),
       claims: {
-        required: [{
-          ...structuredClone(groundingClaim),
-          genUiPaths: ['data.handoff'],
-        }],
+        required: [
+          {
+            ...structuredClone(groundingClaim),
+            genUiPaths: ['data.handoff'],
+          },
+        ],
         forbidden: [],
       },
     };
@@ -934,17 +1077,11 @@ describe('live quality LangSmith dataset', () => {
       },
     };
     const missingGenUiEvidenceScores = await parity(
-      caseWith(
-        'missing-genui-evidence',
-        'genui',
-        genUiGroundingExpectation,
-      ),
+      caseWith('missing-genui-evidence', 'genui', genUiGroundingExpectation),
       missingGenUiEvidenceOutput,
     );
     expect(
-      missingGenUiEvidenceScores.find(
-        ({ key }) => key === 'grounded_response',
-      ),
+      missingGenUiEvidenceScores.find(({ key }) => key === 'grounded_response'),
     ).toMatchObject({
       score: false,
       comment: expect.stringContaining('no GenUI evidence'),
@@ -961,29 +1098,34 @@ describe('live quality LangSmith dataset', () => {
       toolOrderGroups: [['handoff'], ['previewCart']],
     };
     const orderOutput = passingExperimentOutput();
-    orderOutput.executedTools = [{
-      toolName: 'previewCart',
-      arguments: {},
-      ok: true,
-      resultSummary: 'cart previewed',
-      provenance: [{ fixtureMode: 'test_only', sourceFile: 'test' }],
-    }, toolTrace];
+    orderOutput.executedTools = [
+      {
+        toolName: 'previewCart',
+        arguments: {},
+        ok: true,
+        resultSummary: 'cart previewed',
+        provenance: [{ fixtureMode: 'test_only', sourceFile: 'test' }],
+      },
+      toolTrace,
+    ];
     const orderScores = await parity(
       caseWith('outcome-over-tool-order', 'text', orderExpectation),
       orderOutput,
     );
-    expect(orderScores.find(({ key }) => key === 'tool_contract'))
-      .toMatchObject({
-        score: false,
-        comment: expect.stringContaining('missing ordered tool'),
-      });
+    expect(
+      orderScores.find(({ key }) => key === 'tool_contract'),
+    ).toMatchObject({
+      score: false,
+      comment: expect.stringContaining('missing ordered tool'),
+    });
     orderOutput.executedTools.reverse();
     const orderedScores = await parity(
       caseWith('required-tool-order', 'text', orderExpectation),
       orderOutput,
     );
-    expect(orderedScores.find(({ key }) => key === 'tool_contract'))
-      .toMatchObject({ score: true });
+    expect(
+      orderedScores.find(({ key }) => key === 'tool_contract'),
+    ).toMatchObject({ score: true });
 
     const genUiExpectation: TurnExpectation = {
       ...structuredClone(countExpectation),
@@ -991,7 +1133,14 @@ describe('live quality LangSmith dataset', () => {
         required: true,
         requireCompleteMenuCollection: false,
         allowedWidgetKinds: ['supportHandoff'],
-        requiredDataPaths: ['id', 'lifecycleStage', 'widgetKind', 'status', 'data', 'actions'],
+        requiredDataPaths: [
+          'id',
+          'lifecycleStage',
+          'widgetKind',
+          'status',
+          'data',
+          'actions',
+        ],
         requiredActions: [],
         forbiddenActions: ['contact_staff'],
       },
@@ -1009,7 +1158,9 @@ describe('live quality LangSmith dataset', () => {
       caseWith('forbidden-action', 'genui', genUiExpectation),
       genUiOutput,
     );
-    expect(forbiddenActionScores.find(({ key }) => key === 'presentation_contract')).toMatchObject({
+    expect(
+      forbiddenActionScores.find(({ key }) => key === 'presentation_contract'),
+    ).toMatchObject({
       score: false,
       comment: expect.stringContaining('forbidden GenUI action'),
     });
@@ -1022,7 +1173,9 @@ describe('live quality LangSmith dataset', () => {
       ),
       genUiOutput,
     );
-    expect(textGenUiScores.find(({ key }) => key === 'presentation_contract')).toMatchObject({
+    expect(
+      textGenUiScores.find(({ key }) => key === 'presentation_contract'),
+    ).toMatchObject({
       score: false,
       comment: expect.stringContaining('text mode forbids GenUI'),
     });
@@ -1036,7 +1189,9 @@ describe('live quality LangSmith dataset', () => {
       ),
       nullGenUiOutput,
     );
-    expect(nullGenUiScores.find(({ key }) => key === 'presentation_contract')).toMatchObject({
+    expect(
+      nullGenUiScores.find(({ key }) => key === 'presentation_contract'),
+    ).toMatchObject({
       score: false,
       comment: expect.stringContaining('text mode forbids GenUI'),
     });
@@ -1055,7 +1210,9 @@ describe('live quality LangSmith dataset', () => {
       caseWith('persistence', 'text', countExpectation),
       persistenceOutput,
     );
-    expect(persistenceScores.find(({ key }) => key === 'persistence')?.score).toBe(false);
+    expect(
+      persistenceScores.find(({ key }) => key === 'persistence')?.score,
+    ).toBe(false);
 
     const checkpointRequiredOutput = passingExperimentOutput();
     checkpointRequiredOutput.persistence.checkpointId = undefined;
@@ -1063,14 +1220,12 @@ describe('live quality LangSmith dataset', () => {
     checkpointRequiredOutput.persistence.checkpointThreadId = undefined;
     checkpointRequiredOutput.persistence.checkpointVerified = false;
     const checkpointRequiredScores = await parity(
-      caseWith(
-        'live-checkpoint-required',
-        'text',
-        countExpectation,
-      ),
+      caseWith('live-checkpoint-required', 'text', countExpectation),
       checkpointRequiredOutput,
     );
-    expect(checkpointRequiredScores.find(({ key }) => key === 'persistence')?.score).toBe(false);
+    expect(
+      checkpointRequiredScores.find(({ key }) => key === 'persistence')?.score,
+    ).toBe(false);
 
     const structuralExpectation: TurnExpectation = {
       ...structuredClone(countExpectation),
@@ -1088,7 +1243,9 @@ describe('live quality LangSmith dataset', () => {
       caseWith('structural-state', 'text', structuralExpectation),
       structuralOutput,
     );
-    expect(structuralScores.find(({ key }) => key === 'state_transition')?.score).toBe(true);
+    expect(
+      structuralScores.find(({ key }) => key === 'state_transition')?.score,
+    ).toBe(true);
 
     const provenanceExpectation: TurnExpectation = {
       ...countExpectation,
@@ -1106,7 +1263,9 @@ describe('live quality LangSmith dataset', () => {
       caseWith('provenance', 'text', provenanceExpectation),
       provenanceOutput,
     );
-    expect(provenanceScores.find(({ key }) => key === 'provider_evidence')).toMatchObject({
+    expect(
+      provenanceScores.find(({ key }) => key === 'provider_evidence'),
+    ).toMatchObject({
       score: false,
       comment: expect.stringContaining('without provenance'),
     });
@@ -1117,8 +1276,12 @@ describe('live quality LangSmith dataset', () => {
       caseWith('latency', 'text', countExpectation),
       latencyOutput,
     );
-    expect(latencyScores.find(({ key }) => key === 'latency')?.score).toBe(false);
-    expect(latencyScores.find(({ key }) => key === 'acceptance')?.score).toBe(false);
+    expect(latencyScores.find(({ key }) => key === 'latency')?.score).toBe(
+      false,
+    );
+    expect(latencyScores.find(({ key }) => key === 'acceptance')?.score).toBe(
+      false,
+    );
   });
 
   it('uses the requested versioned dataset name', () => {

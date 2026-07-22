@@ -1,4 +1,7 @@
 import type { PoolClient } from 'pg';
+import {
+  irreversibleOperationLeaseTtlMs,
+} from '../agent/agentRuntimeTiming.js';
 import type {
   IrreversibleOperationCompletion,
   IrreversibleOperationInput,
@@ -45,7 +48,9 @@ export async function reservePostgresIrreversibleOperation(input: {
     }
 
     const now = new Date();
-    const leaseExpiresAt = new Date(now.getTime() + 30_000);
+    const leaseExpiresAt = new Date(
+      now.getTime() + irreversibleOperationLeaseTtlMs,
+    );
     const leaseToken = crypto.randomUUID();
     const inserted = await client.query<IrreversibleOperationRow>(
       `INSERT INTO irreversible_operations (
@@ -317,7 +322,9 @@ async function reserveExistingOperation(input: {
     (input.current.status === 'unknown' || leaseExpired)
   ) {
     const leaseToken = crypto.randomUUID();
-    const leaseExpiresAt = new Date(now.getTime() + 30_000);
+    const leaseExpiresAt = new Date(
+      now.getTime() + irreversibleOperationLeaseTtlMs,
+    );
     const claimed = await input.client.query<IrreversibleOperationRow>(
       `UPDATE irreversible_operations
        SET status = 'attempting',

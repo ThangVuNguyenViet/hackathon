@@ -548,14 +548,26 @@ export abstract class PostgresStoreConversationOperations extends PostgresStoreC
   }
 
   async markPendingCustomerTurnClaimed(turnId: string, runId: string): Promise<PendingCustomerTurn> {
+    return this.markPendingCustomerTurnTerminal(turnId, runId, 'claimed');
+  }
+
+  async markPendingCustomerTurnIgnored(turnId: string, runId: string): Promise<PendingCustomerTurn> {
+    return this.markPendingCustomerTurnTerminal(turnId, runId, 'ignored');
+  }
+
+  private async markPendingCustomerTurnTerminal(
+    turnId: string,
+    runId: string,
+    status: Extract<PendingCustomerTurn['status'], 'claimed' | 'ignored'>,
+  ): Promise<PendingCustomerTurn> {
     const result = await this.db.query<PendingCustomerTurnRow>(
       `
         UPDATE pending_customer_turns
-        SET status = 'claimed', claimed_run_id = $2, updated_at = NOW()
+        SET status = $3, claimed_run_id = $2, updated_at = NOW()
         WHERE turn_id = $1
         RETURNING *
       `,
-      [turnId, runId],
+      [turnId, runId, status],
     );
     const row = result.rows[0];
     if (!row) throw new Error(`Pending customer turn not found: ${turnId}`);

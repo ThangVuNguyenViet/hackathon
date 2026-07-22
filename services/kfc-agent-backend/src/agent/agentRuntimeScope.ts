@@ -13,8 +13,9 @@ import {
   type SingleAgentRuntimeContext,
 } from './singleAgentRuntime.js';
 
-export type AgentRuntime =
-  Runtime<{ runtime?: SingleAgentRuntimeContext }>;
+export type AgentRuntime = Runtime<{ runtime?: SingleAgentRuntimeContext }>;
+
+export type AgentRuntimeLookup = Pick<AgentRuntime, 'context'>;
 
 const LANGGRAPH_RESUMING_CONFIG_KEY = '__pregel_resuming';
 
@@ -26,19 +27,20 @@ function runtimeMatchesGraphLookup(
     runtime.turnInput.sessionId === lookup.sessionId &&
     runtime.turnInput.customerId === lookup.customerId &&
     runtime.turnInput.channel === lookup.channel &&
-    (runtime.turnInput.externalMessageId ?? null) ===
-      lookup.externalMessageId
+    (runtime.turnInput.externalMessageId ?? null) === lookup.externalMessageId
   );
 }
 
 export function createAgentRuntimeScope(input: {
   resolveRuntime?: KfcAgentRuntimeResolver;
 }) {
-  const checkpointResumeRuntimesByRun =
-    new WeakMap<object, WeakSet<SingleAgentRuntimeContext>>();
+  const checkpointResumeRuntimesByRun = new WeakMap<
+    object,
+    WeakSet<SingleAgentRuntimeContext>
+  >();
   const resolveRuntime = async (
     state: KfcAgentStateValue,
-    runtime: AgentRuntime,
+    runtime: AgentRuntimeLookup,
   ): Promise<SingleAgentRuntimeContext> => {
     const injected = runtime.context?.runtime;
     if (injected) return injected;
@@ -57,15 +59,11 @@ export function createAgentRuntimeScope(input: {
     }
     if (typeof state.text !== 'string') {
       if (!runControl) throw new Error('agent_graph_input_invalid');
-      let authorizedRuntimes =
-        checkpointResumeRuntimesByRun.get(runControl);
+      let authorizedRuntimes = checkpointResumeRuntimesByRun.get(runControl);
       if (langGraphIsResuming) {
         authorizedRuntimes ??= new WeakSet();
         authorizedRuntimes.add(resolved);
-        checkpointResumeRuntimesByRun.set(
-          runControl,
-          authorizedRuntimes,
-        );
+        checkpointResumeRuntimesByRun.set(runControl, authorizedRuntimes);
       } else if (!authorizedRuntimes?.has(resolved)) {
         throw new Error('agent_graph_input_invalid');
       }

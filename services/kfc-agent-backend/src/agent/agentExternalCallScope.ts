@@ -1,6 +1,7 @@
 import type { ExternalCallContext } from '../clients/interfaces.js';
+import { agentTurnDeadlineMs } from './agentRuntimeTiming.js';
 
-export const defaultAgentTurnDeadlineMs = 10_000;
+export const defaultAgentTurnDeadlineMs = agentTurnDeadlineMs;
 const maximumTimerDelayMs = 2_147_483_647;
 
 export interface AgentTurnExternalCallScope {
@@ -23,7 +24,7 @@ export function createAgentTurnExternalCallScope(
   const abortForTimeout = () => {
     if (!controller.signal.aborted) {
       controller.abort(new DOMException(
-        'Agent turn deadline exceeded',
+        'agent_turn_deadline_exceeded',
         'TimeoutError',
       ));
     }

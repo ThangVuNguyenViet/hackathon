@@ -25,6 +25,9 @@ import {
 import type {
   ModelPublicationAuthority,
 } from './modelPublicationAuthority.js';
+import {
+  hasCurrentMembershipCapabilityEligibility,
+} from '../ordering/agentMembershipApprovalAuthority.js';
 
 export const AGENT_TOOL_CAPABILITY_SCHEMA_VERSION =
   'kfc-agent-tool-capabilities-v1' as const;
@@ -263,8 +266,8 @@ interface EligibilityFacts {
   hasCart: boolean;
   hasStoreAuthority: boolean;
   hasPromotion: boolean;
-  hasRewards: boolean;
-  hasWallet: boolean;
+  canAcquireVoucher: boolean;
+  canRedeemReward: boolean;
   hasPaymentMethods: boolean;
   hasOrderReadAuthority: boolean;
 }
@@ -302,12 +305,12 @@ const toolEligibilityRules = {
     hasScopes(input, ['customer:read', 'order:read']),
   getFavoriteItems: ({ input }) =>
     hasScopes(input, ['customer:read']),
-  acquireVoucher: ({ input, hasRewards }) =>
-    hasRewards &&
+  acquireVoucher: ({ input, canAcquireVoucher }) =>
+    canAcquireVoucher &&
     input.capabilities.durableApprovalResumeSupported &&
     hasScopes(input, ['membership:write']),
-  redeemReward: ({ input, hasWallet }) =>
-    hasWallet &&
+  redeemReward: ({ input, canRedeemReward }) =>
+    canRedeemReward &&
     input.capabilities.durableApprovalResumeSupported &&
     hasScopes(input, ['membership:write']),
   searchContentPolicy: () => true,
@@ -386,16 +389,14 @@ export function deriveAgentToolProfile(
       'searchPromotions',
       'offerId',
     ),
-    hasRewards: activeCollectionHasIdentifier(
-      input.lifecycle,
-      'listMembershipRewards',
-      'rewardId',
-    ),
-    hasWallet: activeCollectionHasIdentifier(
-      input.lifecycle,
-      'listMembershipWallet',
-      'voucherId',
-    ),
+    canAcquireVoucher: hasCurrentMembershipCapabilityEligibility({
+      state: input.lifecycle,
+      capability: 'acquireVoucher',
+    }),
+    canRedeemReward: hasCurrentMembershipCapabilityEligibility({
+      state: input.lifecycle,
+      capability: 'redeemReward',
+    }),
     hasPaymentMethods:
       activePaymentCollectionHasSupportedMethod(input.lifecycle),
     hasOrderReadAuthority:

@@ -61,6 +61,7 @@ class CaptureSpan implements AgentTraceSpan {
 }
 
 const privateValue = 'PRIVATE-CUSTOMER-CONTENT-DO-NOT-TRACE';
+const graphRuntime = {} as AgentRuntime;
 
 function privateState(): KfcAgentStateValue {
   return {
@@ -112,7 +113,9 @@ describe('agent graph observability', () => {
       executedToolResultCount: 0,
       hasStructuredAction: true,
       hasFailure: true,
+      failureCategory: null,
       hasValidationError: true,
+      validationErrorCategory: null,
       latestProviderAttempt: 2,
       latestProviderOutcome: 'error',
       latestProviderPurpose: 'agent_decision',
@@ -121,6 +124,82 @@ describe('agent graph observability', () => {
       providerFailureErrorClass: 'rate_limited',
       providerFailureRetryable: true,
     });
+  });
+
+  it('maps only allowlisted validation errors to bounded categories', () => {
+    expect(privacySafeGraphTraceState({
+      validationError: 'structured_action_saved_address_ref_unavailable',
+    })).toMatchObject({
+      hasValidationError: true,
+      validationErrorCategory: 'saved_address_authority_invalid',
+    });
+    expect(privacySafeGraphTraceState({
+      validationError: privateValue,
+    })).toMatchObject({
+      hasValidationError: true,
+      validationErrorCategory: null,
+    });
+  });
+
+  it('maps allowlisted validation failures to bounded categories', () => {
+    expect(privacySafeGraphTraceState({
+      failure: 'agent_response_claim_unsupported',
+    })).toMatchObject({
+      hasFailure: true,
+      failureCategory: 'response_grounding_invalid',
+    });
+    expect(privacySafeGraphTraceState({
+      failure: privateValue,
+    })).toMatchObject({
+      hasFailure: true,
+      failureCategory: null,
+    });
+  });
+
+  it('emits the bounded validation category on node completion', async () => {
+    const events: TraceEvent[] = [];
+    const node = traceAgentGraphNode(
+      'validate_tool_calls',
+      async () => ({
+        validationError: 'structured_action_saved_address_ref_unavailable',
+      }),
+      async () => traceRuntime(events),
+    );
+
+    await node(privateState(), graphRuntime);
+
+    expect(events.at(-1)).toEqual({
+      phase: 'end',
+      name: 'validate_tool_calls',
+      payload: expect.objectContaining({
+        emittedValidationError: true,
+        validationErrorCategory: 'saved_address_authority_invalid',
+      }),
+    });
+    expect(JSON.stringify(events)).not.toContain(privateValue);
+  });
+
+  it('emits a bounded publication failure category on node completion', async () => {
+    const events: TraceEvent[] = [];
+    const node = traceAgentGraphNode(
+      'validate_publication',
+      async () => ({
+        failure: 'agent_response_publication_rejected',
+      }),
+      async () => traceRuntime(events),
+    );
+
+    await node(privateState(), graphRuntime);
+
+    expect(events.at(-1)).toEqual({
+      phase: 'end',
+      name: 'validate_publication',
+      payload: expect.objectContaining({
+        emittedFailure: true,
+        failureCategory: 'response_publication_invalid',
+      }),
+    });
+    expect(JSON.stringify(events)).not.toContain(privateValue);
   });
 
   it('traces node execution without serializing private state or updates', async () => {
@@ -134,7 +213,7 @@ describe('agent graph observability', () => {
       async () => traceRuntime(events),
     );
 
-    await node(state, {} as AgentRuntime);
+    await node(state, graphRuntime);
 
     expect(events).toEqual([
       {
@@ -221,7 +300,7 @@ describe('agent graph observability', () => {
       graphTrace: runtime.turnTrace,
     } as KfcAgentStateValue;
 
-    await nodes.call_model(state, {} as AgentRuntime);
+    await nodes.call_model(state, graphRuntime);
     await routes.call_model(state);
 
     expect(Object.keys(nodes)).toEqual(names);
@@ -243,7 +322,7 @@ describe('agent graph observability', () => {
 
     await expect(node(
       privateState(),
-      {} as AgentRuntime,
+      graphRuntime,
     )).rejects.toThrow(privateValue);
 
     expect(events.at(-1)).toEqual({

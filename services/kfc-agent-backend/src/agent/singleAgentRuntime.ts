@@ -144,7 +144,7 @@ export async function runtimeDispatchFailure(
   if (completedFailure) return completedFailure;
   if (currentRun) return null;
   runtime.abortExternalCalls(new DOMException(
-    'Customer run was cancelled',
+    'customer_run_cancelled',
     'AbortError',
   ));
   return 'customer_run_cancelled';

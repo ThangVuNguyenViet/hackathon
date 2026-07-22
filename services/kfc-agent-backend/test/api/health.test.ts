@@ -25,8 +25,8 @@ describe("health route", () => {
         model: fakeModel(),
         identity: {
           provider: "openai",
-          model: "gpt-4.1-mini",
-          profile: "openai-gpt-4.1-mini",
+          model: "gpt-5-mini-2025-08-07",
+          profile: "openai-gpt-5-mini-2025-08-07-reasoning-low-verbosity-low",
         },
       },
     });
@@ -147,7 +147,7 @@ describe("health route", () => {
         agentProfileMode: "production",
         commerceEnvironment: "sandbox",
         graph: {
-          runtime: "langgraph-stategraph-v1",
+          runtime: "langgraph-create-agent-workflow-v1",
           checkpoint: "memory-v1",
         },
         versions: {

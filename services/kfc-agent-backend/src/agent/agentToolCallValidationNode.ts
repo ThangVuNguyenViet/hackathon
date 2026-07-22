@@ -1,16 +1,9 @@
 import type { Runtime } from '@langchain/langgraph';
 import { prepareModelAuthoredPaymentSelection } from '../ordering/paymentMethodAuthority.js';
-import {
-  agentToolCallDisposition,
-} from '../ordering/toolCallDisposition.js';
-import {
-  agentToolArgumentSchemas,
-} from '../ordering/toolCatalog.js';
+import { agentToolCallDisposition } from '../ordering/toolCallDisposition.js';
+import { agentToolArgumentSchemas } from '../ordering/toolCatalog.js';
 import type { ToolName } from '../ordering/types.js';
-import {
-  isRecord,
-  toolCallId,
-} from './agentBoundaryPolicy.js';
+import { isRecord, toolCallId } from './agentBoundaryPolicy.js';
 import {
   lastToolCalls,
   requiredDomainState,
@@ -19,36 +12,19 @@ import type {
   KfcAgentStateUpdate,
   KfcAgentStateValue,
 } from './agentStateSchema.js';
-import {
-  publicationBundle,
-} from './agentPublicationRuntime.js';
-import {
-  GROUNDED_RESPONSE_TOOL_NAME,
-} from './responseGrounding.js';
-import {
-  issueResponsePublicationAttestation,
-} from './responsePrivacyAttestation.js';
-import {
-  validateSelectedActionGroundedResponse,
-} from './selectedActionResponseBoundary.js';
-import {
-  ordinaryToolBindingUpdateAfterAcceptedBatch,
-} from './agentToolBindingManifest.js';
-import {
-  isValidApprovalBatchShape,
-} from './agentApprovalBatchShape.js';
+import { publicationBundle } from './agentPublicationRuntime.js';
+import { GROUNDED_RESPONSE_TOOL_NAME } from './responseGrounding.js';
+import { issueResponsePublicationAttestation } from './responsePrivacyAttestation.js';
+import { validateSelectedActionGroundedResponse } from './selectedActionResponseBoundary.js';
+import { isValidApprovalBatchShape } from './agentApprovalBatchShape.js';
 import {
   isToolName,
   runtimeDispatchFailure,
   type PendingToolCall,
   type SingleAgentRuntimeContext,
 } from './singleAgentRuntime.js';
-import {
-  checkpointSafeApprovalFor,
-} from './checkpointSafeApproval.js';
-import {
-  validateModelQuoteFulfillmentAddressAuthority,
-} from './modelQuoteFulfillmentAddressAuthority.js';
+import { checkpointSafeApprovalFor } from './checkpointSafeApproval.js';
+import { validateModelQuoteFulfillmentAddressAuthority } from './modelQuoteFulfillmentAddressAuthority.js';
 import {
   claimPendingSavedAddressQuote,
   responseDisclosesPrivateSavedAddress,
@@ -64,12 +40,9 @@ type BindingToolNames = (
   runtime: SingleAgentRuntimeContext,
 ) => readonly ToolName[];
 
-const modelToolUseScopes =
-  new WeakMap<SingleAgentRuntimeContext, string>();
+const modelToolUseScopes = new WeakMap<SingleAgentRuntimeContext, string>();
 
-function modelToolUseScope(
-  runtime: SingleAgentRuntimeContext,
-): string {
+function modelToolUseScope(runtime: SingleAgentRuntimeContext): string {
   const existing = modelToolUseScopes.get(runtime);
   if (existing) return existing;
   const issued = crypto.randomUUID();
@@ -88,8 +61,7 @@ function rejectedToolCalls(input: {
     ...(input.failure
       ? { failure: input.failure }
       : {
-          validationError: input.validationError ??
-            'invalid_tool_arguments',
+          validationError: input.validationError ?? 'invalid_tool_arguments',
           correctionMessagesNeeded: true,
         }),
   };
@@ -119,9 +91,7 @@ export function createValidateAgentToolCallsNode(input: {
         return { failure: 'agent_model_publication_authority_invalid' };
       }
       const validated = validateSelectedActionGroundedResponse({
-        raw: responseCall && calls.length === 1
-          ? responseCall.args
-          : undefined,
+        raw: responseCall && calls.length === 1 ? responseCall.args : undefined,
         publicationBundle: bundle,
         state: requiredDomainState(state),
         envelope: state.structuredAction,
@@ -129,8 +99,7 @@ export function createValidateAgentToolCallsNode(input: {
         authority: state.selectedActionResponseAuthority,
         currentTurnToolTrace: state.currentTurnToolTrace,
         approvalDecision: state.approvalDecision,
-        validatedApprovalActionDigest:
-          state.validatedApprovalActionDigest,
+        validatedApprovalActionDigest: state.validatedApprovalActionDigest,
       });
       if (!validated.ok) {
         return {
@@ -146,12 +115,12 @@ export function createValidateAgentToolCallsNode(input: {
       }
       if (
         !state.modelPublicationAuthority ||
-        await responseDisclosesPrivateSavedAddress({
+        (await responseDisclosesPrivateSavedAddress({
           authority: state.modelPublicationAuthority,
           currentTurnEvidence: state.currentTurnResponseEvidence,
           customerText: validated.customerText,
           state: requiredDomainState(state),
-        })
+        }))
       ) {
         return {
           ...rejectedToolCalls({
@@ -209,19 +178,7 @@ export function createValidateAgentToolCallsNode(input: {
     if (dispatchFailure) {
       return rejectedToolCalls({ failure: dispatchFailure });
     }
-    const currentToolNames = input.bindingToolNames(state, runtime);
-    if (
-      currentToolNames.length !== state.advertisedToolNames.length ||
-      currentToolNames.some(
-        (toolName, index) => state.advertisedToolNames[index] !== toolName,
-      )
-    ) {
-      return rejectedToolCalls({
-        validationError: 'agent_tool_profile_stale',
-      });
-    }
-
-    const advertisedToolNames = new Set(state.advertisedToolNames);
+    const advertisedToolNames = new Set(input.bindingToolNames(state, runtime));
     const classifiedCalls = [];
     for (const call of calls) {
       if (
@@ -239,9 +196,11 @@ export function createValidateAgentToolCallsNode(input: {
       if (!disposition.success) return rejectedToolCalls({});
       classifiedCalls.push({ call, disposition: disposition.data });
     }
-    if (!isValidApprovalBatchShape(
-      classifiedCalls.map(({ disposition }) => disposition),
-    )) {
+    if (
+      !isValidApprovalBatchShape(
+        classifiedCalls.map(({ disposition }) => disposition),
+      )
+    ) {
       return rejectedToolCalls({
         validationError: 'approval_batch_shape_invalid',
       });
@@ -271,9 +230,7 @@ export function createValidateAgentToolCallsNode(input: {
           });
         }
         const quoteArguments =
-          agentToolArgumentSchemas.quoteFulfillment.parse(
-            canonicalArguments,
-          );
+          agentToolArgumentSchemas.quoteFulfillment.parse(canonicalArguments);
         if ('savedAddressRef' in quoteArguments) {
           const publishedRef =
             livePublicationBundle.modelState.pendingSavedAddressRef;
@@ -303,8 +260,7 @@ export function createValidateAgentToolCallsNode(input: {
               validationError: claimed.errorCode,
             });
           }
-          auditArguments =
-            structuredClone(disposition.arguments);
+          auditArguments = structuredClone(disposition.arguments);
           canonicalArguments = claimed.call.arguments;
           savedAddressPreparedState = claimed.state;
         } else {
@@ -312,8 +268,7 @@ export function createValidateAgentToolCallsNode(input: {
             await validateModelQuoteFulfillmentAddressAuthority({
               publicationBundle: livePublicationBundle,
               currentUserTurn: state.currentUserTurn,
-              recentTurns:
-                requiredDomainState(state).recentTurns ?? [],
+              recentTurns: requiredDomainState(state).recentTurns ?? [],
               proposedAddress: quoteArguments.address,
             });
           if (!addressAuthority.ok) {
@@ -321,17 +276,16 @@ export function createValidateAgentToolCallsNode(input: {
               failure: addressAuthority.errorCode,
             });
           }
-          auditArguments =
-            structuredClone(disposition.arguments);
+          auditArguments = structuredClone(disposition.arguments);
           canonicalArguments = {
             ...quoteArguments,
             address: addressAuthority.address,
           };
         }
       }
-      const signature = `${disposition.toolName}:${
-        JSON.stringify(canonicalArguments)
-      }`;
+      const signature = `${disposition.toolName}:${JSON.stringify(
+        canonicalArguments,
+      )}`;
       if (callSignatures.has(signature)) {
         return rejectedToolCalls({
           validationError: 'duplicate_tool_call',
@@ -342,14 +296,11 @@ export function createValidateAgentToolCallsNode(input: {
         id: currentCallId,
         toolName: disposition.toolName,
         arguments: canonicalArguments,
-        ...(auditArguments
-          ? { auditArguments }
-          : {}),
+        ...(auditArguments ? { auditArguments } : {}),
       });
     }
 
-    let preparedState =
-      savedAddressPreparedState ?? requiredDomainState(state);
+    let preparedState = savedAddressPreparedState ?? requiredDomainState(state);
     for (const call of pending) {
       const nextState = prepareModelAuthoredPaymentSelection(
         preparedState,
@@ -364,18 +315,9 @@ export function createValidateAgentToolCallsNode(input: {
     }
     return {
       domainState: preparedState,
-      ...ordinaryToolBindingUpdateAfterAcceptedBatch({
-        phase: state.ordinaryToolBindingPhase,
-        advertisedToolNames: state.advertisedToolNames,
-        acceptedToolNames: pending.map(({ toolName }) => toolName),
-        closedInitialIndependentToolNames:
-          state.closedInitialIndependentToolNames,
-        consumedToolNames: state.consumedToolNames,
-      }),
       pendingToolCalls: pending,
       queuedToolCalls: [],
-      checkpointSafeApproval:
-        await checkpointSafeApprovalFor(runtime, pending),
+      checkpointSafeApproval: await checkpointSafeApprovalFor(runtime, pending),
       validationError: null,
       correctionMessagesNeeded: false,
     };

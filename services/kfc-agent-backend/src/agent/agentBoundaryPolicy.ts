@@ -12,20 +12,23 @@ export type ProviderErrorClass =
   | 'timeout'
   | 'unknown';
 
-export type ProviderErrorType =
-  | 'abort_error'
-  | 'api_connection_error'
-  | 'api_connection_timeout_error'
-  | 'authentication_error'
-  | 'bad_request_error'
-  | 'fetch_error'
-  | 'internal_server_error'
-  | 'not_found_error'
-  | 'permission_denied_error'
-  | 'rate_limit_error'
-  | 'request_error'
-  | 'timeout_error'
-  | 'unprocessable_entity_error';
+export const PROVIDER_ERROR_TYPES = [
+  'abort_error',
+  'api_connection_error',
+  'api_connection_timeout_error',
+  'authentication_error',
+  'bad_request_error',
+  'fetch_error',
+  'internal_server_error',
+  'not_found_error',
+  'permission_denied_error',
+  'rate_limit_error',
+  'request_error',
+  'timeout_error',
+  'unprocessable_entity_error',
+] as const;
+
+export type ProviderErrorType = (typeof PROVIDER_ERROR_TYPES)[number];
 
 export interface ProviderFailureDiagnostic {
   stage: 'model_invoke';

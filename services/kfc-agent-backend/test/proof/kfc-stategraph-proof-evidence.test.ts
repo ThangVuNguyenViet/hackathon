@@ -58,8 +58,8 @@ const privateAddress = 'PRIVATE_CUSTOMER_HOME_ADDRESS';
 const configurationAtProofTime: KfcProofConfigurationAtProofTime = {
   agent: {
     provider: 'openai',
-    model: 'gpt-4.1-mini',
-    profile: 'openai-gpt-4.1-mini',
+    model: 'gpt-5-mini-2025-08-07',
+    profile: 'openai-gpt-5-mini-2025-08-07-reasoning-low-verbosity-low',
   },
 };
 

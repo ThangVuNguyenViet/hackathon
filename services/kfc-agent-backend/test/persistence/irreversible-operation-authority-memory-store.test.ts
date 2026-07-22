@@ -117,7 +117,7 @@ describe('MemoryStore irreversible-operation authority fencing', () => {
     const input = operation('expired-active-attempt');
     await reserveOwner(store, input);
 
-    vi.advanceTimersByTime(30_001);
+    vi.advanceTimersByTime(60_000);
 
     await expect(
       store.markIrreversibleOperationOutcomeUnknownIfExpired({
@@ -147,24 +147,62 @@ describe('MemoryStore irreversible-operation authority fencing', () => {
     });
   });
 
-  it('leaves an unexpired active attempt pending', async () => {
+  it.each([30_000, 59_999])(
+    'leaves an active attempt pending at t0 + %i ms',
+    async (elapsedMs) => {
+      vi.useFakeTimers();
+      vi.setSystemTime(fixedNow);
+      const store = new MemoryStore();
+      const input = operation(`unexpired-active-attempt:${elapsedMs}`);
+      await reserveOwner(store, input);
+
+      vi.advanceTimersByTime(elapsedMs);
+
+      await expect(
+        store.markIrreversibleOperationOutcomeUnknownIfExpired({
+          ...input,
+          reason: 'must_not_be_recorded',
+        }),
+      ).resolves.toEqual({ status: 'pending' });
+      await expect(
+        store.getIrreversibleOperation(input),
+      ).resolves.toEqual({ status: 'pending' });
+    },
+  );
+
+  it('uses the shared lease duration for initial and reclaimed attempts', async () => {
     vi.useFakeTimers();
     vi.setSystemTime(fixedNow);
     const store = new MemoryStore();
-    const input = operation('unexpired-active-attempt');
-    await reserveOwner(store, input);
-
-    vi.advanceTimersByTime(29_999);
+    const input = operation('initial-and-reclaimed-lease-duration');
 
     await expect(
-      store.markIrreversibleOperationOutcomeUnknownIfExpired({
-        ...input,
-        reason: 'must_not_be_recorded',
-      }),
-    ).resolves.toEqual({ status: 'pending' });
+      store.reserveIrreversibleOperation(input),
+    ).resolves.toMatchObject({ status: 'reserved', attempt: 1 });
+    vi.advanceTimersByTime(59_999);
     await expect(
-      store.getIrreversibleOperation(input),
+      store.reserveIrreversibleOperation(input),
     ).resolves.toEqual({ status: 'pending' });
+    vi.advanceTimersByTime(1);
+    await expect(
+      store.reserveIrreversibleOperation(input),
+    ).resolves.toMatchObject({
+      status: 'reserved',
+      attempt: 2,
+      reconciliation: true,
+    });
+    vi.advanceTimersByTime(59_999);
+    await expect(
+      store.reserveIrreversibleOperation(input),
+    ).resolves.toEqual({ status: 'pending' });
+    vi.advanceTimersByTime(1);
+    await expect(
+      store.reserveIrreversibleOperation(input),
+    ).resolves.toMatchObject({
+      status: 'reserved',
+      attempt: 3,
+      reconciliation: true,
+    });
   });
 
   it('cannot transition an expired attempt during human pause or after authority advances', async () => {
@@ -173,7 +211,7 @@ describe('MemoryStore irreversible-operation authority fencing', () => {
     const store = new MemoryStore();
     const input = operation('expired-stale-authority');
     await reserveOwner(store, input);
-    vi.advanceTimersByTime(30_001);
+    vi.advanceTimersByTime(60_000);
 
     await expect(
       store.transitionSessionAuthority({
@@ -221,7 +259,7 @@ describe('MemoryStore irreversible-operation authority fencing', () => {
     const store = new MemoryStore();
     const input = operation('stale-owner-after-unknown');
     const owner = await reserveOwner(store, input);
-    vi.advanceTimersByTime(30_001);
+    vi.advanceTimersByTime(60_000);
 
     await expect(
       store.markIrreversibleOperationOutcomeUnknownIfExpired({

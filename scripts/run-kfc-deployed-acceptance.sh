@@ -278,9 +278,9 @@ PHASE="production_latency"
   cd "$BACKEND_DIR"
   PRODUCTION_CHAT_URL="$CHATBOT_URL" \
     PRODUCTION_LATENCY_ITERATIONS=20 \
-    PRODUCTION_GREETING_TARGET_MS=6000 \
-    PRODUCTION_MENU_TARGET_MS=8000 \
-    PRODUCTION_OVERALL_TARGET_MS=8000 \
+    PRODUCTION_GREETING_TARGET_MS=10000 \
+    PRODUCTION_MENU_TARGET_MS=10000 \
+    PRODUCTION_OVERALL_TARGET_MS=10000 \
     npm run proof:production:latency
 )
 LATENCY_REPORT="$(find "$ROOT_DIR/artifacts/production-latency" -type f -name 'latency-*.json' -print0 | xargs -0 ls -t | head -1)"

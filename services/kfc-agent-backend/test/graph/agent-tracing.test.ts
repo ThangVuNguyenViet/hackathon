@@ -1,7 +1,4 @@
-import {
-  isSystemMessage,
-  type BaseMessage,
-} from '@langchain/core/messages';
+import { isSystemMessage, type BaseMessage } from '@langchain/core/messages';
 import { fakeModel } from '@langchain/core/testing';
 import { MemorySaver } from '@langchain/langgraph';
 import { describe, expect, it, vi } from 'vitest';
@@ -12,49 +9,25 @@ import {
   privacySafeAgentToolSpanInputs,
   privacySafeAgentToolSpanOutputs,
 } from '../../src/agent/agentToolTracePrivacy.js';
-import {
-  responseEvidenceContractForTool,
-} from '../../src/agent/responseEvidenceContracts.js';
-import {
-  GROUNDED_RESPONSE_TOOL_NAME,
-} from '../../src/agent/responseGrounding.js';
-import {
-  selectedActionResponseReferenceSchema,
-} from '../../src/agent/selectedActionResponseAuthority.js';
-import {
-  STRUCTURED_RESPONSE_REFERENCE_MESSAGE_ID,
-} from '../../src/agent/structuredCustomerAction.js';
-import {
-  independentParallelReadToolNames,
-} from '../../src/agent/parallelReadBatch.js';
-import {
-  createTrustedCustomerActionEnvelope,
-} from '../../src/domain/customerCommand.js';
+import { responseEvidenceContractForTool } from '../../src/agent/responseEvidenceContracts.js';
+import { selectedActionResponseReferenceSchema } from '../../src/agent/selectedActionResponseAuthority.js';
+import { STRUCTURED_RESPONSE_REFERENCE_MESSAGE_ID } from '../../src/agent/structuredCustomerAction.js';
+import { independentParallelReadToolNames } from '../../src/agent/parallelReadBatch.js';
+import { createTrustedCustomerActionEnvelope } from '../../src/domain/customerCommand.js';
 import type { Order } from '../../src/domain/types.js';
-import {
-  kfcGenUiVerifiedStateRevision,
-} from '../../src/genui/kfcGenUi.js';
+import { kfcGenUiVerifiedStateRevision } from '../../src/genui/kfcGenUi.js';
 import { runAgentTurn } from '../../src/graph/buildGraph.js';
 import { createMockClients } from '../../src/mock/createMockClients.js';
-import {
-  toolNames,
-} from '../../src/ordering/toolCatalog.js';
-import type {
-  InvoiceRequest,
-  ToolName,
-} from '../../src/ordering/types.js';
+import { toolNames } from '../../src/ordering/toolCatalog.js';
+import type { InvoiceRequest, ToolName } from '../../src/ordering/types.js';
 import type {
   AgentTracer,
   AgentTraceSpan,
   AgentTraceSpanInput,
 } from '../../src/observability/agentTracing.js';
 import { MemoryStore } from '../../src/persistence/memoryStore.js';
-import {
-  controlledCustomerAccess,
-} from '../fixtures/controlledCustomerAccess.js';
-import {
-  groundedResponseModelReply,
-} from '../fixtures/groundedResponse.js';
+import { controlledCustomerAccess } from '../fixtures/controlledCustomerAccess.js';
+import { groundedResponseModelReply } from '../fixtures/groundedResponse.js';
 import { createTestFixtures } from '../fixtures/testFixtures.js';
 
 interface TraceEvent {
@@ -133,11 +106,7 @@ const privateTraceToolCases = [
   ['createPaymentLink', 'serial', 'private_tool_failed'],
   ['checkPaymentStatus', 'serial', 'payment_status_check_failed'],
   ['collectInvoice', 'serial', 'private_tool_failed'],
-] as const satisfies readonly [
-  ToolName,
-  'parallel' | 'serial',
-  string,
-][];
+] as const satisfies readonly [ToolName, 'parallel' | 'serial', string][];
 
 const parallelReadToolNameSet = new Set<ToolName>(
   independentParallelReadToolNames,
@@ -149,10 +118,7 @@ function structuredResponseReference(messages: BaseMessage[]) {
       isSystemMessage(message) &&
       message.id === STRUCTURED_RESPONSE_REFERENCE_MESSAGE_ID,
   );
-  if (
-    !authorityMessage ||
-    typeof authorityMessage.content !== 'string'
-  ) {
+  if (!authorityMessage || typeof authorityMessage.content !== 'string') {
     throw new Error('structured_action_reference_message_missing');
   }
   const parsed: unknown = JSON.parse(authorityMessage.content);
@@ -171,8 +137,9 @@ function structuredResponseReference(messages: BaseMessage[]) {
 describe('agent turn tracing', () => {
   it('derives the complete private trace surface from response evidence contracts', () => {
     const contractPrivateTools = toolNames
-      .filter((toolName) =>
-        responseEvidenceContractForTool(toolName).privateData)
+      .filter(
+        (toolName) => responseEvidenceContractForTool(toolName).privateData,
+      )
       .sort();
     const coveredPrivateTools = privateTraceToolCases
       .map(([toolName]) => toolName)
@@ -180,26 +147,30 @@ describe('agent turn tracing', () => {
 
     expect(coveredPrivateTools).toEqual(contractPrivateTools);
     for (const [toolName, path] of privateTraceToolCases) {
-      expect(parallelReadToolNameSet.has(toolName)).toBe(
-        path === 'parallel',
-      );
+      expect(parallelReadToolNameSet.has(toolName)).toBe(path === 'parallel');
     }
   });
 
   it('traces a model-selected verified tool through state and persistence', async () => {
     const sessionId = 'agent-trace-direct-tool';
     const model = fakeModel()
-      .respondWithTools([{
-        name: 'searchMenu',
-        args: { scope: 'filtered', query: 'combo' },
-      }])
-      .respond(groundedResponseModelReply({
-        customerText: 'I found a verified menu option.',
-        evidenceReferences: [{
-          evidenceId: 'menu_search_results',
-          claimKinds: ['product'],
-        }],
-      }));
+      .respondWithTools([
+        {
+          name: 'searchMenu',
+          args: { scope: 'filtered', query: 'combo' },
+        },
+      ])
+      .respond(
+        groundedResponseModelReply({
+          customerText: 'I found a verified menu option.',
+          evidenceReferences: [
+            {
+              evidenceId: 'menu_search_results',
+              claimKinds: ['product'],
+            },
+          ],
+        }),
+      );
     const tracer = new CaptureTracer();
     const store = new MemoryStore();
 
@@ -224,45 +195,47 @@ describe('agent turn tracing', () => {
     expect(output.state.menuSearchResults?.map((item) => item.code)).toEqual([
       '20751',
     ]);
-    expect(tracer.events).toEqual(expect.arrayContaining([
-      expect.objectContaining({
-        phase: 'start',
-        name: 'agent_turn',
-        payload: expect.objectContaining({
-          sessionIdDigest:
-            expect.stringMatching(/^[0-9a-f]{64}$/u),
-          customerIdDigest:
-            expect.stringMatching(/^[0-9a-f]{64}$/u),
-          latestUserMessagePresent: true,
-          latestUserMessageLength: 15,
-          latestUserMessageDigest:
-            expect.stringMatching(/^[0-9a-f]{64}$/u),
+    expect(tracer.events).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          phase: 'start',
+          name: 'agent_turn',
+          payload: expect.objectContaining({
+            sessionIdDigest: expect.stringMatching(/^[0-9a-f]{64}$/u),
+            customerIdDigest: expect.stringMatching(/^[0-9a-f]{64}$/u),
+            latestUserMessagePresent: true,
+            latestUserMessageLength: 15,
+            latestUserMessageDigest: expect.stringMatching(/^[0-9a-f]{64}$/u),
+          }),
         }),
-      }),
-      expect.objectContaining({
-        phase: 'start',
-        name: 'agent_parallel_provider_read',
-        payload: expect.objectContaining({
-          toolName: 'searchMenu',
-          index: 0,
+        expect.objectContaining({
+          phase: 'start',
+          name: 'agent_parallel_provider_read',
+          payload: expect.objectContaining({
+            toolName: 'searchMenu',
+            index: 0,
+          }),
         }),
-      }),
-      expect.objectContaining({
-        phase: 'end',
-        name: 'agent_parallel_provider_read',
-        payload: expect.objectContaining({
-          toolName: 'searchMenu',
-          executionOutcome: 'success',
+        expect.objectContaining({
+          phase: 'end',
+          name: 'agent_parallel_provider_read',
+          payload: expect.objectContaining({
+            toolName: 'searchMenu',
+            result: expect.objectContaining({
+              toolName: 'searchMenu',
+              ok: true,
+            }),
+          }),
         }),
-      }),
-      expect.objectContaining({
-        phase: 'end',
-        name: 'agent_turn',
-        payload: expect.objectContaining({
-          responseText: output.responseText,
+        expect.objectContaining({
+          phase: 'end',
+          name: 'agent_turn',
+          payload: expect.objectContaining({
+            responseText: output.responseText,
+          }),
         }),
-      }),
-    ]));
+      ]),
+    );
     expect(await store.listTurns(sessionId)).toEqual([
       expect.objectContaining({ role: 'user', text: 'Show me a combo' }),
       expect.objectContaining({
@@ -279,27 +252,28 @@ describe('agent turn tracing', () => {
     expect(tracedSteps.indexOf('start:agent_turn')).toBeLessThan(
       tracedSteps.indexOf('start:agent_parallel_provider_reads'),
     );
-    expect(tracedSteps.indexOf('start:agent_parallel_provider_reads'))
-      .toBeLessThan(
-        tracedSteps.indexOf('start:agent_parallel_provider_read'),
-      );
-    expect(tracedSteps.indexOf('start:agent_parallel_provider_read'))
-      .toBeLessThan(
-        tracedSteps.indexOf('end:agent_parallel_provider_read'),
-      );
-    expect(tracedSteps.indexOf('end:agent_parallel_provider_read'))
-      .toBeLessThan(
-        tracedSteps.indexOf('end:agent_parallel_provider_reads'),
-      );
-    expect(tracedSteps.indexOf('end:agent_parallel_provider_reads'))
-      .toBeLessThan(
-        tracedSteps.indexOf('start:session_intelligence'),
-      );
-    expect(tracer.events.find(
-      (event) =>
-        event.phase === 'start' &&
-        event.name === 'agent_parallel_provider_read',
-    )?.payload).not.toHaveProperty('arguments');
+    expect(
+      tracedSteps.indexOf('start:agent_parallel_provider_reads'),
+    ).toBeLessThan(tracedSteps.indexOf('start:agent_parallel_provider_read'));
+    expect(
+      tracedSteps.indexOf('start:agent_parallel_provider_read'),
+    ).toBeLessThan(tracedSteps.indexOf('end:agent_parallel_provider_read'));
+    expect(
+      tracedSteps.indexOf('end:agent_parallel_provider_read'),
+    ).toBeLessThan(tracedSteps.indexOf('end:agent_parallel_provider_reads'));
+    expect(
+      tracedSteps.indexOf('end:agent_parallel_provider_reads'),
+    ).toBeLessThan(tracedSteps.indexOf('start:session_intelligence'));
+    expect(
+      tracer.events.find(
+        (event) =>
+          event.phase === 'start' &&
+          event.name === 'agent_parallel_provider_read',
+      )?.payload,
+    ).toMatchObject({
+      toolName: 'searchMenu',
+      arguments: { scope: 'filtered', query: 'combo' },
+    });
     expect(tracedSteps.indexOf('start:session_intelligence')).toBeLessThan(
       tracedSteps.indexOf('end:session_intelligence'),
     );
@@ -312,42 +286,31 @@ describe('agent turn tracing', () => {
   it('retries trusted response composition without repeating its tool', async () => {
     const sessionId = 'agent-trace-trusted-action';
     const customerId = 'agent-trace-trusted-action-customer';
-    const baseModel = fakeModel();
-    const planningModel = fakeModel().respond(
-      groundedResponseModelReply({
-        customerText: 'Planning mode must not run.',
-      }),
-    );
-    const responseModel = fakeModel()
-      .respond(Object.assign(new Error('temporary response outage'), {
-        status: 503,
-      }))
+    const model = fakeModel()
+      .respond(
+        Object.assign(new Error('temporary response outage'), {
+          status: 503,
+        }),
+      )
       .respond((messages) =>
         groundedResponseModelReply({
           customerText: 'The verified payment choices are ready.',
-          selectedActionResponse:
-            structuredResponseReference(messages),
-        })(messages));
+          selectedActionResponse: structuredResponseReference(messages),
+        })(messages),
+      );
     const bindings: string[][] = [];
-    vi.spyOn(baseModel, 'bindTools').mockImplementation((tools) => {
-      const names = (tools as Array<{ name?: string }>).flatMap(
-        ({ name }) => name ? [name] : [],
+    const bindTools = model.bindTools.bind(model);
+    vi.spyOn(model, 'bindTools').mockImplementation((tools) => {
+      const names = (tools as Array<{ name?: string }>).flatMap(({ name }) =>
+        name ? [name] : [],
       );
       bindings.push(names);
-      return (
-        names.length === 1 &&
-        names[0] === GROUNDED_RESPONSE_TOOL_NAME
-          ? responseModel
-          : planningModel
-      ) as ReturnType<NonNullable<typeof baseModel.bindTools>>;
+      return bindTools(tools);
     });
     const tracer = new CaptureTracer();
     const store = new MemoryStore();
     const clients = createMockClients(createTestFixtures());
-    const listPaymentMethods = vi.spyOn(
-      clients.payment,
-      'listMethods',
-    );
+    const listPaymentMethods = vi.spyOn(clients.payment, 'listMethods');
 
     const output = await runAgentTurn({
       sessionId,
@@ -359,7 +322,7 @@ describe('agent turn tracing', () => {
       store,
       dashboard: new DashboardEventBus(),
       checkpointer: new MemorySaver(),
-      agentModel: baseModel,
+      agentModel: model,
       tracer,
       trustedCustomerAction: createTrustedCustomerActionEnvelope({
         source: 'kfc_genui_action',
@@ -372,25 +335,16 @@ describe('agent turn tracing', () => {
       }),
     });
 
-    expect(output.responseText).toBe(
-      'The verified payment choices are ready.',
-    );
+    expect(output.responseText).toBe('The verified payment choices are ready.');
     expect(listPaymentMethods).toHaveBeenCalledOnce();
-    expect(planningModel.callCount).toBe(0);
-    expect(responseModel.callCount).toBe(2);
-    expect(bindings).toEqual([[GROUNDED_RESPONSE_TOOL_NAME]]);
-    expect(
-      tracer.events.filter(
-        ({ phase, name }) =>
-          phase === 'start' && name === 'call_model',
-      ),
-    ).toHaveLength(2);
+    expect(model.callCount).toBe(2);
+    expect(bindings).toEqual([[], []]);
+    expect(tracer.events.some(({ name }) => name === 'call_model')).toBe(false);
     expect(
       tracer.events.some(({ name }) => name === 'call_response_model'),
     ).toBe(false);
     const modelAttempts = tracer.events.filter(
-      ({ phase, name }) =>
-        phase === 'end' && name === 'agent_model_attempt',
+      ({ phase, name }) => phase === 'end' && name === 'agent_model_attempt',
     );
     expect(modelAttempts).toEqual([
       expect.objectContaining({
@@ -408,7 +362,7 @@ describe('agent turn tracing', () => {
           attempt: 2,
           purpose: 'response_composition',
           outcome: 'success',
-          toolCallCount: 1,
+          toolCallCount: 0,
         }),
       }),
     ]);
@@ -424,33 +378,37 @@ describe('agent turn tracing', () => {
       city: null,
     } as const;
     const model = fakeModel()
-      .respondWithTools([{
-        name: 'quoteFulfillment',
-        args: {
-          address,
-          method: 'delivery',
+      .respondWithTools([
+        {
+          name: 'quoteFulfillment',
+          args: {
+            address,
+            method: 'delivery',
+          },
         },
-      }])
-      .respond(groundedResponseModelReply({
-        customerText: 'Okay.',
-      }));
+      ])
+      .respond(
+        groundedResponseModelReply({
+          customerText: 'Okay.',
+        }),
+      );
     const tracer = new CaptureTracer();
     const store = new MemoryStore();
     const clients = createMockClients(createTestFixtures());
-    const quoteFulfillment = vi.fn(
-      clients.fulfillment.quoteFulfillment,
-    );
+    const quoteFulfillment = vi.fn(clients.fulfillment.quoteFulfillment);
     clients.fulfillment.quoteFulfillment = quoteFulfillment;
     await store.appendEvent(sessionId, 'graph:verified_state', {
       verifiedState: {
         cart: {
           id: 'agent-trace-private-cart',
-          items: [{
-            itemCode: '20751',
-            name: 'Verified item',
-            quantity: 1,
-            unitPriceVnd: 99_000,
-          }],
+          items: [
+            {
+              itemCode: '20751',
+              name: 'Verified item',
+              quantity: 1,
+              unitPriceVnd: 99_000,
+            },
+          ],
           subtotalVnd: 99_000,
           discountVnd: 0,
           deliveryFeeVnd: 0,
@@ -471,6 +429,7 @@ describe('agent turn tracing', () => {
         rawEvent: {
           source: 'privacy-regression',
           privateAddress: address,
+          canonicalScenarioTurnIndex: 15,
         },
       },
       clients,
@@ -493,28 +452,23 @@ describe('agent turn tracing', () => {
       }),
     );
     const rootStart = tracer.events.find(
-      (event) =>
-        event.phase === 'start' &&
-        event.name === 'agent_turn',
+      (event) => event.phase === 'start' && event.name === 'agent_turn',
     );
     const quoteStart = tracer.events.find(
       (event) =>
-        event.phase === 'start' &&
-        event.name === 'tool_call:quoteFulfillment',
+        event.phase === 'start' && event.name === 'tool_call:quoteFulfillment',
     );
     expect(rootStart).toMatchObject({
       payload: {
         latestUserMessagePresent: true,
-        latestUserMessageDigest:
-          expect.stringMatching(/^[0-9a-f]{64}$/u),
+        latestUserMessageDigest: expect.stringMatching(/^[0-9a-f]{64}$/u),
         metadataPresent: true,
-        metadataDigest:
-          expect.stringMatching(/^[0-9a-f]{64}$/u),
+        metadataDigest: expect.stringMatching(/^[0-9a-f]{64}$/u),
       },
       metadata: {
         rawEvent: {
           type: 'record',
-          count: 2,
+          count: 3,
           digest: expect.stringMatching(/^[0-9a-f]{64}$/u),
         },
       },
@@ -524,8 +478,7 @@ describe('agent turn tracing', () => {
         toolName: 'quoteFulfillment',
         boundary: 'fulfillment',
         argumentsRedacted: true,
-        argumentsDigest:
-          expect.stringMatching(/^[0-9a-f]{64}$/u),
+        argumentsDigest: expect.stringMatching(/^[0-9a-f]{64}$/u),
         addressSource: 'explicit_address',
         method: 'delivery',
       },
@@ -536,13 +489,15 @@ describe('agent turn tracing', () => {
         inputs: event.payload,
         metadata: event.metadata,
       }));
+    expect(rootStart?.metadata).not.toHaveProperty(
+      'canonicalScenarioTurnIndex',
+    );
     expect(JSON.stringify(capturedTraceInputs)).not.toContain(sentinel);
   });
 
-  it('projects private status spans structurally while preserving provider results', async () => {
+  it('passes private status read arguments and results through to tracing', async () => {
     const orderId = 'PRIVATE-ORDER-ID-SENTINEL-bc2941';
-    const providerMessage =
-      'PRIVATE-PROVIDER-MESSAGE-SENTINEL-c64551';
+    const providerMessage = 'PRIVATE-PROVIDER-MESSAGE-SENTINEL-c64551';
     const sourceUrl =
       'https://private.invalid/PRIVATE-SOURCE-URL-SENTINEL-914c85';
     const sessionId = 'agent-trace-private-status';
@@ -551,12 +506,14 @@ describe('agent turn tracing', () => {
       id: orderId,
       cart: {
         id: 'private-status-cart',
-        items: [{
-          itemCode: '20751',
-          name: 'Verified item',
-          quantity: 1,
-          unitPriceVnd: 99_000,
-        }],
+        items: [
+          {
+            itemCode: '20751',
+            name: 'Verified item',
+            quantity: 1,
+            unitPriceVnd: 99_000,
+          },
+        ],
         subtotalVnd: 99_000,
         discountVnd: 0,
         deliveryFeeVnd: 0,
@@ -568,12 +525,14 @@ describe('agent turn tracing', () => {
       assignedStoreId: 'store-private-status',
       createdAt: '2026-07-20T00:00:00.000Z',
     };
-    const privateProvenance = [{
-      fixtureMode: 'provider_runtime' as const,
-      sourceFile: 'private-provider-status.ts',
-      sourceUrl,
-      sourceApi: `private-provider:${orderId}`,
-    }];
+    const privateProvenance = [
+      {
+        fixtureMode: 'provider_runtime' as const,
+        sourceFile: 'private-provider-status.ts',
+        sourceUrl,
+        sourceApi: `private-provider:${orderId}`,
+      },
+    ];
     const recentOrderProvider = vi.fn(() => ({
       ok: true as const,
       value: order,
@@ -602,22 +561,30 @@ describe('agent turn tracing', () => {
       paymentStatusProvider,
     });
     const model = fakeModel()
-      .respondWithTools([{
-        id: orderId,
-        name: 'getRecentOrder',
-        args: {},
-      }])
-      .respondWithTools([{
-        name: 'getOrderStatus',
-        args: {},
-      }])
-      .respondWithTools([{
-        name: 'checkPaymentStatus',
-        args: {},
-      }])
-      .respond(groundedResponseModelReply({
-        customerText: 'The private status reads completed.',
-      }));
+      .respondWithTools([
+        {
+          id: orderId,
+          name: 'getRecentOrder',
+          args: {},
+        },
+      ])
+      .respondWithTools([
+        {
+          name: 'getOrderStatus',
+          args: {},
+        },
+      ])
+      .respondWithTools([
+        {
+          name: 'checkPaymentStatus',
+          args: {},
+        },
+      ])
+      .respond(
+        groundedResponseModelReply({
+          customerText: 'The private status reads completed.',
+        }),
+      );
     const tracer = new CaptureTracer();
 
     const output = await runAgentTurn({
@@ -659,109 +626,116 @@ describe('agent turn tracing', () => {
         deadlineAt: expect.any(Number),
       }),
     );
-    expect(output.responseText).toBe(
-      'The private status reads completed.',
-    );
+    expect(output.responseText).toBe('The private status reads completed.');
     expect(model.callCount).toBe(4);
 
-    const privateToolEvents = tracer.events.filter(({ name }) =>
-      name.startsWith('agent_parallel_provider_read') ||
-      name === 'tool_call:getOrderStatus' ||
-      name === 'tool_call:checkPaymentStatus');
+    const privateToolEvents = tracer.events.filter(
+      ({ name }) =>
+        name.startsWith('agent_parallel_provider_read') ||
+        name === 'tool_call:getOrderStatus' ||
+        name === 'tool_call:checkPaymentStatus',
+    );
     const serializedPrivateToolEvents = JSON.stringify(privateToolEvents);
-    expect(serializedPrivateToolEvents).not.toContain(orderId);
-    expect(serializedPrivateToolEvents).not.toContain(providerMessage);
-    expect(serializedPrivateToolEvents).not.toContain(sourceUrl);
-    expect(privateToolEvents).toEqual(expect.arrayContaining([
-      expect.objectContaining({
-        phase: 'start',
-        name: 'agent_parallel_provider_read',
-        payload: expect.objectContaining({
-          toolName: 'getRecentOrder',
-          privateEvidenceTool: true,
-          argumentsRedacted: true,
-          toolCallIdRedacted: true,
-          toolCallIdDigest:
-            expect.stringMatching(/^[0-9a-f]{64}$/u),
+    expect(serializedPrivateToolEvents).toContain(orderId);
+    expect(serializedPrivateToolEvents).toContain(
+      'Retrieved one verified recent-order record',
+    );
+    expect(privateToolEvents).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          phase: 'start',
+          name: 'agent_parallel_provider_read',
+          payload: expect.objectContaining({
+            id: orderId,
+            toolName: 'getRecentOrder',
+            arguments: {},
+          }),
         }),
-      }),
-      expect.objectContaining({
-        phase: 'end',
-        name: 'agent_parallel_provider_read',
-        payload: expect.objectContaining({
-          toolName: 'getRecentOrder',
-          executionOutcome: 'success',
-          outcome: 'recent_order_observed',
-          provenance: [{ fixtureMode: 'provider_runtime' }],
+        expect.objectContaining({
+          phase: 'end',
+          name: 'agent_parallel_provider_read',
+          payload: expect.objectContaining({
+            id: orderId,
+            toolName: 'getRecentOrder',
+            result: expect.objectContaining({
+              ok: true,
+              message: 'Retrieved one verified recent-order record',
+              provenance: [
+                {
+                  fixtureMode: 'provider_runtime',
+                  sourceFile: 'src/ordering/customerContextReadTools.ts',
+                  sourceApi: 'customer-context-provider:getRecentOrder',
+                },
+              ],
+              value: order,
+            }),
+          }),
         }),
-      }),
-      expect.objectContaining({
-        phase: 'end',
-        name: 'tool_call:getOrderStatus',
-        payload: expect.objectContaining({
-          outcome: 'order_status_observed',
-          provenance: [{ fixtureMode: 'provider_runtime' }],
+        expect.objectContaining({
+          phase: 'end',
+          name: 'tool_call:getOrderStatus',
+          payload: expect.objectContaining({
+            outcome: 'order_status_observed',
+            provenance: [{ fixtureMode: 'provider_runtime' }],
+          }),
         }),
-      }),
-      expect.objectContaining({
-        phase: 'end',
-        name: 'tool_call:checkPaymentStatus',
-        payload: expect.objectContaining({
-          outcome: 'payment_status_observed',
-          provenance: [{ fixtureMode: 'provider_runtime' }],
+        expect.objectContaining({
+          phase: 'end',
+          name: 'tool_call:checkPaymentStatus',
+          payload: expect.objectContaining({
+            outcome: 'payment_status_observed',
+            provenance: [{ fixtureMode: 'provider_runtime' }],
+          }),
         }),
-      }),
-    ]));
+      ]),
+    );
   });
 
   it('redacts invoice identity fields while preserving exact provider dispatch', async () => {
-    const companyName =
-      'PRIVATE-INVOICE-COMPANY-SENTINEL-8e5e6c';
+    const companyName = 'PRIVATE-INVOICE-COMPANY-SENTINEL-8e5e6c';
     const taxCode = 'PRIVATE-INVOICE-TAX-SENTINEL-a72437';
-    const email =
-      'private-invoice-email-sentinel-95113e@private.invalid';
-    const providerMessage =
-      'PRIVATE-INVOICE-PROVIDER-MESSAGE-SENTINEL-3a5838';
+    const email = 'private-invoice-email-sentinel-95113e@private.invalid';
+    const providerMessage = 'PRIVATE-INVOICE-PROVIDER-MESSAGE-SENTINEL-3a5838';
     const sourceUrl =
       'https://private.invalid/PRIVATE-INVOICE-URL-SENTINEL-545968';
     const sessionId = 'agent-trace-private-invoice';
     const customerId = 'agent-trace-private-invoice-customer';
     const clients = createMockClients(createTestFixtures());
-    const collectInvoice = vi.fn(
-      async (invoice: Partial<InvoiceRequest>) => {
-        if (
-          !invoice.companyName ||
-          !invoice.taxCode ||
-          !invoice.email
-        ) {
-          throw new Error('test_invoice_fields_missing');
-        }
-        return {
-          ok: true as const,
-          value: {
-            companyName: invoice.companyName,
-            taxCode: invoice.taxCode,
-            email: invoice.email,
-          },
-          message: providerMessage,
-          provenance: [{
+    const collectInvoice = vi.fn(async (invoice: Partial<InvoiceRequest>) => {
+      if (!invoice.companyName || !invoice.taxCode || !invoice.email) {
+        throw new Error('test_invoice_fields_missing');
+      }
+      return {
+        ok: true as const,
+        value: {
+          companyName: invoice.companyName,
+          taxCode: invoice.taxCode,
+          email: invoice.email,
+        },
+        message: providerMessage,
+        provenance: [
+          {
             fixtureMode: 'provider_runtime' as const,
             sourceFile: `private-invoice:${taxCode}`,
             sourceUrl,
             sourceApi: `private-invoice:${email}`,
-          }],
-        };
-      },
-    );
+          },
+        ],
+      };
+    });
     clients.invoice.collectInvoice = collectInvoice;
     const model = fakeModel()
-      .respondWithTools([{
-        name: 'collectInvoice',
-        args: { companyName, taxCode, email },
-      }])
-      .respond(groundedResponseModelReply({
-        customerText: 'The invoice request was accepted.',
-      }));
+      .respondWithTools([
+        {
+          name: 'collectInvoice',
+          args: { companyName, taxCode, email },
+        },
+      ])
+      .respond(
+        groundedResponseModelReply({
+          customerText: 'The invoice request was accepted.',
+        }),
+      );
     const tracer = new CaptureTracer();
 
     const output = await runAgentTurn({
@@ -789,11 +763,10 @@ describe('agent turn tracing', () => {
         deadlineAt: expect.any(Number),
       }),
     );
-    expect(output.responseText).toBe(
-      'The invoice request was accepted.',
+    expect(output.responseText).toBe('The invoice request was accepted.');
+    const invoiceTrace = tracer.events.filter(
+      ({ name }) => name === 'tool_call:collectInvoice',
     );
-    const invoiceTrace = tracer.events.filter(({ name }) =>
-      name === 'tool_call:collectInvoice');
     const serializedInvoiceTrace = JSON.stringify(invoiceTrace);
     for (const sentinel of [
       companyName,
@@ -804,37 +777,37 @@ describe('agent turn tracing', () => {
     ]) {
       expect(serializedInvoiceTrace).not.toContain(sentinel);
     }
-    expect(invoiceTrace).toEqual(expect.arrayContaining([
-      expect.objectContaining({
-        phase: 'start',
-        payload: expect.objectContaining({
-          toolName: 'collectInvoice',
-          privateEvidenceTool: true,
-          argumentsRedacted: true,
-          argumentsDigest:
-            expect.stringMatching(/^[0-9a-f]{64}$/u),
+    expect(invoiceTrace).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          phase: 'start',
+          payload: expect.objectContaining({
+            toolName: 'collectInvoice',
+            privateEvidenceTool: true,
+            argumentsRedacted: true,
+            argumentsDigest: expect.stringMatching(/^[0-9a-f]{64}$/u),
+          }),
         }),
-      }),
-      expect.objectContaining({
-        phase: 'end',
-        payload: {
-          toolName: 'collectInvoice',
-          ok: true,
-          executionOutcome: 'success',
-          privateEvidenceTool: true,
-          outcome: 'private_tool_observed',
-          provenance: [{ fixtureMode: 'provider_runtime' }],
-        },
-      }),
-    ]));
+        expect.objectContaining({
+          phase: 'end',
+          payload: {
+            toolName: 'collectInvoice',
+            ok: true,
+            executionOutcome: 'success',
+            privateEvidenceTool: true,
+            outcome: 'private_tool_observed',
+            provenance: [{ fixtureMode: 'provider_runtime' }],
+          },
+        }),
+      ]),
+    );
   });
 
   it.each(privateTraceToolCases)(
     'sanitizes %s start, end, and failure trace payloads on the %s path',
     async (toolName, _path, expectedFailure) => {
       const orderId = 'PRIVATE-FAIL-ORDER-ID-SENTINEL-f4550c';
-      const providerMessage =
-        'PRIVATE-FAIL-PROVIDER-MESSAGE-SENTINEL-4928c4';
+      const providerMessage = 'PRIVATE-FAIL-PROVIDER-MESSAGE-SENTINEL-4928c4';
       const sourceUrl =
         'https://private.invalid/PRIVATE-FAIL-URL-SENTINEL-189bdf';
       const tracer = new CaptureTracer();
@@ -851,8 +824,7 @@ describe('agent turn tracing', () => {
               ? {
                   companyName: providerMessage,
                   taxCode: orderId,
-                  email:
-                    `private-invoice-${orderId}@private.invalid`,
+                  email: `private-invoice-${orderId}@private.invalid`,
                 }
               : { orderId },
       };
@@ -860,75 +832,78 @@ describe('agent turn tracing', () => {
         name: `tool_call:${toolName}`,
         runType: 'tool',
         inputs: {
-          ...await privacySafeAgentToolCallIdentity(
-            toolName,
-            orderId,
-          ),
-          ...await privacySafeAgentToolSpanInputs({ request }),
+          ...(await privacySafeAgentToolCallIdentity(toolName, orderId)),
+          ...(await privacySafeAgentToolSpanInputs({ request })),
         },
       });
-      await span.end(await privacySafeAgentToolSpanOutputs({
-        result: {
+      await span.end(
+        await privacySafeAgentToolSpanOutputs({
+          result: {
+            toolName,
+            ok: false,
+            errorCode: `provider_failure:${orderId}`,
+            message: providerMessage,
+            provenance: [
+              {
+                fixtureMode: 'provider_runtime',
+                sourceFile: `private-provider:${orderId}`,
+                sourceUrl,
+                sourceApi: providerMessage,
+              },
+            ],
+          },
+          auditArguments: request.arguments,
+        }),
+      );
+      await span.fail(
+        privacySafeAgentToolSpanFailure(
           toolName,
-          ok: false,
-          errorCode: `provider_failure:${orderId}`,
-          message: providerMessage,
-          provenance: [{
-            fixtureMode: 'provider_runtime',
-            sourceFile: `private-provider:${orderId}`,
-            sourceUrl,
-            sourceApi: providerMessage,
-          }],
-        },
-        auditArguments: request.arguments,
-      }));
-      await span.fail(privacySafeAgentToolSpanFailure(
-        toolName,
-        new Error(`${providerMessage}:${orderId}:${sourceUrl}`),
-      ));
+          new Error(`${providerMessage}:${orderId}:${sourceUrl}`),
+        ),
+      );
 
       const serializedEvents = JSON.stringify(tracer.events);
       expect(serializedEvents).not.toContain(orderId);
       expect(serializedEvents).not.toContain(providerMessage);
       expect(serializedEvents).not.toContain(sourceUrl);
-      expect(tracer.events).toEqual(expect.arrayContaining([
-        expect.objectContaining({
-          phase: 'start',
-          name: `tool_call:${toolName}`,
-          payload: expect.objectContaining({
-            toolName,
-            privateEvidenceTool: true,
-            argumentsRedacted: true,
-            toolCallIdRedacted: true,
-            toolCallIdDigest:
-              expect.stringMatching(/^[0-9a-f]{64}$/u),
+      expect(tracer.events).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            phase: 'start',
+            name: `tool_call:${toolName}`,
+            payload: expect.objectContaining({
+              toolName,
+              privateEvidenceTool: true,
+              argumentsRedacted: true,
+              toolCallIdRedacted: true,
+              toolCallIdDigest: expect.stringMatching(/^[0-9a-f]{64}$/u),
+            }),
           }),
-        }),
-        expect.objectContaining({
-          phase: 'end',
-          name: `tool_call:${toolName}`,
-          payload: {
-            toolName,
-            ok: false,
-            executionOutcome: 'error',
-            privateEvidenceTool: true,
-            outcome: expectedFailure,
-            provenance: [{ fixtureMode: 'provider_runtime' }],
-          },
-        }),
-        expect.objectContaining({
-          phase: 'fail',
-          name: `tool_call:${toolName}`,
-          payload: { message: expectedFailure },
-        }),
-      ]));
+          expect.objectContaining({
+            phase: 'end',
+            name: `tool_call:${toolName}`,
+            payload: {
+              toolName,
+              ok: false,
+              executionOutcome: 'error',
+              privateEvidenceTool: true,
+              outcome: expectedFailure,
+              provenance: [{ fixtureMode: 'provider_runtime' }],
+            },
+          }),
+          expect.objectContaining({
+            phase: 'fail',
+            name: `tool_call:${toolName}`,
+            payload: { message: expectedFailure },
+          }),
+        ]),
+      );
     },
   );
 
   it('sanitizes a thrown private provider error at the runtime span boundary', async () => {
     const orderId = 'PRIVATE-THROWN-ORDER-ID-SENTINEL-38fb3c';
-    const providerMessage =
-      'PRIVATE-THROWN-PROVIDER-MESSAGE-SENTINEL-5f3d44';
+    const providerMessage = 'PRIVATE-THROWN-PROVIDER-MESSAGE-SENTINEL-5f3d44';
     const sourceUrl =
       'https://private.invalid/PRIVATE-THROWN-URL-SENTINEL-6274cb';
     const sessionId = 'agent-trace-private-provider-throw';
@@ -961,14 +936,18 @@ describe('agent turn tracing', () => {
       paymentStatusProvider,
     });
     const model = fakeModel()
-      .respondWithTools([{
-        name: 'getRecentOrder',
-        args: {},
-      }])
-      .respondWithTools([{
-        name: 'checkPaymentStatus',
-        args: {},
-      }]);
+      .respondWithTools([
+        {
+          name: 'getRecentOrder',
+          args: {},
+        },
+      ])
+      .respondWithTools([
+        {
+          name: 'checkPaymentStatus',
+          args: {},
+        },
+      ]);
     const tracer = new CaptureTracer();
 
     await runAgentTurn({
@@ -976,8 +955,7 @@ describe('agent turn tracing', () => {
       customerId,
       channel: 'kfc',
       text: 'Check my recent payment.',
-      externalMessageId:
-        'agent-trace-private-provider-throw-message',
+      externalMessageId: 'agent-trace-private-provider-throw-message',
       accessContext: controlledCustomerAccess({
         sessionId,
         customerId,
@@ -997,8 +975,9 @@ describe('agent turn tracing', () => {
         deadlineAt: expect.any(Number),
       }),
     );
-    const paymentTraceEvents = tracer.events.filter(({ name }) =>
-      name === 'tool_call:checkPaymentStatus');
+    const paymentTraceEvents = tracer.events.filter(
+      ({ name }) => name === 'tool_call:checkPaymentStatus',
+    );
     const serializedPaymentTrace = JSON.stringify(paymentTraceEvents);
     expect(serializedPaymentTrace).not.toContain(orderId);
     expect(serializedPaymentTrace).not.toContain(providerMessage);
@@ -1010,10 +989,9 @@ describe('agent turn tracing', () => {
     });
   });
 
-  it('sanitizes a failed parallel batch that contains a private status read', async () => {
+  it('passes a failed parallel batch request and terminal errors through to tracing', async () => {
     const orderId = 'PRIVATE-BATCH-ORDER-ID-SENTINEL-a03a30';
-    const providerMessage =
-      'PRIVATE-BATCH-PROVIDER-MESSAGE-SENTINEL-b607c3';
+    const providerMessage = 'PRIVATE-BATCH-PROVIDER-MESSAGE-SENTINEL-b607c3';
     const sourceUrl =
       'https://private.invalid/PRIVATE-BATCH-URL-SENTINEL-dcbf3a';
     const sessionId = 'agent-trace-private-parallel-failure';
@@ -1046,8 +1024,7 @@ describe('agent turn tracing', () => {
       customerId,
       channel: 'kfc',
       text: 'Check my recent order and menu.',
-      externalMessageId:
-        'agent-trace-private-parallel-failure-message',
+      externalMessageId: 'agent-trace-private-parallel-failure-message',
       accessContext: controlledCustomerAccess({
         sessionId,
         customerId,
@@ -1060,21 +1037,27 @@ describe('agent turn tracing', () => {
       tracer,
     }).catch(() => undefined);
 
-    const privateParallelEvents = tracer.events.filter(({ name, phase }) =>
-      name === 'agent_parallel_provider_reads' ||
-      (
-        name === 'agent_parallel_provider_read' &&
-        phase !== 'fail'
-      ));
-    const serializedPrivateParallelEvents =
-      JSON.stringify(privateParallelEvents);
-    expect(serializedPrivateParallelEvents).not.toContain(orderId);
-    expect(serializedPrivateParallelEvents).not.toContain(providerMessage);
-    expect(serializedPrivateParallelEvents).not.toContain(sourceUrl);
+    const privateParallelEvents = tracer.events.filter(
+      ({ name, phase }) =>
+        name === 'agent_parallel_provider_reads' ||
+        (name === 'agent_parallel_provider_read' && phase !== 'fail'),
+    );
+    const serializedPrivateParallelEvents = JSON.stringify(
+      privateParallelEvents,
+    );
+    expect(serializedPrivateParallelEvents).toContain(orderId);
+    expect(serializedPrivateParallelEvents).toContain('getRecentOrder');
+    expect(serializedPrivateParallelEvents).toContain('searchMenu');
+    const providerError = `${providerMessage}:${orderId}:${sourceUrl}`;
     expect(privateParallelEvents).toContainEqual({
       phase: 'fail',
       name: 'agent_parallel_provider_reads',
-      payload: { message: 'private_tool_batch_failed' },
+      payload: { message: providerError },
+    });
+    expect(tracer.events).toContainEqual({
+      phase: 'fail',
+      name: 'agent_parallel_provider_read',
+      payload: { message: providerError },
     });
   });
 });

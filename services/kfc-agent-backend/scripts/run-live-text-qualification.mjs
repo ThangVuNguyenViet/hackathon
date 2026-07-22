@@ -16,6 +16,7 @@ import { fileURLToPath } from 'node:url';
 import {
   assertLiveTextQualificationManifestFile,
   assertCleanQualificationSource,
+  assertQualificationEvidenceIsNotAdvisoryCalibrationDraft,
   assertQualificationProviderEnvironment,
   mandatoryLiveTextQualification,
 } from './lib/kfc-live-text-qualification.mjs';
@@ -73,6 +74,7 @@ function runVitest(reportPath, environment) {
         'vitest',
         'run',
         'test/scenarios/live-ai-scenario-replay.test.ts',
+        '--maxConcurrency=9',
         '--reporter=json',
         `--outputFile=${reportPath}`,
       ],
@@ -102,8 +104,7 @@ const jobs = Array.from(
   (_unused, index) => index + 1,
 ).flatMap((repetition) =>
   mandatoryLiveTextQualification.providers.map((provider) => {
-    const outcomeJudgeProvider =
-      provider === 'openai' ? 'google' : 'openai';
+    const outcomeJudgeProvider = provider === 'openai' ? 'google' : 'openai';
     const executionId = randomUUID();
     return {
       executionId,
@@ -121,10 +122,7 @@ const jobs = Array.from(
     };
   }),
 );
-const concurrency = resolveQualificationConcurrency(
-  process.env,
-  jobs.length,
-);
+const concurrency = resolveQualificationConcurrency(process.env, jobs.length);
 process.stdout.write(
   `Mandatory text qualification concurrency: total=${concurrency.maximum} ` +
     `openai=${concurrency.providerMaximum.openai} ` +
@@ -166,11 +164,18 @@ const runs = await runQualificationJobs(
     const reportBytes = readFileSync(reportPath);
     const attestationBytes = readFileSync(attestationPath);
     const attestation = JSON.parse(attestationBytes.toString('utf8'));
+    assertQualificationEvidenceIsNotAdvisoryCalibrationDraft(attestation);
     if (
       !attestation ||
       typeof attestation !== 'object' ||
+      Array.isArray(attestation) ||
       typeof attestation.startedAt !== 'string' ||
-      typeof attestation.completedAt !== 'string'
+      typeof attestation.completedAt !== 'string' ||
+      !attestation.inventory ||
+      typeof attestation.inventory !== 'object' ||
+      Array.isArray(attestation.inventory) ||
+      !Number.isInteger(attestation.inventory.scenarioCount) ||
+      !Number.isInteger(attestation.inventory.turnCount)
     ) {
       throw new Error('live text execution attestation is malformed');
     }
@@ -180,10 +185,8 @@ const runs = await runQualificationJobs(
       repetition,
       mode: 'text',
       status: 'PASS',
-      scenarioRuns:
-        mandatoryLiveTextQualification.scenariosPerExecution,
-      turnEvaluations:
-        mandatoryLiveTextQualification.turnEvaluationsPerExecution,
+      scenarioRuns: attestation.inventory.scenarioCount,
+      turnEvaluations: attestation.inventory.turnCount,
       agent,
       outcomeJudge,
       report: {
@@ -200,37 +203,47 @@ const runs = await runQualificationJobs(
   },
 );
 
+const attestedInventories = runs.map((run) => {
+  const attestation = JSON.parse(
+    readFileSync(resolve(artifactDir, run.attestation.path), 'utf8'),
+  );
+  assertQualificationEvidenceIsNotAdvisoryCalibrationDraft(attestation);
+  return attestation.inventory;
+});
+const inventory = attestedInventories[0];
+if (
+  !inventory ||
+  attestedInventories.some(
+    (candidate) => JSON.stringify(candidate) !== JSON.stringify(inventory),
+  )
+) {
+  throw new Error(
+    'qualification executions do not share one source-bound inventory',
+  );
+}
 const manifest = {
-  schemaVersion: 2,
+  schemaVersion: 3,
   artifactKind: 'kfc-live-text-qualification',
   gitSha,
-  inventory: {
-    version: mandatoryLiveTextQualification.inventoryVersion,
-    digest: mandatoryLiveTextQualification.inventoryDigest,
-    scenarioCount:
-      mandatoryLiveTextQualification.scenariosPerExecution,
-    turnCount:
-      mandatoryLiveTextQualification.turnEvaluationsPerExecution,
-  },
+  inventory,
   matrix: {
     mode: 'text',
     providers: mandatoryLiveTextQualification.providers,
     repetitions: mandatoryLiveTextQualification.repetitions,
-    totalScenarioRuns:
-      mandatoryLiveTextQualification.totalScenarioRuns,
-    totalTurnEvaluations:
-      mandatoryLiveTextQualification.totalTurnEvaluations,
+    totalScenarioRuns: runs.reduce((total, run) => total + run.scenarioRuns, 0),
+    totalTurnEvaluations: runs.reduce(
+      (total, run) => total + run.turnEvaluations,
+      0,
+    ),
   },
   runs,
   status: 'PASS',
   completedAt: new Date().toISOString(),
 };
 const temporaryManifestPath = `${manifestPath}.tmp`;
-writeFileSync(
-  temporaryManifestPath,
-  `${JSON.stringify(manifest, null, 2)}\n`,
-  { flag: 'wx' },
-);
+writeFileSync(temporaryManifestPath, `${JSON.stringify(manifest, null, 2)}\n`, {
+  flag: 'wx',
+});
 assertCleanQualificationSource(repositoryRoot, gitSha);
 const validated = assertLiveTextQualificationManifestFile(
   temporaryManifestPath,

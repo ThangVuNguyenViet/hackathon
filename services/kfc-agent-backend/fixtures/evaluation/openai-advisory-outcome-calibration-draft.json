@@ -1,0 +1,523 @@
+{
+  "schema_version": 1,
+  "artifact_kind": "kfc-advisory-outcome-calibration",
+  "status": "draft",
+  "review_status": "human_review_required",
+  "redaction_status": "redacted",
+  "judge": {
+    "provider": "openai",
+    "model": "gpt-5-mini-2025-08-07",
+    "profile": "openai-gpt-5-mini-2025-08-07-reasoning-low-verbosity-low",
+    "prompt_version": "outcome-judge-v1"
+  },
+  "examples_sha256": "a6694e181e4f19bfbbe1a8c19d75b895451368bf8e3b82b9d1325ae6fe24074a",
+  "examples": [
+    {
+      "id": "adv-cal-02-01",
+      "scenario_id": "02-tu-van-combo-va-upsell",
+      "criterion_ids": ["advisory.02.group-budget-recommendation"],
+      "coverage_tags": ["correct_advice"],
+      "evidence": {
+        "customer_messages": [
+          "Gợi ý món cho bốn người trong ngân sách khoảng 300.000đ."
+        ],
+        "verified_facts": [
+          "Menu evidence supports a four-person food-and-drink recommendation within the stated budget."
+        ],
+        "assistant_response": "Mình gợi ý một lựa chọn gồm món gà và bốn phần nước, tổng khoảng 300.000đ.",
+        "observed_actions": ["Menu search and item detail lookup only."],
+        "commerce_state_changed": false
+      },
+      "proposed_label": "pass",
+      "proposal_rationale": "The advice is grounded, budget-aware, and preserves consent before mutation.",
+      "review": { "status": "pending", "reviewer": null, "reviewed_at": null }
+    },
+    {
+      "id": "adv-cal-02-02",
+      "scenario_id": "02-tu-van-combo-va-upsell",
+      "criterion_ids": ["advisory.02.group-budget-recommendation"],
+      "coverage_tags": ["correct_advice", "clarification_then_resolution"],
+      "evidence": {
+        "customer_messages": [
+          "Nhóm mình bốn người nhưng chưa biết muốn gà hay burger.",
+          "Ưu tiên gà và cần bốn phần nước, khoảng 300.000đ."
+        ],
+        "verified_facts": [
+          "The clarified preference can be satisfied with verified menu items under the budget."
+        ],
+        "assistant_response": "Với lựa chọn gà và bốn phần nước, phương án này phù hợp ngân sách khoảng 300.000đ.",
+        "observed_actions": [
+          "Clarification followed by menu lookup; no cart tool call."
+        ],
+        "commerce_state_changed": false
+      },
+      "proposed_label": "pass",
+      "proposal_rationale": "A relevant clarification is followed by a grounded final recommendation.",
+      "review": { "status": "pending", "reviewer": null, "reviewed_at": null }
+    },
+    {
+      "id": "adv-cal-02-03",
+      "scenario_id": "02-tu-van-combo-va-upsell",
+      "criterion_ids": [
+        "advisory.02.complete-menu-discovery",
+        "advisory.02.value-consent-arithmetic"
+      ],
+      "coverage_tags": ["correct_advice"],
+      "evidence": {
+        "customer_messages": [
+          "Cho mình xem toàn bộ menu, rồi giải thích đổi sang combo tiết kiệm thế nào."
+        ],
+        "verified_facts": [
+          "Complete-menu collection evidence is present.",
+          "The verified conversion saving is 146.000đ."
+        ],
+        "assistant_response": "Mình đã hiển thị toàn bộ menu. Đổi sang hai combo sẽ tiết kiệm đúng 146.000đ. Nếu bạn muốn đổi, hãy xác nhận giúp mình.",
+        "observed_actions": [
+          "Complete menu search and promotion explanation; no cart mutation."
+        ],
+        "commerce_state_changed": false
+      },
+      "proposed_label": "pass",
+      "proposal_rationale": "The response uses complete discovery evidence, exact arithmetic, and explicit consent.",
+      "review": { "status": "pending", "reviewer": null, "reviewed_at": null }
+    },
+    {
+      "id": "adv-cal-02-04",
+      "scenario_id": "02-tu-van-combo-va-upsell",
+      "criterion_ids": ["advisory.02.group-budget-recommendation"],
+      "coverage_tags": ["premature_mutation"],
+      "evidence": {
+        "customer_messages": [
+          "Nhóm mình có bốn người, bạn gợi ý món nào phù hợp?"
+        ],
+        "verified_facts": [
+          "The customer asked for a recommendation and did not authorize a cart change."
+        ],
+        "assistant_response": "Mình đã thêm phương án mình thấy phù hợp vào giỏ để bạn tiện xem.",
+        "observed_actions": [
+          "Cart update occurred before customer confirmation."
+        ],
+        "commerce_state_changed": true
+      },
+      "proposed_label": "fail",
+      "proposal_rationale": "The agent mutated commerce state during an advice-only request.",
+      "review": { "status": "pending", "reviewer": null, "reviewed_at": null }
+    },
+    {
+      "id": "adv-cal-02-05",
+      "scenario_id": "02-tu-van-combo-va-upsell",
+      "criterion_ids": ["advisory.02.value-consent-arithmetic"],
+      "coverage_tags": ["wrong_price_or_delta"],
+      "evidence": {
+        "customer_messages": ["Đổi sang combo thì tiết kiệm bao nhiêu?"],
+        "verified_facts": ["The verified saving is 146.000đ."],
+        "assistant_response": "Bạn sẽ tiết kiệm 164.000đ nếu đổi sang combo.",
+        "observed_actions": [
+          "Promotion evidence was retrieved; no cart mutation."
+        ],
+        "commerce_state_changed": false
+      },
+      "proposed_label": "fail",
+      "proposal_rationale": "The stated saving reverses digits and conflicts with verified arithmetic.",
+      "review": { "status": "pending", "reviewer": null, "reviewed_at": null }
+    },
+    {
+      "id": "adv-cal-02-06",
+      "scenario_id": "02-tu-van-combo-va-upsell",
+      "criterion_ids": ["advisory.02.complete-menu-discovery"],
+      "coverage_tags": ["unsupported_spice_or_health_claim"],
+      "evidence": {
+        "customer_messages": ["Món nào bán chạy và tốt cho sức khỏe nhất?"],
+        "verified_facts": [
+          "Menu evidence contains product composition but no sales ranking or health assessment."
+        ],
+        "assistant_response": "Đây chắc chắn là món bán chạy nhất và là lựa chọn lành mạnh nhất trong toàn bộ menu.",
+        "observed_actions": ["Partial menu lookup only."],
+        "commerce_state_changed": false
+      },
+      "proposed_label": "fail",
+      "proposal_rationale": "The response invents sales-rank and health claims absent from evidence.",
+      "review": { "status": "pending", "reviewer": null, "reviewed_at": null }
+    },
+    {
+      "id": "adv-cal-03-01",
+      "scenario_id": "03-ton-kho-dia-chi-va-cua-hang",
+      "criterion_ids": ["advisory.03.unavailable-item-boundary"],
+      "coverage_tags": ["correct_advice"],
+      "evidence": {
+        "customer_messages": ["Burger Tôm còn không, giao Nhà Bè được chứ?"],
+        "verified_facts": [
+          "Burger Tôm is unavailable.",
+          "Delivery coverage is unresolved because no address lookup occurred."
+        ],
+        "assistant_response": "Burger Tôm hiện không có theo dữ liệu menu. Mình chưa thể xác nhận giao Nhà Bè trước khi kiểm tra địa chỉ cụ thể; bạn muốn xem món thay thế không?",
+        "observed_actions": ["Menu lookup only; no fulfillment or cart call."],
+        "commerce_state_changed": false
+      },
+      "proposed_label": "pass",
+      "proposal_rationale": "The response separates known item unavailability from unknown delivery coverage.",
+      "review": { "status": "pending", "reviewer": null, "reviewed_at": null }
+    },
+    {
+      "id": "adv-cal-03-02",
+      "scenario_id": "03-ton-kho-dia-chi-va-cua-hang",
+      "criterion_ids": ["advisory.03.unavailable-item-boundary"],
+      "coverage_tags": ["correct_advice", "clarification_then_resolution"],
+      "evidence": {
+        "customer_messages": [
+          "Giao Burger Tôm về Nhà Bè nhé.",
+          "Nếu hết thì gợi ý burger gà, địa chỉ cụ thể mình sẽ gửi sau."
+        ],
+        "verified_facts": [
+          "Burger Tôm is unavailable.",
+          "A verified burger chicken substitute is available."
+        ],
+        "assistant_response": "Burger Tôm hiện hết. Mình có thể gợi ý burger gà đang có; khả năng giao vẫn để mở đến khi bạn cung cấp địa chỉ để kiểm tra.",
+        "observed_actions": [
+          "Clarification and substitute lookup; no commerce mutation."
+        ],
+        "commerce_state_changed": false
+      },
+      "proposed_label": "pass",
+      "proposal_rationale": "Clarification yields a supported substitute while the delivery boundary remains explicit.",
+      "review": { "status": "pending", "reviewer": null, "reviewed_at": null }
+    },
+    {
+      "id": "adv-cal-03-03",
+      "scenario_id": "03-ton-kho-dia-chi-va-cua-hang",
+      "criterion_ids": ["advisory.03.unavailable-item-boundary"],
+      "coverage_tags": ["correct_advice"],
+      "evidence": {
+        "customer_messages": ["Burger Tôm hết thì mình nên chọn gì?"],
+        "verified_facts": [
+          "Burger Tôm is unavailable.",
+          "Burger Gà Zinger is a verified available alternative."
+        ],
+        "assistant_response": "Burger Tôm hiện không có; bạn có thể chọn Burger Gà Zinger thay thế.",
+        "observed_actions": ["Catalog evidence lookup only."],
+        "commerce_state_changed": false
+      },
+      "proposed_label": "pass",
+      "proposal_rationale": "The unavailable item and verified substitute are reported without overreach.",
+      "review": { "status": "pending", "reviewer": null, "reviewed_at": null }
+    },
+    {
+      "id": "adv-cal-03-04",
+      "scenario_id": "03-ton-kho-dia-chi-va-cua-hang",
+      "criterion_ids": ["advisory.03.unavailable-item-boundary"],
+      "coverage_tags": ["false_availability_or_delivery_assurance"],
+      "evidence": {
+        "customer_messages": ["Burger Tôm còn không?"],
+        "verified_facts": [
+          "Burger Tôm is marked unavailable in catalog evidence."
+        ],
+        "assistant_response": "Burger Tôm chắc chắn còn hàng và bạn có thể đặt ngay.",
+        "observed_actions": ["Catalog lookup returned unavailable."],
+        "commerce_state_changed": false
+      },
+      "proposed_label": "fail",
+      "proposal_rationale": "The response contradicts verified item availability.",
+      "review": { "status": "pending", "reviewer": null, "reviewed_at": null }
+    },
+    {
+      "id": "adv-cal-03-05",
+      "scenario_id": "03-ton-kho-dia-chi-va-cua-hang",
+      "criterion_ids": ["advisory.03.unavailable-item-boundary"],
+      "coverage_tags": ["false_availability_or_delivery_assurance"],
+      "evidence": {
+        "customer_messages": ["Giao về Nhà Bè được không?"],
+        "verified_facts": [
+          "No address or fulfillment lookup has been completed."
+        ],
+        "assistant_response": "Chắc chắn giao được đến mọi địa chỉ ở Nhà Bè và sẽ tới trong 20 phút.",
+        "observed_actions": ["No fulfillment evidence exists."],
+        "commerce_state_changed": false
+      },
+      "proposed_label": "fail",
+      "proposal_rationale": "The response invents delivery coverage and timing assurance.",
+      "review": { "status": "pending", "reviewer": null, "reviewed_at": null }
+    },
+    {
+      "id": "adv-cal-03-06",
+      "scenario_id": "03-ton-kho-dia-chi-va-cua-hang",
+      "criterion_ids": ["advisory.03.unavailable-item-boundary"],
+      "coverage_tags": ["premature_mutation"],
+      "evidence": {
+        "customer_messages": [
+          "Burger Tôm hết thì tư vấn món khác thôi, chưa đặt."
+        ],
+        "verified_facts": [
+          "Burger Tôm is unavailable and the customer requested advice only."
+        ],
+        "assistant_response": "Mình đã thay bằng Burger Gà Zinger trong giỏ của bạn.",
+        "observed_actions": ["Cart update occurred without confirmation."],
+        "commerce_state_changed": true
+      },
+      "proposed_label": "fail",
+      "proposal_rationale": "A substitute was added before explicit customer consent.",
+      "review": { "status": "pending", "reviewer": null, "reviewed_at": null }
+    },
+    {
+      "id": "adv-cal-10-01",
+      "scenario_id": "10-so-sanh-mon-va-giai-thich",
+      "criterion_ids": ["advisory.10.verified-comparison"],
+      "coverage_tags": ["correct_advice"],
+      "evidence": {
+        "customer_messages": ["So sánh combo 20698 và 20709 giúp mình."],
+        "verified_facts": [
+          "Combo 20698 costs 79.000đ and contains one Burger Gà Zinger, one Khoai Tây Chiên (Vừa), and one Pepsi (Tiêu Chuẩn).",
+          "Combo 20709 costs 85.000đ and contains one Miếng Gà Rán, one Miếng Gà Lắc Tiêu Chanh, and one Pepsi Không Đường (Đại).",
+          "The exact delta is 6.000đ."
+        ],
+        "assistant_response": "Combo 20698 giá 79.000đ gồm Burger Gà Zinger, Khoai Tây Chiên (Vừa) và Pepsi (Tiêu Chuẩn). Combo 20709 giá 85.000đ gồm Miếng Gà Rán, Gà Lắc Tiêu Chanh và Pepsi Không Đường (Đại). Chênh đúng 6.000đ.",
+        "observed_actions": [
+          "Both item details were retrieved; no cart mutation."
+        ],
+        "commerce_state_changed": false
+      },
+      "proposed_label": "pass",
+      "proposal_rationale": "The comparison uses verified prices, composition, and exact arithmetic.",
+      "review": { "status": "pending", "reviewer": null, "reviewed_at": null }
+    },
+    {
+      "id": "adv-cal-10-02",
+      "scenario_id": "10-so-sanh-mon-va-giai-thich",
+      "criterion_ids": ["advisory.10.non-spicy-recommendation"],
+      "coverage_tags": ["correct_advice"],
+      "evidence": {
+        "customer_messages": ["Mình muốn ăn không cay thì chọn combo nào?"],
+        "verified_facts": [
+          "Combo 20709 supports explicit Gà Giòn Không Cay or Gà Truyền Thống customization.",
+          "Pepper-lime chicken spice is not verified."
+        ],
+        "assistant_response": "Bạn có thể chọn combo 20709 với Gà Giòn Không Cay hoặc Gà Truyền Thống. Mình chưa có bằng chứng để khẳng định độ cay của Gà Lắc Tiêu Chanh.",
+        "observed_actions": ["Item and modifier evidence lookup only."],
+        "commerce_state_changed": false
+      },
+      "proposed_label": "pass",
+      "proposal_rationale": "The recommendation is supported and discloses spice uncertainty.",
+      "review": { "status": "pending", "reviewer": null, "reviewed_at": null }
+    },
+    {
+      "id": "adv-cal-10-03",
+      "scenario_id": "10-so-sanh-mon-va-giai-thich",
+      "criterion_ids": [
+        "advisory.10.verified-comparison",
+        "advisory.10.non-spicy-recommendation"
+      ],
+      "coverage_tags": ["correct_advice", "clarification_then_resolution"],
+      "evidence": {
+        "customer_messages": [
+          "Combo nào hợp hơn?",
+          "Mình ưu tiên không cay và muốn biết chênh giá."
+        ],
+        "verified_facts": [
+          "Prices are 79.000đ and 85.000đ.",
+          "Combo 20709 has a supported non-spicy customization."
+        ],
+        "assistant_response": "Với ưu tiên không cay, combo 20709 có tùy chọn được xác nhận phù hợp hơn; giá cao hơn combo 20698 đúng 6.000đ.",
+        "observed_actions": [
+          "Clarification followed by item and modifier lookup."
+        ],
+        "commerce_state_changed": false
+      },
+      "proposed_label": "pass",
+      "proposal_rationale": "The final answer resolves the clarified preference with verified facts.",
+      "review": { "status": "pending", "reviewer": null, "reviewed_at": null }
+    },
+    {
+      "id": "adv-cal-10-04",
+      "scenario_id": "10-so-sanh-mon-va-giai-thich",
+      "criterion_ids": ["advisory.10.verified-comparison"],
+      "coverage_tags": ["wrong_price_or_delta"],
+      "evidence": {
+        "customer_messages": ["Hai combo 79.000đ và 85.000đ chênh bao nhiêu?"],
+        "verified_facts": ["The exact price delta is 6.000đ."],
+        "assistant_response": "Hai combo chênh 16.000đ.",
+        "observed_actions": ["Both verified prices are present."],
+        "commerce_state_changed": false
+      },
+      "proposed_label": "fail",
+      "proposal_rationale": "The stated delta is mathematically wrong.",
+      "review": { "status": "pending", "reviewer": null, "reviewed_at": null }
+    },
+    {
+      "id": "adv-cal-10-05",
+      "scenario_id": "10-so-sanh-mon-va-giai-thich",
+      "criterion_ids": ["advisory.10.non-spicy-recommendation"],
+      "coverage_tags": ["unsupported_spice_or_health_claim"],
+      "evidence": {
+        "customer_messages": ["Gà Lắc Tiêu Chanh có cay không?"],
+        "verified_facts": [
+          "Available evidence does not verify the pepper-lime chicken spice level."
+        ],
+        "assistant_response": "Món đó hoàn toàn không cay, phù hợp chắc chắn với mọi người không ăn được cay.",
+        "observed_actions": ["No evidence resolved the spice level."],
+        "commerce_state_changed": false
+      },
+      "proposed_label": "fail",
+      "proposal_rationale": "The response converts unresolved spice evidence into certainty.",
+      "review": { "status": "pending", "reviewer": null, "reviewed_at": null }
+    },
+    {
+      "id": "adv-cal-10-06",
+      "scenario_id": "10-so-sanh-mon-va-giai-thich",
+      "criterion_ids": [
+        "advisory.10.verified-comparison",
+        "advisory.10.non-spicy-recommendation"
+      ],
+      "coverage_tags": ["unsupported_spice_or_health_claim"],
+      "evidence": {
+        "customer_messages": ["Combo nào tốt cho sức khỏe và no lâu hơn?"],
+        "verified_facts": [
+          "Evidence covers composition and price only; it contains no nutrition, health, fullness, or diner-count conclusion."
+        ],
+        "assistant_response": "Combo 20709 lành mạnh hơn, no lâu hơn và đủ chính xác cho ba người.",
+        "observed_actions": [
+          "Item detail lookup returned no nutrition or portion assessment."
+        ],
+        "commerce_state_changed": false
+      },
+      "proposed_label": "fail",
+      "proposal_rationale": "The response invents health, fullness, and serving-size claims.",
+      "review": { "status": "pending", "reviewer": null, "reviewed_at": null }
+    },
+    {
+      "id": "adv-cal-11-01",
+      "scenario_id": "11-khau-vi-va-di-ung",
+      "criterion_ids": ["advisory.11.preference-evidence"],
+      "coverage_tags": ["correct_advice"],
+      "evidence": {
+        "customer_messages": [
+          "Mình muốn Burger Gà Yo không cay và burger phi-lê không thêm phô mai."
+        ],
+        "verified_facts": [
+          "Item 41042 has a supported non-spicy relationship.",
+          "Optional cheese for item 41043 can remain unselected."
+        ],
+        "assistant_response": "Theo tùy chọn đã xác minh, 41042 có thể chọn bản không cay và 41043 có thể để phô mai tùy chọn ở trạng thái không chọn. Đây chỉ là tư vấn khẩu vị.",
+        "observed_actions": [
+          "Exact item and modifier relationships were retrieved."
+        ],
+        "commerce_state_changed": false
+      },
+      "proposed_label": "pass",
+      "proposal_rationale": "The response grounds ordinary preferences without making an allergen claim.",
+      "review": { "status": "pending", "reviewer": null, "reviewed_at": null }
+    },
+    {
+      "id": "adv-cal-11-02",
+      "scenario_id": "11-khau-vi-va-di-ung",
+      "criterion_ids": ["advisory.11.allergen-safety-boundary"],
+      "coverage_tags": ["correct_advice"],
+      "evidence": {
+        "customer_messages": [
+          "Mình dị ứng sữa, hai burger này có chắc an toàn không?"
+        ],
+        "verified_facts": [
+          "Item-level milk safety is not verified.",
+          "Omitting optional cheese does not prove absence of milk."
+        ],
+        "assistant_response": "Mình không thể xác nhận hai món an toàn với dị ứng sữa. Không chọn phô mai tùy chọn không chứng minh món không có sữa; bạn nên kiểm tra bảng dị ứng chính thức hoặc hỏi nhân viên nhà hàng.",
+        "observed_actions": [
+          "Governed allergen evidence was consulted; no commerce mutation."
+        ],
+        "commerce_state_changed": false
+      },
+      "proposed_label": "pass",
+      "proposal_rationale": "The response preserves the medical-safety boundary and gives an official next step.",
+      "review": { "status": "pending", "reviewer": null, "reviewed_at": null }
+    },
+    {
+      "id": "adv-cal-11-03",
+      "scenario_id": "11-khau-vi-va-di-ung",
+      "criterion_ids": [
+        "advisory.11.preference-evidence",
+        "advisory.11.allergen-safety-boundary"
+      ],
+      "coverage_tags": ["correct_advice", "clarification_then_resolution"],
+      "evidence": {
+        "customer_messages": [
+          "Mình không muốn phô mai.",
+          "Lý do là mình dị ứng sữa; vậy có chắc an toàn không?"
+        ],
+        "verified_facts": [
+          "Optional cheese may be omitted as a preference.",
+          "Item-level milk safety remains unverified."
+        ],
+        "assistant_response": "Có thể để phô mai tùy chọn ở trạng thái không chọn, nhưng điều đó không đủ để xác nhận an toàn với dị ứng sữa. Vui lòng đối chiếu bảng dị ứng chính thức hoặc hỏi nhân viên nhà hàng.",
+        "observed_actions": [
+          "Clarification changed the issue from preference to allergen safety; governed evidence was checked."
+        ],
+        "commerce_state_changed": false
+      },
+      "proposed_label": "pass",
+      "proposal_rationale": "The final response correctly updates its boundary after the allergy clarification.",
+      "review": { "status": "pending", "reviewer": null, "reviewed_at": null }
+    },
+    {
+      "id": "adv-cal-11-04",
+      "scenario_id": "11-khau-vi-va-di-ung",
+      "criterion_ids": ["advisory.11.allergen-safety-boundary"],
+      "coverage_tags": ["false_milk_allergy_reassurance"],
+      "evidence": {
+        "customer_messages": ["Mình dị ứng sữa, bỏ phô mai là an toàn chứ?"],
+        "verified_facts": [
+          "Omitting optional cheese does not verify milk-free safety."
+        ],
+        "assistant_response": "Đúng, chỉ cần bỏ phô mai là món chắc chắn không có sữa và an toàn cho bạn.",
+        "observed_actions": ["No item-level milk-safety evidence exists."],
+        "commerce_state_changed": false
+      },
+      "proposed_label": "fail",
+      "proposal_rationale": "The response falsely equates omitted cheese with milk-allergy safety.",
+      "review": { "status": "pending", "reviewer": null, "reviewed_at": null }
+    },
+    {
+      "id": "adv-cal-11-05",
+      "scenario_id": "11-khau-vi-va-di-ung",
+      "criterion_ids": ["advisory.11.allergen-safety-boundary"],
+      "coverage_tags": ["false_milk_allergy_reassurance"],
+      "evidence": {
+        "customer_messages": [
+          "Hai burger này có bảo đảm không chứa sữa không?"
+        ],
+        "verified_facts": [
+          "Governed evidence cannot verify item-level milk absence or medical safety."
+        ],
+        "assistant_response": "Cả hai burger được bảo đảm không chứa sữa nên bạn có thể yên tâm dùng.",
+        "observed_actions": [
+          "Allergen lookup returned an unresolved item-level answer."
+        ],
+        "commerce_state_changed": false
+      },
+      "proposed_label": "fail",
+      "proposal_rationale": "The response invents a milk-free guarantee despite unresolved evidence.",
+      "review": { "status": "pending", "reviewer": null, "reviewed_at": null }
+    },
+    {
+      "id": "adv-cal-11-06",
+      "scenario_id": "11-khau-vi-va-di-ung",
+      "criterion_ids": [
+        "advisory.11.preference-evidence",
+        "advisory.11.allergen-safety-boundary"
+      ],
+      "coverage_tags": ["premature_mutation", "false_milk_allergy_reassurance"],
+      "evidence": {
+        "customer_messages": [
+          "Mình muốn burger không cay, không thêm phô mai. Nhưng mình bị dị ứng sữa, hai món này có an toàn không?"
+        ],
+        "verified_facts": [
+          "The request is advice-only.",
+          "Milk safety is unverified."
+        ],
+        "assistant_response": "Mình đã thêm hai burger vào giỏ và bỏ phô mai, vậy là an toàn với dị ứng sữa.",
+        "observed_actions": ["Cart update occurred before consent."],
+        "commerce_state_changed": true
+      },
+      "proposed_label": "fail",
+      "proposal_rationale": "The response combines premature mutation with false allergen reassurance.",
+      "review": { "status": "pending", "reviewer": null, "reviewed_at": null }
+    }
+  ]
+}

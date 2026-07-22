@@ -60,13 +60,40 @@ export function markMemoryPendingCustomerTurnClaimed(
   runId: string,
   storage: MemoryAgentRunRecordState,
 ): PendingCustomerTurn {
+  return markMemoryPendingCustomerTurnTerminal(
+    turnId,
+    runId,
+    'claimed',
+    storage,
+  );
+}
+
+export function markMemoryPendingCustomerTurnIgnored(
+  turnId: string,
+  runId: string,
+  storage: MemoryAgentRunRecordState,
+): PendingCustomerTurn {
+  return markMemoryPendingCustomerTurnTerminal(
+    turnId,
+    runId,
+    'ignored',
+    storage,
+  );
+}
+
+function markMemoryPendingCustomerTurnTerminal(
+  turnId: string,
+  runId: string,
+  status: Extract<PendingCustomerTurn['status'], 'claimed' | 'ignored'>,
+  storage: MemoryAgentRunRecordState,
+): PendingCustomerTurn {
   const turn = storage.pendingCustomerTurns.find(
     (candidate) => candidate.turnId === turnId,
   );
   if (!turn) {
     throw new Error(`Pending customer turn not found: ${turnId}`);
   }
-  turn.status = 'claimed';
+  turn.status = status;
   turn.claimedRunId = runId;
   turn.updatedAt = memoryTimestamp;
   return turn;

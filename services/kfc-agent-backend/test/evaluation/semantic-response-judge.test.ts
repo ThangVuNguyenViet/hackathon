@@ -376,6 +376,64 @@ describe('provider-neutral semantic response judge', () => {
     expect(serializedPrompt).not.toContain('PRIVATE-ADDRESS');
   });
 
+  it('presents tool alternatives as one-of and retains menu composition facts', () => {
+    const row = expectation(
+      '10-so-sanh-mon-va-giai-thich.json',
+      3,
+    );
+    const evidence = semanticResponseJudgeEvidence({
+      expectation: row,
+      responseText:
+        'Chọn combo 20709 với Gà Giòn Không Cay; độ cay của Gà Lắc Tiêu Chanh chưa được xác minh.',
+      entries: [{
+        toolName: 'searchMenu',
+        arguments: { query: '20698 OR 20709' },
+        ok: true,
+        resultSummary: 'PRIVATE-RAW-MENU-RESULT',
+        provenance: [],
+      }],
+      stateBefore: {
+        cart: { items: [] },
+      },
+      stateAfter: {
+        menuSearchResults: {
+          items: [{
+            code: '20709',
+            name: 'Combo Tiêu Tung Chill 85k',
+            description:
+              '1 Miếng Gà Rán + 1 Miếng Gà Lắc Tiêu Chanh + 1 ly Pepsi Không Đường (Đại)',
+            privateProviderPayload: 'PRIVATE-MENU-PAYLOAD',
+          }],
+        },
+        cart: { items: [] },
+      },
+    });
+    const toolRequirement = (
+      evidence.requirements as Array<Record<string, unknown>>
+    ).find(({ kind }) => kind === 'grounded_tool_outcome');
+
+    expect(toolRequirement).toMatchObject({
+      anyOfToolNames: [
+        'searchMenu',
+        'getItemDetails',
+        'getModifierOptions',
+      ],
+      satisfactionRule: 'at_least_one_matching_tool_outcome',
+      expectedOk: true,
+    });
+    expect(toolRequirement).not.toHaveProperty('requiredToolGroup');
+    expect(evidence.toolOutcomes).toContainEqual({
+      toolName: 'searchMenu',
+      ok: true,
+      polarity: 'success',
+      outcome: 'tool_succeeded',
+    });
+    const serialized = JSON.stringify(evidence);
+    expect(serialized).toContain('1 Miếng Gà Lắc Tiêu Chanh');
+    expect(serialized).not.toContain('PRIVATE-RAW-MENU-RESULT');
+    expect(serialized).not.toContain('PRIVATE-MENU-PAYLOAD');
+  });
+
   it.each([
     {
       toolName: 'getRecentOrder' as const,

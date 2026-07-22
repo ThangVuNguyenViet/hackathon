@@ -70,6 +70,7 @@ const publicCommerceFactKeys = new Set([
   'code',
   'complete',
   'default',
+  'description',
   'deliveryFeeVnd',
   'discountVnd',
   'feeVnd',
@@ -392,7 +393,8 @@ function requirementForPrompt(
   return {
     requirementId: claim.requirementId,
     kind: claim.kind,
-    requiredToolGroup: claim.anyOf,
+    anyOfToolNames: claim.anyOf,
+    satisfactionRule: 'at_least_one_matching_tool_outcome',
     expectedOk: claim.expectedOk,
     outcomeCodeOneOf: claim.resultSummaryOneOf.filter((code) =>
       claim.anyOf.some((toolName) =>
@@ -402,7 +404,7 @@ function requirementForPrompt(
         ).some((ok) =>
           semanticJudgeOutcomeCode(toolName, ok, code) === code))),
     instruction:
-      'The response must communicate this verified outcome with the correct polarity.',
+      'At least one listed tool outcome with the expected polarity is sufficient; do not require every listed tool. The response must communicate the verified outcome with the correct polarity.',
   };
 }
 

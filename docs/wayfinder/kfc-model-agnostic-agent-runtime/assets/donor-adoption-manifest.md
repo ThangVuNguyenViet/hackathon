@@ -2,7 +2,7 @@
 
 Status: binding first implementation artifact for [Start the fresh-main KFC agent migration and classify donor work](https://github.com/ThangVuNguyenViet/hackathon/issues/45).
 
-Architecture amendment (2026-07-19): the explicit LangGraph boundary below supersedes the earlier `langchain.createAgent` target in issues #44, #46, #49, and draft PR #52. Earlier plans that preserve the custom router/planner/composer topology are historical evidence, not the migration target.
+Architecture amendment (2026-07-21): the reviewed hybrid boundary below replaces only the hand-authored semantic model/tool loop with one complete LangChain `createAgent()` graph inside a reduced deterministic KFC `StateGraph`. It supersedes both the explicit low-level semantic topology target and a direct-facade `createAgent()` cutover. Earlier plans that preserve the custom router/planner/composer topology are historical evidence, not the migration target.
 
 ## Baseline and custody
 
@@ -36,29 +36,37 @@ Cherry-picking a donor wholesale is prohibited.
 
 ## Non-negotiable architecture boundary
 
-The production path is one explicitly authored [`StateGraph`](https://docs.langchain.com/oss/javascript/langgraph/graph-api) from `@langchain/langgraph`—using the graph API rather than a prebuilt agent loop—with official [`ChatOpenAI`](https://docs.langchain.com/oss/javascript/integrations/chat/openai) and [`ChatGoogle`](https://docs.langchain.com/oss/javascript/integrations/chat/google) integrations. The model interprets customer intent, selects complete tool calls, consumes tool results, and writes customer prose.
+The production runtime uses one reviewed LangChain JavaScript `createAgent()`
+factory behind a named wrapper node in a reduced deterministic KFC
+`StateGraph`. The wrapper maps KFC outer state and invocation context into the
+complete nested agent and maps its typed result or propagated interrupt back to
+the outer workflow. LangChain middleware manages the semantic model/tool loop
+and human review. The parent graph owns the durable checkpointer, immutable
+turn deadline, trusted-action routing, publication validation, persistence,
+GenUI, and delivery. Business authorization, exact approval receipts, provider
+idempotency, and reconciliation remain application-owned. `AgentExecutor`,
+`createReactAgent`, duplicate semantic runtimes, deterministic language
+routing, scenario-specific behavior, and manufactured model calls remain
+prohibited.
 
-“LangGraph-only” constrains orchestration, not the low-level contracts LangGraph and the provider integrations require. Production code may use `@langchain/core` `BaseChatModel`, messages, `bindTools`, `tool` or `DynamicStructuredTool`, `RunnableConfig`, schemas, and callbacks, plus `@langchain/openai` and `@langchain/google`. It must not import the top-level `langchain` package or use `createAgent`, `createReactAgent`, `AgentExecutor`, or middleware-owned agent, tool, approval, retry, semantic-correction, or call-limit loops.
+The inspectable production workflow has two responsibility layers:
 
-The graph exposes one inspectable loop:
-
-- `load_context -> call_model`
-- typed terminal response: `call_model -> validate_tool_calls -> finalize_response -> persist_and_project -> END`; the same author call supplies customer prose plus a typed publication declaration that deterministic boundaries validate against verified evidence and authority
-- valid model tool calls: `call_model -> validate_tool_calls -> request_approval` when required `-> execute_tools -> call_model`
-- invalid model tool calls: `validate_tool_calls -> record_semantic_correction -> call_model` once, otherwise `fail_closed -> persist_and_project -> END`
-- a bare or invalid final message gets the same single semantic-correction budget; malformed output, unsupported evidence, or invalid publication authority closes the response after that bounded correction
-- approval resume: `request_approval -> revalidate_approval -> execute_tools` only when the authenticated receipt and current provider revisions still match, otherwise `fail_closed`
-- retryable provider failure: `call_model -> record_provider_retry -> call_model` within the deadline and call budget, otherwise `fail_closed`
+- the outer graph hydrates and gates the turn, invokes the named semantic-agent wrapper, validates trusted structured output, persists success or failure under the current fence, projects GenUI, and delivers;
+- the complete nested `createAgent()` owns semantic model/tool iteration, dynamic tool visibility, whole-batch authored-call validation, bounded retry and correction, native HITL interruption, and provider-native structured output;
+- nested interrupts propagate through the wrapper and resume the same parent thread with `Command`; workflow approval never substitutes for the signed KFC business-authority chain;
+- every physical provider call shares one six-attempt ledger and the one classified retry, while every model-authored semantic invalidity shares one correction budget;
+- terminal structured-output parsing errors are caught at a tested wrapper or model-call boundary that can re-enter the same invocation budgets; a second invalid result fails closed.
 
 Trusted structured UI commands are carried separately from customer text and
 the migration draft routes them through `prepare_structured_action` without
 natural-language interpretation. That branch is integration-pending and is not
 qualification evidence until its focused and full offline gates pass;
 irreversible actions additionally remain blocked on authenticated authority.
-`runAgentTurn` only assembles trusted dependencies and invokes the compiled
-graph. There is no parallel legacy runtime or nested opaque agent runnable.
+`runAgentTurn` only assembles trusted dependencies and invokes the cached,
+compiled outer graph. There is no parallel legacy runtime or second production
+semantic agent.
 
-Every model invocation, validation result, tool dispatch, approval interrupt/resume, graph-owned semantic correction, retry decision, persistence step, and stop decision must have an explicitly named graph node or conditional edge and remain visible in LangSmith traces. Configure both provider adapters with inherited `maxRetries: 0` and no hedging; every permitted retry is a graph transition that increments the shared provider-attempt counter and records the error class and attempt in LangSmith. Conditional edges may inspect typed message/tool-call structure, errors, counters, and verified state; they may not interpret customer prose.
+Every model invocation, validation result, tool dispatch, approval interrupt/resume, semantic correction, retry decision, persistence step, and stop decision must remain visible through stable LangSmith lifecycle spans and outcomes; tests must not require obsolete internal node names. Configure both provider adapters with inherited `maxRetries: 0` and no hedging. Every permitted physical retry re-enters the shared provider-attempt guard and records the bounded error class and attempt. Deterministic outer routing and middleware may inspect typed message/tool-call structure, errors, counters, and verified state; they may not interpret customer prose.
 
 Deterministic code may validate schemas, authentication, authorization, verified identifiers and state, business policy, exact-cart invariants, approval digests, idempotency, retries, execution, verified collection projection, and stopping. It may not:
 
@@ -107,7 +115,7 @@ Approval pauses use LangGraph `interrupt` and `Command` with the injected checkp
 
 | Area | Required replacement |
 | --- | --- |
-| `buildGraph.ts`, `nodes.ts`, `agentTurnState.ts`, `state.ts` | Keep the external turn/checkpoint contract, but replace the custom semantic topology with one explicitly authored `StateGraph`, explicit model/tool/approval/persistence nodes, structural conditional edges, and minimal application-owned verified state. |
+| `buildGraph.ts`, `agentStateGraph.ts`, `agentStateGraphRunner.ts`, `agentStateSchema.ts`, `agentTurnState.ts` | Keep the external turn/checkpoint contract and reduce the existing outer `StateGraph` to deterministic hydration, gates, trusted routing, publication, persistence, GenUI, and delivery. Invoke one complete `createAgent()` through a wrapper node that explicitly maps the differing outer and nested state contracts. |
 | Synchronous request idempotency | Atomically reserve `(sessionId, clientMessageId, requestFingerprint)` in `ConversationStore` before model/tool work; conflict on a changed fingerprint, replay a stored terminal response on a match, and complete once. Do not use `kfc_request_completed` event scans or conversation-turn uniqueness as the fence. |
 | Approval identity | Authenticate the approving principal/channel and bind the receipt to customer, session, capability, exact action digest, and current verified/provider revisions before translating approve/reject into a graph resume. |
 | GenUI action authority | Bind each attachment to its originating assistant turn, authenticated session/customer, schema version, and verified state/collection revision; enforce expiry and a one-shot or explicitly replayable lifecycle plus request idempotency atomically. |
@@ -116,7 +124,7 @@ Approval pauses use LangGraph `interrupt` and `Command` with the injected checkp
 | `toolExecutor.ts` and safety gates | Exact cart-code equality for availability/fulfillment. Remove model-controlled `confirmed`, model-supplied fulfillment item-code sets and voucher subtotals, and model-supplied modifier display metadata. Bind irreversible execution to authenticated, current, exact-action approval receipts while preserving stale-run suppression, trusted confirmation binding, and provider-authority revalidation. |
 | Membership writes | Keep `acquireVoucher` and `redeemReward`. The model chooses the target; runtime previews, interrupts, verifies the digest/account/target, executes once, persists the receipt, and returns it to the agent. |
 | Content retrieval | Keep typed governed evidence and provenance. Replace provider-specific semantic ranking or unmarked top-three fallbacks with a complete/partial typed result. |
-| Model profiles | One provider-neutral profile contract with `gpt-4.1-mini` and `gemini-3.1-flash-lite` with `LOW` thinking. Fail on drift; no silent fallback or mixed production profile. |
+| Model profiles | One provider-neutral profile contract with `gpt-5-mini-2025-08-07` using low reasoning and low verbosity, and `gemini-3.1-flash-lite` with `LOW` thinking. Fail on drift; no silent fallback or mixed production profile. |
 | GenUI projection | Extend the existing menu picker with provider-derived category tabs, every verified row, and a visible five-distinct-item limit. Project complete verified collections without model truncation. |
 | Text collection projection | The model supplies the introduction and recommendation. Deterministic transport chunking renders every verified row when completeness is promised. |
 | Monitor | Keep it asynchronous and non-authoritative. It is not part of the customer critical path or a per-turn merge judge. |
@@ -125,7 +133,7 @@ Approval pauses use LangGraph `interrupt` and `Command` with the injected checkp
 
 Delete these production paths after the maintained replacement passes focused tests:
 
-- the rejected top-level `langchain.createAgent` implementation previously housed in `src/agent/singleAgentRuntime.ts`, its middleware-owned loop, and the `langchain-create-agent-v1` runtime identity; retain only the minimal application helpers used by the explicit graph
+- any direct-facade `createAgent()` cutover that bypasses the reduced outer KFC workflow, plus the obsolete `langchain-create-agent-v1` identity; retain reusable application helpers and use `langgraph-create-agent-workflow-v1` for the hybrid runtime
 - `src/llm/smallTalkRouter.ts`
 - `src/llm/responseComposer.ts`
 - `src/llm/contentSemanticRanker.ts`
@@ -153,7 +161,7 @@ Delete these production paths after the maintained replacement passes focused te
 - split-role configuration, readiness, showcase, proof, and live-command surfaces in `src/config/env.ts`, `src/index.ts`, `src/workerReadiness.ts`, `src/showcase/showcase.ts`, `src/proof/kfcGenUiDeployedProof.ts`, `scripts/run-langsmith-genui-eval.ts`, `package.json`, `.env.example`, and the active backend `README.md`; replace planner/router/composer variables and proof fields with one agent provider/model/profile/SHA identity while keeping the monitor separately identified
 - cross-repository consumers in `scripts/deploy-backend-cloudflare-worker.sh`, `tests/deployment/deploy_scripts.test.sh`, and Flutter showcase models/content/tests that publish, parse, assert, or display separate planner/response identities; migrate them atomically with the backend showcase/proof schema to the single agent identity
 
-Allowed runtime packages are `@langchain/langgraph`, its required `@langchain/core` primitives, `@langchain/openai`, `@langchain/google`, and `langsmith`. Remove the top-level `langchain` dependency introduced by the rejected draft. The runtime task must prove compatible official package versions, Cloudflare Worker support, native checkpointing and interrupts, strict tools, tracing, and both provider adapters before deleting the old path.
+Allowed runtime packages include the exact reviewed `langchain@1.5.3` convenience dependency, `@langchain/langgraph`, its required `@langchain/core` primitives, `@langchain/openai`, `@langchain/google`, and `langsmith`. Only `src/agent/kfcCreateAgent.ts` may construct the production `createAgent()` instance. The runtime task must prove compatible official package versions, Cloudflare Worker support, native checkpointing and interrupts, strict tools, tracing, and both provider adapters before deleting the old path.
 
 ## Donor commit disposition
 

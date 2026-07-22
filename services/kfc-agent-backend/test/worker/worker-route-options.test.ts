@@ -101,6 +101,7 @@ function expectCommonWorkerCapabilities(
   expect(routeOptions.checkpointer).toBeDefined();
   expect(routeOptions.fixtures?.menuItems.length).toBeGreaterThan(0);
   expect(routeOptions.messengerFetchImpl).toBe(harness.messengerFetch);
+  expect(routeOptions.messengerPageAccessToken).toBe('page_access_token');
   expect(routeOptions.zaloFetchImpl).toBe(harness.zaloFetch);
 
   expect(routeOptions.agent?.identity).toMatchObject({

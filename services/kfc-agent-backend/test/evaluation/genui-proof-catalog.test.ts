@@ -26,7 +26,7 @@ function run(scenarioId: string, generatedAt: string): ProofRunSummary {
         modifierTreeCount: 2,
       },
       lifecycle: { provider: 'd1', controlsRegistered: true },
-      graph: { runtime: 'langgraph-stategraph-v1', checkpoint: 'd1-v1' },
+      graph: { runtime: 'langchain-create-agent-v1', checkpoint: 'd1-v1' },
       versions: {
         agent: {
           provider: 'google',
@@ -66,8 +66,8 @@ describe('GenUI consolidated proof catalog', () => {
     const openai = run('02-menu', '2026-07-11');
     openai.runtime.versions.agent = {
       provider: 'openai',
-      model: 'gpt-4.1-mini',
-      profile: 'openai-gpt-4.1-mini',
+      model: 'gpt-5-mini-2025-08-07',
+      profile: 'openai-gpt-5-mini-2025-08-07-reasoning-low-verbosity-low',
     };
 
     expect(() =>

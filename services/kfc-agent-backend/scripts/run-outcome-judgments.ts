@@ -134,7 +134,7 @@ function printHelp(): void {
     "",
     "Judges exactly the nine canonical ai-talent-tracks/fnb/conversations scenarios.",
     "Default provider: OUTCOME_JUDGE_PROVIDER, or openai when the environment variable is unset.",
-    "Pinned models: gpt-4.1-mini for OpenAI; gemini-3.1-flash-lite for Google.",
+    "Pinned models: gpt-5-mini-2025-08-07 for OpenAI; gemini-3.1-flash-lite for Google.",
     "Request timeout: OUTCOME_JUDGE_TIMEOUT_MS, or 60000ms when the environment variable is unset.",
   ].join("\n"));
 }

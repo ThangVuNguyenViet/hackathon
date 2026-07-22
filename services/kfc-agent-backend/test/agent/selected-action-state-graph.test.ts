@@ -8,14 +8,10 @@ import { Command, MemorySaver } from '@langchain/langgraph';
 import { describe, expect, it, vi } from 'vitest';
 import { createKfcAgentStateGraph } from '../../src/agent/agentStateGraph.js';
 import {
-  GROUNDED_RESPONSE_TOOL_NAME,
-} from '../../src/agent/responseGrounding.js';
-import {
   selectedActionResponseReferenceSchema,
   type SelectedActionResponseReference,
 } from '../../src/agent/selectedActionResponseAuthority.js';
 import {
-  STRUCTURED_RESPONSE_CORRECTION_MESSAGE_ID,
   STRUCTURED_RESPONSE_REFERENCE_MESSAGE_ID,
 } from '../../src/agent/structuredCustomerAction.js';
 import {
@@ -149,8 +145,7 @@ function bindResponseOnlyModel(
       ({ name }) => name ? [name] : [],
     );
     return (
-      names.length === 1 &&
-      names[0] === GROUNDED_RESPONSE_TOOL_NAME
+      names.length === 0
         ? responseModel
         : planningModel
     ) as ReturnType<NonNullable<typeof baseModel.bindTools>>;
@@ -558,7 +553,7 @@ describe('selected action StateGraph response authority', () => {
           selectedActionResponse,
         })(messages);
       };
-      const responseModel = fakeModel().respond(response).respond(response);
+      const responseModel = fakeModel().respond(response);
       const planningModel = bindResponseOnlyModel(baseModel, responseModel);
       const input = turnInput(
         baseModel,
@@ -618,20 +613,10 @@ describe('selected action StateGraph response authority', () => {
         trustedCustomerAction: envelope,
       });
 
-      expect(result.failure).toBe(
-        'agent_semantic_correction_limit_exceeded',
-      );
+      expect(result.failure).toBe('agent_response_publication_rejected');
       expect(result.output).toBeNull();
       expect(planningModel.callCount).toBe(0);
-      expect(responseModel.callCount).toBe(2);
-      expect(responseModel.calls[1]?.messages).toContainEqual(
-        expect.objectContaining({
-          id: STRUCTURED_RESPONSE_CORRECTION_MESSAGE_ID,
-          content: expect.stringContaining(
-            'agent_response_publication_rejected',
-          ),
-        }),
-      );
+      expect(responseModel.callCount).toBe(1);
       expect(selectedActionResponse).toMatchObject({
         actionDigest: envelope.actionDigest,
         selection: {
@@ -665,9 +650,7 @@ describe('selected action StateGraph response authority', () => {
           },
         })(messages);
     };
-    const responseModel = fakeModel()
-      .respond(forgedResponse)
-      .respond(forgedResponse);
+    const responseModel = fakeModel().respond(forgedResponse);
     const planningModel = bindResponseOnlyModel(baseModel, responseModel);
     const input = turnInput(baseModel, 'selected-action-coherent-forgery');
     await seedTrustedActionSourceTurn(input);
@@ -687,18 +670,10 @@ describe('selected action StateGraph response authority', () => {
         lifecycle: 'one_shot',
         command: { kind: 'edit_cart' },
       }),
-    })).rejects.toThrow('agent_semantic_correction_limit_exceeded');
+    })).rejects.toThrow('selected_action_response_action_mismatch');
 
     expect(planningModel.callCount).toBe(0);
-    expect(responseModel.callCount).toBe(2);
-    expect(responseModel.calls[1]?.messages).toContainEqual(
-      expect.objectContaining({
-        id: STRUCTURED_RESPONSE_CORRECTION_MESSAGE_ID,
-        content: expect.stringContaining(
-          'selected_action_response_action_mismatch',
-        ),
-      }),
-    );
+    expect(responseModel.callCount).toBe(1);
     expect(
       (await input.store.listTurns(input.sessionId))
         .filter(({ role }) => role === 'assistant'),
@@ -716,9 +691,7 @@ describe('selected action StateGraph response authority', () => {
       cart.totalVnd += 1;
       return response;
     };
-    const responseModel = fakeModel()
-      .respond(staleResponse)
-      .respond(staleResponse);
+    const responseModel = fakeModel().respond(staleResponse);
     const planningModel = bindResponseOnlyModel(baseModel, responseModel);
     const input = turnInput(baseModel, 'selected-action-stale-current');
     await seedTrustedActionSourceTurn(input);
@@ -737,18 +710,10 @@ describe('selected action StateGraph response authority', () => {
         lifecycle: 'one_shot',
         command: { kind: 'edit_cart' },
       }),
-    })).rejects.toThrow('agent_semantic_correction_limit_exceeded');
+    })).rejects.toThrow('selected_action_response_stale_outcome');
 
     expect(planningModel.callCount).toBe(0);
-    expect(responseModel.callCount).toBe(2);
-    expect(responseModel.calls[1]?.messages).toContainEqual(
-      expect.objectContaining({
-        id: STRUCTURED_RESPONSE_CORRECTION_MESSAGE_ID,
-        content: expect.stringContaining(
-          'selected_action_response_stale_outcome',
-        ),
-      }),
-    );
+    expect(responseModel.callCount).toBe(1);
     expect(
       (await input.store.listTurns(input.sessionId))
         .filter(({ role }) => role === 'assistant'),

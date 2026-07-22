@@ -646,14 +646,29 @@ export abstract class D1StoreConversationOperations extends D1StoreCore {
     turnId: string,
     runId: string,
   ): Promise<PendingCustomerTurn> {
+    return this.markPendingCustomerTurnTerminal(turnId, runId, 'claimed');
+  }
+
+  async markPendingCustomerTurnIgnored(
+    turnId: string,
+    runId: string,
+  ): Promise<PendingCustomerTurn> {
+    return this.markPendingCustomerTurnTerminal(turnId, runId, 'ignored');
+  }
+
+  private async markPendingCustomerTurnTerminal(
+    turnId: string,
+    runId: string,
+    status: Extract<PendingCustomerTurn['status'], 'claimed' | 'ignored'>,
+  ): Promise<PendingCustomerTurn> {
     const now = new Date().toISOString();
     await this.db
       .prepare(
         `UPDATE pending_customer_turns
-         SET status = 'claimed', claimed_run_id = ?, updated_at = ?
+         SET status = ?, claimed_run_id = ?, updated_at = ?
          WHERE turn_id = ?`,
       )
-      .bind(runId, now, turnId)
+      .bind(status, runId, now, turnId)
       .run();
     const row = await this.db
       .prepare(`SELECT * FROM pending_customer_turns WHERE turn_id = ? LIMIT 1`)

@@ -13,7 +13,12 @@ describe('KFC monitor model profile', () => {
     expect(resolveMonitorModelProfile({
       agentProvider: 'google',
     })).toBe(monitorModelProfiles.google);
-    expect(monitorModelProfiles.openai.model).toBe('gpt-4.1-mini');
+    expect(monitorModelProfiles.openai).toMatchObject({
+      provider: 'openai',
+      model: 'gpt-5-mini-2025-08-07',
+      profile:
+        'openai-gpt-5-mini-2025-08-07-reasoning-low-verbosity-low',
+    });
     expect(monitorModelProfiles.google).toMatchObject({
       model: 'gemini-3.1-flash-lite',
       thinkingLevel: 'LOW',
@@ -24,7 +29,7 @@ describe('KFC monitor model profile', () => {
     expect(resolveMonitorModelProfile({
       agentProvider: 'google',
       provider: 'openai',
-      model: 'gpt-4.1-mini',
+      model: 'gpt-5-mini-2025-08-07',
     })).toBe(monitorModelProfiles.openai);
     expect(() => resolveMonitorModelProfile({
       agentProvider: 'google',

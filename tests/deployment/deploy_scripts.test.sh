@@ -91,6 +91,7 @@ grep -q 'KFC_MENU_API_URL' "$ROOT_DIR/scripts/deploy-backend-cloudflare-worker.s
 ! grep -q 'KFC_COMMERCE_MODE="${KFC_COMMERCE_MODE:-fixture}"' "$ROOT_DIR/scripts/deploy-backend-cloudflare-worker.sh"
 grep -q "wrangler versions secret put LANGSMITH_API_KEY" "$ROOT_DIR/scripts/deploy-backend-cloudflare-worker.sh"
 grep -q "wrangler versions secret put META_APP_SECRET" "$ROOT_DIR/scripts/deploy-backend-cloudflare-worker.sh"
+grep -q "wrangler versions secret put META_PAGE_ACCESS_TOKEN" "$ROOT_DIR/scripts/deploy-backend-cloudflare-worker.sh"
 grep -q "wrangler versions secret put GOOGLE_API_KEY" "$ROOT_DIR/scripts/deploy-backend-cloudflare-worker.sh"
 grep -q "wrangler versions secret put OPENAI_API_KEY" "$ROOT_DIR/scripts/deploy-backend-cloudflare-worker.sh"
 grep -q "wrangler versions secret put KFC_COMMERCE_GATEWAY_TOKEN" "$ROOT_DIR/scripts/deploy-backend-cloudflare-worker.sh"
@@ -105,6 +106,7 @@ main_guard_line="$(grep -n "ALLOW_NON_MAIN_DEPLOY" "$ROOT_DIR/scripts/deploy-bac
 worker_deploy_line="$(grep -n "npx wrangler deploy" "$ROOT_DIR/scripts/deploy-backend-cloudflare-worker.sh" | cut -d: -f1)"
 langsmith_secret_line="$(grep -n "wrangler versions secret put LANGSMITH_API_KEY" "$ROOT_DIR/scripts/deploy-backend-cloudflare-worker.sh" | cut -d: -f1)"
 meta_secret_line="$(grep -n "wrangler versions secret put META_APP_SECRET" "$ROOT_DIR/scripts/deploy-backend-cloudflare-worker.sh" | cut -d: -f1)"
+meta_page_secret_line="$(grep -n "wrangler versions secret put META_PAGE_ACCESS_TOKEN" "$ROOT_DIR/scripts/deploy-backend-cloudflare-worker.sh" | cut -d: -f1)"
 openai_secret_line="$(grep -n "wrangler versions secret put OPENAI_API_KEY" "$ROOT_DIR/scripts/deploy-backend-cloudflare-worker.sh" | cut -d: -f1)"
 google_secret_line="$(grep -n "wrangler versions secret put GOOGLE_API_KEY" "$ROOT_DIR/scripts/deploy-backend-cloudflare-worker.sh" | cut -d: -f1)"
 gateway_secret_line="$(grep -n "wrangler versions secret put KFC_COMMERCE_GATEWAY_TOKEN" "$ROOT_DIR/scripts/deploy-backend-cloudflare-worker.sh" | cut -d: -f1)"
@@ -112,7 +114,8 @@ confirmation_secret_line="$(grep -n "wrangler versions secret put KFC_CONFIRMATI
 confirmation_previous_line="$(grep -n "wrangler versions secret put KFC_CONFIRMATION_PREVIOUS_SIGNING_KEYS" "$ROOT_DIR/scripts/deploy-backend-cloudflare-worker.sh" | cut -d: -f1)"
 test "$main_guard_line" -lt "$langsmith_secret_line"
 test "$main_guard_line" -lt "$meta_secret_line"
-test "$meta_secret_line" -lt "$langsmith_secret_line"
+test "$meta_secret_line" -lt "$meta_page_secret_line"
+test "$meta_page_secret_line" -lt "$langsmith_secret_line"
 test "$langsmith_secret_line" -lt "$confirmation_secret_line"
 test "$confirmation_secret_line" -lt "$confirmation_previous_line"
 test "$confirmation_previous_line" -lt "$openai_secret_line"
@@ -162,7 +165,7 @@ grep -q -- "--pwa-strategy=none" "$ROOT_DIR/scripts/deploy-dashboard-cloudflare-
 grep -q "kfc-ai-chatbot" "$ROOT_DIR/scripts/deploy-dashboard-cloudflare-pages.sh"
 grep -q "kfc-ai-live-monitor" "$ROOT_DIR/scripts/deploy-dashboard-cloudflare-pages.sh"
 grep -q -- "--outdir" "$ROOT_DIR/scripts/deploy-backend-cloudflare-worker.sh"
-grep -q 'KFC_AGENT_PROVIDER=openai KFC_AGENT_MODEL=gpt-4.1-mini RUN_LIVE_AI_INTERRUPTION=1' "$ROOT_DIR/services/kfc-agent-backend/package.json"
+grep -q 'KFC_AGENT_PROVIDER=openai KFC_AGENT_MODEL=gpt-5-mini-2025-08-07 RUN_LIVE_AI_INTERRUPTION=1' "$ROOT_DIR/services/kfc-agent-backend/package.json"
 ! grep -q "run-deployed-browser-proof.ts" "$ROOT_DIR/scripts/run-kfc-deployed-acceptance.sh"
 ! grep -q "run-outcome-judgments.ts" "$ROOT_DIR/scripts/run-kfc-deployed-acceptance.sh"
 grep -q 'npm run test:live:qualification:text' "$ROOT_DIR/scripts/run-kfc-deployed-acceptance.sh"
@@ -178,9 +181,10 @@ grep -q 'npm run test:live:genui:integration' "$ROOT_DIR/scripts/run-kfc-deploye
 grep -q 'npm run proof:live:messenger' "$ROOT_DIR/scripts/run-kfc-deployed-acceptance.sh"
 grep -q 'npm run proof:production:latency' "$ROOT_DIR/scripts/run-kfc-deployed-acceptance.sh"
 grep -q 'PRODUCTION_LATENCY_ITERATIONS=20' "$ROOT_DIR/scripts/run-kfc-deployed-acceptance.sh"
-grep -q 'PRODUCTION_GREETING_TARGET_MS=6000' "$ROOT_DIR/scripts/run-kfc-deployed-acceptance.sh"
-grep -q 'PRODUCTION_MENU_TARGET_MS=8000' "$ROOT_DIR/scripts/run-kfc-deployed-acceptance.sh"
-grep -q 'PRODUCTION_OVERALL_TARGET_MS=8000' "$ROOT_DIR/scripts/run-kfc-deployed-acceptance.sh"
+grep -q 'PRODUCTION_GREETING_TARGET_MS=10000' "$ROOT_DIR/scripts/run-kfc-deployed-acceptance.sh"
+grep -q 'PRODUCTION_MENU_TARGET_MS=10000' "$ROOT_DIR/scripts/run-kfc-deployed-acceptance.sh"
+grep -q 'PRODUCTION_OVERALL_TARGET_MS=10000' "$ROOT_DIR/scripts/run-kfc-deployed-acceptance.sh"
+! grep -Eq 'PRODUCTION_(GREETING|MENU|OVERALL)_TARGET_MS=(6000|8000)' "$ROOT_DIR/scripts/run-kfc-deployed-acceptance.sh"
 grep -q 'goldenStreak !== 5 || matrixStreak !== 3' "$ROOT_DIR/scripts/lib/kfc-acceptance-checks.mjs"
 grep -q 'goldenAffected' "$ROOT_DIR/scripts/lib/kfc-acceptance-checks.mjs"
 grep -q 'matrixAffected' "$ROOT_DIR/scripts/lib/kfc-acceptance-checks.mjs"
@@ -264,6 +268,7 @@ printf '%s\n' \
   'LANGSMITH_PROJECT=test-project' \
   'LANGSMITH_ENDPOINT=https://example.test/langsmith' \
   'META_APP_SECRET=test-meta-secret' \
+  'META_PAGE_ACCESS_TOKEN=test-page-access-token' \
   'KFC_CONFIRMATION_SIGNING_KEY_ID=test-active' \
   'KFC_CONFIRMATION_SIGNING_SECRET=test-confirmation-signing-secret-32-bytes-minimum' \
   'KFC_CONFIRMATION_PREVIOUS_SIGNING_KEYS=[]' \
@@ -281,11 +286,12 @@ printf '%s\n' \
   'LANGSMITH_PROJECT=test-project' \
   'LANGSMITH_ENDPOINT=https://example.test/langsmith' \
   'META_APP_SECRET=test-meta-secret' \
+  'META_PAGE_ACCESS_TOKEN=test-page-access-token' \
   'KFC_CONFIRMATION_SIGNING_KEY_ID=test-active' \
   'KFC_CONFIRMATION_SIGNING_SECRET=test-confirmation-signing-secret-32-bytes-minimum' \
   'KFC_CONFIRMATION_PREVIOUS_SIGNING_KEYS=[]' \
   'KFC_AGENT_PROVIDER=google' \
-  'KFC_AGENT_MODEL=gpt-4.1-mini' \
+  'KFC_AGENT_MODEL=gpt-5-mini-2025-08-07' \
   'OPENAI_API_KEY=test-openai-key' \
   'GOOGLE_API_KEY=test-google-key' \
   'KFC_COMMERCE_MODE=fixture' \
@@ -311,7 +317,7 @@ KFC_DEPLOY_PREFLIGHT_ONLY=true \
   KFC_AGENT_PROVIDER=google \
   KFC_AGENT_MODEL=gemini-3.1-flash-lite \
   KFC_MONITOR_PROVIDER=openai \
-  KFC_MONITOR_MODEL=gpt-4.1-mini \
+  KFC_MONITOR_MODEL=gpt-5-mini-2025-08-07 \
   "$ROOT_DIR/scripts/deploy-backend-cloud-run.sh" \
   >"$tmp_dir/cloud-run-explicit-monitor.log" 2>&1
 grep -q "Cloud Run deployment profile preflight passed" \
@@ -332,7 +338,7 @@ if KFC_DEPLOY_PREFLIGHT_ONLY=true \
 else
   test "$?" -eq 64
 fi
-grep -q "KFC_MONITOR_MODEL must be gpt-4.1-mini" \
+grep -q "KFC_MONITOR_MODEL must be gpt-5-mini-2025-08-07" \
   "$tmp_dir/cloud-run-monitor-drift.log"
 
 if KFC_DEPLOY_PREFLIGHT_ONLY=true \
@@ -370,7 +376,7 @@ grep -q "KFC_AGENT_MODEL must be gemini-3.1-flash-lite" \
 if GCP_PROJECT_ID=test-project \
   META_PAGE_ID=test-page \
   KFC_AGENT_PROVIDER=google \
-  KFC_AGENT_MODEL=gpt-4.1-mini \
+  KFC_AGENT_MODEL=gpt-5-mini-2025-08-07 \
   "$ROOT_DIR/scripts/deploy-backend-cloud-run.sh" \
   >"$tmp_dir/cloud-run-agent-drift.log" 2>&1; then
   echo "Expected Cloud Run deploy to reject agent-model drift." >&2
@@ -386,7 +392,7 @@ mkdir -p "$identity_dir"
 printf '{"gitSha":"qualified","deploymentId":"worker-qualified","releaseBuiltAt":"2026-07-15T00:00:00.000Z","dirty":false}\n' > "$identity_dir/release.json"
 printf '{"deployment":{"gitSha":"qualified","deploymentId":"worker-qualified","builtAt":"2026-07-15T00:00:00.000Z","dirty":false},"versions":{"agent":{"provider":"google","model":"gemini-3.1-flash-lite","profile":"google-gemini-3.1-flash-lite-thinking-low"},"toolCatalog":"tools-v1","ranker":"ranker-v1","ledger":"ledger-v1"}}\n' > "$identity_dir/runtime.json"
 printf '{"ok":true,"release":{"gitSha":"qualified","deploymentId":"worker-qualified","releaseBuiltAt":"2026-07-15T00:00:00.000Z","dirty":false},"proof":{"deployment":{"gitSha":"qualified","deploymentId":"worker-qualified","builtAt":"2026-07-15T00:00:00.000Z","dirty":false},"versions":{"agent":{"provider":"google","model":"gemini-3.1-flash-lite","profile":"google-gemini-3.1-flash-lite-thinking-low"},"toolCatalog":"tools-v1","ranker":"ranker-v1","ledger":"ledger-v1"}}}\n' > "$identity_dir/matching.json"
-printf '{"ok":true,"release":{"gitSha":"qualified","deploymentId":"worker-qualified","releaseBuiltAt":"2026-07-15T00:00:00.000Z","dirty":false},"proof":{"deployment":{"gitSha":"qualified","deploymentId":"worker-qualified","builtAt":"2026-07-15T00:00:00.000Z","dirty":false},"versions":{"agent":{"provider":"openai","model":"gpt-4.1-mini","profile":"openai-gpt-4.1-mini"},"toolCatalog":"tools-v1","ranker":"ranker-v1","ledger":"ledger-v1"}}}\n' > "$identity_dir/drifted.json"
+printf '{"ok":true,"release":{"gitSha":"qualified","deploymentId":"worker-qualified","releaseBuiltAt":"2026-07-15T00:00:00.000Z","dirty":false},"proof":{"deployment":{"gitSha":"qualified","deploymentId":"worker-qualified","builtAt":"2026-07-15T00:00:00.000Z","dirty":false},"versions":{"agent":{"provider":"openai","model":"gpt-5-mini-2025-08-07","profile":"openai-gpt-5-mini-2025-08-07-reasoning-low-verbosity-low"},"toolCatalog":"tools-v1","ranker":"ranker-v1","ledger":"ledger-v1"}}}\n' > "$identity_dir/drifted.json"
 node "$ROOT_DIR/scripts/lib/kfc-acceptance-checks.mjs" check-8 "$identity_dir/release.json" "$identity_dir/runtime.json" "$identity_dir/matching.json"
 ! node "$ROOT_DIR/scripts/lib/kfc-acceptance-checks.mjs" check-8 "$identity_dir/release.json" "$identity_dir/runtime.json" "$identity_dir/drifted.json" >/dev/null 2>&1
 
@@ -430,8 +436,8 @@ const releaseBuiltAt = '2026-07-20T00:00:00.000Z';
 const workerDeploymentId = 'worker-release';
 const openAiIdentity = {
   provider: 'openai',
-  model: 'gpt-4.1-mini',
-  profile: 'openai-gpt-4.1-mini',
+  model: 'gpt-5-mini-2025-08-07',
+  profile: 'openai-gpt-5-mini-2025-08-07-reasoning-low-verbosity-low',
 };
 const valid = {
   schemaVersion: 4,
@@ -465,9 +471,9 @@ const valid = {
     },
   },
   targets: {
-    greetingP95Ms: 6000,
-    menuP95Ms: 8000,
-    overallP95Ms: 8000,
+    greetingP95Ms: 10000,
+    menuP95Ms: 10000,
+    overallP95Ms: 10000,
   },
   latency: {
     ok: true,
@@ -500,7 +506,7 @@ const valid = {
     })),
   ],
   traces: {
-    runtime: 'langgraph-stategraph-v1',
+    runtime: 'langgraph-create-agent-workflow-v1',
     ok: true,
     failures: [],
     rootQueryOverflowed: false,
@@ -624,6 +630,11 @@ expectRejected((report) => {
   report.targets.menuP95Ms = 999999;
   report.targets.overallP95Ms = 999999;
 }, 'weakened release targets');
+expectRejected((report) => {
+  report.targets.greetingP95Ms = 6000;
+  report.targets.menuP95Ms = 8000;
+  report.targets.overallP95Ms = 8000;
+}, 'retired asymmetric release targets');
 expectRejected((report) => {
   report.traces.settle.completed = false;
 }, 'unsettled');

@@ -6,11 +6,7 @@ import {
 } from './agentModelProfile.js';
 
 export const outcomeJudgeModelProfiles = {
-  openai: {
-    provider: 'openai',
-    model: 'gpt-4.1-mini',
-    profile: 'openai-gpt-4.1-mini-outcome-judge',
-  },
+  openai: agentModelProfiles.openai,
   google: {
     provider: 'google',
     model: 'gemini-3.1-flash-lite',

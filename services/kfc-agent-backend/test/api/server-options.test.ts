@@ -26,7 +26,7 @@ describe('buildServerOptionsFromEnv', () => {
       release: { gitSha: 'release-1', deploymentId: 'deployment-1', builtAt: '2026-07-15T00:00:00Z', dirty: false },
       proof: {
         deployment: { gitSha: 'release-1', deploymentId: 'deployment-1' },
-        graph: { runtime: 'langgraph-stategraph-v1' },
+        graph: { runtime: 'langchain-create-agent-v1' },
         versions: {
           agent: {
             provider: 'google',
@@ -59,7 +59,7 @@ describe('buildServerOptionsFromEnv', () => {
       PORT: '18090',
       OPENAI_API_KEY: 'openai_key_local',
       KFC_AGENT_PROVIDER: 'openai',
-      KFC_AGENT_MODEL: 'gpt-4.1-mini',
+      KFC_AGENT_MODEL: 'gpt-5-mini-2025-08-07',
       OPENAI_BASE_URL: 'https://openai.local/v1',
       LANGSMITH_API_KEY: 'langsmith_key_local',
       LANGSMITH_PROJECT: 'kfc-agent-backend-local',
@@ -98,8 +98,8 @@ describe('buildServerOptionsFromEnv', () => {
       agent: {
         identity: {
           provider: 'openai',
-          model: 'gpt-4.1-mini',
-          profile: 'openai-gpt-4.1-mini',
+          model: 'gpt-5-mini-2025-08-07',
+          profile: 'openai-gpt-5-mini-2025-08-07-reasoning-low-verbosity-low',
         },
         model: expect.any(Object),
       },
@@ -110,8 +110,8 @@ describe('buildServerOptionsFromEnv', () => {
         runtime: {
           monitor: {
             provider: 'openai',
-            model: 'gpt-4.1-mini',
-            profile: 'openai-gpt-4.1-mini-monitor',
+            model: 'gpt-5-mini-2025-08-07',
+            profile: 'openai-gpt-5-mini-2025-08-07-reasoning-low-verbosity-low',
           },
         },
       },
@@ -123,8 +123,8 @@ describe('buildServerOptionsFromEnv', () => {
     expect(options.monitorJudge).toBeInstanceOf(ModelMonitorJudge);
     expect((options.monitorJudge as ModelMonitorJudge).identity).toEqual({
       provider: 'openai',
-      model: 'gpt-4.1-mini',
-      profile: 'openai-gpt-4.1-mini-monitor',
+      model: 'gpt-5-mini-2025-08-07',
+      profile: 'openai-gpt-5-mini-2025-08-07-reasoning-low-verbosity-low',
     });
   });
 
@@ -236,15 +236,15 @@ describe('buildServerOptionsFromEnv', () => {
       KFC_AGENT_PROVIDER: 'google',
       GOOGLE_API_KEY: 'google_key_local',
       KFC_MONITOR_PROVIDER: 'openai',
-      KFC_MONITOR_MODEL: 'gpt-4.1-mini',
+      KFC_MONITOR_MODEL: 'gpt-5-mini-2025-08-07',
       OPENAI_API_KEY: 'openai_key_local',
     } as NodeJS.ProcessEnv);
 
     const options = buildServerOptionsFromEnv(env);
     expect((options.monitorJudge as ModelMonitorJudge).identity).toEqual({
       provider: 'openai',
-      model: 'gpt-4.1-mini',
-      profile: 'openai-gpt-4.1-mini-monitor',
+      model: 'gpt-5-mini-2025-08-07',
+      profile: 'openai-gpt-5-mini-2025-08-07-reasoning-low-verbosity-low',
     });
   });
 
@@ -264,7 +264,7 @@ describe('buildServerOptionsFromEnv', () => {
     }))).toThrow('KFC monitor model drift');
     expect(() => buildServerOptionsFromEnv(loadEnv({
       ...base,
-      KFC_MONITOR_MODEL: 'gpt-4.1-mini',
+      KFC_MONITOR_MODEL: 'gpt-5-mini-2025-08-07',
     }))).toThrow(
       'OPENAI_API_KEY is required for the explicitly configured KFC monitor provider',
     );

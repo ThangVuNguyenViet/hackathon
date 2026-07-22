@@ -3,42 +3,32 @@
   "title": "09: Phương thức thanh toán website/app",
   "channel": "kfc",
   "goal": "User hỏi các phương thức thanh toán, bot tra cứu fixture chính sách thanh toán đã crawl và phân biệt MoMo không được liệt kê cho checkout website/app.",
-  "useCases": [
-    "UC-16"
-  ],
+  "useCases": ["UC-16"],
   "finalState": "payment_methods_answered",
   "turns": [
     {
       "index": 1,
       "speaker": "User",
       "text": "KFC có những phương thức thanh toán nào trên website/app?",
-      "useCases": [
-        "UC-16"
-      ]
+      "useCases": ["UC-16"]
     },
     {
       "index": 2,
       "speaker": "Bot",
-      "text": "Theo chính sách thanh toán công khai của KFC, các phương thức đang được liệt kê gồm: thanh toán khi nhận hàng, thẻ ATM nội địa, thẻ Visa/Master và ví ZaloPay.",
-      "useCases": [
-        "UC-16"
-      ]
+      "text": "Dạ trên website và ứng dụng KFC, bạn có thể thanh toán khi nhận hàng, dùng thẻ ATM nội địa, thẻ Visa/Master hoặc ví ZaloPay.",
+      "useCases": ["UC-16"]
     },
     {
       "index": 3,
       "speaker": "User",
       "text": "Vậy thanh toán MoMo được không?",
-      "useCases": [
-        "UC-16"
-      ]
+      "useCases": ["UC-16"]
     },
     {
       "index": 4,
       "speaker": "Bot",
-      "text": "Theo chính sách thanh toán công khai của KFC, Ví MoMo không được liệt kê cho checkout website/app. Các phương thức đang được liệt kê gồm: thanh toán khi nhận hàng, thẻ ATM nội địa, thẻ Visa/Master và ví ZaloPay.",
-      "useCases": [
-        "UC-16"
-      ]
+      "text": "Dạ, hiện mình chưa thấy MoMo trong các phương thức thanh toán được công bố trên website hoặc ứng dụng KFC. Bạn có thể chọn thanh toán khi nhận hàng, thẻ ATM nội địa, thẻ Visa/Master hoặc ZaloPay nhé.",
+      "useCases": ["UC-16"]
     }
   ],
   "expectations": [

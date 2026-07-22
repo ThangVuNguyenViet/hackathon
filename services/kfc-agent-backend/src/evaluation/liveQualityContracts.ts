@@ -6,12 +6,9 @@ export const LIVE_QUALITY_DATASET_DESCRIPTION =
   'Repository-owned KFC live acceptance inventory. Regenerate from scenarioCoverageLedger.ts.';
 export const LIVE_QUALITY_DATASET_SPLIT = 'acceptance';
 export const LIVE_QUALITY_SCHEMA_VERSION = 'kfc-live-quality-v2';
-export const LIVE_QUALITY_INVENTORY_VERSION = '2026-07-20.1';
+export const LIVE_QUALITY_INVENTORY_VERSION = '2026-07-21.1';
 export const LIVE_QUALITY_CANONICAL_INVENTORY_DIGEST =
-  '9684774444e7b844fab12de0da5b9530035aa8f8cf5b5c275fbebd68e2cb76d5';
-export const LIVE_QUALITY_EXPECTED_SCENARIO_COUNT = 9;
-export const LIVE_QUALITY_EXPECTED_TURN_COUNT = 46;
-export const LIVE_QUALITY_EXPECTED_CASE_COUNT = LIVE_QUALITY_EXPECTED_TURN_COUNT * 2;
+  'b037df135d342a45e643ac69e02d3cad9b319a0a7e9d9b4a2a2a3aafd052f6fb';
 export const LIVE_QUALITY_SYNC_OWNER = 'kfc-live-quality-dataset-sync';
 export const LIVE_QUALITY_SOURCE_PATH =
   'services/kfc-agent-backend/test/scenarios/scenarioCoverageLedger.ts';
@@ -26,12 +23,7 @@ export interface ScenarioToolCountConstraint {
 
 export interface ScenarioArgumentConstraint {
   path: string;
-  operator:
-    | 'exists'
-    | 'absent'
-    | 'equals'
-    | 'one_of'
-    | 'equals_state_path';
+  operator: 'exists' | 'absent' | 'equals' | 'one_of' | 'equals_state_path';
   value?: unknown;
   values?: unknown[];
   statePath?: string;
@@ -73,11 +65,17 @@ export const SCENARIO_MUTABLE_STATE_KEYS = [
   'invoiceRequest',
 ] as const;
 
-export type ScenarioMutableState =
-  (typeof SCENARIO_MUTABLE_STATE_KEYS)[number];
+export type ScenarioMutableState = (typeof SCENARIO_MUTABLE_STATE_KEYS)[number];
 
 export type ScenarioSemanticResponseAct =
   | 'acknowledge_delivery_note_and_invoice_intent'
+  | 'compare_verified_menu_items'
+  | 'recommend_supported_non_spicy_option'
+  | 'recommend_verified_value_conversion_with_consent'
+  | 'apply_verified_value_conversion_after_consent'
+  | 'describe_preference_without_allergen_claim'
+  | 'disclose_unverified_allergen_safety'
+  | 'report_verified_item_unavailable'
   | 'clarify_availability_or_address'
   | 'reject_post_order_mutation'
   | 'request_reorder_confirmation'
@@ -181,7 +179,12 @@ export interface ScenarioTurnOracle {
   };
   latency: { maxTurnMs: number };
   artifacts: Array<
-    'transcript' | 'tool_trace' | 'provider_evidence' | 'checkpoint' | 'genui' | 'messenger_projection'
+    | 'transcript'
+    | 'tool_trace'
+    | 'provider_evidence'
+    | 'checkpoint'
+    | 'genui'
+    | 'messenger_projection'
   >;
 }
 
@@ -195,15 +198,29 @@ export interface TurnExpectation extends ScenarioTurnOracle {
     description: string;
   }>;
   exactArguments?: Partial<Record<ToolName, ScenarioArgumentConstraint[]>>;
-  expectedToolOutcomes?: Partial<Record<ToolName, {
-    ok: boolean | 'either';
-    resultSummaryOneOf?: string[];
-  }>>;
+  expectedToolOutcomes?: Partial<
+    Record<
+      ToolName,
+      {
+        ok: boolean | 'either';
+        resultSummaryOneOf?: string[];
+      }
+    >
+  >;
   statePathConstraints?: ScenarioStatePathConstraint[];
   requiredCatalogCodes?: string[];
   requiredCatalogItemEvidence?: Array<{
     code: string;
     available?: boolean;
+    priceVnd?: number;
+  }>;
+  requiredCatalogModifierEvidence?: Array<{
+    itemCode: string;
+    groupId: string;
+    modifierId: string;
+    groupMin?: number;
+    default?: boolean;
+    quantity?: number;
   }>;
   requiredCatalogModifierText?: string;
   requiredCatalogCategoryIds?: string[];
@@ -250,11 +267,21 @@ export type LiveQualityV3TurnExpectation = Omit<
 };
 
 export type LiveQualityEvaluationExpectation =
-  | TurnExpectation
-  | LiveQualityV3TurnExpectation;
+  TurnExpectation | LiveQualityV3TurnExpectation;
+
+export interface LiveScenarioAdvisoryMetadata {
+  role: 'core' | 'supporting';
+  phaseEndTurnIndex: number;
+  judgmentPolicy: 'warning' | 'evidence_only' | 'blocking';
+  criteria: Array<{
+    id: string;
+    description: string;
+  }>;
+}
 
 export interface LiveScenarioCase {
   fileName: string;
+  advisory?: LiveScenarioAdvisoryMetadata;
   turnExpectations: TurnExpectation[];
   targetWidgetKinds?: KfcGenUiWidgetKind[];
   forbiddenWidgetKinds?: KfcGenUiWidgetKind[];

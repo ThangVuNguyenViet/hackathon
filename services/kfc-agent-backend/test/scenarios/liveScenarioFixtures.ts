@@ -121,8 +121,8 @@ export function liveScenarioFixtures(fileName: string): {
         membershipProfileSnapshots: fixtures.membershipProfileSnapshots.map((snapshot, index) => index === 0
           ? {
               ...snapshot,
-              points: 120,
-              evidenceText: 'Membership provider: 120 points, MEMBER tier.',
+              points: 3_200,
+              evidenceText: 'Membership provider: 3,200 points, MEMBER tier.',
               sourceFile: 'test/scenarios/liveScenarioFixtures.ts (scenario provider data)',
               provenance: {
                 ...snapshot.provenance,

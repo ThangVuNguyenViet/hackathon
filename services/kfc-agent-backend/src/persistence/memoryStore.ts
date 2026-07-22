@@ -113,6 +113,7 @@ import {
   listMemoryAgentRunTurns,
   listMemoryPendingCustomerTurns,
   markMemoryPendingCustomerTurnClaimed,
+  markMemoryPendingCustomerTurnIgnored,
   updateMemoryAgentRunRecord,
   upsertMemoryPendingCustomerTurn,
 } from './memoryStoreAgentRunRecords.js';
@@ -559,6 +560,14 @@ export class MemoryStore
 
   async markPendingCustomerTurnClaimed(turnId: string, runId: string): Promise<PendingCustomerTurn> {
     return markMemoryPendingCustomerTurnClaimed(
+      turnId,
+      runId,
+      this.memoryAgentRunState(),
+    );
+  }
+
+  async markPendingCustomerTurnIgnored(turnId: string, runId: string): Promise<PendingCustomerTurn> {
+    return markMemoryPendingCustomerTurnIgnored(
       turnId,
       runId,
       this.memoryAgentRunState(),

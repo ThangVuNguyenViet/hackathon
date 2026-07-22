@@ -12,12 +12,8 @@ import {
   digestCommerceAction,
   commerceApprovalReceiptSchema,
 } from '../ordering/approvalReceipt.js';
-import {
-  commerceApprovalExecutionFenceSchema,
-} from '../ordering/approvalExecutionFence.js';
-import {
-  buildCurrentAgentApprovalBinding,
-} from '../ordering/agentToolExecutor.js';
+import { commerceApprovalExecutionFenceSchema } from '../ordering/approvalExecutionFence.js';
+import { buildCurrentAgentApprovalBinding } from '../ordering/agentToolExecutor.js';
 import type {
   CommerceApprovalPrincipal,
   ToolCallRequest,
@@ -27,13 +23,9 @@ import {
   guestCheckoutCommerceApprovalPrincipal,
   isGuestCheckoutPrincipal,
 } from '../ordering/commerceApprovalPrincipal.js';
-import {
-  authorizeGuestCheckout,
-} from '../security/guestCheckoutAuthority.js';
+import { authorizeGuestCheckout } from '../security/guestCheckoutAuthority.js';
 import { buildChannelPresentation } from '../presentation/channelPresentation.js';
-import {
-  persistVerifiedStateSnapshot,
-} from '../graph/verifiedState.js';
+import { persistVerifiedStateSnapshot } from '../graph/verifiedState.js';
 import type { AgentTraceSpan } from '../observability/agentTracing.js';
 import type { CreateConfirmationPauseInput } from '../persistence/contracts.js';
 import {
@@ -42,11 +34,10 @@ import {
 } from '../session/sessionContext.js';
 import type {
   KfcAgentStateGraph,
+  KfcAgentStateGraphResult,
   KfcAgentStateGraphUpdate,
 } from './agentStateGraph.js';
-import {
-  verifiedGuestApprovalAuthorityMatchesPrincipal,
-} from '../api/confirmationApprovalCapability.js';
+import { verifiedGuestApprovalAuthorityMatchesPrincipal } from '../api/confirmationApprovalCapability.js';
 import {
   createAgentTurnExternalCallScope,
   type SingleAgentRuntimeContext,
@@ -54,11 +45,34 @@ import {
 import { providerFailureReportCode } from './agentModelInvocation.js';
 import {
   checkpointSafeApprovalMatchesCall,
+  checkpointSafeApprovalSchema,
+  createCheckpointSafeApproval,
   parseCheckpointSafeApprovalInterrupt,
   type CheckpointSafeApproval,
 } from './checkpointSafeApproval.js';
 
 const confirmationPauseTtlMs = 10 * 60_000;
+
+export type AgentTurnFailureEvidence = Pick<
+  KfcAgentStateGraphResult,
+  | 'currentTurnToolTrace'
+  | 'providerAttemptEvidence'
+  | 'responseFactualClaims'
+  | 'responsePublicationDeclaration'
+  | 'responseText'
+  | 'selectedActionResponseReference'
+>;
+
+export class AgentTurnExecutionError extends Error {
+  override readonly name = 'AgentTurnExecutionError';
+
+  constructor(
+    readonly code: string,
+    readonly evidence: AgentTurnFailureEvidence,
+  ) {
+    super(code);
+  }
+}
 
 interface AgentCheckpoint {
   threadId: string;
@@ -80,13 +94,99 @@ interface AgentStateGraphTurnInput {
   checkpoint: AgentCheckpoint;
 }
 
-function approvalActionFromInterruptions(
-  interruptions: ReadonlyArray<{ value?: unknown }>,
-): CheckpointSafeApproval {
-  if (interruptions.length !== 1) {
+interface ApprovalInterruption {
+  approval: CheckpointSafeApproval;
+  action: ToolCallRequest;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+async function nativeApprovalInterruption(input: {
+  value: unknown;
+  requestId: string | undefined;
+}): Promise<ApprovalInterruption | null> {
+  if (!isRecord(input.value) || !('reviewConfigs' in input.value)) return null;
+  const actionRequests = input.value.actionRequests;
+  const reviewConfigs = input.value.reviewConfigs;
+  if (
+    !input.requestId?.trim() ||
+    !Array.isArray(actionRequests) ||
+    actionRequests.length !== 1 ||
+    !Array.isArray(reviewConfigs) ||
+    reviewConfigs.length !== 1
+  ) {
     throw new Error('agent_approval_interrupt_invalid');
   }
-  return parseCheckpointSafeApprovalInterrupt(interruptions[0]?.value);
+  const actionRequest = actionRequests[0];
+  const reviewConfig = reviewConfigs[0];
+  if (
+    !isRecord(actionRequest) ||
+    !isRecord(actionRequest.args) ||
+    !isRecord(reviewConfig) ||
+    reviewConfig.actionName !== actionRequest.name ||
+    !Array.isArray(reviewConfig.allowedDecisions) ||
+    reviewConfig.allowedDecisions.length !== 2 ||
+    !reviewConfig.allowedDecisions.includes('approve') ||
+    !reviewConfig.allowedDecisions.includes('reject')
+  ) {
+    throw new Error('agent_approval_interrupt_invalid');
+  }
+  const toolName = checkpointSafeApprovalSchema.shape.toolName.safeParse(
+    actionRequest.name,
+  );
+  if (!toolName.success) {
+    throw new Error('agent_approval_interrupt_invalid');
+  }
+  const action: ToolCallRequest = {
+    toolName: toolName.data,
+    arguments: actionRequest.args,
+  };
+  return {
+    approval: await createCheckpointSafeApproval({
+      requestId: input.requestId,
+      call: action,
+    }),
+    action,
+  };
+}
+
+async function approvalActionFromInterruptions(input: {
+  interruptions: ReadonlyArray<{ value?: unknown }>;
+  requestId: string | undefined;
+  pendingToolCalls: KfcAgentStateGraphUpdate['pendingToolCalls'];
+  checkpointSafeApproval: KfcAgentStateGraphUpdate['checkpointSafeApproval'];
+}): Promise<ApprovalInterruption> {
+  if (input.interruptions.length !== 1) {
+    throw new Error('agent_approval_interrupt_invalid');
+  }
+  const value = input.interruptions[0]?.value;
+  const native = await nativeApprovalInterruption({
+    value,
+    requestId: input.requestId,
+  });
+  if (native) return native;
+
+  const approval = parseCheckpointSafeApprovalInterrupt(value);
+  const pendingToolCalls = input.pendingToolCalls ?? [];
+  const call = pendingToolCalls[0];
+  if (
+    pendingToolCalls.length !== 1 ||
+    !call ||
+    input.checkpointSafeApproval?.requestId !== approval.requestId ||
+    input.checkpointSafeApproval.actionDigest !== approval.actionDigest ||
+    !(await checkpointSafeApprovalMatchesCall({ approval, call }))
+  ) {
+    throw new Error('agent_approval_interrupt_invalid');
+  }
+  return {
+    approval,
+    action: {
+      toolName: call.toolName,
+      arguments: call.arguments,
+    },
+  };
 }
 
 export { agentCheckpointThreadId };
@@ -113,18 +213,12 @@ export function agentCheckpointConfigForTurn(input: {
     ) {
       throw new Error('agent_confirmation_checkpoint_mismatch');
     }
-    const executionFence =
-      input.confirmationResume.executionFence;
+    const executionFence = input.confirmationResume.executionFence;
     if (
       executionFence &&
-      (
-        executionFence.checkpointThreadId !==
-          resumeCheckpoint.threadId ||
-        executionFence.checkpointNamespace !==
-          resumeCheckpoint.namespace ||
-        executionFence.checkpointId !==
-          resumeCheckpoint.checkpointId
-      )
+      (executionFence.checkpointThreadId !== resumeCheckpoint.threadId ||
+        executionFence.checkpointNamespace !== resumeCheckpoint.namespace ||
+        executionFence.checkpointId !== resumeCheckpoint.checkpointId)
     ) {
       throw new Error('agent_confirmation_checkpoint_mismatch');
     }
@@ -166,25 +260,17 @@ async function approvalPrincipal(
       authenticationEvidenceRef: evidence.evidenceRef,
     });
   }
-  const guestDecision = authorizeGuestCheckout(
-    input.guestCheckoutAuthority,
-    {
-      channel: input.channel,
-      sessionId: input.sessionId,
-      customerId: input.customerId,
-      externalMessageId: input.externalMessageId,
-      surfaceSubjectRef: input.customerId,
-      runFence: input.runGuard?.commitFence,
-      confirmationResume: input.confirmationResume !== undefined,
-    },
-  );
-  if (
-    guestDecision.allowed &&
-    input.guestCheckoutAuthority
-  ) {
-    return guestCheckoutCommerceApprovalPrincipal(
-      input.guestCheckoutAuthority,
-    );
+  const guestDecision = authorizeGuestCheckout(input.guestCheckoutAuthority, {
+    channel: input.channel,
+    sessionId: input.sessionId,
+    customerId: input.customerId,
+    externalMessageId: input.externalMessageId,
+    surfaceSubjectRef: input.customerId,
+    runFence: input.runGuard?.commitFence,
+    confirmationResume: input.confirmationResume !== undefined,
+  });
+  if (guestDecision.allowed && input.guestCheckoutAuthority) {
+    return guestCheckoutCommerceApprovalPrincipal(input.guestCheckoutAuthority);
   }
   const resume = input.confirmationResume;
   const verified = resume?.verifiedGuestAuthority;
@@ -202,18 +288,15 @@ async function approvalPrincipal(
     verified.toolName === 'placeOrder' &&
     action.toolName === 'createPaymentLink' &&
     Date.parse(verifiedPrincipal.expiresAt) > Date.now() &&
-    await verifiedGuestApprovalAuthorityMatchesPrincipal(
-      verified,
-      {
-        principal: verifiedPrincipal,
-        sessionId: input.sessionId,
-        customerId: input.customerId,
-        channel: input.channel,
-        sessionGeneration: sessionAuthorityGeneration,
-        checkpointThreadId: resume.checkpoint.threadId,
-        checkpointNamespace: resume.checkpoint.namespace,
-      },
-    )
+    (await verifiedGuestApprovalAuthorityMatchesPrincipal(verified, {
+      principal: verifiedPrincipal,
+      sessionId: input.sessionId,
+      customerId: input.customerId,
+      channel: input.channel,
+      sessionGeneration: sessionAuthorityGeneration,
+      checkpointThreadId: resume.checkpoint.threadId,
+      checkpointNamespace: resume.checkpoint.namespace,
+    }))
   ) {
     return verifiedPrincipal;
   }
@@ -235,10 +318,7 @@ async function canonicalConfirmationRecord(input: {
   requestId: string;
   action: ToolCallRequest;
 }): Promise<CreateConfirmationPauseInput> {
-  const principal = await approvalPrincipal(
-    input.turnInput,
-    input.action,
-  );
+  const principal = await approvalPrincipal(input.turnInput, input.action);
   const approvalBinding = await buildCurrentAgentApprovalBinding(
     input.turnInput.clients,
     input.action,
@@ -246,14 +326,12 @@ async function canonicalConfirmationRecord(input: {
       ...toolExecutionContext(input.turnInput),
       approval: {
         principal,
-        ...(input.turnInput.confirmationResume
-          ?.verifiedGuestAuthority
+        ...(input.turnInput.confirmationResume?.verifiedGuestAuthority
           ? {
               confirmationRequestId:
                 input.turnInput.confirmationResume.requestId,
               verifiedGuestAuthority:
-                input.turnInput.confirmationResume
-                  .verifiedGuestAuthority,
+                input.turnInput.confirmationResume.verifiedGuestAuthority,
             }
           : {}),
       },
@@ -267,16 +345,13 @@ async function canonicalConfirmationRecord(input: {
   );
   if ('ok' in approvalBinding) {
     throw new Error(
-      `agent_approval_binding_failed:${
-        approvalBinding.errorCode ?? 'unknown'
-      }`,
+      `agent_approval_binding_failed:${approvalBinding.errorCode ?? 'unknown'}`,
     );
   }
   if (!(await isRunStillCurrent(input.turnInput))) {
-    input.runtime.abortExternalCalls(new DOMException(
-      'Customer run was cancelled',
-      'AbortError',
-    ));
+    input.runtime.abortExternalCalls(
+      new DOMException('customer_run_cancelled', 'AbortError'),
+    );
     throw new Error('customer_run_cancelled');
   }
 
@@ -314,8 +389,7 @@ async function canonicalConfirmationRecord(input: {
   }
 
   const createdAt = new Date();
-  const evidence =
-    input.turnInput.accessContext?.authenticationEvidence;
+  const evidence = input.turnInput.accessContext?.authenticationEvidence;
   const principalExpiry = isGuestCheckoutPrincipal(principal)
     ? Date.parse(principal.expiresAt)
     : evidence?.state === 'verified'
@@ -341,8 +415,7 @@ async function canonicalConfirmationRecord(input: {
     action: input.action,
     actionDigest,
     approvalBinding,
-    approvalBindingDigest:
-      await digestCommerceAction(approvalBinding),
+    approvalBindingDigest: await digestCommerceAction(approvalBinding),
     principal,
     createdAt: createdAt.toISOString(),
     expiresAt: new Date(expiresAt).toISOString(),
@@ -419,10 +492,7 @@ async function persistApprovalPauseState(input: {
 }): Promise<void> {
   const { runGuard } = input.turnInput;
   if (!runGuard) {
-    await persistVerifiedStateSnapshot(
-      input.turnInput.store,
-      input.state,
-    );
+    await persistVerifiedStateSnapshot(input.turnInput.store, input.state);
     return;
   }
   if (!runGuard.commitFence) {
@@ -448,10 +518,9 @@ export async function runKfcAgentStateGraphTurn(
   };
   try {
     if (!(await isRunStillCurrent(input.turnInput))) {
-      externalCallScope.abort(new DOMException(
-        'Customer run was cancelled',
-        'AbortError',
-      ));
+      externalCallScope.abort(
+        new DOMException('customer_run_cancelled', 'AbortError'),
+      );
       throw new Error('customer_run_cancelled');
     }
 
@@ -459,8 +528,7 @@ export async function runKfcAgentStateGraphTurn(
       checkpoint: input.checkpoint,
       confirmationResume: input.turnInput.confirmationResume,
     });
-    const checkpointThreadId =
-      checkpointConfig.configurable.thread_id;
+    const checkpointThreadId = checkpointConfig.configurable.thread_id;
     const agentConfig = {
       ...checkpointConfig,
       context: { runtime },
@@ -468,65 +536,74 @@ export async function runKfcAgentStateGraphTurn(
     };
     const invocation = input.turnInput.confirmationResume
       ? new Command<unknown, KfcAgentStateGraphUpdate, never>({
-        resume: { requestId: input.turnInput.confirmationResume.requestId },
-        update: {
-          turnDeadlineAt: externalCallScope.context.deadlineAt,
-        },
-      })
+          resume: {
+            decisions: [
+              {
+                type: input.turnInput.confirmationResume.approved
+                  ? 'approve'
+                  : 'reject',
+              },
+            ],
+          },
+          update: {
+            turnDeadlineAt: externalCallScope.context.deadlineAt,
+          },
+        })
       : {
-        sessionId: input.turnInput.sessionId,
-        customerId: input.turnInput.customerId,
-        channel: input.turnInput.channel,
-        externalMessageId: input.turnInput.externalMessageId ?? null,
-      };
-    const result = await input.graph.invoke(invocation, {
-      ...agentConfig,
-      // Disable LangGraph/LangChain's implicit tracing. Its generic runtime
-      // serialization includes the injected turn context, which intentionally
-      // holds transient customer prose. Privacy-safe explicit agent spans are
-      // emitted through turnTrace instead.
-      callbacks: [],
-    });
+          sessionId: input.turnInput.sessionId,
+          customerId: input.turnInput.customerId,
+          channel: input.turnInput.channel,
+          externalMessageId: input.turnInput.externalMessageId ?? null,
+        };
+    const callbacks = await input.turnTrace.langchainCallbacks?.();
+    const invokeGraph = () =>
+      input.graph.invoke(invocation, {
+        ...agentConfig,
+        ...(callbacks ? { callbacks } : {}),
+      });
+    const result =
+      callbacks || !input.turnTrace.withActiveTrace
+        ? await invokeGraph()
+        : await input.turnTrace.withActiveTrace(invokeGraph);
 
     const graphResult = result as typeof result & {
       __interrupt__?: ReadonlyArray<{ value?: unknown }>;
     };
     const interruptions = graphResult.__interrupt__ ?? [];
+    if (graphResult.failure) {
+      const code = providerFailureReportCode(
+        graphResult.failure,
+        graphResult.providerFailureDiagnostic,
+      );
+      throw new AgentTurnExecutionError(code, {
+        currentTurnToolTrace: graphResult.currentTurnToolTrace,
+        providerAttemptEvidence: graphResult.providerAttemptEvidence,
+        responseFactualClaims: graphResult.responseFactualClaims,
+        responsePublicationDeclaration:
+          graphResult.responsePublicationDeclaration,
+        responseText: graphResult.responseText,
+        selectedActionResponseReference:
+          graphResult.selectedActionResponseReference,
+      });
+    }
     const graphState = graphResult.domainState;
     if (!graphState) throw new Error('agent_domain_state_missing');
     if (interruptions.length > 0) {
-      const approval = approvalActionFromInterruptions(interruptions);
-      const pendingToolCalls = graphResult.pendingToolCalls ?? [];
-      const actionRequest = pendingToolCalls[0];
-      if (
-        pendingToolCalls.length !== 1 ||
-        !actionRequest ||
-        graphResult.checkpointSafeApproval?.requestId !==
-          approval.requestId ||
-        graphResult.checkpointSafeApproval?.actionDigest !==
-          approval.actionDigest ||
-        !(await checkpointSafeApprovalMatchesCall({
-          approval,
-          call: actionRequest,
-        }))
-      ) {
-        throw new Error('agent_approval_interrupt_invalid');
-      }
-      const actionName = actionRequest.toolName;
-      const requestId = approval.requestId;
-      if (!requestId) {
-        throw new Error('agent_approval_request_id_missing');
-      }
+      const interruption = await approvalActionFromInterruptions({
+        interruptions,
+        requestId: input.turnInput.confirmationRequestId,
+        pendingToolCalls: graphResult.pendingToolCalls,
+        checkpointSafeApproval: graphResult.checkpointSafeApproval,
+      });
+      const actionName = interruption.action.toolName;
+      const requestId = interruption.approval.requestId;
       const confirmationRecord = await canonicalConfirmationRecord({
         turnInput: input.turnInput,
         runtime,
         graphState,
         checkpointThreadId,
         requestId,
-        action: {
-          toolName: actionRequest.toolName,
-          arguments: actionRequest.arguments,
-        },
+        action: interruption.action,
       });
       await persistApprovalPauseState({
         turnInput: input.turnInput,
@@ -538,8 +615,7 @@ export async function runKfcAgentStateGraphTurn(
         inputs: {
           capability: actionName,
           actionDigest: confirmationRecord.actionDigest,
-          approvalBindingDigest:
-            confirmationRecord.approvalBindingDigest,
+          approvalBindingDigest: confirmationRecord.approvalBindingDigest,
         },
         metadata: { component: 'LangGraphInterrupt' },
         tags: ['agent-approval'],
@@ -564,12 +640,6 @@ export async function runKfcAgentStateGraphTurn(
       };
     }
 
-    if (graphResult.failure) {
-      throw new Error(providerFailureReportCode(
-        graphResult.failure,
-        graphResult.providerFailureDiagnostic,
-      ));
-    }
     const output = graphResult.output;
     if (!output) throw new Error('agent_output_missing');
     await input.turnTrace.end({

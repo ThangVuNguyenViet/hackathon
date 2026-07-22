@@ -23,7 +23,7 @@ const cases = buildLiveQualityDatasetCases({
   inventoryVersion: SCENARIO_COVERAGE_LEDGER_VERSION,
   scenarioCases: liveScenarioCases,
 });
-const result = await syncLiveQualityDataset(client, cases);
+const result = await syncLiveQualityDataset(client, cases, liveScenarioCases);
 const legacyDatasetName = 'kfc-live-quality-v1';
 let legacyDatasetDisposition: 'absent' | 'superseded' | 'unowned_skipped' = 'absent';
 if (await client.hasDataset({ datasetName: legacyDatasetName })) {
@@ -52,7 +52,6 @@ console.log(JSON.stringify({
   ok: true,
   datasetName: LIVE_QUALITY_DATASET_NAME,
   inventoryVersion: SCENARIO_COVERAGE_LEDGER_VERSION,
-  caseCount: cases.length,
   legacyDatasetDisposition,
   ...result,
 }, null, 2));

@@ -34,6 +34,72 @@ describe('live scenario fixture providers', () => {
     expect(config.mockedUpstreamApiForTurn?.(9)).toBeUndefined();
   });
 
+  it('keeps scenario 10 comparison facts grounded in generated menu data', async () => {
+    const fixtures = await loadGeneratedFixtures(process.cwd());
+    const data = new OrderingDataService(fixtures, { currentDate: '2026-07-13' });
+    const zinger = data.getMenuItem('20698');
+    const pepperLime = data.getMenuItem('20709');
+    const chickenMainGroup = data.getModifierTree('20709')?.modifierGroups
+      .find(({ groupId }) => groupId === '1');
+    const friedChicken = chickenMainGroup?.options
+      .find(({ modifierId }) => modifierId === '41035');
+    const chickenStyle = friedChicken?.modifierGroups
+      .find(({ groupId }) => groupId === '60253');
+
+    expect(zinger).toMatchObject({
+      code: '20698',
+      priceVnd: 79_000,
+      description: '1 Burger zinger + 1 Khoai tây chiên (vừa) + 1 Ly Pepsi (tiêu chuẩn)',
+    });
+    expect(pepperLime).toMatchObject({
+      code: '20709',
+      priceVnd: 85_000,
+      description: '1 Miếng Gà Rán + 1 Miếng Gà Lắc Tiêu Chanh + 1 ly Pepsi Không Đường (Đại)',
+    });
+    expect(chickenStyle).toMatchObject({
+      groupId: '60253',
+      options: expect.arrayContaining([
+        expect.objectContaining({ modifierId: '70031', name: 'Gà Giòn Cay' }),
+        expect.objectContaining({ modifierId: '70027', name: 'Gà Giòn Không Cay' }),
+        expect.objectContaining({ modifierId: '70036', name: 'Gà Truyền Thống' }),
+      ]),
+    });
+  });
+
+  it('keeps scenario 11 preference modifiers distinct from allergy evidence', async () => {
+    const fixtures = await loadGeneratedFixtures(process.cwd());
+    const data = new OrderingDataService(fixtures, { currentDate: '2026-07-13' });
+    const yoGroup = data.getModifierTree('41042')?.modifierGroups
+      .find(({ groupId }) => groupId === '60258');
+    const nonSpicyYo = yoGroup?.options
+      .find(({ modifierId }) => modifierId === '70444');
+    const cheeseGroup = data.getModifierTree('41043')?.modifierGroups
+      .find(({ groupId }) => groupId === '60259');
+    const addCheese = cheeseGroup?.options
+      .find(({ modifierId }) => modifierId === '70049');
+
+    expect(yoGroup).toMatchObject({
+      groupId: '60258',
+      min: 1,
+      max: 1,
+    });
+    expect(nonSpicyYo).toMatchObject({
+      modifierId: '70444',
+      name: 'Burger Gà Yo (Không Cay)',
+    });
+    expect(cheeseGroup).toMatchObject({
+      groupId: '60259',
+      min: 0,
+      max: 1,
+    });
+    expect(addCheese).toMatchObject({
+      modifierId: '70049',
+      name: 'Thêm Phô Mai',
+      default: false,
+      quantity: 0,
+    });
+  });
+
   it('exposes scenario 07 private history and favorites only through authenticated providers', async () => {
     const source = await loadGeneratedFixtures(process.cwd());
     const config = liveScenarioFixtures('07-ca-nhan-hoa-va-loyalty.json');
@@ -73,7 +139,8 @@ describe('live scenario fixture providers', () => {
       value: [{ code: '20698', name: 'Combo Burger Zinger' }],
     });
     expect(fixtures.membershipProfileSnapshots[0]).toMatchObject({
-      points: 120,
+      points: 3_200,
+      evidenceText: 'Membership provider: 3,200 points, MEMBER tier.',
       provenance: { fixtureMode: 'demo_mock_seed' },
     });
     expect(fixtures.menuItems).toContainEqual(expect.objectContaining({

@@ -5,12 +5,14 @@ import {
   type ModelPublicationBundle,
 } from './modelPublicationProjection.js';
 import { stateRevision } from '../graph/turnSupport.js';
+import type { ResponseEvidenceLimitation } from './responseEvidenceContracts.js';
 
 export const RESPONSE_PUBLICATION_ATTESTATION_SCHEMA_VERSION =
   'kfc-response-publication-attestation-v1' as const;
 
 const digestSchema = z.string().regex(/^[0-9a-f]{64}$/u);
-const evidenceIdSchema = z.string()
+const evidenceIdSchema = z
+  .string()
   .min(1)
   .max(128)
   .refine(
@@ -19,43 +21,45 @@ const evidenceIdSchema = z.string()
   );
 
 const disclosureAuthoritySchema = z.discriminatedUnion('kind', [
-  z.object({
-    kind: z.literal('current_user_message'),
-    messageDigest: digestSchema,
-  }).strict(),
-  z.object({
-    kind: z.literal('publication_evidence'),
-    evidenceId: evidenceIdSchema,
-  }).strict(),
+  z
+    .object({
+      kind: z.literal('current_user_message'),
+      messageDigest: digestSchema,
+    })
+    .strict(),
+  z
+    .object({
+      kind: z.literal('publication_evidence'),
+      evidenceId: evidenceIdSchema,
+    })
+    .strict(),
 ]);
 
-export const responsePublicationAttestationSchema = z.object({
-  schemaVersion: z.literal(
-    RESPONSE_PUBLICATION_ATTESTATION_SCHEMA_VERSION,
-  ),
-  projectionDigest: digestSchema,
-  responseDigest: digestSchema,
-  semanticRelevance: z.enum(['aligned', 'misaligned']),
-  privateDataDisclosure: z.enum([
-    'none',
-    'authorized',
-    'unauthorized',
-  ]),
-  disclosureAuthorities: z.array(disclosureAuthoritySchema).max(64),
-  disclosesInternalMetadata: z.boolean(),
-}).strict();
+export const responsePublicationAttestationSchema = z
+  .object({
+    schemaVersion: z.literal(RESPONSE_PUBLICATION_ATTESTATION_SCHEMA_VERSION),
+    projectionDigest: digestSchema,
+    responseDigest: digestSchema,
+    semanticRelevance: z.enum(['aligned', 'misaligned']),
+    privateDataDisclosure: z.enum(['none', 'authorized', 'unauthorized']),
+    disclosureAuthorities: z.array(disclosureAuthoritySchema).max(64),
+    disclosesInternalMetadata: z.boolean(),
+  })
+  .strict();
 
 export type ResponsePublicationAttestation = z.infer<
   typeof responsePublicationAttestationSchema
 >;
 
 export const responsePublicationDeclarationSchema =
-  responsePublicationAttestationSchema.pick({
-    semanticRelevance: true,
-    privateDataDisclosure: true,
-    disclosureAuthorities: true,
-    disclosesInternalMetadata: true,
-  }).strict();
+  responsePublicationAttestationSchema
+    .pick({
+      semanticRelevance: true,
+      privateDataDisclosure: true,
+      disclosureAuthorities: true,
+      disclosesInternalMetadata: true,
+    })
+    .strict();
 
 export type ResponsePublicationDeclaration = z.infer<
   typeof responsePublicationDeclarationSchema
@@ -73,6 +77,14 @@ export type ResponsePublicationAttestationValidation =
       responsePublicationSafe: false;
     };
 
+export type ResponsePublicationDeclarationConsistencyValidation =
+  | { ok: true }
+  | {
+      ok: false;
+      errorCode: 'agent_response_publication_rejected';
+      correctable: boolean;
+    };
+
 function rejected(): ResponsePublicationAttestationValidation {
   return {
     ok: false,
@@ -87,6 +99,86 @@ function authorityKey(
   return authority.kind === 'current_user_message'
     ? `${authority.kind}:${authority.messageDigest}`
     : `${authority.kind}:${authority.evidenceId}`;
+}
+
+function declarationRejected(
+  correctable: boolean,
+): ResponsePublicationDeclarationConsistencyValidation {
+  return {
+    ok: false,
+    errorCode: 'agent_response_publication_rejected',
+    correctable,
+  };
+}
+
+export function validateResponsePublicationDeclarationConsistency(input: {
+  raw: unknown;
+  bundle: ModelPublicationBundle;
+  factualClaims: {
+    evidenceReferences: readonly { evidenceId: string }[];
+  };
+}): ResponsePublicationDeclarationConsistencyValidation {
+  if (!isIssuedModelPublicationBundle(input.bundle)) {
+    return declarationRejected(false);
+  }
+  const declaration = responsePublicationDeclarationSchema.safeParse(input.raw);
+  if (!declaration.success) return declarationRejected(false);
+  if (
+    declaration.data.semanticRelevance !== 'aligned' ||
+    declaration.data.privateDataDisclosure === 'unauthorized' ||
+    declaration.data.disclosesInternalMetadata
+  ) {
+    return declarationRejected(false);
+  }
+
+  const privateEvidenceIds = new Set(
+    privateDisclosureEvidenceIds(input.bundle),
+  );
+  const issuedEvidenceIds = new Set(
+    input.bundle.evidence.map(({ evidenceId }) => evidenceId),
+  );
+  if (
+    declaration.data.disclosureAuthorities.some((authority) =>
+      authority.kind === 'publication_evidence'
+        ? !issuedEvidenceIds.has(authority.evidenceId)
+        : authority.messageDigest !==
+          input.bundle.lifecycle.currentUserMessageDigest,
+    )
+  ) {
+    return declarationRejected(false);
+  }
+  const authorityKeys =
+    declaration.data.disclosureAuthorities.map(authorityKey);
+  if (new Set(authorityKeys).size !== authorityKeys.length) {
+    return declarationRejected(true);
+  }
+
+  const citedPrivateEvidenceIds = [
+    ...new Set(
+      input.factualClaims.evidenceReferences
+        .map(({ evidenceId }) => evidenceId)
+        .filter((evidenceId) => privateEvidenceIds.has(evidenceId)),
+    ),
+  ].sort();
+  const declaredPrivateEvidenceIds = declaration.data.disclosureAuthorities
+    .flatMap((authority) =>
+      authority.kind === 'publication_evidence' ? [authority.evidenceId] : [],
+    )
+    .sort();
+  const authoritySetMismatch =
+    JSON.stringify(citedPrivateEvidenceIds) !==
+    JSON.stringify(declaredPrivateEvidenceIds);
+  const disclosureFlagMismatch =
+    (citedPrivateEvidenceIds.length > 0 &&
+      declaration.data.privateDataDisclosure !== 'authorized') ||
+    (declaration.data.privateDataDisclosure === 'none' &&
+      declaration.data.disclosureAuthorities.length > 0) ||
+    (declaration.data.privateDataDisclosure === 'authorized' &&
+      declaration.data.disclosureAuthorities.length === 0);
+
+  return authoritySetMismatch || disclosureFlagMismatch
+    ? declarationRejected(true)
+    : { ok: true };
 }
 
 export async function validateResponsePublicationAttestation(input: {
@@ -119,12 +211,11 @@ export async function validateResponsePublicationAttestation(input: {
     privateDisclosureEvidenceIds(input.bundle),
   );
   if (
-    attestation.disclosureAuthorities.some(
-      (authority) =>
-        authority.kind === 'publication_evidence'
-          ? !allowedEvidenceIds.has(authority.evidenceId)
-          : authority.messageDigest !==
-            input.bundle.lifecycle.currentUserMessageDigest,
+    attestation.disclosureAuthorities.some((authority) =>
+      authority.kind === 'publication_evidence'
+        ? !allowedEvidenceIds.has(authority.evidenceId)
+        : authority.messageDigest !==
+          input.bundle.lifecycle.currentUserMessageDigest,
     )
   ) {
     return rejected();
@@ -166,40 +257,18 @@ export async function issueResponsePublicationAttestation(input: {
       evidenceId: string;
       claimKinds?: readonly string[];
     }[];
+    disclosedLimitations: readonly ResponseEvidenceLimitation[];
     hasUnsupportedFactualClaim?: boolean;
   };
 }): Promise<ResponsePublicationAttestationValidation> {
-  const declaration = responsePublicationDeclarationSchema.safeParse(
-    input.raw,
-  );
+  const declaration = responsePublicationDeclarationSchema.safeParse(input.raw);
   if (!declaration.success) return rejected();
-  const privateEvidenceIds = new Set(
-    privateDisclosureEvidenceIds(input.bundle),
-  );
-  const citedPrivateEvidenceIds = [
-    ...new Set(
-      input.factualClaims.evidenceReferences
-        .map(({ evidenceId }) => evidenceId)
-        .filter((evidenceId) => privateEvidenceIds.has(evidenceId)),
-    ),
-  ].sort();
-  const declaredPrivateEvidenceIds = declaration.data
-    .disclosureAuthorities
-    .flatMap((authority) =>
-      authority.kind === 'publication_evidence'
-        ? [authority.evidenceId]
-        : [])
-    .sort();
-  if (
-    JSON.stringify(citedPrivateEvidenceIds) !==
-      JSON.stringify(declaredPrivateEvidenceIds) ||
-    (
-      citedPrivateEvidenceIds.length > 0 &&
-      declaration.data.privateDataDisclosure !== 'authorized'
-    )
-  ) {
-    return rejected();
-  }
+  const consistency = validateResponsePublicationDeclarationConsistency({
+    raw: declaration.data,
+    bundle: input.bundle,
+    factualClaims: input.factualClaims,
+  });
+  if (!consistency.ok) return rejected();
   return validateResponsePublicationAttestation({
     raw: {
       schemaVersion: RESPONSE_PUBLICATION_ATTESTATION_SCHEMA_VERSION,

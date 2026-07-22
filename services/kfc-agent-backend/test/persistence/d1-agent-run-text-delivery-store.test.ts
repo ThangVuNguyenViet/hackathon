@@ -4,10 +4,7 @@ import {
   type StatementSync,
 } from 'node:sqlite';
 import { afterEach, describe, expect, it } from 'vitest';
-import {
-  D1Store,
-  type D1DatabaseLike,
-} from '../../src/persistence/d1Store.js';
+import { D1Store, type D1DatabaseLike } from '../../src/persistence/d1Store.js';
 import type {
   D1PreparedStatement,
   D1Result,
@@ -20,6 +17,31 @@ afterEach(() => {
 });
 
 describe('D1 AgentRun text-delivery persistence', () => {
+  it('authorizes delivery against the run session active authority', async () => {
+    const harness = await createHarness('active-session-authority');
+    harness.database.execute(
+      `INSERT INTO session_controls (
+         session_id, agent_mode, assigned_agent_id,
+         session_authority_generation, updated_at
+       ) VALUES (?, 'ai_active', NULL, 1, ?)`,
+      [harness.sessionId, harness.at(0)],
+    );
+    harness.database.execute(
+      `UPDATE agent_runs
+       SET session_authority_generation = 1
+       WHERE id = ?`,
+      [harness.runId],
+    );
+
+    await expect(createDelivery(harness)).resolves.toMatchObject({
+      status: 'created',
+      record: {
+        runId: harness.runId,
+        status: 'pending',
+      },
+    });
+  });
+
   it('atomically creates, begins, and confirms a sent delivery after lease expiry', async () => {
     const harness = await createHarness('sent');
     const created = await createDelivery(harness);
@@ -45,17 +67,16 @@ describe('D1 AgentRun text-delivery persistence', () => {
       [harness.at(-1), harness.runId],
     );
 
-    const completed =
-      await harness.store.completeAgentRunTextDeliveryAttempt({
-        execution: harness.execution,
-        deliveryAttempt: 1,
-        deliveryAttemptToken: 'delivery-attempt-token-sent-000001',
-        outcome: {
-          status: 'confirmed_sent',
-          messageId: 'provider-message-sent-1',
-        },
-        updatedAt: harness.at(2),
-      });
+    const completed = await harness.store.completeAgentRunTextDeliveryAttempt({
+      execution: harness.execution,
+      deliveryAttempt: 1,
+      deliveryAttemptToken: 'delivery-attempt-token-sent-000001',
+      outcome: {
+        status: 'confirmed_sent',
+        messageId: 'provider-message-sent-1',
+      },
+      updatedAt: harness.at(2),
+    });
 
     expect(completed).toMatchObject({
       status: 'transitioned',
@@ -64,12 +85,13 @@ describe('D1 AgentRun text-delivery persistence', () => {
         providerMessageId: 'provider-message-sent-1',
       },
     });
-    await expect(harness.store.getAgentRun(harness.runId)).resolves
-      .toMatchObject({
-        status: 'completed',
-        deliveryStatus: 'sent',
-        deliveryExternalMessageId: 'provider-message-sent-1',
-      });
+    await expect(
+      harness.store.getAgentRun(harness.runId),
+    ).resolves.toMatchObject({
+      status: 'completed',
+      deliveryStatus: 'sent',
+      deliveryExternalMessageId: 'provider-message-sent-1',
+    });
     expect(harness.database.batchCalls).toBeGreaterThanOrEqual(2);
   });
 
@@ -78,12 +100,11 @@ describe('D1 AgentRun text-delivery persistence', () => {
     await createDelivery(harness);
     await beginDelivery(harness, 'delivery-attempt-token-unknown-001');
 
-    const reconciled =
-      await harness.store.reconcileAgentRunTextDelivery({
-        execution: harness.execution,
-        outcomeCode: 'provider_connection_interrupted',
-        updatedAt: harness.at(2),
-      });
+    const reconciled = await harness.store.reconcileAgentRunTextDelivery({
+      execution: harness.execution,
+      outcomeCode: 'provider_connection_interrupted',
+      updatedAt: harness.at(2),
+    });
     const replay = await harness.store.reconcileAgentRunTextDelivery({
       execution: harness.execution,
       outcomeCode: 'different_replay_code',
@@ -101,11 +122,12 @@ describe('D1 AgentRun text-delivery persistence', () => {
       status: 'replay',
       record: { outcomeCode: 'provider_connection_interrupted' },
     });
-    await expect(harness.store.getAgentRun(harness.runId)).resolves
-      .toMatchObject({
-        status: 'reconciliation_required',
-        deliveryStatus: 'outcome_unknown',
-      });
+    await expect(
+      harness.store.getAgentRun(harness.runId),
+    ).resolves.toMatchObject({
+      status: 'reconciliation_required',
+      deliveryStatus: 'outcome_unknown',
+    });
   });
 
   it('reconciles expired sending before claim and blocks every later reclaim', async () => {
@@ -256,8 +278,7 @@ describe('D1 AgentRun text-delivery persistence', () => {
     const secondExecution = {
       ...harness.execution,
       executionAttempt: 2,
-      executionLeaseToken:
-        'run-execution-token-pending-rebind-00000002',
+      executionLeaseToken: 'run-execution-token-pending-rebind-00000002',
     };
     const claim = await harness.store.claimAgentRunExecution({
       runId: harness.runId,
@@ -286,8 +307,7 @@ describe('D1 AgentRun text-delivery persistence', () => {
       },
     });
 
-    const firstToken =
-      'delivery-attempt-token-pending-rebind-000001';
+    const firstToken = 'delivery-attempt-token-pending-rebind-000001';
     await expect(
       harness.store.beginAgentRunTextDeliveryAttempt({
         execution: secondExecution,
@@ -323,8 +343,7 @@ describe('D1 AgentRun text-delivery persistence', () => {
       harness.store.beginAgentRunTextDeliveryAttempt({
         execution: secondExecution,
         nextDeliveryAttempt: 2,
-        deliveryAttemptToken:
-          'delivery-attempt-token-pending-rebind-000002',
+        deliveryAttemptToken: 'delivery-attempt-token-pending-rebind-000002',
         updatedAt: harness.at(5),
       }),
     ).resolves.toEqual({
@@ -366,11 +385,7 @@ describe('D1 AgentRun text-delivery persistence', () => {
          external_user_id, delivery_status, metadata, created_at
        ) VALUES (?, ?, 'messenger', 'assistant', 'Other presentation',
          NULL, NULL, 'pending', NULL, ?)`,
-      [
-        otherTurnId,
-        differentHarness.sessionId,
-        differentHarness.at(0),
-      ],
+      [otherTurnId, differentHarness.sessionId, differentHarness.at(0)],
     );
     differentHarness.database.execute(
       `UPDATE agent_runs SET assistant_turn_id = ? WHERE id = ?`,
@@ -471,21 +486,25 @@ describe('D1 AgentRun text-delivery persistence', () => {
     await expect(
       harness.store.getAgentRunTextDelivery(harness.runId),
     ).resolves.toBeUndefined();
-    expect(harness.database.count(
-      `SELECT COUNT(*) AS count
+    expect(
+      harness.database.count(
+        `SELECT COUNT(*) AS count
        FROM agent_run_text_delivery_attempts
        WHERE run_id = ?`,
-      [harness.runId],
-    )).toBe(0);
+        [harness.runId],
+      ),
+    ).toBe(0);
     await expect(
       retained.store.getAgentRunTextDelivery(retained.runId),
     ).resolves.toMatchObject({ status: 'sending' });
-    expect(harness.database.count(
-      `SELECT COUNT(*) AS count
+    expect(
+      harness.database.count(
+        `SELECT COUNT(*) AS count
        FROM agent_run_text_delivery_attempts
        WHERE run_id = ?`,
-      [retained.runId],
-    )).toBe(1);
+        [retained.runId],
+      ),
+    ).toBe(1);
   });
 
   it('supersedes stale retryable work but never suppresses an in-flight delivery', async () => {
@@ -502,13 +521,12 @@ describe('D1 AgentRun text-delivery persistence', () => {
       [protectedHarness.sessionId],
     );
     await expect(
-      protectedHarness.store
-        .supersedeAgentRunExecutionIfNoLongerCurrent({
-          sessionId: protectedHarness.sessionId,
-          fence: runFence(protectedHarness),
-          errorMessage: 'Run lost current ownership',
-          completedAt: protectedHarness.at(2),
-        }),
+      protectedHarness.store.supersedeAgentRunExecutionIfNoLongerCurrent({
+        sessionId: protectedHarness.sessionId,
+        fence: runFence(protectedHarness),
+        errorMessage: 'Run lost current ownership',
+        completedAt: protectedHarness.at(2),
+      }),
     ).resolves.toMatchObject({
       status: 'reconciliation_required',
       reason: 'delivery_outcome_unknown',
@@ -523,13 +541,12 @@ describe('D1 AgentRun text-delivery persistence', () => {
       [retryableHarness.sessionId],
     );
     await expect(
-      retryableHarness.store
-        .supersedeAgentRunExecutionIfNoLongerCurrent({
-          sessionId: retryableHarness.sessionId,
-          fence: runFence(retryableHarness),
-          errorMessage: 'Run lost current ownership',
-          completedAt: retryableHarness.at(2),
-        }),
+      retryableHarness.store.supersedeAgentRunExecutionIfNoLongerCurrent({
+        sessionId: retryableHarness.sessionId,
+        fence: runFence(retryableHarness),
+        errorMessage: 'Run lost current ownership',
+        completedAt: retryableHarness.at(2),
+      }),
     ).resolves.toMatchObject({
       status: 'superseded',
       run: {
@@ -694,9 +711,9 @@ class SqliteD1Database implements D1DatabaseLike {
   }
 
   count(query: string, values: readonly unknown[]): number {
-    const row = this.raw.prepare(query).get(
-      ...sqliteInputValues(values),
-    ) as { count: number | bigint };
+    const row = this.raw.prepare(query).get(...sqliteInputValues(values)) as {
+      count: number | bigint;
+    };
     return Number(row.count);
   }
 }
@@ -736,18 +753,15 @@ class SqliteD1Statement implements D1PreparedStatement {
 
   async first<T = Record<string, unknown>>(): Promise<T | null> {
     return (
-      this.statement().get(...sqliteInputValues(this.values)) as
-        | T
-        | undefined
-    ) ?? null;
+      (this.statement().get(...sqliteInputValues(this.values)) as
+        T | undefined) ?? null
+    );
   }
 
   async all<T = Record<string, unknown>>(): Promise<D1Result<T>> {
     return {
       success: true,
-      results: this.statement().all(
-        ...sqliteInputValues(this.values),
-      ) as T[],
+      results: this.statement().all(...sqliteInputValues(this.values)) as T[],
       meta: {},
     };
   }

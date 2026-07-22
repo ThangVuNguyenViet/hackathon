@@ -47,7 +47,7 @@ function manifest(overrides: Partial<GenUiProofManifest> = {}): GenUiProofManife
         modifierTreeCount: 2,
       },
       lifecycle: { provider: 'd1', controlsRegistered: true },
-      graph: { runtime: 'langgraph-stategraph-v1', checkpoint: 'd1-v1' },
+      graph: { runtime: 'langchain-create-agent-v1', checkpoint: 'd1-v1' },
       versions: {
         agent: {
           provider: 'google',

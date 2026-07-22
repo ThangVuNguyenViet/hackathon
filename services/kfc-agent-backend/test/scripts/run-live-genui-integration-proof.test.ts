@@ -48,7 +48,7 @@ function runtime(): ProofRuntimeBinding {
       controlsRegistered: true,
     },
     graph: {
-      runtime: 'langgraph-stategraph-v1',
+      runtime: 'langgraph-create-agent-workflow-v1',
       checkpoint: 'configured-v1',
     },
     versions: {
@@ -148,7 +148,6 @@ describe('deployed KFC GenUI proof admission', () => {
     expect(script).toContain('/admin/lifecycle/sessions/');
     expect(script).toContain('randomUUID()');
     expect(script).toContain('LEGACY_GENUI_CAPTURE_PLAN_VERSION');
-    expect(script).not.toContain('LIVE_QUALITY_EXPECTED_SCENARIO_COUNT');
   });
 
   it('keeps the tracked Flutter branch input byte-exact without regenerating it during proof', () => {

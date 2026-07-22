@@ -1,12 +1,15 @@
 import { z } from 'zod';
 import { opaqueProviderIdSchema } from '../domain/opaqueProviderId.js';
+import { paymentSurfaceSchema } from '../domain/paymentSurface.js';
 import { verifiedRefIdSchema } from '../domain/verifiedRef.js';
 import type { ToolName } from './types.js';
 
-const exactNonBlankStringSchema = z.string().min(1).refine(
-  (value) => value.trim() === value,
-  { message: 'value must not contain surrounding whitespace' },
-);
+const exactNonBlankStringSchema = z
+  .string()
+  .min(1)
+  .refine((value) => value.trim() === value, {
+    message: 'value must not contain surrounding whitespace',
+  });
 
 export const resolvedFulfillmentAddressSchema = z
   .object({
@@ -91,48 +94,66 @@ export const agentFulfillmentAddressSchema = z
     }
   });
 
-const savedAddressRefSchema = z.object({
-  id: verifiedRefIdSchema,
-  kind: z.literal('saved_address'),
-}).strict();
+const savedAddressRefSchema = z
+  .object({
+    id: verifiedRefIdSchema,
+    kind: z.literal('saved_address'),
+  })
+  .strict();
 
 export const toolArgumentSchemas = {
   searchMenu: z.object({ query: z.string().optional().default('') }).strict(),
   getItemDetails: z.object({ code: z.string().min(1) }).strict(),
   getModifierOptions: z.object({ code: z.string().min(1) }).strict(),
   updateCart: z.union([
-    z.object({
-      itemCode: z.string().min(1),
-      quantity: z.number().int().nonnegative(),
-      modifiers: z
-        .array(
-          z
-            .object({
-              groupId: z.string().min(1),
-              modifierId: z.string().min(1),
-              quantity: z.number().int().positive().optional(),
-              groupName: z.string().min(1).optional(),
-              modifierName: z.string().min(1).optional(),
-              priceDeltaVnd: z.number().int().optional(),
-            })
-            .strict(),
-        )
-        .optional(),
-    }).strict(),
-    z.object({
-      changes: z.array(z.object({
+    z
+      .object({
         itemCode: z.string().min(1),
         quantity: z.number().int().nonnegative(),
-        modifiers: z.array(z.object({
-          groupId: z.string().min(1),
-          modifierId: z.string().min(1),
-          quantity: z.number().int().positive().optional(),
-          groupName: z.string().min(1).optional(),
-          modifierName: z.string().min(1).optional(),
-          priceDeltaVnd: z.number().int().optional(),
-        }).strict()).optional(),
-      }).strict()).min(1),
-    }).strict(),
+        modifiers: z
+          .array(
+            z
+              .object({
+                groupId: z.string().min(1),
+                modifierId: z.string().min(1),
+                quantity: z.number().int().positive().optional(),
+                groupName: z.string().min(1).optional(),
+                modifierName: z.string().min(1).optional(),
+                priceDeltaVnd: z.number().int().optional(),
+              })
+              .strict(),
+          )
+          .optional(),
+      })
+      .strict(),
+    z
+      .object({
+        changes: z
+          .array(
+            z
+              .object({
+                itemCode: z.string().min(1),
+                quantity: z.number().int().nonnegative(),
+                modifiers: z
+                  .array(
+                    z
+                      .object({
+                        groupId: z.string().min(1),
+                        modifierId: z.string().min(1),
+                        quantity: z.number().int().positive().optional(),
+                        groupName: z.string().min(1).optional(),
+                        modifierName: z.string().min(1).optional(),
+                        priceDeltaVnd: z.number().int().optional(),
+                      })
+                      .strict(),
+                  )
+                  .optional(),
+              })
+              .strict(),
+          )
+          .min(1),
+      })
+      .strict(),
   ]),
   previewCart: z.object({}).strict(),
   recommendAddOns: z.object({}).strict(),
@@ -157,7 +178,9 @@ export const toolArgumentSchemas = {
       itemCodes: z.array(z.string().min(1)).min(1),
     })
     .strict(),
-  searchPromotions: z.object({ query: z.string().optional().default('') }).strict(),
+  searchPromotions: z
+    .object({ query: z.string().optional().default('') })
+    .strict(),
   explainPromotion: z.object({ offerId: z.string().min(1) }).strict(),
   validateVoucher: z
     .object({
@@ -166,18 +189,33 @@ export const toolArgumentSchemas = {
     })
     .strict(),
   getMembershipProfile: z.object({}).strict(),
-  listMembershipRewards: z.object({ query: z.string().min(1).optional() }).strict(),
-  listMembershipWallet: z.object({ status: z.enum(['active', 'expired', 'used', 'unknown']).optional() }).strict(),
-  getMembershipPointHistory: z.object({ days: z.number().int().positive().optional() }).strict(),
+  listMembershipRewards: z
+    .object({ query: z.string().min(1).optional() })
+    .strict(),
+  listMembershipWallet: z
+    .object({
+      status: z.enum(['active', 'expired', 'used', 'unknown']).optional(),
+    })
+    .strict(),
+  getMembershipPointHistory: z
+    .object({ days: z.number().int().positive().optional() })
+    .strict(),
   listMembershipTools: z
     .object({
-      sideEffect: z.enum(['read', 'account_mutation', 'voucher_acquisition', 'reward_redemption']).optional(),
+      sideEffect: z
+        .enum([
+          'read',
+          'account_mutation',
+          'voucher_acquisition',
+          'reward_redemption',
+        ])
+        .optional(),
     })
     .strict(),
   listPaymentMethods: z
     .object({
       query: z.string().min(1).optional(),
-      paymentSurface: z.string().min(1).optional(),
+      paymentSurface: paymentSurfaceSchema.optional(),
     })
     .strict(),
   getSavedAddresses: z.object({}).strict(),
@@ -202,7 +240,9 @@ export const toolArgumentSchemas = {
       query: z.string().optional().default(''),
     })
     .strict(),
-  answerAllergenQuestion: z.object({ query: z.string().optional().default('') }).strict(),
+  answerAllergenQuestion: z
+    .object({ query: z.string().optional().default('') })
+    .strict(),
   previewOrder: z.object({}).strict(),
   placeOrder: z.object({}).strict(),
   getOrderStatus: z.object({ orderId: z.string().min(1) }).strict(),
@@ -228,138 +268,220 @@ export const agentToolArgumentSchemas = {
   searchMenu: agentCollectionScopeSchema,
   getItemDetails: z.object({ code: z.string().min(1) }).strict(),
   getModifierOptions: z.object({ code: z.string().min(1) }).strict(),
-  updateCart: z.object({
-    changes: z.array(z.object({
-      itemCode: z.string().min(1),
-      quantity: z.number().int().nonnegative(),
-      modifiers: z.array(z.object({
-        groupId: z.string().min(1),
-        modifierId: z.string().min(1),
-        quantity: z.number().int().positive().nullable(),
-      }).strict()),
-    }).strict()).min(1),
-  }).strict(),
+  updateCart: z
+    .object({
+      changes: z
+        .array(
+          z
+            .object({
+              itemCode: z.string().min(1),
+              quantity: z.number().int().nonnegative(),
+              modifiers: z.array(
+                z
+                  .object({
+                    groupId: z.string().min(1),
+                    modifierId: z.string().min(1),
+                    quantity: z.number().int().positive().nullable(),
+                  })
+                  .strict(),
+              ),
+            })
+            .strict(),
+        )
+        .min(1),
+    })
+    .strict(),
   previewCart: z.object({}).strict(),
   recommendAddOns: z.object({}).strict(),
-  findStores: z.object({
-    query: z.string().min(1).nullable(),
-    city: z.string().min(1).nullable(),
-    district: z.string().min(1).nullable(),
-  }).strict(),
-  checkStoreAvailability: z.object({
-    storeId: z.string().min(1),
-    disposition: z.enum(['pickup', 'delivery']).nullable(),
-  }).strict(),
+  findStores: z
+    .object({
+      query: z.string().min(1).nullable(),
+      city: z.string().min(1).nullable(),
+      district: z.string().min(1).nullable(),
+    })
+    .strict(),
+  checkStoreAvailability: z
+    .object({
+      storeId: z.string().min(1),
+      disposition: z.enum(['pickup', 'delivery']).nullable(),
+    })
+    .strict(),
   quoteFulfillment: z.union([
-    z.object({
-      address: agentFulfillmentAddressSchema,
-      method: z.enum(['pickup', 'delivery']),
-    }).strict(),
-    z.object({
-      savedAddressRef: savedAddressRefSchema,
-      method: z.enum(['pickup', 'delivery']),
-    }).strict(),
+    z
+      .object({
+        address: agentFulfillmentAddressSchema,
+        method: z.enum(['pickup', 'delivery']),
+      })
+      .strict(),
+    z
+      .object({
+        savedAddressRef: savedAddressRefSchema,
+        method: z.enum(['pickup', 'delivery']),
+      })
+      .strict(),
   ]),
   searchPromotions: agentCollectionScopeSchema,
   explainPromotion: z.object({ offerId: z.string().min(1) }).strict(),
   validateVoucher: z.object({ voucherText: z.string().min(1) }).strict(),
   getMembershipProfile: z.object({}).strict(),
   listMembershipRewards: agentCollectionScopeSchema,
-  listMembershipWallet: z.object({
-    status: z.enum(['active', 'expired', 'used', 'unknown']).nullable(),
-  }).strict(),
-  getMembershipPointHistory: z.object({
-    days: z.number().int().positive().nullable(),
-  }).strict(),
-  listMembershipTools: z.object({
-    sideEffect: z.enum(['read', 'account_mutation', 'voucher_acquisition', 'reward_redemption']).nullable(),
-  }).strict(),
-  listPaymentMethods: z.object({
-    query: z.string().min(1).nullable(),
-    paymentSurface: z.string().min(1).nullable(),
-  }).strict(),
+  listMembershipWallet: z
+    .object({
+      status: z.enum(['active', 'expired', 'used', 'unknown']).nullable(),
+    })
+    .strict(),
+  getMembershipPointHistory: z
+    .object({
+      days: z.number().int().positive().nullable(),
+    })
+    .strict(),
+  listMembershipTools: z
+    .object({
+      sideEffect: z
+        .enum([
+          'read',
+          'account_mutation',
+          'voucher_acquisition',
+          'reward_redemption',
+        ])
+        .nullable(),
+    })
+    .strict(),
+  listPaymentMethods: z
+    .object({
+      query: z.string().min(1).nullable(),
+      paymentSurface: paymentSurfaceSchema.nullable(),
+    })
+    .strict(),
   getSavedAddresses: z.object({}).strict(),
   getRecentOrder: z.object({}).strict(),
   getFavoriteItems: z.object({}).strict(),
-  acquireVoucher: z.object({
-    rewardId: z.string().min(1),
-  }).strict(),
-  redeemReward: z.object({
-    voucherId: z.string().min(1),
-    channel: z.string().min(1),
-  }).strict(),
-  searchContentPolicy: z.object({
-    kind: z.enum(['promotion', 'news', 'allergen', 'policy', 'all']),
-    scope: z.enum(['all', 'filtered']),
-    query: z.string().min(1).nullable(),
-  }).strict().superRefine((value, context) => {
-    if ((value.scope === 'all') !== (value.query === null)) {
-      context.addIssue({
-        code: z.ZodIssueCode.custom,
-        path: ['query'],
-        message: value.scope === 'all'
-          ? 'query must be null when scope is all'
-          : 'query is required when scope is filtered',
-      });
-    }
-  }),
+  acquireVoucher: z
+    .object({
+      rewardId: z.string().min(1),
+    })
+    .strict(),
+  redeemReward: z
+    .object({
+      voucherId: z.string().min(1),
+      channel: z.string().min(1),
+    })
+    .strict(),
+  searchContentPolicy: z
+    .object({
+      kind: z.enum(['promotion', 'news', 'allergen', 'policy', 'all']),
+      scope: z.enum(['all', 'filtered']),
+      query: z.string().min(1).nullable(),
+    })
+    .strict()
+    .superRefine((value, context) => {
+      if ((value.scope === 'all') !== (value.query === null)) {
+        context.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ['query'],
+          message:
+            value.scope === 'all'
+              ? 'query must be null when scope is all'
+              : 'query is required when scope is filtered',
+        });
+      }
+    }),
   answerAllergenQuestion: z.object({ query: z.string().min(1) }).strict(),
   previewOrder: z.object({}).strict(),
   placeOrder: z.object({}).strict(),
   getOrderStatus: z.object({}).strict(),
   createPaymentLink: z.object({ methodId: opaqueProviderIdSchema }).strict(),
   checkPaymentStatus: z.object({}).strict(),
-  collectInvoice: z.object({
-    companyName: z.string().min(1).nullable(),
-    taxCode: z.string().min(1).nullable(),
-    email: z.string().email().nullable(),
-  }).strict(),
+  collectInvoice: z
+    .object({
+      companyName: z.string().min(1).nullable(),
+      taxCode: z.string().min(1).nullable(),
+      email: z.string().email().nullable(),
+    })
+    .strict(),
   handoff: z.object({ reasons: z.array(z.string().min(1)).min(1) }).strict(),
   resolveHandoff: z.object({}).strict(),
 } satisfies Record<ToolName, z.ZodTypeAny>;
 
 export const agentToolDescriptions: Record<ToolName, string> = {
-  searchMenu: 'Return the complete menu for scope all, or the complete matching menu collection for scope filtered.',
-  getItemDetails: 'Return verified details for one previously discovered menu item code.',
-  getModifierOptions: 'Return verified modifier groups and identifiers for one menu item code.',
-  updateCart: 'Apply customer-requested quantities using previously verified item and modifier identifiers.',
+  searchMenu:
+    'Return the complete menu for scope all, or the complete matching menu collection for scope filtered. For filtered scope, pass only concise product names or exact identifiers needed for matching; combine independent alternatives with OR. Do not copy the full customer sentence into query.',
+  getItemDetails:
+    'Return verified details for one previously discovered menu item code.',
+  getModifierOptions:
+    'Return verified modifier groups and identifiers for one menu item code.',
+  updateCart:
+    'Apply customer-requested quantities using previously verified item and modifier identifiers. After a catalog read uniquely verifies every explicitly requested item and required modifier, use this tool to perform the requested cart change instead of only describing or promising it.',
   previewCart: 'Return the current verified cart and server-calculated totals.',
-  recommendAddOns: 'Return verified add-on candidates for the current cart without mutating it.',
-  findStores: 'Return verified stores matching the supplied structured location filters.',
-  checkStoreAvailability: 'Check the exact current cart at one store and one pickup or delivery disposition; cart item codes are injected by the server.',
-  quoteFulfillment: 'Quote pickup or delivery for the exact current cart using either an explicit address or the exact pendingSavedAddressRef from verified model state. For an explicit address, send a real line1 and only administrative fields explicitly supplied in model-visible evidence; use null for a missing district or city so the fulfillment provider can resolve it. Cart item codes are injected by the server.',
-  searchPromotions: 'Return a complete promotion collection for the requested scope.',
-  explainPromotion: 'Return verified details and provenance for one promotion offer identifier.',
-  validateVoucher: 'Validate voucher text against the authoritative current cart subtotal.',
+  recommendAddOns:
+    'Return verified add-on candidates for the current cart without mutating it.',
+  findStores:
+    'Return verified stores only when the customer explicitly asks to discover, locate, or compare stores. Do not use this tool to infer delivery coverage, select a fulfillment store, or answer a delivery-fee question from an incomplete location such as a district alone; those require the cart and a complete delivery address through the fulfillment tools.',
+  checkStoreAvailability:
+    'Check the exact current cart at one store and one pickup or delivery disposition; cart item codes are injected by the server.',
+  quoteFulfillment:
+    'Quote pickup or delivery for the exact current cart using either an explicit address or the exact pendingSavedAddressRef from verified model state. For an explicit address, send a real line1 and only administrative fields explicitly supplied in model-visible evidence; use null for a missing district or city so the fulfillment provider can resolve it. Cart item codes are injected by the server.',
+  searchPromotions:
+    'Return a complete promotion collection for the requested scope.',
+  explainPromotion:
+    'Return verified details and provenance for one promotion offer identifier.',
+  validateVoucher:
+    'Validate customer-supplied voucher text against the authoritative current cart subtotal. Use this tool before claiming that a voucher applies or changes the total.',
   getMembershipProfile: 'Return the authenticated customer membership profile.',
-  listMembershipRewards: 'Return a complete authenticated reward collection for the requested scope.',
-  listMembershipWallet: 'Return the authenticated wallet collection for the requested status filter.',
-  getMembershipPointHistory: 'Return authenticated membership point history for the requested day window.',
-  listMembershipTools: 'Return authenticated membership capabilities for the requested side-effect class.',
-  listPaymentMethods: 'Return verified payment methods for the requested filters.',
-  getSavedAddresses: 'Return the authenticated customer saved-address records as read-only evidence for this tool loop.',
-  getRecentOrder: 'Return the authenticated customer most recent order, or null when none exists, as read-only evidence for this tool loop.',
-  getFavoriteItems: 'Return the authenticated customer favorite menu items as read-only evidence for this tool loop.',
-  acquireVoucher: 'Request acquisition of one previously verified reward; execution requires server approval.',
-  redeemReward: 'Request redemption of one previously verified wallet voucher; execution requires server approval.',
-  searchContentPolicy: 'Return complete governed content evidence for the requested kind and scope.',
-  answerAllergenQuestion: 'Return governed allergen evidence with official-source provenance.',
-  previewOrder: 'Preview an order only after a successful fresh availability check for the exact current cart, active store, and pickup or delivery disposition.',
-  placeOrder: 'Place the exact verified order only while its fresh exact-cart availability check remains valid and after server-authenticated approval.',
-  getOrderStatus: 'Return status for the authenticated customer current verified order.',
-  createPaymentLink: 'Request a payment link using the exact methodId from the active verified payment-method collection; execution requires server approval.',
-  checkPaymentStatus: 'Return payment status for the authenticated customer current verified order.',
-  collectInvoice: 'Collect available invoice fields without inventing missing values.',
-  handoff: 'Request escalation of the current session to a human with structured reasons; execution requires server approval.',
-  resolveHandoff: 'Withdraw the exact active verified human-support escalation when the customer no longer wants that escalation; execution requires server approval. Do not call this merely because the customer starts another commerce task.',
+  listMembershipRewards:
+    'Return a complete authenticated reward collection for the requested scope.',
+  listMembershipWallet:
+    'Return the authenticated wallet collection for the requested status filter.',
+  getMembershipPointHistory:
+    'Return authenticated membership point history for the requested day window.',
+  listMembershipTools:
+    'Return authenticated membership capabilities for the requested side-effect class.',
+  listPaymentMethods:
+    'Return the currently verified payment-method policy for the requested filters. Use fresh tool evidence for each current payment-support or payment-listing question, including follow-up questions about whether a named method is listed; prior conversation text is not current provider authority.',
+  getSavedAddresses:
+    'Return the authenticated customer saved-address records as read-only evidence for this tool loop.',
+  getRecentOrder:
+    'Return the authenticated customer most recent order, or null when none exists, as read-only evidence for this tool loop.',
+  getFavoriteItems:
+    'Return the authenticated customer favorite menu items as read-only evidence for this tool loop.',
+  acquireVoucher:
+    'Request acquisition of one previously verified reward; execution requires server approval.',
+  redeemReward:
+    'Request redemption of one previously verified wallet voucher; execution requires server approval.',
+  searchContentPolicy:
+    'Return complete governed content evidence for the requested kind and scope.',
+  answerAllergenQuestion:
+    'Return governed allergen evidence with official-source provenance.',
+  previewOrder:
+    'Preview an order only after a successful fresh availability check for the exact current cart, active store, and pickup or delivery disposition.',
+  placeOrder:
+    'Place the exact verified order only while its fresh exact-cart availability check remains valid and after server-authenticated approval.',
+  getOrderStatus:
+    'Return status for the authenticated customer current verified order.',
+  createPaymentLink:
+    'Request a payment link using the exact methodId from the active verified payment-method collection; execution requires server approval.',
+  checkPaymentStatus:
+    'Return payment status for the authenticated customer current verified order.',
+  collectInvoice:
+    'Collect available invoice fields without inventing missing values.',
+  handoff:
+    'Request escalation of the current session to a human with structured reasons; execution requires server approval.',
+  resolveHandoff:
+    'Withdraw the exact active verified human-support escalation when the customer no longer wants that escalation; execution requires server approval. Do not call this merely because the customer starts another commerce task.',
 };
 
 export const toolNames = Object.keys(toolArgumentSchemas) as ToolName[];
 
-export function parseToolArguments(toolName: ToolName, args: Record<string, unknown>) {
+export function parseToolArguments(
+  toolName: ToolName,
+  args: Record<string, unknown>,
+) {
   return toolArgumentSchemas[toolName].safeParse(args);
 }
 
-export function parseAgentToolArguments(toolName: ToolName, args: Record<string, unknown>) {
+export function parseAgentToolArguments(
+  toolName: ToolName,
+  args: Record<string, unknown>,
+) {
   return agentToolArgumentSchemas[toolName].safeParse(args);
 }

@@ -109,7 +109,7 @@ export function parseOutcomeJudgment(raw: string): OutcomeJudgment {
   return outcomeJudgmentSchema.parse(decoded);
 }
 
-const outcomeJudgePromptVersion = "outcome-judge-v1";
+export const outcomeJudgePromptVersion = "outcome-judge-v1";
 
 const outcomeJudgeSystemMessage = [
   "You are a KFC Vietnam customer-outcome judge.",

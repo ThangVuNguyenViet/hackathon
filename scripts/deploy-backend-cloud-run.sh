@@ -54,7 +54,7 @@ fi
 if [[ "$KFC_AGENT_PROVIDER" == "google" ]]; then
   expected_agent_model="gemini-3.1-flash-lite"
 else
-  expected_agent_model="gpt-4.1-mini"
+  expected_agent_model="gpt-5-mini-2025-08-07"
 fi
 if [[
   -n "$KFC_AGENT_MODEL" &&
@@ -70,7 +70,7 @@ fi
 if [[ "$KFC_MONITOR_PROVIDER" == "google" ]]; then
   expected_monitor_model="gemini-3.1-flash-lite"
 else
-  expected_monitor_model="gpt-4.1-mini"
+  expected_monitor_model="gpt-5-mini-2025-08-07"
 fi
 if [[
   -n "$KFC_MONITOR_MODEL" &&
