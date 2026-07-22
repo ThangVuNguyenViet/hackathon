@@ -1,7 +1,7 @@
 import type { ConversationTurn } from '../domain/types.js';
 import { KFC_GENUI_SCHEMA_VERSION } from '../genui/kfcGenUi.js';
-import type { AgentTurnInput } from '../graph/agentTurnState.js';
-import { emitDashboardEvent } from '../graph/turnSupport.js';
+import type { AgentTurnInput } from './agentTurn.js';
+import { emitDashboardEvent } from './turnSupport.js';
 import {
   responseProfileForChannel,
   type ResponseProfile,
@@ -32,10 +32,7 @@ export async function loadOrAppendAgentCurrentUserTurn(
       input.externalMessageId,
     )
     : undefined;
-  if (
-    input.confirmationResume ||
-    currentUserTurn
-  ) {
+  if (currentUserTurn) {
     return currentUserTurn;
   }
 

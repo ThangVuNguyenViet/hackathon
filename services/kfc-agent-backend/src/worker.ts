@@ -36,7 +36,6 @@ import { DashboardEventBus } from "./dashboard/eventBus.js";
 import { dashboardSessionTarget } from "./dashboard/sessionVisibility.js";
 import type { AgentMode, DashboardEvent } from "./domain/types.js";
 import { D1Store, type D1DatabaseLike } from "./persistence/d1Store.js";
-import { D1CheckpointSaver } from "./persistence/d1CheckpointSaver.js";
 import type { ConversationStore } from "./persistence/memoryStore.js";
 import { sessionIdForConversationEvent } from "./session/sessionContext.js";
 import { fetchCatalogObservation } from "./catalog/catalogObservation.js";
@@ -143,9 +142,6 @@ export interface WorkerEnv {
   KFC_AGENT_MODEL?: string;
   KFC_MONITOR_PROVIDER?: "openai" | "google";
   KFC_MONITOR_MODEL?: string;
-  KFC_CONFIRMATION_SIGNING_KEY_ID?: string;
-  KFC_CONFIRMATION_SIGNING_SECRET?: string;
-  KFC_CONFIRMATION_PREVIOUS_SIGNING_KEYS?: string;
   OPENAI_API_KEY?: string;
   GOOGLE_API_KEY?: string;
   OPENAI_BASE_URL?: string;
@@ -483,11 +479,6 @@ export default {
     ) {
       return respondWithAgentBackground(
         await handlers.chatKfcGenUiAction(await readJson(request)),
-      );
-    }
-    if (request.method === "POST" && url.pathname === "/chat/kfc/confirmations/resume") {
-      return respondWithAgentBackground(
-        await handlers.confirmationResume(await readJson(request)),
       );
     }
     if (request.method === "POST" && url.pathname === "/chat/kfc/runs") {

@@ -92,7 +92,6 @@ import {
   type CustomerRun,
   type CustomerRunEvent,
 } from "../customerRuns/contracts.js";
-import { agentCheckpointThreadPrefix } from '../session/sessionContext.js';
 import {
   D1Result,
   D1PreparedStatement,
@@ -234,28 +233,6 @@ export class D1StoreAgentOperations extends D1StoreConversationOperations {
       .bind(runId)
       .all<AgentRunTurnRow>();
     return (rows.results ?? []).map(agentRunTurnFromRow);
-  }
-
-  async listCheckpointIdentifiers(sessionId: string) {
-    const agentPrefix = agentCheckpointThreadPrefix(sessionId);
-    const rows = await this.db.prepare(
-      `SELECT thread_id, checkpoint_ns, checkpoint_id, parent_checkpoint_id
-       FROM langgraph_checkpoints
-       WHERE thread_id = ?
-          OR substr(thread_id, 1, length(?)) = ?
-       ORDER BY thread_id ASC, checkpoint_ns ASC, checkpoint_id ASC`,
-    ).bind(sessionId, agentPrefix, agentPrefix).all<{
-      thread_id: string;
-      checkpoint_ns: string;
-      checkpoint_id: string;
-      parent_checkpoint_id: string | null;
-    }>();
-    return (rows.results ?? []).map((row) => ({
-      checkpointThreadId: row.thread_id,
-      checkpointNamespace: row.checkpoint_ns,
-      checkpointId: row.checkpoint_id,
-      parentCheckpointId: row.parent_checkpoint_id,
-    }));
   }
 
   async getSessionAgentState(sessionId: string): Promise<SessionAgentState> {

@@ -20,7 +20,6 @@ import {
   type WebhookDeliveryChannel,
   type WebhookDeliveryStatus,
   type WebhookDelivery,
-  type CheckpointIdentifier,
   type SessionControl,
   type TransitionSessionAuthorityInput,
   type TransitionSessionAuthorityResult,
@@ -596,8 +595,6 @@ export class MemoryStore
   async listAgentRunTurns(runId: string): Promise<AgentRunTurn[]> {
     return listMemoryAgentRunTurns(runId, this.memoryAgentRunState());
   }
-
-  async listCheckpointIdentifiers(_sessionId: string): Promise<CheckpointIdentifier[]> { return []; }
 
   async getSessionAgentState(sessionId: string): Promise<SessionAgentState> {
     return getMemorySessionAgentState(sessionId, this.sessionAgentStates);

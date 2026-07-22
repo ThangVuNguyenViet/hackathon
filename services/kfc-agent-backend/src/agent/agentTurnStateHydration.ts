@@ -2,14 +2,14 @@ import {
   selectedPaymentMethodAuthoritySchema,
 } from '../domain/opaqueProviderId.js';
 import type { ConversationTurn } from '../domain/types.js';
-import type { AgentTurnInput } from '../graph/agentTurnState.js';
+import type { AgentTurnInput } from './agentTurn.js';
 import {
   agentStateWithCurrentOrderStatusEvidence,
-} from '../graph/orderStatusEvidenceProjection.js';
-import type { AgentGraphState } from '../graph/state.js';
+} from './orderStatusEvidenceProjection.js';
+import type { AgentState } from './agentState.js';
 import {
   loadPriorVerifiedState,
-} from '../graph/verifiedState.js';
+} from './verifiedState.js';
 import { countCustomerTurns } from '../monitor/sessionIntelligence.js';
 import { buildBoundedRecentTurns } from '../session/sessionContext.js';
 import {
@@ -17,7 +17,7 @@ import {
 } from './trustedActionConversation.js';
 
 export interface LoadedAgentTurnState {
-  state: AgentGraphState;
+  state: AgentState;
   customerTurnCount: number;
   currentUserTurn?: ConversationTurn;
 }

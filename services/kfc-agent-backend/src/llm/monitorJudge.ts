@@ -8,8 +8,8 @@ import type {
   DashboardEvent,
   MonitorSessionIntelligence,
 } from "../domain/types.js";
-import type { AgentGraphState } from "../graph/state.js";
-import { buildVerifiedStateSnapshot } from "../graph/verifiedState.js";
+import type { AgentState } from "../agent/agentState.js";
+import { buildVerifiedStateSnapshot } from "../agent/verifiedState.js";
 import type {
   MonitorSessionIntelligenceJudge,
   MonitorSessionIntelligenceJudgeInput,
@@ -132,7 +132,7 @@ function buildPrompt(input: MonitorSessionIntelligenceJudgeInput): string {
   );
 }
 
-function stateForPrompt(state: AgentGraphState): Record<string, unknown> {
+function stateForPrompt(state: AgentState): Record<string, unknown> {
   const verifiedState = buildVerifiedStateSnapshot(state);
   return {
     sessionId: state.sessionId,

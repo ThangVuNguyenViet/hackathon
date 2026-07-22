@@ -2,7 +2,6 @@ import { existsSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { z } from "zod";
-import type { BaseCheckpointSaver } from "@langchain/langgraph";
 import { AgentRunCoordinator } from "../agentRuns/coordinator.js";
 import type {
   ChannelMediaDeliveryResult,
@@ -51,7 +50,7 @@ import { customerCommandFromVerifiedAction } from "../domain/customerCommand.js"
 import {
   isKfcGenUiAttachment,
 } from "../genui/kfcGenUi.js";
-import type { AgentGraphState } from "../graph/state.js";
+import type { AgentState } from "../agent/agentState.js";
 import {
   calculateMonitorSessionIntelligence,
   preserveMonitorContext,

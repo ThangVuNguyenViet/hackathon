@@ -1,9 +1,9 @@
 import type { Address, MenuItem, Order } from '../domain/types.js';
 import type { VerifiedRef } from '../domain/verifiedRef.js';
-import type { AgentGraphState } from "../graph/state.js";
+import type { AgentState } from "../agent/agentState.js";
 import {
   activeCartSupersedesSubmittedOrder,
-} from "../graph/activeCheckout.js";
+} from "../agent/activeCheckout.js";
 import type { PaymentAttempt, ToolName } from "../ordering/types.js";
 import {
   KFC_GENUI_SCHEMA_VERSION,
@@ -28,7 +28,7 @@ const smartMenuActions: KfcGenUiAttachment['actions'] = [
   { id: "add_items", label: "Xác nhận món", intent: "primary" },
 ];
 
-function verifiedMenuItems(state: AgentGraphState) {
+function verifiedMenuItems(state: AgentState) {
   return (
     state.activeMenuCollection?.result.items ??
     state.menuSearchResults ??
@@ -48,7 +48,7 @@ function verifiedMenuCategories(
 }
 
 function menuCollectionData(
-  state: AgentGraphState,
+  state: AgentState,
   includeCurrentPromotionEvidence: boolean,
 ): Record<string, unknown> {
   const items = verifiedMenuItems(state);
@@ -91,9 +91,9 @@ type PaymentStatusPresentation =
     };
 
 export interface SelectKfcGenUiInput {
-  state: AgentGraphState;
+  state: AgentState;
   /** Full state persisted with this turn; presentation policy may hide fields but cannot change authority. */
-  authorityState?: AgentGraphState;
+  authorityState?: AgentState;
   turnToolNames: ToolName[];
   reuseVerifiedMenuResults?: boolean;
   /**
@@ -153,7 +153,7 @@ function paymentOrderPresentation(
 }
 
 function paymentStatusEvidence(
-  state: AgentGraphState,
+  state: AgentState,
   turnToolNames: ToolName[],
   currentCheck?: SelectKfcGenUiInput['paymentStatusPresentation'],
 ): PaymentStatusEvidence | undefined {
@@ -231,7 +231,7 @@ function moneyVnd(value: unknown): string {
 }
 
 function paymentActionLabel(
-  state: AgentGraphState,
+  state: AgentState,
   methodId: string | undefined,
 ): string {
   return state.paymentMethodEvidence?.find(
@@ -259,14 +259,14 @@ function selectKfcGenUiAttachmentUnbound(
   const hideSubmittedHistory =
     activeCartSupersedesSubmittedOrder(presentationState) &&
     !refreshedSubmittedStatus;
-  const postOrderState: AgentGraphState = hideSubmittedHistory
+  const postOrderState: AgentState = hideSubmittedHistory
     ? {
         ...presentationState,
         order: undefined,
         paymentAttempt: undefined,
       }
     : presentationState;
-  const authorizedPostOrderState: AgentGraphState = {
+  const authorizedPostOrderState: AgentState = {
     ...postOrderState,
     paymentAttempt: paymentAttemptForVerifiedOrder(
       postOrderState.paymentAttempt,

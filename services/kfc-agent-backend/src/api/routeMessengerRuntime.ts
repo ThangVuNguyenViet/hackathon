@@ -2,7 +2,6 @@ import { existsSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { z } from "zod";
-import type { BaseCheckpointSaver } from "@langchain/langgraph";
 import { AgentRunCoordinator } from "../agentRuns/coordinator.js";
 import type {
   ChannelMediaDeliveryResult,
@@ -52,8 +51,8 @@ import { customerCommandFromVerifiedAction } from "../domain/customerCommand.js"
 import {
   isKfcGenUiAttachment,
 } from "../genui/kfcGenUi.js";
-import { runAgentTurn } from "../graph/buildGraph.js";
-import type { AgentGraphState } from "../graph/state.js";
+import { runAgentTurn } from "../agent/kfcAgent.js";
+import type { AgentState } from "../agent/agentState.js";
 import {
   calculateMonitorSessionIntelligence,
   preserveMonitorContext,
@@ -105,9 +104,6 @@ import { eventFromMessengerDelivery, sendMessengerSenderAction, dashboardEventId
 
 import type { RouteCommerceRuntime } from './routeCommerceRuntime.js';
 import type { RouteAgentRuntime } from './routeAgentRuntime.js';
-import {
-  persistCanonicalConfirmationPause,
-} from './confirmationPausePersistence.js';
 import {
   messengerGuestAuthorityForClaimedRun,
 } from './routeMessengerGuestAuthority.js';
@@ -631,51 +627,10 @@ export function createRouteMessengerRuntime(input: { options: RouteOptions; stor
           guestCheckoutAuthority,
           runGuard,
           tracer: options.agentTracer,
-          checkpointer: options.checkpointer,
         });
         if (output.suppressed || !(await isCurrentRun())) {
           await suppressRun("run_not_current_before_delivery");
           return { status: "skipped", errorCode: "stale_agent_run" };
-        }
-        if (output.pause) {
-          await persistCanonicalConfirmationPause({
-            store,
-            sessionId: run.sessionId,
-            customerId: run.externalUserId,
-            channel: run.channel,
-            pause: output.pause,
-            accessContext: undefined,
-            guestCheckoutAuthority,
-            checkpointer: options.checkpointer,
-            runCommit: {
-              fence: commitFence,
-              state: output.state,
-            },
-          });
-          const finalized = await updateExecutingRun({
-            status: 'completed',
-            deliveryStatus: 'not_applicable',
-            errorCode: null,
-            errorMessage: null,
-            completedAt: new Date().toISOString(),
-          });
-          if (finalized.status !== 'committed') {
-            return {
-              status: 'skipped',
-              errorCode: 'stale_agent_run',
-            };
-          }
-          for (const turn of linkedTurns) {
-            await store.markPendingCustomerTurnClaimed(
-              turn.turnId,
-              run.id,
-            );
-            await store.markWebhookDeliveryProcessed(
-              run.channel,
-              turn.externalMessageId,
-            );
-          }
-          return { status: 'processed' };
         }
         presentation = output.presentation;
         if (!output.assistantTurnId) {

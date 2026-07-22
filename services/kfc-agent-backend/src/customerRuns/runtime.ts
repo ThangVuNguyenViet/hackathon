@@ -3,9 +3,6 @@ import {
   type KfcGenUiAttachment,
 } from '../genui/kfcGenUi.js';
 import type {
-  ConfirmationApprovalPausePointer,
-} from '../api/confirmationPausePersistence.js';
-import type {
   ConversationStore,
   CreateCustomerRunInput,
 } from '../persistence/memoryStore.js';
@@ -30,7 +27,6 @@ type ExecutionResult =
       responseText: string;
       genUi?: KfcGenUiAttachment;
       assistantTurnId?: string | null;
-      approvalPause?: ConfirmationApprovalPausePointer;
     }
   | {
       status: 'superseded';
@@ -421,9 +417,6 @@ export class CustomerRunCoordinator {
             status: 'completed',
             responseText: result.responseText,
             assistantTurnId: result.assistantTurnId ?? null,
-            ...(result.approvalPause
-              ? { approvalPause: result.approvalPause }
-              : {}),
           },
         },
       ]))) {

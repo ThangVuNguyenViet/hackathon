@@ -1,10 +1,8 @@
 import { mkdir, writeFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import { Client } from 'langsmith';
-import {
-  KFC_AGENT_GRAPH_NODE_NAMES,
-  KFC_AGENT_RUNTIME_ID,
-} from '../src/agent/agentStateGraph.js';
+const KFC_AGENT_GRAPH_NODE_NAMES = ['kfc_agent_turn'] as const;
+const KFC_AGENT_RUNTIME_ID = 'simple-model-tool-loop';
 import {
   agentModelProfiles,
   type AgentModelIdentity,

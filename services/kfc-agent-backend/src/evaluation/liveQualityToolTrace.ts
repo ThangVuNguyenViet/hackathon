@@ -5,7 +5,7 @@ import {
 } from '../agent/responseEvidenceContracts.js';
 import {
   canonicalJson,
-} from '../graph/turnSupport.js';
+} from '../agent/turnSupport.js';
 import {
   TOOL_NAMES,
   type ToolTracePublicationAuditV2,

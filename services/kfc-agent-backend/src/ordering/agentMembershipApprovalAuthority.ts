@@ -3,7 +3,7 @@ import type {
   GeneratedMembershipToolDefinition,
   GeneratedMembershipWalletVoucher,
 } from "../fixtures/schema.js";
-import type { AgentGraphState } from "../graph/state.js";
+import type { AgentState } from "../agent/agentState.js";
 import type {
   CommerceApprovalCapability,
   VerifiedCollectionSnapshot,
@@ -32,7 +32,7 @@ export type MembershipApprovalEvidence =
     };
 
 function activeSnapshot<Item>(
-  state: AgentGraphState | undefined,
+  state: AgentState | undefined,
   toolName: "listMembershipRewards" | "listMembershipWallet" |
     "listMembershipTools",
 ): VerifiedCollectionSnapshot<Item> | undefined {
@@ -44,7 +44,7 @@ function activeSnapshot<Item>(
 }
 
 export function currentMembershipApprovalEvidence(input: {
-  state: AgentGraphState | undefined;
+  state: AgentState | undefined;
   capability: MembershipApprovalCapability;
   targetId: string;
   channel?: string;

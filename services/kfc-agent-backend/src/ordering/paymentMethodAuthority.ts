@@ -1,5 +1,5 @@
 import type { GeneratedPaymentMethod } from '../fixtures/schema.js';
-import type { AgentGraphState } from '../graph/state.js';
+import type { AgentState } from '../agent/agentState.js';
 import {
   opaqueProviderIdSchema,
   paymentMethodCollectionAuthoritySchema,
@@ -18,7 +18,7 @@ export interface VerifiedPaymentMethodAuthority
 }
 
 type PaymentCollectionState = Pick<
-  AgentGraphState,
+  AgentState,
   'activeCollectionKeys' | 'verifiedCollections'
 >;
 
@@ -121,12 +121,12 @@ export function selectedPaymentMethodAuthority(
  * and snapshots that authority before the approval interrupt.
  */
 export function prepareModelAuthoredPaymentSelection(
-  state: AgentGraphState,
+  state: AgentState,
   call: {
     toolName: string;
     arguments: Record<string, unknown>;
   } | undefined,
-): AgentGraphState | undefined {
+): AgentState | undefined {
   if (call?.toolName !== 'createPaymentLink') return state;
   const methodId = opaqueProviderIdSchema.safeParse(call.arguments.methodId);
   if (!methodId.success) return undefined;
@@ -140,10 +140,10 @@ export function prepareModelAuthoredPaymentSelection(
 }
 
 export function stateAfterPaymentApprovalRejection(
-  state: AgentGraphState,
+  state: AgentState,
   call: { toolName: string } | undefined,
   hasStructuredAction: boolean,
-): AgentGraphState {
+): AgentState {
   return !hasStructuredAction && call?.toolName === 'createPaymentLink'
     ? { ...state, selectedPaymentMethod: undefined }
     : state;

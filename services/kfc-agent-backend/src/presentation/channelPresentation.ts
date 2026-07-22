@@ -1,6 +1,6 @@
 import type { Channel } from '../domain/types.js';
 import type { KfcGenUiAttachment } from '../genui/kfcGenUi.js';
-import type { AgentGraphState } from '../graph/state.js';
+import type { AgentState } from '../agent/agentState.js';
 import {
   resolveResponseProfile,
   responseProfileForChannel,
@@ -45,7 +45,7 @@ export interface BuildChannelPresentationInput {
 export interface BuildSocialPresentationInput {
   channel: Exclude<Channel, 'kfc'>;
   standaloneText: string;
-  state: AgentGraphState;
+  state: AgentState;
 }
 
 const structuredCompanionCapabilities: ChannelCapabilities = {
@@ -136,7 +136,7 @@ export function assertPresentationMatchesChannel(
   }
 }
 
-function renderTrustedMediaFromState(state: AgentGraphState): ChannelPresentationMedia[] {
+function renderTrustedMediaFromState(state: AgentState): ChannelPresentationMedia[] {
   const candidates = [
     ...(state.menuItemDetail ? [state.menuItemDetail] : []),
     ...(state.menuSearchResults ?? []),

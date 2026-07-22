@@ -5,7 +5,6 @@ import {
   createWorkerMessengerHistorySync,
 } from './workerMessaging.js';
 import { workerLifecycleOptions } from './workerLifecycle.js';
-import { workerCheckpointer } from './workerStore.js';
 import { loadBundledGeneratedFixtures } from './fixtures/bundledFixtures.js';
 import { createMockClients } from './mock/createMockClients.js';
 import type { DashboardEventBus } from './dashboard/eventBus.js';
@@ -42,12 +41,6 @@ function workerModelEnv(env: WorkerEnv) {
     KFC_AGENT_MODEL: env.KFC_AGENT_MODEL ?? '',
     KFC_MONITOR_PROVIDER: env.KFC_MONITOR_PROVIDER,
     KFC_MONITOR_MODEL: env.KFC_MONITOR_MODEL ?? '',
-    KFC_CONFIRMATION_SIGNING_KEY_ID:
-      env.KFC_CONFIRMATION_SIGNING_KEY_ID ?? 'primary',
-    KFC_CONFIRMATION_SIGNING_SECRET:
-      env.KFC_CONFIRMATION_SIGNING_SECRET ?? '',
-    KFC_CONFIRMATION_PREVIOUS_SIGNING_KEYS:
-      env.KFC_CONFIRMATION_PREVIOUS_SIGNING_KEYS ?? '',
     OPENAI_API_KEY: env.OPENAI_API_KEY ?? '',
     GOOGLE_API_KEY: env.GOOGLE_API_KEY ?? '',
     OPENAI_BASE_URL: env.OPENAI_BASE_URL ?? 'https://api.openai.com/v1',
@@ -163,7 +156,6 @@ export function buildWorkerRouteOptions(
 
   const routeOptions: RouteOptions = {
     ...options,
-    checkpointer: workerCheckpointer(env.DB),
     fixtures,
     kfcCommerceProvider: options.kfcCommerceProvider ?? {
       cart: fixtureProvider.cart,

@@ -3,7 +3,7 @@ import {
   providerHandoffResolutionSchema,
 } from '../commerce/providerResponseSchemas.js';
 import type { Cart, CustomerAccessContext, Order } from '../domain/types.js';
-import type { AgentGraphState } from '../graph/state.js';
+import type { AgentState } from '../agent/agentState.js';
 import type { RunCommitFence } from '../persistence/contracts.js';
 import type {
   GuestCheckoutAuthority,
@@ -141,7 +141,7 @@ function exactCartItemCodes(context: AgentToolExecutorContext): string[] | undef
 }
 
 function activeCollectionSnapshot<Item>(
-  state: AgentGraphState | undefined,
+  state: AgentState | undefined,
   toolName: CollectionToolName,
 ): VerifiedCollectionSnapshot<Item> | undefined {
   const key = state?.activeCollectionKeys?.[toolName];

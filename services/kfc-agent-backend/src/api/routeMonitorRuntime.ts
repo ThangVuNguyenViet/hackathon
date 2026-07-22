@@ -8,12 +8,12 @@ import type {
 import {
   agentTraceProbeRunId,
   type AgentTraceContext,
-} from "../graph/agentTraceContext.js";
-import type { AgentGraphState } from "../graph/state.js";
-import { stateRevision } from "../graph/turnSupport.js";
+} from "../agent/agentTraceContext.js";
+import type { AgentState } from "../agent/agentState.js";
+import { stateRevision } from "../agent/turnSupport.js";
 import {
   buildVerifiedStateSnapshot,
-} from "../graph/verifiedState.js";
+} from "../agent/verifiedState.js";
 import {
   calculateMonitorSessionIntelligence,
   countCustomerTurns,
@@ -30,7 +30,7 @@ import type { RouteOptions } from "./routeHandlerContracts.js";
 import { dashboardEventId } from "./routeHandlerSupport.js";
 
 interface MonitorAgentTurnOutput {
-  state: AgentGraphState;
+  state: AgentState;
   assistantTurnId?: string | null;
 }
 
@@ -62,7 +62,7 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 }
 
 export async function privacySafeMonitorTraceInputs(input: {
-  state: AgentGraphState;
+  state: AgentState;
   dashboardEvents: ReturnType<DashboardEventBus["getEvents"]>;
   customerTurnCount: number;
 }): Promise<Record<string, unknown>> {
@@ -134,7 +134,7 @@ export function createRouteMonitorRuntime(input: {
   async function reserveDurableMonitorRefinement(input: {
     sessionId: string;
     evidenceRevision: string;
-    state: AgentGraphState;
+    state: AgentState;
     dashboardEvents: ReturnType<DashboardEventBus["getEvents"]>;
     customerTurnCount: number;
     humanJoined?: boolean;
@@ -515,7 +515,7 @@ export function createRouteMonitorRuntime(input: {
     const latestUserTurn = [...turns]
       .reverse()
       .find((turn) => turn.role === "user");
-    const state: AgentGraphState = {
+    const state: AgentState = {
       sessionId: input.sessionId,
       customerId: target.externalUserId,
       channel: target.channel as Channel,
@@ -617,7 +617,7 @@ export function createRouteMonitorRuntime(input: {
 
   function deferMonitorSessionIntelligenceRefinement(input: {
     sessionId: string;
-    state: AgentGraphState;
+    state: AgentState;
     dashboardEvents: ReturnType<DashboardEventBus["getEvents"]>;
     customerTurnCount: number;
     humanJoined?: boolean;
@@ -798,7 +798,7 @@ export function createRouteMonitorRuntime(input: {
     const latestUserTurn = [...turns]
       .reverse()
       .find((turn) => turn.role === "user");
-    const state: AgentGraphState = {
+    const state: AgentState = {
       sessionId: input.sessionId,
       customerId: target.externalUserId,
       channel: "messenger",

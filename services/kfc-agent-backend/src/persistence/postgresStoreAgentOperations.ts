@@ -77,8 +77,6 @@ import {
   type CustomerRun,
   type CustomerRunEvent,
 } from '../customerRuns/contracts.js';
-import { agentCheckpointThreadPrefix } from '../session/sessionContext.js';
-import { PostgresCheckpointSaver } from './postgresCheckpointSaver.js';
 import {
   Queryable,
   ConversationTurnRow,
@@ -234,29 +232,6 @@ export class PostgresStoreAgentOperations extends PostgresStoreConversationOpera
       [runId],
     );
     return result.rows.map(agentRunTurnFromRow);
-  }
-
-  async listCheckpointIdentifiers(sessionId: string) {
-    const agentPrefix = agentCheckpointThreadPrefix(sessionId);
-    const result = await this.db.query<{
-      thread_id: string;
-      checkpoint_ns: string;
-      checkpoint_id: string;
-      parent_checkpoint_id: string | null;
-    }>(
-      `SELECT thread_id, checkpoint_ns, checkpoint_id, parent_checkpoint_id
-       FROM langgraph_checkpoints
-       WHERE thread_id = $1
-          OR left(thread_id, length($2)) = $2
-       ORDER BY thread_id ASC, checkpoint_ns ASC, checkpoint_id ASC`,
-      [sessionId, agentPrefix],
-    );
-    return result.rows.map((row) => ({
-      checkpointThreadId: row.thread_id,
-      checkpointNamespace: row.checkpoint_ns,
-      checkpointId: row.checkpoint_id,
-      parentCheckpointId: row.parent_checkpoint_id,
-    }));
   }
 
   async getSessionAgentState(sessionId: string): Promise<SessionAgentState> {

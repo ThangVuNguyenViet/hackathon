@@ -1,11 +1,11 @@
-import type { AgentGraphState } from "../graph/state.js";
+import type { AgentState } from "../agent/agentState.js";
 import type {
   ModifierSelectionInput,
   VerifiedCollectionSnapshot,
 } from "./types.js";
 
 export function activeMenuSnapshotContaining(
-  state: AgentGraphState | undefined,
+  state: AgentState | undefined,
   itemCode: string,
 ): VerifiedCollectionSnapshot<{ code: string }> | undefined {
   for (const toolName of ["searchMenu", "recommendAddOns"] as const) {
@@ -24,7 +24,7 @@ export function activeMenuSnapshotContaining(
 }
 
 export function itemCodeIsVerified(
-  state: AgentGraphState | undefined,
+  state: AgentState | undefined,
   itemCode: string,
 ): boolean {
   return Boolean(
@@ -43,7 +43,7 @@ function positiveInteger(value: unknown): number | undefined {
 }
 
 export function authoritativeModifiers(
-  state: AgentGraphState | undefined,
+  state: AgentState | undefined,
   itemCode: string,
   selections: Array<{
     groupId: string;

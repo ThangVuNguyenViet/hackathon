@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import type { AgentGraphState } from '../graph/state.js';
+import type { AgentState } from '../agent/agentState.js';
 import { digestCommerceAction } from '../ordering/approvalReceipt.js';
 import {
   activePaymentMethodCollectionAuthority,
@@ -125,7 +125,7 @@ function canonicalJson(value: unknown): string {
  * excluded so a semantically unchanged reply does not invalidate an action.
  */
 export function kfcGenUiVerifiedStateRevision(
-  state: Partial<AgentGraphState>,
+  state: Partial<AgentState>,
 ): string {
   const relevantState = {
     cart: state.cart ?? null,

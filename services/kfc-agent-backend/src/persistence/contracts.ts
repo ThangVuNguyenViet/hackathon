@@ -178,7 +178,7 @@ export interface ConfirmationPauseRecord {
   requestId: string;
   checkpointThreadId: string;
   checkpointNamespace: string;
-  /** Exact immutable LangGraph checkpoint containing the interrupt. */
+  /** Legacy pause binding retained only for stored-data compatibility. */
   checkpointId: string;
   sessionId: string;
   customerId: string;
@@ -351,13 +351,6 @@ export interface WebhookDelivery {
   lastError: string | null;
   createdAt: string;
   updatedAt: string;
-}
-
-export interface CheckpointIdentifier {
-  checkpointThreadId: string;
-  checkpointNamespace: string;
-  checkpointId: string;
-  parentCheckpointId: string | null;
 }
 
 export interface SessionControl {
@@ -755,7 +748,6 @@ export interface ConversationStore {
   listAgentRuns(sessionId: string): Promise<AgentRun[]>;
   linkAgentRunTurn(input: AgentRunTurn): Promise<AgentRunTurn>;
   listAgentRunTurns(runId: string): Promise<AgentRunTurn[]>;
-  listCheckpointIdentifiers(sessionId: string): Promise<CheckpointIdentifier[]>;
   getSessionAgentState(sessionId: string): Promise<SessionAgentState>;
   setSessionAgentState(input: SessionAgentStateInput): Promise<SessionAgentState>;
   advanceSessionAgentGeneration(

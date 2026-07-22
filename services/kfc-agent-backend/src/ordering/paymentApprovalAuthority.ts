@@ -2,8 +2,8 @@ import type { Order } from '../domain/types.js';
 import type {
   SelectedPaymentMethodAuthority,
 } from '../domain/opaqueProviderId.js';
-import type { AgentGraphState } from '../graph/state.js';
-import { canonicalJson } from '../graph/turnSupport.js';
+import type { AgentState } from '../agent/agentState.js';
+import { canonicalJson } from '../agent/turnSupport.js';
 import {
   activeSupportedPaymentMethod,
   paymentMethodAuthorityMatchesCurrentProvider,
@@ -31,7 +31,7 @@ export interface CapturedPaymentApprovalAuthority {
 }
 
 export function capturePaymentApprovalAuthority(input: {
-  state: AgentGraphState;
+  state: AgentState;
   contextOrder: Order | undefined;
   methodId: string;
 }): CapturedPaymentApprovalAuthority | PaymentApprovalAuthorityFailure {
@@ -72,7 +72,7 @@ export function capturePaymentApprovalAuthority(input: {
 }
 
 export function paymentApprovalAuthorityRemainsCurrent(input: {
-  state: AgentGraphState;
+  state: AgentState;
   contextOrder: Order | undefined;
   captured: CapturedPaymentApprovalAuthority;
   revisions: CommerceAuthorityRevisions;

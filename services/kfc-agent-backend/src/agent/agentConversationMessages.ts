@@ -4,14 +4,14 @@ import {
   HumanMessage,
 } from '@langchain/core/messages';
 import type { ConversationTurn } from '../domain/types.js';
-import type { AgentTurnInput } from '../graph/agentTurnState.js';
-import type { AgentGraphState } from '../graph/state.js';
+import type { AgentTurnInput } from './agentTurn.js';
+import type { AgentState } from './agentState.js';
 import {
   semanticConversationTurns,
 } from './trustedActionConversation.js';
 
 export function freshMessages(
-  state: AgentGraphState,
+  state: AgentState,
   input: AgentTurnInput,
   currentUserTurn: ConversationTurn | undefined,
 ): BaseMessage[] {

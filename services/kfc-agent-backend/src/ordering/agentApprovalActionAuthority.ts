@@ -1,5 +1,5 @@
 import type { Order } from '../domain/types.js';
-import type { AgentGraphState } from '../graph/state.js';
+import type { AgentState } from '../agent/agentState.js';
 import { currentMembershipApprovalEvidence } from './agentMembershipApprovalAuthority.js';
 import {
   agentFailure,
@@ -26,7 +26,7 @@ export function buildVerifiedApprovalAction(input: {
   request: ToolCallRequest;
   canonicalRequest: ToolCallRequest;
   capability: CommerceApprovalCapability;
-  state: AgentGraphState | undefined;
+  state: AgentState | undefined;
   sessionId: string;
   orderPreview: Order | undefined;
   contextOrder: Order | undefined;

@@ -1,5 +1,5 @@
 import type { CustomerAccessContext } from '../domain/types.js';
-import type { AgentGraphState } from '../graph/state.js';
+import type { AgentState } from '../agent/agentState.js';
 import type { RunCommitFence } from '../persistence/contracts.js';
 import { authorizeCustomerAccess } from '../security/customerAccessContext.js';
 import {
@@ -40,7 +40,7 @@ export async function authorizeCommerceApprovalPrincipal(input: {
   verifiedGuestAuthority?: VerifiedGuestApprovalResumeAuthority;
   sessionId: string;
   customerId: string;
-  channel: AgentGraphState['channel'];
+  channel: AgentState['channel'];
 }): Promise<AgentToolCallFailure | undefined> {
   const {
     request,
@@ -157,7 +157,7 @@ export async function authorizeCommerceApprovalPrincipal(input: {
 
 export async function commerceApprovalPrincipalBindingExtension(input: {
   principal: CommerceApprovalPrincipal;
-  state: AgentGraphState | undefined;
+  state: AgentState | undefined;
 }): Promise<
   | Record<string, never>
   | {

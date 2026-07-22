@@ -6,13 +6,13 @@ import type {
   MonitorRiskLevel,
   MonitorSessionIntelligence,
 } from "../domain/types.js";
-import type { AgentGraphState } from "../graph/state.js";
+import type { AgentState } from "../agent/agentState.js";
 import {
   paymentAttemptForVerifiedOrder,
 } from "../ordering/paymentOrderAuthority.js";
 
 export interface CalculateMonitorSessionIntelligenceInput {
-  state: AgentGraphState;
+  state: AgentState;
   dashboardEvents: DashboardEvent[];
   updatedAt?: string;
   customerTurnCount?: number;
@@ -244,7 +244,7 @@ export function calculateMonitorSessionIntelligence(
 }
 
 function commerceFromOrder(
-  order: AgentGraphState["order"],
+  order: AgentState["order"],
 ): MonitorSessionIntelligence["commerce"] {
   if (!order?.commerceEnvironment || !order.commerceProviderProvenance) return undefined;
   return {
@@ -632,12 +632,12 @@ function evidenceIsSupportedByRuntime(
   );
 }
 
-function hasValidFulfillment(state: AgentGraphState): boolean {
+function hasValidFulfillment(state: AgentState): boolean {
   return state.fulfillment?.availability.ok === true;
 }
 
 function addMissingFulfillmentReasons(
-  state: AgentGraphState,
+  state: AgentState,
   reasons: Set<MonitorIntelligenceReason>,
 ): void {
   if (!state.address) reasons.add("missing_address");

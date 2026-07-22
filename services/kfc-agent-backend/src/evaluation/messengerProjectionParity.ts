@@ -1,4 +1,4 @@
-import type { AgentGraphState } from '../graph/state.js';
+import type { AgentState } from '../agent/agentState.js';
 import {
   assertPresentationMatchesChannel,
   buildSocialPresentation,
@@ -11,7 +11,7 @@ import {
 
 export interface MessengerProjectionParityInput {
   projection: VerifiedCommerceProjection<unknown>;
-  state: AgentGraphState;
+  state: AgentState;
   standaloneText: string;
   requiredSemanticFacts: string[];
   forbiddenSemanticFacts?: string[];

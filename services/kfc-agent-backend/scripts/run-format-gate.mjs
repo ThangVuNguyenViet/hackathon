@@ -21,11 +21,9 @@ const candidates = new Set([
   '.prettierrc.json',
   'eslint-warning-baseline.json',
   'eslint.config.mjs',
-  'langgraph.json',
   'package-lock.json',
   'package.json',
   'tsconfig.json',
-  'vitest.config.ts',
   '../../.github/workflows/kfc-genui.yml',
   '../../.github/workflows/openai-geo-canary.yml',
 ]);
@@ -48,7 +46,7 @@ async function collectSourceFiles(directory) {
 
 // The frozen legacy list makes the incremental scope explicit: new files and
 // files removed from the list must be formatted without rewriting old sources.
-for (const directory of ['scripts', 'src', 'test']) {
+for (const directory of ['scripts', 'src']) {
   await collectSourceFiles(directory);
 }
 

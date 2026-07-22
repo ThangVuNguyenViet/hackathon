@@ -2,7 +2,6 @@ import { existsSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { z } from "zod";
-import type { BaseCheckpointSaver } from "@langchain/langgraph";
 import type {
   ExternalClients,
   MessengerClient,
@@ -50,8 +49,8 @@ import {
   kfcGenUiAttachmentForPersistence,
   type KfcGenUiAttachment,
 } from "../genui/kfcGenUi.js";
-import { runAgentTurn } from "../graph/buildGraph.js";
-import type { AgentTurnOutput } from "../graph/agentTurnState.js";
+import { runAgentTurn } from "../agent/kfcAgent.js";
+import type { AgentTurnOutput } from "../agent/agentTurn.js";
 import type { AgentTracer } from "../observability/agentTracing.js";
 import {
   createMockClients,
@@ -90,13 +89,6 @@ import { isRecord, canonicalJson, sha256Fingerprint, kfcSessionIdSchema, kfcChat
 import { messengerDeliveryFailureForStorage, eventFromMessengerDelivery, sendMessengerSenderAction, dashboardEventId, checkCommerceGatewayReadiness, checkCatalogReadiness, runReadinessCheck, checkFixtures, checkMessengerConfig, checkZaloConfig, deeplinkForSession, renderInboxUrlTemplate, ChannelProfileTarget, channelTargetForSession, humanChannelTargetForSession } from './routeHandlerSupport.js';
 
 import type { RouteCommerceRuntime } from './routeCommerceRuntime.js';
-import {
-  confirmationApprovalPausePointerSchema,
-  confirmationPauseForPublicResponse,
-  confirmationPausePointerForDurableEvent,
-  persistCanonicalConfirmationPause,
-  type ConfirmationApprovalPausePointer,
-} from './confirmationPausePersistence.js';
 import { createRouteMonitorRuntime } from "./routeMonitorRuntime.js";
 import { reserveKfcSynchronousRequest } from "./synchronousRequestReservation.js";
 import {
@@ -133,7 +125,6 @@ interface DurableKfcAgentResponseBody {
   replyIntent: AgentTurnOutput['replyIntent'];
   genUi?: KfcGenUiAttachment;
   status?: AgentTurnOutput['status'];
-  pause?: ConfirmationApprovalPausePointer;
   sessionId: string;
   customerId: string;
   userTurnId: string | null;
@@ -155,7 +146,6 @@ function persistenceSafePresentation(
 
 function durableKfcAgentResponseBody(input: {
   output: AgentTurnOutput;
-  pause?: ConfirmationApprovalPausePointer;
   sessionId: string;
   customerId: string;
   userTurnId: string | null;
@@ -174,7 +164,6 @@ function durableKfcAgentResponseBody(input: {
         }
       : {}),
     ...(input.output.status ? { status: input.output.status } : {}),
-    ...(input.pause ? { pause: input.pause } : {}),
     sessionId: input.sessionId,
     customerId: input.customerId,
     userTurnId: input.userTurnId,
@@ -304,74 +293,12 @@ export function createRouteAgentRuntime(input: { options: RouteOptions; store: C
     const streamingObserver = streamingRunObservers.get(
       streamingRunObserverKey(input.sessionId, input.clientMessageId),
     );
-    const isStreamingRun =
-      input.runGuard !== undefined || streamingObserver !== undefined;
     const reservation = await reserveKfcSynchronousRequest({
       store,
       sessionId: input.sessionId,
       clientMessageId: input.clientMessageId,
       bindingFingerprint: requestFingerprint,
       locallyActiveRequestIds: locallyActiveSynchronousRequests,
-      ...(!isStreamingRun
-        ? {
-            projectResponse: async (
-              response: HandlerResponse,
-            ): Promise<HandlerResponse> => {
-              if (!isRecord(response.body)) return response;
-              const rawPause = response.body.pause;
-              if (rawPause === undefined) return response;
-              const pointer =
-                confirmationApprovalPausePointerSchema.safeParse(
-                  rawPause,
-                );
-              if (!pointer.success) {
-                return {
-                  status: 503,
-                  body: {
-                    errorCode:
-                      'agent_approval_authority_unavailable',
-                  },
-                };
-              }
-              if (!options.confirmationApprovalKeyRing) {
-                return {
-                  status: 503,
-                  body: {
-                    errorCode:
-                      'agent_approval_authority_unconfigured',
-                  },
-                };
-              }
-              try {
-                const publicPause =
-                  await confirmationPauseForPublicResponse({
-                    pause: pointer.data,
-                    store,
-                    accessContext: await kfcProofAccessContext(
-                      input.sessionId,
-                      input.customerId,
-                    ),
-                    keyRing: options.confirmationApprovalKeyRing,
-                  });
-                return {
-                  ...response,
-                  body: {
-                    ...response.body,
-                    pause: publicPause,
-                  },
-                };
-              } catch {
-                return {
-                  status: 503,
-                  body: {
-                    errorCode:
-                      'agent_approval_authority_unavailable',
-                  },
-                };
-              }
-            },
-          }
-        : {}),
     });
     if (reservation.status === "response") return reservation.response;
 
@@ -410,7 +337,6 @@ export function createRouteAgentRuntime(input: { options: RouteOptions; store: C
         dashboard,
         agentModel: options.agent?.model,
         tracer: options.agentTracer,
-        checkpointer: options.checkpointer,
         accessContext,
         observeRun: input.observeRun ?? streamingObserver?.observe,
         runGuard,
@@ -439,39 +365,8 @@ export function createRouteAgentRuntime(input: { options: RouteOptions; store: C
         .reverse()
         .find((turn) => turn.externalMessageId === input.clientMessageId);
 
-      let publicPause:
-        | Awaited<
-            ReturnType<typeof confirmationPausePointerForDurableEvent>
-          >
-        | undefined;
-      if (output.pause) {
-        await persistCanonicalConfirmationPause({
-          store,
-          sessionId: input.sessionId,
-          customerId: input.customerId,
-          channel: "kfc",
-          pause: output.pause,
-          accessContext,
-          checkpointer: options.checkpointer,
-          ...(runGuard
-            ? {
-                runCommit: {
-                  fence: runGuard.commitFence,
-                  state: output.state,
-                },
-              }
-            : {}),
-        });
-        publicPause =
-          await confirmationPausePointerForDurableEvent({
-            pause: output.pause,
-            store,
-          });
-      }
-
       const responseBody = durableKfcAgentResponseBody({
         output,
-        ...(publicPause ? { pause: publicPause } : {}),
         sessionId: input.sessionId,
         customerId: input.customerId,
         userTurnId: userTurn?.id ?? null,
@@ -622,7 +517,7 @@ export function createRouteAgentRuntime(input: { options: RouteOptions; store: C
     const events = await store.listEvents(sessionId);
     for (let index = events.length - 1; index >= 0; index -= 1) {
       const event = events[index];
-      if (event?.sourceType !== "graph:verified_state") continue;
+      if (event?.sourceType !== "agent:verified_state") continue;
       const value = event.payload.verifiedState;
       if (
         typeof value !== "object" ||
@@ -632,7 +527,7 @@ export function createRouteAgentRuntime(input: { options: RouteOptions; store: C
         return;
       }
       const { handoff: _handoff, ...verifiedState } = value as Record<string, unknown>;
-      await store.appendEvent(sessionId, "graph:verified_state", { verifiedState });
+      await store.appendEvent(sessionId, "agent:verified_state", { verifiedState });
       return;
     }
   }
@@ -645,7 +540,7 @@ export function createRouteAgentRuntime(input: { options: RouteOptions; store: C
     const events = await store.listEvents(sessionId);
     for (let index = events.length - 1; index >= 0; index -= 1) {
       const event = events[index];
-      if (event?.sourceType !== "graph:verified_state") continue;
+      if (event?.sourceType !== "agent:verified_state") continue;
       const verifiedState = event.payload.verifiedState;
       return isRecord(verifiedState) && isRecord(verifiedState.handoff)
         ? "queued"

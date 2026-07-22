@@ -65,7 +65,6 @@ export function registerRoutes(server: FastifyInstance, options: RouteOptions = 
     return send(reply, await handlers.chatKfcMessage(request.body));
   });
   server.post('/chat/kfc/genui-action', async (request, reply) => send(reply, await handlers.chatKfcGenUiAction(request.body)));
-  server.post('/chat/kfc/confirmations/resume', async (request, reply) => send(reply, await handlers.confirmationResume(request.body)));
   server.post('/chat/kfc/runs', async (request, reply) => send(reply, await handlers.chatKfcStartRun(request.body)));
   server.post('/chat/kfc/runs/:runId/cancel', async (request, reply) => {
     const params = z.object({ runId: z.string().min(1) }).parse(request.params);

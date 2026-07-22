@@ -11,7 +11,7 @@ import type {
   Order,
   ToolSideEffectClass,
 } from "../domain/types.js";
-import type { AgentGraphState } from "../graph/state.js";
+import type { AgentState } from "../agent/agentState.js";
 import { authorizeCustomerAccess } from "../security/customerAccessContext.js";
 import {
   parseToolArguments,
@@ -40,7 +40,7 @@ import { executePaymentToolCall } from './paymentToolExecution.js';
 
 export interface ExecutorContext {
   externalCallContext: ExternalCallContext;
-  state?: AgentGraphState;
+  state?: AgentState;
   accessContext?: CustomerAccessContext;
   cart?: CartWithModifiers;
   address?: Address;
@@ -129,7 +129,7 @@ function buildVoucherCart(subtotalVnd: number): Cart {
 }
 
 function normalizeExecution(
-  requestOrState: ToolCallRequest | AgentGraphState,
+  requestOrState: ToolCallRequest | AgentState,
   maybeRequest?: ToolCallRequest,
   maybeContext?: ExecutorContext,
 ): { request: ToolCallRequest; context: ExecutorContext } {
@@ -271,13 +271,13 @@ export async function executeToolCall(
 ): Promise<ToolCallResult>;
 export async function executeToolCall(
   clients: ExternalClients,
-  state: AgentGraphState,
+  state: AgentState,
   request: ToolCallRequest,
   context: ExecutorContext,
 ): Promise<ToolCallResult>;
 export async function executeToolCall(
   clients: ExternalClients,
-  requestOrState: ToolCallRequest | AgentGraphState,
+  requestOrState: ToolCallRequest | AgentState,
   maybeRequestOrContext?: ToolCallRequest | ExecutorContext,
   maybeContext?: ExecutorContext,
 ): Promise<ToolCallResult> {
@@ -431,19 +431,11 @@ export async function executeToolCall(
         );
       return resultFromToolResult(
         request.toolName,
-        "changes" in args
-          ? await clients.cart.applyChanges(
-              cart,
-              args.changes,
-              context.externalCallContext,
-            )
-          : await clients.cart.updateCart(
-              cart,
-              args.itemCode,
-              args.quantity,
-              args.modifiers,
-              context.externalCallContext,
-            ),
+        await clients.cart.applyChanges(
+          cart,
+          args.changes,
+          context.externalCallContext,
+        ),
       );
     }
     case "previewCart":

@@ -1,9 +1,5 @@
 import type { BuildServerOptions } from "./server.js";
-import { z } from 'zod';
 import type { AppEnv } from "../config/env.js";
-import {
-  createConfirmationApprovalKeyRing,
-} from './confirmationApprovalCapability.js';
 import {
   createAgentChatModel,
   resolveAgentModelProfile,
@@ -22,55 +18,6 @@ import { LangSmithShowcaseScenarioSource } from "../showcase/showcase.js";
 function optionalValue(value: string | undefined): string | undefined {
   const normalized = value?.trim();
   return normalized ? normalized : undefined;
-}
-
-const previousConfirmationSigningKeysSchema = z.array(z.object({
-  keyId: z.string().regex(/^[A-Za-z0-9._-]{1,64}$/u),
-  secret: z.string().min(32),
-}).strict()).max(4);
-
-function confirmationApprovalKeyRing(
-  env: ServerOptionsEnv,
-) {
-  const secret = optionalValue(env.KFC_CONFIRMATION_SIGNING_SECRET);
-  const rawPrevious = optionalValue(
-    env.KFC_CONFIRMATION_PREVIOUS_SIGNING_KEYS,
-  );
-  if (!secret) {
-    if (rawPrevious) {
-      throw new Error(
-        'KFC_CONFIRMATION_SIGNING_SECRET is required when previous confirmation keys are configured',
-      );
-    }
-    return undefined;
-  }
-  let previous: z.infer<
-    typeof previousConfirmationSigningKeysSchema
-  > = [];
-  if (rawPrevious) {
-    let raw: unknown;
-    try {
-      raw = JSON.parse(rawPrevious) as unknown;
-    } catch {
-      throw new Error(
-        'KFC_CONFIRMATION_PREVIOUS_SIGNING_KEYS must be valid JSON',
-      );
-    }
-    const parsed = previousConfirmationSigningKeysSchema.safeParse(raw);
-    if (!parsed.success) {
-      throw new Error(
-        'KFC_CONFIRMATION_PREVIOUS_SIGNING_KEYS is invalid',
-      );
-    }
-    previous = parsed.data;
-  }
-  return createConfirmationApprovalKeyRing({
-    active: {
-      keyId: env.KFC_CONFIRMATION_SIGNING_KEY_ID,
-      secret,
-    },
-    previous,
-  });
 }
 
 // Older callers may omit the switch; an absent mode always takes the
@@ -167,7 +114,6 @@ export function buildServerOptionsFromEnv(
     zaloAccessToken: optionalValue(env.ZALO_ACCESS_TOKEN),
     zaloInboxUrlTemplate: optionalValue(env.ZALO_INBOX_URL_TEMPLATE),
     zaloApiBaseUrl: optionalValue(env.ZALO_API_BASE_URL),
-    confirmationApprovalKeyRing: confirmationApprovalKeyRing(env),
     agent,
     monitorJudge,
     agentTracer: langsmithApiKey

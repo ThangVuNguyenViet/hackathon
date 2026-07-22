@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
 import { isDeepStrictEqual } from 'node:util';
-import { canonicalJson } from '../graph/turnSupport.js';
+import { canonicalJson } from '../agent/turnSupport.js';
 import type {
   LiveQualityExperimentOutput,
   ScenarioArgumentConstraint,

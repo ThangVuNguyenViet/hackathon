@@ -2,7 +2,6 @@ import { existsSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { z } from "zod";
-import type { BaseCheckpointSaver } from "@langchain/langgraph";
 import type {
   ChannelMediaDeliveryResult,
   ExternalClients,
@@ -60,8 +59,8 @@ import {
   isKfcGenUiAttachment,
   kfcGenUiVerifiedStateRevision,
 } from "../genui/kfcGenUi.js";
-import { runAgentTurn } from "../graph/buildGraph.js";
-import type { AgentGraphState } from "../graph/state.js";
+import { runAgentTurn } from "../agent/kfcAgent.js";
+import type { AgentState } from "../agent/agentState.js";
 import {
   calculateMonitorSessionIntelligence,
   preserveMonitorContext,
@@ -500,7 +499,7 @@ export function createChatRouteHandlers(context: RouteHandlerContext) {
       }
       const latestVerifiedStateEvent = [...await store.listEvents(parsed.data.sessionId)]
         .reverse()
-        .find(({ sourceType }) => sourceType === 'graph:verified_state');
+        .find(({ sourceType }) => sourceType === 'agent:verified_state');
       const latestVerifiedState = latestVerifiedStateEvent?.payload.verifiedState;
       if (
         !isRecord(latestVerifiedState) ||

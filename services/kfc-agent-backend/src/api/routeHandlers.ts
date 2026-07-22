@@ -10,16 +10,12 @@ import { createSystemRouteHandlers } from './routeSystemHandlers.js';
 import { createChatRouteHandlers } from './routeChatHandlers.js';
 import { createChannelRouteHandlers } from './routeChannelHandlers.js';
 import { createDashboardRouteHandlers } from './routeDashboardHandlers.js';
-import {
-  confirmationApprovalPausePointerSchema,
-} from './confirmationPausePersistence.js';
 import { isRecord, type HandlerResponse, type RouteHandlers, type RouteOptions } from './routeHandlerContracts.js';
 export * from './routeHandlerContracts.js';
 import { existsSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { z } from "zod";
-import type { BaseCheckpointSaver } from "@langchain/langgraph";
 import type {
   ChannelMediaDeliveryResult,
   ExternalClients,
@@ -68,8 +64,8 @@ import { customerCommandFromVerifiedAction } from "../domain/customerCommand.js"
 import {
   isKfcGenUiAttachment,
 } from "../genui/kfcGenUi.js";
-import { runAgentTurn } from "../graph/buildGraph.js";
-import type { AgentGraphState } from "../graph/state.js";
+import { runAgentTurn } from "../agent/kfcAgent.js";
+import type { AgentState } from "../agent/agentState.js";
 import {
   calculateMonitorSessionIntelligence,
   preserveMonitorContext,
@@ -210,15 +206,6 @@ export function createRouteHandlers(options: RouteOptions = {}): RouteHandlers {
       if (typeof response.body.responseText !== "string") {
         throw new Error("KFC run response is missing customer text");
       }
-      const parsedPause =
-        response.body.pause === undefined
-          ? undefined
-          : confirmationApprovalPausePointerSchema.safeParse(
-              response.body.pause,
-            );
-      if (parsedPause && !parsedPause.success) {
-        throw new Error("KFC run response has an invalid approval pause");
-      }
       const genUi = response.body.genUi;
       if (genUi !== undefined && !isKfcGenUiAttachment(genUi)) {
         throw new Error("KFC run response has invalid GenUI");
@@ -231,9 +218,6 @@ export function createRouteHandlers(options: RouteOptions = {}): RouteHandlers {
           typeof response.body.assistantTurnId === "string"
             ? response.body.assistantTurnId
             : null,
-        ...(parsedPause?.success
-          ? { approvalPause: parsedPause.data }
-          : {}),
       };
     },
   });

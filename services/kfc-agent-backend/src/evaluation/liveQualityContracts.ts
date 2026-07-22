@@ -14,7 +14,7 @@ export const LIVE_QUALITY_EXPECTED_TURN_COUNT = 46;
 export const LIVE_QUALITY_EXPECTED_CASE_COUNT = LIVE_QUALITY_EXPECTED_TURN_COUNT * 2;
 export const LIVE_QUALITY_SYNC_OWNER = 'kfc-live-quality-dataset-sync';
 export const LIVE_QUALITY_SOURCE_PATH =
-  'services/kfc-agent-backend/test/scenarios/scenarioCoverageLedger.ts';
+  'ai-talent-tracks/fnb/conversations';
 
 export type LiveQualityMode = 'genui' | 'text';
 

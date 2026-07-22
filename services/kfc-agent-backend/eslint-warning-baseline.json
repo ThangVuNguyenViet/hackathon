@@ -136,10 +136,10 @@
     "src/genui/kfcGenUiSelector.ts": {
       "@typescript-eslint/no-unsafe-type-assertion": 1
     },
-    "src/graph/contextPolicy.ts": {
+    "src/agent/contextPolicy.ts": {
       "@typescript-eslint/no-unsafe-type-assertion": 1
     },
-    "src/graph/verifiedState.ts": {
+    "src/agent/verifiedState.ts": {
       "@typescript-eslint/no-unsafe-type-assertion": 2
     },
     "src/llm/openAiDiagnostics.ts": {

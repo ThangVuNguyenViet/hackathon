@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import { KFC_AGENT_RUNTIME_ID } from '../agent/agentStateGraph.js';
+const KFC_AGENT_RUNTIME_ID = 'simple-model-tool-loop';
 import type { AgentModelIdentity } from '../config/agentModelProfile.js';
 
 export const LEGACY_GENUI_CAPTURE_PLAN_VERSION = 3;
@@ -356,7 +356,7 @@ export function assertRuntimeBinding(value: ProofRuntimeBinding): void {
     throw new Error('Runtime proof binding contains a mixed or unknown version identity');
   }
   if (value.graph.runtime !== KFC_AGENT_RUNTIME_ID) {
-    throw new Error('Runtime proof binding is not the StateGraph runtime');
+    throw new Error('Runtime proof binding is not the simple agent runtime');
   }
   for (const field of [
     value.commerceEnvironment,

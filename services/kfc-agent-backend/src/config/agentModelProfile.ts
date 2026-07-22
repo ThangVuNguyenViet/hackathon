@@ -85,10 +85,8 @@ export function createAgentChatModel(input: {
       model: input.profile.model,
       temperature: 0,
       useResponsesApi: true,
-      supportsStrictToolCalling: true,
-      // The StateGraph owns and counts every retry. SDK retries would
-      // otherwise become uncounted inference attempts.
-      maxRetries: 0,
+      supportsStrictToolCalling: false,
+      maxRetries: 1,
       configuration: input.openAiBaseUrl?.trim()
         ? { baseURL: input.openAiBaseUrl.trim() }
         : undefined,
@@ -101,7 +99,7 @@ export function createAgentChatModel(input: {
   return new ChatGoogle({
     apiKey: input.googleApiKey,
     model: input.profile.model,
-    maxRetries: 0,
+    maxRetries: 1,
     thinkingLevel: input.profile.thinkingLevel,
   });
 }

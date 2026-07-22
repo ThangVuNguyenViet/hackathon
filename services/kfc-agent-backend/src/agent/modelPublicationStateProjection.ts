@@ -9,12 +9,12 @@ import type {
 import type { VerifiedRef } from '../domain/verifiedRef.js';
 import {
   agentStateWithCurrentOrderStatusEvidence,
-} from '../graph/orderStatusEvidenceProjection.js';
+} from './orderStatusEvidenceProjection.js';
 import {
   activeCartSupersedesSubmittedOrder,
   cartMatchesSubmittedOrder,
-} from '../graph/activeCheckout.js';
-import type { AgentGraphState } from '../graph/state.js';
+} from './activeCheckout.js';
+import type { AgentState } from './agentState.js';
 import type {
   CollectionToolName,
   ContentEvidence,
@@ -88,7 +88,7 @@ export interface ModelPublicationOrder {
 export interface ModelPublicationState {
   cart?: Cart;
   activeCollections?: Partial<Record<CollectionToolName, unknown>>;
-  selectedModifiers?: AgentGraphState['selectedModifiers'];
+  selectedModifiers?: AgentState['selectedModifiers'];
   menuSearchResults?: MenuItem[];
   menuItemDetail?: MenuItem;
   menuModifierOptions?: unknown;
@@ -131,7 +131,7 @@ function projectAddressDraft(
 }
 
 function latestSuccessfulQuoteUsesSavedAddress(
-  state: AgentGraphState,
+  state: AgentState,
 ): boolean {
   const latestQuote = [...(state.toolTrace ?? [])]
     .reverse()
@@ -485,7 +485,7 @@ export function projectCollectionResult(
 }
 
 function projectActiveCollections(
-  state: AgentGraphState,
+  state: AgentState,
   authorizedScopes: ReadonlySet<CustomerAccessScope>,
 ): Partial<Record<CollectionToolName, unknown>> | undefined {
   const projected: Partial<Record<CollectionToolName, unknown>> = {};
@@ -537,7 +537,7 @@ function draftSupersedesAddress(
 }
 
 export function projectModelPublicationState(input: {
-  state: AgentGraphState;
+  state: AgentState;
   currentUserMessageDigest: string;
   authorityDigest: string;
   currentTurnRevision: string;

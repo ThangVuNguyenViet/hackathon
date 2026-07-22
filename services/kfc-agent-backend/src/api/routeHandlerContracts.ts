@@ -3,10 +3,6 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { z } from "zod";
 import type { BaseChatModel } from "@langchain/core/language_models/chat_models";
-import type { BaseCheckpointSaver } from "@langchain/langgraph";
-import type {
-  ConfirmationApprovalKeyRing,
-} from './confirmationApprovalCapability.js';
 import type {
   VerifiedMessengerGuestCheckoutIngress,
 } from '../security/guestCheckoutAuthority.js';
@@ -58,8 +54,8 @@ import { customerCommandFromVerifiedAction } from "../domain/customerCommand.js"
 import {
   isKfcGenUiAttachment,
 } from "../genui/kfcGenUi.js";
-import { runAgentTurn } from "../graph/buildGraph.js";
-import type { AgentGraphState } from "../graph/state.js";
+import { runAgentTurn } from "../agent/kfcAgent.js";
+import type { AgentState } from "../agent/agentState.js";
 import {
   calculateMonitorSessionIntelligence,
   preserveMonitorContext,
@@ -329,8 +325,6 @@ export interface RouteOptions {
   };
   monitorJudge?: MonitorSessionIntelligenceJudge;
   agentTracer?: AgentTracer;
-  checkpointer?: BaseCheckpointSaver;
-  confirmationApprovalKeyRing?: ConfirmationApprovalKeyRing;
   defer?: (task: () => Promise<void>) => void;
   customerRunPaceMs?: number;
   customerRunMaxTextEvents?: number;
@@ -405,7 +399,6 @@ export interface RouteHandlers {
   messengerProofEnvelope(sessionId: string): Promise<HandlerResponse>;
   kfcProofEnvelope(sessionId: string): Promise<HandlerResponse>;
   kfcProofPreconditions(sessionId: string, body: unknown): Promise<HandlerResponse>;
-  confirmationResume(body: unknown): Promise<HandlerResponse>;
   chatKfcMessage(body: unknown): Promise<HandlerResponse>;
   chatKfcGenUiAction(body: unknown): Promise<HandlerResponse>;
   chatKfcStartRun(body: unknown): Promise<HandlerResponse>;

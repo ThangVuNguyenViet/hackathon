@@ -100,40 +100,20 @@ export const toolArgumentSchemas = {
   searchMenu: z.object({ query: z.string().optional().default('') }).strict(),
   getItemDetails: z.object({ code: z.string().min(1) }).strict(),
   getModifierOptions: z.object({ code: z.string().min(1) }).strict(),
-  updateCart: z.union([
-    z.object({
+  updateCart: z.object({
+    changes: z.array(z.object({
       itemCode: z.string().min(1),
       quantity: z.number().int().nonnegative(),
-      modifiers: z
-        .array(
-          z
-            .object({
-              groupId: z.string().min(1),
-              modifierId: z.string().min(1),
-              quantity: z.number().int().positive().optional(),
-              groupName: z.string().min(1).optional(),
-              modifierName: z.string().min(1).optional(),
-              priceDeltaVnd: z.number().int().optional(),
-            })
-            .strict(),
-        )
-        .optional(),
-    }).strict(),
-    z.object({
-      changes: z.array(z.object({
-        itemCode: z.string().min(1),
-        quantity: z.number().int().nonnegative(),
-        modifiers: z.array(z.object({
-          groupId: z.string().min(1),
-          modifierId: z.string().min(1),
-          quantity: z.number().int().positive().optional(),
-          groupName: z.string().min(1).optional(),
-          modifierName: z.string().min(1).optional(),
-          priceDeltaVnd: z.number().int().optional(),
-        }).strict()).optional(),
-      }).strict()).min(1),
-    }).strict(),
-  ]),
+      modifiers: z.array(z.object({
+        groupId: z.string().min(1),
+        modifierId: z.string().min(1),
+        quantity: z.number().int().positive().optional(),
+        groupName: z.string().min(1).optional(),
+        modifierName: z.string().min(1).optional(),
+        priceDeltaVnd: z.number().int().optional(),
+      }).strict()).optional(),
+    }).strict()).min(1),
+  }).strict(),
   previewCart: z.object({}).strict(),
   recommendAddOns: z.object({}).strict(),
   findStores: z
