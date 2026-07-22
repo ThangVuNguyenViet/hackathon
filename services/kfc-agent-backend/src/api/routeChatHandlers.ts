@@ -47,6 +47,7 @@ import type {
   MonitorSessionIntelligence,
   ToolResult,
 } from "../domain/types.js";
+
 import {
   createTrustedCustomerActionEnvelope,
   customerCommandFromVerifiedAction,
@@ -127,6 +128,20 @@ const clientItemRemovalSchema = z.object({
 const clientPaymentMethodSchema = z.object({
   methodId: opaqueProviderIdSchema,
 }).strict();
+
+function isDirectlyAddableMenuItem(
+  item: Record<string, unknown>,
+): boolean {
+  const modifierGroups = item.modifierGroups;
+  return (
+    item.available === true &&
+    item.isCustomize !== true &&
+    item.hasModifiers !== true &&
+    (modifierGroups === undefined ||
+      modifierGroups === null ||
+      (Array.isArray(modifierGroups) && modifierGroups.length === 0))
+  );
+}
 
 function hasExactClientActionPayload(
   actionSpec: {
@@ -338,13 +353,17 @@ export function createChatRouteHandlers(context: RouteHandlerContext) {
       };
       let trustedValue = actionSpec.value ?? parsed.data.action.value;
       if (actionSpec.id === "add_items") {
-        if (attachment.widgetKind !== "smartMenuPicker") {
+        if (
+          attachment.widgetKind !== "smartMenuPicker" &&
+          attachment.widgetKind !== "fullMenuBrowser"
+        ) {
           return { status: 422, body: { errorCode: "invalid_action_payload" } };
         }
         const batch = kfcSmartMenuBatchPayloadSchema.safeParse(parsed.data.action.payload);
         const allowedCodes = new Set(
           (Array.isArray(attachment.data.items) ? attachment.data.items : [])
             .filter(isRecord)
+            .filter(isDirectlyAddableMenuItem)
             .map((item) => item.code)
             .filter((code): code is string => typeof code === "string"),
         );

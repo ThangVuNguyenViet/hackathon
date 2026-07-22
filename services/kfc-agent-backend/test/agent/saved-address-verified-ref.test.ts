@@ -3,29 +3,22 @@ import {
   claimPendingSavedAddressQuote,
   claimSavedAddressQuote,
 } from '../../src/agent/savedAddressVerifiedRef.js';
-import {
-  projectModelPublicationState,
-} from '../../src/agent/modelPublicationStateProjection.js';
+import { projectModelPublicationState } from '../../src/agent/modelPublicationStateProjection.js';
 import {
   createTrustedCustomerActionEnvelope,
   type TrustedCustomerActionEnvelope,
 } from '../../src/domain/customerCommand.js';
 import type { Address, Cart, Channel } from '../../src/domain/types.js';
-import {
-  kfcGenUiVerifiedStateRevision,
-} from '../../src/genui/kfcGenUi.js';
+import { kfcGenUiVerifiedStateRevision } from '../../src/genui/kfcGenUi.js';
 import type { AgentTurnInput } from '../../src/graph/agentTurnState.js';
 import type { AgentGraphState } from '../../src/graph/state.js';
-import type {
-  AuthenticatedCommerceApprovalPrincipal,
-} from '../../src/ordering/types.js';
+import type { AuthenticatedCommerceApprovalPrincipal } from '../../src/ordering/types.js';
 import {
   agentToolArgumentSchemas,
+  parseAgentToolArguments,
 } from '../../src/ordering/toolCatalog.js';
 import { MemoryStore } from '../../src/persistence/memoryStore.js';
-import {
-  controlledCustomerAccess,
-} from '../fixtures/controlledCustomerAccess.js';
+import { controlledCustomerAccess } from '../fixtures/controlledCustomerAccess.js';
 
 const address: Address = {
   label: 'Private saved label Ω',
@@ -42,12 +35,14 @@ interface SavedAddressRef {
 function cart(): Cart {
   return {
     id: 'saved-ref-cart',
-    items: [{
-      itemCode: '20751',
-      name: 'Verified item',
-      quantity: 1,
-      unitPriceVnd: 99_000,
-    }],
+    items: [
+      {
+        itemCode: '20751',
+        name: 'Verified item',
+        quantity: 1,
+        unitPriceVnd: 99_000,
+      },
+    ],
     subtotalVnd: 99_000,
     discountVnd: 0,
     deliveryFeeVnd: 0,
@@ -56,9 +51,7 @@ function cart(): Cart {
   };
 }
 
-function state(
-  overrides: Partial<AgentGraphState> = {},
-): AgentGraphState {
+function state(overrides: Partial<AgentGraphState> = {}): AgentGraphState {
   return {
     sessionId: 'kfc:saved-ref-session',
     customerId: 'saved-ref-customer',
@@ -83,8 +76,7 @@ function principal(
     customerId: authoritativeState.customerId,
     channel: authoritativeState.channel,
     authenticatedSubject: authoritativeState.customerId,
-    authenticationEvidenceRef:
-      `controlled-test:${authoritativeState.customerId}`,
+    authenticationEvidenceRef: `controlled-test:${authoritativeState.customerId}`,
     ...overrides,
   };
 }
@@ -158,8 +150,7 @@ function envelope(input: {
     attachmentId: 'saved-address-attachment',
     actionDigest: input.actionDigest ?? 'a'.repeat(64),
     verifiedRevision:
-      input.verifiedRevision ??
-      kfcGenUiVerifiedStateRevision(input.state),
+      input.verifiedRevision ?? kfcGenUiVerifiedStateRevision(input.state),
     lifecycle: 'one_shot',
     command: {
       kind: 'accept_fulfillment',
@@ -176,15 +167,17 @@ async function turnInput(input: {
   channel?: Channel;
   authenticatedSubject?: string;
   authenticationEvidenceRef?: string;
-}): Promise<Pick<
-  AgentTurnInput,
-  | 'accessContext'
-  | 'channel'
-  | 'customerId'
-  | 'runGuard'
-  | 'sessionId'
-  | 'store'
->> {
+}): Promise<
+  Pick<
+    AgentTurnInput,
+    | 'accessContext'
+    | 'channel'
+    | 'customerId'
+    | 'runGuard'
+    | 'sessionId'
+    | 'store'
+  >
+> {
   const sessionId = input.sessionId ?? input.state.sessionId;
   const customerId = input.customerId ?? input.state.customerId;
   const channel = input.channel ?? input.state.channel;
@@ -217,8 +210,7 @@ async function turnInput(input: {
       commitFence: {
         kind: 'customer_run',
         runId: savedAddressRunId(input.state),
-        sessionAuthorityGeneration:
-          persistedRun.sessionAuthorityGeneration,
+        sessionAuthorityGeneration: persistedRun.sessionAuthorityGeneration,
       },
     },
     store: input.store,
@@ -238,14 +230,38 @@ describe('saved-address verified-ref boundary', () => {
       city: 'Hồ Chí Minh',
     };
 
-    expect(agentToolArgumentSchemas.quoteFulfillment.safeParse({
-      address: rawAddress,
-      method: 'delivery',
-    }).success).toBe(true);
-    expect(agentToolArgumentSchemas.quoteFulfillment.safeParse({
-      savedAddressRef: ref,
-      method: 'delivery',
-    }).success).toBe(true);
+    expect(
+      agentToolArgumentSchemas.quoteFulfillment.safeParse({
+        address: rawAddress,
+        savedAddressRef: null,
+        method: 'delivery',
+      }).success,
+    ).toBe(true);
+    expect(
+      agentToolArgumentSchemas.quoteFulfillment.safeParse({
+        address: null,
+        savedAddressRef: ref,
+        method: 'delivery',
+      }).success,
+    ).toBe(true);
+    expect(
+      parseAgentToolArguments('quoteFulfillment', {
+        address: rawAddress,
+        method: 'delivery',
+      }),
+    ).toMatchObject({
+      success: true,
+      data: { address: rawAddress, savedAddressRef: null, method: 'delivery' },
+    });
+    expect(
+      parseAgentToolArguments('quoteFulfillment', {
+        savedAddressRef: ref,
+        method: 'delivery',
+      }),
+    ).toMatchObject({
+      success: true,
+      data: { address: null, savedAddressRef: ref, method: 'delivery' },
+    });
     for (const invalid of [
       {
         address: rawAddress,
@@ -254,13 +270,13 @@ describe('saved-address verified-ref boundary', () => {
       },
       {
         address: null,
-        savedAddressRef: ref,
+        savedAddressRef: null,
         method: 'delivery',
       },
       {
-        savedAddressRef: null,
-        address: rawAddress,
-        method: 'delivery',
+        address: null,
+        savedAddressRef: ref,
+        method: 'pickup',
       },
       {
         savedAddressRef: {
@@ -378,29 +394,32 @@ describe('saved-address verified-ref boundary', () => {
       name: 'authentication evidence',
       input: { authenticationEvidenceRef: 'controlled-test:other-login' },
     },
-  ])('collapses a wrong $name principal to an unavailable ref', async ({
-    input,
-  }) => {
-    const authoritativeState = state();
-    const store = new MemoryStore();
-    const ref = await issueSavedAddressRef({
-      store,
-      state: authoritativeState,
-    });
-
-    await expect(claimSavedAddressQuote({
-      envelope: envelope({ state: authoritativeState, ref }),
-      turnInput: await turnInput({
-        state: authoritativeState,
+  ])(
+    'collapses a wrong $name principal to an unavailable ref',
+    async ({ input }) => {
+      const authoritativeState = state();
+      const store = new MemoryStore();
+      const ref = await issueSavedAddressRef({
         store,
-        ...input,
-      }),
-      state: authoritativeState,
-    })).resolves.toEqual({
-      ok: false,
-      errorCode: 'structured_action_saved_address_ref_unavailable',
-    });
-  });
+        state: authoritativeState,
+      });
+
+      await expect(
+        claimSavedAddressQuote({
+          envelope: envelope({ state: authoritativeState, ref }),
+          turnInput: await turnInput({
+            state: authoritativeState,
+            store,
+            ...input,
+          }),
+          state: authoritativeState,
+        }),
+      ).resolves.toEqual({
+        ok: false,
+        errorCode: 'structured_action_saved_address_ref_unavailable',
+      });
+    },
+  );
 
   it('rejects stale and forged authority without consuming the valid ref', async () => {
     const authoritativeState = state();
@@ -414,37 +433,43 @@ describe('saved-address verified-ref boundary', () => {
       store,
     });
 
-    await expect(claimSavedAddressQuote({
-      envelope: envelope({
+    await expect(
+      claimSavedAddressQuote({
+        envelope: envelope({
+          state: authoritativeState,
+          ref,
+          verifiedRevision: 'b'.repeat(64),
+        }),
+        turnInput: currentTurnInput,
         state: authoritativeState,
-        ref,
-        verifiedRevision: 'b'.repeat(64),
       }),
-      turnInput: currentTurnInput,
-      state: authoritativeState,
-    })).resolves.toEqual({
+    ).resolves.toEqual({
       ok: false,
       errorCode: 'structured_action_verified_state_stale',
     });
-    await expect(claimSavedAddressQuote({
-      envelope: envelope({
+    await expect(
+      claimSavedAddressQuote({
+        envelope: envelope({
+          state: authoritativeState,
+          ref: {
+            id: '00000000-0000-4000-8000-000000000001',
+            kind: 'saved_address',
+          },
+        }),
+        turnInput: currentTurnInput,
         state: authoritativeState,
-        ref: {
-          id: '00000000-0000-4000-8000-000000000001',
-          kind: 'saved_address',
-        },
       }),
-      turnInput: currentTurnInput,
-      state: authoritativeState,
-    })).resolves.toEqual({
+    ).resolves.toEqual({
       ok: false,
       errorCode: 'structured_action_saved_address_ref_unavailable',
     });
-    await expect(claimSavedAddressQuote({
-      envelope: envelope({ state: authoritativeState, ref }),
-      turnInput: currentTurnInput,
-      state: authoritativeState,
-    })).resolves.toMatchObject({ ok: true });
+    await expect(
+      claimSavedAddressQuote({
+        envelope: envelope({ state: authoritativeState, ref }),
+        turnInput: currentTurnInput,
+        state: authoritativeState,
+      }),
+    ).resolves.toMatchObject({ ok: true });
   });
 
   it('replays only the identical action digest and rejects a distinct use', async () => {
@@ -464,25 +489,31 @@ describe('saved-address verified-ref boundary', () => {
       actionDigest: 'c'.repeat(64),
     });
 
-    await expect(claimSavedAddressQuote({
-      envelope: exactEnvelope,
-      turnInput: currentTurnInput,
-      state: authoritativeState,
-    })).resolves.toMatchObject({ ok: true });
-    await expect(claimSavedAddressQuote({
-      envelope: exactEnvelope,
-      turnInput: currentTurnInput,
-      state: authoritativeState,
-    })).resolves.toMatchObject({ ok: true });
-    await expect(claimSavedAddressQuote({
-      envelope: envelope({
+    await expect(
+      claimSavedAddressQuote({
+        envelope: exactEnvelope,
+        turnInput: currentTurnInput,
         state: authoritativeState,
-        ref,
-        actionDigest: 'd'.repeat(64),
       }),
-      turnInput: currentTurnInput,
-      state: authoritativeState,
-    })).resolves.toEqual({
+    ).resolves.toMatchObject({ ok: true });
+    await expect(
+      claimSavedAddressQuote({
+        envelope: exactEnvelope,
+        turnInput: currentTurnInput,
+        state: authoritativeState,
+      }),
+    ).resolves.toMatchObject({ ok: true });
+    await expect(
+      claimSavedAddressQuote({
+        envelope: envelope({
+          state: authoritativeState,
+          ref,
+          actionDigest: 'd'.repeat(64),
+        }),
+        turnInput: currentTurnInput,
+        state: authoritativeState,
+      }),
+    ).resolves.toEqual({
       ok: false,
       errorCode: 'structured_action_saved_address_ref_unavailable',
     });
@@ -512,27 +543,31 @@ describe('saved-address verified-ref boundary', () => {
       throw new Error('test_customer_run_fence_missing');
     }
 
-    await expect(claimSavedAddressQuote({
-      envelope: actionEnvelope,
-      turnInput: currentTurnInput,
-      state: authoritativeState,
-    })).resolves.toEqual({
+    await expect(
+      claimSavedAddressQuote({
+        envelope: actionEnvelope,
+        turnInput: currentTurnInput,
+        state: authoritativeState,
+      }),
+    ).resolves.toEqual({
       ok: false,
       errorCode: 'structured_action_saved_address_conflicts_with_draft',
     });
-    await expect(store.claimVerifiedRef({
-      ref,
-      principal: principal(authoritativeState),
-      expectedVerifiedRevision:
-        kfcGenUiVerifiedStateRevision(authoritativeState),
-      now: new Date().toISOString(),
-      useId: 'test:prove-draft-rejection-did-not-consume',
-      runFence: {
-        sessionId: authoritativeState.sessionId,
-        fence: currentFence,
-        notAfter: '2099-01-01T00:00:00.000Z',
-      },
-    })).resolves.toMatchObject({ status: 'claimed' });
+    await expect(
+      store.claimVerifiedRef({
+        ref,
+        principal: principal(authoritativeState),
+        expectedVerifiedRevision:
+          kfcGenUiVerifiedStateRevision(authoritativeState),
+        now: new Date().toISOString(),
+        useId: 'test:prove-draft-rejection-did-not-consume',
+        runFence: {
+          sessionId: authoritativeState.sessionId,
+          fence: currentFence,
+          notAfter: '2099-01-01T00:00:00.000Z',
+        },
+      }),
+    ).resolves.toMatchObject({ status: 'claimed' });
   });
 
   it('does not consume a one-shot ref without a durable run fence', async () => {
@@ -546,30 +581,31 @@ describe('saved-address verified-ref boundary', () => {
       state: authoritativeState,
       store,
     });
-    const {
-      runGuard: _runGuard,
-      ...unguardedTurnInput
-    } = guardedTurnInput;
+    const { runGuard: _runGuard, ...unguardedTurnInput } = guardedTurnInput;
 
-    await expect(claimPendingSavedAddressQuote({
-      ref,
-      method: 'delivery',
-      useId: 'model-tool:unguarded',
-      callId: 'unguarded',
-      turnInput: unguardedTurnInput,
-      state: authoritativeState,
-    })).resolves.toEqual({
+    await expect(
+      claimPendingSavedAddressQuote({
+        ref,
+        method: 'delivery',
+        useId: 'model-tool:unguarded',
+        callId: 'unguarded',
+        turnInput: unguardedTurnInput,
+        state: authoritativeState,
+      }),
+    ).resolves.toEqual({
       ok: false,
       errorCode: 'structured_action_saved_address_ref_unavailable',
     });
-    await expect(claimPendingSavedAddressQuote({
-      ref,
-      method: 'delivery',
-      useId: 'model-tool:guarded',
-      callId: 'guarded',
-      turnInput: guardedTurnInput,
-      state: authoritativeState,
-    })).resolves.toMatchObject({ ok: true });
+    await expect(
+      claimPendingSavedAddressQuote({
+        ref,
+        method: 'delivery',
+        useId: 'model-tool:guarded',
+        callId: 'guarded',
+        turnInput: guardedTurnInput,
+        state: authoritativeState,
+      }),
+    ).resolves.toMatchObject({ ok: true });
   });
 
   it('fails closed on expired and commerce-revision-stale refs', async () => {
@@ -581,17 +617,19 @@ describe('saved-address verified-ref boundary', () => {
       createdAt: '2020-01-01T00:00:00.000Z',
       expiresAt: '2020-01-02T00:00:00.000Z',
     });
-    await expect(claimPendingSavedAddressQuote({
-      ref: expiredRef,
-      method: 'delivery',
-      useId: 'model-tool:expired',
-      callId: 'expired',
-      turnInput: await turnInput({
+    await expect(
+      claimPendingSavedAddressQuote({
+        ref: expiredRef,
+        method: 'delivery',
+        useId: 'model-tool:expired',
+        callId: 'expired',
+        turnInput: await turnInput({
+          state: expiredState,
+          store: expiredStore,
+        }),
         state: expiredState,
-        store: expiredStore,
       }),
-      state: expiredState,
-    })).resolves.toEqual({
+    ).resolves.toEqual({
       ok: false,
       errorCode: 'structured_action_saved_address_ref_unavailable',
     });
@@ -606,17 +644,19 @@ describe('saved-address verified-ref boundary', () => {
       ...cart(),
       totalVnd: 100_000,
     };
-    await expect(claimPendingSavedAddressQuote({
-      ref: staleRef,
-      method: 'delivery',
-      useId: 'model-tool:stale',
-      callId: 'stale',
-      turnInput: await turnInput({
+    await expect(
+      claimPendingSavedAddressQuote({
+        ref: staleRef,
+        method: 'delivery',
+        useId: 'model-tool:stale',
+        callId: 'stale',
+        turnInput: await turnInput({
+          state: staleState,
+          store: staleStore,
+        }),
         state: staleState,
-        store: staleStore,
       }),
-      state: staleState,
-    })).resolves.toEqual({
+    ).resolves.toEqual({
       ok: false,
       errorCode: 'structured_action_saved_address_ref_unavailable',
     });
@@ -661,9 +701,11 @@ describe('saved-address verified-ref boundary', () => {
     const winningUseId = concurrent[0]?.ok
       ? 'model-tool:turn-a:duplicate-provider-call-id'
       : 'model-tool:turn-b:duplicate-provider-call-id';
-    await expect(claimPendingSavedAddressQuote({
-      ...input,
-      useId: winningUseId,
-    })).resolves.toMatchObject({ ok: true });
+    await expect(
+      claimPendingSavedAddressQuote({
+        ...input,
+        useId: winningUseId,
+      }),
+    ).resolves.toMatchObject({ ok: true });
   });
 });

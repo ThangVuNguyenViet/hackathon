@@ -48,7 +48,7 @@ describe('sandbox lifecycle control routes', () => {
       model
         .respondWithTools([{
           name: 'searchMenu',
-          args: { scope: 'filtered', query: 'Burger Gà Zinger' },
+          args: { scope: 'filtered', query: 'Burger Gà Zinger' , purpose: 'browse'},
         }])
         .respondWithTools([{
           name: 'updateCart',

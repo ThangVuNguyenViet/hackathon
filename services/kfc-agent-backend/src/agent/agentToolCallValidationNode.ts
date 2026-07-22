@@ -1,7 +1,6 @@
 import type { Runtime } from '@langchain/langgraph';
 import { prepareModelAuthoredPaymentSelection } from '../ordering/paymentMethodAuthority.js';
 import { agentToolCallDisposition } from '../ordering/toolCallDisposition.js';
-import { agentToolArgumentSchemas } from '../ordering/toolCatalog.js';
 import type { ToolName } from '../ordering/types.js';
 import { isRecord, toolCallId } from './agentBoundaryPolicy.js';
 import {
@@ -24,11 +23,8 @@ import {
   type SingleAgentRuntimeContext,
 } from './singleAgentRuntime.js';
 import { checkpointSafeApprovalFor } from './checkpointSafeApproval.js';
-import { validateModelQuoteFulfillmentAddressAuthority } from './modelQuoteFulfillmentAddressAuthority.js';
-import {
-  claimPendingSavedAddressQuote,
-  responseDisclosesPrivateSavedAddress,
-} from './savedAddressVerifiedRef.js';
+import { responseDisclosesPrivateSavedAddress } from './savedAddressVerifiedRef.js';
+import { prepareModelQuoteFulfillment } from './modelQuoteFulfillmentPreparation.js';
 
 type AgentRuntime = Runtime<{ runtime?: SingleAgentRuntimeContext }>;
 type RuntimeResolver = (
@@ -217,11 +213,6 @@ export function createValidateAgentToolCallsNode(input: {
       let auditArguments: Record<string, unknown> | undefined;
       const currentCallId = toolCallId(call);
       if (disposition.toolName === 'quoteFulfillment') {
-        if (!state.currentUserTurn) {
-          return rejectedToolCalls({
-            failure: 'agent_address_authority_mismatch',
-          });
-        }
         try {
           livePublicationBundle ??= await publicationBundle(state, runtime);
         } catch {
@@ -229,59 +220,32 @@ export function createValidateAgentToolCallsNode(input: {
             failure: 'agent_model_publication_authority_invalid',
           });
         }
-        const quoteArguments =
-          agentToolArgumentSchemas.quoteFulfillment.parse(canonicalArguments);
-        if ('savedAddressRef' in quoteArguments) {
-          const publishedRef =
-            livePublicationBundle.modelState.pendingSavedAddressRef;
-          if (
-            calls.length !== 1 ||
-            quoteArguments.method !== 'delivery' ||
-            publishedRef?.kind !== 'saved_address' ||
-            publishedRef.id !== quoteArguments.savedAddressRef.id
-          ) {
-            return rejectedToolCalls({
-              validationError:
-                'structured_action_saved_address_ref_unavailable',
-            });
-          }
-          const claimed = await claimPendingSavedAddressQuote({
-            ref: quoteArguments.savedAddressRef,
-            method: quoteArguments.method,
-            useId:
-              `model-tool:${modelToolUseScope(runtime)}:` +
-              `${state.currentUserTurn.id}:${currentCallId}`,
-            callId: currentCallId,
-            turnInput: runtime.turnInput,
-            state: requiredDomainState(state),
-          });
-          if (!claimed.ok) {
-            return rejectedToolCalls({
-              validationError: claimed.errorCode,
-            });
-          }
-          auditArguments = structuredClone(disposition.arguments);
-          canonicalArguments = claimed.call.arguments;
-          savedAddressPreparedState = claimed.state;
-        } else {
-          const addressAuthority =
-            await validateModelQuoteFulfillmentAddressAuthority({
-              publicationBundle: livePublicationBundle,
-              currentUserTurn: state.currentUserTurn,
-              recentTurns: requiredDomainState(state).recentTurns ?? [],
-              proposedAddress: quoteArguments.address,
-            });
-          if (!addressAuthority.ok) {
-            return rejectedToolCalls({
-              failure: addressAuthority.errorCode,
-            });
-          }
-          auditArguments = structuredClone(disposition.arguments);
-          canonicalArguments = {
-            ...quoteArguments,
-            address: addressAuthority.address,
-          };
+        const prepared = await prepareModelQuoteFulfillment({
+          call: {
+            id: currentCallId,
+            toolName: disposition.toolName,
+            arguments: canonicalArguments,
+            auditArguments: structuredClone(call.args),
+          },
+          callCount: calls.length,
+          publicationBundle: livePublicationBundle,
+          currentUserTurn: state.currentUserTurn ?? undefined,
+          runtime,
+          state: requiredDomainState(state),
+          useId:
+            `model-tool:${modelToolUseScope(runtime)}:` +
+            `${state.currentUserTurn?.id ?? 'missing'}:${currentCallId}`,
+        });
+        if (!prepared.ok) {
+          return rejectedToolCalls(
+            prepared.kind === 'failure'
+              ? { failure: prepared.errorCode }
+              : { validationError: prepared.errorCode },
+          );
         }
+        auditArguments = prepared.call.auditArguments;
+        canonicalArguments = prepared.call.arguments;
+        savedAddressPreparedState = prepared.state;
       }
       const signature = `${disposition.toolName}:${JSON.stringify(
         canonicalArguments,

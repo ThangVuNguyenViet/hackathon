@@ -2,6 +2,10 @@ import type { Channel } from '../domain/types.js';
 import type { KfcGenUiAttachment } from '../genui/kfcGenUi.js';
 import type { AgentGraphState } from '../graph/state.js';
 import {
+  trustedCatalogMedia,
+  type CatalogMediaIntent,
+} from './catalogMediaIntent.js';
+import {
   resolveResponseProfile,
   responseProfileForChannel,
   type ResponseProfile,
@@ -45,7 +49,9 @@ export interface BuildChannelPresentationInput {
 export interface BuildSocialPresentationInput {
   channel: Exclude<Channel, 'kfc'>;
   standaloneText: string;
+  /** @deprecated Accepted for caller compatibility but never inspected for media. */
   state: AgentGraphState;
+  catalogMediaIntent?: CatalogMediaIntent;
 }
 
 const structuredCompanionCapabilities: ChannelCapabilities = {
@@ -107,7 +113,7 @@ export function buildSocialPresentation(input: BuildSocialPresentationInput): Ch
     throw new Error('Social presenter received a non-social channel');
   }
   const media = getChannelCapabilities(input.channel).supportsCatalogMedia
-    ? renderTrustedMediaFromState(input.state)
+    ? trustedCatalogMedia(input.catalogMediaIntent)
     : [];
   return {
     profile: 'social',
@@ -134,42 +140,6 @@ export function assertPresentationMatchesChannel(
   if (presentation.profile === 'genui' && 'media' in presentation && presentation.media !== undefined) {
     throw new Error('GenUI presentation contains forbidden social media delivery data');
   }
-}
-
-function renderTrustedMediaFromState(state: AgentGraphState): ChannelPresentationMedia[] {
-  const candidates = [
-    ...(state.menuItemDetail ? [state.menuItemDetail] : []),
-    ...(state.menuSearchResults ?? []),
-    ...(state.promotionOffers ?? []),
-  ].map((item) => record(item)).filter((item): item is Record<string, unknown> => Boolean(item));
-  return candidates.flatMap((item, index) => {
-    const imageUrl = trustedKfcImageUrl(item.imageUrl);
-    const title = nonEmptyString(item.name) ?? nonEmptyString(item.offerName) ?? nonEmptyString(item.title) ?? nonEmptyString(item.campaign);
-    if (!imageUrl || !title) return [];
-    const entityId = nonEmptyString(item.code) ?? nonEmptyString(item.itemCode) ?? nonEmptyString(item.offerId) ?? nonEmptyString(item.id) ?? 'item';
-    return [{ key: `social:${entityId}:${index}`, imageUrl, title }];
-  });
-}
-
-function trustedKfcImageUrl(value: unknown): string | undefined {
-  const text = nonEmptyString(value);
-  if (!text) return undefined;
-  try {
-    const url = new URL(text);
-    return url.protocol === 'https:' && url.hostname === 'static.kfcvietnam.com.vn' ? url.toString() : undefined;
-  } catch {
-    return undefined;
-  }
-}
-
-function record(value: unknown): Record<string, unknown> | undefined {
-  return typeof value === 'object' && value !== null && !Array.isArray(value)
-    ? value as Record<string, unknown>
-    : undefined;
-}
-
-function nonEmptyString(value: unknown): string | undefined {
-  return typeof value === 'string' && value.trim().length > 0 ? value.trim() : undefined;
 }
 
 function assertNever(value: never): never {

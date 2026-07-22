@@ -12,8 +12,7 @@ import type {
 
 function exactStringSet(left: readonly string[], right: readonly string[]) {
   return (
-    left.length === right.length &&
-    left.every((value) => right.includes(value))
+    left.length === right.length && left.every((value) => right.includes(value))
   );
 }
 
@@ -24,7 +23,7 @@ export function bindAgentFulfillmentQuote(input: {
   const args = agentToolArgumentSchemas.quoteFulfillment.parse(
     input.request.arguments,
   );
-  if (!('address' in args)) {
+  if (args.address === null) {
     return agentFailure(
       input.request,
       'Saved-address reference must be resolved by the agent graph',

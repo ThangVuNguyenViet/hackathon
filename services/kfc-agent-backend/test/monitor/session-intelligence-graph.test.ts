@@ -17,7 +17,7 @@ describe('monitor intelligence graph events', () => {
     const model = fakeModel()
       .respondWithTools([{
         name: 'searchMenu',
-        args: { scope: 'filtered', query: 'combo' },
+        args: { scope: 'filtered', query: 'combo' , purpose: 'browse'},
       }])
       .respondWithTools([{
         name: 'updateCart',

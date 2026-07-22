@@ -83,13 +83,13 @@ describe("Messenger webhook adapter", () => {
         fakeModel()
           .respondWithTools([{
             name: 'searchMenu',
-            args: { scope: 'all', query: null },
+            args: { scope: 'all', query: null, purpose: 'browse' },
           }])
           .respond(groundedResponseModelReply({
             customerText:
               'Combo Hợp Gu 99K có giá 99.000đ. Bạn muốn chọn món nào?',
             evidenceReferences: [{
-              evidenceId: 'menu_search_results',
+              evidenceId: 'active_collection:searchMenu',
               claimKinds: ['product', 'price'],
             }],
           })),
@@ -123,12 +123,10 @@ describe("Messenger webhook adapter", () => {
       .map((call) => parseMessengerBody(call[1]))
       .filter((body) => body.message);
     expect(deliveryBodies[0]).toMatchObject({ message: { text: expect.any(String) } });
-    expect(deliveryBodies[1]).toMatchObject({
-      message: { attachment: { type: 'image', payload: { url: expect.stringMatching(/^https:\/\/static\.kfcvietnam\.com\.vn\//) } } },
-    });
+    expect(deliveryBodies).toHaveLength(1);
   });
 
-  it('keeps successful Messenger text delivery sent when optional media fails', async () => {
+  it('keeps category browsing text-only on Messenger', async () => {
     const messengerFetchImpl = vi.fn(async (_url: Parameters<typeof fetch>[0], init?: Parameters<typeof fetch>[1]) => {
       const body = parseMessengerBody(init);
       if (hasSenderAction(init)) return new Response(JSON.stringify({ recipient_id: 'psid_media_fail' }));
@@ -144,7 +142,11 @@ describe("Messenger webhook adapter", () => {
         fakeModel()
           .respondWithTools([{
             name: 'searchMenu',
-            args: { scope: 'all', query: null },
+            args: {
+              scope: 'filtered',
+              query: 'combo',
+              purpose: 'browse',
+            },
           }])
           .respond(groundedResponseModelReply({
             customerText: 'Mình đã tìm thấy các lựa chọn trong thực đơn.',
@@ -157,7 +159,7 @@ describe("Messenger webhook adapter", () => {
     });
 
     const response = await server.inject(signedMessengerWebhook({
-      object: 'page', entry: [{ id: '118976205445198', messaging: [{ sender: { id: 'psid_media_fail' }, recipient: { id: '118976205445198' }, message: { mid: 'mid_media_fail', text: 'xem menu' } }] }],
+      object: 'page', entry: [{ id: '118976205445198', messaging: [{ sender: { id: 'psid_media_fail' }, recipient: { id: '118976205445198' }, message: { mid: 'mid_media_fail', text: 'gợi ý Combo Hợp Gu 99K' } }] }],
     }));
 
     expect(response.json()).toMatchObject({ processed: 1, failed: 0 });
@@ -171,7 +173,7 @@ describe("Messenger webhook adapter", () => {
       ),
     ).toMatchObject({
       type: 'assistant_reply_sent',
-      payload: { deliveryStatus: 'sent', textDeliveryStatus: 'sent', mediaDeliveryStatus: 'failed' },
+      payload: { deliveryStatus: 'sent', textDeliveryStatus: 'sent', mediaDeliveryStatus: 'not_requested' },
     });
   });
 
@@ -233,6 +235,7 @@ describe("Messenger webhook adapter", () => {
             args: {
               scope: 'filtered',
               query: 'Combo Hợp Gu 99K',
+              purpose: 'browse',
             },
           }])
           .respondWithTools([{
@@ -280,7 +283,7 @@ describe("Messenger webhook adapter", () => {
       skippedDuplicates: 0,
       failed: 0,
     });
-    expect(messengerFetchImpl).toHaveBeenCalledTimes(6);
+    expect(messengerFetchImpl).toHaveBeenCalledTimes(5);
     const messengerRequestBodies = messengerFetchImpl.mock.calls.map((call) =>
       parseMessengerBody(call[1]),
     );
@@ -299,22 +302,9 @@ describe("Messenger webhook adapter", () => {
     });
     expect((messengerTextRequest?.message as { text?: string }).text).toContain("99.000đ");
     expect(JSON.stringify(messengerTextRequest)).toContain("99.000đ");
-    expect(messengerRequestBodies).toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({
-          message: {
-            attachment: expect.objectContaining({
-              type: "image",
-              payload: expect.objectContaining({
-                url: expect.stringMatching(
-                  /^https:\/\/static\.kfcvietnam\.com\.vn\//,
-                ),
-              }),
-            }),
-          },
-        }),
-      ]),
-    );
+    expect(messengerRequestBodies.some((body) =>
+      Boolean((body.message as { attachment?: unknown } | undefined)?.attachment),
+    )).toBe(false);
 
     const turns = await server.inject({
       method: "GET",
@@ -587,7 +577,7 @@ describe("Messenger webhook adapter", () => {
         fakeModel()
           .respondWithTools([{
             name: 'searchMenu',
-            args: { scope: 'filtered', query: 'Combo 99K' },
+            args: { scope: 'filtered', query: 'Combo 99K' , purpose: 'browse'},
           }])
           .respond(groundedResponseModelReply({
             customerText: 'Dạ KFC hỗ trợ bạn.',
@@ -760,7 +750,7 @@ describe("Messenger webhook adapter", () => {
         fakeModel()
           .respondWithTools([{
             name: 'searchMenu',
-            args: { scope: 'filtered', query: 'Combo 99K' },
+            args: { scope: 'filtered', query: 'Combo 99K' , purpose: 'browse'},
           }])
           .respond(groundedResponseModelReply({
             customerText:

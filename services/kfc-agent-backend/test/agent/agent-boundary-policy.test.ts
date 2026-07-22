@@ -162,7 +162,7 @@ describe('agent boundary policy', () => {
     const call: ToolCall = {
       id: 'tool-call-1',
       name: 'searchMenu',
-      args: { scope: 'all', query: null },
+      args: { scope: 'all', query: null, purpose: 'browse' },
       type: 'tool_call',
     };
 

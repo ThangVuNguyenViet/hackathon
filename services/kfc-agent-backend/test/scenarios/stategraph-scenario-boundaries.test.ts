@@ -90,7 +90,7 @@ describe('offline StateGraph scenario boundaries', () => {
       .respondWithTools([
         {
           name: 'searchMenu',
-          args: { scope: 'filtered', query: 'Pepsi' },
+          args: { scope: 'filtered', query: 'Pepsi' , purpose: 'browse'},
         },
       ])
       .respond(
@@ -235,7 +235,7 @@ describe('offline StateGraph scenario boundaries', () => {
       .respondWithTools([
         {
           name: 'searchMenu',
-          args: { scope: 'all', query: null },
+          args: { scope: 'all', query: null, purpose: 'browse' },
         },
         {
           name: 'searchPromotions',
@@ -302,7 +302,7 @@ describe('offline StateGraph scenario boundaries', () => {
       .respondWithTools([
         {
           name: 'searchMenu',
-          args: { scope: 'all', query: null },
+          args: { scope: 'all', query: null, purpose: 'browse' },
         },
       ])
       .respondWithTools([

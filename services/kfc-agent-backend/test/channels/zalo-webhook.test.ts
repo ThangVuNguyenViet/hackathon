@@ -48,12 +48,12 @@ describe('Zalo webhook adapter', () => {
         fakeModel()
           .respondWithTools([{
             name: 'searchMenu',
-            args: { scope: 'all', query: null },
+            args: { scope: 'all', query: null, purpose: 'browse' },
           }])
           .respond(groundedResponseModelReply({
             customerText: 'Combo Hợp Gu 99K có giá 99.000đ.',
             evidenceReferences: [{
-              evidenceId: 'menu_search_results',
+              evidenceId: 'active_collection:searchMenu',
               claimKinds: ['product', 'price'],
             }],
           })),
@@ -77,11 +77,7 @@ describe('Zalo webhook adapter', () => {
     };
     expect(outboundBody.message.text).toContain('Combo Hợp Gu 99K');
     expect(outboundBody.message.text).toContain('99.000đ');
-    expect(zaloFetchImpl.mock.calls.slice(1).map((call) => JSON.parse(String(call[1]?.body)))).toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({ message: expect.objectContaining({ attachment: expect.any(Object) }) }),
-      ]),
-    );
+    expect(zaloFetchImpl).toHaveBeenCalledTimes(1);
     expect((await store.listTurns('zalo:zalo_menu_user')).at(-1)?.metadata?.genUi).toBeUndefined();
   });
 
@@ -104,6 +100,7 @@ describe('Zalo webhook adapter', () => {
             args: {
               scope: 'filtered',
               query: 'Combo Hợp Gu 99K',
+              purpose: 'browse',
             },
           }])
           .respondWithTools([{
@@ -141,7 +138,7 @@ describe('Zalo webhook adapter', () => {
 
     expect(response.statusCode).toBe(200);
     expect(response.json()).toMatchObject({ received: 1 });
-    expect(zaloFetchImpl).toHaveBeenCalledTimes(2);
+    expect(zaloFetchImpl).toHaveBeenCalledTimes(1);
     const zaloRequestBodies = zaloFetchImpl.mock.calls.map((call) =>
       JSON.parse(String(call[1]?.body)),
     );
@@ -152,13 +149,7 @@ describe('Zalo webhook adapter', () => {
       message: { text: expect.stringContaining('1 Combo Hợp Gu 99K') },
     });
     expect(JSON.stringify(zaloTextRequest)).toContain('99.000đ');
-    expect(zaloRequestBodies).toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({
-          message: expect.objectContaining({ attachment: expect.any(Object) }),
-        }),
-      ]),
-    );
+    expect(zaloRequestBodies.some((body) => body.message?.attachment)).toBe(false);
 
     const turns = await server.inject({ method: 'GET', url: '/dashboard/sessions/zalo:zalo_user_1/turns' });
     expect(turns.json().turns.at(-1)).toMatchObject({

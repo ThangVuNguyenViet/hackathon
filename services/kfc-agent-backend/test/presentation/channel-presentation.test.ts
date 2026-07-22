@@ -105,7 +105,7 @@ describe('channel presentation profile isolation', () => {
     },
   );
 
-  it('derives trusted native media directly from verified commerce state', () => {
+  it('does not infer native media from persisted commerce state', () => {
     const imageUrl = 'https://static.kfcvietnam.com.vn/images/items/lg/HOPGU.jpg';
     const presentation = buildSocialPresentation({
       channel: 'messenger',
@@ -128,9 +128,36 @@ describe('channel presentation profile isolation', () => {
     expect(presentation).toEqual({
       profile: 'social',
       text: 'Combo Hợp Gu 99K có giá 99.000đ.',
-      media: [{ key: 'social:20751:0', imageUrl, title: 'Combo Hợp Gu 99K' }],
     });
     expect(presentation.genUi).toBeUndefined();
+  });
+
+  it('renders only the persisted current-turn catalog media intent', () => {
+    const imageUrl = 'https://static.kfcvietnam.com.vn/images/items/lg/HOPGU.jpg';
+    const presentation = buildSocialPresentation({
+      channel: 'messenger',
+      standaloneText: 'Mình gợi ý ba lựa chọn phù hợp.',
+      state: state(),
+      catalogMediaIntent: {
+        schemaVersion: 'kfc-catalog-media-intent-v1',
+        intentId: 'intent-current-search',
+        toolName: 'searchMenu',
+        toolCallId: 'call-current-search',
+        evidenceId: 'current:searchMenu:evidence',
+        currentTurnRevision: 'turn-revision',
+        activeVerifiedRevision: 'collection-revision',
+        outcome: 'selected',
+        media: [
+          { key: 'catalog:20751:0', imageUrl, title: 'Combo Hợp Gu 99K' },
+        ],
+      },
+    });
+
+    expect(presentation).toEqual({
+      profile: 'social',
+      text: 'Mình gợi ý ba lựa chọn phù hợp.',
+      media: [{ key: 'catalog:20751:0', imageUrl, title: 'Combo Hợp Gu 99K' }],
+    });
   });
 
   it('does not deliver untrusted catalog media', () => {

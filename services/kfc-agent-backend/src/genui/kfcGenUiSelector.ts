@@ -28,6 +28,47 @@ const smartMenuActions: KfcGenUiAttachment['actions'] = [
   { id: "add_items", label: "Xác nhận món", intent: "primary" },
 ];
 
+const compactMenuDisplayLimit = 5;
+
+function isCompleteVerifiedFullMenu(state: AgentGraphState): boolean {
+  const searchMenuKey = state.activeCollectionKeys?.searchMenu;
+  const collection = searchMenuKey
+    ? state.verifiedCollections?.searchMenu?.[searchMenuKey]
+    : undefined;
+  const activeMenuCollection = state.activeMenuCollection;
+  if (
+    !collection ||
+    !activeMenuCollection ||
+    activeMenuCollection.key !== collection.key ||
+    activeMenuCollection.revision !== collection.revision ||
+    activeMenuCollection.providerRevision !== collection.providerRevision
+  ) {
+    return false;
+  }
+  const { result } = collection;
+  return (
+    result.scope.scope === 'all' &&
+    result.complete === true &&
+    result.items.length > 0 &&
+    result.total === result.returned &&
+    result.returned === result.items.length
+  );
+}
+
+function menuPresentation(
+  state: AgentGraphState,
+): Pick<KfcGenUiAttachment, 'widgetKind' | 'title'> {
+  return isCompleteVerifiedFullMenu(state)
+    ? {
+        widgetKind: 'fullMenuBrowser',
+        title: 'Toàn bộ thực đơn',
+      }
+    : {
+        widgetKind: 'smartMenuPicker',
+        title: 'Gợi ý món phù hợp',
+      };
+}
+
 function verifiedMenuItems(state: AgentGraphState) {
   return (
     state.activeMenuCollection?.result.items ??
@@ -51,13 +92,17 @@ function menuCollectionData(
   state: AgentGraphState,
   includeCurrentPromotionEvidence: boolean,
 ): Record<string, unknown> {
-  const items = verifiedMenuItems(state);
+  const verifiedItems = verifiedMenuItems(state);
+  const items = isCompleteVerifiedFullMenu(state)
+    ? verifiedItems
+    : verifiedItems.slice(0, compactMenuDisplayLimit);
   const collection = state.activeMenuCollection;
   return {
     latestUserMessage: state.latestUserMessage,
     items,
     categories: verifiedMenuCategories(items),
     selectionLimit: 5,
+    displayed: items.length,
     ...(includeCurrentPromotionEvidence
       ? { promotions: state.promotionOffers ?? [] }
       : {}),
@@ -69,6 +114,7 @@ function menuCollectionData(
           collection: {
             key: collection.key,
             revision: collection.revision,
+            providerRevision: collection.providerRevision,
             total: collection.result.total,
             returned: collection.result.returned,
             complete: collection.result.complete,
@@ -311,6 +357,7 @@ function selectKfcGenUiAttachmentUnbound(
   );
   const isPromotionOnlyTurn =
     hasCurrentPromotionEvidence && !hasCurrentMenuEvidence;
+  const verifiedMenuResults = verifiedMenuItems(state);
 
   const supportReasons = (
     state.handoff?.reasons ?? state.escalationReasons
@@ -377,16 +424,15 @@ function selectKfcGenUiAttachmentUnbound(
     hasCurrentMenuEvidence &&
     !keepsModifierSurface &&
     !turnToolNames.includes('updateCart') &&
-    (state.menuSearchResults?.length ?? 0) > 0 &&
+    verifiedMenuResults.length > 0 &&
     !isPromotionOnlyTurn &&
     !prefersFulfillmentSurface
   ) {
     return {
       id: `genui_${idBase}_menu`,
       lifecycleStage: "menu",
-      widgetKind: "smartMenuPicker",
       status: "active",
-      title: "Gợi ý món phù hợp",
+      ...menuPresentation(state),
       data: menuCollectionData(state, hasCurrentPromotionEvidence),
       actions: smartMenuActions,
     };
@@ -527,7 +573,6 @@ function selectKfcGenUiAttachmentUnbound(
     };
   }
 
-  const verifiedMenuResults = verifiedMenuItems(state);
   const hasMenuResults = verifiedMenuResults.length > 0;
   if (
     input.reuseVerifiedMenuResults === true &&
@@ -537,9 +582,8 @@ function selectKfcGenUiAttachmentUnbound(
     return {
       id: `genui_${idBase}_menu`,
       lifecycleStage: "menu",
-      widgetKind: "smartMenuPicker",
       status: "active",
-      title: "Gợi ý món phù hợp",
+      ...menuPresentation(state),
       data: menuCollectionData(state, hasCurrentPromotionEvidence),
       actions: smartMenuActions,
     };
@@ -699,9 +743,8 @@ function selectKfcGenUiAttachmentUnbound(
     return {
       id: `genui_${idBase}_menu`,
       lifecycleStage: "menu",
-      widgetKind: "smartMenuPicker",
       status: "active",
-      title: "Gợi ý món phù hợp",
+      ...menuPresentation(state),
       data: menuCollectionData(state, hasCurrentPromotionEvidence),
       actions: smartMenuActions,
     };

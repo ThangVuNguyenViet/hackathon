@@ -41,14 +41,21 @@ function menuAuthorModel() {
   return fakeModel()
     .respondWithTools([{
       name: 'searchMenu',
-      args: { scope: 'all', query: null },
+      args: { scope: 'filtered', query: 'Combo Hợp Gu 99K' , purpose: 'browse'},
+    }])
+    .respondWithTools([{
+      name: 'getItemDetails',
+      args: { code: '20751' },
     }])
     .respond(groundedResponseModelReply({
-      customerText: 'Mình đã tải menu KFC đã được xác minh.',
-      evidenceReferences: [{
-        evidenceId: 'menu_search_results',
-        claimKinds: ['product'],
-      }],
+      customerText: 'Combo Hợp Gu 99K đang có giá 99.000đ.',
+      evidenceReferences: (publication) => publication.evidence
+        .filter(({ evidenceId }) =>
+          evidenceId.startsWith('current:getItemDetails:'))
+        .map(({ evidenceId }) => ({
+          evidenceId,
+          claimKinds: ['product', 'price'],
+        })),
     }));
 }
 

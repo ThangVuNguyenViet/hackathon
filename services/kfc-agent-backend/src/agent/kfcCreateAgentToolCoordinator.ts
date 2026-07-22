@@ -48,7 +48,10 @@ export interface KfcAcceptedToolCall extends PendingToolCall {
 }
 
 export interface KfcCreateAgentToolCoordinator {
-  acceptBatch(calls: readonly KfcAcceptedToolCall[]): void;
+  acceptBatch(
+    calls: readonly KfcAcceptedToolCall[],
+    preparedState?: AgentGraphState,
+  ): void;
   execute(call: PendingToolCall): Promise<KfcCreateAgentCoordinatedToolResult>;
   snapshot(): PublicationToolBatchResult;
 }
@@ -86,6 +89,9 @@ function plainCall(call: PendingToolCall): PendingToolCall {
     id: call.id,
     toolName: call.toolName,
     arguments: structuredClone(call.arguments),
+    ...(call.auditArguments
+      ? { auditArguments: structuredClone(call.auditArguments) }
+      : {}),
   };
 }
 
@@ -325,11 +331,17 @@ export function createKfcCreateAgentToolCoordinator(
   };
 
   return {
-    acceptBatch(calls) {
+    acceptBatch(calls, preparedState) {
       if (accepted) {
         throw new Error('kfc_create_agent_tool_batch_in_progress');
       }
       validateAcceptedCalls(calls);
+      if (preparedState) {
+        projection = {
+          ...projection,
+          state: structuredClone(preparedState),
+        };
+      }
       accepted = {
         calls: calls.map(cloneAcceptedCall),
         arrivals: new Map(),
@@ -353,10 +365,31 @@ export function createKfcCreateAgentToolCoordinator(
       }
       const batch = accepted;
       const expected = batch.calls.find(({ id }) => id === call.id);
+      const expectedAuthored = expected?.auditArguments
+        ? agentToolCallDisposition(expected.toolName, expected.auditArguments)
+        : undefined;
+      const receivedAuthored = expected?.auditArguments
+        ? agentToolCallDisposition(call.toolName, call.arguments)
+        : undefined;
+      const receivedCanonical = expected?.auditArguments
+        ? undefined
+        : agentToolCallDisposition(call.toolName, call.arguments);
+      const argumentsMatch = expected?.auditArguments
+        ? expectedAuthored?.success === true &&
+          receivedAuthored?.success === true &&
+          isDeepStrictEqual(
+            expectedAuthored.data.arguments,
+            receivedAuthored.data.arguments,
+          )
+        : receivedCanonical?.success === true &&
+          isDeepStrictEqual(
+            expected?.arguments,
+            receivedCanonical.data.arguments,
+          );
       if (
         !expected ||
         expected.toolName !== call.toolName ||
-        !isDeepStrictEqual(expected.arguments, call.arguments) ||
+        !argumentsMatch ||
         batch.arrivals.has(call.id)
       ) {
         throw new Error('kfc_create_agent_tool_call_mismatch');

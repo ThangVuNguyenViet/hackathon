@@ -19,7 +19,7 @@ function menuModel(response: string) {
   return fakeModel()
     .respondWithTools([{
       name: 'searchMenu',
-      args: { scope: 'filtered', query: 'combo' },
+      args: { scope: 'filtered', query: 'combo' , purpose: 'browse'},
       id: 'profile-menu-search',
     }])
     .respond(groundedResponseModelReply({

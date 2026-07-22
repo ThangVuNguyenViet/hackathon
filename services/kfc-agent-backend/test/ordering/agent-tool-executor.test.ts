@@ -27,7 +27,10 @@ import {
   type AgentApprovalExecutionContext,
   type AgentToolExecutorContext,
 } from "../../src/ordering/agentToolExecutor.js";
-import { agentToolArgumentSchemas } from "../../src/ordering/toolCatalog.js";
+import {
+  agentToolArgumentSchemas,
+  parseAgentToolArguments,
+} from "../../src/ordering/toolCatalog.js";
 import type {
   CommerceApprovalBinding,
   CommerceApprovalCapability,
@@ -608,10 +611,34 @@ describe("provider-neutral agent commerce executor", () => {
   });
 
   it("uses one strict schema surface with explicit semantic confirmation fields", () => {
+    const legacyMenu = parseAgentToolArguments("searchMenu", {
+      scope: "all",
+      query: null,
+    });
+    expect(legacyMenu.success ? legacyMenu.data : undefined).toEqual({
+      scope: "all",
+      query: null,
+      purpose: "browse",
+    });
     expect(
       agentToolArgumentSchemas.searchMenu.safeParse({
         scope: "all",
         query: null,
+        purpose: "recommend",
+      }).success,
+    ).toBe(false);
+    expect(
+      agentToolArgumentSchemas.searchMenu.safeParse({
+        scope: "filtered",
+        query: "combo",
+        purpose: "browse",
+      }).success,
+    ).toBe(true);
+    expect(
+      agentToolArgumentSchemas.searchMenu.safeParse({
+        scope: "filtered",
+        query: "combo ga",
+        purpose: "recommend",
       }).success,
     ).toBe(true);
     expect(
@@ -978,6 +1005,55 @@ describe("provider-neutral agent commerce executor", () => {
       ok: false,
       errorCode: "unverified_item_code",
     });
+  });
+
+  it("bounds filtered menu evidence while preserving truthful provider counts", async () => {
+    const fixtures = createTestFixtures();
+    const seed = fixtures.menuItems[0]!;
+    fixtures.menuItems = Array.from({ length: 8 }, (_, index) => ({
+      ...seed,
+      code: `combo_${index + 1}`,
+      itemId: `combo_${index + 1}`,
+      posItemId: `combo_${index + 1}`,
+      productCode: `COMBO_${index + 1}`,
+      name: `Combo ${index + 1}`,
+      productUrlSlug: `combo-${index + 1}`,
+      builderUrl:
+        `https://www.kfcvietnam.com.vn/order/delivery/combo/combo-${index + 1}/builder`,
+    }));
+
+    const result = await executeAgentToolCall(
+      createMockClients(fixtures),
+      {
+        toolName: "searchMenu",
+        arguments: {
+          scope: "filtered",
+          query: "combo",
+          purpose: "browse",
+        },
+      },
+      { state: state() },
+    );
+
+    expect(result).toMatchObject({
+      ok: true,
+      value: {
+        total: 8,
+        returned: 5,
+        complete: false,
+        scope: { scope: "filtered", query: "combo" },
+      },
+    });
+    if (!result.ok || result.toolName !== "searchMenu") {
+      throw new Error("filtered menu lookup failed");
+    }
+    expect(result.value.items.map(({ code }) => code)).toEqual([
+      "combo_1",
+      "combo_2",
+      "combo_3",
+      "combo_4",
+      "combo_5",
+    ]);
   });
 
   it("keeps private mock profile data out of agent collection and checkpoint authority", async () => {

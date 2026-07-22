@@ -424,7 +424,7 @@ describe('KFC agent StateGraph runner', () => {
           .respondWithTools([
             {
               name: 'searchMenu',
-              args: { scope: 'filtered', query: 'Pepsi' },
+              args: { scope: 'filtered', query: 'Pepsi' , purpose: 'browse'},
             },
           ])
           .respond(
@@ -452,7 +452,7 @@ describe('KFC agent StateGraph runner', () => {
         agentModel: fakeModel().respondWithTools([
           {
             name: 'searchMenu',
-            args: { scope: 'filtered', query: 'Pepsi' },
+            args: { scope: 'filtered', query: 'Pepsi' , purpose: 'browse'},
           },
         ]),
         tracer,

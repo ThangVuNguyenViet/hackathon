@@ -93,9 +93,7 @@ function failureCode(error: unknown): string {
 
 function publicationCorrectionFeedback(state: KfcAgentStateValue): string {
   const bundle = state.modelPublicationBundle;
-  const privateEvidenceIds = bundle
-    ? privateDisclosureEvidenceIds(bundle)
-    : [];
+  const privateEvidenceIds = bundle ? privateDisclosureEvidenceIds(bundle) : [];
   if (privateEvidenceIds.length === 0) {
     return 'Return only a corrected final structured response. publication.privateEvidenceIds is empty. Set publicationDeclaration.privateDataDisclosure to "none" and publicationDeclaration.disclosureAuthorities to []. Public evidence citations never receive disclosure authorities. Do not call tools.';
   }

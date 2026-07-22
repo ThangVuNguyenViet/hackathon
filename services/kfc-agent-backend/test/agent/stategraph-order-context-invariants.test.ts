@@ -418,7 +418,7 @@ describe('maintained StateGraph authenticated order-context invariants', () => {
     const model = fakeModel()
       .respondWithTools([
         authoredToolCall('getRecentOrder', {}),
-        authoredToolCall('searchMenu', { scope: 'all', query: null }),
+        authoredToolCall('searchMenu', { scope: 'all', query: null , purpose: 'browse'}),
         authoredToolCall('searchPromotions', {
           scope: 'all',
           query: null,
@@ -608,6 +608,7 @@ describe('maintained StateGraph authenticated order-context invariants', () => {
       .respondWithTools([authoredToolCall('searchMenu', {
         scope: 'all',
         query: null,
+        purpose: 'browse',
       })])
       .respond((messages) => groundedReply({
         messages,

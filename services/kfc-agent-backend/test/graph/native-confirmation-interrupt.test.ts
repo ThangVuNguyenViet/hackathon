@@ -49,6 +49,7 @@ function orderConfirmationModel() {
         args: {
           scope: 'filtered',
           query: 'Combo Hợp Gu 99K',
+          purpose: 'browse',
         },
       },
       {

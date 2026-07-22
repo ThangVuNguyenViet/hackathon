@@ -168,10 +168,6 @@ describe('KFC chat API', () => {
     const server = buildServer({
       ...testAgent(
         fakeModel()
-          .respondWithTools([{
-            name: 'getMembershipProfile',
-            args: {},
-          }])
           .respond(groundedResponseModelReply({
             customerText:
               'Please sign in through the official KFC channel before accessing membership details.',
@@ -190,7 +186,7 @@ describe('KFC chat API', () => {
       },
     });
 
-    expect(response.statusCode).toBe(200);
+    expect(response.statusCode, response.body).toBe(200);
     expect(response.json()).not.toHaveProperty('state');
     expect(response.json().responseText).toMatch(/\b(?:sign|log)[ -]?in\b|đăng nhập/iu);
     expect(JSON.stringify(response.json())).not.toContain('loyalty-demo-profile');
@@ -202,12 +198,12 @@ describe('KFC chat API', () => {
         fakeModel()
           .respondWithTools([{
             name: 'searchMenu',
-            args: { scope: 'all', query: null },
+            args: { scope: 'all', query: null, purpose: 'browse' },
           }])
           .respond(groundedResponseModelReply({
             customerText: 'Mời bạn chọn món trong danh sách bên dưới.',
             evidenceReferences: [{
-              evidenceId: 'menu_search_results',
+              evidenceId: 'active_collection:searchMenu',
               claimKinds: ['product'],
             }],
           })),
@@ -225,13 +221,13 @@ describe('KFC chat API', () => {
       },
     });
 
-    expect(response.statusCode).toBe(200);
+    expect(response.statusCode, response.body).toBe(200);
     expect(response.json()).toMatchObject({
       responseText: 'Mời bạn chọn món trong danh sách bên dưới.',
-      genUi: { widgetKind: 'smartMenuPicker' },
+      genUi: { widgetKind: 'fullMenuBrowser' },
       presentation: {
         text: 'Mời bạn chọn món trong danh sách bên dưới.',
-        genUi: { widgetKind: 'smartMenuPicker' },
+        genUi: { widgetKind: 'fullMenuBrowser' },
       },
     });
   });
@@ -357,7 +353,7 @@ describe('KFC chat API', () => {
     const model = fakeModel()
       .respondWithTools([{
         name: 'searchMenu',
-        args: { scope: 'filtered', query: 'Combo Hợp Gu 99K' },
+        args: { scope: 'filtered', query: 'Combo Hợp Gu 99K' , purpose: 'browse'},
       }])
       .respondWithTools([{
         name: 'updateCart',
@@ -1453,7 +1449,7 @@ describe('KFC chat API', () => {
         fakeModel()
           .respondWithTools([{
             name: 'searchMenu',
-            args: { scope: 'filtered', query: 'Combo Hợp Gu 99K' },
+            args: { scope: 'filtered', query: 'Combo Hợp Gu 99K' , purpose: 'browse'},
           }])
           .respondWithTools([{
             name: 'updateCart',
@@ -1513,7 +1509,7 @@ describe('KFC chat API', () => {
         fakeModel()
           .respondWithTools([{
             name: 'searchMenu',
-            args: { scope: 'filtered', query: 'Combo Hợp Gu 99K' },
+            args: { scope: 'filtered', query: 'Combo Hợp Gu 99K' , purpose: 'browse'},
           }])
           .respondWithTools([{
             name: 'updateCart',
@@ -1609,7 +1605,7 @@ describe('KFC chat API', () => {
           .respondWithTools([
             {
               name: 'searchMenu',
-              args: { scope: 'filtered', query: 'Combo Hợp Gu 99K' },
+              args: { scope: 'filtered', query: 'Combo Hợp Gu 99K' , purpose: 'browse'},
             },
             {
               name: 'searchPromotions',
@@ -1639,6 +1635,7 @@ describe('KFC chat API', () => {
                 district: 'Biên Hòa',
                 city: 'ĐỒNG NAI',
               },
+              savedAddressRef: null,
               method: 'delivery',
             },
           }])

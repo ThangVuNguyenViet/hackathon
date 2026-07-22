@@ -271,6 +271,19 @@ describe('channel presentation delivery compatibility', () => {
       claimedRunId: null,
       receivedAt: '2026-07-20T06:00:00.000Z',
     });
+    await store.reserveWebhookDelivery({
+      channel: 'messenger',
+      externalEventId: 'mid_redacted_processing',
+      externalThreadId: externalUserId,
+      externalUserId,
+      sessionId,
+      receivedAt: pending.turn.receivedAt,
+      payload: {
+        eventType: 'message',
+        text: pending.turn.text,
+        receivedAt: pending.turn.receivedAt,
+      },
+    });
     await store.createAgentRun({
       id: 'run_redacted_processing',
       sessionId,
@@ -386,7 +399,23 @@ describe('channel presentation delivery compatibility', () => {
       externalMessageId: null,
       externalUserId,
       deliveryStatus: 'pending',
-      metadata: null,
+      metadata: {
+        catalogMediaIntent: {
+          schemaVersion: 'kfc-catalog-media-intent-v1',
+          intentId: 'intent-pre-intent-reclaim',
+          toolName: 'getItemDetails',
+          toolCallId: 'call-pre-intent-reclaim',
+          evidenceId: 'current:getItemDetails:evidence',
+          currentTurnRevision: 'turn-revision',
+          activeVerifiedRevision: 'item-revision',
+          outcome: 'selected',
+          media: [{
+            key: 'catalog:20751:0',
+            imageUrl: 'https://static.kfcvietnam.com.vn/images/items/lg/HOPGU.jpg',
+            title: 'Combo Hợp Gu 99K',
+          }],
+        },
+      },
     });
     await store.createAgentRun({
       id: 'run_pre_intent_reclaim',
@@ -450,7 +479,7 @@ describe('channel presentation delivery compatibility', () => {
         }
         const body = JSON.parse(String(init.body)) as {
           sender_action?: string;
-          message?: { text?: string };
+          message?: { text?: string; attachment?: unknown };
         };
         return new Response(
           JSON.stringify(
@@ -493,6 +522,33 @@ describe('channel presentation delivery compatibility', () => {
         )
         .find((body) => body.message)?.message?.text,
     ).toBe(assistantTurn.text);
+    expect(
+      messengerFetchImpl.mock.calls
+        .map(([, init]) =>
+          init?.body
+            ? JSON.parse(String(init.body)) as {
+                message?: {
+                  attachment?: {
+                    payload?: { url?: string };
+                  };
+                };
+              }
+            : {},
+        )
+        .filter((body) => body.message?.attachment),
+    ).toEqual([{
+      message: {
+        attachment: {
+          type: 'image',
+          payload: {
+            url: 'https://static.kfcvietnam.com.vn/images/items/lg/HOPGU.jpg',
+            is_reusable: true,
+          },
+        },
+      },
+      messaging_type: 'RESPONSE',
+      recipient: { id: externalUserId },
+    }]);
     await expect(
       store.getAgentRun('run_pre_intent_reclaim'),
     ).resolves.toMatchObject({
@@ -518,5 +574,17 @@ describe('channel presentation delivery compatibility', () => {
       text: assistantTurn.text,
       deliveryStatus: 'sent',
     })]);
+    await expect(
+      handlers.processMessengerAgentRun('run_pre_intent_reclaim'),
+    ).resolves.toEqual({ status: 'skipped' });
+    expect(
+      messengerFetchImpl.mock.calls.filter(([, init]) => {
+        if (!init?.body) return false;
+        const body = JSON.parse(String(init.body)) as {
+          message?: { attachment?: unknown };
+        };
+        return body.message?.attachment !== undefined;
+      }),
+    ).toHaveLength(1);
   });
 });

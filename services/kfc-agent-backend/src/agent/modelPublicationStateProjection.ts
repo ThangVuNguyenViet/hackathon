@@ -44,6 +44,8 @@ const projectedCollectionToolNames = [
   'answerAllergenQuestion',
 ] as const satisfies readonly CollectionToolName[];
 
+const maximumPublishedMenuCategorySummaries = 32;
+
 export interface ModelPublicationLifecycle {
   currentUserMessageDigest: string;
   authorityDigest: string;
@@ -468,10 +470,34 @@ function projectCollectionItems(
   }
 }
 
+function projectAllScopeMenuSummary(
+  result: VerifiedCollectionResult<unknown>,
+): Record<string, unknown> {
+  const categoryCounts = new Map<string, number>();
+  for (const item of result.items) {
+    const categoryId = (item as Partial<MenuItem>).categoryId;
+    if (typeof categoryId !== 'string' || categoryId.length === 0) continue;
+    categoryCounts.set(categoryId, (categoryCounts.get(categoryId) ?? 0) + 1);
+  }
+  return {
+    total: result.total,
+    returned: result.returned,
+    complete: result.complete,
+    scope: { scope: 'all' },
+    categoryCount: categoryCounts.size,
+    categories: [...categoryCounts]
+      .slice(0, maximumPublishedMenuCategorySummaries)
+      .map(([categoryId, itemCount]) => ({ categoryId, itemCount })),
+  };
+}
+
 export function projectCollectionResult(
   toolName: CollectionToolName,
   result: VerifiedCollectionResult<unknown>,
 ): unknown | undefined {
+  if (toolName === 'searchMenu' && result.scope.scope === 'all') {
+    return projectAllScopeMenuSummary(result);
+  }
   const items = projectCollectionItems(toolName, result.items);
   if (!items) return undefined;
   return {

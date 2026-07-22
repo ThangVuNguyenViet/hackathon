@@ -1,14 +1,9 @@
-import {
-  AIMessage,
-  type BaseMessage,
-} from '@langchain/core/messages';
+import { AIMessage, type BaseMessage } from '@langchain/core/messages';
 import { fakeModel } from '@langchain/core/testing';
 import { MemorySaver } from '@langchain/langgraph';
 import { describe, expect, it, vi } from 'vitest';
 import { DashboardEventBus } from '../../src/dashboard/eventBus.js';
-import {
-  createNoopAgentTracer,
-} from '../../src/observability/agentTracing.js';
+import { createNoopAgentTracer } from '../../src/observability/agentTracing.js';
 import type {
   ExternalCallContext,
   IrreversibleConfirmationBinding,
@@ -27,44 +22,29 @@ import {
   runAgentTurn,
   type AgentTurnInput,
 } from '../../src/graph/buildGraph.js';
-import {
-  createTrustedCustomerActionEnvelope,
-} from '../../src/domain/customerCommand.js';
+import { createTrustedCustomerActionEnvelope } from '../../src/domain/customerCommand.js';
 import type { CustomerAccessScope } from '../../src/domain/types.js';
 import { createMockClients } from '../../src/mock/createMockClients.js';
 import type { AppendConversationTurnInput } from '../../src/persistence/contracts.js';
-import type {
-  CreateConfirmationPauseInput,
-} from '../../src/persistence/contracts.js';
+import type { CreateConfirmationPauseInput } from '../../src/persistence/contracts.js';
 import { MemoryStore } from '../../src/persistence/memoryStore.js';
 import {
   createCommerceApprovalReceipt,
   digestCommerceAction,
 } from '../../src/ordering/approvalReceipt.js';
-import {
-  createCommerceApprovalExecutionFence,
-} from '../../src/ordering/approvalExecutionFence.js';
+import { createCommerceApprovalExecutionFence } from '../../src/ordering/approvalExecutionFence.js';
 import type { ToolTraceEntry } from '../../src/ordering/types.js';
 import { stateRevision } from '../../src/graph/turnSupport.js';
-import {
-  controlledCustomerAccess,
-} from '../fixtures/controlledCustomerAccess.js';
-import {
-  forceFirstBoundInvokeRetryableFailure,
-} from '../support/controlledRetryCanary.js';
-import {
-  createControlledRetryTraceCapture,
-} from '../support/controlledRetryTraceCapture.js';
+import { controlledCustomerAccess } from '../fixtures/controlledCustomerAccess.js';
+import { forceFirstBoundInvokeRetryableFailure } from '../support/controlledRetryCanary.js';
+import { createControlledRetryTraceCapture } from '../support/controlledRetryTraceCapture.js';
 import {
   groundedResponseClaims,
   groundedResponseModelReply,
 } from '../fixtures/groundedResponse.js';
 import { createTestFixtures } from '../fixtures/testFixtures.js';
 
-function turnInput(
-  model: ReturnType<typeof fakeModel>,
-  sessionId: string,
-) {
+function turnInput(model: ReturnType<typeof fakeModel>, sessionId: string) {
   return {
     sessionId,
     customerId: 'single-agent-customer',
@@ -159,8 +139,7 @@ async function authenticatedRejectionResume(
       checkpointId: record.checkpointId,
       bindingFingerprint: approvalBindingDigest,
       approvalBindingDigest,
-      providerIdempotencyKey:
-        `confirmation:${record.requestId}:handoff:test`,
+      providerIdempotencyKey: `confirmation:${record.requestId}:handoff:test`,
       attempt: 1,
       leaseToken: crypto.randomUUID(),
     },
@@ -222,13 +201,13 @@ class InterleavingMemoryStore extends MemoryStore {
 }
 
 function recordedPrompt(model: ReturnType<typeof fakeModel>): string {
-  return model.calls[0]?.messages.map((message) => message.text).join('\n') ?? '';
+  return (
+    model.calls[0]?.messages.map((message) => message.text).join('\n') ?? ''
+  );
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' &&
-    value !== null &&
-    !Array.isArray(value);
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
 function currentToolEvidenceId(
@@ -261,46 +240,52 @@ function currentToolEvidenceId(
 
 describe('single maintained KFC agent runtime', () => {
   it('uses one provider call for a tool-less turn', async () => {
-    const model = fakeModel()
-      .respond(groundedResponseModelReply({
+    const model = fakeModel().respond(
+      groundedResponseModelReply({
         customerText: 'I can help with that.',
-      }));
+      }),
+    );
 
-    const output = await runAgentTurn(turnInput(model, 'single-agent-one-call'));
+    const output = await runAgentTurn(
+      turnInput(model, 'single-agent-one-call'),
+    );
 
     expect(output.responseText).toBe('I can help with that.');
     expect(model.callCount).toBe(1);
   });
 
   it('fails closed before model invocation when publication access is revoked after observation', async () => {
-    const model = fakeModel().respond(groundedResponseModelReply({
-      customerText: 'This response must never be produced.',
-    }));
-    const input = turnInput(
-      model,
-      'single-agent-publication-access-revoked',
+    const model = fakeModel().respond(
+      groundedResponseModelReply({
+        customerText: 'This response must never be produced.',
+      }),
     );
+    const input = turnInput(model, 'single-agent-publication-access-revoked');
     const accessContext = controlledCustomerAccess({
       sessionId: input.sessionId,
       customerId: input.customerId,
       channel: input.channel,
     });
 
-    await expect(runAgentTurn({
-      ...input,
-      accessContext,
-      observeRun: async ({ kind }) => {
-        if (kind === 'planning') accessContext.authorizedScopes.splice(0);
-      },
-    })).rejects.toThrow('agent_model_publication_authority_invalid');
+    await expect(
+      runAgentTurn({
+        ...input,
+        accessContext,
+        observeRun: async ({ kind }) => {
+          if (kind === 'planning') accessContext.authorizedScopes.splice(0);
+        },
+      }),
+    ).rejects.toThrow('agent_model_publication_authority_invalid');
 
     expect(model.callCount).toBe(0);
   });
 
   it('fails closed before model invocation when publication authentication expires after observation', async () => {
-    const model = fakeModel().respond(groundedResponseModelReply({
-      customerText: 'This response must never be produced.',
-    }));
+    const model = fakeModel().respond(
+      groundedResponseModelReply({
+        customerText: 'This response must never be produced.',
+      }),
+    );
     const input = turnInput(
       model,
       'single-agent-publication-authentication-expired',
@@ -311,19 +296,21 @@ describe('single maintained KFC agent runtime', () => {
       channel: input.channel,
     });
 
-    await expect(runAgentTurn({
-      ...input,
-      accessContext,
-      observeRun: async ({ kind }) => {
-        if (
-          kind === 'planning' &&
-          accessContext.authenticationEvidence.state === 'verified'
-        ) {
-          accessContext.authenticationEvidence.expiresAt =
-            '2000-01-01T00:00:00.000Z';
-        }
-      },
-    })).rejects.toThrow('agent_model_publication_authority_invalid');
+    await expect(
+      runAgentTurn({
+        ...input,
+        accessContext,
+        observeRun: async ({ kind }) => {
+          if (
+            kind === 'planning' &&
+            accessContext.authenticationEvidence.state === 'verified'
+          ) {
+            accessContext.authenticationEvidence.expiresAt =
+              '2000-01-01T00:00:00.000Z';
+          }
+        },
+      }),
+    ).rejects.toThrow('agent_model_publication_authority_invalid');
 
     expect(model.callCount).toBe(0);
   });
@@ -370,12 +357,14 @@ describe('single maintained KFC agent runtime', () => {
       const initial = await publicationBundle(publicationState, runtime);
       loaded.state.cart = {
         id: 'publication-reissue-cart',
-        items: [{
-          itemCode: '20751',
-          name: 'Verified item',
-          quantity: 1,
-          unitPriceVnd: 99_000,
-        }],
+        items: [
+          {
+            itemCode: '20751',
+            name: 'Verified item',
+            quantity: 1,
+            unitPriceVnd: 99_000,
+          },
+        ],
         subtotalVnd: 99_000,
         discountVnd: 0,
         deliveryFeeVnd: 0,
@@ -390,8 +379,9 @@ describe('single maintained KFC agent runtime', () => {
         id: 'publication-reissue-cart',
         totalVnd: 99_000,
       });
-      await expect(publicationBundle(publicationState, runtime))
-        .resolves.toBe(reissued);
+      await expect(publicationBundle(publicationState, runtime)).resolves.toBe(
+        reissued,
+      );
     } finally {
       externalCalls.dispose();
     }
@@ -403,10 +393,11 @@ describe('single maintained KFC agent runtime', () => {
       'SYNTHETIC_FIXED_ACTION_PROSE_MUST_NOT_REACH_FUTURE_PROMPTS';
     const priorModelReply = 'A model-generated action reply remains history.';
     const currentText = 'This is an ordinary customer message.';
-    const model = fakeModel()
-      .respond(groundedResponseModelReply({
+    const model = fakeModel().respond(
+      groundedResponseModelReply({
         customerText: 'I received the ordinary message.',
-      }));
+      }),
+    );
     const input = turnInput(model, sessionId);
     await input.store.appendTurn({
       sessionId,
@@ -465,7 +456,7 @@ describe('single maintained KFC agent runtime', () => {
     expect(prompt).toContain(priorModelReply);
     expect(prompt).toContain(currentText);
     expect(output.responseText).toBe('I received the ordinary message.');
-    expect((await input.store.listTurns(sessionId))).toContainEqual(
+    expect(await input.store.listTurns(sessionId)).toContainEqual(
       expect.objectContaining({
         role: 'user',
         text: currentText,
@@ -474,22 +465,17 @@ describe('single maintained KFC agent runtime', () => {
   });
 
   it('retries one trace-visible transient provider failure', async () => {
-    const delegate = fakeModel()
-      .respond(groundedResponseModelReply({
+    const delegate = fakeModel().respond(
+      groundedResponseModelReply({
         customerText: 'Recovered without changing the request.',
-      }));
-    const trace = createControlledRetryTraceCapture(
-      createNoopAgentTracer(),
+      }),
     );
-    const input = turnInput(
-      delegate,
-      'single-agent-provider-retry',
-    );
+    const trace = createControlledRetryTraceCapture(createNoopAgentTracer());
+    const input = turnInput(delegate, 'single-agent-provider-retry');
 
     const retryInput: AgentTurnInput = {
       ...input,
-      agentModel:
-        forceFirstBoundInvokeRetryableFailure(delegate),
+      agentModel: forceFirstBoundInvokeRetryableFailure(delegate),
       tracer: trace.tracer,
     };
     const output = await runAgentTurn(retryInput);
@@ -501,20 +487,26 @@ describe('single maintained KFC agent runtime', () => {
 
   it('returns the complete verified menu collection in two provider calls', async () => {
     const claims = groundedResponseClaims({
-      evidenceReferences: [{
-        evidenceId: 'menu_search_results',
-        claimKinds: ['product'],
-      }],
+      evidenceReferences: [
+        {
+          evidenceId: 'active_collection:searchMenu',
+          claimKinds: ['product'],
+        },
+      ],
     });
     const model = fakeModel()
-      .respondWithTools([{
-        name: 'searchMenu',
-        args: { scope: 'all', query: null },
-      }])
-      .respond(groundedResponseModelReply({
-        customerText: 'I found verified menu options.',
-        ...claims,
-      }));
+      .respondWithTools([
+        {
+          name: 'searchMenu',
+          args: { scope: 'all', query: null, purpose: 'browse' },
+        },
+      ])
+      .respond(
+        groundedResponseModelReply({
+          customerText: 'I found verified menu options.',
+          ...claims,
+        }),
+      );
 
     const output = await runAgentTurn(
       turnInput(model, 'single-agent-two-call'),
@@ -529,7 +521,7 @@ describe('single maintained KFC agent runtime', () => {
     });
     expect(output.responseText).toContain('I found verified menu options.');
     expect(output.genUi).toMatchObject({
-      widgetKind: 'smartMenuPicker',
+      widgetKind: 'fullMenuBrowser',
       data: {
         items: output.state.activeMenuCollection?.result.items,
         total: output.state.activeMenuCollection?.result.total,
@@ -547,20 +539,26 @@ describe('single maintained KFC agent runtime', () => {
     const clients = createMockClients(createTestFixtures());
     const dashboard = new DashboardEventBus();
     const firstClaims = groundedResponseClaims({
-      evidenceReferences: [{
-        evidenceId: 'menu_search_results',
-        claimKinds: ['product'],
-      }],
+      evidenceReferences: [
+        {
+          evidenceId: 'menu_search_results',
+          claimKinds: ['product'],
+        },
+      ],
     });
     const firstModel = fakeModel()
-      .respondWithTools([{
-        name: 'searchMenu',
-        args: { scope: 'filtered', query: 'combo' },
-      }])
-      .respond(groundedResponseModelReply({
-        customerText: 'I loaded the complete verified menu.',
-        ...firstClaims,
-      }));
+      .respondWithTools([
+        {
+          name: 'searchMenu',
+          args: { scope: 'filtered', query: 'combo', purpose: 'browse' },
+        },
+      ])
+      .respond(
+        groundedResponseModelReply({
+          customerText: 'I loaded the complete verified menu.',
+          ...firstClaims,
+        }),
+      );
     const firstInput = {
       ...turnInput(firstModel, sessionId),
       store,
@@ -570,8 +568,7 @@ describe('single maintained KFC agent runtime', () => {
     };
 
     const firstOutput = await runAgentTurn(firstInput);
-    const collectionKey =
-      firstOutput.state.activeCollectionKeys?.searchMenu;
+    const collectionKey = firstOutput.state.activeCollectionKeys?.searchMenu;
     expect(collectionKey).toBeTruthy();
     expect(
       firstOutput.state.verifiedCollections?.searchMenu?.[collectionKey!],
@@ -579,16 +576,15 @@ describe('single maintained KFC agent runtime', () => {
 
     const secondClaims = groundedResponseClaims();
     const secondModel = fakeModel()
-      .respondWithTools([{
-        name: 'getItemDetails',
-        args: { code: '20751' },
-      }])
+      .respondWithTools([
+        {
+          name: 'getItemDetails',
+          args: { code: '20751' },
+        },
+      ])
       .respond((messages) => {
         secondClaims.evidenceReferences.splice(0, 1, {
-          evidenceId: currentToolEvidenceId(
-            messages,
-            'getItemDetails',
-          ),
+          evidenceId: currentToolEvidenceId(messages, 'getItemDetails'),
           claimKinds: ['product'],
         });
         return groundedResponseModelReply({
@@ -610,41 +606,111 @@ describe('single maintained KFC agent runtime', () => {
     expect(secondModel.callCount).toBe(2);
   });
 
+  it('can update the cart on the turn after a short okay response', async () => {
+    const sessionId = 'single-agent-cart-after-okay';
+    const store = new MemoryStore();
+    const checkpointer = new MemorySaver();
+    const clients = createMockClients(createTestFixtures());
+    const dashboard = new DashboardEventBus();
+    const firstModel = fakeModel()
+      .respondWithTools([
+        {
+          name: 'searchMenu',
+          args: { scope: 'all', query: null, purpose: 'browse' },
+        },
+      ])
+      .respond(
+        groundedResponseModelReply({
+          customerText: 'Okay.',
+        }),
+      );
+
+    await runAgentTurn({
+      ...turnInput(firstModel, sessionId),
+      store,
+      checkpointer,
+      clients,
+      dashboard,
+    });
+
+    const secondModel = fakeModel()
+      .respondWithTools([
+        {
+          name: 'updateCart',
+          args: {
+            changes: [
+              {
+                itemCode: '20751',
+                quantity: 1,
+                modifiers: [],
+              },
+            ],
+          },
+        },
+      ])
+      .respond(
+        groundedResponseModelReply({
+          customerText: 'Okay.',
+        }),
+      );
+    const output = await runAgentTurn({
+      ...turnInput(secondModel, sessionId),
+      text: 'Add item 20751 to my cart.',
+      externalMessageId: `${sessionId}-follow-up`,
+      store,
+      checkpointer,
+      clients,
+      dashboard,
+    });
+
+    expect(output.state.cart?.items).toEqual([
+      expect.objectContaining({ itemCode: '20751', quantity: 1 }),
+    ]);
+    expect(output.responseText).toBe('Okay.');
+    expect(secondModel.callCount).toBe(2);
+  });
+
   it('projects server-injected fulfillment arguments back into verified state', async () => {
     const claims = groundedResponseClaims();
     const model = fakeModel()
-      .respondWithTools([{
-        name: 'searchMenu',
-        args: { scope: 'all', query: null },
-      }])
-      .respondWithTools([{
-        name: 'updateCart',
-        args: {
-          changes: [{
-            itemCode: '20751',
-            quantity: 1,
-            modifiers: [],
-          }],
+      .respondWithTools([
+        {
+          name: 'searchMenu',
+          args: { scope: 'all', query: null, purpose: 'browse' },
         },
-      }])
-      .respondWithTools([{
-        name: 'quoteFulfillment',
-        args: {
-          address: {
-            label: null,
-            line1: '60 Đ. Phạm Văn Nghị',
-            district: 'Quận 7',
-            city: 'Hồ Chí Minh',
+      ])
+      .respondWithTools([
+        {
+          name: 'updateCart',
+          args: {
+            changes: [
+              {
+                itemCode: '20751',
+                quantity: 1,
+                modifiers: [],
+              },
+            ],
           },
-          method: 'delivery',
         },
-      }])
+      ])
+      .respondWithTools([
+        {
+          name: 'quoteFulfillment',
+          args: {
+            address: {
+              label: null,
+              line1: '60 Đ. Phạm Văn Nghị',
+              district: 'Quận 7',
+              city: 'Hồ Chí Minh',
+            },
+            savedAddressRef: null,
+            method: 'delivery',
+          },
+        },
+      ])
       .respond((messages) => {
         claims.evidenceReferences.splice(0, 1, {
-          evidenceId: currentToolEvidenceId(
-            messages,
-            'quoteFulfillment',
-          ),
+          evidenceId: currentToolEvidenceId(messages, 'quoteFulfillment'),
           claimKinds: ['fulfillment'],
         });
         return groundedResponseModelReply({
@@ -653,14 +719,10 @@ describe('single maintained KFC agent runtime', () => {
         })(messages);
       });
 
-    const input = turnInput(
-      model,
-      'single-agent-fulfillment-projection',
-    );
+    const input = turnInput(model, 'single-agent-fulfillment-projection');
     const output = await runAgentTurn({
       ...input,
-      text:
-        'Add item 20751 and deliver to 60 Đ. Phạm Văn Nghị, Quận 7, Hồ Chí Minh.',
+      text: 'Add item 20751 and deliver to 60 Đ. Phạm Văn Nghị, Quận 7, Hồ Chí Minh.',
     });
 
     expect(output.state.fulfillment?.storeId).toBe('KFCVN0318');
@@ -673,28 +735,83 @@ describe('single maintained KFC agent runtime', () => {
     expect(model.callCount).toBe(4);
   });
 
+  it('rejects a createAgent fulfillment address outside the published user authority', async () => {
+    const model = fakeModel()
+      .respondWithTools([
+        {
+          name: 'searchMenu',
+          args: { scope: 'all', query: null, purpose: 'browse' },
+        },
+      ])
+      .respondWithTools([
+        {
+          name: 'updateCart',
+          args: {
+            changes: [
+              {
+                itemCode: '20751',
+                quantity: 1,
+                modifiers: [],
+              },
+            ],
+          },
+        },
+      ])
+      .respondWithTools([
+        {
+          name: 'quoteFulfillment',
+          args: {
+            address: {
+              label: null,
+              line1: '999 Forged Provider Street',
+              district: 'Forged District',
+              city: 'Forged City',
+            },
+            savedAddressRef: null,
+            method: 'delivery',
+          },
+        },
+      ]);
+    const input = turnInput(model, 'single-agent-forged-address-authority');
+    const quoteFulfillment = vi.spyOn(
+      input.clients.fulfillment,
+      'quoteFulfillment',
+    );
+
+    await expect(
+      runAgentTurn({
+        ...input,
+        text: 'Add item 20751 and deliver to 60 Đ. Phạm Văn Nghị, Quận 7, Hồ Chí Minh.',
+      }),
+    ).rejects.toThrow('agent_address_authority_mismatch');
+    expect(quoteFulfillment).not.toHaveBeenCalled();
+  });
+
   it('suppresses a reversible mutation when the customer run is superseded', async () => {
     let current = true;
     let planningObservations = 0;
     const model = fakeModel()
-      .respondWithTools([{
-        name: 'searchMenu',
-        args: { scope: 'all', query: null },
-      }])
-      .respondWithTools([{
-        name: 'updateCart',
-        args: {
-          changes: [{
-            itemCode: '20751',
-            quantity: 1,
-            modifiers: [],
-          }],
+      .respondWithTools([
+        {
+          name: 'searchMenu',
+          args: { scope: 'all', query: null, purpose: 'browse' },
         },
-      }]);
-    const baseInput = turnInput(
-      model,
-      'single-agent-superseded-mutation',
-    );
+      ])
+      .respondWithTools([
+        {
+          name: 'updateCart',
+          args: {
+            changes: [
+              {
+                itemCode: '20751',
+                quantity: 1,
+                modifiers: [],
+              },
+            ],
+          },
+        },
+      ]);
+    const baseInput = turnInput(model, 'single-agent-superseded-mutation');
     const runId = 'single-agent-superseded-mutation-run';
     const run = await baseInput.store.createCustomerRun({
       id: runId,
@@ -720,14 +837,11 @@ describe('single maintained KFC agent runtime', () => {
         commitFence: {
           kind: 'customer_run' as const,
           runId,
-          sessionAuthorityGeneration:
-            run.sessionAuthorityGeneration,
+          sessionAuthorityGeneration: run.sessionAuthorityGeneration,
         },
       },
       observeRun: async (
-        observation: Parameters<
-          NonNullable<AgentTurnInput['observeRun']>
-        >[0],
+        observation: Parameters<NonNullable<AgentTurnInput['observeRun']>>[0],
       ) => {
         if (observation.kind !== 'planning') return;
         planningObservations += 1;
@@ -736,9 +850,7 @@ describe('single maintained KFC agent runtime', () => {
     };
     const applyChanges = vi.spyOn(input.clients.cart, 'applyChanges');
 
-    await expect(runAgentTurn(input)).rejects.toThrow(
-      'customer_run_cancelled',
-    );
+    await expect(runAgentTurn(input)).rejects.toThrow('customer_run_cancelled');
     expect(applyChanges).not.toHaveBeenCalled();
   });
 
@@ -754,9 +866,11 @@ describe('single maintained KFC agent runtime', () => {
           args: { query: 'phô mai' },
         },
       ])
-      .respond(groundedResponseModelReply({
-        customerText: 'I checked the verified information.',
-      }));
+      .respond(
+        groundedResponseModelReply({
+          customerText: 'I checked the verified information.',
+        }),
+      );
     const input = turnInput(model, 'single-agent-collection-events');
 
     await runAgentTurn(input);
@@ -765,18 +879,19 @@ describe('single maintained KFC agent runtime', () => {
       .getEvents(input.sessionId)
       .filter((event) => event.type === 'session_updated')
       .map((event) => event.payload.updateType);
-    expect(updateTypes).toEqual(expect.arrayContaining([
-      'promotion_answered',
-      'content_evidence_found',
-    ]));
+    expect(updateTypes).toEqual(
+      expect.arrayContaining(['promotion_answered', 'content_evidence_found']),
+    );
   });
 
   it('allows one response-only semantic correction and then continues', async () => {
     const model = fakeModel()
       .respond(new AIMessage('This raw response must be corrected.'))
-      .respond(groundedResponseModelReply({
-        customerText: 'I corrected the response using the typed contract.',
-      }));
+      .respond(
+        groundedResponseModelReply({
+          customerText: 'I corrected the response using the typed contract.',
+        }),
+      );
 
     const output = await runAgentTurn(
       turnInput(model, 'single-agent-one-correction'),
@@ -791,14 +906,18 @@ describe('single maintained KFC agent runtime', () => {
 
   it('fails closed on a second semantic correction', async () => {
     const model = fakeModel()
-      .respondWithTools([{
-        name: 'getItemDetails',
-        args: { code: '' },
-      }])
-      .respondWithTools([{
-        name: 'getModifierOptions',
-        args: { code: '' },
-      }]);
+      .respondWithTools([
+        {
+          name: 'getItemDetails',
+          args: { code: '' },
+        },
+      ])
+      .respondWithTools([
+        {
+          name: 'getModifierOptions',
+          args: { code: '' },
+        },
+      ]);
 
     await expect(
       runAgentTurn(turnInput(model, 'single-agent-two-corrections')),
@@ -808,56 +927,74 @@ describe('single maintained KFC agent runtime', () => {
 
   it('reserves no response slot after six accepted planning calls', async () => {
     const model = fakeModel()
-      .respondWithTools([{
-        name: 'searchMenu',
-        args: { scope: 'all', query: null },
-      }])
-      .respondWithTools([{
-        name: 'updateCart',
-        args: {
-          changes: [{
-            itemCode: '20751',
-            quantity: 1,
-            modifiers: [],
-          }],
+      .respondWithTools([
+        {
+          name: 'searchMenu',
+          args: { scope: 'all', query: null, purpose: 'browse' },
         },
-      }])
-      .respondWithTools([{
-        name: 'previewCart',
-        args: {},
-      }])
-      .respondWithTools([{
-        name: 'recommendAddOns',
-        args: {},
-      }])
-      .respondWithTools([{
-        name: 'quoteFulfillment',
-        args: {
-          address: {
-            label: null,
-            line1: '60 Đ. Phạm Văn Nghị',
-            district: 'Quận 7',
-            city: 'Hồ Chí Minh',
+      ])
+      .respondWithTools([
+        {
+          name: 'updateCart',
+          args: {
+            changes: [
+              {
+                itemCode: '20751',
+                quantity: 1,
+                modifiers: [],
+              },
+            ],
           },
-          method: 'delivery',
         },
-      }])
-      .respondWithTools([{
-        name: 'checkStoreAvailability',
-        args: {
-          storeId: 'KFCVN0318',
-          disposition: 'delivery',
+      ])
+      .respondWithTools([
+        {
+          name: 'previewCart',
+          args: {},
         },
-      }])
-      .respond(groundedResponseModelReply({
-        customerText: 'This seventh response must never be requested.',
-      }));
+      ])
+      .respondWithTools([
+        {
+          name: 'recommendAddOns',
+          args: {},
+        },
+      ])
+      .respondWithTools([
+        {
+          name: 'quoteFulfillment',
+          args: {
+            address: {
+              label: null,
+              line1: '60 Đ. Phạm Văn Nghị',
+              district: 'Quận 7',
+              city: 'Hồ Chí Minh',
+            },
+            savedAddressRef: null,
+            method: 'delivery',
+          },
+        },
+      ])
+      .respondWithTools([
+        {
+          name: 'checkStoreAvailability',
+          args: {
+            storeId: 'KFCVN0318',
+            disposition: 'delivery',
+          },
+        },
+      ])
+      .respond(
+        groundedResponseModelReply({
+          customerText: 'This seventh response must never be requested.',
+        }),
+      );
 
-    await expect(runAgentTurn({
-      ...turnInput(model, 'single-agent-six-call-limit'),
-      text:
-        'Add item 20751, deliver to 60 Đ. Phạm Văn Nghị, Quận 7, Hồ Chí Minh, and prepare invoice details.',
-    })).rejects.toThrow('agent_provider_call_limit_exceeded');
+    await expect(
+      runAgentTurn({
+        ...turnInput(model, 'single-agent-six-call-limit'),
+        text: 'Add item 20751, deliver to 60 Đ. Phạm Văn Nghị, Quận 7, Hồ Chí Minh, and prepare invoice details.',
+      }),
+    ).rejects.toThrow('agent_provider_call_limit_exceeded');
     expect(model.callCount).toBe(6);
   });
 
@@ -881,9 +1018,11 @@ describe('single maintained KFC agent runtime', () => {
           },
         },
       ])
-      .respond(groundedResponseModelReply({
-        customerText: 'The authored invoice batch was processed.',
-      }));
+      .respond(
+        groundedResponseModelReply({
+          customerText: 'The authored invoice batch was processed.',
+        }),
+      );
 
     const output = await runAgentTurn(
       turnInput(model, 'single-agent-same-name-batch'),
@@ -899,25 +1038,31 @@ describe('single maintained KFC agent runtime', () => {
 
   it('rejects an accepted tool name selected again in a later model round', async () => {
     const model = fakeModel()
-      .respondWithTools([{
-        name: 'collectInvoice',
-        args: {
-          companyName: 'Công ty ABC',
-          taxCode: '0312345678',
-          email: 'accepted@abc.test',
+      .respondWithTools([
+        {
+          name: 'collectInvoice',
+          args: {
+            companyName: 'Công ty ABC',
+            taxCode: '0312345678',
+            email: 'accepted@abc.test',
+          },
         },
-      }])
-      .respondWithTools([{
-        name: 'collectInvoice',
-        args: {
-          companyName: 'Công ty ABC',
-          taxCode: '0312345678',
-          email: 'repeated@abc.test',
+      ])
+      .respondWithTools([
+        {
+          name: 'collectInvoice',
+          args: {
+            companyName: 'Công ty ABC',
+            taxCode: '0312345678',
+            email: 'repeated@abc.test',
+          },
         },
-      }])
-      .respond(groundedResponseModelReply({
-        customerText: 'The accepted invoice request remains unchanged.',
-      }));
+      ])
+      .respond(
+        groundedResponseModelReply({
+          customerText: 'The accepted invoice request remains unchanged.',
+        }),
+      );
 
     const output = await runAgentTurn(
       turnInput(model, 'single-agent-later-same-name'),
@@ -931,10 +1076,12 @@ describe('single maintained KFC agent runtime', () => {
   });
 
   it('uses maintained HITL and emits an exact hidden action/revision binding', async () => {
-    const model = fakeModel().respondWithTools([{
-      name: 'handoff',
-      args: { reasons: ['customer requested support'] },
-    }]);
+    const model = fakeModel().respondWithTools([
+      {
+        name: 'handoff',
+        args: { reasons: ['customer requested support'] },
+      },
+    ]);
     const input = approvalTurnInput(
       model,
       'single-agent-hitl',
@@ -963,8 +1110,7 @@ describe('single maintained KFC agent runtime', () => {
         customerId: input.customerId,
         channel: input.channel,
         authenticatedSubject: input.customerId,
-        authenticationEvidenceRef:
-          `controlled-test:${input.customerId}`,
+        authenticationEvidenceRef: `controlled-test:${input.customerId}`,
       },
       approvalBinding: {
         capability: 'handoff',
@@ -989,10 +1135,12 @@ describe('single maintained KFC agent runtime', () => {
   });
 
   it('rejects legacy boolean approval in the maintained runtime', async () => {
-    const model = fakeModel().respondWithTools([{
-      name: 'handoff',
-      args: { reasons: ['customer requested support'] },
-    }]);
+    const model = fakeModel().respondWithTools([
+      {
+        name: 'handoff',
+        args: { reasons: ['customer requested support'] },
+      },
+    ]);
     const input = approvalTurnInput(
       model,
       'single-agent-legacy-approval',
@@ -1000,13 +1148,15 @@ describe('single maintained KFC agent runtime', () => {
     );
     const paused = await runAgentTurn(input);
 
-    await expect(runAgentTurn({
-      ...input,
-      confirmationResume: {
-        requestId: paused.pause!.requestId,
-        approved: true,
-      },
-    })).rejects.toThrow('agent_confirmation_resume_authority_required');
+    await expect(
+      runAgentTurn({
+        ...input,
+        confirmationResume: {
+          requestId: paused.pause!.requestId,
+          approved: true,
+        },
+      }),
+    ).rejects.toThrow('agent_confirmation_resume_authority_required');
     expect(await input.store.listEvents(input.sessionId)).not.toContainEqual(
       expect.objectContaining({ sourceType: 'agent:failed_closed' }),
     );
@@ -1018,7 +1168,7 @@ describe('single maintained KFC agent runtime', () => {
       .respondWithTools([
         {
           name: 'searchMenu',
-          args: { scope: 'all', query: null },
+          args: { scope: 'all', query: null, purpose: 'browse' },
         },
         {
           name: 'handoff',
@@ -1047,10 +1197,7 @@ describe('single maintained KFC agent runtime', () => {
       'handoff:write',
     );
     const searchMenu = vi.spyOn(input.clients.menu, 'searchMenu');
-    const escalateToHuman = vi.spyOn(
-      input.clients.handoff,
-      'escalateToHuman',
-    );
+    const escalateToHuman = vi.spyOn(input.clients.handoff, 'escalateToHuman');
 
     const output = await runAgentTurn(input);
 
@@ -1096,40 +1243,36 @@ describe('single maintained KFC agent runtime', () => {
         },
       ],
     },
-  ] as const)(
-    'rejects $label atomically',
-    async ({ calls }) => {
-      const model = fakeModel()
-        .respondWithTools([...calls])
-        .respond(groundedResponseModelReply({
+  ] as const)('rejects $label atomically', async ({ calls }) => {
+    const model = fakeModel()
+      .respondWithTools([...calls])
+      .respond(
+        groundedResponseModelReply({
           customerText: 'I could not safely process that action batch.',
-        }));
-      const input = approvalTurnInput(
-        model,
-        `single-agent-invalid-approval-${calls.length}-${calls[0].name}`,
-        'handoff:write',
+        }),
       );
-      const escalateToHuman = vi.spyOn(
-        input.clients.handoff,
-        'escalateToHuman',
-      );
+    const input = approvalTurnInput(
+      model,
+      `single-agent-invalid-approval-${calls.length}-${calls[0].name}`,
+      'handoff:write',
+    );
+    const escalateToHuman = vi.spyOn(input.clients.handoff, 'escalateToHuman');
 
-      const output = await runAgentTurn(input);
+    const output = await runAgentTurn(input);
 
-      expect(output.status).toBe('completed');
-      expect(output.pause).toBeUndefined();
-      expect(escalateToHuman).not.toHaveBeenCalled();
-      expect(output.state.invoiceRequest).toBeUndefined();
-      expect(model.callCount).toBe(2);
-    },
-  );
+    expect(output.status).toBe('completed');
+    expect(output.pause).toBeUndefined();
+    expect(escalateToHuman).not.toHaveBeenCalled();
+    expect(output.state.invoiceRequest).toBeUndefined();
+    expect(model.callCount).toBe(2);
+  });
 
   it('rejects provider reads combined with a final approval', async () => {
     const model = fakeModel()
       .respondWithTools([
         {
           name: 'searchMenu',
-          args: { scope: 'all', query: null },
+          args: { scope: 'all', query: null, purpose: 'browse' },
         },
         {
           name: 'findStores',
@@ -1140,23 +1283,19 @@ describe('single maintained KFC agent runtime', () => {
           args: { reasons: ['customer requested support'] },
         },
       ])
-      .respond(groundedResponseModelReply({
-        customerText: 'I could not safely process that action batch.',
-      }));
+      .respond(
+        groundedResponseModelReply({
+          customerText: 'I could not safely process that action batch.',
+        }),
+      );
     const input = approvalTurnInput(
       model,
       'single-agent-final-approval-hitl',
       'handoff:write',
     );
     const searchMenu = vi.spyOn(input.clients.menu, 'searchMenu');
-    const findStores = vi.spyOn(
-      input.clients.storeLocator,
-      'findStores',
-    );
-    const escalateToHuman = vi.spyOn(
-      input.clients.handoff,
-      'escalateToHuman',
-    );
+    const findStores = vi.spyOn(input.clients.storeLocator, 'findStores');
+    const escalateToHuman = vi.spyOn(input.clients.handoff, 'escalateToHuman');
 
     const output = await runAgentTurn(input);
 
@@ -1175,21 +1314,29 @@ describe('single maintained KFC agent runtime', () => {
     const clients = createMockClients(createTestFixtures());
     const dashboard = new DashboardEventBus();
     const orderModel = fakeModel()
-      .respondWithTools([{
-        name: 'handoff',
-        args: { reasons: ['order support requested'] },
-      }])
-      .respond(groundedResponseModelReply({
-        customerText: 'Order creation cancelled.',
-      }));
+      .respondWithTools([
+        {
+          name: 'handoff',
+          args: { reasons: ['order support requested'] },
+        },
+      ])
+      .respond(
+        groundedResponseModelReply({
+          customerText: 'Order creation cancelled.',
+        }),
+      );
     const handoffModel = fakeModel()
-      .respondWithTools([{
-        name: 'handoff',
-        args: { reasons: ['customer requested support'] },
-      }])
-      .respond(groundedResponseModelReply({
-        customerText: 'Human handoff cancelled.',
-      }));
+      .respondWithTools([
+        {
+          name: 'handoff',
+          args: { reasons: ['customer requested support'] },
+        },
+      ])
+      .respond(
+        groundedResponseModelReply({
+          customerText: 'Human handoff cancelled.',
+        }),
+      );
     const orderInput = {
       ...approvalTurnInput(orderModel, sessionId, 'handoff:write'),
       text: 'Submit my order',
@@ -1276,11 +1423,14 @@ describe('single maintained KFC agent runtime', () => {
     expect(loaded.currentUserTurn?.id).toBe(first.id);
     expect(loaded.state.latestUserMessage).toBe(first.text);
     expect(loaded.state.recentTurns?.at(-1)?.id).toBe(first.id);
-    expect(loaded.state.recentTurns?.map(({ id }) => id))
-      .not.toContain(second.id);
-    await expect(loadTurnState(input, {
-      currentUserTurnId: 'missing-checkpoint-turn',
-    })).rejects.toThrow('agent_current_user_turn_missing');
+    expect(loaded.state.recentTurns?.map(({ id }) => id)).not.toContain(
+      second.id,
+    );
+    await expect(
+      loadTurnState(input, {
+        currentUserTurnId: 'missing-checkpoint-turn',
+      }),
+    ).rejects.toThrow('agent_current_user_turn_missing');
   });
 
   it('rehydrates an exact v2 error receipt against the failed checkpoint trace', async () => {
@@ -1300,7 +1450,7 @@ describe('single maintained KFC agent runtime', () => {
     });
     const failedTrace: ToolTraceEntry = {
       toolName: 'searchMenu' as const,
-      arguments: { scope: 'filtered', query: 'unavailable' },
+      arguments: { scope: 'filtered', query: 'unavailable', purpose: 'browse' },
       ok: false,
       resultSummary: 'provider_error',
       provenance: [],
@@ -1354,8 +1504,7 @@ describe('single maintained KFC agent runtime', () => {
     });
 
     try {
-      const tracePrefixDigest =
-        await publicationToolTracePrefixDigest([]);
+      const tracePrefixDigest = await publicationToolTracePrefixDigest([]);
       const hydrated = await rehydratePublicationTurn({
         runtime,
         currentTurnId: currentTurn.id,
@@ -1381,68 +1530,64 @@ describe('single maintained KFC agent runtime', () => {
           evidenceDigest: 'b'.repeat(64),
         },
       ]) {
-        await expect(rehydratePublicationTurn({
-          runtime,
-          currentTurnId: currentTurn.id,
-          turnToolTraceStartIndex: 0,
-          turnToolTracePrefixDigest: tracePrefixDigest,
-          toolEvidenceReceipts: [tamperedReceipt],
-        })).rejects.toThrow(
-          'agent_checkpoint_tool_evidence_unrecoverable',
-        );
+        await expect(
+          rehydratePublicationTurn({
+            runtime,
+            currentTurnId: currentTurn.id,
+            turnToolTraceStartIndex: 0,
+            turnToolTracePrefixDigest: tracePrefixDigest,
+            toolEvidenceReceipts: [tamperedReceipt],
+          }),
+        ).rejects.toThrow('agent_checkpoint_tool_evidence_unrecoverable');
       }
 
       for (const tamperedAudit of [
         { currentTurnId: `${currentTurn.id}-other` },
         { traceIndex: 1 },
       ]) {
-        await input.store.appendEvent(
-          input.sessionId,
-          'graph:verified_state',
-          {
-            verifiedState: {
-              toolTrace: [{
+        await input.store.appendEvent(input.sessionId, 'graph:verified_state', {
+          verifiedState: {
+            toolTrace: [
+              {
                 ...failedTrace,
                 publicationEvidenceAudit: {
                   ...failedTrace.publicationEvidenceAudit!,
                   ...tamperedAudit,
                 },
-              }],
-            },
+              },
+            ],
           },
-        );
-        await expect(rehydratePublicationTurn({
+        });
+        await expect(
+          rehydratePublicationTurn({
+            runtime,
+            currentTurnId: currentTurn.id,
+            turnToolTraceStartIndex: 0,
+            turnToolTracePrefixDigest: tracePrefixDigest,
+            toolEvidenceReceipts: [receipt],
+          }),
+        ).rejects.toThrow('agent_checkpoint_tool_evidence_unrecoverable');
+      }
+
+      await input.store.appendEvent(input.sessionId, 'graph:verified_state', {
+        verifiedState: {
+          toolTrace: [
+            {
+              ...failedTrace,
+              arguments: { scope: 'all', query: null, purpose: 'browse' },
+            },
+          ],
+        },
+      });
+      await expect(
+        rehydratePublicationTurn({
           runtime,
           currentTurnId: currentTurn.id,
           turnToolTraceStartIndex: 0,
           turnToolTracePrefixDigest: tracePrefixDigest,
           toolEvidenceReceipts: [receipt],
-        })).rejects.toThrow(
-          'agent_checkpoint_tool_evidence_unrecoverable',
-        );
-      }
-
-      await input.store.appendEvent(
-        input.sessionId,
-        'graph:verified_state',
-        {
-          verifiedState: {
-            toolTrace: [{
-              ...failedTrace,
-              arguments: { scope: 'all', query: null },
-            }],
-          },
-        },
-      );
-      await expect(rehydratePublicationTurn({
-        runtime,
-        currentTurnId: currentTurn.id,
-        turnToolTraceStartIndex: 0,
-        turnToolTracePrefixDigest: tracePrefixDigest,
-        toolEvidenceReceipts: [receipt],
-      })).rejects.toThrow(
-        'agent_checkpoint_tool_evidence_unrecoverable',
-      );
+        }),
+      ).rejects.toThrow('agent_checkpoint_tool_evidence_unrecoverable');
     } finally {
       externalCalls.dispose();
     }
@@ -1491,8 +1636,7 @@ describe('single maintained KFC agent runtime', () => {
       };
       const evidenceDigest = digestCharacter.repeat(64);
       const receipt = {
-        schemaVersion:
-          'kfc-checkpoint-tool-evidence-receipt-v2' as const,
+        schemaVersion: 'kfc-checkpoint-tool-evidence-receipt-v2' as const,
         evidenceId: `current:searchMenu:${evidenceDigest}`,
         evidenceDigest,
         toolCallId: `failed-search-menu-call-${traceIndex}`,
@@ -1530,46 +1674,48 @@ describe('single maintained KFC agent runtime', () => {
     });
 
     try {
-      await expect(rehydratePublicationTurn({
-        runtime,
-        currentTurnId: currentTurn.id,
-        turnToolTraceStartIndex: 0,
-        turnToolTracePrefixDigest:
-          await publicationToolTracePrefixDigest([]),
-        toolEvidenceReceipts: [first.receipt, second.receipt],
-      })).resolves.toMatchObject({
+      await expect(
+        rehydratePublicationTurn({
+          runtime,
+          currentTurnId: currentTurn.id,
+          turnToolTraceStartIndex: 0,
+          turnToolTracePrefixDigest: await publicationToolTracePrefixDigest([]),
+          toolEvidenceReceipts: [first.receipt, second.receipt],
+        }),
+      ).resolves.toMatchObject({
         currentTurnToolTrace: traces,
       });
 
-      await expect(rehydratePublicationTurn({
-        runtime,
-        currentTurnId: currentTurn.id,
-        turnToolTraceStartIndex: 1,
-        turnToolTracePrefixDigest:
-          await publicationToolTracePrefixDigest([first.trace]),
-        toolEvidenceReceipts: [second.receipt],
-      })).rejects.toThrow(
-        'agent_checkpoint_publication_state_stale',
-      );
-      await expect(rehydratePublicationTurn({
-        runtime,
-        currentTurnId: currentTurn.id,
-        turnToolTraceStartIndex: 2,
-        turnToolTracePrefixDigest:
-          await publicationToolTracePrefixDigest(traces),
-        toolEvidenceReceipts: [],
-      })).rejects.toThrow(
-        'agent_checkpoint_publication_state_stale',
-      );
-      await expect(rehydratePublicationTurn({
-        runtime,
-        currentTurnId: currentTurn.id,
-        turnToolTraceStartIndex: 0,
-        turnToolTracePrefixDigest: 'f'.repeat(64),
-        toolEvidenceReceipts: [first.receipt, second.receipt],
-      })).rejects.toThrow(
-        'agent_checkpoint_publication_state_stale',
-      );
+      await expect(
+        rehydratePublicationTurn({
+          runtime,
+          currentTurnId: currentTurn.id,
+          turnToolTraceStartIndex: 1,
+          turnToolTracePrefixDigest: await publicationToolTracePrefixDigest([
+            first.trace,
+          ]),
+          toolEvidenceReceipts: [second.receipt],
+        }),
+      ).rejects.toThrow('agent_checkpoint_publication_state_stale');
+      await expect(
+        rehydratePublicationTurn({
+          runtime,
+          currentTurnId: currentTurn.id,
+          turnToolTraceStartIndex: 2,
+          turnToolTracePrefixDigest:
+            await publicationToolTracePrefixDigest(traces),
+          toolEvidenceReceipts: [],
+        }),
+      ).rejects.toThrow('agent_checkpoint_publication_state_stale');
+      await expect(
+        rehydratePublicationTurn({
+          runtime,
+          currentTurnId: currentTurn.id,
+          turnToolTraceStartIndex: 0,
+          turnToolTracePrefixDigest: 'f'.repeat(64),
+          toolEvidenceReceipts: [first.receipt, second.receipt],
+        }),
+      ).rejects.toThrow('agent_checkpoint_publication_state_stale');
     } finally {
       externalCalls.dispose();
     }
@@ -1577,13 +1723,17 @@ describe('single maintained KFC agent runtime', () => {
 
   it('revalidates the exact provider binding before a rejection resume', async () => {
     const model = fakeModel()
-      .respondWithTools([{
-        name: 'handoff',
-        args: { reasons: ['customer requested support'] },
-      }])
-      .respond(groundedResponseModelReply({
-        customerText: 'I left the order unsubmitted.',
-      }));
+      .respondWithTools([
+        {
+          name: 'handoff',
+          args: { reasons: ['customer requested support'] },
+        },
+      ])
+      .respond(
+        groundedResponseModelReply({
+          customerText: 'I left the order unsubmitted.',
+        }),
+      );
     const input = approvalTurnInput(
       model,
       'single-agent-reject-revalidation',
@@ -1616,8 +1766,7 @@ describe('single maintained KFC agent runtime', () => {
       catalogObservationId: authority.catalogObservationId,
       catalogObservationHash: authority.catalogObservationHash,
       cartRevision: record.approvalBinding.revisions.cartRevision,
-      fulfillmentRevision:
-        record.approvalBinding.revisions.fulfillmentRevision,
+      fulfillmentRevision: record.approvalBinding.revisions.fulfillmentRevision,
       paymentRevision: record.approvalBinding.revisions.paymentRevision,
       providerRevision: record.approvalBinding.revisions.providerRevision,
     });
@@ -1628,10 +1777,12 @@ describe('single maintained KFC agent runtime', () => {
   });
 
   it('rejects a stale provider binding before either approval decision resumes', async () => {
-    const model = fakeModel().respondWithTools([{
-      name: 'handoff',
-      args: { reasons: ['customer requested support'] },
-    }]);
+    const model = fakeModel().respondWithTools([
+      {
+        name: 'handoff',
+        args: { reasons: ['customer requested support'] },
+      },
+    ]);
     const input = approvalTurnInput(
       model,
       'single-agent-stale-provider-binding',
@@ -1653,10 +1804,12 @@ describe('single maintained KFC agent runtime', () => {
     const resume = await authenticatedRejectionResume(record);
 
     try {
-      await expect(runAgentTurn({
-        ...input,
-        confirmationResume: resume.confirmationResume,
-      })).rejects.toThrow('agent_approval_receipt_binding_mismatch');
+      await expect(
+        runAgentTurn({
+          ...input,
+          confirmationResume: resume.confirmationResume,
+        }),
+      ).rejects.toThrow('agent_approval_receipt_binding_mismatch');
     } finally {
       resume.externalCallScope.dispose();
     }
@@ -1669,8 +1822,7 @@ describe('single maintained KFC agent runtime', () => {
       catalogObservationId: authority.catalogObservationId,
       catalogObservationHash: authority.catalogObservationHash,
       cartRevision: record.approvalBinding.revisions.cartRevision,
-      fulfillmentRevision:
-        record.approvalBinding.revisions.fulfillmentRevision,
+      fulfillmentRevision: record.approvalBinding.revisions.fulfillmentRevision,
       paymentRevision: record.approvalBinding.revisions.paymentRevision,
       providerRevision: record.approvalBinding.revisions.providerRevision,
     });
@@ -1681,10 +1833,12 @@ describe('single maintained KFC agent runtime', () => {
   });
 
   it('rejects a receipt with a non-date expiry before resuming the model', async () => {
-    const model = fakeModel().respondWithTools([{
-      name: 'handoff',
-      args: { reasons: ['customer requested support'] },
-    }]);
+    const model = fakeModel().respondWithTools([
+      {
+        name: 'handoff',
+        args: { reasons: ['customer requested support'] },
+      },
+    ]);
     const input = approvalTurnInput(
       model,
       'single-agent-invalid-receipt-expiry',
@@ -1695,16 +1849,18 @@ describe('single maintained KFC agent runtime', () => {
     const resume = await authenticatedRejectionResume(record);
 
     try {
-      await expect(runAgentTurn({
-        ...input,
-        confirmationResume: {
-          ...resume.confirmationResume,
-          commerceReceipt: {
-            ...resume.confirmationResume.commerceReceipt,
-            expiresAt: 'not-a-date',
+      await expect(
+        runAgentTurn({
+          ...input,
+          confirmationResume: {
+            ...resume.confirmationResume,
+            commerceReceipt: {
+              ...resume.confirmationResume.commerceReceipt,
+              expiresAt: 'not-a-date',
+            },
           },
-        },
-      })).rejects.toThrow('agent_confirmation_resume_authority_required');
+        }),
+      ).rejects.toThrow('agent_confirmation_resume_authority_required');
     } finally {
       resume.externalCallScope.dispose();
     }
@@ -1725,18 +1881,20 @@ describe('single maintained KFC agent runtime', () => {
       metadata: null,
     });
 
-    await expect(runAgentTurn({
-      ...input,
-      trustedCustomerAction: createTrustedCustomerActionEnvelope({
-        source: 'kfc_genui_action',
-        assistantTurnId: 'assistant-turn-1',
-        attachmentId: 'attachment-1',
-        actionDigest: '0'.repeat(64),
-        verifiedRevision: '1'.repeat(64),
-        lifecycle: 'one_shot',
-        command: { kind: 'confirm_order' },
+    await expect(
+      runAgentTurn({
+        ...input,
+        trustedCustomerAction: createTrustedCustomerActionEnvelope({
+          source: 'kfc_genui_action',
+          assistantTurnId: 'assistant-turn-1',
+          attachmentId: 'attachment-1',
+          actionDigest: '0'.repeat(64),
+          verifiedRevision: '1'.repeat(64),
+          lifecycle: 'one_shot',
+          command: { kind: 'confirm_order' },
+        }),
       }),
-    })).rejects.toThrow('structured_action_verified_state_stale');
+    ).rejects.toThrow('structured_action_verified_state_stale');
     expect(model.callCount).toBe(0);
   });
 
@@ -1746,14 +1904,16 @@ describe('single maintained KFC agent runtime', () => {
     const checkpointer = new MemorySaver();
     const clients = createMockClients(createTestFixtures());
     const dashboard = new DashboardEventBus();
-    const firstModel = fakeModel()
-      .respond(groundedResponseModelReply({
+    const firstModel = fakeModel().respond(
+      groundedResponseModelReply({
         customerText: 'first response',
-      }));
-    const secondModel = fakeModel()
-      .respond(groundedResponseModelReply({
+      }),
+    );
+    const secondModel = fakeModel().respond(
+      groundedResponseModelReply({
         customerText: 'second response',
-      }));
+      }),
+    );
     const firstMarker = 'FIRST_EXACT_MESSAGE_49';
     const secondMarker = 'SECOND_EXACT_MESSAGE_49';
 

@@ -1,8 +1,6 @@
 import { z } from 'zod';
 import type { ExternalCallContext } from '../clients/interfaces.js';
-import {
-  type AgentToolResultForModel,
-} from '../graph/orderStatusEvidenceProjection.js';
+import { type AgentToolResultForModel } from '../graph/orderStatusEvidenceProjection.js';
 import {
   approvalCapabilityScopes,
   getToolBoundary,
@@ -15,18 +13,10 @@ import {
   buildCurrentAgentApprovalBinding,
   executeAgentToolCall,
 } from '../ordering/agentToolExecutor.js';
-import {
-  verifyCommerceApprovalExecutionFence,
-} from '../ordering/approvalExecutionFence.js';
-import {
-  verifyCommerceApprovalReceipt,
-} from '../ordering/approvalReceipt.js';
-import {
-  externalCallCancelledErrorCode,
-} from '../ordering/toolExecutor.js';
-import {
-  agentToolCallDisposition,
-} from '../ordering/toolCallDisposition.js';
+import { verifyCommerceApprovalExecutionFence } from '../ordering/approvalExecutionFence.js';
+import { verifyCommerceApprovalReceipt } from '../ordering/approvalReceipt.js';
+import { externalCallCancelledErrorCode } from '../ordering/toolExecutor.js';
+import { agentToolCallDisposition } from '../ordering/toolCallDisposition.js';
 import type {
   AgentToolCallResult,
   CommerceApprovalCapability,
@@ -37,12 +27,8 @@ import type {
 } from '../ordering/types.js';
 import { projectToolProgressFamily } from '../customerRuns/progressProjection.js';
 import { resolveResponseProfile } from '../presentation/responseProfile.js';
-import {
-  ensureCartForTool,
-} from '../graph/commerceExecution.js';
-import type {
-  AgentTurnInput,
-} from '../graph/agentTurnState.js';
+import { ensureCartForTool } from '../graph/commerceExecution.js';
+import type { AgentTurnInput } from '../graph/agentTurnState.js';
 import type { ConversationTurn, Order } from '../domain/types.js';
 import type { AgentGraphState } from '../graph/state.js';
 import {
@@ -64,12 +50,8 @@ import {
   assembleLoadedTurnState,
   type LoadedAgentTurnState,
 } from './agentTurnStateHydration.js';
-import {
-  semanticConversationTurns,
-} from './trustedActionConversation.js';
-import {
-  persistVerifiedStateForCurrentRun,
-} from './agentVerifiedStateCommit.js';
+import { semanticConversationTurns } from './trustedActionConversation.js';
+import { persistVerifiedStateForCurrentRun } from './agentVerifiedStateCommit.js';
 import {
   isAgentCollectionToolName,
   projectAgentToolResultForModelCall,
@@ -79,19 +61,10 @@ import {
   privacySafeAgentToolSpanOutputs,
   privacySafeAgentToolSpanFailure,
 } from './agentToolTracePrivacy.js';
-import {
-  loadOrAppendAgentCurrentUserTurn,
-} from './agentTurnIntake.js';
-export {
-  freshMessages,
-  messageText,
-} from './agentConversationMessages.js';
-export {
-  persistCompletedTurn,
-} from './agentTurnPersistence.js';
-export {
-  commerceToolDefinitions,
-} from './agentToolDefinitions.js';
+import { loadOrAppendAgentCurrentUserTurn } from './agentTurnIntake.js';
+export { freshMessages, messageText } from './agentConversationMessages.js';
+export { persistCompletedTurn } from './agentTurnPersistence.js';
+export { commerceToolDefinitions } from './agentToolDefinitions.js';
 export {
   createAgentTurnExternalCallScope,
   defaultAgentTurnDeadlineMs,
@@ -109,12 +82,10 @@ export interface SingleAgentRuntimeContext {
 }
 
 export type AgentExternalCallFailure =
-  | 'agent_turn_deadline_exceeded'
-  | 'customer_run_cancelled';
+  'agent_turn_deadline_exceeded' | 'customer_run_cancelled';
 
 export type AgentDispatchFailure =
-  | AgentExternalCallFailure
-  | 'agent_run_current_check_failed';
+  AgentExternalCallFailure | 'agent_run_current_check_failed';
 
 export function runtimeExternalCallFailure(
   runtime: SingleAgentRuntimeContext,
@@ -122,8 +93,7 @@ export function runtimeExternalCallFailure(
   const { deadlineAt, signal } = runtime.externalCallContext;
   if (!signal.aborted && Date.now() < deadlineAt) return null;
   return Date.now() >= deadlineAt ||
-    (signal.reason instanceof Error &&
-      signal.reason.name === 'TimeoutError')
+    (signal.reason instanceof Error && signal.reason.name === 'TimeoutError')
     ? 'agent_turn_deadline_exceeded'
     : 'customer_run_cancelled';
 }
@@ -137,16 +107,16 @@ export async function runtimeDispatchFailure(
   try {
     currentRun = await isRunStillCurrent(runtime.turnInput);
   } catch {
-    return runtimeExternalCallFailure(runtime) ??
-      'agent_run_current_check_failed';
+    return (
+      runtimeExternalCallFailure(runtime) ?? 'agent_run_current_check_failed'
+    );
   }
   const completedFailure = runtimeExternalCallFailure(runtime);
   if (completedFailure) return completedFailure;
   if (currentRun) return null;
-  runtime.abortExternalCalls(new DOMException(
-    'customer_run_cancelled',
-    'AbortError',
-  ));
+  runtime.abortExternalCalls(
+    new DOMException('customer_run_cancelled', 'AbortError'),
+  );
   return 'customer_run_cancelled';
 }
 
@@ -191,12 +161,10 @@ export function isApprovalCapability(
 export function toolCallRequiresApproval(
   call: Pick<PendingToolCall, 'toolName' | 'arguments'>,
 ): boolean {
-  const disposition = agentToolCallDisposition(
-    call.toolName,
-    call.arguments,
+  const disposition = agentToolCallDisposition(call.toolName, call.arguments);
+  return (
+    disposition.success && disposition.data.effect === 'irreversible_mutation'
   );
-  return disposition.success &&
-    disposition.data.effect === 'irreversible_mutation';
 }
 
 function projectedToolArguments(
@@ -212,8 +180,9 @@ function projectedToolArguments(
     return order ? { orderId: order.id } : call.arguments;
   }
   if (call.toolName === 'checkStoreAvailability') {
-    const parsed =
-      agentToolArgumentSchemas.checkStoreAvailability.parse(call.arguments);
+    const parsed = agentToolArgumentSchemas.checkStoreAvailability.parse(
+      call.arguments,
+    );
     if (!parsed.disposition) return call.arguments;
     return {
       storeId: parsed.storeId,
@@ -229,8 +198,10 @@ function projectedToolArguments(
       : call.arguments;
   }
   if (call.toolName !== 'quoteFulfillment') return call.arguments;
-  const parsed = agentToolArgumentSchemas.quoteFulfillment.parse(call.arguments);
-  if (!('address' in parsed)) {
+  const parsed = agentToolArgumentSchemas.quoteFulfillment.parse(
+    call.arguments,
+  );
+  if (parsed.address === null) {
     throw new Error('saved_address_ref_must_be_resolved_by_graph');
   }
   return {
@@ -256,17 +227,13 @@ async function applyAgentToolResult(input: {
   });
   try {
     assertRuntimeExternalCallActive(input.runtime);
-    if (
-      input.result.ok &&
-      isAgentCollectionToolName(input.result.toolName)
-    ) {
+    if (input.result.ok && isAgentCollectionToolName(input.result.toolName)) {
       if (!input.result.verifiedCollection) {
         throw new Error('agent_verified_collection_missing');
       }
       const trace: ToolTraceEntry = {
         toolName: input.result.toolName,
-        arguments:
-          input.call.auditArguments ?? input.call.arguments,
+        arguments: input.call.auditArguments ?? input.call.arguments,
         ok: true,
         resultSummary: input.result.message,
         provenance: input.result.provenance,
@@ -351,8 +318,8 @@ export async function executePortableCommerceCall(input: {
     : rawRequest;
   const approvalCapability =
     disposition.success &&
-      disposition.data.effect === 'irreversible_mutation' &&
-      isApprovalCapability(request.toolName)
+    disposition.data.effect === 'irreversible_mutation' &&
+    isApprovalCapability(request.toolName)
       ? request.toolName
       : undefined;
   const requiresApproval = approvalCapability !== undefined;
@@ -374,8 +341,7 @@ export async function executePortableCommerceCall(input: {
   await input.runtime.turnInput.observeRun?.({
     kind: 'tool',
     protected:
-      approval !== undefined ||
-      protectedAgentToolNames.has(request.toolName),
+      approval !== undefined || protectedAgentToolNames.has(request.toolName),
     irreversible: requiresApproval,
     progressFamily: projectToolProgressFamily(request),
   });
@@ -394,9 +360,7 @@ export async function executePortableCommerceCall(input: {
     input.runtime.externalCallContext,
   );
   if (!cartInitialization.ok) {
-    if (
-      cartInitialization.errorCode === externalCallCancelledErrorCode
-    ) {
+    if (cartInitialization.errorCode === externalCallCancelledErrorCode) {
       assertRuntimeExternalCallActive(input.runtime);
       throw new Error(externalCallCancelledErrorCode);
     }
@@ -453,10 +417,7 @@ export async function executePortableCommerceCall(input: {
       },
     );
     assertRuntimeExternalCallActive(input.runtime);
-    if (
-      !result.ok &&
-      result.errorCode === externalCallCancelledErrorCode
-    ) {
+    if (!result.ok && result.errorCode === externalCallCancelledErrorCode) {
       throw new Error(externalCallCancelledErrorCode);
     }
     const resultFailure = await runtimeDispatchFailure(input.runtime);
@@ -469,11 +430,12 @@ export async function executePortableCommerceCall(input: {
     });
     const stateFailure = await runtimeDispatchFailure(input.runtime);
     if (stateFailure) throw new Error(stateFailure);
-    await toolSpan.end(await privacySafeAgentToolSpanOutputs({
-      result,
-      auditArguments:
-        input.call.auditArguments ?? request.arguments,
-    }));
+    await toolSpan.end(
+      await privacySafeAgentToolSpanOutputs({
+        result,
+        auditArguments: input.call.auditArguments ?? request.arguments,
+      }),
+    );
   } catch (error) {
     await toolSpan.fail(
       privacySafeAgentToolSpanFailure(request.toolName, error),
@@ -506,10 +468,7 @@ export async function executePortableCommerceReadOnly(input: {
     input.call.toolName,
     input.call.arguments,
   );
-  if (
-    !disposition.success ||
-    disposition.data.effect !== 'provider_read'
-  ) {
+  if (!disposition.success || disposition.data.effect !== 'provider_read') {
     throw new Error('agent_parallel_read_dispatch_invalid');
   }
   const request: ToolCallRequest = {
@@ -549,10 +508,7 @@ export async function preflightPortableCommerceRead(input: {
     input.call.toolName,
     input.call.arguments,
   );
-  if (
-    !disposition.success ||
-    disposition.data.effect !== 'provider_read'
-  ) {
+  if (!disposition.success || disposition.data.effect !== 'provider_read') {
     throw new Error('agent_parallel_read_dispatch_invalid');
   }
   const request: ToolCallRequest = {
@@ -573,8 +529,7 @@ export async function preflightPortableCommerceRead(input: {
     arguments: request.arguments,
     ...(input.call.auditArguments
       ? {
-          auditArguments:
-            structuredClone(input.call.auditArguments),
+          auditArguments: structuredClone(input.call.auditArguments),
         }
       : {}),
   };
@@ -587,17 +542,13 @@ export function projectPortableCommerceReadResult(input: {
   result: AgentToolCallResult;
   currentTurnToolTrace: ToolTraceEntry[];
 }): void {
-  if (
-    input.result.ok &&
-    isAgentCollectionToolName(input.result.toolName)
-  ) {
+  if (input.result.ok && isAgentCollectionToolName(input.result.toolName)) {
     if (!input.result.verifiedCollection) {
       throw new Error('agent_verified_collection_missing');
     }
     const trace: ToolTraceEntry = {
       toolName: input.result.toolName,
-      arguments:
-        input.call.auditArguments ?? input.call.arguments,
+      arguments: input.call.auditArguments ?? input.call.arguments,
       ok: true,
       resultSummary: input.result.message,
       provenance: input.result.provenance,
@@ -749,8 +700,7 @@ export async function validateApprovalResume(
         confirmationRequestId: resume.requestId,
         ...(resume.verifiedGuestAuthority
           ? {
-              verifiedGuestAuthority:
-                resume.verifiedGuestAuthority,
+              verifiedGuestAuthority: resume.verifiedGuestAuthority,
             }
           : {}),
       },

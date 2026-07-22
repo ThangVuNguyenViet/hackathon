@@ -4,6 +4,7 @@ import type { OrderStatusDeliveryEstimate } from "./orderStatusEvidence.js";
 import type {
   StateGraphTurnProofBinding,
 } from './stateGraphTurnProof.js';
+import type { CatalogMediaIntent } from '../presentation/catalogMediaIntent.js';
 
 export type Channel =
   "messenger" | "zalo" | "kfc" | "messenger_mock" | "zalo_mock";
@@ -191,6 +192,8 @@ export interface ConversationTurnMetadata {
   authorType?: "ai_agent" | "human_agent";
   agentId?: string;
   responseProfile?: "genui" | "social";
+  /** Immutable current-turn media selection; recovery reuses it without reading catalog state. */
+  catalogMediaIntent?: CatalogMediaIntent;
   release?: {
     gitSha: string;
     deploymentId: string;

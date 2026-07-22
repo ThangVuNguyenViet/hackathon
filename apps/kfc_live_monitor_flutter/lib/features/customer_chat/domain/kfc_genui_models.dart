@@ -6,6 +6,7 @@ part 'kfc_payment_method_authority.dart';
 
 enum KfcGenUiWidgetKind {
   smartMenuPicker('smartMenuPicker'),
+  fullMenuBrowser('fullMenuBrowser'),
   productDetailCard('productDetailCard'),
   modifierPicker('modifierPicker'),
   promotionGallery('promotionGallery'),
@@ -327,6 +328,7 @@ class KfcGenUiAttachment {
   bool _isKnownActionForWidget(String actionId) {
     return switch (widgetKind) {
       KfcGenUiWidgetKind.smartMenuPicker => actionId == 'add_items',
+      KfcGenUiWidgetKind.fullMenuBrowser => actionId == 'add_items',
       KfcGenUiWidgetKind.productDetailCard => actionId == 'add_item',
       KfcGenUiWidgetKind.modifierPicker => actionId.startsWith(
         'customize_item:',
@@ -559,7 +561,8 @@ class KfcGenUiAttachment {
   bool _hasValidDataDomainForAction(String actionId) {
     return switch (actionId) {
       'add_items' =>
-        widgetKind == KfcGenUiWidgetKind.smartMenuPicker &&
+        (widgetKind == KfcGenUiWidgetKind.smartMenuPicker ||
+                widgetKind == KfcGenUiWidgetKind.fullMenuBrowser) &&
             _uniqueRecordsByIdentifier(data['items'], 'code') != null,
       'add_item' =>
         widgetKind == KfcGenUiWidgetKind.productDetailCard &&

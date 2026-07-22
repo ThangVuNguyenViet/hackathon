@@ -15,10 +15,7 @@ export interface KfcCreateAgentToolDependencies {
 }
 
 const toolDefinitions = new Map(
-  commerceToolDefinitions().map((definition) => [
-    definition.name,
-    definition,
-  ]),
+  commerceToolDefinitions().map((definition) => [definition.name, definition]),
 );
 
 export function createKfcCreateAgentTools(

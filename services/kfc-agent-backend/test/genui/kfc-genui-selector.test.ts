@@ -337,7 +337,7 @@ describe('selectKfcGenUiAttachment', () => {
     });
   });
 
-  it('projects every verified broad-menu row with provider categories and the five-item selection limit', () => {
+  it('selects the full-menu browser only for a complete verified all-scope search collection', () => {
     const menuSearchResults = Array.from({ length: 12 }, (_, index) => ({
       code: `item_${index + 1}`,
       name: `Món ${index + 1}`,
@@ -349,26 +349,32 @@ describe('selectKfcGenUiAttachment', () => {
       imageUrl: `https://example.test/item-${index + 1}.jpg`,
       available: true,
     }));
+    const collection = {
+      key: 'all',
+      revision: 'menu-revision',
+      providerRevision: 'provider-revision',
+      result: {
+        items: menuSearchResults,
+        total: menuSearchResults.length,
+        returned: menuSearchResults.length,
+        complete: true,
+        scope: { scope: 'all' as const },
+      },
+    };
     const attachment = selectKfcGenUiAttachment({
       state: state({
         menuSearchResults,
-        activeMenuCollection: {
-          key: 'all',
-          revision: 'menu-revision',
-          providerRevision: 'provider-revision',
-          result: {
-            items: menuSearchResults,
-            total: menuSearchResults.length,
-            returned: menuSearchResults.length,
-            complete: true,
-            scope: { scope: 'all' },
-          },
+        activeMenuCollection: collection,
+        activeCollectionKeys: { searchMenu: collection.key },
+        verifiedCollections: {
+          searchMenu: { [collection.key]: collection },
         },
       }),
       turnToolNames: ['searchMenu'],
     });
 
-    expect(attachment?.widgetKind).toBe('smartMenuPicker');
+    expect(attachment?.widgetKind).toBe('fullMenuBrowser');
+    expect(attachment?.title).toBe('Toàn bộ thực đơn');
     expect(attachment?.data.items).toHaveLength(12);
     expect(attachment?.data.items).toEqual(
       expect.arrayContaining([
@@ -386,12 +392,144 @@ describe('selectKfcGenUiAttachment', () => {
       total: 12,
       returned: 12,
       complete: true,
+      collection: {
+        key: 'all',
+        revision: 'menu-revision',
+        providerRevision: 'provider-revision',
+        scope: { scope: 'all' },
+      },
     });
     expect(attachment?.authority).toMatchObject({
       schemaVersion: 'kfc-genui-v1',
       sessionId: 'session_1',
       customerId: 'customer_1',
       actionLifecycle: 'one_shot',
+    });
+  });
+
+  it.each([
+    {
+      name: 'incomplete',
+      items: [{
+        code: 'partial-1',
+        name: 'Partial item',
+        description: 'Partial description',
+        category: 'Combo',
+        categoryId: 'combo',
+        priceVnd: 50_000,
+        originalPriceVnd: null,
+        imageUrl: 'https://example.test/partial.jpg',
+        available: true,
+      }],
+      total: 2,
+      returned: 1,
+      complete: false,
+      expectedKind: 'smartMenuPicker',
+    },
+    {
+      name: 'count-mismatched',
+      items: [{
+        code: 'mismatch-1',
+        name: 'Mismatch item',
+        description: 'Mismatch description',
+        category: 'Combo',
+        categoryId: 'combo',
+        priceVnd: 50_000,
+        originalPriceVnd: null,
+        imageUrl: 'https://example.test/mismatch.jpg',
+        available: true,
+      }],
+      total: 2,
+      returned: 1,
+      complete: true,
+      expectedKind: 'smartMenuPicker',
+    },
+    {
+      name: 'empty',
+      items: [],
+      total: 0,
+      returned: 0,
+      complete: true,
+      expectedKind: undefined,
+    },
+  ])('does not claim the entire menu for a $name all-scope collection', ({
+    items,
+    total,
+    returned,
+    complete,
+    expectedKind,
+  }) => {
+    const collection = {
+      key: 'all',
+      revision: 'menu-revision',
+      providerRevision: 'provider-revision',
+      result: {
+        items,
+        total,
+        returned,
+        complete,
+        scope: { scope: 'all' as const },
+      },
+    };
+    const attachment = selectKfcGenUiAttachment({
+      state: state({
+        menuSearchResults: items,
+        activeMenuCollection: collection,
+        activeCollectionKeys: { searchMenu: collection.key },
+        verifiedCollections: {
+          searchMenu: { [collection.key]: collection },
+        },
+      }),
+      turnToolNames: ['searchMenu'],
+    });
+
+    expect(attachment?.widgetKind).toBe(expectedKind);
+    expect(attachment?.title).not.toBe('Toàn bộ thực đơn');
+  });
+
+  it('keeps the verified filtered collection complete while showing only five choices', () => {
+    const items = Array.from({ length: 12 }, (_, index) => ({
+      code: `filtered-${index + 1}`,
+      name: `Filtered ${index + 1}`,
+      description: `Filtered description ${index + 1}`,
+      category: 'Burger',
+      categoryId: 'burger',
+      priceVnd: 50_000 + index,
+      originalPriceVnd: null,
+      imageUrl: `https://example.test/filtered-${index + 1}.jpg`,
+      available: true,
+    }));
+    const collection = {
+      key: 'filtered:burger',
+      revision: 'filtered-revision',
+      providerRevision: 'provider-revision',
+      result: {
+        items,
+        total: items.length,
+        returned: items.length,
+        complete: true,
+        scope: { scope: 'filtered' as const, query: 'burger' },
+      },
+    };
+    const attachment = selectKfcGenUiAttachment({
+      state: state({
+        menuSearchResults: items,
+        activeMenuCollection: collection,
+        activeCollectionKeys: { searchMenu: collection.key },
+        verifiedCollections: {
+          searchMenu: { [collection.key]: collection },
+        },
+      }),
+      turnToolNames: ['searchMenu'],
+    });
+
+    expect(attachment?.widgetKind).toBe('smartMenuPicker');
+    expect(attachment?.data.items).toEqual(items.slice(0, 5));
+    expect(attachment?.data).toMatchObject({
+      displayed: 5,
+      total: 12,
+      returned: 12,
+      complete: true,
     });
   });
 
@@ -453,7 +591,7 @@ describe('selectKfcGenUiAttachment', () => {
       turnToolNames: ['searchMenu'],
     });
     const items = attachment?.data.items as Array<Record<string, unknown>>;
-    expect(items).toHaveLength(6);
+    expect(items).toHaveLength(5);
     expect(attachment?.data).not.toHaveProperty('partySize');
     expect(attachment?.data).not.toHaveProperty('budgetVnd');
     expect(items[0]).not.toHaveProperty('recommendedQuantity');

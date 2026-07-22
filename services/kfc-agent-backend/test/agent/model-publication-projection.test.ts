@@ -386,7 +386,16 @@ describe('model publication projection', () => {
 
     expect(publicationAuthority.privateAccess).toEqual({ state: 'none' });
     expect(publication.modelState.cart).toBeDefined();
-    expect(serialized).toContain('PUBLIC ACTIVE MENU');
+    expect(serialized).not.toContain('PUBLIC ACTIVE MENU');
+    expect(publication.modelState.activeCollections?.searchMenu).toEqual({
+      total: 1,
+      returned: 1,
+      complete: true,
+      scope: { scope: 'all' },
+      categoryCount: 1,
+      categories: [{ categoryId: 'test-chicken', itemCount: 1 }],
+    });
+    expect(publication.modelState).not.toHaveProperty('menuSearchResults');
     expect(serialized).not.toContain('PRIVATE ACTIVE');
     expect(serialized).not.toContain('PRIVATE MEMBER REWARD');
     expect(publication.lifecycle).toMatchObject({
@@ -420,6 +429,16 @@ describe('model publication projection', () => {
       execution,
     });
     if (!evidence) throw new Error('public current evidence missing');
+    expect(evidence.value).toEqual({
+      total: 1,
+      returned: 1,
+      complete: true,
+      scope: { scope: 'all' },
+      categoryCount: 1,
+      categories: [{ categoryId: '20000', itemCount: 1 }],
+    });
+    expect(JSON.stringify(evidence)).not.toContain('Combo Hợp Gu 99K');
+    expect(JSON.stringify(evidence)).not.toContain('imageUrl');
     const publication = await buildModelPublicationBundle({
       state: durable,
       authority: publicationAuthority,
@@ -452,7 +471,7 @@ describe('model publication projection', () => {
     const serialized = JSON.stringify(publication);
 
     expect(serialized).toContain('PRIVATE ACTIVE DRAFT LINE');
-    expect(serialized).toContain('PUBLIC ACTIVE MENU');
+    expect(serialized).not.toContain('PUBLIC ACTIVE MENU');
     expect(serialized).not.toContain('order-private-history');
     expect(serialized).not.toContain('PRIVATE ACTIVE PAYMENT');
     expect(serialized).not.toContain('PRIVATE ACTIVE METHOD');
@@ -787,7 +806,7 @@ describe('model publication projection', () => {
       call: {
         id: 'tool-call-current-menu-detail',
         toolName: 'searchMenu',
-        arguments: { scope: 'all', query: null },
+        arguments: { scope: 'filtered', query: 'CURRENT MENU DETAIL' },
       },
       fixtures,
     });
@@ -803,7 +822,7 @@ describe('model publication projection', () => {
     expect(privateDisclosureEvidenceIds(withCurrentEvidence)).toEqual([]);
   });
 
-  it('publishes an active typed collection without reviving stale raw fields', async () => {
+  it('summarizes an active all-scope menu without publishing catalog item payload', async () => {
     const collectionKey = 'menu:all';
     const durable = state({
       menuSearchResults: [menuItem('STALE RAW MENU RESULT')],
@@ -830,12 +849,23 @@ describe('model publication projection', () => {
     const publication = await bundle(durable);
     const serialized = JSON.stringify(publication);
 
-    expect(serialized).toContain('ACTIVE TYPED MENU ITEM');
-    expect(serialized).toContain('test-chicken');
+    expect(serialized).not.toContain('ACTIVE TYPED MENU ITEM');
+    expect(serialized).not.toContain('Current catalog description');
+    expect(serialized).not.toContain('https://example.com/item.png');
+    expect(serialized).not.toContain('item-1');
     expect(serialized).not.toContain('STALE RAW MENU RESULT');
     expect(serialized).not.toContain('STALE RAW DETAIL');
     expect(serialized).not.toContain('internal-revision');
     expect(serialized).not.toContain('internal-provider-revision');
+    expect(publication.modelState.activeCollections?.searchMenu).toEqual({
+      total: 1,
+      returned: 1,
+      complete: true,
+      scope: { scope: 'all' },
+      categoryCount: 1,
+      categories: [{ categoryId: 'test-chicken', itemCount: 1 }],
+    });
+    expect(publication.modelState).not.toHaveProperty('menuSearchResults');
     expect(
       publication.evidence.find(
         (entry) => entry.evidenceId === 'active_collection:searchMenu',
@@ -853,6 +883,39 @@ describe('model publication projection', () => {
     expect(publication.evidence).not.toContainEqual(
       expect.objectContaining({ evidenceId: 'active_collections' }),
     );
+  });
+
+  it('retains every verified item for a filtered menu publication', async () => {
+    const collectionKey = 'menu:filtered';
+    const items = [
+      menuItem('FILTERED MENU ITEM ONE'),
+      { ...menuItem('FILTERED MENU ITEM TWO'), code: 'item-2' },
+    ];
+    const durable = state({
+      activeCollectionKeys: { searchMenu: collectionKey },
+      verifiedCollections: {
+        searchMenu: {
+          [collectionKey]: {
+            key: collectionKey,
+            revision: 'filtered-revision',
+            providerRevision: 'filtered-provider-revision',
+            result: {
+              items,
+              total: items.length,
+              returned: items.length,
+              complete: true,
+              scope: { scope: 'filtered', query: 'burger' },
+            },
+          },
+        },
+      },
+    });
+
+    const publication = await bundle(durable);
+
+    expect(publication.modelState.menuSearchResults).toHaveLength(2);
+    expect(JSON.stringify(publication)).toContain('FILTERED MENU ITEM ONE');
+    expect(JSON.stringify(publication)).toContain('FILTERED MENU ITEM TWO');
   });
 
   it('uses structural state rather than customer-text classification', async () => {

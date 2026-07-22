@@ -38,6 +38,7 @@ Future<void> runKfcGenUiComponentGolden(
 ) async {
   final frameSize = switch (kind) {
     KfcGenUiWidgetKind.smartMenuPicker => const Size(390, 844),
+    KfcGenUiWidgetKind.fullMenuBrowser => const Size(390, 780),
     KfcGenUiWidgetKind.productDetailCard => const Size(390, 700),
     KfcGenUiWidgetKind.modifierPicker => const Size(390, 700),
     KfcGenUiWidgetKind.promotionGallery => const Size(390, 844),
@@ -64,6 +65,7 @@ Future<void> runKfcGenUiComponentGolden(
             padding: const EdgeInsets.all(KfcOpsTokens.gutter),
             child: switch (kind) {
               KfcGenUiWidgetKind.smartMenuPicker ||
+              KfcGenUiWidgetKind.fullMenuBrowser ||
               KfcGenUiWidgetKind.productDetailCard ||
               KfcGenUiWidgetKind.modifierPicker ||
               KfcGenUiWidgetKind.promotionGallery ||

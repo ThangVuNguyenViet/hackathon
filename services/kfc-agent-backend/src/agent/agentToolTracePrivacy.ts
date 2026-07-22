@@ -1,24 +1,16 @@
 import { stateRevision } from '../graph/turnSupport.js';
-import {
-  privacySafeToolResultSummary,
-} from '../graph/verifiedState.js';
+import { privacySafeToolResultSummary } from '../graph/verifiedState.js';
 import { getToolBoundary } from '../ordering/toolBoundaries.js';
-import {
-  agentToolArgumentSchemas,
-} from '../ordering/toolCatalog.js';
+import { agentToolArgumentSchemas } from '../ordering/toolCatalog.js';
 import type {
   AgentToolCallResult,
   SourceProvenance,
   ToolCallRequest,
   ToolName,
 } from '../ordering/types.js';
-import {
-  isPrivateResponseEvidenceTool,
-} from './responseEvidenceContracts.js';
+import { isPrivateResponseEvidenceTool } from './responseEvidenceContracts.js';
 
-export function isPrivateEvidenceToolName(
-  toolName: ToolName,
-): boolean {
+export function isPrivateEvidenceToolName(toolName: ToolName): boolean {
   return isPrivateResponseEvidenceTool(toolName);
 }
 
@@ -34,27 +26,16 @@ export async function privacySafeAgentToolCallIdentity(
     : { toolCallId };
 }
 
-function privateToolTraceOutcome(
-  toolName: ToolName,
-  ok: boolean,
-): string {
+function privateToolTraceOutcome(toolName: ToolName, ok: boolean): string {
   switch (toolName) {
     case 'getRecentOrder':
-      return ok
-        ? 'recent_order_observed'
-        : 'recent_order_lookup_failed';
+      return ok ? 'recent_order_observed' : 'recent_order_lookup_failed';
     case 'getOrderStatus':
-      return ok
-        ? 'order_status_observed'
-        : 'order_status_lookup_failed';
+      return ok ? 'order_status_observed' : 'order_status_lookup_failed';
     case 'checkPaymentStatus':
-      return ok
-        ? 'payment_status_observed'
-        : 'payment_status_check_failed';
+      return ok ? 'payment_status_observed' : 'payment_status_check_failed';
     default:
-      return ok
-        ? 'private_tool_observed'
-        : 'private_tool_failed';
+      return ok ? 'private_tool_observed' : 'private_tool_failed';
   }
 }
 
@@ -73,8 +54,7 @@ export async function privacySafeAgentToolSpanInputs(input: {
   request: ToolCallRequest;
   auditArguments?: Record<string, unknown>;
 }): Promise<Record<string, unknown>> {
-  const auditArguments =
-    input.auditArguments ?? input.request.arguments;
+  const auditArguments = input.auditArguments ?? input.request.arguments;
   const base = {
     toolName: input.request.toolName,
     boundary: getToolBoundary(input.request.toolName),
@@ -89,13 +69,11 @@ export async function privacySafeAgentToolSpanInputs(input: {
   }
   if (input.request.toolName !== 'quoteFulfillment') return base;
   const parsed =
-    agentToolArgumentSchemas.quoteFulfillment.safeParse(
-      auditArguments,
-    );
+    agentToolArgumentSchemas.quoteFulfillment.safeParse(auditArguments);
   return {
     ...base,
     addressSource:
-      parsed.success && 'savedAddressRef' in parsed.data
+      parsed.success && parsed.data.savedAddressRef !== null
         ? 'saved_address_ref'
         : 'explicit_address',
     method: parsed.success ? parsed.data.method : null,
@@ -113,13 +91,8 @@ export async function privacySafeAgentToolSpanOutputs(input: {
       ok: input.result.ok,
       executionOutcome,
       privateEvidenceTool: true,
-      outcome: privateToolTraceOutcome(
-        input.result.toolName,
-        input.result.ok,
-      ),
-      provenance: privateToolProvenanceMetadata(
-        input.result.provenance,
-      ),
+      outcome: privateToolTraceOutcome(input.result.toolName, input.result.ok),
+      provenance: privateToolProvenanceMetadata(input.result.provenance),
     };
   }
   const resultSummary = privacySafeToolResultSummary(

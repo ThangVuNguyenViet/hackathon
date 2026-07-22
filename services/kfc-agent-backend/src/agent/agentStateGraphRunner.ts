@@ -27,6 +27,7 @@ import { authorizeGuestCheckout } from '../security/guestCheckoutAuthority.js';
 import { buildChannelPresentation } from '../presentation/channelPresentation.js';
 import { persistVerifiedStateSnapshot } from '../graph/verifiedState.js';
 import type { AgentTraceSpan } from '../observability/agentTracing.js';
+import { buildPrivacySafeLangSmithMetadata } from '../observability/langsmithDiagnosticMetadata.js';
 import type { CreateConfirmationPauseInput } from '../persistence/contracts.js';
 import {
   agentCheckpointThreadBelongsToSession,
@@ -43,6 +44,7 @@ import {
   type SingleAgentRuntimeContext,
 } from './singleAgentRuntime.js';
 import { providerFailureReportCode } from './agentModelInvocation.js';
+import { agentToolArgumentSchemas } from '../ordering/toolCatalog.js';
 import {
   checkpointSafeApprovalMatchesCall,
   checkpointSafeApprovalSchema,
@@ -52,6 +54,23 @@ import {
 } from './checkpointSafeApproval.js';
 
 const confirmationPauseTtlMs = 10 * 60_000;
+
+function successfulCatalogMediaTool(
+  trace: KfcAgentStateGraphResult['currentTurnToolTrace'],
+) {
+  return [...trace]
+    .reverse()
+    .find(
+      (entry) =>
+        entry.ok &&
+        new Set([
+          'searchMenu',
+          'getItemDetails',
+          'getModifierOptions',
+          'recommendAddOns',
+        ]).has(entry.toolName),
+    );
+}
 
 export type AgentTurnFailureEvidence = Pick<
   KfcAgentStateGraphResult,
@@ -642,12 +661,79 @@ export async function runKfcAgentStateGraphTurn(
 
     const output = graphResult.output;
     if (!output) throw new Error('agent_output_missing');
+    const menuTrace = [...graphResult.currentTurnToolTrace]
+      .reverse()
+      .find((entry) => entry.ok && entry.toolName === 'searchMenu');
+    const menuArguments = menuTrace
+      ? agentToolArgumentSchemas.searchMenu.safeParse(menuTrace.arguments)
+      : undefined;
+    const activeMenu = output.state.activeMenuCollection?.result;
+    const mediaTool = successfulCatalogMediaTool(
+      graphResult.currentTurnToolTrace,
+    );
+    const mediaCount =
+      output.presentation.profile === 'social'
+        ? (output.presentation.media?.length ?? 0)
+        : 0;
+    const mediaReason =
+      mediaTool?.toolName === 'searchMenu'
+        ? menuArguments?.success && menuArguments.data.scope === 'all'
+          ? 'full_menu_suppressed'
+          : menuArguments?.success &&
+              menuArguments.data.purpose === 'recommend' &&
+              mediaCount > 0
+            ? 'focused_recommendation'
+            : 'broad_browse_suppressed'
+        : mediaTool?.toolName === 'getItemDetails'
+          ? mediaCount > 0
+            ? 'item_detail'
+            : 'no_verified_media'
+          : mediaTool?.toolName === 'getModifierOptions'
+            ? mediaCount > 0
+              ? 'modifier_parent'
+              : 'no_verified_media'
+            : mediaTool?.toolName === 'recommendAddOns'
+              ? mediaCount > 0
+                ? 'add_on_recommendation'
+                : 'no_verified_media'
+              : undefined;
+    const diagnostics = await buildPrivacySafeLangSmithMetadata({
+      currentMetadata: input.turnInput.metadata
+        ? { ...input.turnInput.metadata }
+        : undefined,
+      ...(graphResult.modelPublicationBundle
+        ? {
+            modelPublication: {
+              byteSize: Buffer.byteLength(
+                JSON.stringify(graphResult.modelPublicationBundle),
+                'utf8',
+              ),
+            },
+          }
+        : {}),
+      ...(menuArguments?.success && activeMenu
+        ? {
+            searchMenu: {
+              scope: menuArguments.data.scope,
+              purpose: menuArguments.data.purpose,
+              totalCount: activeMenu.total,
+              returnedCount: activeMenu.returned,
+            },
+          }
+        : {}),
+      ...(output.genUi
+        ? { genUi: { selectedKind: output.genUi.widgetKind } }
+        : {}),
+      ...(mediaReason
+        ? { mediaDecision: { reason: mediaReason, count: mediaCount } }
+        : {}),
+    });
     await input.turnTrace.end({
       replyIntent: output.replyIntent,
       genUiKind: output.genUi?.widgetKind ?? null,
       state: traceStateSummary(output.state),
-      responseText: output.responseText,
       customerTurnCount: graphResult.customerTurnCount,
+      diagnostics,
     });
     return output;
   } finally {

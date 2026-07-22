@@ -75,6 +75,37 @@ const agentCollectionScopeSchema = z
     }
   });
 
+const agentSearchMenuSchema = z
+  .object({
+      scope: z.enum(['all', 'filtered']),
+      query: z.string().min(1).nullable(),
+      purpose: z.enum(['browse', 'recommend']),
+  })
+  .strict()
+  .superRefine((value, context) => {
+    if (value.scope === 'all' && value.query !== null) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['query'],
+        message: 'query must be null when scope is all',
+      });
+    }
+    if (value.scope === 'all' && value.purpose !== 'browse') {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['purpose'],
+        message: 'all-scope menu requests must use browse purpose',
+      });
+    }
+    if (value.scope === 'filtered' && value.query === null) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['query'],
+        message: 'query is required when scope is filtered',
+      });
+    }
+  });
+
 export const agentFulfillmentAddressSchema = z
   .object({
     label: exactNonBlankStringSchema.nullable(),
@@ -100,6 +131,45 @@ const savedAddressRefSchema = z
     kind: z.literal('saved_address'),
   })
   .strict();
+
+const canonicalAgentQuoteFulfillmentSchema = z
+  .object({
+    address: agentFulfillmentAddressSchema.nullable(),
+    savedAddressRef: savedAddressRefSchema.nullable(),
+    method: z.enum(['pickup', 'delivery']),
+  })
+  .strict()
+  .superRefine((value, context) => {
+    if ((value.address === null) === (value.savedAddressRef === null)) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['address'],
+        message: 'exactly one fulfillment address source is required',
+      });
+    }
+    if (value.savedAddressRef !== null && value.method !== 'delivery') {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['savedAddressRef'],
+        message: 'savedAddressRef is valid only for delivery',
+      });
+    }
+  });
+
+function legacyQuoteFulfillmentCounterpart(input: unknown): unknown {
+  if (!isArgumentRecord(input)) return input;
+  const value = input;
+  const hasAddress = Object.hasOwn(value, 'address');
+  const hasSavedAddressRef = Object.hasOwn(value, 'savedAddressRef');
+  if (hasAddress === hasSavedAddressRef) return input;
+  return hasAddress
+    ? { ...value, savedAddressRef: null }
+    : { ...value, address: null };
+}
+
+function isArgumentRecord(input: unknown): input is Record<string, unknown> {
+  return typeof input === 'object' && input !== null && !Array.isArray(input);
+}
 
 export const toolArgumentSchemas = {
   searchMenu: z.object({ query: z.string().optional().default('') }).strict(),
@@ -265,7 +335,7 @@ export const toolArgumentSchemas = {
  * schema can be used by OpenAI and Gemini. Execution parses these again.
  */
 export const agentToolArgumentSchemas = {
-  searchMenu: agentCollectionScopeSchema,
+  searchMenu: agentSearchMenuSchema,
   getItemDetails: z.object({ code: z.string().min(1) }).strict(),
   getModifierOptions: z.object({ code: z.string().min(1) }).strict(),
   updateCart: z
@@ -306,20 +376,10 @@ export const agentToolArgumentSchemas = {
       disposition: z.enum(['pickup', 'delivery']).nullable(),
     })
     .strict(),
-  quoteFulfillment: z.union([
-    z
-      .object({
-        address: agentFulfillmentAddressSchema,
-        method: z.enum(['pickup', 'delivery']),
-      })
-      .strict(),
-    z
-      .object({
-        savedAddressRef: savedAddressRefSchema,
-        method: z.enum(['pickup', 'delivery']),
-      })
-      .strict(),
-  ]),
+  quoteFulfillment: z.preprocess(
+    legacyQuoteFulfillmentCounterpart,
+    canonicalAgentQuoteFulfillmentSchema,
+  ),
   searchPromotions: agentCollectionScopeSchema,
   explainPromotion: z.object({ offerId: z.string().min(1) }).strict(),
   validateVoucher: z.object({ voucherText: z.string().min(1) }).strict(),
@@ -405,7 +465,7 @@ export const agentToolArgumentSchemas = {
 
 export const agentToolDescriptions: Record<ToolName, string> = {
   searchMenu:
-    'Return the complete menu for scope all, or the complete matching menu collection for scope filtered. For filtered scope, pass only concise product names or exact identifiers needed for matching; combine independent alternatives with OR. Do not copy the full customer sentence into query.',
+    'Return the complete menu for scope all. For scope filtered, query the provider and return at most five verified matches with truthful total, returned, and completeness metadata. Use {scope: all, query: null, purpose: browse} only for an entire-menu overview. Use filtered+browse for category or broad catalog browsing such as combo availability, and filtered+recommend only for a focused item or modifier suggestion. For filtered scope, pass only concise provider-derived product, category, property, or exact-identifier terms; combine independent alternatives with OR. Never copy the full customer sentence into query. Prose should mention at most three representative items for a category browse.',
   getItemDetails:
     'Return verified details for one previously discovered menu item code.',
   getModifierOptions:
@@ -483,5 +543,9 @@ export function parseAgentToolArguments(
   toolName: ToolName,
   args: Record<string, unknown>,
 ) {
-  return agentToolArgumentSchemas[toolName].safeParse(args);
+  const canonicalArgs =
+    toolName === 'searchMenu' && !Object.hasOwn(args, 'purpose')
+      ? { ...args, purpose: 'browse' }
+      : args;
+  return agentToolArgumentSchemas[toolName].safeParse(canonicalArgs);
 }
