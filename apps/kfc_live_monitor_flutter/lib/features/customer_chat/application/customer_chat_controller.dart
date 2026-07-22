@@ -421,7 +421,7 @@ class CustomerChatController extends BeaconController {
         : '';
     return switch (action.actionId) {
       'add_item' => 'Thêm $quantityPrefix${action.value ?? 'món này'} vào giỏ',
-      'add_items' => 'Xác nhận các món đã chọn',
+      'add_items' => _addItemsCustomerText(action),
       'customize_item' => 'Tùy chỉnh ${action.value ?? 'combo'}',
       'continue_to_fulfillment' => 'Tiếp tục giao hàng',
       'edit_cart' => 'Sửa giỏ hàng',
@@ -444,6 +444,60 @@ class CustomerChatController extends BeaconController {
       'send_issue_summary' => 'Gửi tóm tắt lỗi cho nhân viên',
       _ => action.value ?? action.actionId,
     };
+  }
+
+  String _addItemsCustomerText(KfcGenUiAction action) {
+    const fallback = 'Xác nhận các món đã chọn';
+    final catalogItems = state.value
+        .actionAttachment(action.attachmentId)
+        ?.data['items'];
+    final selectedItems = action.payload['items'];
+    if (catalogItems is! List ||
+        selectedItems is! List ||
+        selectedItems.isEmpty) {
+      return fallback;
+    }
+
+    final namesByCode = <String, String>{};
+    final duplicateCodes = <String>{};
+    for (final rawItem in catalogItems) {
+      if (rawItem is! Map) continue;
+      final code = rawItem['code'];
+      final name = rawItem['name'];
+      if (code is! String ||
+          code.isEmpty ||
+          name is! String ||
+          name.trim().isEmpty) {
+        continue;
+      }
+      if (namesByCode.containsKey(code)) duplicateCodes.add(code);
+      namesByCode[code] = name.trim();
+    }
+    for (final code in duplicateCodes) {
+      namesByCode.remove(code);
+    }
+
+    final selections = <String>[];
+    for (final rawSelection in selectedItems) {
+      if (rawSelection is! Map) return fallback;
+      final itemCode = rawSelection['itemCode'];
+      final rawQuantity = rawSelection['quantity'];
+      final quantity = rawQuantity is num && rawQuantity.isFinite
+          ? rawQuantity.toInt()
+          : null;
+      final name = itemCode is String ? namesByCode[itemCode] : null;
+      if (name == null ||
+          quantity == null ||
+          quantity < 1 ||
+          quantity > 99 ||
+          rawQuantity != quantity) {
+        return fallback;
+      }
+      selections.add('$quantity × $name');
+    }
+    return selections.isEmpty
+        ? fallback
+        : 'Thêm vào giỏ: ${selections.join(', ')}';
   }
 }
 

@@ -166,6 +166,46 @@ void main() {
     expect(controller.state.value.messages.last.text, contains('Đơn'));
   });
 
+  test('add_items transcript names each selected item and quantity', () async {
+    final controller = CustomerChatController(
+      repository: const FixtureCustomerChatRepository(
+        eventDelay: Duration.zero,
+      ),
+      initialState: CustomerChatState(
+        sessionId: 'kfc:fixture',
+        customerId: 'fixture',
+        messages: [
+          CustomerChatMessage(
+            id: 'menu_turn',
+            role: CustomerChatRole.assistant,
+            text: 'Chọn món',
+            genUi: kfcGenUiFixture(KfcGenUiWidgetKind.smartMenuPicker),
+          ),
+        ],
+      ),
+    );
+
+    await controller.submitAction(
+      const KfcGenUiAction(
+        attachmentId: 'fixture_menu',
+        actionId: 'add_items',
+        payload: {
+          'items': [
+            {'itemCode': '20751', 'quantity': 1},
+            {'itemCode': 'burger-flava', 'quantity': 2},
+          ],
+        },
+      ),
+    );
+
+    expect(
+      controller.state.value.messages
+          .firstWhere((message) => message.role == CustomerChatRole.customer)
+          .text,
+      'Thêm vào giỏ: 1 × Combo Hợp Gu 99K, 2 × Burger Phi-lê Gà Quay',
+    );
+  });
+
   test(
     'rejects an action that is not authorized by a retained attachment',
     () async {
