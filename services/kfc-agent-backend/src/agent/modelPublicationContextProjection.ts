@@ -11,6 +11,18 @@ const minimumInternedValueBytes = 128;
 
 type JsonRecord = Record<string, unknown>;
 
+const menuSearchEvidenceIds = new Set([
+  'active_collection:searchMenu',
+  'menu_search_results',
+]);
+
+function isMenuSearchEvidenceId(evidenceId: string): boolean {
+  return (
+    menuSearchEvidenceIds.has(evidenceId) ||
+    evidenceId.startsWith('current:searchMenu:')
+  );
+}
+
 export interface CompactModelPublicationValues {
   valueTable: Record<string, unknown>;
   modelState: unknown;
@@ -27,6 +39,75 @@ function isRecord(value: unknown): value is JsonRecord {
 
 function isComposite(value: unknown): value is unknown[] | JsonRecord {
   return Array.isArray(value) || isRecord(value);
+}
+
+function withoutNestedModifierGroups(value: unknown): unknown {
+  if (Array.isArray(value)) {
+    return value.map(withoutNestedModifierGroups);
+  }
+  if (!isRecord(value)) return value;
+  return Object.fromEntries(
+    Object.entries(value)
+      .filter(([key]) => key !== 'modifierGroups')
+      .map(([key, entry]) => [key, withoutNestedModifierGroups(entry)]),
+  );
+}
+
+function modelVisibleMenuSearchInput(input: {
+  modelState: ModelPublicationState;
+  evidence: readonly ModelPublicationEvidence[];
+}): {
+  modelState: ModelPublicationState;
+  evidence: ModelPublicationEvidence[];
+} {
+  const activeCollections = input.modelState.activeCollections;
+  const modelState: ModelPublicationState = {
+    ...input.modelState,
+    ...(activeCollections?.searchMenu !== undefined
+      ? {
+          activeCollections: {
+            ...activeCollections,
+            searchMenu: withoutNestedModifierGroups(
+              activeCollections.searchMenu,
+            ),
+          },
+        }
+      : {}),
+    ...(input.modelState.menuSearchResults !== undefined
+      ? {
+          menuSearchResults: withoutNestedModifierGroups(
+            input.modelState.menuSearchResults,
+          ) as ModelPublicationState['menuSearchResults'],
+        }
+      : {}),
+  };
+  const evidence = input.evidence.map((entry) => {
+    if (!isMenuSearchEvidenceId(entry.evidenceId)) return entry;
+    const requiredLimitations = entry.requiredLimitations.flatMap(
+      (requirement) => {
+        const claimKinds = requirement.claimKinds.filter(
+          (claimKind) => claimKind !== 'modifier',
+        );
+        return claimKinds.length > 0
+          ? [
+              {
+                ...requirement,
+                claimKinds: claimKinds as typeof requirement.claimKinds,
+              },
+            ]
+          : [];
+      },
+    );
+    return {
+      ...entry,
+      claimKinds: entry.claimKinds.filter(
+        (claimKind) => claimKind !== 'modifier',
+      ),
+      requiredLimitations,
+      value: withoutNestedModifierGroups(entry.value),
+    };
+  });
+  return { modelState, evidence };
 }
 
 function collectCompositeValues(
@@ -63,12 +144,13 @@ export function compactModelPublicationValues(input: {
   modelState: ModelPublicationState;
   evidence: readonly ModelPublicationEvidence[];
 }): CompactModelPublicationValues {
+  const modelVisibleInput = modelVisibleMenuSearchInput(input);
   const occurrences = new Map<
     string,
     { count: number; value: unknown[] | JsonRecord }
   >();
-  collectCompositeValues(input.modelState, occurrences);
-  for (const evidence of input.evidence) {
+  collectCompositeValues(modelVisibleInput.modelState, occurrences);
+  for (const evidence of modelVisibleInput.evidence) {
     collectCompositeValues(evidence.value, occurrences);
   }
 
@@ -122,8 +204,8 @@ export function compactModelPublicationValues(input: {
       return [ids.get(canonical)!, encode(occurrence.value, canonical)];
     }),
   );
-  const modelState = encode(input.modelState);
-  const evidence = input.evidence.map(({ value, ...metadata }) => ({
+  const modelState = encode(modelVisibleInput.modelState);
+  const evidence = modelVisibleInput.evidence.map(({ value, ...metadata }) => ({
     ...metadata,
     value: encode(value),
   }));

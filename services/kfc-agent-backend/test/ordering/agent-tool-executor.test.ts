@@ -1007,7 +1007,7 @@ describe("provider-neutral agent commerce executor", () => {
     });
   });
 
-  it("bounds filtered menu evidence while preserving truthful provider counts", async () => {
+  it("retains every filtered menu match from the mock provider", async () => {
     const fixtures = createTestFixtures();
     const seed = fixtures.menuItems[0]!;
     fixtures.menuItems = Array.from({ length: 8 }, (_, index) => ({
@@ -1039,8 +1039,8 @@ describe("provider-neutral agent commerce executor", () => {
       ok: true,
       value: {
         total: 8,
-        returned: 5,
-        complete: false,
+        returned: 8,
+        complete: true,
         scope: { scope: "filtered", query: "combo" },
       },
     });
@@ -1053,6 +1053,9 @@ describe("provider-neutral agent commerce executor", () => {
       "combo_3",
       "combo_4",
       "combo_5",
+      "combo_6",
+      "combo_7",
+      "combo_8",
     ]);
   });
 

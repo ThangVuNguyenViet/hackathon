@@ -12,7 +12,10 @@ import {
   type CurrentTurnResponseEvidence,
   type ModelPublicationAuthority,
 } from '../../src/agent/modelPublicationProjection.js';
-import { traceReceiptIsRecoverable } from '../../src/agent/agentPublicationRuntime.js';
+import {
+  modelPublicationContextWithDiagnostics,
+  traceReceiptIsRecoverable,
+} from '../../src/agent/agentPublicationRuntime.js';
 import type { GraphExecutedToolResult } from '../../src/agent/graphExecutedToolResult.js';
 import type {
   Address,
@@ -888,7 +891,25 @@ describe('model publication projection', () => {
   it('retains every verified item for a filtered menu publication', async () => {
     const collectionKey = 'menu:filtered';
     const items = [
-      menuItem('FILTERED MENU ITEM ONE'),
+      {
+        ...menuItem('FILTERED MENU ITEM ONE'),
+        hasModifiers: true,
+        modifierGroups: [{
+          groupId: 'group-1',
+          name: 'Choose style',
+          min: 1,
+          max: 1,
+          depth: 0,
+          options: [{
+            modifierId: 'secret-option-id',
+            name: 'FULL MODIFIER TREE MUST NOT BE IN SEARCH PUBLICATION',
+            priceDeltaVnd: 0,
+            default: true,
+            quantity: 1,
+            modifierGroups: [],
+          }],
+        }],
+      },
       { ...menuItem('FILTERED MENU ITEM TWO'), code: 'item-2' },
     ];
     const durable = state({
@@ -916,6 +937,54 @@ describe('model publication projection', () => {
     expect(publication.modelState.menuSearchResults).toHaveLength(2);
     expect(JSON.stringify(publication)).toContain('FILTERED MENU ITEM ONE');
     expect(JSON.stringify(publication)).toContain('FILTERED MENU ITEM TWO');
+    expect(JSON.stringify(publication)).toContain(
+      'FULL MODIFIER TREE MUST NOT BE IN SEARCH PUBLICATION',
+    );
+
+    const activeSearchEvidence = publication.evidence.find(
+      (entry) => entry.evidenceId === 'active_collection:searchMenu',
+    );
+    if (!activeSearchEvidence) throw new Error('search evidence missing');
+    const context = modelPublicationContextWithDiagnostics(
+      {
+        ...publication,
+        evidence: [
+          ...publication.evidence,
+          {
+            ...activeSearchEvidence,
+            evidenceId: 'current:searchMenu:test-digest',
+          },
+        ],
+        allowedEvidenceIds: [
+          ...publication.allowedEvidenceIds,
+          'current:searchMenu:test-digest',
+        ],
+      },
+      null,
+    ).serialized;
+    expect(context).not.toContain(
+      'FULL MODIFIER TREE MUST NOT BE IN SEARCH PUBLICATION',
+    );
+    const parsed = JSON.parse(context) as {
+      publication: {
+        evidence: Array<{
+          evidenceId: string;
+          claimKinds: string[];
+          requiredLimitations: unknown[];
+        }>;
+      };
+    };
+    for (const evidenceId of [
+      'active_collection:searchMenu',
+      'menu_search_results',
+      'current:searchMenu:test-digest',
+    ]) {
+      const evidence = parsed.publication.evidence.find(
+        (entry) => entry.evidenceId === evidenceId,
+      );
+      expect(evidence?.claimKinds).not.toContain('modifier');
+      expect(evidence?.requiredLimitations).toEqual([]);
+    }
   });
 
   it('uses structural state rather than customer-text classification', async () => {

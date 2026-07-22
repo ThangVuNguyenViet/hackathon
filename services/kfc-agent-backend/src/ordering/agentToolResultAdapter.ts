@@ -116,23 +116,11 @@ export async function adaptAgentToolResult(input: {
         context,
       );
       if (isAgentCallFailure(revisions)) return revisions;
-      const providerItems = legacy.value as unknown[];
-      const boundsFilteredMenu =
-        legacy.toolName === "searchMenu" && scope?.scope === "filtered";
-      const items = boundsFilteredMenu
-        ? providerItems.slice(0, 5)
-        : providerItems;
       return agentCollectionResult({
         legacy,
-        items,
+        items: legacy.value as unknown[],
         scope: scope ?? { scope: "all" },
         providerRevision: revisions.providerRevision,
-        ...(boundsFilteredMenu
-          ? {
-              total: providerItems.length,
-              complete: providerItems.length <= items.length,
-            }
-          : {}),
       });
     }
     default:
