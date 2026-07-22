@@ -275,10 +275,11 @@ void main() {
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.reset);
     final fixture = kfcGenUiFixture(KfcGenUiWidgetKind.fullMenuBrowser);
+    final actions = <KfcGenUiAction>[];
 
     await tester.pumpWidget(
       TestApp(
-        child: KfcGenUiRenderer(attachment: fixture, onAction: (_) {}),
+        child: KfcGenUiRenderer(attachment: fixture, onAction: actions.add),
       ),
     );
 
@@ -290,6 +291,34 @@ void main() {
     expect(find.text('Đầy đủ 2 món'), findsOneWidget);
     expect(find.text('Combo Hợp Gu 99K'), findsOneWidget);
     expect(find.text('Burger Phi-lê Gà Quay'), findsNothing);
+
+    final increase = find.byKey(
+      CustomerChatKeys.genUiMenuQuantityIncrease(fixture.id, 'combo-1'),
+    );
+    final decrease = find.byKey(
+      CustomerChatKeys.genUiMenuQuantityDecrease(fixture.id, 'combo-1'),
+    );
+    await tester.tap(increase);
+    await tester.pump();
+    await tester.tap(increase);
+    await tester.pump();
+    await tester.tap(decrease);
+    await tester.pump();
+
+    expect(
+      find.byKey(CustomerChatKeys.genUiMenuQuantity(fixture.id, 'combo-1')),
+      findsOneWidget,
+    );
+    expect(find.text('1 món'), findsOneWidget);
+    await tester.tap(
+      find.byKey(CustomerChatKeys.genUiAction(fixture.id, 'add_items')),
+    );
+    await tester.pump();
+    expect(actions.single.payload, {
+      'items': [
+        {'itemCode': 'combo-1', 'quantity': 1},
+      ],
+    });
 
     await tester.tap(
       find.byKey(CustomerChatKeys.genUiMenuCategory(fixture.id, 'burger')),

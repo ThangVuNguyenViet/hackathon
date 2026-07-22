@@ -108,6 +108,63 @@ async function actionHandlerHarness(input?: {
 }
 
 describe('trusted GenUI action route boundary', () => {
+  it('accepts a selected batch from the full menu browser', async () => {
+    const harness = await actionHandlerHarness({
+      attachmentFactory: ({ sessionId, customerId, verifiedRevision }) => {
+        const issuedAt = new Date();
+        const expiresAt = new Date(issuedAt.getTime() + 60_000).toISOString();
+        return {
+          id: 'trusted-full-menu-attachment',
+          lifecycleStage: 'menu',
+          widgetKind: 'fullMenuBrowser',
+          status: 'active',
+          title: 'Full menu',
+          data: {
+            items: [{
+              code: '20751',
+              name: 'Combo 99K',
+              available: true,
+            }],
+          },
+          actions: [{ id: 'add_items', label: 'Confirm items' }],
+          expiresAt,
+          authority: {
+            schemaVersion: 'kfc-genui-v1',
+            sessionId,
+            customerId,
+            verifiedRevision,
+            actionLifecycle: 'one_shot',
+            issuedAt: issuedAt.toISOString(),
+            expiresAt,
+          },
+        };
+      },
+    });
+
+    const response = await harness.handlers.chatKfcGenUiAction({
+      sessionId: harness.sessionId,
+      customerId: harness.customerId,
+      clientMessageId: 'trusted-full-menu-selection-1',
+      action: {
+        attachmentId: harness.attachment.id,
+        actionId: 'add_items',
+        payload: {
+          items: [{ itemCode: '20751', quantity: 2 }],
+        },
+      },
+    });
+
+    expect(response).toEqual({
+      status: 200,
+      body: { acceptedByTestBoundary: true },
+    });
+    expect(harness.calls).toHaveLength(1);
+    expect(harness.calls[0]?.trustedCustomerAction?.command).toEqual({
+      kind: 'cart_batch_update',
+      items: [{ itemCode: '20751', quantity: 2 }],
+    });
+  });
+
   it('passes provenance and the strict command separately from persisted metadata', async () => {
     const harness = await actionHandlerHarness();
     const response = await harness.handlers.chatKfcGenUiAction({

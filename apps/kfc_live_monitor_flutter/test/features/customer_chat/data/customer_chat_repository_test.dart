@@ -119,8 +119,12 @@ void main() {
         clientMessageId: 'customer_chat_msg_2',
         action: const KfcGenUiAction(
           attachmentId: 'fixture_menu',
-          actionId: 'add_item',
-          value: 'Combo 99K',
+          actionId: 'add_items',
+          payload: {
+            'items': [
+              {'itemCode': '20751', 'quantity': 2},
+            ],
+          },
         ),
       );
 
@@ -132,8 +136,12 @@ void main() {
         'clientMessageId': 'customer_chat_msg_2',
         'action': {
           'attachmentId': 'fixture_menu',
-          'actionId': 'add_item',
-          'value': 'Combo 99K',
+          'actionId': 'add_items',
+          'payload': {
+            'items': [
+              {'itemCode': '20751', 'quantity': 2},
+            ],
+          },
         },
       });
     },

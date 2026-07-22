@@ -338,7 +338,10 @@ export function createChatRouteHandlers(context: RouteHandlerContext) {
       };
       let trustedValue = actionSpec.value ?? parsed.data.action.value;
       if (actionSpec.id === "add_items") {
-        if (attachment.widgetKind !== "smartMenuPicker") {
+        if (
+          attachment.widgetKind !== "smartMenuPicker" &&
+          attachment.widgetKind !== "fullMenuBrowser"
+        ) {
           return { status: 422, body: { errorCode: "invalid_action_payload" } };
         }
         const batch = kfcSmartMenuBatchPayloadSchema.safeParse(parsed.data.action.payload);
