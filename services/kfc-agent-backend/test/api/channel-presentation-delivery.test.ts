@@ -1,15 +1,151 @@
 import { fakeModel } from '@langchain/core/testing';
 import { MemorySaver } from '@langchain/langgraph';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { OpenAiKfcAgent } from '../../src/agent/openAiKfcAgent.js';
 import { createRouteHandlers } from '../../src/api/routeHandlers.js';
 import { agentRunExecutionFence } from '../../src/persistence/agentRunExecutionLease.js';
 import { MemoryStore } from '../../src/persistence/memoryStore.js';
+import { createTestFixtures } from '../fixtures/testFixtures.js';
 import { groundedResponseModelReply } from '../fixtures/groundedResponse.js';
 import { testAgent } from '../fixtures/testAgent.js';
+
+function directAgent(responseText: string): OpenAiKfcAgent {
+  return new OpenAiKfcAgent({
+    client: {
+      responses: {
+        create: async () => ({ output: [], output_text: responseText }),
+      },
+    },
+    model: 'gpt-4.1-mini',
+  });
+}
 
 describe('channel presentation delivery compatibility', () => {
   afterEach(() => {
     vi.useRealTimers();
+  });
+
+  it('runs Messenger agent turns through the configured direct Responses agent', async () => {
+    const store = new MemoryStore();
+    const sessionId = 'messenger:direct_responses_user';
+    const externalUserId = 'direct_responses_user';
+    const externalMessageId = 'mid_direct_responses';
+    const pending = await store.upsertPendingCustomerTurn({
+      turnId: 'pending_direct_responses',
+      sessionId,
+      channel: 'messenger',
+      externalMessageId,
+      externalUserId,
+      text: 'Gợi ý món gà.',
+      steerMode: 'steering',
+      status: 'pending',
+      claimedRunId: null,
+      receivedAt: '2026-07-22T00:00:00.000Z',
+    });
+    await store.reserveWebhookDelivery({
+      channel: 'messenger',
+      externalEventId: externalMessageId,
+      externalThreadId: externalUserId,
+      externalUserId,
+      sessionId,
+      receivedAt: pending.turn.receivedAt,
+      payload: {
+        eventType: 'message',
+        text: pending.turn.text,
+        receivedAt: pending.turn.receivedAt,
+      },
+    });
+    await store.createAgentRun({
+      id: 'run_direct_responses',
+      sessionId,
+      generation: 1,
+      channel: 'messenger',
+      externalUserId,
+      status: 'scheduled',
+      coalescedInputText: pending.turn.text,
+      deliveryStatus: 'pending',
+      scheduledAt: '2026-07-22T00:00:01.000Z',
+    });
+    await store.linkAgentRunTurn({
+      runId: 'run_direct_responses',
+      turnId: pending.turn.turnId,
+      sequence: 0,
+    });
+    await store.setSessionAgentState({
+      sessionId,
+      currentRunId: 'run_direct_responses',
+      generation: 1,
+      debounceDeadlineAt: null,
+    });
+    const requests: Array<Record<string, unknown>> = [];
+    const openAiAgent = new OpenAiKfcAgent({
+      client: {
+        responses: {
+          create: async (request) => {
+            requests.push(request);
+            return {
+              output: [],
+              output_text: 'Mình gợi ý món gà phù hợp nhé.',
+              usage: { input_tokens: 10, output_tokens: 8, total_tokens: 18 },
+            };
+          },
+        },
+      },
+      model: 'gpt-4.1-mini',
+    });
+    const messengerFetchImpl = vi.fn(
+      async (_input: RequestInfo | URL, init?: RequestInit) => {
+        if (!init?.body) {
+          return Response.json({ first_name: 'Direct', last_name: 'User' });
+        }
+        const body = JSON.parse(String(init.body)) as {
+          message?: { text?: string };
+        };
+        return Response.json(
+          body.message
+            ? { message_id: 'mid_direct_responses_reply' }
+            : { recipient_id: externalUserId },
+        );
+      },
+    );
+    const handlers = createRouteHandlers({
+      store,
+      fixtures: createTestFixtures(),
+      openAiAgent,
+      messengerPageAccessToken: 'page_token',
+      messengerGraphApiBaseUrl: 'https://graph.local',
+      messengerFetchImpl,
+    });
+
+    await expect(
+      handlers.processMessengerAgentRun('run_direct_responses'),
+    ).resolves.toEqual({ status: 'processed' });
+    expect(requests).toHaveLength(1);
+    await expect(
+      store.getAgentRun('run_direct_responses'),
+    ).resolves.toMatchObject({
+      status: 'completed',
+      deliveryStatus: 'sent',
+      deliveryExternalMessageId: 'mid_direct_responses_reply',
+    });
+    expect(
+      (await store.listTurns(sessionId)).map((turn) => ({
+        role: turn.role,
+        text: turn.text,
+        deliveryStatus: turn.deliveryStatus,
+      })),
+    ).toEqual([
+      {
+        role: 'user',
+        text: 'Gợi ý món gà.',
+        deliveryStatus: 'received',
+      },
+      {
+        role: 'assistant',
+        text: 'Mình gợi ý món gà phù hợp nhé.',
+        deliveryStatus: 'sent',
+      },
+    ]);
   });
 
   it('suppresses a stale agent run before its presentation is delivered', async () => {
@@ -69,34 +205,26 @@ describe('channel presentation delivery compatibility', () => {
       debounceDeadlineAt: '2026-07-11T00:00:01.000Z',
     });
 
-    const commitAssistantTurn =
-      store.commitAssistantTurnIfRunCurrent.bind(store);
-    vi.spyOn(store, 'commitAssistantTurnIfRunCurrent').mockImplementation(
-      async (input) => {
-        const result = await commitAssistantTurn(input);
-        if (result.status === 'committed') {
-          await store.setSessionAgentState({
-            sessionId: 'messenger:stale_user',
-            currentRunId: 'run_newer',
-            generation: 2,
-            debounceDeadlineAt: '2026-07-11T00:00:02.000Z',
-          });
-        }
-        return result;
-      },
-    );
-    const model = fakeModel().respond(
-      groundedResponseModelReply({
-        customerText: 'Phản hồi của lượt cũ.',
-      }),
-    );
+    const appendTurn = store.appendTurn.bind(store);
+    vi.spyOn(store, 'appendTurn').mockImplementation(async (input) => {
+      const result = await appendTurn(input);
+      if (input.role === 'assistant') {
+        await store.setSessionAgentState({
+          sessionId: 'messenger:stale_user',
+          currentRunId: 'run_newer',
+          generation: 2,
+          debounceDeadlineAt: '2026-07-11T00:00:02.000Z',
+        });
+      }
+      return result;
+    });
     const handlers = createRouteHandlers({
       store,
-      checkpointer: new MemorySaver(),
+      fixtures: createTestFixtures(),
+      openAiAgent: directAgent('Phản hồi của lượt cũ.'),
       messengerPageAccessToken: 'page_token',
       messengerGraphApiBaseUrl: 'https://graph.local',
       messengerFetchImpl,
-      ...testAgent(model),
     });
 
     await expect(
@@ -214,18 +342,13 @@ describe('channel presentation delivery compatibility', () => {
         });
       },
     );
-    const model = fakeModel().respond(
-      groundedResponseModelReply({
-        customerText: 'Đây là thực đơn hiện có.',
-      }),
-    );
     const handlers = createRouteHandlers({
       store,
-      checkpointer: new MemorySaver(),
+      fixtures: createTestFixtures(),
+      openAiAgent: directAgent('Đây là thực đơn hiện có.'),
       messengerPageAccessToken: 'page_token',
       messengerGraphApiBaseUrl: 'https://graph.local',
       messengerFetchImpl,
-      ...testAgent(model),
     });
 
     await expect(

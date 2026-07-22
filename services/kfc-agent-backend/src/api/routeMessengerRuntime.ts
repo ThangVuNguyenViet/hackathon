@@ -4,6 +4,13 @@ import { fileURLToPath } from 'node:url';
 import { z } from 'zod';
 import type { BaseCheckpointSaver } from '@langchain/langgraph';
 import { AgentRunCoordinator } from '../agentRuns/coordinator.js';
+import { createAgentTurnExternalCallScope } from '../agent/agentExternalCallScope.js';
+import {
+  createKfcOpenAiTools,
+  createKfcToolSession,
+  verifiedKfcToolSessionContext,
+  type KfcToolSession,
+} from '../agent/kfcOpenAiTools.js';
 import type {
   ChannelMediaDeliveryResult,
   ExternalClients,
@@ -50,9 +57,6 @@ import type {
 } from '../domain/types.js';
 import { customerCommandFromVerifiedAction } from '../domain/customerCommand.js';
 import { isKfcGenUiAttachment } from '../genui/kfcGenUi.js';
-import { runAgentTurn } from '../graph/buildGraph.js';
-import { AgentTurnExecutionError } from '../agent/agentStateGraphRunner.js';
-import type { AgentGraphState } from '../graph/state.js';
 import {
   calculateMonitorSessionIntelligence,
   preserveMonitorContext,
@@ -148,8 +152,6 @@ import {
 
 import type { RouteCommerceRuntime } from './routeCommerceRuntime.js';
 import type { RouteAgentRuntime } from './routeAgentRuntime.js';
-import { persistCanonicalConfirmationPause } from './confirmationPausePersistence.js';
-import { messengerGuestAuthorityForClaimedRun } from './routeMessengerGuestAuthority.js';
 import type { VerifiedMessengerGuestCheckoutIngress } from '../security/guestCheckoutAuthority.js';
 
 export function createRouteMessengerRuntime(
@@ -173,7 +175,6 @@ export function createRouteMessengerRuntime(
     kfcProofAccessContext,
     latestKfcProofPreconditions,
     kfcAgentResponse,
-    deferAiMonitorRefinement,
     deliverAssistantReply,
     persistEventProfile,
     turnMetadataFor,
@@ -190,6 +191,10 @@ export function createRouteMessengerRuntime(
     latestUnansweredCustomerTurn,
     replyToLatestUnansweredCustomerTurn,
   } = input;
+  const openAiToolSessions = new Map<
+    string,
+    { clients: ExternalClients; session: KfcToolSession }
+  >();
   async function processMessengerEventInternal(
     event: ConversationEvent,
   ): Promise<MessengerWebhookEventProcessingResult> {
@@ -377,7 +382,7 @@ export function createRouteMessengerRuntime(
 
   async function processMessengerAgentRunInternal(
     runId: string,
-    verifiedIngress?: readonly VerifiedMessengerGuestCheckoutIngress[],
+    _verifiedIngress?: readonly VerifiedMessengerGuestCheckoutIngress[],
   ): Promise<MessengerWebhookEventProcessingResult> {
     const storedRun = await store.getAgentRun(runId);
     if (!storedRun)
@@ -487,13 +492,6 @@ export function createRouteMessengerRuntime(
       }
       return { status: 'failed', errorCode: 'agent_run_no_linked_turns' };
     }
-    const guestCheckoutAuthority = await messengerGuestAuthorityForClaimedRun({
-      run,
-      firstLinkedTurn: linkedTurns[0]!,
-      commitFence,
-      verifiedIngress,
-    });
-
     dashboard.emitEvent({
       id: `dash_${run.sessionId}_${run.id}_started`,
       sessionId: run.sessionId,
@@ -599,7 +597,6 @@ export function createRouteMessengerRuntime(
         },
       };
       const resumableDelivery = await store.getAgentRunTextDelivery(run.id);
-      let output: Awaited<ReturnType<typeof runAgentTurn>> | undefined;
       let presentation: ChannelPresentationPlan;
       let deliveryAssistantTurnId: string;
       if (
@@ -668,101 +665,90 @@ export function createRouteMessengerRuntime(
         presentation = textOnlyPresentation(assistantTurn.text, run.channel);
         deliveryAssistantTurnId = assistantTurn.id;
       } else {
-        output = await runAgentTurn({
-          sessionId: run.sessionId,
-          customerId: run.externalUserId,
-          channel: run.channel,
-          text: run.coalescedInputText,
-          externalMessageId: linkedTurns[0]!.externalMessageId,
-          metadata: null,
-          clients,
-          store,
-          dashboard,
-          agentModel: options.agent?.model,
-          guestCheckoutAuthority,
-          runGuard,
-          tracer: options.agentTracer,
-          checkpointer: options.checkpointer,
-        });
-        if (output.suppressed || !(await isCurrentRun())) {
-          await suppressRun('run_not_current_before_delivery');
-          return { status: 'skipped', errorCode: 'stale_agent_run' };
+        if (!options.openAiAgent) {
+          const failed = await updateExecutingRun({
+            status: 'failed',
+            deliveryStatus: 'failed',
+            errorCode: 'kfc_agent_not_configured',
+            errorMessage: 'Direct OpenAI Responses agent is not configured',
+            completedAt: new Date().toISOString(),
+          });
+          return failed.status === 'committed'
+            ? { status: 'failed', errorCode: 'kfc_agent_not_configured' }
+            : { status: 'skipped', errorCode: 'stale_agent_run' };
         }
-        if (output.pause) {
-          await persistCanonicalConfirmationPause({
-            store,
+        const externalCalls = createAgentTurnExternalCallScope(120_000);
+        try {
+          let toolRuntime = openAiToolSessions.get(run.sessionId);
+          if (!toolRuntime) {
+            toolRuntime = {
+              clients,
+              session: await createKfcToolSession(
+                clients,
+                run.sessionId,
+                run.externalUserId,
+                run.channel,
+                externalCalls.context,
+              ),
+            };
+            openAiToolSessions.set(run.sessionId, toolRuntime);
+          } else {
+            toolRuntime.session.externalCallContext = externalCalls.context;
+          }
+          const directOutput = await options.openAiAgent.respond({
             sessionId: run.sessionId,
             customerId: run.externalUserId,
             channel: run.channel,
-            pause: output.pause,
-            accessContext: undefined,
-            guestCheckoutAuthority,
-            checkpointer: options.checkpointer,
-            runCommit: {
-              fence: commitFence,
-              state: output.state,
-            },
+            text: run.coalescedInputText,
+            externalMessageId: linkedTurns[0]!.externalMessageId,
+            metadata: null,
+            store,
+            verifiedBusinessContext: verifiedKfcToolSessionContext(
+              toolRuntime.session,
+            ),
+            tools: createKfcOpenAiTools({
+              clients: toolRuntime.clients,
+              session: toolRuntime.session,
+              accessContext: await kfcProofAccessContext(
+                run.sessionId,
+                run.externalUserId,
+              ),
+            }),
           });
-          const finalized = await updateExecutingRun({
-            status: 'completed',
-            deliveryStatus: 'not_applicable',
-            errorCode: null,
-            errorMessage: null,
-            completedAt: new Date().toISOString(),
-          });
-          if (finalized.status !== 'committed') {
-            return {
-              status: 'skipped',
-              errorCode: 'stale_agent_run',
-            };
+          if (!(await isCurrentRun())) {
+            await suppressRun('run_not_current_before_delivery');
+            return { status: 'skipped', errorCode: 'stale_agent_run' };
           }
-          for (const turn of linkedTurns) {
-            await store.markPendingCustomerTurnClaimed(turn.turnId, run.id);
-            await store.markWebhookDeliveryProcessed(
-              run.channel,
-              turn.externalMessageId,
-            );
+          presentation = textOnlyPresentation(
+            directOutput.responseText,
+            run.channel,
+          );
+          deliveryAssistantTurnId = directOutput.assistantTurnId;
+          const assistantTurn = (await store.listTurns(run.sessionId)).find(
+            (turn) =>
+              turn.id === deliveryAssistantTurnId &&
+              turn.sessionId === run.sessionId &&
+              turn.channel === run.channel &&
+              turn.role === 'assistant',
+          );
+          if (!assistantTurn) {
+            const failed = await updateExecutingRun({
+              status: 'failed',
+              deliveryStatus: 'failed',
+              errorCode: 'agent_run_assistant_turn_missing',
+              errorMessage:
+                'Agent run produced no valid durable assistant turn',
+              completedAt: new Date().toISOString(),
+            });
+            return failed.status === 'committed'
+              ? {
+                  status: 'failed',
+                  errorCode: 'agent_run_assistant_turn_missing',
+                }
+              : { status: 'skipped', errorCode: 'stale_agent_run' };
           }
-          return { status: 'processed' };
-        }
-        presentation = output.presentation;
-        if (!output.assistantTurnId) {
-          const failed = await updateExecutingRun({
-            status: 'failed',
-            deliveryStatus: 'failed',
-            errorCode: 'agent_run_assistant_turn_missing',
-            errorMessage: 'Agent run produced no durable assistant turn',
-            completedAt: new Date().toISOString(),
-          });
-          return failed.status === 'committed'
-            ? {
-                status: 'failed',
-                errorCode: 'agent_run_assistant_turn_missing',
-              }
-            : { status: 'skipped', errorCode: 'stale_agent_run' };
-        }
-        deliveryAssistantTurnId = output.assistantTurnId;
-        const outputAssistantTurn = (await store.listTurns(run.sessionId)).find(
-          (turn) =>
-            turn.id === deliveryAssistantTurnId &&
-            turn.sessionId === run.sessionId &&
-            turn.channel === run.channel &&
-            turn.role === 'assistant',
-        );
-        if (!outputAssistantTurn) {
-          const failed = await updateExecutingRun({
-            status: 'failed',
-            deliveryStatus: 'failed',
-            errorCode: 'agent_run_assistant_turn_missing',
-            errorMessage: 'Agent run produced no valid durable assistant turn',
-            completedAt: new Date().toISOString(),
-          });
-          return failed.status === 'committed'
-            ? {
-                status: 'failed',
-                errorCode: 'agent_run_assistant_turn_missing',
-              }
-            : { status: 'skipped', errorCode: 'stale_agent_run' };
+        } finally {
+          externalCalls.dispose();
         }
       }
       if (!deliveryAssistantTurnId) {
@@ -799,13 +785,6 @@ export function createRouteMessengerRuntime(
       if (delivery.suppressed) {
         await suppressRun('run_not_current_before_delivery');
         return { status: 'skipped', errorCode: 'stale_agent_run' };
-      }
-      if (delivery.ok && output) {
-        deferAiMonitorRefinement({
-          sessionId: run.sessionId,
-          clientMessageId: linkedTurns[0]!.externalMessageId,
-          output,
-        });
       }
       const assistantTurnId = deliveryAssistantTurnId;
       const postDeliveryRun = await store.getAgentRun(run.id);
@@ -887,15 +866,9 @@ export function createRouteMessengerRuntime(
             errorCode: delivery.errorCode ?? 'assistant_reply_delivery_failed',
             errorMessage: delivery.errorMessage,
           };
-    } catch (error) {
-      const errorCode =
-        error instanceof AgentTurnExecutionError
-          ? error.code
-          : 'agent_run_processing_failed';
-      const errorMessage =
-        error instanceof AgentTurnExecutionError
-          ? error.code
-          : 'Agent run processing failed';
+    } catch {
+      const errorCode = 'agent_run_processing_failed';
+      const errorMessage = 'Agent run processing failed';
       const failed = await updateExecutingRun({
         status: 'failed',
         deliveryStatus: 'failed',
