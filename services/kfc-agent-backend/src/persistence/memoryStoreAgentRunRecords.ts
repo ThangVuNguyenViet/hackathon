@@ -2,6 +2,7 @@ import type {
   AgentRun,
   AgentRunTurn,
   PendingCustomerTurn,
+  SessionAgentState,
 } from '../domain/types.js';
 import type {
   AgentRunPatch,
@@ -17,6 +18,7 @@ interface MemoryAgentRunRecordState {
   pendingCustomerTurns: PendingCustomerTurn[];
   agentRuns: Map<string, AgentRun>;
   agentRunTurns: AgentRunTurn[];
+  sessionAgentStates: Map<string, SessionAgentState>;
   sessionControls: Map<string, SessionControl>;
 }
 
@@ -73,12 +75,33 @@ export function markMemoryPendingCustomerTurnIgnored(
   runId: string,
   storage: MemoryAgentRunRecordState,
 ): PendingCustomerTurn {
-  return markMemoryPendingCustomerTurnTerminal(
-    turnId,
-    runId,
-    'ignored',
-    storage,
+  const turn = storage.pendingCustomerTurns.find(
+    (candidate) => candidate.turnId === turnId,
   );
+  if (!turn) {
+    throw new Error(`Pending customer turn not found: ${turnId}`);
+  }
+  if (turn.status !== 'pending' || turn.claimedRunId !== null) {
+    return turn;
+  }
+  const run = storage.agentRuns.get(runId);
+  const state = storage.sessionAgentStates.get(turn.sessionId);
+  const linked = storage.agentRunTurns.some(
+    (link) => link.runId === runId && link.turnId === turnId,
+  );
+  if (
+    !linked ||
+    run?.sessionId !== turn.sessionId ||
+    run.status !== 'failed' ||
+    state?.currentRunId !== runId ||
+    state.generation !== run.generation
+  ) {
+    return turn;
+  }
+  turn.status = 'ignored';
+  turn.claimedRunId = runId;
+  turn.updatedAt = memoryTimestamp;
+  return turn;
 }
 
 function markMemoryPendingCustomerTurnTerminal(
@@ -116,8 +139,7 @@ export function claimMemoryAgentRunRecord(
 ): ClaimAgentRunResult {
   const existing = [...storage.agentRuns.values()].find(
     (run) =>
-      run.sessionId === input.sessionId &&
-      run.generation === input.generation,
+      run.sessionId === input.sessionId && run.generation === input.generation,
   );
   if (existing) return { run: existing, claimed: false };
   return {
@@ -150,9 +172,7 @@ export function listMemoryAgentRuns(
     .filter((run) => run.sessionId === sessionId)
     .sort((left, right) => {
       const generation = left.generation - right.generation;
-      return generation === 0
-        ? left.id.localeCompare(right.id)
-        : generation;
+      return generation === 0 ? left.id.localeCompare(right.id) : generation;
     });
 }
 

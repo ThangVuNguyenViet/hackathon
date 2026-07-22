@@ -11,7 +11,8 @@ import {
   type ResponseProfile,
 } from './responseProfile.js';
 
-export type ChannelPresentationMode = 'structured_companion' | 'standalone_text';
+export type ChannelPresentationMode =
+  'structured_companion' | 'standalone_text';
 
 export interface ChannelCapabilities {
   presentationMode: ChannelPresentationMode;
@@ -73,6 +74,28 @@ const standaloneMediaCapabilities: ChannelCapabilities = {
   supportsCatalogMedia: true,
 };
 
+export const MESSENGER_TEXT_MAX_CHARACTERS = 2_000;
+const boundedTextOmissionMarker = '…';
+
+export function projectChannelTextForDelivery(
+  channel: Channel,
+  text: string,
+): string {
+  if (channel !== 'messenger' || text.length <= MESSENGER_TEXT_MAX_CHARACTERS)
+    return text;
+
+  const contentBudget =
+    MESSENGER_TEXT_MAX_CHARACTERS - boundedTextOmissionMarker.length;
+  let projected = '';
+  for (const { segment } of new Intl.Segmenter(undefined, {
+    granularity: 'grapheme',
+  }).segment(text)) {
+    if (projected.length + segment.length > contentBudget) break;
+    projected += segment;
+  }
+  return `${projected.trimEnd()}${boundedTextOmissionMarker}`;
+}
+
 export function getChannelCapabilities(channel: Channel): ChannelCapabilities {
   switch (channel) {
     case 'kfc':
@@ -88,12 +111,17 @@ export function getChannelCapabilities(channel: Channel): ChannelCapabilities {
   }
 }
 
-export function textOnlyPresentation(text: string, channel: Channel = 'messenger'): ChannelPresentationPlan {
+export function textOnlyPresentation(
+  text: string,
+  channel: Channel = 'messenger',
+): ChannelPresentationPlan {
   const profile = responseProfileForChannel(channel);
   return profile === 'genui' ? { profile, text } : { profile, text };
 }
 
-export function buildChannelPresentation(input: BuildChannelPresentationInput): ChannelPresentationPlan {
+export function buildChannelPresentation(
+  input: BuildChannelPresentationInput,
+): ChannelPresentationPlan {
   const profile = resolveResponseProfile(input);
   if (profile === 'social') {
     if (input.genUi) {
@@ -108,7 +136,9 @@ export function buildChannelPresentation(input: BuildChannelPresentationInput): 
   };
 }
 
-export function buildSocialPresentation(input: BuildSocialPresentationInput): ChannelPresentationPlan {
+export function buildSocialPresentation(
+  input: BuildSocialPresentationInput,
+): ChannelPresentationPlan {
   if (responseProfileForChannel(input.channel) !== 'social') {
     throw new Error('Social presenter received a non-social channel');
   }
@@ -117,7 +147,7 @@ export function buildSocialPresentation(input: BuildSocialPresentationInput): Ch
     : [];
   return {
     profile: 'social',
-    text: input.standaloneText,
+    text: projectChannelTextForDelivery(input.channel, input.standaloneText),
     ...(media.length > 0 ? { media } : {}),
   };
 }
@@ -132,13 +162,25 @@ export function assertPresentationMatchesChannel(
     responseProfile: expectedProfile,
   });
   if (presentation.profile !== resolvedProfile) {
-    throw new Error(`Presentation profile mismatch: expected ${resolvedProfile}, got ${presentation.profile}`);
+    throw new Error(
+      `Presentation profile mismatch: expected ${resolvedProfile}, got ${presentation.profile}`,
+    );
   }
-  if (presentation.profile === 'social' && 'genUi' in presentation && presentation.genUi !== undefined) {
+  if (
+    presentation.profile === 'social' &&
+    'genUi' in presentation &&
+    presentation.genUi !== undefined
+  ) {
     throw new Error('Social presentation contains forbidden GenUI metadata');
   }
-  if (presentation.profile === 'genui' && 'media' in presentation && presentation.media !== undefined) {
-    throw new Error('GenUI presentation contains forbidden social media delivery data');
+  if (
+    presentation.profile === 'genui' &&
+    'media' in presentation &&
+    presentation.media !== undefined
+  ) {
+    throw new Error(
+      'GenUI presentation contains forbidden social media delivery data',
+    );
   }
 }
 

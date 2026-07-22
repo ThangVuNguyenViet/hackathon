@@ -1109,7 +1109,11 @@ describe('KFC agent StateGraph', () => {
       .respondWithTools([
         {
           name: 'searchMenu',
-          args: { scope: 'filtered', query: 'combo' , purpose: 'browse'},
+          args: {
+            scope: 'filtered',
+            query: 'combo',
+            purpose: 'browse',
+          },
         },
       ])
       .respond(
@@ -1149,7 +1153,11 @@ describe('KFC agent StateGraph', () => {
     const model = fakeModel().respondWithTools([
       {
         name: 'searchMenu',
-        args: { scope: 'filtered', query: 'combo' , purpose: 'browse'},
+        args: {
+          scope: 'filtered',
+          query: 'combo',
+          purpose: 'browse',
+        },
       },
     ]);
     const input = turnInput(model, 'state-graph-tool-error');
@@ -1721,7 +1729,7 @@ describe('KFC agent StateGraph', () => {
       .respondWithTools([
         {
           name: 'searchMenu',
-          args: { scope: 'filtered', query: 'combo' , purpose: 'browse'},
+          args: { scope: 'filtered', query: 'combo', purpose: 'browse' },
         },
         {
           name: 'findStores',
@@ -1802,7 +1810,11 @@ describe('KFC agent StateGraph', () => {
     const model = fakeModel().respondWithTools([
       {
         name: 'searchMenu',
-        args: { scope: 'filtered', query: 'combo' , purpose: 'browse'},
+        args: {
+          scope: 'filtered',
+          query: 'combo',
+          purpose: 'browse',
+        },
       },
     ]);
     const input = {
@@ -1888,6 +1900,7 @@ describe('KFC agent StateGraph', () => {
             city: 'Hồ Chí Minh',
           },
           method: 'delivery',
+          itemCodes: ['20751'],
         },
         publicationEvidenceAudit: expect.objectContaining({
           argumentsDigest: await stateRevision({
@@ -1898,6 +1911,7 @@ describe('KFC agent StateGraph', () => {
               city: 'Hồ Chí Minh',
             },
             method: 'delivery',
+            itemCodes: ['20751'],
           }),
         }),
       }),

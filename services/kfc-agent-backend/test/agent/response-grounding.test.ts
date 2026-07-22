@@ -75,7 +75,7 @@ describe('grounded response submission', () => {
       'Use all-scope menu browsing only when the customer asks for the entire menu',
     );
     expect(AGENT_SYSTEM_PROMPT).toContain(
-      'For a category browse, use the filtered provider query, which returns at most five verified choices with truthful total and completeness metadata; prose mentions at most three representative items',
+      'For a category browse, use the filtered provider query. The mock provider returns every verified match without truncation; the compact widget presents up to five choices. In prose, name no more than three representative items',
     );
     expect(AGENT_SYSTEM_PROMPT).toContain(
       'Request recommendation media only for a focused item or modifier suggestion',
@@ -87,7 +87,6 @@ describe('grounded response submission', () => {
       'Do not include modifier unless customerText states a verified modifier fact',
     );
   });
-
   it('keeps historical cart confirmation in model policy, not deterministic text routing', () => {
     expect(AGENT_SYSTEM_PROMPT).toContain(
       'present that exact verified candidate and obtain explicit customer confirmation in a later turn before changing the cart',

@@ -219,7 +219,6 @@ async function freshFullMenuPublication() {
     bundle: await publicationBundle(state),
   };
 }
-
 const claims: ResponseFactualClaims = {
   evidenceReferences: [
     {
@@ -364,7 +363,6 @@ describe('response publication boundary', () => {
     if (!fullMenu) throw new Error('full-menu graph state missing');
     expect(fullMenu.result.items).toHaveLength(fullMenu.result.total);
   });
-
   it('materializes repeated publication values once in a prompt-only value table', () => {
     const sentinel = `unique-menu-payload-${'x'.repeat(512)}`;
     const items = [{ code: 'item-1', name: sentinel }];
@@ -1354,6 +1352,63 @@ describe('response publication boundary', () => {
     });
   });
 
+  it('accepts harmless public evidence authorities without a correction call', async () => {
+    const bundle = await publicationBundle();
+    const publicEvidence = bundle.evidence.find(
+      ({ privateData }) => !privateData,
+    );
+    if (!publicEvidence) throw new Error('public publication evidence missing');
+    const publicClaims: ResponseFactualClaims = {
+      evidenceReferences: [
+        {
+          evidenceId: publicEvidence.evidenceId,
+          claimKinds: [...publicEvidence.claimKinds],
+        },
+      ],
+      disclosedLimitations: [],
+      hasUnsupportedFactualClaim: false,
+    };
+    const declaration = {
+      semanticRelevance: 'aligned' as const,
+      privateDataDisclosure: 'none' as const,
+      disclosureAuthorities: [
+        {
+          kind: 'publication_evidence' as const,
+          evidenceId: publicEvidence.evidenceId,
+        },
+      ],
+      disclosesInternalMetadata: false,
+    };
+
+    expect(
+      validateResponsePublicationDeclarationConsistency({
+        raw: declaration,
+        bundle,
+        factualClaims: publicClaims,
+      }),
+    ).toEqual({ ok: true });
+    await expect(
+      issueResponsePublicationAttestation({
+        raw: declaration,
+        bundle,
+        customerText,
+        factualClaims: publicClaims,
+      }),
+    ).resolves.toMatchObject({
+      ok: true,
+      responsePublicationSafe: true,
+      attestation: {
+        privateDataDisclosure: 'none',
+        disclosureAuthorities: [],
+      },
+    });
+    expect(declaration.disclosureAuthorities).toEqual([
+      {
+        kind: 'publication_evidence',
+        evidenceId: publicEvidence.evidenceId,
+      },
+    ]);
+  });
   it('classifies duplicate issued private evidence authorities as correctable while final attestation stays strict', async () => {
     const bundle = await privatePublicationBundle();
     const privateClaims: ResponseFactualClaims = {

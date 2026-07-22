@@ -10,7 +10,10 @@ import {
 } from 'langchain';
 import { isGraphInterrupt } from '@langchain/langgraph';
 import { agentToolCallDisposition } from '../ordering/toolCallDisposition.js';
-import { toolNames } from '../ordering/toolCatalog.js';
+import {
+  agentToolArgumentSchemas,
+  toolNames,
+} from '../ordering/toolCatalog.js';
 import type { ToolName } from '../ordering/types.js';
 import { isValidApprovalBatchShape } from './agentApprovalBatchShape.js';
 import {
@@ -612,7 +615,22 @@ export function createKfcCreateAgentMiddleware() {
     contextSchema: kfcCreateAgentContextSchema,
     wrapToolCall: async (request, handler) => {
       try {
-        return await handler(request);
+        if (request.toolCall.name !== 'quoteFulfillment') {
+          return await handler(request);
+        }
+        const parsed = agentToolArgumentSchemas.quoteFulfillment.safeParse(
+          request.toolCall.args,
+        );
+        if (!parsed.success) {
+          throw new Error('invalid_tool_arguments');
+        }
+        return await handler({
+          ...request,
+          toolCall: {
+            ...request.toolCall,
+            args: parsed.data,
+          },
+        });
       } catch (error) {
         if (isGraphInterrupt(error)) throw error;
         const preserved = preservedBoundaryFailureCode(error);

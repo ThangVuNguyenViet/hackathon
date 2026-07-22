@@ -805,7 +805,7 @@ describe('KFC nested createAgent factory', () => {
       'Use filtered+browse for category or broad catalog browsing such as combo availability, and filtered+recommend only for a focused item or modifier suggestion.',
     );
     expect(searchMenu?.description).toContain(
-      'For scope filtered, query the provider and return at most five verified matches with truthful total, returned, and completeness metadata.',
+      'Return the complete menu for scope all, or every verified provider match for scope filtered without truncation.',
     );
     expect(searchMenu?.description).not.toMatch(/20698|20709/u);
   });

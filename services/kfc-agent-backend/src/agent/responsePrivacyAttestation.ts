@@ -111,6 +111,28 @@ function declarationRejected(
   };
 }
 
+function normalizeHarmlessPublicEvidenceAuthorities(
+  declaration: ResponsePublicationDeclaration,
+  bundle: ModelPublicationBundle,
+): ResponsePublicationDeclaration {
+  if (declaration.privateDataDisclosure !== 'none') return declaration;
+
+  const privateEvidenceIds = new Set(privateDisclosureEvidenceIds(bundle));
+  const issuedEvidenceIds = new Set(
+    bundle.evidence.map(({ evidenceId }) => evidenceId),
+  );
+  const disclosureAuthorities = declaration.disclosureAuthorities.filter(
+    (authority) =>
+      authority.kind !== 'publication_evidence' ||
+      !issuedEvidenceIds.has(authority.evidenceId) ||
+      privateEvidenceIds.has(authority.evidenceId),
+  );
+  return disclosureAuthorities.length ===
+    declaration.disclosureAuthorities.length
+    ? declaration
+    : { ...declaration, disclosureAuthorities };
+}
+
 export function validateResponsePublicationDeclarationConsistency(input: {
   raw: unknown;
   bundle: ModelPublicationBundle;
@@ -121,12 +143,18 @@ export function validateResponsePublicationDeclarationConsistency(input: {
   if (!isIssuedModelPublicationBundle(input.bundle)) {
     return declarationRejected(false);
   }
-  const declaration = responsePublicationDeclarationSchema.safeParse(input.raw);
-  if (!declaration.success) return declarationRejected(false);
+  const parsedDeclaration = responsePublicationDeclarationSchema.safeParse(
+    input.raw,
+  );
+  if (!parsedDeclaration.success) return declarationRejected(false);
+  const declaration = normalizeHarmlessPublicEvidenceAuthorities(
+    parsedDeclaration.data,
+    input.bundle,
+  );
   if (
-    declaration.data.semanticRelevance !== 'aligned' ||
-    declaration.data.privateDataDisclosure === 'unauthorized' ||
-    declaration.data.disclosesInternalMetadata
+    declaration.semanticRelevance !== 'aligned' ||
+    declaration.privateDataDisclosure === 'unauthorized' ||
+    declaration.disclosesInternalMetadata
   ) {
     return declarationRejected(false);
   }
@@ -138,7 +166,7 @@ export function validateResponsePublicationDeclarationConsistency(input: {
     input.bundle.evidence.map(({ evidenceId }) => evidenceId),
   );
   if (
-    declaration.data.disclosureAuthorities.some((authority) =>
+    declaration.disclosureAuthorities.some((authority) =>
       authority.kind === 'publication_evidence'
         ? !issuedEvidenceIds.has(authority.evidenceId)
         : authority.messageDigest !==
@@ -147,8 +175,7 @@ export function validateResponsePublicationDeclarationConsistency(input: {
   ) {
     return declarationRejected(false);
   }
-  const authorityKeys =
-    declaration.data.disclosureAuthorities.map(authorityKey);
+  const authorityKeys = declaration.disclosureAuthorities.map(authorityKey);
   if (new Set(authorityKeys).size !== authorityKeys.length) {
     return declarationRejected(true);
   }
@@ -160,7 +187,7 @@ export function validateResponsePublicationDeclarationConsistency(input: {
         .filter((evidenceId) => privateEvidenceIds.has(evidenceId)),
     ),
   ].sort();
-  const declaredPrivateEvidenceIds = declaration.data.disclosureAuthorities
+  const declaredPrivateEvidenceIds = declaration.disclosureAuthorities
     .flatMap((authority) =>
       authority.kind === 'publication_evidence' ? [authority.evidenceId] : [],
     )
@@ -170,11 +197,11 @@ export function validateResponsePublicationDeclarationConsistency(input: {
     JSON.stringify(declaredPrivateEvidenceIds);
   const disclosureFlagMismatch =
     (citedPrivateEvidenceIds.length > 0 &&
-      declaration.data.privateDataDisclosure !== 'authorized') ||
-    (declaration.data.privateDataDisclosure === 'none' &&
-      declaration.data.disclosureAuthorities.length > 0) ||
-    (declaration.data.privateDataDisclosure === 'authorized' &&
-      declaration.data.disclosureAuthorities.length === 0);
+      declaration.privateDataDisclosure !== 'authorized') ||
+    (declaration.privateDataDisclosure === 'none' &&
+      declaration.disclosureAuthorities.length > 0) ||
+    (declaration.privateDataDisclosure === 'authorized' &&
+      declaration.disclosureAuthorities.length === 0);
 
   return authoritySetMismatch || disclosureFlagMismatch
     ? declarationRejected(true)
@@ -261,10 +288,16 @@ export async function issueResponsePublicationAttestation(input: {
     hasUnsupportedFactualClaim?: boolean;
   };
 }): Promise<ResponsePublicationAttestationValidation> {
-  const declaration = responsePublicationDeclarationSchema.safeParse(input.raw);
-  if (!declaration.success) return rejected();
+  const parsedDeclaration = responsePublicationDeclarationSchema.safeParse(
+    input.raw,
+  );
+  if (!parsedDeclaration.success) return rejected();
+  const declaration = normalizeHarmlessPublicEvidenceAuthorities(
+    parsedDeclaration.data,
+    input.bundle,
+  );
   const consistency = validateResponsePublicationDeclarationConsistency({
-    raw: declaration.data,
+    raw: declaration,
     bundle: input.bundle,
     factualClaims: input.factualClaims,
   });
@@ -274,7 +307,7 @@ export async function issueResponsePublicationAttestation(input: {
       schemaVersion: RESPONSE_PUBLICATION_ATTESTATION_SCHEMA_VERSION,
       projectionDigest: input.bundle.projectionDigest,
       responseDigest: await stateRevision(input.customerText),
-      ...declaration.data,
+      ...declaration,
     },
     bundle: input.bundle,
     customerText: input.customerText,

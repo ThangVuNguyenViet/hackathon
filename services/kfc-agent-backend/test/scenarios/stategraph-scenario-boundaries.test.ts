@@ -90,7 +90,7 @@ describe('offline StateGraph scenario boundaries', () => {
       .respondWithTools([
         {
           name: 'searchMenu',
-          args: { scope: 'filtered', query: 'Pepsi' , purpose: 'browse'},
+          args: { scope: 'filtered', query: 'Pepsi', purpose: 'browse' },
         },
       ])
       .respond(
@@ -120,6 +120,7 @@ describe('offline StateGraph scenario boundaries', () => {
     expect(result.toolTrace[0]?.arguments).toEqual({
       scope: 'filtered',
       query: 'Pepsi',
+      purpose: 'browse',
     });
     expect(result.cart).toBeUndefined();
     expect(result.order).toBeUndefined();
@@ -276,6 +277,7 @@ describe('offline StateGraph scenario boundaries', () => {
     expect(result.toolTrace[0]?.arguments).toEqual({
       scope: 'all',
       query: null,
+      purpose: 'browse',
     });
     expect(result.cart).toBeUndefined();
     expect(collection).toMatchObject({

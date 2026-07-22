@@ -77,9 +77,9 @@ const agentCollectionScopeSchema = z
 
 const agentSearchMenuSchema = z
   .object({
-      scope: z.enum(['all', 'filtered']),
-      query: z.string().min(1).nullable(),
-      purpose: z.enum(['browse', 'recommend']),
+    scope: z.enum(['all', 'filtered']),
+    query: z.string().min(1).nullable(),
+    purpose: z.enum(['browse', 'recommend']),
   })
   .strict()
   .superRefine((value, context) => {
@@ -131,7 +131,6 @@ const savedAddressRefSchema = z
     kind: z.literal('saved_address'),
   })
   .strict();
-
 const canonicalAgentQuoteFulfillmentSchema = z
   .object({
     address: agentFulfillmentAddressSchema.nullable(),
@@ -465,7 +464,7 @@ export const agentToolArgumentSchemas = {
 
 export const agentToolDescriptions: Record<ToolName, string> = {
   searchMenu:
-    'Return the complete menu for scope all. For scope filtered, query the provider and return at most five verified matches with truthful total, returned, and completeness metadata. Use {scope: all, query: null, purpose: browse} only for an entire-menu overview. Use filtered+browse for category or broad catalog browsing such as combo availability, and filtered+recommend only for a focused item or modifier suggestion. For filtered scope, pass only concise provider-derived product, category, property, or exact-identifier terms; combine independent alternatives with OR. Never copy the full customer sentence into query. Prose should mention at most three representative items for a category browse.',
+    'Return the complete menu for scope all, or every verified provider match for scope filtered without truncation. Use {scope: all, query: null, purpose: browse} only for an entire-menu overview. Use filtered+browse for category or broad catalog browsing such as combo availability, and filtered+recommend only for a focused item or modifier suggestion. For filtered scope, pass only concise provider-derived product, category, property, or exact-identifier terms; combine independent alternatives with OR. Never copy the full customer sentence into query. The compact widget displays up to five choices, while prose should mention at most three representative items for a category browse.',
   getItemDetails:
     'Return verified details for one previously discovered menu item code.',
   getModifierOptions:

@@ -157,7 +157,7 @@ describe('agent turn tracing', () => {
       .respondWithTools([
         {
           name: 'searchMenu',
-          args: { scope: 'filtered', query: 'combo' , purpose: 'browse'},
+          args: { scope: 'filtered', query: 'combo', purpose: 'browse' },
         },
       ])
       .respond(

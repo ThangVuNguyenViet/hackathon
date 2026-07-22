@@ -894,21 +894,25 @@ describe('model publication projection', () => {
       {
         ...menuItem('FILTERED MENU ITEM ONE'),
         hasModifiers: true,
-        modifierGroups: [{
-          groupId: 'group-1',
-          name: 'Choose style',
-          min: 1,
-          max: 1,
-          depth: 0,
-          options: [{
-            modifierId: 'secret-option-id',
-            name: 'FULL MODIFIER TREE MUST NOT BE IN SEARCH PUBLICATION',
-            priceDeltaVnd: 0,
-            default: true,
-            quantity: 1,
-            modifierGroups: [],
-          }],
-        }],
+        modifierGroups: [
+          {
+            groupId: 'group-1',
+            name: 'Choose style',
+            min: 1,
+            max: 1,
+            depth: 0,
+            options: [
+              {
+                modifierId: 'secret-option-id',
+                name: 'FULL MODIFIER TREE MUST NOT BE IN SEARCH PUBLICATION',
+                priceDeltaVnd: 0,
+                default: true,
+                quantity: 1,
+                modifierGroups: [],
+              },
+            ],
+          },
+        ],
       },
       { ...menuItem('FILTERED MENU ITEM TWO'), code: 'item-2' },
     ];

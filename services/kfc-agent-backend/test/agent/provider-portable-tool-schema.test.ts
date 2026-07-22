@@ -427,9 +427,9 @@ describe('provider-portable commerce tool schemas', () => {
     expect(stringArray(schema.required, 'searchMenu.required')).toEqual(
       expect.arrayContaining(['scope', 'query', 'purpose']),
     );
-    expect(schemaRecord(schema.properties, 'searchMenu.properties')).toHaveProperty(
-      'purpose',
-    );
+    expect(
+      schemaRecord(schema.properties, 'searchMenu.properties'),
+    ).toHaveProperty('purpose');
     const legacyMenu = parseAgentToolArguments('searchMenu', {
       scope: 'all',
       query: null,
