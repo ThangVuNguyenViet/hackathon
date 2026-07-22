@@ -1,4 +1,4 @@
-import type { FastifyInstance } from "fastify";
+import type { FastifyInstance } from 'fastify';
 import {
   mkdir,
   open,
@@ -6,30 +6,29 @@ import {
   rename,
   rm,
   type FileHandle,
-} from "node:fs/promises";
-import { dirname, resolve } from "node:path";
+} from 'node:fs/promises';
+import { dirname, resolve } from 'node:path';
 import {
   createCommerceProofGatewayMutationState,
   restoreCommerceProofGatewayMutationState,
   snapshotCommerceProofGatewayMutationState,
   type CommerceProofGatewayMutationSnapshot,
   type CommerceProofGatewayMutationState,
-} from "../src/commerceProof/gatewayMutationContracts.js";
-import { buildCommerceProofGatewayServer } from "../src/commerceProof/gatewayServer.js";
-import { buildCommerceProofMockOmsServer } from "../src/commerceProof/mockOmsServer.js";
-import { buildCommerceProofMockPosServer } from "../src/commerceProof/mockPosServer.js";
+} from '../src/commerceProof/gatewayMutationContracts.js';
+import { buildCommerceProofGatewayServer } from '../src/commerceProof/gatewayServer.js';
+import { buildCommerceProofMockOmsServer } from '../src/commerceProof/mockOmsServer.js';
+import { buildCommerceProofMockPosServer } from '../src/commerceProof/mockPosServer.js';
 
-const gatewayToken = requiredEnv("KFC_SANDBOX_GATEWAY_TOKEN");
-const host = process.env.HOST?.trim() || "127.0.0.1";
-const port = Number.parseInt(process.env.PORT?.trim() || "8790", 10);
+const gatewayToken = requiredEnv('KFC_SANDBOX_GATEWAY_TOKEN');
+const host = process.env.HOST?.trim() || '127.0.0.1';
+const port = Number.parseInt(process.env.PORT?.trim() || '8790', 10);
 const mutationStatePath = resolve(
   process.env.KFC_SANDBOX_GATEWAY_MUTATION_STATE_PATH?.trim() ||
-    ".runtime/sandbox-commerce-gateway-mutations.json",
+    '.runtime/sandbox-commerce-gateway-mutations.json',
 );
-const initializationMarker =
-  "kfc-commerce-proof-gateway-mutation-state-v1\n";
+const initializationMarker = 'kfc-commerce-proof-gateway-mutation-state-v1\n';
 if (!Number.isInteger(port) || port < 1 || port > 65535) {
-  throw new Error("PORT must be an integer between 1 and 65535");
+  throw new Error('PORT must be an integer between 1 and 65535');
 }
 
 const servers: FastifyInstance[] = [];
@@ -60,21 +59,23 @@ const gateway = buildCommerceProofGatewayServer({
 servers.push(gateway);
 const baseUrl = await gateway.listen({ host, port });
 
-console.log(JSON.stringify({
-  ok: true,
-  service: "sandbox-commerce-gateway",
-  commerceEnvironment: "sandbox",
-  baseUrl,
-}));
+console.log(
+  JSON.stringify({
+    ok: true,
+    service: 'sandbox-commerce-gateway',
+    commerceEnvironment: 'sandbox',
+    baseUrl,
+  }),
+);
 
-for (const signal of ["SIGINT", "SIGTERM"] as const) {
+for (const signal of ['SIGINT', 'SIGTERM'] as const) {
   process.once(signal, () => void shutdown());
 }
 await new Promise<void>(() => {});
 
 async function listen(server: FastifyInstance): Promise<string> {
   servers.push(server);
-  return server.listen({ host: "127.0.0.1", port: 0 });
+  return server.listen({ host: '127.0.0.1', port: 0 });
 }
 
 async function shutdown(): Promise<void> {
@@ -100,17 +101,17 @@ async function loadOrBootstrapMutationState(
   if (stateFile !== undefined || markerFile !== undefined) {
     if (
       stateFile === undefined ||
-      markerFile?.toString("utf8") !== initializationMarker
+      markerFile?.toString('utf8') !== initializationMarker
     ) {
       throw new Error(
-        "sandbox_gateway_mutation_state_missing_or_untrusted_after_initialization",
+        'sandbox_gateway_mutation_state_missing_or_untrusted_after_initialization',
       );
     }
     let parsed: unknown;
     try {
-      parsed = JSON.parse(stateFile.toString("utf8"));
+      parsed = JSON.parse(stateFile.toString('utf8'));
     } catch (error) {
-      throw new Error("sandbox_gateway_mutation_state_json_invalid", {
+      throw new Error('sandbox_gateway_mutation_state_json_invalid', {
         cause: error,
       });
     }
@@ -128,11 +129,9 @@ async function loadOrBootstrapMutationState(
 
 function createSerializedMutationSnapshotWriter(statePath: string) {
   let pending = Promise.resolve();
-  return (
-    snapshot: CommerceProofGatewayMutationSnapshot,
-  ): Promise<void> => {
+  return (snapshot: CommerceProofGatewayMutationSnapshot): Promise<void> => {
     const write = pending.then(() =>
-      writeMutationSnapshotAtomically(statePath, snapshot)
+      writeMutationSnapshotAtomically(statePath, snapshot),
     );
     pending = write.catch(() => {});
     return write;
@@ -142,11 +141,11 @@ function createSerializedMutationSnapshotWriter(statePath: string) {
 async function createInitializationMarker(markerPath: string): Promise<void> {
   let handle: FileHandle | undefined;
   try {
-    handle = await open(markerPath, "wx", 0o600);
-    await handle.writeFile(initializationMarker, "utf8");
+    handle = await open(markerPath, 'wx', 0o600);
+    await handle.writeFile(initializationMarker, 'utf8');
     await handle.sync();
   } catch (error) {
-    throw new Error("sandbox_gateway_mutation_state_bootstrap_refused", {
+    throw new Error('sandbox_gateway_mutation_state_bootstrap_refused', {
       cause: error,
     });
   } finally {
@@ -159,12 +158,11 @@ async function writeMutationSnapshotAtomically(
   statePath: string,
   snapshot: CommerceProofGatewayMutationSnapshot,
 ): Promise<void> {
-  const temporaryPath =
-    `${statePath}.${process.pid}.${crypto.randomUUID()}.tmp`;
+  const temporaryPath = `${statePath}.${process.pid}.${crypto.randomUUID()}.tmp`;
   let handle: FileHandle | undefined;
   try {
-    handle = await open(temporaryPath, "wx", 0o600);
-    await handle.writeFile(`${JSON.stringify(snapshot)}\n`, "utf8");
+    handle = await open(temporaryPath, 'wx', 0o600);
+    await handle.writeFile(`${JSON.stringify(snapshot)}\n`, 'utf8');
     await handle.sync();
     await handle.close();
     handle = undefined;
@@ -178,7 +176,7 @@ async function writeMutationSnapshotAtomically(
 }
 
 async function syncDirectory(directoryPath: string): Promise<void> {
-  const handle = await open(directoryPath, "r");
+  const handle = await open(directoryPath, 'r');
   try {
     await handle.sync();
   } finally {
@@ -186,17 +184,15 @@ async function syncDirectory(directoryPath: string): Promise<void> {
   }
 }
 
-async function readOptionalFile(
-  filePath: string,
-): Promise<Buffer | undefined> {
+async function readOptionalFile(filePath: string): Promise<Buffer | undefined> {
   try {
     return await readFile(filePath);
   } catch (error) {
     if (
-      typeof error === "object" &&
+      typeof error === 'object' &&
       error !== null &&
-      "code" in error &&
-      error.code === "ENOENT"
+      'code' in error &&
+      error.code === 'ENOENT'
     ) {
       return undefined;
     }

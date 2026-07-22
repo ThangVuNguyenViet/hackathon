@@ -26,9 +26,7 @@ import {
   type D1Result,
   type SessionAgentStateRow,
 } from './d1StoreSupport.js';
-import {
-  d1ActiveSessionAuthoritySource,
-} from './d1StoreSessionAuthority.js';
+import { d1ActiveSessionAuthoritySource } from './d1StoreSessionAuthority.js';
 
 export async function getD1SessionAgentState(
   db: D1DatabaseLike,
@@ -45,8 +43,9 @@ export async function setD1SessionAgentState(
     ...input,
     updatedAt: input.updatedAt ?? new Date().toISOString(),
   };
-  await db.prepare(
-    `INSERT INTO session_agent_state (
+  await db
+    .prepare(
+      `INSERT INTO session_agent_state (
        session_id, current_run_id, generation, debounce_deadline_at, updated_at
      ) VALUES (?, ?, ?, ?, ?)
      ON CONFLICT(session_id) DO UPDATE SET
@@ -54,13 +53,15 @@ export async function setD1SessionAgentState(
        generation = excluded.generation,
        debounce_deadline_at = excluded.debounce_deadline_at,
        updated_at = excluded.updated_at`,
-  ).bind(
-    state.sessionId,
-    state.currentRunId,
-    state.generation,
-    state.debounceDeadlineAt,
-    state.updatedAt,
-  ).run();
+    )
+    .bind(
+      state.sessionId,
+      state.currentRunId,
+      state.generation,
+      state.debounceDeadlineAt,
+      state.updatedAt,
+    )
+    .run();
   return state;
 }
 
@@ -69,15 +70,18 @@ export async function listDueD1SessionAgentStates(
   now: string,
   limit: number,
 ): Promise<SessionAgentState[]> {
-  const rows = await db.prepare(
-    `SELECT *
+  const rows = await db
+    .prepare(
+      `SELECT *
      FROM session_agent_state
      WHERE current_run_id IS NULL
        AND debounce_deadline_at IS NOT NULL
        AND debounce_deadline_at <= ?
      ORDER BY debounce_deadline_at ASC, session_id ASC
      LIMIT ?`,
-  ).bind(now, limit).all<SessionAgentStateRow>();
+    )
+    .bind(now, limit)
+    .all<SessionAgentStateRow>();
   return (rows.results ?? []).map(sessionAgentStateFromRow);
 }
 
@@ -90,29 +94,35 @@ export async function advanceD1SessionAgentGeneration(input: {
   }
   const updatedAt = input.operation.updatedAt ?? new Date().toISOString();
   const results = await input.db.batch([
-    input.db.prepare(
-      `INSERT OR IGNORE INTO session_agent_state (
+    input.db
+      .prepare(
+        `INSERT OR IGNORE INTO session_agent_state (
          session_id, current_run_id, generation, debounce_deadline_at, updated_at
        ) VALUES (?, NULL, 0, NULL, ?)`,
-    ).bind(input.operation.sessionId, updatedAt),
-    input.db.prepare(
-      `SELECT current_run_id
+      )
+      .bind(input.operation.sessionId, updatedAt),
+    input.db
+      .prepare(
+        `SELECT current_run_id
        FROM session_agent_state
        WHERE session_id = ?`,
-    ).bind(input.operation.sessionId),
-    input.db.prepare(
-      `UPDATE session_agent_state
+      )
+      .bind(input.operation.sessionId),
+    input.db
+      .prepare(
+        `UPDATE session_agent_state
        SET current_run_id = NULL,
            generation = generation + 1,
            debounce_deadline_at = ?,
            updated_at = ?
        WHERE session_id = ?
        RETURNING *`,
-    ).bind(
-      input.operation.debounceDeadlineAt,
-      updatedAt,
-      input.operation.sessionId,
-    ),
+      )
+      .bind(
+        input.operation.debounceDeadlineAt,
+        updatedAt,
+        input.operation.sessionId,
+      ),
   ]);
   const previous = firstResult<{ current_run_id: string | null }>(results[1]);
   const state = firstResult<SessionAgentStateRow>(results[2]);
@@ -130,8 +140,9 @@ export async function claimD1SessionAgentRunOwnership(input: {
   operation: ClaimSessionAgentRunOwnershipInput;
 }): Promise<ClaimSessionAgentRunOwnershipResult> {
   const updatedAt = input.operation.updatedAt ?? new Date().toISOString();
-  const claimed = await input.db.prepare(
-    `UPDATE session_agent_state
+  const claimed = await input.db
+    .prepare(
+      `UPDATE session_agent_state
      SET current_run_id = ?,
          debounce_deadline_at = NULL,
          updated_at = ?
@@ -154,27 +165,26 @@ export async function claimD1SessionAgentRunOwnership(input: {
            )
        )
      RETURNING *`,
-  ).bind(
-    input.operation.runId,
-    updatedAt,
-    input.operation.sessionId,
-    input.operation.expectedGeneration,
-    input.operation.expectedCurrentRunId,
-    input.operation.expectedDebounceDeadlineAt,
-    input.operation.runId,
-    input.operation.sessionId,
-    input.operation.expectedGeneration,
-    input.operation.sessionId,
-  ).first<SessionAgentStateRow>();
+    )
+    .bind(
+      input.operation.runId,
+      updatedAt,
+      input.operation.sessionId,
+      input.operation.expectedGeneration,
+      input.operation.expectedCurrentRunId,
+      input.operation.expectedDebounceDeadlineAt,
+      input.operation.runId,
+      input.operation.sessionId,
+      input.operation.expectedGeneration,
+      input.operation.sessionId,
+    )
+    .first<SessionAgentStateRow>();
   if (claimed) {
     return { status: 'claimed', state: sessionAgentStateFromRow(claimed) };
   }
   return {
     status: 'stale',
-    state: await readD1SessionAgentState(
-      input.db,
-      input.operation.sessionId,
-    ),
+    state: await readD1SessionAgentState(input.db, input.operation.sessionId),
   };
 }
 
@@ -183,8 +193,9 @@ export async function claimD1AgentRunExecution(input: {
   operation: ClaimAgentRunExecutionInput;
 }): Promise<ClaimAgentRunExecutionResult> {
   assertAgentRunExecutionClaim(input.operation);
-  const claimed = await input.db.prepare(
-    `UPDATE agent_runs
+  const claimed = await input.db
+    .prepare(
+      `UPDATE agent_runs
      SET status = 'running',
          execution_attempt = execution_attempt + 1,
          execution_lease_token = ?,
@@ -235,28 +246,31 @@ export async function claimD1AgentRunExecution(input: {
            AND generation = ?
        )
      RETURNING *`,
-  ).bind(
-    input.operation.executionLeaseToken,
-    input.operation.executionLeaseExpiresAt,
-    input.operation.claimedAt,
-    input.operation.claimedAt,
-    input.operation.runId,
-    input.operation.sessionId,
-    input.operation.generation,
-    input.operation.sessionAuthorityGeneration,
-    MAXIMUM_AGENT_RUN_EXECUTION_ATTEMPTS,
-    input.operation.executionLeaseExpiresAt,
-    input.operation.sessionId,
-    input.operation.sessionAuthorityGeneration,
-    input.operation.sessionId,
-    input.operation.runId,
-    input.operation.generation,
-  ).first<AgentRunRow>();
+    )
+    .bind(
+      input.operation.executionLeaseToken,
+      input.operation.executionLeaseExpiresAt,
+      input.operation.claimedAt,
+      input.operation.claimedAt,
+      input.operation.runId,
+      input.operation.sessionId,
+      input.operation.generation,
+      input.operation.sessionAuthorityGeneration,
+      MAXIMUM_AGENT_RUN_EXECUTION_ATTEMPTS,
+      input.operation.executionLeaseExpiresAt,
+      input.operation.sessionId,
+      input.operation.sessionAuthorityGeneration,
+      input.operation.sessionId,
+      input.operation.runId,
+      input.operation.generation,
+    )
+    .first<AgentRunRow>();
   if (claimed) {
     return { status: 'claimed', run: agentRunFromRow(claimed) };
   }
-  const reconciled = await input.db.prepare(
-    `UPDATE agent_runs
+  const reconciled = await input.db
+    .prepare(
+      `UPDATE agent_runs
      SET status = 'reconciliation_required',
          delivery_status = 'not_applicable',
          error_code = CASE
@@ -298,29 +312,32 @@ export async function claimD1AgentRunExecution(input: {
            AND generation = ?
        )
      RETURNING *`,
-  ).bind(
-    input.operation.claimedAt,
-    input.operation.claimedAt,
-    input.operation.runId,
-    input.operation.sessionId,
-    input.operation.generation,
-    input.operation.sessionAuthorityGeneration,
-    MAXIMUM_AGENT_RUN_EXECUTION_ATTEMPTS,
-    input.operation.sessionId,
-    input.operation.sessionAuthorityGeneration,
-    input.operation.sessionId,
-    input.operation.runId,
-    input.operation.generation,
-  ).first<AgentRunRow>();
+    )
+    .bind(
+      input.operation.claimedAt,
+      input.operation.claimedAt,
+      input.operation.runId,
+      input.operation.sessionId,
+      input.operation.generation,
+      input.operation.sessionAuthorityGeneration,
+      MAXIMUM_AGENT_RUN_EXECUTION_ATTEMPTS,
+      input.operation.sessionId,
+      input.operation.sessionAuthorityGeneration,
+      input.operation.sessionId,
+      input.operation.runId,
+      input.operation.generation,
+    )
+    .first<AgentRunRow>();
   if (reconciled) {
     const run = agentRunFromRow(reconciled);
     const reason = agentRunExecutionReconciliationReason(run);
     if (!reason) throw new Error('d1_agent_run_reconciliation_reason_missing');
     return { status: 'reconciliation_required', reason, run };
   }
-  const existing = await input.db.prepare(
-    `SELECT * FROM agent_runs WHERE id = ? LIMIT 1`,
-  ).bind(input.operation.runId).first<AgentRunRow>();
+  const existing = await input.db
+    .prepare(`SELECT * FROM agent_runs WHERE id = ? LIMIT 1`)
+    .bind(input.operation.runId)
+    .first<AgentRunRow>();
   return agentRunExecutionClaimRejection(
     existing ? agentRunFromRow(existing) : undefined,
   );
@@ -332,8 +349,9 @@ export async function updateD1AgentRunIfExecutionCurrent(input: {
 }): Promise<UpdateAgentRunIfExecutionCurrentResult> {
   const patch = d1AgentRunPatchAssignments(input.operation.patch);
   const updatedAt = new Date().toISOString();
-  const updated = await input.db.prepare(
-    `UPDATE agent_runs
+  const updated = await input.db
+    .prepare(
+      `UPDATE agent_runs
      SET ${[...patch.assignments, 'updated_at = ?'].join(',\n         ')}
      WHERE id = ?
        AND session_id = ?
@@ -357,27 +375,30 @@ export async function updateD1AgentRunIfExecutionCurrent(input: {
            AND generation = ?
        )
      RETURNING *`,
-  ).bind(
-    ...patch.bindings,
-    updatedAt,
-    input.operation.fence.runId,
-    input.operation.sessionId,
-    input.operation.fence.generation,
-    input.operation.fence.sessionAuthorityGeneration,
-    input.operation.fence.executionAttempt,
-    input.operation.fence.executionLeaseToken,
-    input.operation.sessionId,
-    input.operation.fence.sessionAuthorityGeneration,
-    input.operation.sessionId,
-    input.operation.fence.runId,
-    input.operation.fence.generation,
-  ).first<AgentRunRow>();
+    )
+    .bind(
+      ...patch.bindings,
+      updatedAt,
+      input.operation.fence.runId,
+      input.operation.sessionId,
+      input.operation.fence.generation,
+      input.operation.fence.sessionAuthorityGeneration,
+      input.operation.fence.executionAttempt,
+      input.operation.fence.executionLeaseToken,
+      input.operation.sessionId,
+      input.operation.fence.sessionAuthorityGeneration,
+      input.operation.sessionId,
+      input.operation.fence.runId,
+      input.operation.fence.generation,
+    )
+    .first<AgentRunRow>();
   if (updated) {
     return { status: 'committed', run: agentRunFromRow(updated) };
   }
-  const existing = await input.db.prepare(
-    `SELECT * FROM agent_runs WHERE id = ? LIMIT 1`,
-  ).bind(input.operation.fence.runId).first<AgentRunRow>();
+  const existing = await input.db
+    .prepare(`SELECT * FROM agent_runs WHERE id = ? LIMIT 1`)
+    .bind(input.operation.fence.runId)
+    .first<AgentRunRow>();
   return {
     status: 'stale',
     ...(existing ? { run: agentRunFromRow(existing) } : {}),
@@ -411,20 +432,16 @@ function d1AgentRunPatchAssignments(patch: AgentRunPatch): {
   return { assignments, bindings };
 }
 
-async function readD1SessionAgentState(
-  db: D1DatabaseLike,
-  sessionId: string,
-) {
-  const row = await db.prepare(
-    `SELECT * FROM session_agent_state WHERE session_id = ? LIMIT 1`,
-  ).bind(sessionId).first<SessionAgentStateRow>();
+async function readD1SessionAgentState(db: D1DatabaseLike, sessionId: string) {
+  const row = await db
+    .prepare(`SELECT * FROM session_agent_state WHERE session_id = ? LIMIT 1`)
+    .bind(sessionId)
+    .first<SessionAgentStateRow>();
   return row
     ? sessionAgentStateFromRow(row)
     : defaultSessionAgentState(sessionId);
 }
 
-function firstResult<Row>(
-  result: D1Result | undefined,
-): Row | undefined {
+function firstResult<Row>(result: D1Result | undefined): Row | undefined {
   return result?.results?.[0] as Row | undefined;
 }

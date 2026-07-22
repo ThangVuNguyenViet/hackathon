@@ -13,10 +13,14 @@ export function buildServer(options: BuildServerOptions = {}): FastifyInstance {
   const server = Fastify({ logger: false });
   const parseJson = server.getDefaultJsonParser('error', 'error');
 
-  server.addContentTypeParser('application/json', { parseAs: 'buffer' }, (request, body, done) => {
-    request.rawBody = Buffer.isBuffer(body) ? body : Buffer.from(body);
-    parseJson(request, request.rawBody.toString('utf8'), done);
-  });
+  server.addContentTypeParser(
+    'application/json',
+    { parseAs: 'buffer' },
+    (request, body, done) => {
+      request.rawBody = Buffer.isBuffer(body) ? body : Buffer.from(body);
+      parseJson(request, request.rawBody.toString('utf8'), done);
+    },
+  );
 
   server.addHook('onClose', async () => {
     await options.agentTracer?.flush();

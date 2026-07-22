@@ -23,7 +23,8 @@ export const customerSafeProgressLabels = {
   transferring_support: 'Đang chuyển yêu cầu hỗ trợ…',
 } as const;
 
-export type CustomerSafeProgressFamily = keyof typeof customerSafeProgressLabels;
+export type CustomerSafeProgressFamily =
+  keyof typeof customerSafeProgressLabels;
 
 export function projectToolProgressFamily(
   call: ToolCallRequest,

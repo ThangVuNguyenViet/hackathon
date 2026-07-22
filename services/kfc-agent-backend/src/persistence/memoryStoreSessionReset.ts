@@ -22,18 +22,12 @@ import {
   nonAgentTextDeliverySessionBindingDigest,
   reconcileNonAgentTextDelivery,
 } from './nonAgentTextDelivery.js';
-import {
-  effectiveMemorySessionControl,
-} from './memoryStoreSessionAuthority.js';
-import type {
-  MemoryIrreversibleOperationRecord,
-} from './memoryStoreConfirmationResumeOperations.js';
-import type {
-  MemoryVerifiedRefStorageSnapshot,
-} from './memoryStoreVerifiedRefOperations.js';
+import { effectiveMemorySessionControl } from './memoryStoreSessionAuthority.js';
+import type { MemoryIrreversibleOperationRecord } from './memoryStoreIrreversibleOperations.js';
+import type { MemoryVerifiedRefStorageSnapshot } from './memoryStoreVerifiedRefOperations.js';
 
 export interface MemorySessionResetState {
-  confirmationPauseGenerations: Map<string, number>;
+  sessionGenerations: Map<string, number>;
   verifiedRefs: Map<string, MemoryVerifiedRefStorageSnapshot>;
   customerRuns: Map<string, CustomerRun>;
   customerRunRequestIndex: Map<string, string>;
@@ -56,33 +50,16 @@ export async function resetMemorySession(
   state: MemorySessionResetState,
 ): Promise<SessionControl> {
   const resetAt = new Date().toISOString();
-  const unresolvedResume = [...state.irreversibleOperations.values()]
-    .some((operation) =>
-      operation.input.sessionId === sessionId &&
-      operation.input.operation === 'confirmation_resume' &&
-      !(
-        operation.status === 'completed' &&
-        operation.result !== undefined &&
-        operation.completedAt !== undefined
-      )
-    );
-  if (unresolvedResume) throw new SessionResetConflictError();
   const sessionBindingDigest =
     await nonAgentTextDeliverySessionBindingDigest(sessionId);
-  const nonAgentDeliveries = [
-    ...state.nonAgentTextDeliveries.entries(),
-  ].filter(([, delivery]) =>
-    delivery.sessionBindingDigest === sessionBindingDigest);
+  const nonAgentDeliveries = [...state.nonAgentTextDeliveries.entries()].filter(
+    ([, delivery]) => delivery.sessionBindingDigest === sessionBindingDigest,
+  );
   const activeNonAgentSend = nonAgentDeliveries.some(
     ([, delivery]) =>
-      (
-        delivery.status === 'sending' &&
-        delivery.sendingLeaseExpiresAt > resetAt
-      ) ||
-      (
-        delivery.status === 'pending' &&
-        delivery.updatedAt > resetAt
-      ),
+      (delivery.status === 'sending' &&
+        delivery.sendingLeaseExpiresAt > resetAt) ||
+      (delivery.status === 'pending' && delivery.updatedAt > resetAt),
   );
   if (activeNonAgentSend) throw new SessionResetConflictError();
   for (const [requestKey, delivery] of nonAgentDeliveries) {
@@ -107,9 +84,9 @@ export async function resetMemorySession(
     }
   }
 
-  state.confirmationPauseGenerations.set(
+  state.sessionGenerations.set(
     sessionId,
-    (state.confirmationPauseGenerations.get(sessionId) ?? 0) + 1,
+    (state.sessionGenerations.get(sessionId) ?? 0) + 1,
   );
   for (const [refId, snapshot] of state.verifiedRefs) {
     if (snapshot.sessionId === sessionId) {
@@ -127,14 +104,10 @@ export async function resetMemorySession(
       .map((run) => run.id),
   );
 
-  removeWhere(
-    state.customerRunEvents,
-    (event) => customerRunIds.has(event.runId),
+  removeWhere(state.customerRunEvents, (event) =>
+    customerRunIds.has(event.runId),
   );
-  removeWhere(
-    state.agentRunTurns,
-    (link) => agentRunIds.has(link.runId),
-  );
+  removeWhere(state.agentRunTurns, (link) => agentRunIds.has(link.runId));
   removeWhere(
     state.pendingCustomerTurns,
     (turn) => turn.sessionId === sessionId,
@@ -154,10 +127,7 @@ export async function resetMemorySession(
     }
   }
   for (const [requestId, reservation] of state.irreversibleOperations) {
-    if (
-      reservation.input.sessionId === sessionId &&
-      reservation.input.operation !== 'confirmation_resume'
-    ) {
+    if (reservation.input.sessionId === sessionId) {
       state.irreversibleOperations.delete(requestId);
     }
   }
@@ -169,8 +139,7 @@ export async function resetMemorySession(
     sessionId,
     agentMode: 'ai_active',
     assignedAgentId: null,
-    sessionAuthorityGeneration:
-      currentControl.sessionAuthorityGeneration + 1,
+    sessionAuthorityGeneration: currentControl.sessionAuthorityGeneration + 1,
     updatedAt: new Date('2026-07-07T00:00:00.000Z').toISOString(),
   };
   state.sessionControls.set(sessionId, control);

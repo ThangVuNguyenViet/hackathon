@@ -10,14 +10,8 @@ import {
   paymentOrderIsCreated,
 } from './paymentOrderAuthority.js';
 import { toolArgumentSchemas } from './toolCatalog.js';
-import {
-  result,
-  resultFromToolResult,
-} from './toolExecutionResult.js';
-import type {
-  ToolCallRequest,
-  ToolCallResult,
-} from './types.js';
+import { result, resultFromToolResult } from './toolExecutionResult.js';
+import type { ToolCallRequest, ToolCallResult } from './types.js';
 
 interface PaymentToolExecutionContext {
   externalCallContext: ExternalCallContext;

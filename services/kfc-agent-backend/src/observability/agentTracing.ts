@@ -19,7 +19,9 @@ export interface AgentTraceSpan {
 }
 
 export interface AgentTracer {
-  startTurn(input: Omit<AgentTraceSpanInput, 'runType'>): Promise<AgentTraceSpan>;
+  startTurn(
+    input: Omit<AgentTraceSpanInput, 'runType'>,
+  ): Promise<AgentTraceSpan>;
   flush(): Promise<void>;
 }
 
@@ -104,9 +106,7 @@ function createSafeSpan(
 
   const delegateWithActiveTrace = delegate.withActiveTrace;
   if (delegateWithActiveTrace) {
-    safeSpan.withActiveTrace = async <T>(
-      fn: () => Promise<T>,
-    ): Promise<T> => {
+    safeSpan.withActiveTrace = async <T>(fn: () => Promise<T>): Promise<T> => {
       let applicationPromise: Promise<T> | undefined;
       const invokeApplication = (): Promise<T> => {
         applicationPromise ??= Promise.resolve().then(fn);
@@ -149,7 +149,8 @@ function createSafeSpan(
 
 export function createSafeAgentTracer(
   delegate: AgentTracer,
-  onDiagnostic: (code: AgentTraceDiagnostic, error: unknown) => void = () => undefined,
+  onDiagnostic: (code: AgentTraceDiagnostic, error: unknown) => void = () =>
+    undefined,
 ): AgentTracer {
   return {
     async startTurn(input) {

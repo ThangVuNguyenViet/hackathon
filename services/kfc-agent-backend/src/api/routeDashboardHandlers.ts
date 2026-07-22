@@ -1,14 +1,14 @@
-import { existsSync } from "node:fs";
-import { dirname, join } from "node:path";
-import { fileURLToPath } from "node:url";
-import { z } from "zod";
+import { existsSync } from 'node:fs';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { z } from 'zod';
 import type {
   ChannelMediaDeliveryResult,
   ExternalClients,
   MessengerClient,
   MessengerSenderAction,
-} from "../clients/interfaces.js";
-import type { KfcCommerceGatewayClients } from "../clients/kfcCommerceGateway.js";
+} from '../clients/interfaces.js';
+import type { KfcCommerceGatewayClients } from '../clients/kfcCommerceGateway.js';
 import {
   LifecycleError,
   type CreateLifecycleInput,
@@ -18,25 +18,25 @@ import {
   type MutationContext,
   type SandboxLifecycleControls,
   projectLifecycleCommerceClients,
-} from "../commerce/lifecycleProvider.js";
-import { createCatalogObservationClients } from "../clients/catalogObservationClients.js";
+} from '../commerce/lifecycleProvider.js';
+import { createCatalogObservationClients } from '../clients/catalogObservationClients.js';
 import {
   fetchCatalogObservation,
   type CatalogObservation,
   type CommerceEnvironment,
-} from "../catalog/catalogObservation.js";
-import type { ConversationEvent } from "../channels/conversationEvent.js";
-import type { MessengerHistorySyncCoordinator } from "../channels/messengerHistory.js";
+} from '../catalog/catalogObservation.js';
+import type { ConversationEvent } from '../channels/conversationEvent.js';
+import type { MessengerHistorySyncCoordinator } from '../channels/messengerHistory.js';
 import {
   createMessengerClient,
   normalizeMessengerWebhook,
   verifyMessengerChallenge,
-} from "../channels/messenger.js";
-import { createZaloClient, normalizeZaloWebhook } from "../channels/zalo.js";
-import { DashboardEventBus } from "../dashboard/eventBus.js";
-import { dashboardSessionTarget } from "../dashboard/sessionVisibility.js";
-import type { GeneratedFixtures } from "../fixtures/schema.js";
-import { loadGeneratedFixtures } from "../fixtures/loadFixtures.js";
+} from '../channels/messenger.js';
+import { createZaloClient, normalizeZaloWebhook } from '../channels/zalo.js';
+import { DashboardEventBus } from '../dashboard/eventBus.js';
+import { dashboardSessionTarget } from '../dashboard/sessionVisibility.js';
+import type { GeneratedFixtures } from '../fixtures/schema.js';
+import { loadGeneratedFixtures } from '../fixtures/loadFixtures.js';
 import type {
   AgentMode,
   Channel,
@@ -45,13 +45,11 @@ import type {
   CustomerAccessContext,
   MonitorSessionIntelligence,
   ToolResult,
-} from "../domain/types.js";
-import { customerCommandFromVerifiedAction } from "../domain/customerCommand.js";
-import {
-  isKfcGenUiAttachment,
-} from "../genui/kfcGenUi.js";
-import { runAgentTurn } from "../agent/kfcAgent.js";
-import type { AgentState } from "../agent/agentState.js";
+} from '../domain/types.js';
+import { customerCommandFromVerifiedAction } from '../domain/customerCommand.js';
+import { isKfcGenUiAttachment } from '../genui/kfcGenUi.js';
+import { runAgentTurn } from '../agent/kfcAgent.js';
+import type { AgentState } from '../agent/agentState.js';
 import {
   calculateMonitorSessionIntelligence,
   preserveMonitorContext,
@@ -59,49 +57,126 @@ import {
   monitorContextReevaluationCustomerTurnThreshold,
   resolveMonitorSessionIntelligence,
   type MonitorSessionIntelligenceJudge,
-} from "../monitor/sessionIntelligence.js";
-import type { AgentTracer } from "../observability/agentTracing.js";
+} from '../monitor/sessionIntelligence.js';
+import type { AgentTracer } from '../observability/agentTracing.js';
 import {
   createMockClients,
   type MockClientOptions,
-} from "../mock/createMockClients.js";
+} from '../mock/createMockClients.js';
 import {
   applyMockedUpstreamFixtureOverrides,
   mockedUpstreamApiProfileSchema,
   mockedUpstreamClientOptions,
-} from "../mock/mockedUpstreamProfile.js";
-import type { ToolName } from "../ordering/types.js";
-import { CustomerRunCoordinator, type CustomerRunObservation } from "../customerRuns/runtime.js";
+} from '../mock/mockedUpstreamProfile.js';
+import type { ToolName } from '../ordering/types.js';
+import {
+  CustomerRunCoordinator,
+  type CustomerRunObservation,
+} from '../customerRuns/runtime.js';
 import {
   kfcSessionMatchesCustomer,
   type CustomerRunStartRequest,
-} from "../customerRuns/contracts.js";
+} from '../customerRuns/contracts.js';
 import {
   MemoryStore,
   type ConversationStore,
   type WebhookDelivery,
-} from "../persistence/memoryStore.js";
+} from '../persistence/memoryStore.js';
 import {
   buildBoundedRecentTurns,
   sessionIdForConversationEvent,
-} from "../session/sessionContext.js";
-import {
-  type ChannelPresentationPlan,
-} from "../presentation/channelPresentation.js";
+} from '../session/sessionContext.js';
+import { type ChannelPresentationPlan } from '../presentation/channelPresentation.js';
 import {
   ShowcaseService,
   ShowcaseValidationError,
   type ShowcaseScenarioSource,
-} from "../showcase/showcase.js";
-import { isRecord, canonicalJson, sha256Fingerprint, kfcSessionIdSchema, kfcChatPayloadSchema, kfcGenUiActionPayloadSchema, kfcSmartMenuBatchPayloadSchema, messengerHistorySyncPayloadSchema, staleMessengerRecoveryPayloadSchema, sessionControlPayloadSchema, dashboardSessionDefaultLookbackMs, humanMessagePayloadSchema, lifecycleTransitionSchema, lifecycleEventPayloadSchema, confirmationResumePayloadSchema, kfcProofPreconditionsSchema, lifecycleErrorResponse, ReadinessCheckResult, ReadinessOptions, RouteOptions, HandlerResponse, MessengerWebhookEventProcessingResult, StaleMessengerDeliveryRecoveryResult, RouteHandlers, defaultFixturesRoot } from './routeHandlerContracts.js';
-import { messengerDeliveryFailureForStorage, eventFromMessengerDelivery, sendMessengerSenderAction, dashboardEventId, checkCommerceGatewayReadiness, checkCatalogReadiness, runReadinessCheck, checkFixtures, checkMessengerConfig, checkZaloConfig, deeplinkForSession, renderInboxUrlTemplate, ChannelProfileTarget, channelTargetForSession, humanChannelTargetForSession } from './routeHandlerSupport.js';
+} from '../showcase/showcase.js';
+import {
+  isRecord,
+  canonicalJson,
+  sha256Fingerprint,
+  kfcSessionIdSchema,
+  kfcChatPayloadSchema,
+  kfcGenUiActionPayloadSchema,
+  kfcSmartMenuBatchPayloadSchema,
+  messengerHistorySyncPayloadSchema,
+  staleMessengerRecoveryPayloadSchema,
+  sessionControlPayloadSchema,
+  dashboardSessionDefaultLookbackMs,
+  humanMessagePayloadSchema,
+  lifecycleTransitionSchema,
+  lifecycleEventPayloadSchema,
+  kfcProofPreconditionsSchema,
+  lifecycleErrorResponse,
+  ReadinessCheckResult,
+  ReadinessOptions,
+  RouteOptions,
+  HandlerResponse,
+  MessengerWebhookEventProcessingResult,
+  StaleMessengerDeliveryRecoveryResult,
+  RouteHandlers,
+  defaultFixturesRoot,
+} from './routeHandlerContracts.js';
+import {
+  messengerDeliveryFailureForStorage,
+  eventFromMessengerDelivery,
+  sendMessengerSenderAction,
+  dashboardEventId,
+  checkCommerceGatewayReadiness,
+  checkCatalogReadiness,
+  runReadinessCheck,
+  checkFixtures,
+  checkMessengerConfig,
+  checkZaloConfig,
+  deeplinkForSession,
+  renderInboxUrlTemplate,
+  ChannelProfileTarget,
+  channelTargetForSession,
+  humanChannelTargetForSession,
+} from './routeHandlerSupport.js';
 
 import type { RouteHandlerContext } from './routeHandlerContext.js';
 import { deliverNonAgentText } from './nonAgentTextDeliveryRuntime.js';
 import { enqueueDashboardResumeRecovery } from './dashboardResumeRecovery.js';
 
 export function createDashboardRouteHandlers(context: RouteHandlerContext) {
-  const { options, store, dashboard, showcase, streamingRunObservers, customerRuns, getFixtures, withConfiguredCommerce, createWebhookClients, createDeliveryClients, dashboardProfileForTarget, createFirstPartyKfcClients, kfcProofAccessContext, latestKfcProofPreconditions, kfcAgentResponse, deferAiMonitorRefinement, deliverAssistantReply, persistEventProfile, turnMetadataFor, emitConversationTurnCreatedEvent, emitSessionModeEvent, emitSessionControlIntelligence, resumedOwnershipSummary, clearPersistedHandoff, persistedHandoffStatus, shouldEvaluateDashboardMonitorContext, ensureDashboardMonitorContext, persistNonAgentInboundEvent, pauseIfHumanJoined, latestUnansweredCustomerTurn, replyToLatestUnansweredCustomerTurn, processMessengerEventInternal, recoverStaleMessengerDeliveriesInternal, processMessengerAgentRunInternal } = context;
+  const {
+    options,
+    store,
+    dashboard,
+    showcase,
+    streamingRunObservers,
+    customerRuns,
+    getFixtures,
+    withConfiguredCommerce,
+    createWebhookClients,
+    createDeliveryClients,
+    dashboardProfileForTarget,
+    createFirstPartyKfcClients,
+    kfcProofAccessContext,
+    latestKfcProofPreconditions,
+    kfcAgentResponse,
+    deferAiMonitorRefinement,
+    deliverAssistantReply,
+    persistEventProfile,
+    turnMetadataFor,
+    emitConversationTurnCreatedEvent,
+    emitSessionModeEvent,
+    emitSessionControlIntelligence,
+    resumedOwnershipSummary,
+    clearPersistedHandoff,
+    persistedHandoffStatus,
+    shouldEvaluateDashboardMonitorContext,
+    ensureDashboardMonitorContext,
+    persistNonAgentInboundEvent,
+    pauseIfHumanJoined,
+    latestUnansweredCustomerTurn,
+    replyToLatestUnansweredCustomerTurn,
+    processMessengerEventInternal,
+    recoverStaleMessengerDeliveriesInternal,
+    processMessengerAgentRunInternal,
+  } = context;
   return {
     async dashboardHumanJoin(sessionId: string, body: unknown) {
       const parsed = sessionControlPayloadSchema.safeParse(body);
@@ -109,7 +184,7 @@ export function createDashboardRouteHandlers(context: RouteHandlerContext) {
         return {
           status: 400,
           body: {
-            errorCode: "invalid_session_control_payload",
+            errorCode: 'invalid_session_control_payload',
             issues: parsed.error.issues,
           },
         };
@@ -117,16 +192,15 @@ export function createDashboardRouteHandlers(context: RouteHandlerContext) {
       const currentControl = await store.getSessionControl(sessionId);
       const transition = await store.transitionSessionAuthority({
         sessionId,
-        expectedGeneration:
-          currentControl.sessionAuthorityGeneration,
-        agentMode: "human_paused",
+        expectedGeneration: currentControl.sessionAuthorityGeneration,
+        agentMode: 'human_paused',
         assignedAgentId: parsed.data.agentId ?? null,
       });
-      if (transition.status === "stale") {
+      if (transition.status === 'stale') {
         return {
           status: 409,
           body: {
-            errorCode: "session_authority_conflict",
+            errorCode: 'session_authority_conflict',
             control: transition.control,
           },
         };
@@ -144,7 +218,7 @@ export function createDashboardRouteHandlers(context: RouteHandlerContext) {
       const control = transition.control;
       emitSessionModeEvent({
         sessionId,
-        updateType: "human_joined",
+        updateType: 'human_joined',
         agentMode: control.agentMode,
         agentId: control.assignedAgentId,
       });
@@ -157,7 +231,7 @@ export function createDashboardRouteHandlers(context: RouteHandlerContext) {
         return {
           status: 400,
           body: {
-            errorCode: "invalid_human_message_payload",
+            errorCode: 'invalid_human_message_payload',
             issues: parsed.error.issues,
           },
         };
@@ -166,18 +240,19 @@ export function createDashboardRouteHandlers(context: RouteHandlerContext) {
       if (!channelTarget)
         return {
           status: 400,
-          body: { errorCode: "unsupported_human_message_session" },
+          body: { errorCode: 'unsupported_human_message_session' },
         };
 
       const expectedControl = await store.getSessionControl(sessionId);
       const deliveryClients = createDeliveryClients();
       const delivery = await deliverNonAgentText({
         store,
-        client: channelTarget.channel === "messenger"
-          ? deliveryClients.messenger
-          : channelTarget.channel === "zalo"
-            ? deliveryClients.zalo
-            : undefined,
+        client:
+          channelTarget.channel === 'messenger'
+            ? deliveryClients.messenger
+            : channelTarget.channel === 'zalo'
+              ? deliveryClients.zalo
+              : undefined,
         channel: channelTarget.channel,
         sessionId,
         clientRequestId: parsed.data.clientRequestId,
@@ -194,7 +269,7 @@ export function createDashboardRouteHandlers(context: RouteHandlerContext) {
         return {
           status: 502,
           body: {
-            errorCode: delivery.errorCode ?? "human_message_delivery_failed",
+            errorCode: delivery.errorCode ?? 'human_message_delivery_failed',
             errorMessage: delivery.errorMessage,
           },
         };
@@ -203,7 +278,7 @@ export function createDashboardRouteHandlers(context: RouteHandlerContext) {
       if (!delivery.replayed) {
         emitSessionModeEvent({
           sessionId,
-          updateType: "human_message_sent",
+          updateType: 'human_message_sent',
           agentMode: (await store.getSessionControl(sessionId)).agentMode,
           agentId: parsed.data.agentId,
           text: parsed.data.text,
@@ -212,7 +287,7 @@ export function createDashboardRouteHandlers(context: RouteHandlerContext) {
           sessionId,
           humanJoined:
             (await store.getSessionControl(sessionId)).agentMode ===
-            "human_paused",
+            'human_paused',
         });
       }
       return {
@@ -230,27 +305,25 @@ export function createDashboardRouteHandlers(context: RouteHandlerContext) {
         return {
           status: 400,
           body: {
-            errorCode: "invalid_session_control_payload",
+            errorCode: 'invalid_session_control_payload',
             issues: parsed.error.issues,
           },
         };
 
       const currentControl = await store.getSessionControl(sessionId);
       let control = currentControl;
-      if (currentControl.agentMode !== "ai_active") {
-        const recoveryTransition =
-          await store.transitionSessionAuthority({
-            sessionId,
-            expectedGeneration:
-              currentControl.sessionAuthorityGeneration,
-            agentMode: "human_paused",
-            assignedAgentId: null,
-          });
-        if (recoveryTransition.status === "stale") {
+      if (currentControl.agentMode !== 'ai_active') {
+        const recoveryTransition = await store.transitionSessionAuthority({
+          sessionId,
+          expectedGeneration: currentControl.sessionAuthorityGeneration,
+          agentMode: 'human_paused',
+          assignedAgentId: null,
+        });
+        if (recoveryTransition.status === 'stale') {
           return {
             status: 409,
             body: {
-              errorCode: "session_authority_conflict",
+              errorCode: 'session_authority_conflict',
               control: recoveryTransition.control,
             },
           };
@@ -260,14 +333,14 @@ export function createDashboardRouteHandlers(context: RouteHandlerContext) {
           sessionId,
           expectedGeneration:
             recoveryTransition.control.sessionAuthorityGeneration,
-          agentMode: "ai_active",
+          agentMode: 'ai_active',
           assignedAgentId: null,
         });
-        if (transition.status === "stale") {
+        if (transition.status === 'stale') {
           return {
             status: 409,
             body: {
-              errorCode: "session_authority_conflict",
+              errorCode: 'session_authority_conflict',
               control: transition.control,
             },
           };
@@ -276,12 +349,12 @@ export function createDashboardRouteHandlers(context: RouteHandlerContext) {
       }
       emitSessionModeEvent({
         sessionId,
-        updateType: "ai_resumed",
+        updateType: 'ai_resumed',
         agentMode: control.agentMode,
         agentId: parsed.data.agentId ?? null,
       });
       await emitSessionControlIntelligence({ sessionId, aiResumed: true });
-      if (dashboardSessionTarget(sessionId)?.channel === "kfc") {
+      if (dashboardSessionTarget(sessionId)?.channel === 'kfc') {
         return {
           status: 200,
           body: {

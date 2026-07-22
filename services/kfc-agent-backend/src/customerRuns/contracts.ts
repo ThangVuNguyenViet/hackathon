@@ -5,7 +5,10 @@ export const CUSTOMER_RUN_SCHEMA_VERSION = 1 as const;
 const opaqueIdSchema = z.string().trim().min(1).max(200);
 const isoTimestampSchema = z.string().datetime({ offset: true });
 
-export function kfcSessionMatchesCustomer(input: { sessionId: string; customerId: string }): boolean {
+export function kfcSessionMatchesCustomer(input: {
+  sessionId: string;
+  customerId: string;
+}): boolean {
   return input.sessionId === `kfc:${input.customerId}`;
 }
 
@@ -97,7 +100,9 @@ export const customerRunEventSchema = z
 export type CustomerRunStatus = z.infer<typeof customerRunStatusSchema>;
 export type CustomerRunPhase = z.infer<typeof customerRunPhaseSchema>;
 export type CustomerRunEventType = z.infer<typeof customerRunEventTypeSchema>;
-export type CustomerRunStartRequest = z.infer<typeof customerRunStartRequestSchema>;
+export type CustomerRunStartRequest = z.infer<
+  typeof customerRunStartRequestSchema
+>;
 export type CustomerRunEvent = z.infer<typeof customerRunEventSchema>;
 
 export interface CustomerRun {

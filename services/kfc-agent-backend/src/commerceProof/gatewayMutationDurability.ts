@@ -3,12 +3,12 @@ import {
   snapshotCommerceProofGatewayMutationState,
   type CommerceProofGatewayMutationSnapshot,
   type CommerceProofGatewayMutationState,
-} from "./gatewayMutationContracts.js";
+} from './gatewayMutationContracts.js';
 
 export type DurableCollection =
-  | "ordersByIdempotencyKey"
-  | "paymentLinksByIdempotencyKey"
-  | "cancellationsByIdempotencyKey";
+  | 'ordersByIdempotencyKey'
+  | 'paymentLinksByIdempotencyKey'
+  | 'cancellationsByIdempotencyKey';
 
 export interface GatewayMutationDurability {
   isDurable(
@@ -48,8 +48,7 @@ export function createGatewayMutationDurability(input: {
     },
     persist() {
       const write = pendingWrite.then(async () => {
-        const snapshot =
-          snapshotCommerceProofGatewayMutationState(input.state);
+        const snapshot = snapshotCommerceProofGatewayMutationState(input.state);
         await input.persistSnapshot(snapshot);
         durable = signatures(snapshot);
       });
@@ -58,8 +57,9 @@ export function createGatewayMutationDurability(input: {
     },
     commitCandidate(candidateInput) {
       const write = pendingWrite.then(async () => {
-        const liveSnapshot =
-          snapshotCommerceProofGatewayMutationState(input.state);
+        const liveSnapshot = snapshotCommerceProofGatewayMutationState(
+          input.state,
+        );
         const candidateState = restoreCommerceProofGatewayMutationState(
           replaceCandidate(liveSnapshot, candidateInput),
         );
@@ -85,7 +85,10 @@ export function createGatewayMutationDurability(input: {
         candidate.publish();
         return candidate.output;
       });
-      pendingWrite = write.then(() => undefined, () => undefined);
+      pendingWrite = write.then(
+        () => undefined,
+        () => undefined,
+      );
       return write;
     },
   };
@@ -120,15 +123,13 @@ function replaceEntry(
     replaced = true;
     return [entryKey, candidate] as const;
   });
-  if (!replaced) throw new Error("gateway_candidate_entry_missing");
+  if (!replaced) throw new Error('gateway_candidate_entry_missing');
   return next;
 }
 
 function signatures(snapshot: CommerceProofGatewayMutationSnapshot) {
   return {
-    ordersByIdempotencyKey: entrySignatures(
-      snapshot.ordersByIdempotencyKey,
-    ),
+    ordersByIdempotencyKey: entrySignatures(snapshot.ordersByIdempotencyKey),
     paymentLinksByIdempotencyKey: entrySignatures(
       snapshot.paymentLinksByIdempotencyKey,
     ),
@@ -141,7 +142,5 @@ function signatures(snapshot: CommerceProofGatewayMutationSnapshot) {
 function entrySignatures(
   entries: ReadonlyArray<readonly [string, unknown]>,
 ): Map<string, string | undefined> {
-  return new Map(
-    entries.map(([key, value]) => [key, JSON.stringify(value)]),
-  );
+  return new Map(entries.map(([key, value]) => [key, JSON.stringify(value)]));
 }

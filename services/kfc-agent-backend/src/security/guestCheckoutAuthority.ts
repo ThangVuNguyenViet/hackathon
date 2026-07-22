@@ -1,6 +1,5 @@
 import type { ConversationEvent } from '../channels/conversationEvent.js';
 import { normalizeMessengerWebhook } from '../channels/messenger.js';
-import type { Channel } from '../domain/types.js';
 import type { RunCommitFence } from '../persistence/contracts.js';
 import { verifyMetaWebhookSignature } from './webhookAuthenticity.js';
 
@@ -10,7 +9,6 @@ export const GUEST_CHECKOUT_AUTHORITY_SCHEMA_VERSION =
 const maximumGuestCheckoutAuthorityTtlMs = 15 * 60_000;
 const issuedGuestCheckoutAuthorities = new WeakSet<object>();
 const issuedMessengerIngressAttestations = new WeakSet<object>();
-const authorityRunFenceBindings = new WeakMap<object, string>();
 
 export interface VerifiedMessengerGuestCheckoutIngress {
   readonly schemaVersion: 'kfc-verified-messenger-ingress-v1';
@@ -28,8 +26,7 @@ export interface VerifiedMessengerGuestCheckoutIngress {
 export interface GuestCheckoutAuthority {
   readonly schemaVersion: typeof GUEST_CHECKOUT_AUTHORITY_SCHEMA_VERSION;
   readonly authoritySource:
-    | 'verified_messenger_ingress'
-    | 'controlled_messenger_mock';
+    'verified_messenger_ingress' | 'controlled_messenger_mock';
   readonly tenantScope: 'kfc-vietnam';
   readonly channel: 'messenger' | 'messenger_mock';
   readonly sessionId: string;
@@ -48,29 +45,6 @@ export interface GuestCheckoutAuthority {
   readonly expiresAt: string;
   readonly authorityDigest: string;
 }
-
-export interface GuestCheckoutAuthorityRequirement {
-  channel: Channel;
-  sessionId: string;
-  customerId: string;
-  externalMessageId: string | null | undefined;
-  surfaceSubjectRef: string | null | undefined;
-  runFence: RunCommitFence | undefined;
-  confirmationResume?: boolean;
-  now?: number;
-}
-
-export type GuestCheckoutAuthorityDecision =
-  | { allowed: true }
-  | {
-      allowed: false;
-      errorCode:
-        | 'guest_checkout_authority_missing'
-        | 'guest_checkout_authority_invalid'
-        | 'guest_checkout_authority_expired'
-        | 'guest_checkout_authority_mismatch'
-        | 'guest_checkout_run_authority_mismatch';
-    };
 
 function canonicalJson(value: unknown): string {
   if (Array.isArray(value)) {
@@ -136,11 +110,7 @@ function assertBoundedText(
   field: string,
   maximum = 1_024,
 ): void {
-  if (
-    value.length === 0 ||
-    value.length > maximum ||
-    value.trim() !== value
-  ) {
+  if (value.length === 0 || value.length > maximum || value.trim() !== value) {
     throw new Error(`guest_checkout_${field}_invalid`);
   }
 }
@@ -259,8 +229,7 @@ async function issueGuestCheckoutAuthority(input: {
     sourceRunRef: run.ref,
     sourceRunGeneration: run.generation,
     sourceRunFenceDigest,
-    sessionAuthorityGeneration:
-      input.runFence.sessionAuthorityGeneration,
+    sessionAuthorityGeneration: input.runFence.sessionAuthorityGeneration,
     issuedAt: input.issuedAt,
     expiresAt: input.expiresAt,
   } as const;
@@ -269,7 +238,6 @@ async function issueGuestCheckoutAuthority(input: {
     authorityDigest: await sha256(unsigned),
   });
   issuedGuestCheckoutAuthorities.add(authority);
-  authorityRunFenceBindings.set(authority, canonicalJson(input.runFence));
   return authority;
 }
 
@@ -331,8 +299,7 @@ export async function issueControlledMessengerMockGuestCheckoutAuthority(input: 
     surfaceSubjectRef: input.customerId,
     externalThreadRef: input.customerId,
     externalMessageId: input.externalMessageId,
-    ingressEvidenceRef:
-      `controlled-messenger-mock:${input.externalMessageId}`,
+    ingressEvidenceRef: `controlled-messenger-mock:${input.externalMessageId}`,
     ingressEvidenceDigest: await sha256(evidence),
     runFence: input.runFence,
     issuedAt: issuedAt.toISOString(),
@@ -345,63 +312,7 @@ export function guestCheckoutAuthorityIsIssued(
 ): authority is GuestCheckoutAuthority {
   return Boolean(
     authority &&
-      issuedGuestCheckoutAuthorities.has(authority) &&
-      authority.schemaVersion === GUEST_CHECKOUT_AUTHORITY_SCHEMA_VERSION,
+    issuedGuestCheckoutAuthorities.has(authority) &&
+    authority.schemaVersion === GUEST_CHECKOUT_AUTHORITY_SCHEMA_VERSION,
   );
-}
-
-export function authorizeGuestCheckout(
-  authority: GuestCheckoutAuthority | undefined,
-  requirement: GuestCheckoutAuthorityRequirement,
-): GuestCheckoutAuthorityDecision {
-  if (!authority) {
-    return { allowed: false, errorCode: 'guest_checkout_authority_missing' };
-  }
-  if (!guestCheckoutAuthorityIsIssued(authority)) {
-    return { allowed: false, errorCode: 'guest_checkout_authority_invalid' };
-  }
-  const now = requirement.now ?? Date.now();
-  if (Date.parse(authority.expiresAt) <= now) {
-    return { allowed: false, errorCode: 'guest_checkout_authority_expired' };
-  }
-  if (
-    requirement.channel !== authority.channel ||
-    requirement.sessionId !== authority.sessionId ||
-    requirement.customerId !== authority.customerId ||
-    requirement.externalMessageId !== authority.externalMessageId ||
-    requirement.surfaceSubjectRef !== authority.surfaceSubjectRef
-  ) {
-    return { allowed: false, errorCode: 'guest_checkout_authority_mismatch' };
-  }
-  const fence = requirement.runFence;
-  if (
-    !fence ||
-    fence.sessionAuthorityGeneration !==
-      authority.sessionAuthorityGeneration
-  ) {
-    return {
-      allowed: false,
-      errorCode: 'guest_checkout_run_authority_mismatch',
-    };
-  }
-  const originalFence = authorityRunFenceBindings.get(authority);
-  if (
-    requirement.confirmationResume !== true &&
-    originalFence !== canonicalJson(fence)
-  ) {
-    return {
-      allowed: false,
-      errorCode: 'guest_checkout_run_authority_mismatch',
-    };
-  }
-  if (
-    requirement.confirmationResume === true &&
-    fence.kind !== 'operation_lease'
-  ) {
-    return {
-      allowed: false,
-      errorCode: 'guest_checkout_run_authority_mismatch',
-    };
-  }
-  return { allowed: true };
 }

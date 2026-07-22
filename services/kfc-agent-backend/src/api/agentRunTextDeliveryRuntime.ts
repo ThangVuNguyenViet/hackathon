@@ -14,9 +14,7 @@ import {
   type AgentRunTextDeliveryExecutionBinding,
   type AgentRunTextDeliveryRecord,
 } from '../persistence/agentRunTextDelivery.js';
-import type {
-  ChannelPresentationPlan,
-} from '../presentation/channelPresentation.js';
+import type { ChannelPresentationPlan } from '../presentation/channelPresentation.js';
 
 export interface ChannelTextDeliveryRuntimeResult {
   outcome: ChannelTextSendOutcome;
@@ -79,8 +77,9 @@ export async function deliverChannelAssistantReply(input: {
     };
   }
   const run = await store.getAgentRun(commitFence.runId);
-  const assistantTurn = (await store.listTurns(delivery.sessionId))
-    .find((turn) => turn.id === delivery.assistantTurnId);
+  const assistantTurn = (await store.listTurns(delivery.sessionId)).find(
+    (turn) => turn.id === delivery.assistantTurnId,
+  );
   if (
     typeof delivery.assistantTurnId !== 'string' ||
     delivery.assistantTurnId.trim().length === 0 ||
@@ -89,8 +88,7 @@ export async function deliverChannelAssistantReply(input: {
     run.channel !== delivery.channel ||
     run.externalUserId !== delivery.externalUserId ||
     run.generation !== commitFence.generation ||
-    run.sessionAuthorityGeneration !==
-      commitFence.sessionAuthorityGeneration ||
+    run.sessionAuthorityGeneration !== commitFence.sessionAuthorityGeneration ||
     run.executionAttempt !== commitFence.executionAttempt ||
     run.executionLeaseToken !== commitFence.executionLeaseToken ||
     run.assistantTurnId !== delivery.assistantTurnId ||
@@ -101,8 +99,7 @@ export async function deliverChannelAssistantReply(input: {
     return {
       ok: false,
       errorCode: 'agent_run_delivery_assistant_authority_invalid',
-      errorMessage:
-        'AgentRun assistant delivery authority is invalid',
+      errorMessage: 'AgentRun assistant delivery authority is invalid',
     };
   }
 
@@ -118,8 +115,7 @@ export async function deliverChannelAssistantReply(input: {
     assistantTurnId: delivery.assistantTurnId,
     commitFence,
   });
-  const textSent =
-    textDelivery.outcome.status === 'confirmed_sent';
+  const textSent = textDelivery.outcome.status === 'confirmed_sent';
   const turnDeliveryStatus =
     textDelivery.outcome.status === 'confirmed_sent'
       ? 'sent'
@@ -164,7 +160,7 @@ export async function deliverChannelAssistantReply(input: {
     }
   }
   const mediaDeliveryStatus = delivery.presentation.media?.length
-    ? mediaResult?.status ?? 'failed'
+    ? (mediaResult?.status ?? 'failed')
     : 'not_requested';
   const safeMediaItems = (mediaResult?.items ?? []).map((item) =>
     item.status === 'sent'
@@ -173,8 +169,7 @@ export async function deliverChannelAssistantReply(input: {
           key: item.key,
           status: 'failed' as const,
           errorCode: `${delivery.channel}_media_send_failed`,
-          errorMessage:
-            `${delivery.channel} media delivery failed`,
+          errorMessage: `${delivery.channel} media delivery failed`,
         },
   );
 
@@ -198,8 +193,8 @@ export async function deliverChannelAssistantReply(input: {
     ...(textDelivery.suppressed ? { suppressed: true } : {}),
     externalMessageId:
       textDelivery.outcome.status === 'confirmed_sent'
-      ? textDelivery.outcome.messageId
-      : null,
+        ? textDelivery.outcome.messageId
+        : null,
     ...(textDelivery.outcome.status === 'confirmed_sent'
       ? {}
       : {
@@ -227,9 +222,7 @@ export async function sendChannelTextWithAgentRunDelivery(input: {
     executionAttempt: input.commitFence.executionAttempt,
     executionLeaseToken: input.commitFence.executionLeaseToken,
   };
-  const existing = await input.store.getAgentRunTextDelivery(
-    execution.runId,
-  );
+  const existing = await input.store.getAgentRunTextDelivery(execution.runId);
   if (existing) {
     const candidate = await createPendingAgentRunTextDelivery({
       execution,
@@ -257,8 +250,7 @@ export async function sendChannelTextWithAgentRunDelivery(input: {
       existing.status === 'delivery_outcome_unknown'
     ) {
       return unknownOutcome(
-        existing.outcomeCode ??
-          'agent_run_text_delivery_outcome_unknown',
+        existing.outcomeCode ?? 'agent_run_text_delivery_outcome_unknown',
         true,
       );
     }
@@ -293,9 +285,7 @@ export async function sendChannelTextWithAgentRunDelivery(input: {
   });
   if (begun.status === 'dispatch_blocked') {
     if (begun.reason === 'confirmed_sent') {
-      const replay = await input.store.getAgentRunTextDelivery(
-        execution.runId,
-      );
+      const replay = await input.store.getAgentRunTextDelivery(execution.runId);
       if (
         replay?.status === 'confirmed_sent' &&
         sameImmutableDeliveryBinding(replay, created.record)
@@ -314,24 +304,20 @@ export async function sendChannelTextWithAgentRunDelivery(input: {
       begun.reason === 'sending_in_progress' ||
       begun.reason === 'delivery_outcome_unknown'
     ) {
-      return unknownOutcome(
-        `agent_run_text_delivery_${begun.reason}`,
-        true,
-      );
+      return unknownOutcome(`agent_run_text_delivery_${begun.reason}`, true);
     }
     return blockedOutcome(`agent_run_text_delivery_${begun.reason}`);
   }
 
   const outcome = await sendTextOutcome(input);
   try {
-    const completed =
-      await input.store.completeAgentRunTextDeliveryAttempt({
-        execution,
-        deliveryAttempt: begun.record.deliveryAttempt,
-        deliveryAttemptToken,
-        outcome,
-        updatedAt: new Date().toISOString(),
-      });
+    const completed = await input.store.completeAgentRunTextDeliveryAttempt({
+      execution,
+      deliveryAttempt: begun.record.deliveryAttempt,
+      deliveryAttemptToken,
+      outcome,
+      updatedAt: new Date().toISOString(),
+    });
     if (completed.status === 'transitioned') {
       return {
         outcome,
@@ -371,9 +357,10 @@ async function sendTextOutcome(input: {
     return {
       status: 'delivery_outcome_unknown',
       errorCode: `${input.channel}_delivery_outcome_unknown`,
-      message: error instanceof Error
-        ? error.message
-        : `${input.channel} delivery outcome is unknown`,
+      message:
+        error instanceof Error
+          ? error.message
+          : `${input.channel} delivery outcome is unknown`,
     };
   }
 }
@@ -390,9 +377,7 @@ function sameImmutableDeliveryBinding(
   );
 }
 
-function blockedOutcome(
-  errorCode: string,
-): ChannelTextDeliveryRuntimeResult {
+function blockedOutcome(errorCode: string): ChannelTextDeliveryRuntimeResult {
   return {
     outcome: {
       status: 'not_dispatched',

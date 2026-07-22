@@ -53,9 +53,7 @@ const verifiedRefSelectColumns = verifiedRefColumns
   .map((column) => `verified_refs.${column}`)
   .join(', ');
 
-export class PostgresStoreVerifiedRefOperations
-  extends PostgresStoreAgentOperations
-{
+export class PostgresStoreVerifiedRefOperations extends PostgresStoreAgentOperations {
   override async initialize(): Promise<void> {
     await super.initialize();
     await this.db.query(`
@@ -133,14 +131,14 @@ export class PostgresStoreVerifiedRefOperations
     const record = issueVerifiedRefRecord(rawInput);
     const sessionId = record.principal.sessionId;
     await this.db.query(
-      `INSERT INTO confirmation_pause_sessions (session_id, generation)
+      `INSERT INTO session_generations (session_id, generation)
        VALUES ($1, 0)
        ON CONFLICT (session_id) DO NOTHING`,
       [sessionId],
     );
     const generation = await this.db.query<{ generation: number }>(
       `SELECT generation
-       FROM confirmation_pause_sessions
+       FROM session_generations
        WHERE session_id = $1`,
       [sessionId],
     );
@@ -160,7 +158,7 @@ export class PostgresStoreVerifiedRefOperations
          $9, $10, $11, $12, $13, $14, $15, $16
        FROM (
          SELECT session_id
-         FROM confirmation_pause_sessions
+         FROM session_generations
          WHERE session_id = $17
            AND generation = $18
          FOR SHARE
@@ -177,7 +175,7 @@ export class PostgresStoreVerifiedRefOperations
     }
     const current = await this.db.query<{ generation: number }>(
       `SELECT generation
-       FROM confirmation_pause_sessions
+       FROM session_generations
        WHERE session_id = $1`,
       [sessionId],
     );
@@ -213,7 +211,7 @@ export class PostgresStoreVerifiedRefOperations
     const client = await this.db.connect();
     try {
       await client.query('BEGIN');
-      if (!await lockPostgresRunCommitOwner(client, input.runFence)) {
+      if (!(await lockPostgresRunCommitOwner(client, input.runFence))) {
         await client.query('ROLLBACK');
         return { status: 'unavailable' };
       }
@@ -255,16 +253,22 @@ export class PostgresStoreVerifiedRefOperations
          AND expires_at > $11
          AND session_generation = (
            SELECT generation
-           FROM confirmation_pause_sessions
+           FROM session_generations
            WHERE session_id = $5
          )
        RETURNING ${verifiedRefColumns}`,
       [
-        input.useId, input.now, input.ref.id, input.ref.kind,
-        input.principal.sessionId, input.principal.customerId,
-        input.principal.channel, input.principal.authenticatedSubject,
+        input.useId,
+        input.now,
+        input.ref.id,
+        input.ref.kind,
+        input.principal.sessionId,
+        input.principal.customerId,
+        input.principal.channel,
+        input.principal.authenticatedSubject,
         input.principal.authenticationEvidenceRef,
-        input.expectedVerifiedRevision, input.now,
+        input.expectedVerifiedRevision,
+        input.now,
       ],
     );
     if (updated.rows[0]) {
@@ -284,21 +288,14 @@ export class PostgresStoreVerifiedRefOperations
         record: cloneVerifiedRefRecord(snapshot.record),
       };
     }
-    const existing = await this.findAvailableVerifiedRef(
-      input,
-      'one_shot',
-      db,
-    );
+    const existing = await this.findAvailableVerifiedRef(input, 'one_shot', db);
     if (!existing) return { status: 'unavailable' };
     const snapshot = verifiedRefSnapshotFromStorageRow(existing);
-    return (
-      verifiedRefSnapshotMatches(
-        snapshot,
-        snapshot.sessionGeneration,
-        input,
-      ) &&
-      snapshot.record.claimedUseId === input.useId
-    )
+    return verifiedRefSnapshotMatches(
+      snapshot,
+      snapshot.sessionGeneration,
+      input,
+    ) && snapshot.record.claimedUseId === input.useId
       ? {
           status: 'replay',
           record: cloneVerifiedRefRecord(snapshot.record),
@@ -326,9 +323,9 @@ export class PostgresStoreVerifiedRefOperations
     const result = await db.query<VerifiedRefStorageRow>(
       `SELECT ${verifiedRefSelectColumns}
        FROM verified_refs
-       INNER JOIN confirmation_pause_sessions
-         ON confirmation_pause_sessions.session_id = verified_refs.session_id
-        AND confirmation_pause_sessions.generation =
+       INNER JOIN session_generations
+         ON session_generations.session_id = verified_refs.session_id
+        AND session_generations.generation =
               verified_refs.session_generation
        WHERE verified_refs.ref_id = $1
          AND verified_refs.kind = $2

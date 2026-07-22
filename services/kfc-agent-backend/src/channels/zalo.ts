@@ -20,7 +20,14 @@ const zaloTextSendResponseSchema = z
 const zaloWebhookSchema = z
   .object({
     event_name: z.string(),
-    sender: z.object({ id: z.string(), name: z.string().optional(), avatar: z.string().optional() }).passthrough().optional(),
+    sender: z
+      .object({
+        id: z.string(),
+        name: z.string().optional(),
+        avatar: z.string().optional(),
+      })
+      .passthrough()
+      .optional(),
     recipient: z.object({ id: z.string() }).passthrough().optional(),
     message: z
       .object({
@@ -39,43 +46,61 @@ function attachmentText(eventName: string): string {
   if (eventName.includes('file')) return '[Zalo file]';
   if (eventName.includes('link')) return '[Zalo link]';
   if (eventName.includes('sticker')) return '[Zalo sticker]';
-  if (eventName.includes('audio') || eventName.includes('voice')) return '[Zalo audio]';
+  if (eventName.includes('audio') || eventName.includes('voice'))
+    return '[Zalo audio]';
   if (eventName.includes('location')) return '[Zalo location]';
   if (eventName === 'follow') return '[Zalo follow]';
   return '[Unsupported Zalo event]';
 }
 
 function normalizeAttachment(value: unknown): ConversationAttachment {
-  const attachment = value && typeof value === 'object' ? (value as Record<string, unknown>) : {};
+  const attachment =
+    value && typeof value === 'object'
+      ? (value as Record<string, unknown>)
+      : {};
   const payload =
-    attachment.payload && typeof attachment.payload === 'object' ? (attachment.payload as Record<string, unknown>) : {};
-  const type = typeof attachment.type === 'string' ? attachment.type : 'unknown';
+    attachment.payload && typeof attachment.payload === 'object'
+      ? (attachment.payload as Record<string, unknown>)
+      : {};
+  const type =
+    typeof attachment.type === 'string' ? attachment.type : 'unknown';
   return {
-    type: ['image', 'file', 'link', 'sticker', 'audio', 'location'].includes(type)
+    type: ['image', 'file', 'link', 'sticker', 'audio', 'location'].includes(
+      type,
+    )
       ? (type as ConversationAttachment['type'])
       : 'unknown',
     url: typeof payload.url === 'string' ? payload.url : undefined,
     title: typeof payload.name === 'string' ? payload.name : undefined,
-    latitude: typeof payload.latitude === 'number' ? payload.latitude : undefined,
-    longitude: typeof payload.longitude === 'number' ? payload.longitude : undefined,
+    latitude:
+      typeof payload.latitude === 'number' ? payload.latitude : undefined,
+    longitude:
+      typeof payload.longitude === 'number' ? payload.longitude : undefined,
     raw: attachment,
   };
 }
 
-export function normalizeZaloWebhook(payload: unknown, expectedOaId?: string): ConversationEvent[] {
+export function normalizeZaloWebhook(
+  payload: unknown,
+  expectedOaId?: string,
+): ConversationEvent[] {
   const body = zaloWebhookSchema.parse(payload);
-  if (expectedOaId && body.recipient?.id && body.recipient.id !== expectedOaId) return [];
+  if (expectedOaId && body.recipient?.id && body.recipient.id !== expectedOaId)
+    return [];
   if (!body.sender?.id) return [];
 
   const timestamp = body.timestamp ?? Date.now();
-  const attachments = (body.message?.attachments ?? []).map(normalizeAttachment);
+  const attachments = (body.message?.attachments ?? []).map(
+    normalizeAttachment,
+  );
   const text = body.message?.text?.trim();
   const hasText = Boolean(text);
   const eventName = body.event_name;
   const isText = eventName.includes('text') && hasText;
   const isFollow = eventName === 'follow';
   const isLink = eventName.includes('link');
-  const fallbackText = text && text.length > 0 ? text : attachmentText(eventName);
+  const fallbackText =
+    text && text.length > 0 ? text : attachmentText(eventName);
 
   return [
     {
@@ -83,8 +108,15 @@ export function normalizeZaloWebhook(payload: unknown, expectedOaId?: string): C
       externalUserId: body.sender.id,
       externalThreadId: body.sender.id,
       text: fallbackText,
-      eventType: isText ? 'message' : isFollow ? 'follow' : isLink || attachments.length > 0 ? 'attachment' : 'unsupported',
-      rawEventId: body.message?.msg_id ?? `${body.sender.id}:${eventName}:${timestamp}`,
+      eventType: isText
+        ? 'message'
+        : isFollow
+          ? 'follow'
+          : isLink || attachments.length > 0
+            ? 'attachment'
+            : 'unsupported',
+      rawEventId:
+        body.message?.msg_id ?? `${body.sender.id}:${eventName}:${timestamp}`,
       receivedAt: new Date(timestamp).toISOString(),
       platformEventName: eventName,
       attachments,
@@ -147,9 +179,10 @@ export function createZaloClient(input: {
       return {
         status: 'delivery_outcome_unknown',
         errorCode: 'zalo_delivery_outcome_unknown',
-        message: error instanceof Error
-          ? error.message
-          : 'Zalo delivery outcome is unknown',
+        message:
+          error instanceof Error
+            ? error.message
+            : 'Zalo delivery outcome is unknown',
       };
     }
 
@@ -196,7 +229,10 @@ export function createZaloClient(input: {
 
   return {
     sendTextWithOutcome,
-    async sendText(recipientId, text): Promise<ToolResult<{ messageId: string }>> {
+    async sendText(
+      recipientId,
+      text,
+    ): Promise<ToolResult<{ messageId: string }>> {
       return channelTextSendOutcomeToLegacyToolResult(
         await sendTextWithOutcome(recipientId, text),
       );
@@ -207,30 +243,70 @@ export function createZaloClient(input: {
         try {
           const response = await fetchImpl(`${apiBaseUrl}/v3.0/oa/message/cs`, {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json', access_token: input.accessToken ?? '' },
+            headers: {
+              'Content-Type': 'application/json',
+              access_token: input.accessToken ?? '',
+            },
             body: JSON.stringify({
               recipient: { user_id: recipientId },
-              message: { text: item.title, attachment: { type: 'template', payload: { template_type: 'media', elements: [{ media_type: 'image', url: item.imageUrl }] } } },
+              message: {
+                text: item.title,
+                attachment: {
+                  type: 'template',
+                  payload: {
+                    template_type: 'media',
+                    elements: [{ media_type: 'image', url: item.imageUrl }],
+                  },
+                },
+              },
             }),
           });
-          const body = (await response.json()) as { message_id?: string; error?: number; message?: string };
-          if (!response.ok || (body.error !== undefined && body.error !== 0) || !body.message_id) {
-            items.push({ key: item.key, status: 'failed', errorCode: 'zalo_media_send_failed', errorMessage: body.message ?? 'Zalo media send failed' });
+          const body = (await response.json()) as {
+            message_id?: string;
+            error?: number;
+            message?: string;
+          };
+          if (
+            !response.ok ||
+            (body.error !== undefined && body.error !== 0) ||
+            !body.message_id
+          ) {
+            items.push({
+              key: item.key,
+              status: 'failed',
+              errorCode: 'zalo_media_send_failed',
+              errorMessage: body.message ?? 'Zalo media send failed',
+            });
           } else {
-            items.push({ key: item.key, status: 'sent', messageId: body.message_id });
+            items.push({
+              key: item.key,
+              status: 'sent',
+              messageId: body.message_id,
+            });
           }
         } catch (error) {
-          items.push({ key: item.key, status: 'failed', errorCode: 'zalo_media_send_failed', errorMessage: error instanceof Error ? error.message : 'Zalo media send failed' });
+          items.push({
+            key: item.key,
+            status: 'failed',
+            errorCode: 'zalo_media_send_failed',
+            errorMessage:
+              error instanceof Error ? error.message : 'Zalo media send failed',
+          });
         }
       }
       const sent = items.filter((item) => item.status === 'sent').length;
-      return { status: sent === items.length ? 'sent' : sent === 0 ? 'failed' : 'partial', items };
+      return {
+        status:
+          sent === items.length ? 'sent' : sent === 0 ? 'failed' : 'partial',
+        items,
+      };
     },
     async getProfile(_recipientId) {
       return {
         ok: false,
         errorCode: 'zalo_profile_lookup_not_configured',
-        message: 'Zalo profile lookup is not configured; webhook sender profile is used when available',
+        message:
+          'Zalo profile lookup is not configured; webhook sender profile is used when available',
       };
     },
   };

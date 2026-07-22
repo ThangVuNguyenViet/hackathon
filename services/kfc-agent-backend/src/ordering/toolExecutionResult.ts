@@ -1,4 +1,4 @@
-import type { ToolResult } from "../domain/types.js";
+import type { ToolResult } from '../domain/types.js';
 import type {
   SourceProvenance,
   ToolCallFailure,
@@ -6,27 +6,24 @@ import type {
   ToolCallSuccessFor,
   ToolName,
   ToolResultByName,
-} from "./types.js";
+} from './types.js';
 
 const emptyProvenance: SourceProvenance[] = [];
 
-export const externalCallCancelledErrorCode =
-  "agent_tool_execution_cancelled";
+export const externalCallCancelledErrorCode = 'agent_tool_execution_cancelled';
 
 function isSourceProvenance(value: unknown): value is SourceProvenance {
   return (
-    typeof value === "object" &&
+    typeof value === 'object' &&
     value !== null &&
-    "fixtureMode" in value &&
-    "sourceFile" in value &&
-    typeof (value as { fixtureMode?: unknown }).fixtureMode === "string" &&
-    typeof (value as { sourceFile?: unknown }).sourceFile === "string"
+    'fixtureMode' in value &&
+    'sourceFile' in value &&
+    typeof (value as { fixtureMode?: unknown }).fixtureMode === 'string' &&
+    typeof (value as { sourceFile?: unknown }).sourceFile === 'string'
   );
 }
 
-function dedupeProvenance(
-  entries: SourceProvenance[],
-): SourceProvenance[] {
+function dedupeProvenance(entries: SourceProvenance[]): SourceProvenance[] {
   return [
     ...new Map(
       entries.map((entry) => [
@@ -50,7 +47,7 @@ function collectProvenance(
   value: unknown,
   seen = new Set<unknown>(),
 ): SourceProvenance[] {
-  if (!value || typeof value !== "object" || seen.has(value)) return [];
+  if (!value || typeof value !== 'object' || seen.has(value)) return [];
   seen.add(value);
 
   const matches: SourceProvenance[] = [];
@@ -117,14 +114,12 @@ export function result(
   };
 }
 
-export function cancelledResult(
-  request: ToolCallRequest,
-): ToolCallFailure {
+export function cancelledResult(request: ToolCallRequest): ToolCallFailure {
   return result(
     request,
     false,
     undefined,
-    "External tool execution was cancelled before dispatch",
+    'External tool execution was cancelled before dispatch',
     externalCallCancelledErrorCode,
   );
 }

@@ -34,15 +34,13 @@ export function assertAgentRunExecutionClaim(
   }
 }
 
-export function agentRunExecutionFence(
-  run: {
-    id: string;
-    generation: number;
-    sessionAuthorityGeneration: number;
-    executionAttempt: number;
-    executionLeaseToken: string | null;
-  },
-): Extract<RunCommitFence, { kind: 'agent_run' }> {
+export function agentRunExecutionFence(run: {
+  id: string;
+  generation: number;
+  sessionAuthorityGeneration: number;
+  executionAttempt: number;
+  executionLeaseToken: string | null;
+}): Extract<RunCommitFence, { kind: 'agent_run' }> {
   if (
     !Number.isSafeInteger(run.executionAttempt) ||
     run.executionAttempt < 1 ||
@@ -65,9 +63,10 @@ export function agentRunExecutionClaimRejection(
   now = Date.now(),
 ): Extract<ClaimAgentRunExecutionResult, { status: 'stale' }> {
   if (!run) return { status: 'stale', reason: 'not_found' };
-  const leaseExpiry = run.executionLeaseExpiresAt === null
-    ? Number.NaN
-    : Date.parse(run.executionLeaseExpiresAt);
+  const leaseExpiry =
+    run.executionLeaseExpiresAt === null
+      ? Number.NaN
+      : Date.parse(run.executionLeaseExpiresAt);
   if (
     run.status === 'running' &&
     Number.isFinite(leaseExpiry) &&
@@ -77,10 +76,7 @@ export function agentRunExecutionClaimRejection(
   }
   if (
     run.status === 'running' &&
-    (
-      run.irreversibleSideEffectAt !== null ||
-      run.irreversibleToolName !== null
-    )
+    (run.irreversibleSideEffectAt !== null || run.irreversibleToolName !== null)
   ) {
     return {
       status: 'stale',
@@ -97,9 +93,7 @@ export function agentRunExecutionClaimRejection(
 export function agentRunExecutionReconciliationReason(
   run: Pick<
     AgentRun,
-    | 'executionAttempt'
-    | 'irreversibleSideEffectAt'
-    | 'irreversibleToolName'
+    'executionAttempt' | 'irreversibleSideEffectAt' | 'irreversibleToolName'
   >,
 ): 'attempts_exhausted' | 'irreversible_outcome_unknown' | null {
   if (

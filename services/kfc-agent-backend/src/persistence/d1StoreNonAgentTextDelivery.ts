@@ -148,27 +148,23 @@ export async function prepareD1NonAgentTextDeliveryTurn(input: {
   if (!record) return blockedPrepare('not_found');
   if (
     record.sessionBindingDigest !==
-      await nonAgentTextDeliverySessionBindingDigest(operation.sessionId)
+    (await nonAgentTextDeliverySessionBindingDigest(operation.sessionId))
   ) {
     return blockedPrepare('not_found');
   }
-  if (!await reservationAuthorityMatches(record, operation) ||
-      !await exactHumanAuthority(input.db, operation)) {
+  if (
+    !(await reservationAuthorityMatches(record, operation)) ||
+    !(await exactHumanAuthority(input.db, operation))
+  ) {
     return blockedPrepare('stale_authority', record);
   }
-  if (
-    record.status !== 'pending' &&
-    record.status !== 'confirmed_not_sent'
-  ) {
+  if (record.status !== 'pending' && record.status !== 'confirmed_not_sent') {
     return blockedPrepare('delivery_not_dispatchable', record);
   }
-  if (!await nonAgentTextDeliveryTurnBindingMatches(record, operation)) {
+  if (!(await nonAgentTextDeliveryTurnBindingMatches(record, operation))) {
     return blockedPrepare('turn_binding_conflict', record);
   }
-  const existing = await readPreparedTurn(
-    input.db,
-    operation.turn.id,
-  );
+  const existing = await readPreparedTurn(input.db, operation.turn.id);
   if (existing) {
     return samePreparedNonAgentTextDeliveryTurn(existing, operation.turn)
       ? { status: 'replay', turn: existing, record }
@@ -177,10 +173,12 @@ export async function prepareD1NonAgentTextDeliveryTurn(input: {
   if (!input.db.batch) {
     throw new Error('d1_atomic_non_agent_delivery_prepare_unavailable');
   }
-  const sessionBindingDigest =
-    await nonAgentTextDeliverySessionBindingDigest(operation.sessionId);
-  const agentBindingDigest =
-    await nonAgentTextDeliveryAgentBindingDigest(operation.expectedAgentId);
+  const sessionBindingDigest = await nonAgentTextDeliverySessionBindingDigest(
+    operation.sessionId,
+  );
+  const agentBindingDigest = await nonAgentTextDeliveryAgentBindingDigest(
+    operation.expectedAgentId,
+  );
   const eventId = `event_non_agent_${operation.requestKey}`;
   const eventPayload = JSON.stringify({
     text: operation.turn.text,
@@ -213,8 +211,9 @@ export async function prepareD1NonAgentTextDeliveryTurn(input: {
     operation.expectedAgentId,
   ] as const;
   const results = await input.db.batch([
-    input.db.prepare(
-      `INSERT INTO conversation_turns (
+    input.db
+      .prepare(
+        `INSERT INTO conversation_turns (
          id, session_id, channel, role, text, external_message_id,
          external_user_id, delivery_status, metadata, created_at
        )
@@ -223,21 +222,23 @@ export async function prepareD1NonAgentTextDeliveryTurn(input: {
        WHERE ${predicates}
        ON CONFLICT(id) DO NOTHING
        RETURNING *`,
-    ).bind(
-      operation.turn.id,
-      operation.turn.sessionId,
-      operation.turn.channel,
-      operation.turn.role,
-      operation.turn.text,
-      operation.turn.externalMessageId,
-      operation.turn.externalUserId,
-      operation.turn.deliveryStatus,
-      JSON.stringify(operation.turn.metadata),
-      operation.turn.createdAt,
-      ...predicateValues,
-    ),
-    input.db.prepare(
-      `INSERT INTO conversation_events (
+      )
+      .bind(
+        operation.turn.id,
+        operation.turn.sessionId,
+        operation.turn.channel,
+        operation.turn.role,
+        operation.turn.text,
+        operation.turn.externalMessageId,
+        operation.turn.externalUserId,
+        operation.turn.deliveryStatus,
+        JSON.stringify(operation.turn.metadata),
+        operation.turn.createdAt,
+        ...predicateValues,
+      ),
+    input.db
+      .prepare(
+        `INSERT INTO conversation_events (
          id, session_id, source_type, payload, created_at
        )
        SELECT ?, ?, ?, ?, ?
@@ -257,28 +258,27 @@ export async function prepareD1NonAgentTextDeliveryTurn(input: {
              AND created_at = ?
          )
        ON CONFLICT(id) DO NOTHING`,
-    ).bind(
-      eventId,
-      operation.turn.sessionId,
-      'conversation_turn:assistant',
-      eventPayload,
-      operation.turn.createdAt,
-      ...predicateValues,
-      operation.turn.id,
-      operation.turn.sessionId,
-      operation.turn.channel,
-      operation.turn.role,
-      operation.turn.text,
-      operation.turn.externalMessageId,
-      operation.turn.externalUserId,
-      operation.turn.deliveryStatus,
-      JSON.stringify(operation.turn.metadata),
-      operation.turn.createdAt,
-    ),
+      )
+      .bind(
+        eventId,
+        operation.turn.sessionId,
+        'conversation_turn:assistant',
+        eventPayload,
+        operation.turn.createdAt,
+        ...predicateValues,
+        operation.turn.id,
+        operation.turn.sessionId,
+        operation.turn.channel,
+        operation.turn.role,
+        operation.turn.text,
+        operation.turn.externalMessageId,
+        operation.turn.externalUserId,
+        operation.turn.deliveryStatus,
+        JSON.stringify(operation.turn.metadata),
+        operation.turn.createdAt,
+      ),
   ]);
-  const inserted = results[0]?.results?.[0] as
-    | ConversationTurnRow
-    | undefined;
+  const inserted = results[0]?.results?.[0] as ConversationTurnRow | undefined;
   if (inserted) {
     return {
       status: 'prepared',
@@ -292,8 +292,8 @@ export async function prepareD1NonAgentTextDeliveryTurn(input: {
   });
   if (
     !racedRecord ||
-    !await reservationAuthorityMatches(racedRecord, operation) ||
-    !await exactHumanAuthority(input.db, operation)
+    !(await reservationAuthorityMatches(racedRecord, operation)) ||
+    !(await exactHumanAuthority(input.db, operation))
   ) {
     return blockedPrepare('stale_authority', racedRecord);
   }
@@ -319,20 +319,17 @@ export async function beginD1NonAgentTextDeliveryAttempt(input: {
   if (
     !existing ||
     existing.sessionBindingDigest !==
-      await nonAgentTextDeliverySessionBindingDigest(input.attempt.sessionId)
+      (await nonAgentTextDeliverySessionBindingDigest(input.attempt.sessionId))
   ) {
     return blockedBegin('not_found', existing);
   }
-  if (!await reservationAuthorityMatches(existing, input.attempt)) {
+  if (!(await reservationAuthorityMatches(existing, input.attempt))) {
     return blockedBegin('stale_authority', existing);
   }
-  if (!await exactHumanAuthority(input.db, input.attempt)) {
+  if (!(await exactHumanAuthority(input.db, input.attempt))) {
     return blockedBegin('stale_authority', existing);
   }
-  const transition = beginNonAgentTextDeliveryAttempt(
-    existing,
-    input.attempt,
-  );
+  const transition = beginNonAgentTextDeliveryAttempt(existing, input.attempt);
   if (transition.status !== 'dispatch_authorized') return transition;
   const next = transition.record;
   if (!input.db.batch) {
@@ -341,8 +338,9 @@ export async function beginD1NonAgentTextDeliveryAttempt(input: {
   let results: D1Result[];
   try {
     results = await input.db.batch([
-      input.db.prepare(
-      `UPDATE non_agent_text_deliveries
+      input.db
+        .prepare(
+          `UPDATE non_agent_text_deliveries
        SET status = ?,
            delivery_attempt = ?,
            delivery_attempt_token = ?,
@@ -367,22 +365,24 @@ export async function beginD1NonAgentTextDeliveryAttempt(input: {
              AND assigned_agent_id = ?
          )
        RETURNING *`,
-      ).bind(
-        ...mutableStorageValues(next),
-        existing.requestKey,
-        existing.sessionBindingDigest,
-        existing.reservedSessionAuthorityGeneration,
-        existing.agentBindingDigest,
-        existing.status,
-        existing.deliveryAttempt,
-        existing.deliveryAttemptToken,
-        existing.updatedAt,
-        input.attempt.sessionId,
-        input.attempt.expectedSessionAuthorityGeneration,
-        input.attempt.expectedAgentId,
-      ),
-      input.db.prepare(
-        `INSERT INTO non_agent_text_delivery_attempts (
+        )
+        .bind(
+          ...mutableStorageValues(next),
+          existing.requestKey,
+          existing.sessionBindingDigest,
+          existing.reservedSessionAuthorityGeneration,
+          existing.agentBindingDigest,
+          existing.status,
+          existing.deliveryAttempt,
+          existing.deliveryAttemptToken,
+          existing.updatedAt,
+          input.attempt.sessionId,
+          input.attempt.expectedSessionAuthorityGeneration,
+          input.attempt.expectedAgentId,
+        ),
+      input.db
+        .prepare(
+          `INSERT INTO non_agent_text_delivery_attempts (
            request_key,
            delivery_attempt,
            delivery_attempt_token,
@@ -396,23 +396,25 @@ export async function beginD1NonAgentTextDeliveryAttempt(input: {
            AND delivery_attempt = ?
            AND delivery_attempt_token = ?
            AND updated_at = ?`,
-      ).bind(
-        next.requestKey,
-        next.sessionBindingDigest,
-        next.deliveryAttempt,
-        next.deliveryAttemptToken,
-        next.updatedAt,
-      ),
+        )
+        .bind(
+          next.requestKey,
+          next.sessionBindingDigest,
+          next.deliveryAttempt,
+          next.deliveryAttemptToken,
+          next.updatedAt,
+        ),
     ]);
   } catch (error) {
-    if (await attemptTokenExists(input.db, input.attempt.deliveryAttemptToken)) {
+    if (
+      await attemptTokenExists(input.db, input.attempt.deliveryAttemptToken)
+    ) {
       return blockedBegin('delivery_attempt_token_reused', existing);
     }
     throw error;
   }
   const updated = results[0]?.results?.[0] as
-    | NonAgentTextDeliveryRow
-    | undefined;
+    NonAgentTextDeliveryRow | undefined;
   if (updated && Number(results[1]?.meta.changes ?? 0) === 1) {
     const record = recordFromRow(updated);
     if (record.status !== 'sending') {
@@ -427,23 +429,20 @@ export async function beginD1NonAgentTextDeliveryAttempt(input: {
     db: input.db,
     requestKey: existing.requestKey,
   });
-  if (!await exactHumanAuthority(input.db, input.attempt)) {
+  if (!(await exactHumanAuthority(input.db, input.attempt))) {
     return blockedBegin('stale_authority', current);
   }
   if (
     !current ||
     current.sessionBindingDigest !==
-      await nonAgentTextDeliverySessionBindingDigest(input.attempt.sessionId)
+      (await nonAgentTextDeliverySessionBindingDigest(input.attempt.sessionId))
   ) {
     return blockedBegin('not_found', current);
   }
-  if (!await reservationAuthorityMatches(current, input.attempt)) {
+  if (!(await reservationAuthorityMatches(current, input.attempt))) {
     return blockedBegin('stale_authority', current);
   }
-  const classified = beginNonAgentTextDeliveryAttempt(
-    current,
-    input.attempt,
-  );
+  const classified = beginNonAgentTextDeliveryAttempt(current, input.attempt);
   return classified.status === 'dispatch_blocked'
     ? classified
     : blockedBegin('sending_in_progress', current);
@@ -460,7 +459,7 @@ export async function completeD1NonAgentTextDeliveryAttempt(input: {
   if (!existing) return blockedComplete('not_found');
   if (
     existing.sessionBindingDigest !==
-      await nonAgentTextDeliverySessionBindingDigest(input.completion.sessionId)
+    (await nonAgentTextDeliverySessionBindingDigest(input.completion.sessionId))
   ) {
     return blockedComplete('session_mismatch', existing);
   }
@@ -521,9 +520,9 @@ export async function reconcileD1NonAgentTextDelivery(input: {
   if (!existing) return blockedReconcile('not_found');
   if (
     existing.sessionBindingDigest !==
-      await nonAgentTextDeliverySessionBindingDigest(
-        input.reconciliation.sessionId,
-      )
+    (await nonAgentTextDeliverySessionBindingDigest(
+      input.reconciliation.sessionId,
+    ))
   ) {
     return blockedReconcile('session_mismatch', existing);
   }
@@ -586,14 +585,11 @@ async function classifyBlockedCompletion(
   if (!current) return blockedComplete('not_found');
   if (
     current.sessionBindingDigest !==
-      await nonAgentTextDeliverySessionBindingDigest(completion.sessionId)
+    (await nonAgentTextDeliverySessionBindingDigest(completion.sessionId))
   ) {
     return blockedComplete('session_mismatch', current);
   }
-  const classified = completeNonAgentTextDeliveryAttempt(
-    current,
-    completion,
-  );
+  const classified = completeNonAgentTextDeliveryAttempt(current, completion);
   return classified.status === 'transition_blocked'
     ? classified
     : blockedComplete('delivery_not_sending', current);
@@ -610,14 +606,11 @@ async function classifyBlockedReconciliation(
   if (!current) return blockedReconcile('not_found');
   if (
     current.sessionBindingDigest !==
-      await nonAgentTextDeliverySessionBindingDigest(reconciliation.sessionId)
+    (await nonAgentTextDeliverySessionBindingDigest(reconciliation.sessionId))
   ) {
     return blockedReconcile('session_mismatch', current);
   }
-  const classified = reconcileNonAgentTextDelivery(
-    current,
-    reconciliation,
-  );
+  const classified = reconcileNonAgentTextDelivery(current, reconciliation);
   return classified.status !== 'reconciled'
     ? classified
     : blockedReconcile('delivery_not_sending', current);
@@ -661,7 +654,7 @@ async function reservationAuthorityMatches(
     record.reservedSessionAuthorityGeneration ===
       input.expectedSessionAuthorityGeneration &&
     record.agentBindingDigest ===
-      await nonAgentTextDeliveryAgentBindingDigest(input.expectedAgentId)
+      (await nonAgentTextDeliveryAgentBindingDigest(input.expectedAgentId))
   );
 }
 
@@ -704,9 +697,7 @@ function storageValues(record: NonAgentTextDeliveryRecord): unknown[] {
   ];
 }
 
-function mutableStorageValues(
-  record: NonAgentTextDeliveryRecord,
-): unknown[] {
+function mutableStorageValues(record: NonAgentTextDeliveryRecord): unknown[] {
   return [
     record.status,
     record.deliveryAttempt,
@@ -718,13 +709,16 @@ function mutableStorageValues(
   ];
 }
 
-function recordFromRow(row: NonAgentTextDeliveryRow): NonAgentTextDeliveryRecord {
+function recordFromRow(
+  row: NonAgentTextDeliveryRow,
+): NonAgentTextDeliveryRecord {
   return nonAgentTextDeliveryRecordSchema.parse({
     schemaVersion: row.schema_version,
     requestKey: row.request_key,
     sessionBindingDigest: row.session_binding_digest,
-    reservedSessionAuthorityGeneration:
-      Number(row.reserved_session_authority_generation),
+    reservedSessionAuthorityGeneration: Number(
+      row.reserved_session_authority_generation,
+    ),
     channel: row.channel,
     assistantTurnId: row.assistant_turn_id,
     agentBindingDigest: row.agent_binding_digest,
@@ -742,10 +736,7 @@ function recordFromRow(row: NonAgentTextDeliveryRow): NonAgentTextDeliveryRecord
   });
 }
 
-async function readPreparedTurn(
-  db: D1DatabaseLike,
-  turnId: string,
-) {
+async function readPreparedTurn(db: D1DatabaseLike, turnId: string) {
   const row = await db
     .prepare('SELECT * FROM conversation_turns WHERE id = ? LIMIT 1')
     .bind(turnId)

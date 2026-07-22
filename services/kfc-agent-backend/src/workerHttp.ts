@@ -6,7 +6,8 @@ import type { ConversationStore } from './persistence/memoryStore.js';
 import { authorizeDemoAdminHeaders } from './security/demoAdminAuth.js';
 import type { WorkerEnv, WorkerExecutionContext } from './worker.js';
 
-export const ZALO_SITE_VERIFICATION_TOKEN = "JUwvDeVE5W07swqXmF5wFpdComBLkX5UCpCm";
+export const ZALO_SITE_VERIFICATION_TOKEN =
+  'JUwvDeVE5W07swqXmF5wFpdComBLkX5UCpCm';
 
 export const ZALO_SITE_VERIFICATION_PATH = `/zalo_verifier${ZALO_SITE_VERIFICATION_TOKEN}.html`;
 
@@ -27,7 +28,7 @@ export async function listWorkerDashboardSessions(
     displayName: string | null;
     avatarUrl: string | null;
     deeplink: {
-      status: "available" | "unavailable";
+      status: 'available' | 'unavailable';
       url: string | null;
       reason?: string;
     };
@@ -51,33 +52,32 @@ export async function listWorkerDashboardSessions(
     visibleSummaries.map((summary) => summary.sessionId),
   );
   return Promise.all(
-    visibleSummaries
-      .map(async (summary) => {
-        const target = channelTargetForWorkerSession(summary.sessionId);
-        const profile = target
-          ? profiles.get(`${target.channel}:${target.externalUserId}`)
-          : undefined;
-        const control =
-          controls.get(summary.sessionId) ??
-          defaultWorkerSessionControl(summary.sessionId);
-        return {
-          ...summary,
-          agentMode: control.agentMode,
-          assignedAgentId: control.assignedAgentId,
-          controlUpdatedAt: control.updatedAt,
-          externalUserId: target?.externalUserId ?? null,
-          displayName: profile?.displayName ?? null,
-          avatarUrl: profile?.avatarUrl ?? null,
-          deeplink: deeplinkForWorkerSession(summary.sessionId, env),
-        };
-      }),
+    visibleSummaries.map(async (summary) => {
+      const target = channelTargetForWorkerSession(summary.sessionId);
+      const profile = target
+        ? profiles.get(`${target.channel}:${target.externalUserId}`)
+        : undefined;
+      const control =
+        controls.get(summary.sessionId) ??
+        defaultWorkerSessionControl(summary.sessionId);
+      return {
+        ...summary,
+        agentMode: control.agentMode,
+        assignedAgentId: control.assignedAgentId,
+        controlUpdatedAt: control.updatedAt,
+        externalUserId: target?.externalUserId ?? null,
+        displayName: profile?.displayName ?? null,
+        avatarUrl: profile?.avatarUrl ?? null,
+        deeplink: deeplinkForWorkerSession(summary.sessionId, env),
+      };
+    }),
   );
 }
 
 export function defaultWorkerSessionControl(sessionId: string) {
   return {
     sessionId,
-    agentMode: "ai_active" as const,
+    agentMode: 'ai_active' as const,
     assignedAgentId: null,
     updatedAt: new Date(0).toISOString(),
   };
@@ -87,29 +87,29 @@ export function deeplinkForWorkerSession(
   sessionId: string,
   env: WorkerEnv,
 ): {
-  status: "available" | "unavailable";
+  status: 'available' | 'unavailable';
   url: string | null;
   reason?: string;
 } {
   const target = channelTargetForWorkerSession(sessionId);
   if (!target)
-    return { status: "unavailable", url: null, reason: "Unknown channel" };
+    return { status: 'unavailable', url: null, reason: 'Unknown channel' };
 
-  if (target.channel === "messenger") {
+  if (target.channel === 'messenger') {
     if (!env.META_INBOX_URL_TEMPLATE)
       return {
-        status: "unavailable",
+        status: 'unavailable',
         url: null,
-        reason: "Missing META_INBOX_URL_TEMPLATE",
+        reason: 'Missing META_INBOX_URL_TEMPLATE',
       };
     if (!env.META_PAGE_ID)
       return {
-        status: "unavailable",
+        status: 'unavailable',
         url: null,
-        reason: "Missing META_PAGE_ID",
+        reason: 'Missing META_PAGE_ID',
       };
     return {
-      status: "available",
+      status: 'available',
       url: renderWorkerInboxUrlTemplate(env.META_INBOX_URL_TEMPLATE, {
         pageId: env.META_PAGE_ID,
         externalUserId: target.externalUserId,
@@ -118,24 +118,24 @@ export function deeplinkForWorkerSession(
     };
   }
 
-  if (target.channel === "kfc") {
+  if (target.channel === 'kfc') {
     return {
-      status: "unavailable",
+      status: 'unavailable',
       url: null,
-      reason: "KFC chat deeplink disabled",
+      reason: 'KFC chat deeplink disabled',
     };
   }
 
   if (!env.ZALO_INBOX_URL_TEMPLATE)
     return {
-      status: "unavailable",
+      status: 'unavailable',
       url: null,
-      reason: "Missing ZALO_INBOX_URL_TEMPLATE",
+      reason: 'Missing ZALO_INBOX_URL_TEMPLATE',
     };
   if (!env.ZALO_OA_ID)
-    return { status: "unavailable", url: null, reason: "Missing ZALO_OA_ID" };
+    return { status: 'unavailable', url: null, reason: 'Missing ZALO_OA_ID' };
   return {
-    status: "available",
+    status: 'available',
     url: renderWorkerInboxUrlTemplate(env.ZALO_INBOX_URL_TEMPLATE, {
       pageId: env.ZALO_OA_ID,
       externalUserId: target.externalUserId,
@@ -149,15 +149,15 @@ export function renderWorkerInboxUrlTemplate(
   values: { pageId: string; externalUserId: string; sessionId: string },
 ): string {
   return template
-    .replaceAll("{pageId}", encodeURIComponent(values.pageId))
-    .replaceAll("{externalUserId}", encodeURIComponent(values.externalUserId))
-    .replaceAll("{sessionId}", encodeURIComponent(values.sessionId));
+    .replaceAll('{pageId}', encodeURIComponent(values.pageId))
+    .replaceAll('{externalUserId}', encodeURIComponent(values.externalUserId))
+    .replaceAll('{sessionId}', encodeURIComponent(values.sessionId));
 }
 
 export function channelTargetForWorkerSession(
   sessionId: string,
 ):
-  | { channel: "messenger" | "zalo" | "kfc"; externalUserId: string }
+  | { channel: 'messenger' | 'zalo' | 'kfc'; externalUserId: string }
   | undefined {
   return dashboardSessionTarget(sessionId);
 }
@@ -169,10 +169,10 @@ export async function readJson(request: Request): Promise<unknown> {
 }
 
 export function toResponse(response: HandlerResponse): Response {
-  if (response.contentType?.startsWith("text/")) {
+  if (response.contentType?.startsWith('text/')) {
     return new Response(String(response.body), {
       status: response.status,
-      headers: { ...corsHeaders(), "Content-Type": response.contentType },
+      headers: { ...corsHeaders(), 'Content-Type': response.contentType },
     });
   }
   return json(response.body, response.status);
@@ -188,19 +188,24 @@ export function customerRunEventResponse(
   let stopped = false;
   const body = new ReadableStream<Uint8Array>({
     start(controller) {
-      const write = (value: string) => controller.enqueue(encoder.encode(value));
+      const write = (value: string) =>
+        controller.enqueue(encoder.encode(value));
       const heartbeat = setInterval(() => {
-        if (!stopped) write(": heartbeat\n\n");
+        if (!stopped) write(': heartbeat\n\n');
       }, 10_000);
       const stop = () => {
         if (stopped) return;
         stopped = true;
         clearInterval(heartbeat);
-        try { controller.close(); } catch { /* client already disconnected */ }
+        try {
+          controller.close();
+        } catch {
+          /* client already disconnected */
+        }
       };
-      signal.addEventListener("abort", stop, { once: true });
+      signal.addEventListener('abort', stop, { once: true });
       setTimeout(stop, 25_000);
-      write(": connected\n\n");
+      write(': connected\n\n');
       void (async () => {
         let cursor = after;
         let pollDelayMs = 100;
@@ -212,14 +217,17 @@ export function customerRunEventResponse(
           for (const event of events) {
             if (stopped) return;
             cursor = event.sequence;
-            write(`id: ${event.sequence}\nevent: ${event.type}\ndata: ${JSON.stringify(event)}\n\n`);
+            write(
+              `id: ${event.sequence}\nevent: ${event.type}\ndata: ${JSON.stringify(event)}\n\n`,
+            );
           }
-          pollDelayMs = events.length > 0
-            ? 100
-            : Math.min(pollDelayMs * 2, 1_000);
+          pollDelayMs =
+            events.length > 0 ? 100 : Math.min(pollDelayMs * 2, 1_000);
           if (
             run &&
-            ["completed", "failed", "cancelled", "superseded"].includes(run.status) &&
+            ['completed', 'failed', 'cancelled', 'superseded'].includes(
+              run.status,
+            ) &&
             cursor >= run.nextEventSequence - 1
           ) {
             stop();
@@ -234,9 +242,9 @@ export function customerRunEventResponse(
     status: 200,
     headers: {
       ...corsHeaders(),
-      "Cache-Control": "no-cache, no-transform",
-      "Content-Type": "text/event-stream; charset=utf-8",
-      "X-Accel-Buffering": "no",
+      'Cache-Control': 'no-cache, no-transform',
+      'Content-Type': 'text/event-stream; charset=utf-8',
+      'X-Accel-Buffering': 'no',
     },
   });
 }
@@ -249,10 +257,10 @@ export async function persistDashboardEvent(
   await store.appendDashboardEvent(event);
   if (!env.DASHBOARD_SOCKET) return;
   try {
-    await env.DASHBOARD_SOCKET.getByName("operations").fetch(
-      "https://dashboard-socket/events",
+    await env.DASHBOARD_SOCKET.getByName('operations').fetch(
+      'https://dashboard-socket/events',
       {
-        method: "POST",
+        method: 'POST',
         body: JSON.stringify(event),
       },
     );
@@ -277,14 +285,14 @@ export function json(value: unknown, status = 200): Response {
     status,
     headers: {
       ...corsHeaders(),
-      "Cache-Control": "no-store, no-cache, max-age=0",
-      "Content-Type": "application/json",
+      'Cache-Control': 'no-store, no-cache, max-age=0',
+      'Content-Type': 'application/json',
     },
   });
 }
 
 export function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
 export function text(value: string, status = 200): Response {
@@ -292,8 +300,8 @@ export function text(value: string, status = 200): Response {
     status,
     headers: {
       ...corsHeaders(),
-      "Cache-Control": "no-store, no-cache, max-age=0",
-      "Content-Type": "text/plain",
+      'Cache-Control': 'no-store, no-cache, max-age=0',
+      'Content-Type': 'text/plain',
     },
   });
 }
@@ -303,8 +311,8 @@ export function html(value: string, status = 200): Response {
     status,
     headers: {
       ...corsHeaders(),
-      "Cache-Control": "no-store, no-cache, max-age=0",
-      "Content-Type": "text/html; charset=utf-8",
+      'Cache-Control': 'no-store, no-cache, max-age=0',
+      'Content-Type': 'text/html; charset=utf-8',
     },
   });
 }
@@ -315,14 +323,13 @@ export function authorizeDemoAdmin(
 ): { ok: true } | { ok: false; status: number; errorCode: string } {
   return authorizeDemoAdminHeaders({
     expectedToken: env.KFC_DEMO_ADMIN_TOKEN,
-    authorizationHeader: request.headers.get("authorization") ?? undefined,
-    tokenHeader: request.headers.get("x-kfc-demo-admin-token") ?? undefined,
+    authorizationHeader: request.headers.get('authorization') ?? undefined,
+    tokenHeader: request.headers.get('x-kfc-demo-admin-token') ?? undefined,
   });
 }
 
 export function requiresDemoAdmin(pathname: string): boolean {
-  return pathname.startsWith("/admin/") ||
-    pathname.startsWith("/dashboard/");
+  return pathname.startsWith('/admin/') || pathname.startsWith('/dashboard/');
 }
 
 export function zaloSiteVerificationHtml(): string {
@@ -339,9 +346,9 @@ export function zaloSiteVerificationHtml(): string {
 
 export function corsHeaders(): Record<string, string> {
   return {
-    "Access-Control-Allow-Origin": "*",
-    "Access-Control-Allow-Methods": "GET,POST,OPTIONS",
-    "Access-Control-Allow-Headers":
-      "Content-Type,Authorization,X-KFC-Demo-Admin-Token",
+    'Access-Control-Allow-Origin': '*',
+    'Access-Control-Allow-Methods': 'GET,POST,OPTIONS',
+    'Access-Control-Allow-Headers':
+      'Content-Type,Authorization,X-KFC-Demo-Admin-Token',
   };
 }

@@ -1,9 +1,7 @@
 import { createHash } from 'node:crypto';
 import type { AgentState } from '../agent/agentState.js';
-import { digestCommerceAction } from '../ordering/approvalReceipt.js';
-import {
-  activePaymentMethodCollectionAuthority,
-} from '../ordering/paymentMethodAuthority.js';
+import { digestCommerceAction } from '../ordering/commerceDigest.js';
+import { activePaymentMethodCollectionAuthority } from '../ordering/paymentMethodAuthority.js';
 
 export const KFC_GENUI_SCHEMA_VERSION = 'kfc-genui-v1' as const;
 
@@ -26,7 +24,8 @@ export type KfcGenUiWidgetKind = (typeof KFC_GENUI_WIDGET_KINDS)[number];
 
 export type KfcGenUiStatus = 'active' | 'answered' | 'expired' | 'blocked';
 
-export type KfcGenUiActionIntent = 'primary' | 'secondary' | 'destructive' | 'recovery';
+export type KfcGenUiActionIntent =
+  'primary' | 'secondary' | 'destructive' | 'recovery';
 
 export interface KfcGenUiActionSpec {
   id: string;
@@ -69,30 +68,36 @@ export interface KfcGenUiAction {
   payload?: Record<string, unknown>;
 }
 
-export function isKfcGenUiWidgetKind(value: unknown): value is KfcGenUiWidgetKind {
-  return typeof value === 'string' && KFC_GENUI_WIDGET_KINDS.includes(value as KfcGenUiWidgetKind);
+export function isKfcGenUiWidgetKind(
+  value: unknown,
+): value is KfcGenUiWidgetKind {
+  return (
+    typeof value === 'string' &&
+    KFC_GENUI_WIDGET_KINDS.includes(value as KfcGenUiWidgetKind)
+  );
 }
 
-export function isKfcGenUiAttachment(value: unknown): value is KfcGenUiAttachment {
+export function isKfcGenUiAttachment(
+  value: unknown,
+): value is KfcGenUiAttachment {
   if (typeof value !== 'object' || value === null) return false;
   const record = value as Record<string, unknown>;
   const authority = record.authority;
   const authorityValid =
     authority === undefined ||
-    (
-      typeof authority === 'object' &&
+    (typeof authority === 'object' &&
       authority !== null &&
-      (authority as Record<string, unknown>).schemaVersion === KFC_GENUI_SCHEMA_VERSION &&
+      (authority as Record<string, unknown>).schemaVersion ===
+        KFC_GENUI_SCHEMA_VERSION &&
       typeof (authority as Record<string, unknown>).sessionId === 'string' &&
       typeof (authority as Record<string, unknown>).customerId === 'string' &&
-      typeof (authority as Record<string, unknown>).verifiedRevision === 'string' &&
-      (
-        (authority as Record<string, unknown>).actionLifecycle === 'one_shot' ||
-        (authority as Record<string, unknown>).actionLifecycle === 'replayable'
-      ) &&
+      typeof (authority as Record<string, unknown>).verifiedRevision ===
+        'string' &&
+      ((authority as Record<string, unknown>).actionLifecycle === 'one_shot' ||
+        (authority as Record<string, unknown>).actionLifecycle ===
+          'replayable') &&
       typeof (authority as Record<string, unknown>).issuedAt === 'string' &&
-      typeof (authority as Record<string, unknown>).expiresAt === 'string'
-    );
+      typeof (authority as Record<string, unknown>).expiresAt === 'string');
   return (
     typeof record.id === 'string' &&
     typeof record.lifecycleStage === 'string' &&
@@ -151,7 +156,9 @@ export function kfcGenUiVerifiedStateRevision(
     invoiceRequest: state.invoiceRequest ?? null,
     handoff: state.handoff ?? null,
   };
-  return createHash('sha256').update(canonicalJson(relevantState)).digest('hex');
+  return createHash('sha256')
+    .update(canonicalJson(relevantState))
+    .digest('hex');
 }
 
 export async function digestTrustedKfcGenUiAction(input: {
@@ -184,14 +191,11 @@ export function kfcGenUiAttachmentForPersistence(
     currentTurnPrivateOrder?: boolean;
   } = {},
 ): KfcGenUiAttachment {
-  const redactsAddress =
-    attachment.widgetKind === 'addressFulfillmentCheck';
+  const redactsAddress = attachment.widgetKind === 'addressFulfillmentCheck';
   const redactsCurrentTurnOrder =
     privacy.currentTurnPrivateOrder === true &&
-    (
-      attachment.widgetKind === 'paymentOrderStatus' ||
-      attachment.widgetKind === 'orderTrackingStatus'
-    );
+    (attachment.widgetKind === 'paymentOrderStatus' ||
+      attachment.widgetKind === 'orderTrackingStatus');
   if (!redactsAddress && !redactsCurrentTurnOrder) {
     return structuredClone(attachment);
   }

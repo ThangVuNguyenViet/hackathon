@@ -1,14 +1,14 @@
-import { existsSync } from "node:fs";
-import { dirname, join } from "node:path";
-import { fileURLToPath } from "node:url";
-import { z } from "zod";
-import { AgentRunCoordinator } from "../agentRuns/coordinator.js";
+import { existsSync } from 'node:fs';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { z } from 'zod';
+import { AgentRunCoordinator } from '../agentRuns/coordinator.js';
 import type {
   ChannelMediaDeliveryResult,
   MessengerClient,
   MessengerSenderAction,
-} from "../clients/interfaces.js";
-import type { KfcCommerceGatewayClients } from "../clients/kfcCommerceGateway.js";
+} from '../clients/interfaces.js';
+import type { KfcCommerceGatewayClients } from '../clients/kfcCommerceGateway.js';
 import {
   LifecycleError,
   type CreateLifecycleInput,
@@ -18,25 +18,25 @@ import {
   type MutationContext,
   type SandboxLifecycleControls,
   projectLifecycleCommerceClients,
-} from "../commerce/lifecycleProvider.js";
-import { createCatalogObservationClients } from "../clients/catalogObservationClients.js";
+} from '../commerce/lifecycleProvider.js';
+import { createCatalogObservationClients } from '../clients/catalogObservationClients.js';
 import {
   fetchCatalogObservation,
   type CatalogObservation,
   type CommerceEnvironment,
-} from "../catalog/catalogObservation.js";
-import type { ConversationEvent } from "../channels/conversationEvent.js";
-import type { MessengerHistorySyncCoordinator } from "../channels/messengerHistory.js";
+} from '../catalog/catalogObservation.js';
+import type { ConversationEvent } from '../channels/conversationEvent.js';
+import type { MessengerHistorySyncCoordinator } from '../channels/messengerHistory.js';
 import {
   createMessengerClient,
   normalizeMessengerWebhook,
   verifyMessengerChallenge,
-} from "../channels/messenger.js";
-import { createZaloClient, normalizeZaloWebhook } from "../channels/zalo.js";
-import { DashboardEventBus } from "../dashboard/eventBus.js";
-import { dashboardSessionTarget } from "../dashboard/sessionVisibility.js";
-import type { GeneratedFixtures } from "../fixtures/schema.js";
-import { loadGeneratedFixtures } from "../fixtures/loadFixtures.js";
+} from '../channels/messenger.js';
+import { createZaloClient, normalizeZaloWebhook } from '../channels/zalo.js';
+import { DashboardEventBus } from '../dashboard/eventBus.js';
+import { dashboardSessionTarget } from '../dashboard/sessionVisibility.js';
+import type { GeneratedFixtures } from '../fixtures/schema.js';
+import { loadGeneratedFixtures } from '../fixtures/loadFixtures.js';
 import type {
   AgentMode,
   Channel,
@@ -45,63 +45,136 @@ import type {
   CustomerAccessContext,
   MonitorSessionIntelligence,
   ToolResult,
-} from "../domain/types.js";
-import { customerCommandFromVerifiedAction } from "../domain/customerCommand.js";
-import {
-  isKfcGenUiAttachment,
-} from "../genui/kfcGenUi.js";
-import type { AgentState } from "../agent/agentState.js";
+} from '../domain/types.js';
+import { customerCommandFromVerifiedAction } from '../domain/customerCommand.js';
+import { isKfcGenUiAttachment } from '../genui/kfcGenUi.js';
+import type { AgentState } from '../agent/agentState.js';
 import {
   calculateMonitorSessionIntelligence,
   preserveMonitorContext,
   countCustomerTurns,
   monitorContextReevaluationCustomerTurnThreshold,
   resolveMonitorSessionIntelligence,
-} from "../monitor/sessionIntelligence.js";
-import type { AgentTracer } from "../observability/agentTracing.js";
+} from '../monitor/sessionIntelligence.js';
+import type { AgentTracer } from '../observability/agentTracing.js';
 import {
   createMockClients,
   type MockClientOptions,
-} from "../mock/createMockClients.js";
+} from '../mock/createMockClients.js';
 import {
   applyMockedUpstreamFixtureOverrides,
   mockedUpstreamApiProfileSchema,
   mockedUpstreamClientOptions,
-} from "../mock/mockedUpstreamProfile.js";
-import type { ToolName } from "../ordering/types.js";
-import { CustomerRunCoordinator, type CustomerRunObservation } from "../customerRuns/runtime.js";
+} from '../mock/mockedUpstreamProfile.js';
+import type { ToolName } from '../ordering/types.js';
+import {
+  CustomerRunCoordinator,
+  type CustomerRunObservation,
+} from '../customerRuns/runtime.js';
 import {
   kfcSessionMatchesCustomer,
   type CustomerRunStartRequest,
-} from "../customerRuns/contracts.js";
+} from '../customerRuns/contracts.js';
 import {
   MemoryStore,
   type ConversationStore,
   type WebhookDelivery,
-} from "../persistence/memoryStore.js";
-import type {
-  VerifiedMessengerGuestCheckoutIngress,
-} from '../security/guestCheckoutAuthority.js';
+} from '../persistence/memoryStore.js';
+import type { VerifiedMessengerGuestCheckoutIngress } from '../security/guestCheckoutAuthority.js';
 import {
   buildBoundedRecentTurns,
   sessionIdForConversationEvent,
-} from "../session/sessionContext.js";
-import {
-  type ChannelPresentationPlan,
-} from "../presentation/channelPresentation.js";
+} from '../session/sessionContext.js';
+import { type ChannelPresentationPlan } from '../presentation/channelPresentation.js';
 import {
   ShowcaseService,
   ShowcaseValidationError,
   type ShowcaseScenarioSource,
-} from "../showcase/showcase.js";
-import { isRecord, canonicalJson, sha256Fingerprint, kfcSessionIdSchema, kfcChatPayloadSchema, kfcGenUiActionPayloadSchema, kfcSmartMenuBatchPayloadSchema, messengerHistorySyncPayloadSchema, staleMessengerRecoveryPayloadSchema, sessionControlPayloadSchema, dashboardSessionDefaultLookbackMs, humanMessagePayloadSchema, lifecycleTransitionSchema, lifecycleEventPayloadSchema, confirmationResumePayloadSchema, kfcProofPreconditionsSchema, lifecycleErrorResponse, ReadinessCheckResult, ReadinessOptions, RouteOptions, HandlerResponse, MessengerWebhookEventProcessingResult, StaleMessengerDeliveryRecoveryResult, RouteHandlers, defaultFixturesRoot } from './routeHandlerContracts.js';
-import { messengerDeliveryFailureForStorage, eventFromMessengerDelivery, sendMessengerSenderAction, dashboardEventId, checkCommerceGatewayReadiness, checkCatalogReadiness, runReadinessCheck, checkFixtures, checkMessengerConfig, checkZaloConfig, deeplinkForSession, renderInboxUrlTemplate, ChannelProfileTarget, channelTargetForSession, humanChannelTargetForSession } from './routeHandlerSupport.js';
+} from '../showcase/showcase.js';
+import {
+  isRecord,
+  canonicalJson,
+  sha256Fingerprint,
+  kfcSessionIdSchema,
+  kfcChatPayloadSchema,
+  kfcGenUiActionPayloadSchema,
+  kfcSmartMenuBatchPayloadSchema,
+  messengerHistorySyncPayloadSchema,
+  staleMessengerRecoveryPayloadSchema,
+  sessionControlPayloadSchema,
+  dashboardSessionDefaultLookbackMs,
+  humanMessagePayloadSchema,
+  lifecycleTransitionSchema,
+  lifecycleEventPayloadSchema,
+  kfcProofPreconditionsSchema,
+  lifecycleErrorResponse,
+  ReadinessCheckResult,
+  ReadinessOptions,
+  RouteOptions,
+  HandlerResponse,
+  MessengerWebhookEventProcessingResult,
+  StaleMessengerDeliveryRecoveryResult,
+  RouteHandlers,
+  defaultFixturesRoot,
+} from './routeHandlerContracts.js';
+import {
+  messengerDeliveryFailureForStorage,
+  eventFromMessengerDelivery,
+  sendMessengerSenderAction,
+  dashboardEventId,
+  checkCommerceGatewayReadiness,
+  checkCatalogReadiness,
+  runReadinessCheck,
+  checkFixtures,
+  checkMessengerConfig,
+  checkZaloConfig,
+  deeplinkForSession,
+  renderInboxUrlTemplate,
+  ChannelProfileTarget,
+  channelTargetForSession,
+  humanChannelTargetForSession,
+} from './routeHandlerSupport.js';
 
 import type { RouteHandlerContext } from './routeHandlerContext.js';
 import { deliverWebhookOwnedNonAgentText } from './nonAgentTextDeliveryRuntime.js';
 
 export function createChannelRouteHandlers(context: RouteHandlerContext) {
-  const { options, store, dashboard, showcase, streamingRunObservers, customerRuns, getFixtures, withConfiguredCommerce, createWebhookClients, createDeliveryClients, dashboardProfileForTarget, createFirstPartyKfcClients, kfcProofAccessContext, latestKfcProofPreconditions, kfcAgentResponse, deferAiMonitorRefinement, deliverAssistantReply, persistEventProfile, turnMetadataFor, emitConversationTurnCreatedEvent, emitSessionModeEvent, emitSessionControlIntelligence, resumedOwnershipSummary, clearPersistedHandoff, persistedHandoffStatus, shouldEvaluateDashboardMonitorContext, ensureDashboardMonitorContext, persistNonAgentInboundEvent, pauseIfHumanJoined, latestUnansweredCustomerTurn, replyToLatestUnansweredCustomerTurn, processMessengerEventInternal, recoverStaleMessengerDeliveriesInternal, processMessengerAgentRunInternal } = context;
+  const {
+    options,
+    store,
+    dashboard,
+    showcase,
+    streamingRunObservers,
+    customerRuns,
+    getFixtures,
+    withConfiguredCommerce,
+    createWebhookClients,
+    createDeliveryClients,
+    dashboardProfileForTarget,
+    createFirstPartyKfcClients,
+    kfcProofAccessContext,
+    latestKfcProofPreconditions,
+    kfcAgentResponse,
+    deferAiMonitorRefinement,
+    deliverAssistantReply,
+    persistEventProfile,
+    turnMetadataFor,
+    emitConversationTurnCreatedEvent,
+    emitSessionModeEvent,
+    emitSessionControlIntelligence,
+    resumedOwnershipSummary,
+    clearPersistedHandoff,
+    persistedHandoffStatus,
+    shouldEvaluateDashboardMonitorContext,
+    ensureDashboardMonitorContext,
+    persistNonAgentInboundEvent,
+    pauseIfHumanJoined,
+    latestUnansweredCustomerTurn,
+    replyToLatestUnansweredCustomerTurn,
+    processMessengerEventInternal,
+    recoverStaleMessengerDeliveriesInternal,
+    processMessengerAgentRunInternal,
+  } = context;
   const processAgentEvent = async (
     event: ConversationEvent,
     verifiedIngress?: VerifiedMessengerGuestCheckoutIngress,
@@ -112,8 +185,8 @@ export function createChannelRouteHandlers(context: RouteHandlerContext) {
     const claim = await coordinator.claimWakeupRun(wakeup);
     if (!claim.dispatch || !claim.runId) {
       return {
-        status: "skipped",
-        errorCode: claim.reason ?? "agent_run_not_dispatched",
+        status: 'skipped',
+        errorCode: claim.reason ?? 'agent_run_not_dispatched',
       };
     }
     return processMessengerAgentRunInternal(
@@ -126,27 +199,26 @@ export function createChannelRouteHandlers(context: RouteHandlerContext) {
     event: ConversationEvent,
   ): Promise<boolean> =>
     event.shouldRunAgent &&
-    (await store.getSessionControl(
-      sessionIdForConversationEvent(event),
-    )).agentMode === "ai_active";
+    (await store.getSessionControl(sessionIdForConversationEvent(event)))
+      .agentMode === 'ai_active';
 
   return {
     messengerVerify(query: Record<string, unknown>) {
       const result = verifyMessengerChallenge(
         query,
-        options.messengerVerifyToken ?? "",
+        options.messengerVerifyToken ?? '',
       );
       return {
         status: result.statusCode,
         body: result.body,
-        contentType: "text/plain",
+        contentType: 'text/plain',
       };
     },
     async messengerWebhook(
       body: unknown,
       verifiedIngress?: readonly VerifiedMessengerGuestCheckoutIngress[],
     ) {
-      const events = normalizeMessengerWebhook(body, options.metaPageId ?? "");
+      const events = normalizeMessengerWebhook(body, options.metaPageId ?? '');
       const stats = {
         received: events.length,
         processed: 0,
@@ -164,7 +236,7 @@ export function createChannelRouteHandlers(context: RouteHandlerContext) {
           continue;
         }
         const reservation = await store.reserveWebhookDelivery({
-          channel: "messenger",
+          channel: 'messenger',
           externalEventId: event.rawEventId,
           externalThreadId: event.externalThreadId,
           externalUserId: event.externalUserId,
@@ -181,8 +253,7 @@ export function createChannelRouteHandlers(context: RouteHandlerContext) {
           continue;
         }
 
-        const agentRunRequired =
-          await shouldProcessWithAgentRun(event);
+        const agentRunRequired = await shouldProcessWithAgentRun(event);
         if (agentRunRequired) await persistEventProfile(event);
         const matchingIngress = verifiedIngress?.find(
           (ingress) =>
@@ -196,8 +267,8 @@ export function createChannelRouteHandlers(context: RouteHandlerContext) {
         const result = agentRunRequired
           ? await processAgentEvent(event, matchingIngress)
           : await processMessengerEventInternal(event);
-        if (result.status === "processed") stats.processed += 1;
-        else if (result.status === "skipped") stats.skippedDuplicates += 1;
+        if (result.status === 'processed') stats.processed += 1;
+        else if (result.status === 'skipped') stats.skippedDuplicates += 1;
         else stats.failed += 1;
       }
 
@@ -207,8 +278,7 @@ export function createChannelRouteHandlers(context: RouteHandlerContext) {
       event: ConversationEvent,
       verifiedIngress?: VerifiedMessengerGuestCheckoutIngress,
     ) {
-      const agentRunRequired =
-        await shouldProcessWithAgentRun(event);
+      const agentRunRequired = await shouldProcessWithAgentRun(event);
       if (agentRunRequired) await persistEventProfile(event);
       return agentRunRequired
         ? processAgentEvent(event, verifiedIngress)
@@ -242,7 +312,7 @@ export function createChannelRouteHandlers(context: RouteHandlerContext) {
           continue;
         }
         const reservation = await store.reserveWebhookDelivery({
-          channel: "zalo",
+          channel: 'zalo',
           externalEventId: event.rawEventId,
           externalThreadId: event.externalThreadId,
           externalUserId: event.externalUserId,
@@ -262,8 +332,8 @@ export function createChannelRouteHandlers(context: RouteHandlerContext) {
         if (await shouldProcessWithAgentRun(event)) {
           await persistEventProfile(event);
           const result = await processAgentEvent(event);
-          if (result.status === "processed") stats.processed += 1;
-          else if (result.status === "skipped") stats.skippedDuplicates += 1;
+          if (result.status === 'processed') stats.processed += 1;
+          else if (result.status === 'skipped') stats.skippedDuplicates += 1;
           else stats.failed += 1;
           continue;
         }
@@ -279,55 +349,52 @@ export function createChannelRouteHandlers(context: RouteHandlerContext) {
               const assistantTurn = await store.appendTurn({
                 sessionId,
                 channel: event.channel,
-                role: "assistant",
+                role: 'assistant',
                 text: acknowledgement,
                 externalMessageId: null,
                 externalUserId: event.externalUserId,
-                deliveryStatus: "pending",
+                deliveryStatus: 'pending',
                 metadata: null,
               });
               emitConversationTurnCreatedEvent(assistantTurn);
               const delivery = await deliverWebhookOwnedNonAgentText({
                 store,
                 client: deliveryClients.zalo,
-                channel: "zalo",
+                channel: 'zalo',
                 assistantTurnId: assistantTurn.id,
                 recipientId: event.externalUserId,
                 text: acknowledgement,
               });
               if (!delivery.ok) {
                 await store.markWebhookDeliveryFailed(
-                  "zalo",
+                  'zalo',
                   event.rawEventId,
-                  delivery.errorCode ?? "assistant_reply_delivery_failed",
+                  delivery.errorCode ?? 'assistant_reply_delivery_failed',
                 );
                 stats.failed += 1;
                 continue;
               }
             }
-            await store.markWebhookDeliveryProcessed("zalo", event.rawEventId);
+            await store.markWebhookDeliveryProcessed('zalo', event.rawEventId);
             stats.processed += 1;
             continue;
           }
 
           if (await pauseIfHumanJoined(sessionId, event)) {
-            await store.markWebhookDeliveryProcessed("zalo", event.rawEventId);
+            await store.markWebhookDeliveryProcessed('zalo', event.rawEventId);
             stats.processed += 1;
             continue;
           }
 
-          await store.markWebhookDeliveryProcessed(
-            "zalo",
-            event.rawEventId,
-          );
+          await store.markWebhookDeliveryProcessed('zalo', event.rawEventId);
           stats.processed += 1;
         } catch (error) {
           await store.markWebhookDeliveryFailed(
-            "zalo",
+            'zalo',
             event.rawEventId,
             error instanceof Error
               ? error.message
-              : "Unknown Zalo webhook failure",
+              : 'Unknown Zalo webhook failure',
           );
           stats.failed += 1;
         }
@@ -339,7 +406,7 @@ export function createChannelRouteHandlers(context: RouteHandlerContext) {
       if (!options.messengerHistorySync) {
         return {
           status: 503,
-          body: { errorCode: "messenger_history_sync_not_configured" },
+          body: { errorCode: 'messenger_history_sync_not_configured' },
         };
       }
       const parsed = messengerHistorySyncPayloadSchema.safeParse(body);
@@ -347,7 +414,7 @@ export function createChannelRouteHandlers(context: RouteHandlerContext) {
         return {
           status: 400,
           body: {
-            errorCode: "invalid_messenger_history_sync_payload",
+            errorCode: 'invalid_messenger_history_sync_payload',
             issues: parsed.error.issues,
           },
         };
@@ -364,11 +431,10 @@ export function createChannelRouteHandlers(context: RouteHandlerContext) {
           running: false,
           lastStartedAt: null,
           lastFinishedAt: null,
-          lastError: "Messenger history sync is not configured",
+          lastError: 'Messenger history sync is not configured',
           lastResult: null,
         },
       };
     },
-
   };
 }

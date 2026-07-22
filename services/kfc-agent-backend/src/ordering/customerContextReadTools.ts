@@ -2,16 +2,9 @@ import type {
   CustomerClient,
   ExternalCallContext,
 } from '../clients/interfaces.js';
-import type {
-  Address,
-  MenuItem,
-  Order,
-  ToolResult,
-} from '../domain/types.js';
+import type { Address, MenuItem, Order, ToolResult } from '../domain/types.js';
 import { z } from 'zod';
-import {
-  providerOrderSchema,
-} from '../commerce/providerResponseSchemas.js';
+import { providerOrderSchema } from '../commerce/providerResponseSchemas.js';
 import type { SourceProvenance } from './types.js';
 
 interface CustomerContextReadInput {
@@ -20,24 +13,28 @@ interface CustomerContextReadInput {
   externalCallContext: ExternalCallContext;
 }
 
-const responseSafeAddressSchema: z.ZodType<Address> = z.object({
-  label: z.string().min(1),
-  line1: z.string().min(1),
-  district: z.string().min(1),
-  city: z.string().min(1),
-}).strip();
+const responseSafeAddressSchema: z.ZodType<Address> = z
+  .object({
+    label: z.string().min(1),
+    line1: z.string().min(1),
+    district: z.string().min(1),
+    city: z.string().min(1),
+  })
+  .strip();
 
-const responseSafeFavoriteItemSchema: z.ZodType<MenuItem> = z.object({
-  code: z.string().min(1),
-  category: z.string(),
-  categoryId: z.string().min(1),
-  name: z.string().min(1),
-  description: z.string(),
-  priceVnd: z.number().int().nonnegative(),
-  originalPriceVnd: z.number().int().nonnegative().nullable(),
-  imageUrl: z.string(),
-  available: z.boolean(),
-}).strip();
+const responseSafeFavoriteItemSchema: z.ZodType<MenuItem> = z
+  .object({
+    code: z.string().min(1),
+    category: z.string(),
+    categoryId: z.string().min(1),
+    name: z.string().min(1),
+    description: z.string(),
+    priceVnd: z.number().int().nonnegative(),
+    originalPriceVnd: z.number().int().nonnegative().nullable(),
+    imageUrl: z.string(),
+    available: z.boolean(),
+  })
+  .strip();
 
 const responseSafeRecentOrderSchema: z.ZodType<Order | null> =
   providerOrderSchema.nullable().transform((order): Order | null => {
@@ -174,10 +171,11 @@ export async function readCustomerSavedAddresses(
 ): Promise<ToolResult<Address[]>> {
   return controlledCustomerRead(
     input,
-    () => input.customer.getSavedAddresses(
-      input.customerId,
-      input.externalCallContext,
-    ),
+    () =>
+      input.customer.getSavedAddresses(
+        input.customerId,
+        input.externalCallContext,
+      ),
     z.array(responseSafeAddressSchema),
     (addresses) =>
       `Retrieved ${addresses.length} verified saved-address record(s)`,
@@ -190,10 +188,11 @@ export async function readCustomerRecentOrder(
 ): Promise<ToolResult<Order | null>> {
   return controlledCustomerRead(
     input,
-    () => input.customer.getRecentOrder(
-      input.customerId,
-      input.externalCallContext,
-    ),
+    () =>
+      input.customer.getRecentOrder(
+        input.customerId,
+        input.externalCallContext,
+      ),
     responseSafeRecentOrderSchema,
     (order) =>
       order
@@ -208,10 +207,11 @@ export async function readCustomerFavoriteItems(
 ): Promise<ToolResult<MenuItem[]>> {
   return controlledCustomerRead(
     input,
-    () => input.customer.getFavoriteItems(
-      input.customerId,
-      input.externalCallContext,
-    ),
+    () =>
+      input.customer.getFavoriteItems(
+        input.customerId,
+        input.externalCallContext,
+      ),
     z.array(responseSafeFavoriteItemSchema),
     (items) => `Retrieved ${items.length} verified favorite-item record(s)`,
     customerContextProviderProvenance.getFavoriteItems,

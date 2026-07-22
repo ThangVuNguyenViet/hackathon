@@ -67,8 +67,16 @@ export interface CustomerRunCoordinatorOptions {
   sleep?: (milliseconds: number) => Promise<void>;
 }
 
-const terminalStatuses = new Set(['completed', 'failed', 'cancelled', 'superseded']);
-const protectedPhases = new Set<CustomerRunPhase>(['state_change_tool', 'irreversible_tool']);
+const terminalStatuses = new Set([
+  'completed',
+  'failed',
+  'cancelled',
+  'superseded',
+]);
+const protectedPhases = new Set<CustomerRunPhase>([
+  'state_change_tool',
+  'irreversible_tool',
+]);
 const maximumAuthorityStartAttempts = 3;
 
 export class CustomerRunCoordinator {
@@ -84,7 +92,13 @@ export class CustomerRunCoordinator {
   async start(input: unknown): Promise<CoordinatorReply> {
     const parsed = customerRunStartRequestSchema.safeParse(input);
     if (!parsed.success) {
-      return { status: 400, body: { errorCode: 'invalid_customer_run', issues: parsed.error.issues } };
+      return {
+        status: 400,
+        body: {
+          errorCode: 'invalid_customer_run',
+          issues: parsed.error.issues,
+        },
+      };
     }
     const request = parsed.data;
     const fingerprint = await fingerprintFor(request);
@@ -138,8 +152,7 @@ export class CustomerRunCoordinator {
             return {
               status: 409,
               body: {
-                errorCode:
-                  'trusted_genui_action_requires_ai_active_session',
+                errorCode: 'trusted_genui_action_requires_ai_active_session',
                 sessionId: request.sessionId,
                 suppressed: true,
               },
@@ -173,19 +186,21 @@ export class CustomerRunCoordinator {
                 },
                 createdAt: pausedAt,
               },
-              events: [{
-                schemaVersion: CUSTOMER_RUN_SCHEMA_VERSION,
-                eventId: `customer_run_event_${crypto.randomUUID()}`,
-                runId: run.id,
-                expectedSequence: 1,
-                type: 'run_superseded',
-                occurredAt: pausedAt,
-                payload: {
-                  status: 'superseded',
-                  suppressed: true,
-                  agentMode: 'human_paused',
+              events: [
+                {
+                  schemaVersion: CUSTOMER_RUN_SCHEMA_VERSION,
+                  eventId: `customer_run_event_${crypto.randomUUID()}`,
+                  runId: run.id,
+                  expectedSequence: 1,
+                  type: 'run_superseded',
+                  occurredAt: pausedAt,
+                  payload: {
+                    status: 'superseded',
+                    suppressed: true,
+                    agentMode: 'human_paused',
+                  },
                 },
-              }],
+              ],
             },
           );
           if (paused.status === 'stale') continue;
@@ -257,14 +272,15 @@ export class CustomerRunCoordinator {
     }
     this.nextSequences.set(run.id, stored.nextEventSequence);
     this.latestPhases.set(run.id, 'queued');
-    const accepted = await this.emitManyIfCurrent(stored, [{
-      type: 'run_accepted',
-      payload: { status: 'accepted', phase: 'queued' },
-    }]);
+    const accepted = await this.emitManyIfCurrent(stored, [
+      {
+        type: 'run_accepted',
+        payload: { status: 'accepted', phase: 'queued' },
+      },
+    ]);
     if (!accepted) {
       await this.finishAsSuperseded(run.id);
-      const superseded =
-        await this.options.store.getCustomerRun(run.id);
+      const superseded = await this.options.store.getCustomerRun(run.id);
       if (!superseded) {
         throw new Error(`Customer run not found: ${run.id}`);
       }
@@ -278,13 +294,21 @@ export class CustomerRunCoordinator {
     const run = await this.options.store.getCustomerRun(runId);
     if (!run) return { status: 404, body: { errorCode: 'run_not_found' } };
     this.nextSequences.set(runId, run.nextEventSequence);
-    if (terminalStatuses.has(run.status)) return { status: 200, body: terminalBody(run) };
+    if (terminalStatuses.has(run.status))
+      return { status: 200, body: terminalBody(run) };
     if (run.phase && protectedPhases.has(run.phase)) {
-      return { status: 409, body: { errorCode: 'cancellation_temporarily_unavailable', runId } };
+      return {
+        status: 409,
+        body: { errorCode: 'cancellation_temporarily_unavailable', runId },
+      };
     }
     if (run.status !== 'cancelling') {
-      await this.options.store.updateCustomerRun(runId, { status: 'cancelling' });
-      await this.emit(runId, 'cancellation_requested', { status: 'cancelling' });
+      await this.options.store.updateCustomerRun(runId, {
+        status: 'cancelling',
+      });
+      await this.emit(runId, 'cancellation_requested', {
+        status: 'cancelling',
+      });
     }
     return { status: 202, body: { runId, status: 'cancelling' } };
   }
@@ -298,27 +322,31 @@ export class CustomerRunCoordinator {
       if (await this.finishIfCancelled(runId)) return;
       const startedAt = this.now();
       await this.options.store.updateCustomerRun(runId, {
-        status: 'running', phase: 'planning', startedAt,
+        status: 'running',
+        phase: 'planning',
+        startedAt,
       });
       this.latestPhases.set(runId, 'planning');
       this.latestProgress.set(runId, {
         family: 'reviewing_request',
         cancellable: true,
       });
-      if (!(await this.emitManyIfCurrent(run, [
-        {
-          type: 'run_started',
-          payload: { status: 'running', phase: 'planning' },
-        },
-        {
-          type: 'progress_updated',
-          payload: {
-            code: 'reviewing_request',
-            label: customerSafeProgressLabels.reviewing_request,
-            cancellable: true,
+      if (
+        !(await this.emitManyIfCurrent(run, [
+          {
+            type: 'run_started',
+            payload: { status: 'running', phase: 'planning' },
           },
-        },
-      ]))) {
+          {
+            type: 'progress_updated',
+            payload: {
+              code: 'reviewing_request',
+              label: customerSafeProgressLabels.reviewing_request,
+              cancellable: true,
+            },
+          },
+        ]))
+      ) {
         await this.finishAsSuperseded(runId);
         return;
       }
@@ -335,7 +363,8 @@ export class CustomerRunCoordinator {
         await this.finishAsSuperseded(runId);
         return;
       }
-      if (!result || typeof result.responseText !== 'string') throw new Error('Invalid canonical response');
+      if (!result || typeof result.responseText !== 'string')
+        throw new Error('Invalid canonical response');
       if (await this.finishIfCancelled(runId)) return;
 
       const durableGenUi = result.genUi
@@ -347,19 +376,21 @@ export class CustomerRunCoordinator {
           return;
         }
         const actionless = { ...durableGenUi, actions: [] };
-        if (!(await this.emitManyIfCurrent(run, [
-          {
-            type: 'genui_revision',
-            payload: {
-              revision: 1,
-              snapshot: { ...actionless, data: {} },
+        if (
+          !(await this.emitManyIfCurrent(run, [
+            {
+              type: 'genui_revision',
+              payload: {
+                revision: 1,
+                snapshot: { ...actionless, data: {} },
+              },
             },
-          },
-          {
-            type: 'genui_revision',
-            payload: { revision: 2, snapshot: actionless },
-          },
-        ]))) {
+            {
+              type: 'genui_revision',
+              payload: { revision: 2, snapshot: actionless },
+            },
+          ]))
+        ) {
           await this.finishAsSuperseded(runId);
           return;
         }
@@ -389,42 +420,45 @@ export class CustomerRunCoordinator {
           await this.finishAsSuperseded(runId);
           return;
         }
-        if (!(await this.emitOneIfCurrent(
-          run,
-          'text_delta',
-          { delta },
-        ))) {
+        if (!(await this.emitOneIfCurrent(run, 'text_delta', { delta }))) {
           await this.finishAsSuperseded(runId);
           return;
         }
-        if ((this.options.paceMs ?? 25) > 0) await this.sleep(this.options.paceMs ?? 25);
+        if ((this.options.paceMs ?? 25) > 0)
+          await this.sleep(this.options.paceMs ?? 25);
       }
       if (!(await isCurrent())) {
         await this.finishAsSuperseded(runId);
         return;
       }
       const terminalAt = this.now();
-      if (!(await this.emitManyIfCurrent(run, [
-        ...(durableGenUi
-          ? [{
-              type: 'genui_snapshot' as const,
-              payload: { snapshot: durableGenUi },
-            }]
-          : []),
-        {
-          type: 'run_completed',
-          payload: {
-            status: 'completed',
-            responseText: result.responseText,
-            assistantTurnId: result.assistantTurnId ?? null,
+      if (
+        !(await this.emitManyIfCurrent(run, [
+          ...(durableGenUi
+            ? [
+                {
+                  type: 'genui_snapshot' as const,
+                  payload: { snapshot: durableGenUi },
+                },
+              ]
+            : []),
+          {
+            type: 'run_completed',
+            payload: {
+              status: 'completed',
+              responseText: result.responseText,
+              assistantTurnId: result.assistantTurnId ?? null,
+            },
           },
-        },
-      ]))) {
+        ]))
+      ) {
         await this.finishAsSuperseded(runId);
         return;
       }
       await this.options.store.updateCustomerRun(runId, {
-        status: 'completed', phase: 'finalizing', terminalAt,
+        status: 'completed',
+        phase: 'finalizing',
+        terminalAt,
       });
       this.latestPhases.set(runId, 'finalizing');
       this.latestProgress.delete(runId);
@@ -440,8 +474,15 @@ export class CustomerRunCoordinator {
         return;
       }
       const terminalAt = this.now();
-      await this.emit(runId, 'run_failed', { status: 'failed', message: 'Không thể hoàn tất yêu cầu lúc này.' });
-      await this.options.store.updateCustomerRun(runId, { status: 'failed', phase: 'finalizing', terminalAt });
+      await this.emit(runId, 'run_failed', {
+        status: 'failed',
+        message: 'Không thể hoàn tất yêu cầu lúc này.',
+      });
+      await this.options.store.updateCustomerRun(runId, {
+        status: 'failed',
+        phase: 'finalizing',
+        terminalAt,
+      });
       this.latestPhases.set(runId, 'finalizing');
       this.latestProgress.delete(runId);
       this.nextSequences.delete(runId);
@@ -484,12 +525,15 @@ export class CustomerRunCoordinator {
     if (observation.kind === 'tool') {
       const phase = observation.irreversible
         ? 'irreversible_tool'
-        : observation.protected ? 'state_change_tool' : 'read_only_tool';
+        : observation.protected
+          ? 'state_change_tool'
+          : 'read_only_tool';
       this.latestPhases.set(runId, phase);
       const updatePhase = this.options.store.updateCustomerRun(runId, {
         phase,
       });
-      const updateProgress = () => this.emitProgress(
+      const updateProgress = () =>
+        this.emitProgress(
           run,
           runId,
           observation.progressFamily ??
@@ -503,14 +547,18 @@ export class CustomerRunCoordinator {
           throw new CustomerRunSupersededError();
         }
       } else {
-        const [, progressCurrent] =
-          await Promise.all([updatePhase, updateProgress()]);
+        const [, progressCurrent] = await Promise.all([
+          updatePhase,
+          updateProgress(),
+        ]);
         if (!progressCurrent) throw new CustomerRunSupersededError();
       }
       return;
     }
     if (observation.kind === 'verified_state') {
-      await this.options.store.updateCustomerRun(runId, { phase: 'reconciling' });
+      await this.options.store.updateCustomerRun(runId, {
+        phase: 'reconciling',
+      });
       this.latestPhases.set(runId, 'reconciling');
       const current = this.latestProgress.get(runId);
       if (
@@ -534,8 +582,10 @@ export class CustomerRunCoordinator {
         throw new CustomerRunSupersededError();
       }
     } else {
-      const [, progressCurrent] =
-        await Promise.all([updatePhase, updateProgress()]);
+      const [, progressCurrent] = await Promise.all([
+        updatePhase,
+        updateProgress(),
+      ]);
       if (!progressCurrent) throw new CustomerRunSupersededError();
     }
   }
@@ -545,8 +595,15 @@ export class CustomerRunCoordinator {
     if (run) this.nextSequences.set(runId, run.nextEventSequence);
     if (run?.status !== 'cancelling') return false;
     const terminalAt = this.now();
-    await this.emit(runId, 'run_cancelled', { status: 'cancelled', message: 'Đã dừng theo yêu cầu.' });
-    await this.options.store.updateCustomerRun(runId, { status: 'cancelled', phase: 'finalizing', terminalAt });
+    await this.emit(runId, 'run_cancelled', {
+      status: 'cancelled',
+      message: 'Đã dừng theo yêu cầu.',
+    });
+    await this.options.store.updateCustomerRun(runId, {
+      status: 'cancelled',
+      phase: 'finalizing',
+      terminalAt,
+    });
     this.latestPhases.set(runId, 'finalizing');
     this.latestProgress.delete(runId);
     this.nextSequences.delete(runId);
@@ -561,10 +618,7 @@ export class CustomerRunCoordinator {
     cancellable: boolean,
   ): Promise<boolean> {
     const latest = this.latestProgress.get(runId);
-    if (
-      latest?.family === family &&
-      latest.cancellable === cancellable
-    ) {
+    if (latest?.family === family && latest.cancellable === cancellable) {
       return true;
     }
     this.latestProgress.set(runId, { family, cancellable });
@@ -607,8 +661,7 @@ export class CustomerRunCoordinator {
           fence: {
             kind: 'customer_run',
             runId: run.id,
-            sessionAuthorityGeneration:
-              run.sessionAuthorityGeneration,
+            sessionAuthorityGeneration: run.sessionAuthorityGeneration,
           },
           events: events.map((event, index) => ({
             schemaVersion: CUSTOMER_RUN_SCHEMA_VERSION,
@@ -621,10 +674,7 @@ export class CustomerRunCoordinator {
           })),
         });
       if (result.status === 'committed') {
-        this.nextSequences.set(
-          run.id,
-          expectedSequence + events.length,
-        );
+        this.nextSequences.set(run.id, expectedSequence + events.length);
         return true;
       }
       if (!(await this.isCurrent(run))) return false;
@@ -645,13 +695,16 @@ export class CustomerRunCoordinator {
       fence: {
         kind: 'customer_run',
         runId: run.id,
-        sessionAuthorityGeneration:
-          run.sessionAuthorityGeneration,
+        sessionAuthorityGeneration: run.sessionAuthorityGeneration,
       },
     });
   }
 
-  private async emit(runId: string, type: CustomerRunEventType, payload: Record<string, unknown>): Promise<void> {
+  private async emit(
+    runId: string,
+    type: CustomerRunEventType,
+    payload: Record<string, unknown>,
+  ): Promise<void> {
     await this.emitMany(runId, [{ type, payload }]);
   }
 
@@ -686,7 +739,10 @@ export class CustomerRunCoordinator {
         this.nextSequences.set(runId, expectedSequence + events.length);
         return;
       } catch (error) {
-        if (!(error instanceof CustomerRunSequenceConflictError) || attempt === 4) {
+        if (
+          !(error instanceof CustomerRunSequenceConflictError) ||
+          attempt === 4
+        ) {
           throw error;
         }
         this.nextSequences.set(runId, error.actualSequence);
@@ -694,9 +750,14 @@ export class CustomerRunCoordinator {
     }
   }
 
-  private now(): string { return (this.options.now?.() ?? new Date()).toISOString(); }
+  private now(): string {
+    return (this.options.now?.() ?? new Date()).toISOString();
+  }
   private sleep(milliseconds: number): Promise<void> {
-    return this.options.sleep?.(milliseconds) ?? new Promise((resolve) => setTimeout(resolve, milliseconds));
+    return (
+      this.options.sleep?.(milliseconds) ??
+      new Promise((resolve) => setTimeout(resolve, milliseconds))
+    );
   }
   private defer(task: () => Promise<void>): void {
     if (this.options.defer) this.options.defer(task);
@@ -706,8 +767,9 @@ export class CustomerRunCoordinator {
 
 export function splitCustomerText(text: string, maxEvents = 24): string[] {
   if (text.length === 0) return [];
-  const graphemes = [...new Intl.Segmenter('vi', { granularity: 'grapheme' }).segment(text)]
-    .map((part) => part.segment);
+  const graphemes = [
+    ...new Intl.Segmenter('vi', { granularity: 'grapheme' }).segment(text),
+  ].map((part) => part.segment);
   const count = Math.min(Math.max(1, maxEvents), 24, graphemes.length);
   const chunks: string[] = [];
   for (let index = 0; index < count; index += 1) {
@@ -718,10 +780,14 @@ export function splitCustomerText(text: string, maxEvents = 24): string[] {
   return chunks;
 }
 
-async function fingerprintFor(request: CustomerRunStartRequest): Promise<string> {
+async function fingerprintFor(
+  request: CustomerRunStartRequest,
+): Promise<string> {
   const encoded = new TextEncoder().encode(JSON.stringify(request));
   const digest = await crypto.subtle.digest('SHA-256', encoded);
-  return [...new Uint8Array(digest)].map((byte) => byte.toString(16).padStart(2, '0')).join('');
+  return [...new Uint8Array(digest)]
+    .map((byte) => byte.toString(16).padStart(2, '0'))
+    .join('');
 }
 
 function isSessionAuthorityUnavailable(error: unknown): boolean {
@@ -742,9 +808,7 @@ function startBody(
     status: run.status,
     nextSequence: 1,
     replayed,
-    ...(run.status === 'superseded'
-      ? { suppressed: true }
-      : {}),
+    ...(run.status === 'superseded' ? { suppressed: true } : {}),
     ...(agentMode ? { agentMode } : {}),
   };
 }

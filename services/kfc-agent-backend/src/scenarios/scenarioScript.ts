@@ -16,13 +16,24 @@ export interface ScenarioScriptJson {
   finalState: string;
   acceptance?: {
     noCartMutationBeforeUserTurn?: number;
-    cartAfterUserTurn?: Record<string, {
-      includedItems: Array<{ itemCode: string; quantity: number; unitPriceVnd?: number }>;
-      totalVnd: number;
-    }>;
+    cartAfterUserTurn?: Record<
+      string,
+      {
+        includedItems: Array<{
+          itemCode: string;
+          quantity: number;
+          unitPriceVnd?: number;
+        }>;
+        totalVnd: number;
+      }
+    >;
     assistantAfterUserTurnContains?: Record<string, string[]>;
     finalCart?: {
-      includedItems: Array<{ itemCode: string; quantity: number; unitPriceVnd?: number }>;
+      includedItems: Array<{
+        itemCode: string;
+        quantity: number;
+        unitPriceVnd?: number;
+      }>;
       excludedItemCodes: string[];
       totalVnd: number;
     };
@@ -35,8 +46,12 @@ export interface ScenarioScript extends ScenarioScriptJson {
   userTurns: ScenarioTurn[];
 }
 
-export async function loadScenarioScript(filePath: string): Promise<ScenarioScript> {
-  const raw = JSON.parse(await readFile(filePath, 'utf8')) as ScenarioScriptJson;
+export async function loadScenarioScript(
+  filePath: string,
+): Promise<ScenarioScript> {
+  const raw = JSON.parse(
+    await readFile(filePath, 'utf8'),
+  ) as ScenarioScriptJson;
   return {
     ...raw,
     userTurns: raw.turns.filter((turn) => turn.speaker === 'User'),

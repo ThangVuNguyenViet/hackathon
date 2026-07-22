@@ -35,7 +35,10 @@ export class AgentRunCoordinator {
     },
   ) {}
 
-  async recordPendingTurn(event: ConversationEvent, sessionId: string): Promise<AgentRunWakeupJob> {
+  async recordPendingTurn(
+    event: ConversationEvent,
+    sessionId: string,
+  ): Promise<AgentRunWakeupJob> {
     if (event.channel !== 'messenger' && event.channel !== 'zalo') {
       throw new Error(`Unsupported interruption channel: ${event.channel}`);
     }
@@ -74,14 +77,11 @@ export class AgentRunCoordinator {
         !currentRun.irreversibleToolName &&
         currentRun.status === 'scheduled'
       ) {
-        const updated = await this.input.store.updateAgentRun(
-          currentRun.id,
-          {
-            status: 'superseded',
-            deliveryStatus: 'suppressed',
-            completedAt,
-          },
-        );
+        const updated = await this.input.store.updateAgentRun(currentRun.id, {
+          status: 'superseded',
+          deliveryStatus: 'suppressed',
+          completedAt,
+        });
         superseded = updated.status === 'superseded';
       } else if (
         currentRun &&
@@ -91,14 +91,12 @@ export class AgentRunCoordinator {
         currentRun.executionLeaseToken
       ) {
         const result =
-          await this.input.store
-            .supersedeAgentRunExecutionIfNoLongerCurrent({
-              sessionId,
-              fence: agentRunExecutionFence(currentRun),
-              errorMessage:
-                'A newer customer turn invalidated the run owner',
-              completedAt,
-            });
+          await this.input.store.supersedeAgentRunExecutionIfNoLongerCurrent({
+            sessionId,
+            fence: agentRunExecutionFence(currentRun),
+            errorMessage: 'A newer customer turn invalidated the run owner',
+            completedAt,
+          });
         superseded = result.status === 'superseded';
       }
       if (currentRun && superseded) {
@@ -117,9 +115,9 @@ export class AgentRunCoordinator {
       }
     }
     const generation = advanced.state.generation;
-    const pendingTurnCount = (await this.input.store.listPendingCustomerTurns(sessionId)).filter(
-      (turn) => turn.status === 'pending',
-    ).length;
+    const pendingTurnCount = (
+      await this.input.store.listPendingCustomerTurns(sessionId)
+    ).filter((turn) => turn.status === 'pending').length;
     this.input.dashboard?.emitEvent({
       id: `dash_${sessionId}_${event.rawEventId}_pending`,
       sessionId,
@@ -164,9 +162,9 @@ export class AgentRunCoordinator {
       }
     }
 
-    const turns = (await this.input.store.listPendingCustomerTurns(job.sessionId)).filter(
-      (turn) => turn.status === 'pending',
-    );
+    const turns = (
+      await this.input.store.listPendingCustomerTurns(job.sessionId)
+    ).filter((turn) => turn.status === 'pending');
     if (turns.length === 0) {
       return { claimed: false, dispatch: false, reason: 'no_pending_turns' };
     }
@@ -179,14 +177,20 @@ export class AgentRunCoordinator {
       channel: turns[0]!.channel,
       externalUserId: turns[0]!.externalUserId,
       status: 'scheduled',
-      coalescedInputText: turns.map((turn, index) => `${index + 1}. ${turn.text}`).join('\n'),
+      coalescedInputText: turns
+        .map((turn, index) => `${index + 1}. ${turn.text}`)
+        .join('\n'),
       deliveryStatus: 'pending',
       scheduledAt: new Date().toISOString(),
     });
     const run = claim.run;
 
     for (const [index, turn] of turns.entries()) {
-      await this.input.store.linkAgentRunTurn({ runId: run.id, turnId: turn.turnId, sequence: index });
+      await this.input.store.linkAgentRunTurn({
+        runId: run.id,
+        turnId: turn.turnId,
+        sequence: index,
+      });
     }
     const ownership = await this.input.store.claimSessionAgentRunOwnership({
       sessionId: job.sessionId,
@@ -219,9 +223,10 @@ export class AgentRunCoordinator {
         claimed: false,
         dispatch: false,
         runId: run.id,
-        reason: ownership.state.generation === job.generation
-          ? 'ownership_lost'
-          : 'stale_generation',
+        reason:
+          ownership.state.generation === job.generation
+            ? 'ownership_lost'
+            : 'stale_generation',
       };
     }
 
@@ -242,15 +247,24 @@ export class AgentRunCoordinator {
     return { claimed: true, dispatch: true, runId: run.id };
   }
 
-  async claimDueRuns(now: string): Promise<Array<{
-    sessionId: string;
-    generation: number;
-  } & AgentRunWakeupClaimResult>> {
-    const states = await this.input.store.listDueSessionAgentStates(now, this.recoveryLimit());
-    const results: Array<{
-      sessionId: string;
-      generation: number;
-    } & AgentRunWakeupClaimResult> = [];
+  async claimDueRuns(now: string): Promise<
+    Array<
+      {
+        sessionId: string;
+        generation: number;
+      } & AgentRunWakeupClaimResult
+    >
+  > {
+    const states = await this.input.store.listDueSessionAgentStates(
+      now,
+      this.recoveryLimit(),
+    );
+    const results: Array<
+      {
+        sessionId: string;
+        generation: number;
+      } & AgentRunWakeupClaimResult
+    > = [];
     for (const state of states) {
       const result = await this.claimWakeupRun({
         channel: 'agent_run_wakeup',
@@ -259,7 +273,11 @@ export class AgentRunCoordinator {
         dueAt: state.debounceDeadlineAt ?? now,
         queuedAt: now,
       });
-      results.push({ sessionId: state.sessionId, generation: state.generation, ...result });
+      results.push({
+        sessionId: state.sessionId,
+        generation: state.generation,
+        ...result,
+      });
     }
     return results;
   }
@@ -295,9 +313,10 @@ function executionDispatchDecision(run: {
   if (run.status !== 'running') {
     return { dispatch: false, reason: 'already_claimed' };
   }
-  const expiry = run.executionLeaseExpiresAt === null
-    ? Number.NaN
-    : Date.parse(run.executionLeaseExpiresAt);
+  const expiry =
+    run.executionLeaseExpiresAt === null
+      ? Number.NaN
+      : Date.parse(run.executionLeaseExpiresAt);
   if (!Number.isFinite(expiry) || expiry > Date.now()) {
     return { dispatch: false, reason: 'execution_in_progress' };
   }

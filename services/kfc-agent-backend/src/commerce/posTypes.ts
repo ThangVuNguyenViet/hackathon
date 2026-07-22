@@ -1,11 +1,11 @@
 import type {
   ExternalCallContext,
   ProviderMutationIdentity,
-} from "../clients/interfaces.js";
-import type { Order, ToolResult } from "../domain/types.js";
+} from '../clients/interfaces.js';
+import type { Order, ToolResult } from '../domain/types.js';
 
 export type PosTicketStatus =
-  "accepted" | "preparing" | "ready" | "cancelled" | "rejected";
+  'accepted' | 'preparing' | 'ready' | 'cancelled' | 'rejected';
 
 export interface PosTicket {
   id: string;

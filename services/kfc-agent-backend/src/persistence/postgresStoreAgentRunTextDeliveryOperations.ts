@@ -26,12 +26,8 @@ import type {
   SupersedeAgentRunExecutionIfNoLongerCurrentInput,
   SupersedeAgentRunExecutionIfNoLongerCurrentResult,
 } from './contracts.js';
-import {
-  isConnectablePostgres,
-} from './postgresStoreRunOwner.js';
-import {
-  captureActivePostgresSessionAuthority,
-} from './postgresStoreSessionAuthority.js';
+import { isConnectablePostgres } from './postgresStoreRunOwner.js';
+import { captureActivePostgresSessionAuthority } from './postgresStoreSessionAuthority.js';
 import {
   agentRunFromRow,
   type AgentRunRow,
@@ -66,45 +62,37 @@ interface DeliveryAttemptTokenRow {
   delivery_attempt_token: string;
 }
 
-export class PostgresStoreAgentRunTextDeliveryOperations
-  extends PostgresStoreVerifiedRefOperations
-{
+export class PostgresStoreAgentRunTextDeliveryOperations extends PostgresStoreVerifiedRefOperations {
   async createAgentRunTextDelivery(
     input: CreatePendingAgentRunTextDeliveryInput,
   ): Promise<CreateAgentRunTextDeliveryResult> {
     const pending = await createPendingAgentRunTextDelivery(input);
-    return withPostgresDeliveryTransaction(
-      this.db,
-      async (client) => {
-        if (!await lockCurrentDeliveryExecution(client, pending)) {
-          return { status: 'stale' };
-        }
-        const existing = await readDelivery(client, pending.runId, true);
-        if (!existing) {
-          const inserted = await insertDelivery(client, pending);
-          return { status: 'created', record: inserted };
-        }
-        if (sameAgentRunTextDeliveryBinding(existing, pending)) {
-          return { status: 'replay', record: existing };
-        }
-        const rebound = await rebindRetryableAgentRunTextDelivery(
-          existing,
-          {
-            execution: input.execution,
-            channel: input.channel,
-            assistantTurnId: input.assistantTurnId,
-            recipientId: input.recipientId,
-            presentationText: input.presentationText,
-            updatedAt: input.createdAt,
-          },
-        );
-        if (rebound.status !== 'rebound') {
-          return { status: 'conflict', record: existing };
-        }
-        await writeDelivery(client, existing, rebound.record);
-        return { status: 'rebound', record: rebound.record };
-      },
-    );
+    return withPostgresDeliveryTransaction(this.db, async (client) => {
+      if (!(await lockCurrentDeliveryExecution(client, pending))) {
+        return { status: 'stale' };
+      }
+      const existing = await readDelivery(client, pending.runId, true);
+      if (!existing) {
+        const inserted = await insertDelivery(client, pending);
+        return { status: 'created', record: inserted };
+      }
+      if (sameAgentRunTextDeliveryBinding(existing, pending)) {
+        return { status: 'replay', record: existing };
+      }
+      const rebound = await rebindRetryableAgentRunTextDelivery(existing, {
+        execution: input.execution,
+        channel: input.channel,
+        assistantTurnId: input.assistantTurnId,
+        recipientId: input.recipientId,
+        presentationText: input.presentationText,
+        updatedAt: input.createdAt,
+      });
+      if (rebound.status !== 'rebound') {
+        return { status: 'conflict', record: existing };
+      }
+      await writeDelivery(client, existing, rebound.record);
+      return { status: 'rebound', record: rebound.record };
+    });
   }
 
   async getAgentRunTextDelivery(
@@ -116,33 +104,20 @@ export class PostgresStoreAgentRunTextDeliveryOperations
   async beginAgentRunTextDeliveryAttempt(
     input: BeginAgentRunTextDeliveryAttemptInput,
   ): Promise<BeginAgentRunTextDeliveryAttemptResult> {
-    return withPostgresDeliveryTransaction(
-      this.db,
-      async (client) => {
-        const observed = await readDelivery(
-          client,
-          input.execution.runId,
-          false,
-        );
-        if (!observed) return blockedBegin('execution_binding_mismatch');
-        if (!await lockCurrentDeliveryExecution(client, observed)) {
-          return blockedBegin('execution_binding_mismatch');
-        }
-        const existing = await readDelivery(
-          client,
-          input.execution.runId,
-          true,
-        );
-        if (!existing) return blockedBegin('execution_binding_mismatch');
-        const transition = beginAgentRunTextDeliveryAttempt(
-          existing,
-          input,
-        );
-        if (transition.status !== 'dispatch_authorized') {
-          return transition;
-        }
-        const tokenInserted = await client.query(
-          `INSERT INTO agent_run_text_delivery_attempts (
+    return withPostgresDeliveryTransaction(this.db, async (client) => {
+      const observed = await readDelivery(client, input.execution.runId, false);
+      if (!observed) return blockedBegin('execution_binding_mismatch');
+      if (!(await lockCurrentDeliveryExecution(client, observed))) {
+        return blockedBegin('execution_binding_mismatch');
+      }
+      const existing = await readDelivery(client, input.execution.runId, true);
+      if (!existing) return blockedBegin('execution_binding_mismatch');
+      const transition = beginAgentRunTextDeliveryAttempt(existing, input);
+      if (transition.status !== 'dispatch_authorized') {
+        return transition;
+      }
+      const tokenInserted = await client.query(
+        `INSERT INTO agent_run_text_delivery_attempts (
              run_id,
              delivery_attempt,
              delivery_attempt_token,
@@ -150,130 +125,101 @@ export class PostgresStoreAgentRunTextDeliveryOperations
            ) VALUES ($1, $2, $3, $4)
            ON CONFLICT DO NOTHING
            RETURNING run_id`,
-          [
-            existing.runId,
-            transition.record.deliveryAttempt,
-            transition.record.deliveryAttemptToken,
-            transition.record.updatedAt,
-          ],
-        );
-        if (tokenInserted.rowCount !== 1) {
-          return blockedBegin('delivery_attempt_token_reused');
-        }
-        await writeDelivery(client, existing, transition.record);
-        return transition;
-      },
-    );
+        [
+          existing.runId,
+          transition.record.deliveryAttempt,
+          transition.record.deliveryAttemptToken,
+          transition.record.updatedAt,
+        ],
+      );
+      if (tokenInserted.rowCount !== 1) {
+        return blockedBegin('delivery_attempt_token_reused');
+      }
+      await writeDelivery(client, existing, transition.record);
+      return transition;
+    });
   }
 
   async completeAgentRunTextDeliveryAttempt(
     input: CompleteAgentRunTextDeliveryAttemptInput,
   ): Promise<CompleteAgentRunTextDeliveryAttemptResult> {
-    return withPostgresDeliveryTransaction(
-      this.db,
-      async (client) => {
-        if (!await lockStoredExecution(client, input.execution)) {
-          return blockedCompletion('execution_binding_mismatch');
-        }
-        const existing = await readDelivery(
-          client,
-          input.execution.runId,
-          true,
-        );
-        if (!existing) {
-          return blockedCompletion('execution_binding_mismatch');
-        }
-        const transition = completeAgentRunTextDeliveryAttempt(
-          existing,
-          input,
-        );
-        if (transition.status !== 'transitioned') return transition;
-        await writeDelivery(client, existing, transition.record);
-        if (transition.record.status === 'confirmed_sent') {
-          await completeRunAsSent(
-            client,
-            transition.record,
-            input.updatedAt,
-          );
-        } else if (
-          transition.record.status === 'delivery_outcome_unknown'
-        ) {
-          await reconcileRunForUnknownDelivery(
-            client,
-            transition.record,
-            input.updatedAt,
-          );
-        }
-        return transition;
-      },
-    );
-  }
-
-  async reconcileAgentRunTextDelivery(
-    input: ReconcileAgentRunTextDeliveryInput,
-  ): Promise<ReconcileAgentRunTextDeliveryResult> {
-    return withPostgresDeliveryTransaction(
-      this.db,
-      async (client) => {
-        if (!await lockStoredExecution(client, input.execution)) {
-          return {
-            status: 'reconciliation_blocked',
-            reason: 'execution_binding_mismatch',
-          };
-        }
-        const existing = await readDelivery(
-          client,
-          input.execution.runId,
-          true,
-        );
-        if (!existing) {
-          return {
-            status: 'reconciliation_blocked',
-            reason: 'execution_binding_mismatch',
-          };
-        }
-        const transition = reconcileAgentRunTextDelivery(
-          existing,
-          input,
-        );
-        if (
-          transition.status !== 'reconciled' &&
-          transition.status !== 'replay'
-        ) {
-          return transition;
-        }
-        if (transition.status === 'reconciled') {
-          await writeDelivery(client, existing, transition.record);
-        }
+    return withPostgresDeliveryTransaction(this.db, async (client) => {
+      if (!(await lockStoredExecution(client, input.execution))) {
+        return blockedCompletion('execution_binding_mismatch');
+      }
+      const existing = await readDelivery(client, input.execution.runId, true);
+      if (!existing) {
+        return blockedCompletion('execution_binding_mismatch');
+      }
+      const transition = completeAgentRunTextDeliveryAttempt(existing, input);
+      if (transition.status !== 'transitioned') return transition;
+      await writeDelivery(client, existing, transition.record);
+      if (transition.record.status === 'confirmed_sent') {
+        await completeRunAsSent(client, transition.record, input.updatedAt);
+      } else if (transition.record.status === 'delivery_outcome_unknown') {
         await reconcileRunForUnknownDelivery(
           client,
           transition.record,
           input.updatedAt,
         );
+      }
+      return transition;
+    });
+  }
+
+  async reconcileAgentRunTextDelivery(
+    input: ReconcileAgentRunTextDeliveryInput,
+  ): Promise<ReconcileAgentRunTextDeliveryResult> {
+    return withPostgresDeliveryTransaction(this.db, async (client) => {
+      if (!(await lockStoredExecution(client, input.execution))) {
+        return {
+          status: 'reconciliation_blocked',
+          reason: 'execution_binding_mismatch',
+        };
+      }
+      const existing = await readDelivery(client, input.execution.runId, true);
+      if (!existing) {
+        return {
+          status: 'reconciliation_blocked',
+          reason: 'execution_binding_mismatch',
+        };
+      }
+      const transition = reconcileAgentRunTextDelivery(existing, input);
+      if (
+        transition.status !== 'reconciled' &&
+        transition.status !== 'replay'
+      ) {
         return transition;
-      },
-    );
+      }
+      if (transition.status === 'reconciled') {
+        await writeDelivery(client, existing, transition.record);
+      }
+      await reconcileRunForUnknownDelivery(
+        client,
+        transition.record,
+        input.updatedAt,
+      );
+      return transition;
+    });
   }
 
   async supersedeAgentRunExecutionIfNoLongerCurrent(
     input: SupersedeAgentRunExecutionIfNoLongerCurrentInput,
   ): Promise<SupersedeAgentRunExecutionIfNoLongerCurrentResult> {
-    return withPostgresDeliveryTransaction(
-      this.db,
-      async (client) => {
-        const session = await client.query<{ session_id: string }>(
-          `SELECT session_id FROM agent_runs WHERE id = $1`,
-          [input.fence.runId],
-        );
-        if (session.rows[0]?.session_id !== input.sessionId) {
-          return { status: 'stale' };
-        }
-        const authority = await captureActivePostgresSessionAuthority(
-          client,
-          input.sessionId,
-        );
-        const locked = await client.query<AgentRunRow>(
-          `SELECT *
+    return withPostgresDeliveryTransaction(this.db, async (client) => {
+      const session = await client.query<{ session_id: string }>(
+        `SELECT session_id FROM agent_runs WHERE id = $1`,
+        [input.fence.runId],
+      );
+      if (session.rows[0]?.session_id !== input.sessionId) {
+        return { status: 'stale' };
+      }
+      const authority = await captureActivePostgresSessionAuthority(
+        client,
+        input.sessionId,
+      );
+      const locked = await client.query<AgentRunRow>(
+        `SELECT *
            FROM agent_runs
            WHERE id = $1
              AND session_id = $2
@@ -283,54 +229,54 @@ export class PostgresStoreAgentRunTextDeliveryOperations
              AND execution_lease_token = $6
              AND status = 'running'
            FOR UPDATE`,
-          [
-            input.fence.runId,
-            input.sessionId,
-            input.fence.generation,
-            input.fence.sessionAuthorityGeneration,
-            input.fence.executionAttempt,
-            input.fence.executionLeaseToken,
-          ],
-        );
-        const row = locked.rows[0];
-        if (!row) {
-          return {
-            status: 'stale',
-            ...(await readAgentRun(client, input.fence.runId)),
-          };
-        }
-        const run = agentRunFromRow(row);
-        if (
-          run.irreversibleSideEffectAt !== null ||
-          run.irreversibleToolName !== null
-        ) {
-          return {
-            status: 'reconciliation_required',
-            reason: 'irreversible_outcome_unknown',
-            run,
-          };
-        }
-        const delivery = await readDelivery(client, run.id, true);
-        if (
-          delivery?.status === 'sending' ||
-          delivery?.status === 'delivery_outcome_unknown' ||
-          delivery?.status === 'confirmed_sent'
-        ) {
-          return {
-            status: 'reconciliation_required',
-            reason: 'delivery_outcome_unknown',
-            run,
-          };
-        }
-        if (
-          authority === run.sessionAuthorityGeneration &&
-          run.executionLeaseExpiresAt !== null &&
-          await sessionAgentRunIsCurrent(client, run)
-        ) {
-          return { status: 'still_current', run };
-        }
-        const updated = await client.query<AgentRunRow>(
-          `UPDATE agent_runs
+        [
+          input.fence.runId,
+          input.sessionId,
+          input.fence.generation,
+          input.fence.sessionAuthorityGeneration,
+          input.fence.executionAttempt,
+          input.fence.executionLeaseToken,
+        ],
+      );
+      const row = locked.rows[0];
+      if (!row) {
+        return {
+          status: 'stale',
+          ...(await readAgentRun(client, input.fence.runId)),
+        };
+      }
+      const run = agentRunFromRow(row);
+      if (
+        run.irreversibleSideEffectAt !== null ||
+        run.irreversibleToolName !== null
+      ) {
+        return {
+          status: 'reconciliation_required',
+          reason: 'irreversible_outcome_unknown',
+          run,
+        };
+      }
+      const delivery = await readDelivery(client, run.id, true);
+      if (
+        delivery?.status === 'sending' ||
+        delivery?.status === 'delivery_outcome_unknown' ||
+        delivery?.status === 'confirmed_sent'
+      ) {
+        return {
+          status: 'reconciliation_required',
+          reason: 'delivery_outcome_unknown',
+          run,
+        };
+      }
+      if (
+        authority === run.sessionAuthorityGeneration &&
+        run.executionLeaseExpiresAt !== null &&
+        (await sessionAgentRunIsCurrent(client, run))
+      ) {
+        return { status: 'still_current', run };
+      }
+      const updated = await client.query<AgentRunRow>(
+        `UPDATE agent_runs
            SET status = 'superseded',
                superseded_by_run_id = $2,
                delivery_status = 'suppressed',
@@ -343,23 +289,22 @@ export class PostgresStoreAgentRunTextDeliveryOperations
              AND execution_attempt = $5
              AND execution_lease_token = $6
            RETURNING *`,
-          [
-            run.id,
-            input.supersededByRunId ?? null,
-            input.errorMessage,
-            input.completedAt,
-            input.fence.executionAttempt,
-            input.fence.executionLeaseToken,
-          ],
-        );
-        const superseded = updated.rows[0];
-        if (!superseded) return { status: 'stale', run };
-        return {
-          status: 'superseded',
-          run: agentRunFromRow(superseded),
-        };
-      },
-    );
+        [
+          run.id,
+          input.supersededByRunId ?? null,
+          input.errorMessage,
+          input.completedAt,
+          input.fence.executionAttempt,
+          input.fence.executionLeaseToken,
+        ],
+      );
+      const superseded = updated.rows[0];
+      if (!superseded) return { status: 'stale', run };
+      return {
+        status: 'superseded',
+        run: agentRunFromRow(superseded),
+      };
+    });
   }
 }
 
@@ -448,12 +393,7 @@ async function sessionAgentRunIsCurrent(
        AND generation = $3
        AND clock_timestamp() < $4::timestamptz
      FOR UPDATE`,
-    [
-      run.sessionId,
-      run.id,
-      run.generation,
-      run.executionLeaseExpiresAt,
-    ],
+    [run.sessionId, run.id, run.generation, run.executionLeaseExpiresAt],
   );
   return result.rowCount === 1;
 }
@@ -581,10 +521,7 @@ async function writeDelivery(
 
 async function completeRunAsSent(
   client: PoolClient,
-  delivery: Extract<
-    AgentRunTextDeliveryRecord,
-    { status: 'confirmed_sent' }
-  >,
+  delivery: Extract<AgentRunTextDeliveryRecord, { status: 'confirmed_sent' }>,
   updatedAt: string,
 ): Promise<AgentRun> {
   const result = await client.query<AgentRunRow>(
@@ -662,9 +599,7 @@ async function readAgentRun(
     `SELECT * FROM agent_runs WHERE id = $1`,
     [runId],
   );
-  return result.rows[0]
-    ? { run: agentRunFromRow(result.rows[0]) }
-    : {};
+  return result.rows[0] ? { run: agentRunFromRow(result.rows[0]) } : {};
 }
 
 function deliverySelectColumns(alias?: string): string {

@@ -25,10 +25,9 @@ export async function lockPostgresSessionAuthority(
   client: PoolClient,
   sessionId: string,
 ): Promise<void> {
-  await client.query(
-    `SELECT pg_advisory_xact_lock(hashtextextended($1, 0))`,
-    [sessionId],
-  );
+  await client.query(`SELECT pg_advisory_xact_lock(hashtextextended($1, 0))`, [
+    sessionId,
+  ]);
 }
 
 export async function lockActivePostgresSessionAuthority(input: {
@@ -56,11 +55,9 @@ export async function captureActivePostgresSessionAuthority(
   );
   const row = result.rows[0];
   return row
-    ? (
-        row.agent_mode === 'ai_active'
-          ? Number(row.session_authority_generation)
-          : undefined
-      )
+    ? row.agent_mode === 'ai_active'
+      ? Number(row.session_authority_generation)
+      : undefined
     : 0;
 }
 
@@ -74,14 +71,8 @@ export async function transitionPostgresSessionAuthority(input: {
   const client = await input.db.connect();
   try {
     await client.query('BEGIN');
-    await lockPostgresSessionAuthority(
-      client,
-      input.operation.sessionId,
-    );
-    const current = await readLockedControl(
-      client,
-      input.operation.sessionId,
-    );
+    await lockPostgresSessionAuthority(client, input.operation.sessionId);
+    const current = await readLockedControl(client, input.operation.sessionId);
     if (
       current.agentMode === input.operation.agentMode &&
       current.assignedAgentId === input.operation.assignedAgentId
@@ -90,8 +81,7 @@ export async function transitionPostgresSessionAuthority(input: {
       return { status: 'unchanged', control: current };
     }
     if (
-      current.sessionAuthorityGeneration !==
-      input.operation.expectedGeneration
+      current.sessionAuthorityGeneration !== input.operation.expectedGeneration
     ) {
       await client.query('COMMIT');
       return { status: 'stale', control: current };

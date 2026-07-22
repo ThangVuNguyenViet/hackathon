@@ -1,6 +1,10 @@
 export type DemoAdminAuthorization =
   | { ok: true }
-  | { ok: false; status: 401 | 503; errorCode: 'demo_admin_unauthorized' | 'demo_admin_token_not_configured' };
+  | {
+      ok: false;
+      status: 401 | 503;
+      errorCode: 'demo_admin_unauthorized' | 'demo_admin_token_not_configured';
+    };
 
 function tokenMatches(left: string, right: string): boolean {
   const leftBytes = new TextEncoder().encode(left);
@@ -20,11 +24,20 @@ export function authorizeDemoAdminHeaders(input: {
 }): DemoAdminAuthorization {
   const expected = input.expectedToken?.trim();
   if (!expected) {
-    return { ok: false, status: 503, errorCode: 'demo_admin_token_not_configured' };
+    return {
+      ok: false,
+      status: 503,
+      errorCode: 'demo_admin_token_not_configured',
+    };
   }
-  const bearer = input.authorizationHeader?.match(/^Bearer\s+(.+)$/i)?.[1]?.trim();
+  const bearer = input.authorizationHeader
+    ?.match(/^Bearer\s+(.+)$/i)?.[1]
+    ?.trim();
   const headerToken = input.tokenHeader?.trim();
-  if ((bearer && tokenMatches(bearer, expected)) || (headerToken && tokenMatches(headerToken, expected))) {
+  if (
+    (bearer && tokenMatches(bearer, expected)) ||
+    (headerToken && tokenMatches(headerToken, expected))
+  ) {
     return { ok: true };
   }
   return { ok: false, status: 401, errorCode: 'demo_admin_unauthorized' };

@@ -19,9 +19,10 @@ export async function isD1RunCommitFenceCurrent(input: {
     return false;
   }
   const eligible = d1RunCommitEligibility(guard);
-  const row = await input.db.prepare(
-    `SELECT 1 AS current WHERE ${eligible.sql}`,
-  ).bind(...eligible.bindings).first<{ current: number }>();
+  const row = await input.db
+    .prepare(`SELECT 1 AS current WHERE ${eligible.sql}`)
+    .bind(...eligible.bindings)
+    .first<{ current: number }>();
   return row?.current === 1;
 }
 
@@ -38,19 +39,22 @@ export async function appendD1EventIfRunCurrent(input: {
     createdAt: new Date().toISOString(),
   };
   const eligible = d1RunCommitEligibility(operation);
-  const result = await input.db.prepare(
-    `INSERT INTO conversation_events
+  const result = await input.db
+    .prepare(
+      `INSERT INTO conversation_events
        (id, session_id, source_type, payload, created_at)
      SELECT ?, ?, ?, ?, ?
      WHERE ${eligible.sql}`,
-  ).bind(
-    event.id,
-    event.sessionId,
-    event.sourceType,
-    JSON.stringify(event.payload),
-    event.createdAt,
-    ...eligible.bindings,
-  ).run();
+    )
+    .bind(
+      event.id,
+      event.sessionId,
+      event.sourceType,
+      JSON.stringify(event.payload),
+      event.createdAt,
+      ...eligible.bindings,
+    )
+    .run();
   return Number(result.meta.changes ?? 0) === 1
     ? { status: 'committed', event }
     : { status: 'stale' };

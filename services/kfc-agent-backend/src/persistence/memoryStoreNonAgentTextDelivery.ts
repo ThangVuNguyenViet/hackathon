@@ -22,9 +22,7 @@ import {
   reconcileNonAgentTextDelivery,
   sameNonAgentTextDeliveryBinding,
 } from './nonAgentTextDelivery.js';
-import {
-  effectiveMemorySessionControl,
-} from './memoryStoreSessionAuthority.js';
+import { effectiveMemorySessionControl } from './memoryStoreSessionAuthority.js';
 
 function clone<Record>(record: Record): Record {
   return structuredClone(record);
@@ -148,7 +146,7 @@ export async function completeMemoryNonAgentTextDeliveryAttempt(
   }
   if (
     existing.sessionBindingDigest !==
-      await nonAgentTextDeliverySessionBindingDigest(input.sessionId)
+    (await nonAgentTextDeliverySessionBindingDigest(input.sessionId))
   ) {
     return {
       status: 'transition_blocked',
@@ -173,7 +171,7 @@ export async function reconcileMemoryNonAgentTextDelivery(
   }
   if (
     existing.sessionBindingDigest !==
-      await nonAgentTextDeliverySessionBindingDigest(input.sessionId)
+    (await nonAgentTextDeliverySessionBindingDigest(input.sessionId))
   ) {
     return {
       status: 'reconciliation_blocked',

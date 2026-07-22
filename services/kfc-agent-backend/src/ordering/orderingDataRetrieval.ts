@@ -32,19 +32,28 @@ export function tokens(value: string): string[] {
 }
 
 export function searchableTokens(value: string): string[] {
-  return tokens(value).filter((token) => token.length > 1 || /^\d+$/.test(token));
+  return tokens(value).filter(
+    (token) => token.length > 1 || /^\d+$/.test(token),
+  );
 }
 
 export function includesAll(haystack: string, query: string): boolean {
   const haystackText = normalizeSearchText(haystack);
   const queryTokens = searchableTokens(query);
-  return queryTokens.length > 0 && queryTokens.every((token) => haystackText.includes(token));
+  return (
+    queryTokens.length > 0 &&
+    queryTokens.every((token) => haystackText.includes(token))
+  );
 }
 
-export function modifierSearchText(modifier: GeneratedMenuModifier | undefined): string {
+export function modifierSearchText(
+  modifier: GeneratedMenuModifier | undefined,
+): string {
   if (!modifier) return '';
   const values: string[] = [];
-  const visitGroups = (groups: GeneratedMenuModifier['modifierGroups']): void => {
+  const visitGroups = (
+    groups: GeneratedMenuModifier['modifierGroups'],
+  ): void => {
     for (const group of groups) {
       values.push(group.name);
       for (const option of group.options) {
@@ -57,7 +66,9 @@ export function modifierSearchText(modifier: GeneratedMenuModifier | undefined):
   return values.join(' ');
 }
 
-export function toMenuModifierGroups(groups: GeneratedMenuModifier['modifierGroups']): MenuModifierGroup[] {
+export function toMenuModifierGroups(
+  groups: GeneratedMenuModifier['modifierGroups'],
+): MenuModifierGroup[] {
   return groups.map((group) => ({
     groupId: group.groupId,
     name: group.name,
@@ -75,7 +86,10 @@ export function toMenuModifierGroups(groups: GeneratedMenuModifier['modifierGrou
   }));
 }
 
-export function menuSearchRelevance(item: GeneratedMenuItem, query: string): number {
+export function menuSearchRelevance(
+  item: GeneratedMenuItem,
+  query: string,
+): number {
   const normalizedQuery = normalizeSearchText(query).trim();
   const name = normalizeSearchText(item.name);
   const category = normalizeSearchText(item.category);
@@ -106,7 +120,9 @@ export function storeProvenance(store: GeneratedStore): SourceProvenance {
   };
 }
 
-export function availabilityProvenance(store: GeneratedStoreAvailability): SourceProvenance {
+export function availabilityProvenance(
+  store: GeneratedStoreAvailability,
+): SourceProvenance {
   return {
     fixtureMode: store.provenance.fixtureMode,
     sourceFile: store.provenance.sourceFile,
@@ -114,7 +130,9 @@ export function availabilityProvenance(store: GeneratedStoreAvailability): Sourc
   };
 }
 
-export function offerProvenance(offer: GeneratedPromotionVoucherOffer): SourceProvenance {
+export function offerProvenance(
+  offer: GeneratedPromotionVoucherOffer,
+): SourceProvenance {
   return {
     fixtureMode: 'public_crawl_seed',
     sourceFile: offer.sourceFile,
@@ -122,7 +140,9 @@ export function offerProvenance(offer: GeneratedPromotionVoucherOffer): SourcePr
   };
 }
 
-export function paymentMethodProvenance(method: GeneratedPaymentMethod): GeneratedPaymentMethod['provenance'] {
+export function paymentMethodProvenance(
+  method: GeneratedPaymentMethod,
+): GeneratedPaymentMethod['provenance'] {
   return {
     fixtureMode: method.provenance.fixtureMode,
     sourceFile: method.provenance.sourceFile,
@@ -145,7 +165,9 @@ export function membershipProvenance(
   };
 }
 
-export function contentKind(page: GeneratedContentPage): ContentEvidence['kind'] {
+export function contentKind(
+  page: GeneratedContentPage,
+): ContentEvidence['kind'] {
   if (page.kind === 'allergen') return 'allergen';
   if (page.kind === 'promotion') return 'promotion';
   if (page.kind === 'news') return 'news';

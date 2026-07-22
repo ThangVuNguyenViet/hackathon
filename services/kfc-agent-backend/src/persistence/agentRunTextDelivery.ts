@@ -1,10 +1,6 @@
 import { z } from 'zod';
-import type {
-  ChannelTextSendOutcome,
-} from '../clients/interfaces.js';
-import {
-  MAXIMUM_AGENT_RUN_EXECUTION_ATTEMPTS,
-} from './agentRunExecutionLease.js';
+import type { ChannelTextSendOutcome } from '../clients/interfaces.js';
+import { MAXIMUM_AGENT_RUN_EXECUTION_ATTEMPTS } from './agentRunExecutionLease.js';
 
 const schemaVersion = 'kfc-agent-run-text-delivery-v1' as const;
 const sha256Pattern = /^[0-9a-f]{64}$/u;
@@ -36,18 +32,13 @@ function hasCompleteTokenHistory(value: {
     value.deliveryAttemptToken === null
       ? value.deliveryAttempt === 0 &&
         value.priorDeliveryAttemptTokens.length === 0
-      : value.priorDeliveryAttemptTokens.length ===
-          value.deliveryAttempt - 1 &&
-        !value.priorDeliveryAttemptTokens.includes(
-          value.deliveryAttemptToken,
-        );
+      : value.priorDeliveryAttemptTokens.length === value.deliveryAttempt - 1 &&
+        !value.priorDeliveryAttemptTokens.includes(value.deliveryAttemptToken);
   return (
     deliveryHistoryComplete &&
-    value.runExecutionOriginAttempt <=
-      value.runExecutionAttempt &&
+    value.runExecutionOriginAttempt <= value.runExecutionAttempt &&
     value.priorRunExecutionLeaseTokenDigests.length ===
-      value.runExecutionAttempt -
-        value.runExecutionOriginAttempt &&
+      value.runExecutionAttempt - value.runExecutionOriginAttempt &&
     !value.priorRunExecutionLeaseTokenDigests.includes(
       value.runExecutionLeaseTokenDigest,
     )
@@ -58,8 +49,7 @@ function lastDeliveryMatchesCurrentExecution(value: {
   lastDeliveryRunExecutionAttempt: number | null;
   runExecutionAttempt: number;
 }): boolean {
-  return value.lastDeliveryRunExecutionAttempt ===
-    value.runExecutionAttempt;
+  return value.lastDeliveryRunExecutionAttempt === value.runExecutionAttempt;
 }
 
 function confirmedNotSentExecutionIsRetryable(value: {
@@ -68,12 +58,8 @@ function confirmedNotSentExecutionIsRetryable(value: {
 }): boolean {
   return (
     value.lastDeliveryRunExecutionAttempt !== null &&
-    (
-      value.runExecutionAttempt ===
-        value.lastDeliveryRunExecutionAttempt ||
-      value.runExecutionAttempt ===
-        value.lastDeliveryRunExecutionAttempt + 1
-    )
+    (value.runExecutionAttempt === value.lastDeliveryRunExecutionAttempt ||
+      value.runExecutionAttempt === value.lastDeliveryRunExecutionAttempt + 1)
   );
 }
 
@@ -96,8 +82,7 @@ const priorRunExecutionLeaseTokenDigestsSchema = z
   .array(z.string().regex(sha256Pattern))
   .max(MAXIMUM_AGENT_RUN_EXECUTION_ATTEMPTS - 1)
   .refine((digests) => new Set(digests).size === digests.length, {
-    message:
-      'prior_run_execution_lease_token_digests_must_be_unique',
+    message: 'prior_run_execution_lease_token_digests_must_be_unique',
   });
 
 const outcomeCodeSchema = z
@@ -108,17 +93,18 @@ const outcomeCodeSchema = z
     message: 'outcome_code_must_be_trimmed',
   });
 
-const canonicalInstantSchema = z
-  .string()
-  .refine((value) => {
+const canonicalInstantSchema = z.string().refine(
+  (value) => {
     try {
       return new Date(value).toISOString() === value;
     } catch {
       return false;
     }
-  }, {
+  },
+  {
     message: 'instant_must_be_canonical_utc',
-  });
+  },
+);
 
 const executionBindingSchema = z
   .object({
@@ -138,8 +124,7 @@ const deliveryBaseSchema = z
     runExecutionLeaseTokenDigest: z.string().regex(sha256Pattern),
     priorRunExecutionLeaseTokenDigests:
       priorRunExecutionLeaseTokenDigestsSchema,
-    lastDeliveryRunExecutionAttempt:
-      runExecutionAttemptSchema.nullable(),
+    lastDeliveryRunExecutionAttempt: runExecutionAttemptSchema.nullable(),
     channel: z.enum(['messenger', 'zalo']),
     assistantTurnId: exactIdentifierSchema,
     recipientBindingDigest: z.string().regex(sha256Pattern),
@@ -176,12 +161,14 @@ const sendingDeliverySchema = deliveryBaseSchema
     outcomeCode: z.null(),
   })
   .strict()
-  .refine((value) => (
-    hasCompleteTokenHistory(value) &&
-    lastDeliveryMatchesCurrentExecution(value)
-  ), {
-    message: 'delivery_or_execution_token_history_incomplete',
-  });
+  .refine(
+    (value) =>
+      hasCompleteTokenHistory(value) &&
+      lastDeliveryMatchesCurrentExecution(value),
+    {
+      message: 'delivery_or_execution_token_history_incomplete',
+    },
+  );
 
 const confirmedNotSentDeliverySchema = deliveryBaseSchema
   .extend({
@@ -194,12 +181,14 @@ const confirmedNotSentDeliverySchema = deliveryBaseSchema
     outcomeCode: outcomeCodeSchema,
   })
   .strict()
-  .refine((value) => (
-    hasCompleteTokenHistory(value) &&
-    confirmedNotSentExecutionIsRetryable(value)
-  ), {
-    message: 'delivery_or_execution_token_history_incomplete',
-  });
+  .refine(
+    (value) =>
+      hasCompleteTokenHistory(value) &&
+      confirmedNotSentExecutionIsRetryable(value),
+    {
+      message: 'delivery_or_execution_token_history_incomplete',
+    },
+  );
 
 const confirmedSentDeliverySchema = deliveryBaseSchema
   .extend({
@@ -212,12 +201,14 @@ const confirmedSentDeliverySchema = deliveryBaseSchema
     outcomeCode: z.null(),
   })
   .strict()
-  .refine((value) => (
-    hasCompleteTokenHistory(value) &&
-    lastDeliveryMatchesCurrentExecution(value)
-  ), {
-    message: 'delivery_or_execution_token_history_incomplete',
-  });
+  .refine(
+    (value) =>
+      hasCompleteTokenHistory(value) &&
+      lastDeliveryMatchesCurrentExecution(value),
+    {
+      message: 'delivery_or_execution_token_history_incomplete',
+    },
+  );
 
 const unknownDeliverySchema = deliveryBaseSchema
   .extend({
@@ -230,22 +221,22 @@ const unknownDeliverySchema = deliveryBaseSchema
     outcomeCode: outcomeCodeSchema,
   })
   .strict()
-  .refine((value) => (
-    hasCompleteTokenHistory(value) &&
-    lastDeliveryMatchesCurrentExecution(value)
-  ), {
-    message: 'delivery_or_execution_token_history_incomplete',
-  });
+  .refine(
+    (value) =>
+      hasCompleteTokenHistory(value) &&
+      lastDeliveryMatchesCurrentExecution(value),
+    {
+      message: 'delivery_or_execution_token_history_incomplete',
+    },
+  );
 
-export const agentRunTextDeliveryRecordSchema = z.union(
-  [
-    pendingDeliverySchema,
-    sendingDeliverySchema,
-    confirmedNotSentDeliverySchema,
-    confirmedSentDeliverySchema,
-    unknownDeliverySchema,
-  ],
-);
+export const agentRunTextDeliveryRecordSchema = z.union([
+  pendingDeliverySchema,
+  sendingDeliverySchema,
+  confirmedNotSentDeliverySchema,
+  confirmedSentDeliverySchema,
+  unknownDeliverySchema,
+]);
 
 export type AgentRunTextDeliveryRecord = z.infer<
   typeof agentRunTextDeliveryRecordSchema
@@ -385,9 +376,7 @@ export async function createPendingAgentRunTextDelivery(
 ): Promise<Extract<AgentRunTextDeliveryRecord, { status: 'pending' }>> {
   const execution = executionBindingSchema.parse(input.execution);
   const channel = z.enum(['messenger', 'zalo']).parse(input.channel);
-  const assistantTurnId = exactIdentifierSchema.parse(
-    input.assistantTurnId,
-  );
+  const assistantTurnId = exactIdentifierSchema.parse(input.assistantTurnId);
   const recipientId = exactIdentifierSchema.parse(input.recipientId);
   if (input.presentationText.trim().length === 0) {
     throw new Error('agent_run_text_delivery_presentation_empty');
@@ -448,10 +437,7 @@ export async function rebindRetryableAgentRunTextDelivery(
   input: RebindRetryableAgentRunTextDeliveryInput,
 ): Promise<RebindRetryableAgentRunTextDeliveryResult> {
   const record = agentRunTextDeliveryRecordSchema.parse(rawRecord);
-  if (
-    record.status !== 'pending' &&
-    record.status !== 'confirmed_not_sent'
-  ) {
+  if (record.status !== 'pending' && record.status !== 'confirmed_not_sent') {
     return {
       status: 'rebind_blocked',
       reason: 'delivery_not_retryable',
@@ -459,8 +445,7 @@ export async function rebindRetryableAgentRunTextDelivery(
   }
   if (
     record.status === 'confirmed_not_sent' &&
-    record.lastDeliveryRunExecutionAttempt !==
-      record.runExecutionAttempt
+    record.lastDeliveryRunExecutionAttempt !== record.runExecutionAttempt
   ) {
     return {
       status: 'rebind_blocked',
@@ -468,15 +453,11 @@ export async function rebindRetryableAgentRunTextDelivery(
     };
   }
   const execution = executionBindingSchema.safeParse(input.execution);
-  const channel = z.enum(['messenger', 'zalo']).safeParse(
-    input.channel,
-  );
+  const channel = z.enum(['messenger', 'zalo']).safeParse(input.channel);
   const assistantTurnId = exactIdentifierSchema.safeParse(
     input.assistantTurnId,
   );
-  const recipientId = exactIdentifierSchema.safeParse(
-    input.recipientId,
-  );
+  const recipientId = exactIdentifierSchema.safeParse(input.recipientId);
   const updatedAt = nextUpdatedAt(record.updatedAt, input.updatedAt);
   if (
     !execution.success ||
@@ -496,27 +477,19 @@ export async function rebindRetryableAgentRunTextDelivery(
       reason: 'updated_at_invalid',
     };
   }
-  if (
-    execution.data.executionAttempt <= record.runExecutionAttempt
-  ) {
+  if (execution.data.executionAttempt <= record.runExecutionAttempt) {
     return {
       status: 'rebind_blocked',
       reason: 'execution_attempt_not_newer',
     };
   }
-  if (
-    execution.data.executionAttempt !==
-    record.runExecutionAttempt + 1
-  ) {
+  if (execution.data.executionAttempt !== record.runExecutionAttempt + 1) {
     return {
       status: 'rebind_blocked',
       reason: 'execution_attempt_not_next',
     };
   }
-  if (
-    execution.data.executionLeaseToken ===
-    record.runExecutionLeaseToken
-  ) {
+  if (execution.data.executionLeaseToken === record.runExecutionLeaseToken) {
     return {
       status: 'rebind_blocked',
       reason: 'execution_lease_token_reused',
@@ -531,8 +504,7 @@ export async function rebindRetryableAgentRunTextDelivery(
     record.runExecutionLeaseToken,
   ]);
   if (
-    currentExecutionLeaseTokenDigest !==
-    record.runExecutionLeaseTokenDigest
+    currentExecutionLeaseTokenDigest !== record.runExecutionLeaseTokenDigest
   ) {
     return {
       status: 'rebind_blocked',
@@ -554,20 +526,18 @@ export async function rebindRetryableAgentRunTextDelivery(
     currentExecutionLeaseTokenDigest,
   ];
 
-  const pendingForNewExecution =
-    await createPendingAgentRunTextDelivery({
-      execution: execution.data,
-      channel: channel.data,
-      assistantTurnId: assistantTurnId.data,
-      recipientId: recipientId.data,
-      presentationText: input.presentationText,
-      createdAt: updatedAt,
-    });
+  const pendingForNewExecution = await createPendingAgentRunTextDelivery({
+    execution: execution.data,
+    channel: channel.data,
+    assistantTurnId: assistantTurnId.data,
+    recipientId: recipientId.data,
+    presentationText: input.presentationText,
+    createdAt: updatedAt,
+  });
   if (
     pendingForNewExecution.runId !== record.runId ||
     pendingForNewExecution.channel !== record.channel ||
-    pendingForNewExecution.assistantTurnId !==
-      record.assistantTurnId ||
+    pendingForNewExecution.assistantTurnId !== record.assistantTurnId ||
     pendingForNewExecution.recipientBindingDigest !==
       record.recipientBindingDigest ||
     pendingForNewExecution.presentationBindingDigest !==
@@ -580,23 +550,20 @@ export async function rebindRetryableAgentRunTextDelivery(
   }
 
   const rebound = {
-      ...record,
-      runExecutionAttempt:
-        pendingForNewExecution.runExecutionAttempt,
-      runExecutionLeaseToken:
-        pendingForNewExecution.runExecutionLeaseToken,
-      runExecutionLeaseTokenDigest:
-        nextExecutionLeaseTokenDigest,
-      priorRunExecutionLeaseTokenDigests,
-      deliveryBindingDigest:
-        pendingForNewExecution.deliveryBindingDigest,
-      updatedAt,
-    };
+    ...record,
+    runExecutionAttempt: pendingForNewExecution.runExecutionAttempt,
+    runExecutionLeaseToken: pendingForNewExecution.runExecutionLeaseToken,
+    runExecutionLeaseTokenDigest: nextExecutionLeaseTokenDigest,
+    priorRunExecutionLeaseTokenDigests,
+    deliveryBindingDigest: pendingForNewExecution.deliveryBindingDigest,
+    updatedAt,
+  };
   return {
     status: 'rebound',
-    record: record.status === 'pending'
-      ? pendingDeliverySchema.parse(rebound)
-      : confirmedNotSentDeliverySchema.parse(rebound),
+    record:
+      record.status === 'pending'
+        ? pendingDeliverySchema.parse(rebound)
+        : confirmedNotSentDeliverySchema.parse(rebound),
   };
 }
 
@@ -606,10 +573,7 @@ export function beginAgentRunTextDeliveryAttempt(
 ): BeginAgentRunTextDeliveryAttemptResult {
   const record = agentRunTextDeliveryRecordSchema.parse(rawRecord);
   const execution = executionBindingSchema.safeParse(input.execution);
-  if (
-    !execution.success ||
-    !isExactExecutionBinding(record, execution.data)
-  ) {
+  if (!execution.success || !isExactExecutionBinding(record, execution.data)) {
     return blockedBegin('execution_binding_mismatch');
   }
   if (record.status === 'sending') {
@@ -621,27 +585,20 @@ export function beginAgentRunTextDeliveryAttempt(
   if (record.status === 'delivery_outcome_unknown') {
     return blockedBegin('delivery_outcome_unknown');
   }
-  if (
-    record.deliveryAttempt >= MAXIMUM_AGENT_RUN_TEXT_DELIVERY_ATTEMPTS
-  ) {
+  if (record.deliveryAttempt >= MAXIMUM_AGENT_RUN_TEXT_DELIVERY_ATTEMPTS) {
     return blockedBegin('attempts_exhausted');
   }
   if (
     record.status === 'confirmed_not_sent' &&
-    (
-      record.lastDeliveryRunExecutionAttempt === null ||
-      record.runExecutionAttempt !==
-        record.lastDeliveryRunExecutionAttempt + 1
-    )
+    (record.lastDeliveryRunExecutionAttempt === null ||
+      record.runExecutionAttempt !== record.lastDeliveryRunExecutionAttempt + 1)
   ) {
     return blockedBegin('execution_rebind_required');
   }
   if (input.nextDeliveryAttempt !== record.deliveryAttempt + 1) {
     return blockedBegin('delivery_attempt_not_next');
   }
-  const token = exactIdentifierSchema.safeParse(
-    input.deliveryAttemptToken,
-  );
+  const token = exactIdentifierSchema.safeParse(input.deliveryAttemptToken);
   if (!token.success || token.data === record.runExecutionLeaseToken) {
     return blockedBegin('delivery_attempt_token_invalid');
   }
@@ -657,9 +614,7 @@ export function beginAgentRunTextDeliveryAttempt(
   }
   const updatedAt = nextUpdatedAt(record.updatedAt, input.updatedAt);
   if (!updatedAt) return blockedBegin('updated_at_invalid');
-  const priorDeliveryAttemptTokens = [
-    ...record.priorDeliveryAttemptTokens,
-  ];
+  const priorDeliveryAttemptTokens = [...record.priorDeliveryAttemptTokens];
   if (record.deliveryAttemptToken !== null) {
     priorDeliveryAttemptTokens.push(record.deliveryAttemptToken);
   }
@@ -686,10 +641,7 @@ export function completeAgentRunTextDeliveryAttempt(
 ): CompleteAgentRunTextDeliveryAttemptResult {
   const record = agentRunTextDeliveryRecordSchema.parse(rawRecord);
   const execution = executionBindingSchema.safeParse(input.execution);
-  if (
-    !execution.success ||
-    !isExactExecutionBinding(record, execution.data)
-  ) {
+  if (!execution.success || !isExactExecutionBinding(record, execution.data)) {
     return blockedCompletion('execution_binding_mismatch');
   }
   if (record.status !== 'sending') {
@@ -705,9 +657,7 @@ export function completeAgentRunTextDeliveryAttempt(
   if (!updatedAt) return blockedCompletion('updated_at_invalid');
 
   if (input.outcome.status === 'confirmed_sent') {
-    const messageId = exactIdentifierSchema.safeParse(
-      input.outcome.messageId,
-    );
+    const messageId = exactIdentifierSchema.safeParse(input.outcome.messageId);
     if (!messageId.success) {
       return blockedCompletion('provider_message_id_invalid');
     }
@@ -723,9 +673,7 @@ export function completeAgentRunTextDeliveryAttempt(
     };
   }
 
-  const outcomeCode = outcomeCodeSchema.safeParse(
-    input.outcome.errorCode,
-  );
+  const outcomeCode = outcomeCodeSchema.safeParse(input.outcome.errorCode);
   if (!outcomeCode.success) {
     return blockedCompletion('outcome_code_invalid');
   }
@@ -759,10 +707,7 @@ export function reconcileAgentRunTextDelivery(
 ): ReconcileAgentRunTextDeliveryResult {
   const record = agentRunTextDeliveryRecordSchema.parse(rawRecord);
   const execution = executionBindingSchema.safeParse(input.execution);
-  if (
-    !execution.success ||
-    !isExactExecutionBinding(record, execution.data)
-  ) {
+  if (!execution.success || !isExactExecutionBinding(record, execution.data)) {
     return {
       status: 'reconciliation_blocked',
       reason: 'execution_binding_mismatch',
@@ -818,13 +763,9 @@ function isExactExecutionBinding(
   );
 }
 
-function nextUpdatedAt(
-  current: string,
-  candidate: string,
-): string | undefined {
+function nextUpdatedAt(current: string, candidate: string): string | undefined {
   const parsed = canonicalInstantSchema.safeParse(candidate);
-  return parsed.success &&
-    Date.parse(parsed.data) >= Date.parse(current)
+  return parsed.success && Date.parse(parsed.data) >= Date.parse(current)
     ? parsed.data
     : undefined;
 }

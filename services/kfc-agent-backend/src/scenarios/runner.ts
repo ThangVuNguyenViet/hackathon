@@ -34,26 +34,28 @@ export interface ScenarioTurnEvidence {
   stateBefore: ScenarioEvidenceState;
   stateAfter: ScenarioEvidenceState;
 }
-export type ScenarioEvidenceState = Partial<Pick<
-  AgentState,
-  | 'cart'
-  | 'address'
-  | 'addressDraft'
-  | 'fulfillment'
-  | 'orderPreview'
-  | 'order'
-  | 'paymentAttempt'
-  | 'handoff'
-  | 'menuSearchResults'
-  | 'menuItemDetail'
-  | 'menuModifierOptions'
-  | 'promotionContext'
-  | 'promotionOffers'
-  | 'customerContext'
-  | 'paymentMethodEvidence'
-  | 'contentEvidence'
-  | 'invoiceRequest'
->>;
+export type ScenarioEvidenceState = Partial<
+  Pick<
+    AgentState,
+    | 'cart'
+    | 'address'
+    | 'addressDraft'
+    | 'fulfillment'
+    | 'orderPreview'
+    | 'order'
+    | 'paymentAttempt'
+    | 'handoff'
+    | 'menuSearchResults'
+    | 'menuItemDetail'
+    | 'menuModifierOptions'
+    | 'promotionContext'
+    | 'promotionOffers'
+    | 'customerContext'
+    | 'paymentMethodEvidence'
+    | 'contentEvidence'
+    | 'invoiceRequest'
+  >
+>;
 
 export interface ScenarioRunResult {
   finalState: string;
@@ -90,8 +92,53 @@ function defaultFixturesRoot(): string {
   return join(dirname(fileURLToPath(import.meta.url)), '../..');
 }
 
-function sameTrace(left: ToolTraceEntry, right: ToolTraceEntry | undefined): boolean {
+function sameTrace(
+  left: ToolTraceEntry,
+  right: ToolTraceEntry | undefined,
+): boolean {
   return Boolean(right) && JSON.stringify(left) === JSON.stringify(right);
+}
+
+function scenarioAccessContext(
+  sessionId: string,
+  channel: Channel,
+): CustomerAccessContext {
+  const customerSurface = channel.startsWith('messenger')
+    ? 'messenger'
+    : channel.startsWith('zalo')
+      ? 'zalo'
+      : 'kfc-app-chat';
+  const external = customerSurface !== 'kfc-app-chat';
+  return {
+    tenantScope: 'kfc-vietnam',
+    customerSurface,
+    sessionRef: sessionId,
+    surfaceSubjectRef: external ? 'scenario_customer' : 'not-applicable',
+    kfcSubjectRef: 'scenario_customer',
+    authenticationState: 'authenticated',
+    membershipState: 'member',
+    channelAccountLinkState: external ? 'linked' : 'not-applicable',
+    subjectBindingState: 'verified',
+    authenticationEvidence: {
+      state: 'verified',
+      method: 'fixture',
+      issuer: 'scenario-runner',
+      audience: 'kfc-agent-backend',
+      authenticatedAt: '2026-01-01T00:00:00.000Z',
+      expiresAt: '2036-01-01T00:00:00.000Z',
+      evidenceRef: `scenario:${sessionId}`,
+    },
+    authorizedScopes: [
+      'customer:read',
+      'membership:read',
+      'membership:write',
+      'order:read',
+      'order:write',
+      'payment:read',
+      'payment:write',
+      'handoff:write',
+    ],
+  };
 }
 
 export async function runScenario(
@@ -104,8 +151,11 @@ export async function runScenario(
   const loadedFixtures = await loadGeneratedFixtures(
     options.fixturesRoot ?? defaultFixturesRoot(),
   );
-  const fixtures = options.transformFixtures?.(loadedFixtures) ?? loadedFixtures;
-  const mockOptions: MockClientOptions = { ...(options.mockClientOptions ?? {}) };
+  const fixtures =
+    options.transformFixtures?.(loadedFixtures) ?? loadedFixtures;
+  const mockOptions: MockClientOptions = {
+    ...(options.mockClientOptions ?? {}),
+  };
   let currentMockedUpstreamApi: MockedUpstreamApiProfile | undefined;
   if (options.mockedUpstreamApiForTurn) {
     mockOptions.mockedUpstreamApiProvider = () => currentMockedUpstreamApi;
@@ -119,7 +169,10 @@ export async function runScenario(
 
   const turnEvidence: ScenarioTurnEvidence[] = [];
   const toolTrace: ToolTraceEntry[] = [];
-  const toolTraceByTurn: Array<{ turnIndex: number; entries: ToolTraceEntry[] }> = [];
+  const toolTraceByTurn: Array<{
+    turnIndex: number;
+    entries: ToolTraceEntry[];
+  }> = [];
   const escalationReasons = new Set<string>();
   let priorTrace: ToolTraceEntry[] = [];
   let priorState: ScenarioEvidenceState = selectEvidenceState(
@@ -134,14 +187,16 @@ export async function runScenario(
     }
     currentMockedUpstreamApi = options.mockedUpstreamApiForTurn?.(turn.index);
     const startedAt = performance.now();
+    const channel = options.channelOverride ?? script.channel;
     const output = await runAgentTurn({
       sessionId,
       customerId: 'scenario_customer',
-      channel: options.channelOverride ?? script.channel,
+      channel,
       responseProfile: options.responseProfileOverride,
       text: turn.text,
       externalMessageId: `${script.id}:${turn.index}`,
-      accessContext: options.accessContext,
+      accessContext:
+        options.accessContext ?? scenarioAccessContext(sessionId, channel),
       clients,
       store,
       dashboard,

@@ -2,16 +2,12 @@ import type {
   AppendCustomerRunEventsIfRunCurrentInput,
   AppendCustomerRunEventsIfRunCurrentResult,
 } from './contracts.js';
-import {
-  prepareCustomerRunEventBatch,
-} from './customerRunEventCommit.js';
+import { prepareCustomerRunEventBatch } from './customerRunEventCommit.js';
 import {
   isConnectablePostgres,
   lockPostgresRunCommitOwner,
 } from './postgresStoreRunOwner.js';
-import type {
-  Queryable,
-} from './postgresStoreSupport.js';
+import type { Queryable } from './postgresStoreSupport.js';
 
 export async function appendPostgresCustomerRunEventsIfRunCurrent(input: {
   db: Queryable;
@@ -27,7 +23,7 @@ export async function appendPostgresCustomerRunEventsIfRunCurrent(input: {
   const client = await input.db.connect();
   try {
     await client.query('BEGIN');
-    if (!await lockPostgresRunCommitOwner(client, input.operation)) {
+    if (!(await lockPostgresRunCommitOwner(client, input.operation))) {
       await client.query('COMMIT');
       return { status: 'stale' };
     }

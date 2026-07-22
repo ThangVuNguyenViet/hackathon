@@ -2,15 +2,9 @@ import {
   CustomerRunIdempotencyConflictError,
   type CustomerRun,
 } from '../customerRuns/contracts.js';
-import type {
-  CreateCustomerRunInput,
-} from './contracts.js';
-import {
-  isConnectablePostgres,
-} from './postgresStoreRunOwner.js';
-import {
-  captureActivePostgresSessionAuthority,
-} from './postgresStoreSessionAuthority.js';
+import type { CreateCustomerRunInput } from './contracts.js';
+import { isConnectablePostgres } from './postgresStoreRunOwner.js';
+import { captureActivePostgresSessionAuthority } from './postgresStoreSessionAuthority.js';
 import {
   customerRunFromRow,
   type CustomerRunRow,
@@ -37,10 +31,7 @@ export async function createPostgresCustomerRun(input: {
        WHERE session_id = $1
          AND client_message_id = $2
        FOR UPDATE`,
-      [
-        input.operation.sessionId,
-        input.operation.clientMessageId,
-      ],
+      [input.operation.sessionId, input.operation.clientMessageId],
     );
     if (existing.rows[0]) {
       const run = customerRunFromRow(existing.rows[0]);

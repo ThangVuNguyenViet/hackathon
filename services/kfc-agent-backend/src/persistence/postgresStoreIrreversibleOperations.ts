@@ -7,12 +7,8 @@ import type {
   MarkIrreversibleOperationOutcomeUnknownIfExpiredInput,
   MarkIrreversibleOperationOutcomeUnknownIfExpiredResult,
 } from './contracts.js';
-import {
-  isConnectablePostgres,
-} from './postgresStoreRunOwner.js';
-import {
-  captureActivePostgresSessionAuthority,
-} from './postgresStoreSessionAuthority.js';
+import { isConnectablePostgres } from './postgresStoreRunOwner.js';
+import { captureActivePostgresSessionAuthority } from './postgresStoreSessionAuthority.js';
 import type {
   IrreversibleOperationRow,
   Queryable,
@@ -27,11 +23,7 @@ export async function reservePostgresIrreversibleOperation(input: {
       client,
       input.operation.sessionId,
     );
-    const current = await readOperationRow(
-      client,
-      input.operation,
-      true,
-    );
+    const current = await readOperationRow(client, input.operation, true);
     if (current) {
       return reserveExistingOperation({
         client,
@@ -69,8 +61,9 @@ export async function reservePostgresIrreversibleOperation(input: {
         now,
       ],
     );
-    const row = inserted.rows[0] ??
-      await readOperationRow(client, input.operation, true);
+    const row =
+      inserted.rows[0] ??
+      (await readOperationRow(client, input.operation, true));
     if (!row) throw new Error('postgres_operation_reservation_missing');
     if (inserted.rows[0] === undefined) {
       return reserveExistingOperation({
@@ -99,16 +92,10 @@ export async function getPostgresIrreversibleOperation(input: {
       client,
       input.operation.sessionId,
     );
-    const current = await readOperationRow(
-      client,
-      input.operation,
-      true,
-    );
-    return (
-      current &&
+    const current = await readOperationRow(client, input.operation, true);
+    return current &&
       authority !== undefined &&
       current.session_authority_generation === authority
-    )
       ? existingOperationResult(current)
       : undefined;
   });
@@ -154,11 +141,7 @@ export async function completePostgresIrreversibleOperation(input: {
         ],
       );
     }
-    const current = await readOperationRow(
-      client,
-      input.operation,
-      true,
-    );
+    const current = await readOperationRow(client, input.operation, true);
     if (!current) {
       throw new Error(
         `Irreversible operation reservation not found: ${
@@ -166,34 +149,26 @@ export async function completePostgresIrreversibleOperation(input: {
         }`,
       );
     }
-    return (
-      authority === input.owner.sessionAuthorityGeneration &&
+    return authority === input.owner.sessionAuthorityGeneration &&
       current.session_authority_generation ===
         input.owner.sessionAuthorityGeneration &&
       current.status === 'completed' &&
       current.result_json
-    )
       ? { status: 'completed', result: current.result_json }
       : { status: 'lost' };
   });
 }
 
-export async function markPostgresIrreversibleOperationOutcomeUnknownIfExpired(
-  input: {
-    db: Queryable;
-    operation: MarkIrreversibleOperationOutcomeUnknownIfExpiredInput;
-  },
-): Promise<MarkIrreversibleOperationOutcomeUnknownIfExpiredResult> {
+export async function markPostgresIrreversibleOperationOutcomeUnknownIfExpired(input: {
+  db: Queryable;
+  operation: MarkIrreversibleOperationOutcomeUnknownIfExpiredInput;
+}): Promise<MarkIrreversibleOperationOutcomeUnknownIfExpiredResult> {
   return withOperationTransaction(input.db, async (client) => {
     const authority = await captureActivePostgresSessionAuthority(
       client,
       input.operation.sessionId,
     );
-    const current = await readOperationRow(
-      client,
-      input.operation,
-      true,
-    );
+    const current = await readOperationRow(client, input.operation, true);
     if (
       !current ||
       authority === undefined ||
@@ -313,9 +288,7 @@ async function reserveExistingOperation(input: {
   const leaseExpired =
     input.current.lease_expires_at !== null &&
     new Date(input.current.lease_expires_at) <= now;
-  if (
-    (input.current.status === 'unknown' || leaseExpired)
-  ) {
+  if (input.current.status === 'unknown' || leaseExpired) {
     const leaseToken = crypto.randomUUID();
     const leaseExpiresAt = new Date(now.getTime() + 30_000);
     const claimed = await input.client.query<IrreversibleOperationRow>(

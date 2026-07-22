@@ -18,22 +18,11 @@ import { replaceVerifiedCollection } from '../ordering/verifiedCollections.js';
 import { selectedPaymentMethodAuthorityMatchesActiveCollection } from '../ordering/paymentMethodAuthority.js';
 import { paymentAttemptForVerifiedOrder } from '../ordering/paymentOrderAuthority.js';
 import type { MenuItem } from '../domain/types.js';
-import { orderWithoutDeliveryEstimate } from '../domain/orderStatusEvidence.js';
-import type { ExternalCallContext } from '../clients/interfaces.js';
 import type { ConversationStore } from '../persistence/memoryStore.js';
-import {
-  authorizeCustomerAccess,
-  createUnverifiedCustomerAccessContext,
-} from '../security/customerAccessContext.js';
 import {
   type AgentTurnInput,
   type VerifiedStateSnapshot,
 } from './agentTurn.js';
-import {
-  contextPolicyIsActive,
-  contextPolicyRequiresConfirmation,
-  type ContextPolicyDirective,
-} from './contextPolicy.js';
 import type { AgentState } from './agentState.js';
 import { applySuccessfulOrderPaymentResult } from './paymentVerifiedState.js';
 import {
@@ -330,7 +319,6 @@ export function extractVerifiedStateSnapshot(
     verifiedCollections: snapshot.verifiedCollections,
     activeCollectionKeys: snapshot.activeCollectionKeys,
     activeMenuCollection: snapshot.activeMenuCollection,
-    commerceApprovalReceipts: snapshot.commerceApprovalReceipts,
     menuItemDetail: snapshot.menuItemDetail,
     menuModifierOptions: snapshot.menuModifierOptions,
     customerContext: customerContextWithoutSavedAddresses(
@@ -362,103 +350,6 @@ export async function loadPriorVerifiedState(
   return {};
 }
 
-export async function hydrateRecentOrderContext(
-  input: AgentTurnInput,
-  priorVerifiedState: Partial<VerifiedStateSnapshot>,
-  policy: ContextPolicyDirective,
-  externalCallContext: ExternalCallContext,
-): Promise<Partial<VerifiedStateSnapshot>> {
-  const access = authorizeCustomerAccess(
-    input.accessContext ?? createUnverifiedCustomerAccessContext(input),
-    {
-      channel: input.channel,
-      sessionId: input.sessionId,
-      customerId: input.customerId,
-      scope: 'customer:read',
-    },
-  );
-  if (!access.allowed) {
-    return {
-      ...priorVerifiedState,
-      customerContext: undefined,
-    };
-  }
-
-  let customerContext = customerContextWithoutSavedAddresses(
-    priorVerifiedState.customerContext,
-  );
-  const needsCustomer =
-    contextPolicyIsActive(policy, 'customer') ||
-    contextPolicyIsActive(policy, 'fulfillment') ||
-    contextPolicyIsActive(policy, 'membership') ||
-    contextPolicyIsActive(policy, 'recentOrder');
-  if (needsCustomer && (customerContext?.favorites.length ?? 0) === 0) {
-    const favoriteItems = await input.clients.customer.getFavoriteItems(
-      input.customerId,
-      externalCallContext,
-    );
-    if (favoriteItems.ok && favoriteItems.value) {
-      customerContext = {
-        savedAddresses: [],
-        recentOrders: customerContext?.recentOrders ?? [],
-        favorites: favoriteItems.value,
-        loyaltyPoints: customerContext?.loyaltyPoints,
-      };
-    }
-  }
-
-  const needsRecentOrder =
-    contextPolicyIsActive(policy, 'recentOrder') ||
-    contextPolicyRequiresConfirmation(policy, 'recentOrder') ||
-    contextPolicyIsActive(policy, 'order') ||
-    contextPolicyIsActive(policy, 'payment');
-  if (!needsRecentOrder || priorVerifiedState.order) {
-    return { ...priorVerifiedState, customerContext };
-  }
-
-  const result = await input.clients.customer.getRecentOrder(
-    input.customerId,
-    externalCallContext,
-  );
-  if (!result.ok || !result.value)
-    return { ...priorVerifiedState, customerContext };
-
-  const recentOrder = orderWithoutDeliveryEstimate(result.value);
-  const paymentStatus =
-    recentOrder.paymentStatus === 'not_started'
-      ? 'pending'
-      : recentOrder.paymentStatus;
-  customerContext = {
-    savedAddresses: [],
-    recentOrders: [recentOrder, ...(customerContext?.recentOrders ?? [])],
-    favorites: customerContext?.favorites ?? [],
-    loyaltyPoints: customerContext?.loyaltyPoints,
-  };
-  const shouldHydrateActiveOrder =
-    contextPolicyIsActive(policy, 'order') ||
-    contextPolicyIsActive(policy, 'payment');
-  if (!shouldHydrateActiveOrder) {
-    return {
-      ...priorVerifiedState,
-      customerContext,
-    };
-  }
-
-  return {
-    ...priorVerifiedState,
-    order: recentOrder,
-    cart: priorVerifiedState.cart ?? recentOrder.cart,
-    paymentAttempt: paymentAttemptForVerifiedOrder(
-      priorVerifiedState.paymentAttempt,
-      recentOrder,
-    ) ?? {
-      orderId: recentOrder.id,
-      status: paymentStatus,
-    },
-    customerContext,
-  };
-}
-
 export function buildVerifiedStateSnapshot(
   state: AgentState,
 ): VerifiedStateSnapshot {
@@ -473,17 +364,15 @@ export function buildVerifiedStateSnapshot(
     if (!quoteUsedSavedAddressRef || !state.fulfillment) {
       return state.fulfillment;
     }
-    const {
-      resolvedAddress: _privateSavedAddress,
-      ...checkpointSafeFulfillment
-    } = state.fulfillment;
-    return checkpointSafeFulfillment;
+    const { resolvedAddress: _privateSavedAddress, ...persistableFulfillment } =
+      state.fulfillment;
+    return persistableFulfillment;
   })();
   return {
     cart: state.cart,
     // A saved-address quote may use raw provider data in memory for the
     // current response, but only its opaque ref may cross the durable
-    // checkpoint boundary. Explicit provider-resolved addresses remain
+    // persistence boundary. Explicit provider-resolved addresses remain
     // persistable because their source was the customer's own model-visible
     // input rather than a private saved-address lookup.
     address: quoteUsedSavedAddressRef ? undefined : state.address,
@@ -501,7 +390,6 @@ export function buildVerifiedStateSnapshot(
     verifiedCollections: state.verifiedCollections,
     activeCollectionKeys: state.activeCollectionKeys,
     activeMenuCollection: state.activeMenuCollection,
-    commerceApprovalReceipts: state.commerceApprovalReceipts,
     menuItemDetail: state.menuItemDetail,
     menuModifierOptions: state.menuModifierOptions,
     customerContext: customerContextWithoutSavedAddresses(
@@ -607,7 +495,6 @@ function clearFailedFulfillmentQuote(state: AgentState): void {
   state.address = undefined;
   state.orderPreview = undefined;
   state.exactCartAvailabilityObservation = undefined;
-  state.userConfirmedOrder = false;
   repriceCartWithDeliveryFee(state, 0);
 }
 
@@ -675,7 +562,6 @@ export function applyToolResultToState(
       if (!availabilitySource) {
         state.exactCartAvailabilityObservation = undefined;
         state.orderPreview = undefined;
-        state.userConfirmedOrder = false;
         if (matchesActiveFulfillment) state.fulfillment = undefined;
         pushEscalationReasons(state, ['tool_execution_failed']);
         return;
@@ -702,7 +588,6 @@ export function applyToolResultToState(
       );
       if (unavailableCartItemCodes.length > 0) {
         state.orderPreview = undefined;
-        state.userConfirmedOrder = false;
         pushEscalationReasons(state, ['item_unavailable_before_confirmation']);
       }
       return;

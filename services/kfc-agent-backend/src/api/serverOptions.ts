@@ -1,49 +1,42 @@
-import type { BuildServerOptions } from "./server.js";
-import type { AppEnv } from "../config/env.js";
+import type { BuildServerOptions } from './server.js';
+import type { AppEnv } from '../config/env.js';
 import {
   createAgentChatModel,
   resolveAgentModelProfile,
-} from "../config/agentModelProfile.js";
+} from '../config/agentModelProfile.js';
 import {
   createMonitorChatModel,
   resolveMonitorModelProfile,
-} from "../config/monitorModelProfile.js";
-import { ModelMonitorJudge } from "../llm/monitorJudge.js";
-import { createKfcCommerceGatewayClients } from "../clients/kfcCommerceGateway.js";
-import { createHttpPosClient } from "../commerce/httpPosClient.js";
-import { createOmsWithPos } from "../commerce/omsWithPos.js";
-import { LangSmithAgentTracer } from "../observability/langsmithAgentTracer.js";
-import { LangSmithShowcaseScenarioSource } from "../showcase/showcase.js";
+} from '../config/monitorModelProfile.js';
+import { ModelMonitorJudge } from '../llm/monitorJudge.js';
+import { createKfcCommerceGatewayClients } from '../clients/kfcCommerceGateway.js';
+import { createHttpPosClient } from '../commerce/httpPosClient.js';
+import { createOmsWithPos } from '../commerce/omsWithPos.js';
+import { LangSmithAgentTracer } from '../observability/langsmithAgentTracer.js';
+import { LangSmithShowcaseScenarioSource } from '../showcase/showcase.js';
 
 function optionalValue(value: string | undefined): string | undefined {
   const normalized = value?.trim();
   return normalized ? normalized : undefined;
 }
 
-// Older callers may omit the switch; an absent mode always takes the
-// resolver's production-only default.
-type ServerOptionsEnv = Omit<AppEnv, "KFC_AGENT_PROFILE_MODE"> &
-  Partial<Pick<AppEnv, "KFC_AGENT_PROFILE_MODE">>;
-
-export function buildServerOptionsFromEnv(
-  env: ServerOptionsEnv,
-): BuildServerOptions {
+export function buildServerOptionsFromEnv(env: AppEnv): BuildServerOptions {
   const openAiApiKey = optionalValue(env.OPENAI_API_KEY);
   const openAiBaseUrl = optionalValue(env.OPENAI_BASE_URL);
   const googleApiKey = optionalValue(env.GOOGLE_API_KEY);
   const agentIdentity = resolveAgentModelProfile({
     provider: env.KFC_AGENT_PROVIDER,
     model: optionalValue(env.KFC_AGENT_MODEL),
-    mode: env.KFC_AGENT_PROFILE_MODE,
   });
   const monitorIdentity = resolveMonitorModelProfile({
     agentProvider: agentIdentity.provider,
     provider: env.KFC_MONITOR_PROVIDER,
     model: optionalValue(env.KFC_MONITOR_MODEL),
   });
-  const agentConfigured = agentIdentity.provider === "openai"
-    ? Boolean(openAiApiKey)
-    : Boolean(googleApiKey);
+  const agentConfigured =
+    agentIdentity.provider === 'openai'
+      ? Boolean(openAiApiKey)
+      : Boolean(googleApiKey);
   const agent = agentConfigured
     ? {
         identity: agentIdentity,
@@ -55,15 +48,16 @@ export function buildServerOptionsFromEnv(
         }),
       }
     : undefined;
-  const monitorConfigured = monitorIdentity.provider === "openai"
-    ? Boolean(openAiApiKey)
-    : Boolean(googleApiKey);
+  const monitorConfigured =
+    monitorIdentity.provider === 'openai'
+      ? Boolean(openAiApiKey)
+      : Boolean(googleApiKey);
   const monitorExplicitlyConfigured =
     env.KFC_MONITOR_PROVIDER !== undefined ||
     optionalValue(env.KFC_MONITOR_MODEL) !== undefined;
   if (monitorExplicitlyConfigured && !monitorConfigured) {
     throw new Error(
-      `${monitorIdentity.provider === "openai" ? "OPENAI_API_KEY" : "GOOGLE_API_KEY"} is required for the explicitly configured KFC monitor provider`,
+      `${monitorIdentity.provider === 'openai' ? 'OPENAI_API_KEY' : 'GOOGLE_API_KEY'} is required for the explicitly configured KFC monitor provider`,
     );
   }
   const monitorJudge = monitorConfigured
@@ -84,22 +78,25 @@ export function buildServerOptionsFromEnv(
   const posBaseUrl = optionalValue(env.KFC_POS_BASE_URL);
   const posToken = optionalValue(env.KFC_POS_TOKEN);
   if (
-    env.KFC_COMMERCE_MODE === "gateway" &&
-    (!commerceBaseUrl || !commerceToken || !menuApiUrl || !env.KFC_COMMERCE_ENVIRONMENT)
+    env.KFC_COMMERCE_MODE === 'gateway' &&
+    (!commerceBaseUrl ||
+      !commerceToken ||
+      !menuApiUrl ||
+      !env.KFC_COMMERCE_ENVIRONMENT)
   ) {
     throw new Error(
-      "KFC_COMMERCE_GATEWAY_BASE_URL, KFC_COMMERCE_GATEWAY_TOKEN, KFC_MENU_API_URL, and KFC_COMMERCE_ENVIRONMENT are required in gateway mode",
+      'KFC_COMMERCE_GATEWAY_BASE_URL, KFC_COMMERCE_GATEWAY_TOKEN, KFC_MENU_API_URL, and KFC_COMMERCE_ENVIRONMENT are required in gateway mode',
     );
   }
   const commerceGateway =
-    env.KFC_COMMERCE_MODE === "gateway" && commerceBaseUrl && commerceToken
+    env.KFC_COMMERCE_MODE === 'gateway' && commerceBaseUrl && commerceToken
       ? createKfcCommerceGatewayClients({
           baseUrl: commerceBaseUrl,
           token: commerceToken,
         })
       : undefined;
   const posClient =
-    env.KFC_POS_MODE === "http" && posBaseUrl && posToken
+    env.KFC_POS_MODE === 'http' && posBaseUrl && posToken
       ? createHttpPosClient({ baseUrl: posBaseUrl, token: posToken })
       : undefined;
   return {
@@ -132,7 +129,7 @@ export function buildServerOptionsFromEnv(
             datasetName: env.KFC_SHOWCASE_DATASET,
             projectName: env.LANGSMITH_PROJECT,
           }),
-          releaseSha: env.RELEASE_GIT_SHA.trim() || "unknown",
+          releaseSha: env.RELEASE_GIT_SHA.trim() || 'unknown',
           agent: agentIdentity,
         }
       : undefined,
@@ -144,24 +141,26 @@ export function buildServerOptionsFromEnv(
             : commerceGateway.oms,
         }
       : undefined,
-    catalog: env.KFC_COMMERCE_MODE === "gateway" && menuApiUrl && env.KFC_COMMERCE_ENVIRONMENT
-      ? {
-          sourceUrl: menuApiUrl,
-          environment: env.KFC_COMMERCE_ENVIRONMENT,
-          fallbackTtlSeconds: env.CATALOG_TTL_SECONDS ?? 300,
-        }
-      : undefined,
+    catalog:
+      env.KFC_COMMERCE_MODE === 'gateway' &&
+      menuApiUrl &&
+      env.KFC_COMMERCE_ENVIRONMENT
+        ? {
+            sourceUrl: menuApiUrl,
+            environment: env.KFC_COMMERCE_ENVIRONMENT,
+            fallbackTtlSeconds: env.CATALOG_TTL_SECONDS ?? 300,
+          }
+        : undefined,
     readiness: {
       agentConfigured,
       monitorConfigured: monitorJudge !== undefined,
       release: {
-        gitSha: env.RELEASE_GIT_SHA.trim() || "unknown",
-        deploymentId: env.RELEASE_DEPLOYMENT_ID.trim() || "unknown",
-        builtAt: env.RELEASE_BUILT_AT || "unknown",
-        dirty: env.RELEASE_DIRTY !== "false",
+        gitSha: env.RELEASE_GIT_SHA.trim() || 'unknown',
+        deploymentId: env.RELEASE_DEPLOYMENT_ID.trim() || 'unknown',
+        builtAt: env.RELEASE_BUILT_AT || 'unknown',
+        dirty: env.RELEASE_DIRTY !== 'false',
       },
       runtime: {
-        agentProfileMode: env.KFC_AGENT_PROFILE_MODE ?? 'production',
         commerceEnvironment: env.KFC_COMMERCE_ENVIRONMENT,
         agent: agentIdentity,
         monitor: monitorIdentity,
@@ -176,15 +175,8 @@ export function buildServerOptionsFromEnv(
         mode: env.KFC_COMMERCE_MODE,
         baseUrl: commerceBaseUrl,
         token: commerceToken,
-        requiredCapabilities: [
-          "orders",
-          "payment",
-          "handoff_resolution",
-        ],
-        implementedCapabilities: [
-          "orders",
-          "payment",
-        ],
+        requiredCapabilities: ['orders', 'payment', 'handoff_resolution'],
+        implementedCapabilities: ['orders', 'payment'],
       },
       pos: {
         mode: env.KFC_POS_MODE,

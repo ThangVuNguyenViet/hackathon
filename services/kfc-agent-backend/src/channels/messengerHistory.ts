@@ -1,8 +1,8 @@
-import type { DashboardEventBus } from "../dashboard/eventBus.js";
-import type { ConversationProfile, ConversationTurn } from "../domain/types.js";
-import type { ConversationStore } from "../persistence/memoryStore.js";
+import type { DashboardEventBus } from '../dashboard/eventBus.js';
+import type { ConversationProfile, ConversationTurn } from '../domain/types.js';
+import type { ConversationStore } from '../persistence/memoryStore.js';
 
-const unsupportedMessengerMessage = "[unsupported Messenger message]";
+const unsupportedMessengerMessage = '[unsupported Messenger message]';
 const defaultMessagesPerConversation = 20;
 const maxMessengerMessagePageSize = 100;
 
@@ -47,8 +47,8 @@ export interface MessengerHistoryProfile {
   displayName: string | null;
   avatarUrl: string | null;
   profileSource: Extract<
-    ConversationProfile["profileSource"],
-    "messenger_profile_api"
+    ConversationProfile['profileSource'],
+    'messenger_profile_api'
   >;
 }
 
@@ -115,7 +115,7 @@ export function createMessengerHistoryClient(input: {
   graphApiBaseUrl?: string;
   fetchImpl?: typeof fetch;
 }): MessengerHistoryClient {
-  const graphApiBaseUrl = input.graphApiBaseUrl ?? "https://graph.facebook.com";
+  const graphApiBaseUrl = input.graphApiBaseUrl ?? 'https://graph.facebook.com';
   const fetchImpl = input.fetchImpl ?? fetch;
 
   async function fetchJson<T>(url: string): Promise<T> {
@@ -157,13 +157,13 @@ export function createMessengerHistoryClient(input: {
         options.limitMessagesPerConversation,
       );
       const params = new URLSearchParams({
-        platform: "messenger",
+        platform: 'messenger',
         fields: conversationFields(
           Math.min(messageLimit, maxMessengerMessagePageSize),
         ),
         access_token: input.pageAccessToken,
       });
-      if (options.since) params.set("since", options.since);
+      if (options.since) params.set('since', options.since);
 
       let nextUrl: string | undefined =
         `${graphApiBaseUrl}/${input.pageId}/conversations?${params.toString()}`;
@@ -216,21 +216,21 @@ export function createMessengerHistoryClient(input: {
         `${graphApiBaseUrl}/${recipientId}?fields=first_name,last_name,profile_pic&access_token=${input.pageAccessToken}`,
       );
       const displayName =
-        [body.first_name, body.last_name].filter(Boolean).join(" ").trim() ||
+        [body.first_name, body.last_name].filter(Boolean).join(' ').trim() ||
         null;
       if (!displayName && !body.profile_pic) return undefined;
       return {
         displayName,
         avatarUrl: body.profile_pic ?? null,
-        profileSource: "messenger_profile_api",
+        profileSource: 'messenger_profile_api',
       };
     },
     async fetchConversationProfiles() {
       const profiles = new Map<string, MessengerHistoryProfile>();
       const params = new URLSearchParams({
-        platform: "messenger",
-        fields: "participants{id,name,picture}",
-        limit: "50",
+        platform: 'messenger',
+        fields: 'participants{id,name,picture}',
+        limit: '50',
         access_token: input.pageAccessToken,
       });
       let nextUrl: string | undefined =
@@ -255,7 +255,7 @@ export function createMessengerHistoryClient(input: {
             profiles.set(profile.id, {
               displayName: profile.displayName,
               avatarUrl: profile.avatarUrl,
-              profileSource: "messenger_profile_api",
+              profileSource: 'messenger_profile_api',
             });
           }
         }
@@ -300,20 +300,20 @@ export class MessengerHistorySyncService {
         );
 
       for (const message of sortedMessages) {
-        const role: ConversationTurn["role"] =
-          message.fromId === this.input.pageId ? "assistant" : "user";
+        const role: ConversationTurn['role'] =
+          message.fromId === this.input.pageId ? 'assistant' : 'user';
         const externalUserId =
-          role === "assistant"
+          role === 'assistant'
             ? (customerId ?? conversation.id)
             : (message.fromId ?? customerId ?? conversation.id);
         const result = await this.input.store.upsertImportedTurn({
           sessionId,
-          channel: "messenger",
+          channel: 'messenger',
           role,
           text: message.text,
           externalMessageId: message.id,
           externalUserId,
-          deliveryStatus: role === "assistant" ? "sent" : "received",
+          deliveryStatus: role === 'assistant' ? 'sent' : 'received',
           metadata: null,
           createdAt: message.createdTime,
         });
@@ -322,7 +322,7 @@ export class MessengerHistorySyncService {
           messagesImported += 1;
           await this.input.store.appendEvent(
             sessionId,
-            "messenger:history_imported_message",
+            'messenger:history_imported_message',
             {
               conversationId: conversation.id,
               message: message.raw,
@@ -348,7 +348,7 @@ export class MessengerHistorySyncService {
     fallbackProfile?: MessengerHistoryProfile,
   ): Promise<void> {
     const existing = await this.input.store.getProfile(
-      "messenger",
+      'messenger',
       externalUserId,
     );
     if (existing?.displayName || existing?.avatarUrl) return;
@@ -363,7 +363,7 @@ export class MessengerHistorySyncService {
     if (!profile) return;
 
     await this.input.store.upsertProfile({
-      channel: "messenger",
+      channel: 'messenger',
       externalUserId,
       displayName: profile.displayName,
       avatarUrl: profile.avatarUrl,
@@ -379,11 +379,11 @@ function normalizeParticipantProfile(
 ): MessengerHistoryParticipantProfile | undefined {
   if (!participant.id || participant.id === pageId) return undefined;
   const displayName =
-    typeof participant.name === "string" && participant.name.length > 0
+    typeof participant.name === 'string' && participant.name.length > 0
       ? participant.name
       : null;
   const avatarUrl =
-    typeof participant.picture?.data?.url === "string" &&
+    typeof participant.picture?.data?.url === 'string' &&
     participant.picture.data.url.length > 0
       ? participant.picture.data.url
       : null;
@@ -407,7 +407,7 @@ function participantProfileForConversation(
   return {
     displayName: profile.displayName,
     avatarUrl: profile.avatarUrl,
-    profileSource: "messenger_profile_api",
+    profileSource: 'messenger_profile_api',
   };
 }
 
@@ -434,7 +434,7 @@ export class MessengerHistorySyncCoordinator {
     options: MessengerHistoryFetchOptions = {},
   ): Promise<MessengerHistorySyncResult> {
     if (this.running)
-      throw new Error("Messenger history sync is already running");
+      throw new Error('Messenger history sync is already running');
 
     this.running = true;
     this.lastStartedAt = new Date().toISOString();
@@ -448,7 +448,7 @@ export class MessengerHistorySyncCoordinator {
       this.lastError =
         error instanceof Error
           ? error.message
-          : "Unknown Messenger history sync failure";
+          : 'Unknown Messenger history sync failure';
       throw error;
     } finally {
       this.running = false;
@@ -467,7 +467,7 @@ function normalizeMessage(message: MetaMessage): MessengerHistoryMessage[] {
     {
       id: message.id,
       text:
-        typeof message.message === "string" && message.message.length > 0
+        typeof message.message === 'string' && message.message.length > 0
           ? message.message
           : unsupportedMessengerMessage,
       fromId: message.from?.id ?? null,
@@ -504,11 +504,11 @@ function emitImportedDashboardEvents(
   dashboard: DashboardEventBus,
   turn: ConversationTurn,
 ): void {
-  if (turn.role === "user") {
+  if (turn.role === 'user') {
     dashboard.emitEvent({
       id: `dash_import_${turn.externalMessageId}_customer_message_received`,
       sessionId: turn.sessionId,
-      type: "customer_message_received",
+      type: 'customer_message_received',
       payload: {
         turnId: turn.id,
         channel: turn.channel,
@@ -523,7 +523,7 @@ function emitImportedDashboardEvents(
   dashboard.emitEvent({
     id: `dash_import_${turn.externalMessageId}_conversation_turn_created`,
     sessionId: turn.sessionId,
-    type: "conversation_turn_created",
+    type: 'conversation_turn_created',
     payload: {
       turnId: turn.id,
       role: turn.role,

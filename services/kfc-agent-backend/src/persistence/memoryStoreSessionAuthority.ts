@@ -8,13 +8,15 @@ export function effectiveMemorySessionControl(
   controls: ReadonlyMap<string, SessionControl>,
   sessionId: string,
 ): SessionControl {
-  return controls.get(sessionId) ?? {
-    sessionId,
-    agentMode: 'ai_active',
-    assignedAgentId: null,
-    sessionAuthorityGeneration: 0,
-    updatedAt: new Date().toISOString(),
-  };
+  return (
+    controls.get(sessionId) ?? {
+      sessionId,
+      agentMode: 'ai_active',
+      assignedAgentId: null,
+      sessionAuthorityGeneration: 0,
+      updatedAt: new Date().toISOString(),
+    }
+  );
 }
 
 export function captureActiveMemorySessionAuthority(
@@ -42,8 +44,7 @@ export function transitionMemorySessionAuthority(input: {
     return { status: 'unchanged', control: structuredClone(current) };
   }
   if (
-    current.sessionAuthorityGeneration !==
-    input.operation.expectedGeneration
+    current.sessionAuthorityGeneration !== input.operation.expectedGeneration
   ) {
     return { status: 'stale', control: structuredClone(current) };
   }
@@ -51,10 +52,8 @@ export function transitionMemorySessionAuthority(input: {
     sessionId: input.operation.sessionId,
     agentMode: input.operation.agentMode,
     assignedAgentId: input.operation.assignedAgentId,
-    sessionAuthorityGeneration:
-      current.sessionAuthorityGeneration + 1,
-    updatedAt:
-      input.operation.updatedAt ?? new Date().toISOString(),
+    sessionAuthorityGeneration: current.sessionAuthorityGeneration + 1,
+    updatedAt: input.operation.updatedAt ?? new Date().toISOString(),
   };
   input.controls.set(control.sessionId, control);
   return { status: 'transitioned', control: structuredClone(control) };

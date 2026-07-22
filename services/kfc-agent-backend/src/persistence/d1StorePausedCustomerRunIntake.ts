@@ -1,6 +1,4 @@
-import {
-  CustomerRunIdempotencyConflictError,
-} from '../customerRuns/contracts.js';
+import { CustomerRunIdempotencyConflictError } from '../customerRuns/contracts.js';
 import type {
   CommitPausedCustomerRunIntakeInput,
   CommitPausedCustomerRunIntakeResult,
@@ -43,9 +41,7 @@ export async function commitD1PausedCustomerRunIntake(input: {
   const turnId = `turn_${crypto.randomUUID()}`;
   const turnCreatedAt =
     input.operation.userTurn.createdAt ?? new Date().toISOString();
-  const metadata = JSON.stringify(
-    input.operation.userTurn.metadata ?? null,
-  );
+  const metadata = JSON.stringify(input.operation.userTurn.metadata ?? null);
   const runAbsentSql = `NOT EXISTS (
     SELECT 1
     FROM customer_runs
@@ -94,8 +90,9 @@ export async function commitD1PausedCustomerRunIntake(input: {
     prepared.event.eventId,
   ];
   const results = await input.db.batch([
-    input.db.prepare(
-      `INSERT OR IGNORE INTO conversation_turns (
+    input.db
+      .prepare(
+        `INSERT OR IGNORE INTO conversation_turns (
          id, session_id, channel, role, text, external_message_id,
          external_user_id, delivery_status, metadata, created_at
        )
@@ -103,19 +100,21 @@ export async function commitD1PausedCustomerRunIntake(input: {
        WHERE ${pausedAuthoritySql}
          AND ${runAbsentSql}
          AND ${eventAbsentSql}`,
-    ).bind(
-      turnId,
-      input.operation.userTurn.sessionId,
-      input.operation.userTurn.channel,
-      input.operation.userTurn.text,
-      input.operation.userTurn.externalMessageId,
-      input.operation.userTurn.externalUserId,
-      metadata,
-      turnCreatedAt,
-      ...commonBindings,
-    ),
-    input.db.prepare(
-      `INSERT OR IGNORE INTO customer_runs (
+      )
+      .bind(
+        turnId,
+        input.operation.userTurn.sessionId,
+        input.operation.userTurn.channel,
+        input.operation.userTurn.text,
+        input.operation.userTurn.externalMessageId,
+        input.operation.userTurn.externalUserId,
+        metadata,
+        turnCreatedAt,
+        ...commonBindings,
+      ),
+    input.db
+      .prepare(
+        `INSERT OR IGNORE INTO customer_runs (
          id, schema_version, session_id, customer_id, client_message_id,
          request_fingerprint, generation, session_authority_generation,
          status, phase, next_event_sequence, client_schema_version,
@@ -126,34 +125,36 @@ export async function commitD1PausedCustomerRunIntake(input: {
          AND ${runAbsentSql}
          AND ${eventAbsentSql}
          AND ${exactTurnSql}`,
-    ).bind(
-      input.operation.run.id,
-      input.operation.run.schemaVersion,
-      input.operation.run.sessionId,
-      input.operation.run.customerId,
-      input.operation.run.clientMessageId,
-      input.operation.run.requestFingerprint,
-      input.operation.run.generation,
-      input.operation.expectedSessionAuthorityGeneration,
-      input.operation.run.status,
-      input.operation.run.phase,
-      input.operation.run.nextEventSequence + 1,
-      input.operation.run.clientSchemaVersion,
-      input.operation.run.acceptedAt,
-      input.operation.run.startedAt,
-      input.operation.run.terminalAt,
-      input.operation.run.updatedAt,
-      ...commonBindings,
-      input.operation.userTurn.sessionId,
-      input.operation.userTurn.externalMessageId,
-      input.operation.userTurn.channel,
-      input.operation.userTurn.text,
-      input.operation.userTurn.externalUserId,
-      metadata,
-      metadata,
-    ),
-    input.db.prepare(
-      `INSERT OR IGNORE INTO customer_run_events (
+      )
+      .bind(
+        input.operation.run.id,
+        input.operation.run.schemaVersion,
+        input.operation.run.sessionId,
+        input.operation.run.customerId,
+        input.operation.run.clientMessageId,
+        input.operation.run.requestFingerprint,
+        input.operation.run.generation,
+        input.operation.expectedSessionAuthorityGeneration,
+        input.operation.run.status,
+        input.operation.run.phase,
+        input.operation.run.nextEventSequence + 1,
+        input.operation.run.clientSchemaVersion,
+        input.operation.run.acceptedAt,
+        input.operation.run.startedAt,
+        input.operation.run.terminalAt,
+        input.operation.run.updatedAt,
+        ...commonBindings,
+        input.operation.userTurn.sessionId,
+        input.operation.userTurn.externalMessageId,
+        input.operation.userTurn.channel,
+        input.operation.userTurn.text,
+        input.operation.userTurn.externalUserId,
+        metadata,
+        metadata,
+      ),
+    input.db
+      .prepare(
+        `INSERT OR IGNORE INTO customer_run_events (
          event_id, run_id, sequence, schema_version, type,
          occurred_at, payload
        )
@@ -164,19 +165,20 @@ export async function commitD1PausedCustomerRunIntake(input: {
          AND session_authority_generation = ?
          AND status = 'superseded'
          AND next_event_sequence = ?`,
-    ).bind(
-      prepared.event.eventId,
-      prepared.event.runId,
-      prepared.event.sequence,
-      prepared.event.schemaVersion,
-      prepared.event.type,
-      prepared.event.occurredAt,
-      JSON.stringify(prepared.event.payload),
-      input.operation.run.id,
-      input.operation.run.sessionId,
-      input.operation.expectedSessionAuthorityGeneration,
-      input.operation.run.nextEventSequence + 1,
-    ),
+      )
+      .bind(
+        prepared.event.eventId,
+        prepared.event.runId,
+        prepared.event.sequence,
+        prepared.event.schemaVersion,
+        prepared.event.type,
+        prepared.event.occurredAt,
+        JSON.stringify(prepared.event.payload),
+        input.operation.run.id,
+        input.operation.run.sessionId,
+        input.operation.expectedSessionAuthorityGeneration,
+        input.operation.run.nextEventSequence + 1,
+      ),
   ]);
   const runInserted = Number(results[1]?.meta.changes ?? 0);
   const eventInserted = Number(results[2]?.meta.changes ?? 0);
@@ -195,8 +197,7 @@ export async function commitD1PausedCustomerRunIntake(input: {
   if (runInserted !== 0 || eventInserted !== 0) {
     throw new Error('d1_atomic_paused_customer_intake_inconsistent');
   }
-  const concurrentReplay =
-    await existingReplay(input.db, input.operation);
+  const concurrentReplay = await existingReplay(input.db, input.operation);
   if (concurrentReplay) return concurrentReplay;
   await assertExistingTurnIsExact(input.db, input.operation);
   return { status: 'stale' };
@@ -206,16 +207,16 @@ async function existingReplay(
   db: D1DatabaseLike,
   input: CommitPausedCustomerRunIntakeInput,
 ): Promise<CommitPausedCustomerRunIntakeResult | undefined> {
-  const row = await db.prepare(
-    `SELECT *
+  const row = await db
+    .prepare(
+      `SELECT *
      FROM customer_runs
      WHERE session_id = ?
        AND client_message_id = ?
      LIMIT 1`,
-  ).bind(
-    input.run.sessionId,
-    input.run.clientMessageId,
-  ).first<CustomerRunRow>();
+    )
+    .bind(input.run.sessionId, input.run.clientMessageId)
+    .first<CustomerRunRow>();
   if (!row) return undefined;
   const run = customerRunFromRow(row);
   if (run.requestFingerprint !== input.run.requestFingerprint) {
@@ -224,22 +225,25 @@ async function existingReplay(
       input.run.clientMessageId,
     );
   }
-  const turn = await db.prepare(
-    `SELECT *
+  const turn = await db
+    .prepare(
+      `SELECT *
      FROM conversation_turns
      WHERE session_id = ?
        AND external_message_id = ?
      LIMIT 1`,
-  ).bind(
-    input.run.sessionId,
-    input.run.clientMessageId,
-  ).first<ConversationTurnRow>();
-  const events = await db.prepare(
-    `SELECT *
+    )
+    .bind(input.run.sessionId, input.run.clientMessageId)
+    .first<ConversationTurnRow>();
+  const events = await db
+    .prepare(
+      `SELECT *
      FROM customer_run_events
      WHERE run_id = ?
      ORDER BY sequence ASC`,
-  ).bind(run.id).all<CustomerRunEventRow>();
+    )
+    .bind(run.id)
+    .all<CustomerRunEventRow>();
   if (!turn || (events.results ?? []).length === 0) {
     throw new Error('d1_paused_customer_intake_replay_incomplete');
   }
@@ -265,16 +269,16 @@ async function assertExistingTurnIsExact(
   db: D1DatabaseLike,
   input: CommitPausedCustomerRunIntakeInput,
 ): Promise<void> {
-  const turn = await db.prepare(
-    `SELECT *
+  const turn = await db
+    .prepare(
+      `SELECT *
      FROM conversation_turns
      WHERE session_id = ?
        AND external_message_id = ?
      LIMIT 1`,
-  ).bind(
-    input.run.sessionId,
-    input.run.clientMessageId,
-  ).first<ConversationTurnRow>();
+    )
+    .bind(input.run.sessionId, input.run.clientMessageId)
+    .first<ConversationTurnRow>();
   if (turn) {
     assertExactPausedCustomerUserTurn(input, turnFromRow(turn));
   }

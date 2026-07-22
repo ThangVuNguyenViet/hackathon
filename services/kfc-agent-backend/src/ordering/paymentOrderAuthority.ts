@@ -6,9 +6,7 @@ export function paymentAttemptMatchesOrder(
   order: Pick<Order, 'id'> | undefined,
 ): boolean {
   return Boolean(
-    paymentAttempt?.orderId &&
-    order?.id &&
-    paymentAttempt.orderId === order.id,
+    paymentAttempt?.orderId && order?.id && paymentAttempt.orderId === order.id,
   );
 }
 

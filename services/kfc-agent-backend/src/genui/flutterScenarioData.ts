@@ -20,7 +20,10 @@ export function syncFlutterGenUiScenarioData(
   scenariosRoot: string,
   outputPath: string,
 ): void {
-  writeFileSync(outputPath, renderFlutterGenUiScenarioData(capturePlanPath, scenariosRoot));
+  writeFileSync(
+    outputPath,
+    renderFlutterGenUiScenarioData(capturePlanPath, scenariosRoot),
+  );
 }
 
 export function renderFlutterGenUiScenarioData(
@@ -61,7 +64,9 @@ function readJson<T>(path: string): T {
 function dartRawJson(value: unknown): string {
   const json = JSON.stringify(value, null, 2);
   if (json.includes("'''")) {
-    throw new Error('Scenario data cannot contain a triple single quote in a Dart raw string.');
+    throw new Error(
+      'Scenario data cannot contain a triple single quote in a Dart raw string.',
+    );
   }
   return `r'''${json}'''`;
 }

@@ -25,21 +25,19 @@ import {
   supersedeMemoryAgentRunExecutionIfNoLongerCurrent,
   type MemoryAgentRunTextDeliveryState,
 } from './memoryStoreAgentRunTextDelivery.js';
-import {
-  claimMemoryAgentRunExecution,
-} from './memoryStoreAgentRunOwnership.js';
+import { claimMemoryAgentRunExecution } from './memoryStoreAgentRunOwnership.js';
 import { MemoryStoreVerifiedRefOperations } from './memoryStoreVerifiedRefOperations.js';
 
-export abstract class MemoryStoreAgentRunTextDeliveryOperations
-  extends MemoryStoreVerifiedRefOperations
-{
-  protected readonly agentRunTextDeliveries =
-    new Map<string, AgentRunTextDeliveryRecord>();
+export abstract class MemoryStoreAgentRunTextDeliveryOperations extends MemoryStoreVerifiedRefOperations {
+  protected readonly agentRunTextDeliveries = new Map<
+    string,
+    AgentRunTextDeliveryRecord
+  >();
 
-  protected abstract memoryAgentRunTextDeliveryState():
-    MemoryAgentRunTextDeliveryState;
-  protected abstract memoryAgentRunState():
-    Parameters<typeof claimMemoryAgentRunExecution>[1];
+  protected abstract memoryAgentRunTextDeliveryState(): MemoryAgentRunTextDeliveryState;
+  protected abstract memoryAgentRunState(): Parameters<
+    typeof claimMemoryAgentRunExecution
+  >[1];
 
   protected clearOrphanedAgentRunTextDeliveries(): void {
     const state = this.memoryAgentRunTextDeliveryState();
@@ -53,35 +51,39 @@ export abstract class MemoryStoreAgentRunTextDeliveryOperations
   async claimAgentRunExecution(
     input: ClaimAgentRunExecutionInput,
   ): Promise<ClaimAgentRunExecutionResult> {
-    return this.withConfirmationPauseLock(async () => {
+    return this.withStoreLock(async () => {
       const reconciled = reconcileExpiredSendingMemoryAgentRun({
         runId: input.runId,
         reconciledAt: input.claimedAt,
         storage: this.memoryAgentRunTextDeliveryState(),
       });
-      return reconciled ??
-        claimMemoryAgentRunExecution(input, this.memoryAgentRunState());
+      return (
+        reconciled ??
+        claimMemoryAgentRunExecution(input, this.memoryAgentRunState())
+      );
     });
   }
 
   async supersedeAgentRunExecutionIfNoLongerCurrent(
     input: SupersedeAgentRunExecutionIfNoLongerCurrentInput,
   ): Promise<SupersedeAgentRunExecutionIfNoLongerCurrentResult> {
-    return this.withConfirmationPauseLock(async () =>
+    return this.withStoreLock(async () =>
       supersedeMemoryAgentRunExecutionIfNoLongerCurrent(
         input,
         this.memoryAgentRunTextDeliveryState(),
-      ));
+      ),
+    );
   }
 
   async createAgentRunTextDelivery(
     input: CreatePendingAgentRunTextDeliveryInput,
   ): Promise<CreateAgentRunTextDeliveryResult> {
-    return this.withConfirmationPauseLock(async () =>
+    return this.withStoreLock(async () =>
       createMemoryAgentRunTextDelivery(
         input,
         this.memoryAgentRunTextDeliveryState(),
-      ));
+      ),
+    );
   }
 
   async getAgentRunTextDelivery(
@@ -96,30 +98,33 @@ export abstract class MemoryStoreAgentRunTextDeliveryOperations
   async beginAgentRunTextDeliveryAttempt(
     input: BeginAgentRunTextDeliveryAttemptInput,
   ): Promise<BeginAgentRunTextDeliveryAttemptResult> {
-    return this.withConfirmationPauseLock(async () =>
+    return this.withStoreLock(async () =>
       beginMemoryAgentRunTextDeliveryAttempt(
         input,
         this.memoryAgentRunTextDeliveryState(),
-      ));
+      ),
+    );
   }
 
   async completeAgentRunTextDeliveryAttempt(
     input: CompleteAgentRunTextDeliveryAttemptInput,
   ): Promise<CompleteAgentRunTextDeliveryAttemptResult> {
-    return this.withConfirmationPauseLock(async () =>
+    return this.withStoreLock(async () =>
       completeMemoryAgentRunTextDeliveryAttempt(
         input,
         this.memoryAgentRunTextDeliveryState(),
-      ));
+      ),
+    );
   }
 
   async reconcileAgentRunTextDelivery(
     input: ReconcileAgentRunTextDeliveryInput,
   ): Promise<ReconcileAgentRunTextDeliveryResult> {
-    return this.withConfirmationPauseLock(async () =>
+    return this.withStoreLock(async () =>
       reconcileMemoryAgentRunTextDelivery(
         input,
         this.memoryAgentRunTextDeliveryState(),
-      ));
+      ),
+    );
   }
 }

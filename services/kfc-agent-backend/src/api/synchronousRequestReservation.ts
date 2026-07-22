@@ -1,9 +1,13 @@
-import { isRecord, sha256Fingerprint, type HandlerResponse } from "./routeHandlerContracts.js";
+import {
+  isRecord,
+  sha256Fingerprint,
+  type HandlerResponse,
+} from './routeHandlerContracts.js';
 import type {
   ConversationStore,
   IrreversibleOperationInput,
   RunCommitFence,
-} from "../persistence/memoryStore.js";
+} from '../persistence/memoryStore.js';
 
 export interface KfcSynchronousRequestFence {
   runGuard: {
@@ -18,8 +22,8 @@ export interface KfcSynchronousRequestFence {
 }
 
 export type KfcSynchronousRequestReservation =
-  | { status: "ready"; fence: KfcSynchronousRequestFence }
-  | { status: "response"; response: HandlerResponse };
+  | { status: 'ready'; fence: KfcSynchronousRequestFence }
+  | { status: 'response'; response: HandlerResponse };
 
 export async function reserveKfcSynchronousRequest(input: {
   store: ConversationStore;
@@ -27,9 +31,7 @@ export async function reserveKfcSynchronousRequest(input: {
   clientMessageId: string;
   bindingFingerprint: string;
   locallyActiveRequestIds?: Set<string>;
-  projectResponse?(
-    response: HandlerResponse,
-  ): Promise<HandlerResponse>;
+  projectResponse?(response: HandlerResponse): Promise<HandlerResponse>;
 }): Promise<KfcSynchronousRequestReservation> {
   const { store } = input;
   if (
@@ -40,10 +42,10 @@ export async function reserveKfcSynchronousRequest(input: {
     !store.failIrreversibleOperation
   ) {
     return {
-      status: "response",
+      status: 'response',
       response: {
         status: 503,
-        body: { errorCode: "kfc_request_fence_unavailable" },
+        body: { errorCode: 'kfc_request_fence_unavailable' },
       },
     };
   }
@@ -53,7 +55,7 @@ export async function reserveKfcSynchronousRequest(input: {
       clientMessageId: input.clientMessageId,
     })}`,
     sessionId: input.sessionId,
-    operation: "kfc_synchronous_request",
+    operation: 'kfc_synchronous_request',
     bindingFingerprint: input.bindingFingerprint,
   };
   let existing;
@@ -68,9 +70,9 @@ export async function reserveKfcSynchronousRequest(input: {
     }
     throw error;
   }
-  if (existing?.status === "completed") {
+  if (existing?.status === 'completed') {
     return {
-      status: "response",
+      status: 'response',
       response: await projectStoredResponse(
         existing.result,
         true,
@@ -78,21 +80,21 @@ export async function reserveKfcSynchronousRequest(input: {
       ),
     };
   }
-  if (existing?.status === "pending") {
+  if (existing?.status === 'pending') {
     if (input.locallyActiveRequestIds?.has(reservationInput.requestId)) {
       return {
-        status: "response",
+        status: 'response',
         response: inProgressResponse(),
       };
     }
     const expired =
       await store.markIrreversibleOperationOutcomeUnknownIfExpired({
         ...reservationInput,
-        reason: "kfc_synchronous_request_lease_expired",
+        reason: 'kfc_synchronous_request_lease_expired',
       });
-    if (expired.status === "completed") {
+    if (expired.status === 'completed') {
       return {
-        status: "response",
+        status: 'response',
         response: await projectStoredResponse(
           expired.result,
           true,
@@ -100,20 +102,20 @@ export async function reserveKfcSynchronousRequest(input: {
         ),
       };
     }
-    if (expired.status === "unknown") {
+    if (expired.status === 'unknown') {
       return {
-        status: "response",
+        status: 'response',
         response: outcomeUnknownResponse(),
       };
     }
     return {
-      status: "response",
+      status: 'response',
       response: inProgressResponse(),
     };
   }
-  if (existing?.status === "unknown") {
+  if (existing?.status === 'unknown') {
     return {
-      status: "response",
+      status: 'response',
       response: outcomeUnknownResponse(),
     };
   }
@@ -132,9 +134,9 @@ export async function reserveKfcSynchronousRequest(input: {
     }
     throw error;
   }
-  if (reservation.status === "completed") {
+  if (reservation.status === 'completed') {
     return {
-      status: "response",
+      status: 'response',
       response: await projectStoredResponse(
         reservation.result,
         true,
@@ -142,31 +144,29 @@ export async function reserveKfcSynchronousRequest(input: {
       ),
     };
   }
-  if (reservation.status !== "reserved") {
+  if (reservation.status !== 'reserved') {
     return {
-      status: "response",
+      status: 'response',
       response: inProgressResponse(),
     };
   }
   const owner = {
     attempt: reservation.attempt,
     leaseToken: reservation.leaseToken,
-    sessionAuthorityGeneration:
-      reservation.sessionAuthorityGeneration,
+    sessionAuthorityGeneration: reservation.sessionAuthorityGeneration,
   };
   input.locallyActiveRequestIds?.add(reservationInput.requestId);
   const commitFence = {
-    kind: "operation_lease",
+    kind: 'operation_lease',
     requestId: reservationInput.requestId,
     operation: reservationInput.operation,
     bindingFingerprint: reservationInput.bindingFingerprint,
     attempt: owner.attempt,
     leaseToken: owner.leaseToken,
-    sessionAuthorityGeneration:
-      reservation.sessionAuthorityGeneration,
+    sessionAuthorityGeneration: reservation.sessionAuthorityGeneration,
   } as const satisfies RunCommitFence;
   return {
-    status: "ready",
+    status: 'ready',
     fence: {
       runGuard: {
         commitFence,
@@ -184,7 +184,7 @@ export async function reserveKfcSynchronousRequest(input: {
             owner,
             { status: response.status, body: response.body },
           );
-          if (completed.status === "completed") {
+          if (completed.status === 'completed') {
             return {
               response: await projectStoredResponse(
                 completed.result,
@@ -198,7 +198,7 @@ export async function reserveKfcSynchronousRequest(input: {
             await store.getIrreversibleOperation!(reservationInput);
           return {
             response:
-              terminal?.status === "completed"
+              terminal?.status === 'completed'
                 ? await projectStoredResponse(
                     terminal.result,
                     true,
@@ -208,9 +208,7 @@ export async function reserveKfcSynchronousRequest(input: {
             completedByOwner: false,
           };
         } finally {
-          input.locallyActiveRequestIds?.delete(
-            reservationInput.requestId,
-          );
+          input.locallyActiveRequestIds?.delete(reservationInput.requestId);
         }
       },
       async fail(error) {
@@ -221,9 +219,7 @@ export async function reserveKfcSynchronousRequest(input: {
             error instanceof Error ? error.message : String(error),
           );
         } finally {
-          input.locallyActiveRequestIds?.delete(
-            reservationInput.requestId,
-          );
+          input.locallyActiveRequestIds?.delete(reservationInput.requestId);
         }
       },
     },
@@ -234,8 +230,7 @@ async function projectStoredResponse(
   result: Record<string, unknown>,
   replayed: boolean,
   project:
-    | ((response: HandlerResponse) => Promise<HandlerResponse>)
-    | undefined,
+    ((response: HandlerResponse) => Promise<HandlerResponse>) | undefined,
 ): Promise<HandlerResponse> {
   const stored = storedResponse(result, replayed);
   return project ? project(stored) : stored;
@@ -247,8 +242,8 @@ function storedResponse(
 ): HandlerResponse {
   const status = result.status;
   const body = result.body;
-  if (typeof status !== "number" || !isRecord(body)) {
-    throw new Error("Stored KFC synchronous response is invalid");
+  if (typeof status !== 'number' || !isRecord(body)) {
+    throw new Error('Stored KFC synchronous response is invalid');
   }
   return {
     status,
@@ -259,25 +254,25 @@ function storedResponse(
 function inProgressResponse(): HandlerResponse {
   return {
     status: 409,
-    body: { errorCode: "kfc_request_in_progress" },
+    body: { errorCode: 'kfc_request_in_progress' },
   };
 }
 
 function outcomeUnknownResponse(): HandlerResponse {
   return {
     status: 409,
-    body: { errorCode: "kfc_request_outcome_unknown" },
+    body: { errorCode: 'kfc_request_outcome_unknown' },
   };
 }
 
 function isBindingConflict(error: unknown): boolean {
-  return error instanceof Error && error.message.includes("binding conflict");
+  return error instanceof Error && error.message.includes('binding conflict');
 }
 
 function isSessionAuthorityUnavailable(error: unknown): boolean {
   return (
     error instanceof Error &&
-    error.message === "session_ai_authority_unavailable"
+    error.message === 'session_ai_authority_unavailable'
   );
 }
 
@@ -285,11 +280,11 @@ function supersededResponse(
   sessionId: string,
 ): KfcSynchronousRequestReservation {
   return {
-    status: "response",
+    status: 'response',
     response: {
       status: 409,
       body: {
-        errorCode: "agent_run_superseded",
+        errorCode: 'agent_run_superseded',
         sessionId,
         suppressed: true,
       },
@@ -297,13 +292,15 @@ function supersededResponse(
   };
 }
 
-function conflictResponse(bindingFingerprint: string): KfcSynchronousRequestReservation {
+function conflictResponse(
+  bindingFingerprint: string,
+): KfcSynchronousRequestReservation {
   return {
-    status: "response",
+    status: 'response',
     response: {
       status: 409,
       body: {
-        errorCode: "idempotency_conflict",
+        errorCode: 'idempotency_conflict',
         conflictingRequestFingerprint: bindingFingerprint,
       },
     },

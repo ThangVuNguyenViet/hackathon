@@ -22,7 +22,6 @@ import type {
   PaymentAttempt,
   PromotionContext,
   SelectedModifier,
-  CommerceApprovalReceipt,
   CollectionToolName,
   ToolTraceEntry,
   VerifiedCollectionSnapshot,
@@ -57,7 +56,6 @@ export interface AgentState {
   order?: Order;
   /** Durable proof that submitted-order status was checked for a cancellation request. */
   cancellationStatusChecked?: boolean;
-  userConfirmedOrder: boolean;
   escalationReasons: string[];
   retrievedEvidence: RetrievedEvidence[];
   /** Turn-local UI navigation issued by a verified structured customer action. */
@@ -75,8 +73,6 @@ export interface AgentState {
   activeCollectionKeys?: Partial<Record<CollectionToolName, string>>;
   /** Current menu result selected by the agent tool call; presentation must not truncate it. */
   activeMenuCollection?: VerifiedCollectionSnapshot<MenuItem>;
-  /** Successfully consumed receipts retained as irreversible-action evidence. */
-  commerceApprovalReceipts?: CommerceApprovalReceipt[];
   menuItemDetail?: MenuItem;
   menuModifierOptions?: GeneratedMenuModifier;
   promotionOffers?: GeneratedPromotionVoucherOffer[];

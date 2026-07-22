@@ -7,19 +7,44 @@ interface CheckResult {
 }
 
 const workerUrl = normalizeWorkerUrl(
-  process.env.KFC_WORKER_URL ?? process.env.WORKER_URL ?? 'https://kfc-agent-backend-demo.thangvnv0806.workers.dev',
+  process.env.KFC_WORKER_URL ??
+    process.env.WORKER_URL ??
+    'https://kfc-agent-backend-demo.thangvnv0806.workers.dev',
 );
 const verifyToken = process.env.MESSENGER_VERIFY_TOKEN ?? '';
-const proofSessionId = process.env.KFC_PROOF_SESSION_ID ?? process.env.KFC_LIVE_SESSION_ID ?? '';
+const proofSessionId =
+  process.env.KFC_PROOF_SESSION_ID ?? process.env.KFC_LIVE_SESSION_ID ?? '';
 
 const checks: CheckResult[] = [];
 
-checks.push(await requestJson('health', `${workerUrl}/health`, (body) => isRecord(body) && body.ok === true));
-checks.push(await requestJson('ready', `${workerUrl}/ready`, (body) => isRecord(body) && body.ok === true));
-checks.push(await requestJson('ready:deep', `${workerUrl}/ready?deep=1`, (body) => isRecord(body) && body.ok === true));
+checks.push(
+  await requestJson(
+    'health',
+    `${workerUrl}/health`,
+    (body) => isRecord(body) && body.ok === true,
+  ),
+);
+checks.push(
+  await requestJson(
+    'ready',
+    `${workerUrl}/ready`,
+    (body) => isRecord(body) && body.ok === true,
+  ),
+);
+checks.push(
+  await requestJson(
+    'ready:deep',
+    `${workerUrl}/ready?deep=1`,
+    (body) => isRecord(body) && body.ok === true,
+  ),
+);
 checks.push(await checkMessengerVerification());
 checks.push(
-  await requestJson('dashboard:sessions', `${workerUrl}/dashboard/sessions`, (body) => isRecord(body) && Array.isArray(body.sessions)),
+  await requestJson(
+    'dashboard:sessions',
+    `${workerUrl}/dashboard/sessions`,
+    (body) => isRecord(body) && Array.isArray(body.sessions),
+  ),
 );
 if (proofSessionId) {
   const encodedSessionId = encodeURIComponent(proofSessionId);
@@ -52,7 +77,8 @@ async function checkMessengerVerification(): Promise<CheckResult> {
     return {
       name: 'messenger:verify',
       ok: false,
-      message: 'MESSENGER_VERIFY_TOKEN is required to verify the deployed callback challenge',
+      message:
+        'MESSENGER_VERIFY_TOKEN is required to verify the deployed callback challenge',
     };
   }
 
@@ -63,7 +89,9 @@ async function checkMessengerVerification(): Promise<CheckResult> {
 
   try {
     endpoint.searchParams.set('_', String(Date.now()));
-    const response = await fetch(endpoint, { headers: { 'Cache-Control': 'no-cache' } });
+    const response = await fetch(endpoint, {
+      headers: { 'Cache-Control': 'no-cache' },
+    });
     const body = await response.text();
     return {
       name: 'messenger:verify',
@@ -76,7 +104,10 @@ async function checkMessengerVerification(): Promise<CheckResult> {
     return {
       name: 'messenger:verify',
       ok: false,
-      message: error instanceof Error ? error.message : 'Messenger verification check failed',
+      message:
+        error instanceof Error
+          ? error.message
+          : 'Messenger verification check failed',
     };
   }
 }
@@ -89,7 +120,9 @@ async function requestJson(
   try {
     const endpoint = new URL(url);
     endpoint.searchParams.set('_', String(Date.now()));
-    const response = await fetch(endpoint, { headers: { 'Cache-Control': 'no-cache' } });
+    const response = await fetch(endpoint, {
+      headers: { 'Cache-Control': 'no-cache' },
+    });
     const text = await response.text();
     const body = text.length > 0 ? JSON.parse(text) : null;
     const ok = response.ok && validate(body);

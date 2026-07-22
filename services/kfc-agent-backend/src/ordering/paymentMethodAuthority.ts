@@ -6,14 +6,9 @@ import {
   type PaymentMethodCollectionAuthority,
   type SelectedPaymentMethodAuthority,
 } from '../domain/opaqueProviderId.js';
-import { currentCollectionMatchesProvider } from './agentToolAuthority.js';
-import type {
-  CommerceAuthorityRevisions,
-  VerifiedCollectionSnapshot,
-} from './types.js';
+import type { VerifiedCollectionSnapshot } from './types.js';
 
-export interface VerifiedPaymentMethodAuthority
-  extends SelectedPaymentMethodAuthority {
+export interface VerifiedPaymentMethodAuthority extends SelectedPaymentMethodAuthority {
   method: GeneratedPaymentMethod;
 }
 
@@ -115,40 +110,6 @@ export function selectedPaymentMethodAuthority(
   };
 }
 
-/**
- * A typed model tool call is the semantic payment choice for text mode.
- * Deterministic code only resolves its exact opaque id against verified state
- * and snapshots that authority before the approval interrupt.
- */
-export function prepareModelAuthoredPaymentSelection(
-  state: AgentState,
-  call: {
-    toolName: string;
-    arguments: Record<string, unknown>;
-  } | undefined,
-): AgentState | undefined {
-  if (call?.toolName !== 'createPaymentLink') return state;
-  const methodId = opaqueProviderIdSchema.safeParse(call.arguments.methodId);
-  if (!methodId.success) return undefined;
-  const authority = activeSupportedPaymentMethod(state, methodId.data);
-  return authority
-    ? {
-        ...state,
-        selectedPaymentMethod: selectedPaymentMethodAuthority(authority),
-      }
-    : undefined;
-}
-
-export function stateAfterPaymentApprovalRejection(
-  state: AgentState,
-  call: { toolName: string } | undefined,
-  hasStructuredAction: boolean,
-): AgentState {
-  return !hasStructuredAction && call?.toolName === 'createPaymentLink'
-    ? { ...state, selectedPaymentMethod: undefined }
-    : state;
-}
-
 export function selectedPaymentMethodAuthorityMatchesActiveCollection(
   state: PaymentCollectionState,
   authority: SelectedPaymentMethodAuthority,
@@ -161,37 +122,28 @@ export function selectedPaymentMethodAuthorityMatchesActiveCollection(
   );
 }
 
-export function selectedPaymentMethodAuthorityMatchesCurrentProvider(
-  state: PaymentCollectionState,
-  authority: SelectedPaymentMethodAuthority,
-  revisions: CommerceAuthorityRevisions,
-): boolean {
-  if (
-    !selectedPaymentMethodAuthorityMatchesActiveCollection(state, authority)
-  ) {
-    return false;
-  }
-  const collection =
-    state.verifiedCollections?.listPaymentMethods?.[
-      authority.collectionKey
-    ];
-  return currentCollectionMatchesProvider(collection, revisions);
-}
-
 /**
- * Revalidate a previously resolved payment-method authority after the current
- * provider revisions have been read. This second check closes the await gap:
- * the active collection key or snapshot revision cannot change between local
- * selection and provider-authority revalidation.
+ * A typed model tool call is the semantic payment choice for text mode.
+ * Deterministic code only resolves its exact opaque id against verified state
+ * and snapshots that authority for the payment call.
  */
-export function paymentMethodAuthorityMatchesCurrentProvider(
-  state: PaymentCollectionState,
-  authority: VerifiedPaymentMethodAuthority,
-  revisions: CommerceAuthorityRevisions,
-): boolean {
-  return selectedPaymentMethodAuthorityMatchesCurrentProvider(
-    state,
-    selectedPaymentMethodAuthority(authority),
-    revisions,
-  );
+export function prepareModelAuthoredPaymentSelection(
+  state: AgentState,
+  call:
+    | {
+        toolName: string;
+        arguments: Record<string, unknown>;
+      }
+    | undefined,
+): AgentState | undefined {
+  if (call?.toolName !== 'createPaymentLink') return state;
+  const methodId = opaqueProviderIdSchema.safeParse(call.arguments.methodId);
+  if (!methodId.success) return undefined;
+  const authority = activeSupportedPaymentMethod(state, methodId.data);
+  return authority
+    ? {
+        ...state,
+        selectedPaymentMethod: selectedPaymentMethodAuthority(authority),
+      }
+    : undefined;
 }

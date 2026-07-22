@@ -12,14 +12,8 @@ if (mode !== '--check' && mode !== '--write') {
   process.exit(2);
 }
 
-const baseline = JSON.parse(
-  await readFile(path.join(root, '.prettier-legacy.json'), 'utf8'),
-);
-const legacyFiles = new Set(baseline.files);
 const candidates = new Set([
-  '.prettier-legacy.json',
   '.prettierrc.json',
-  'eslint-warning-baseline.json',
   'eslint.config.mjs',
   'package-lock.json',
   'package.json',
@@ -44,8 +38,6 @@ async function collectSourceFiles(directory) {
   }
 }
 
-// The frozen legacy list makes the incremental scope explicit: new files and
-// files removed from the list must be formatted without rewriting old sources.
 for (const directory of ['scripts', 'src']) {
   await collectSourceFiles(directory);
 }
@@ -53,10 +45,6 @@ for (const directory of ['scripts', 'src']) {
 const unformatted = [];
 let written = 0;
 for (const relativePath of [...candidates].sort()) {
-  if (legacyFiles.has(relativePath)) {
-    continue;
-  }
-
   const filePath = path.resolve(root, relativePath);
   const source = await readFile(filePath, 'utf8');
   const config = (await prettier.resolveConfig(filePath)) ?? {};

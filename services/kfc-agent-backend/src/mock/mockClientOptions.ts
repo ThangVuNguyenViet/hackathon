@@ -4,12 +4,7 @@ import type {
   MessengerClient,
   ZaloClient,
 } from '../clients/interfaces.js';
-import type {
-  Address,
-  MenuItem,
-  Order,
-  ToolResult,
-} from '../domain/types.js';
+import type { Address, MenuItem, Order, ToolResult } from '../domain/types.js';
 import type { FulfillmentMethod } from '../ordering/types.js';
 import type { MockedUpstreamApiProfile } from './mockedUpstreamProfile.js';
 

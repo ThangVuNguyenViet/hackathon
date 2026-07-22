@@ -1,11 +1,8 @@
 import type { ToolResult } from '../domain/types.js';
 import type { GeneratedFixtures } from '../fixtures/schema.js';
-import { digestCommerceAction } from '../ordering/approvalReceipt.js';
+import { digestCommerceAction } from '../ordering/commerceDigest.js';
 import { OrderingDataService } from '../ordering/orderingDataService.js';
-import type {
-  Disposition,
-  SourceProvenance,
-} from '../ordering/types.js';
+import type { Disposition, SourceProvenance } from '../ordering/types.js';
 import { mockProviderProvenance } from './mockToolResults.js';
 import type { MockedUpstreamApiProfile } from './mockedUpstreamProfile.js';
 
@@ -90,10 +87,14 @@ export function checkMockInventory(
     ]) {
       unavailable.add(itemCode);
     }
-    if (!provenance.some((source) =>
-      source.fixtureMode === availability.source.fixtureMode &&
-      source.sourceFile === availability.source.sourceFile &&
-      source.sourceApi === availability.source.sourceApi)) {
+    if (
+      !provenance.some(
+        (source) =>
+          source.fixtureMode === availability.source.fixtureMode &&
+          source.sourceFile === availability.source.sourceFile &&
+          source.sourceApi === availability.source.sourceApi,
+      )
+    ) {
       provenance.push(availability.source);
     }
   }
@@ -126,9 +127,7 @@ export async function checkMockInventoryWithAuthority(
       availability: availability.value,
       providerRevision: await mockInventoryProviderRevision(input),
       observedAt: new Date(observedAtMs).toISOString(),
-      expiresAt: new Date(
-        observedAtMs + availabilityLifetimeMs,
-      ).toISOString(),
+      expiresAt: new Date(observedAtMs + availabilityLifetimeMs).toISOString(),
     },
     message: 'ok',
     provenance: availability.provenance,

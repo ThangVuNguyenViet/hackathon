@@ -2,9 +2,7 @@ import {
   customerRunEventSchema,
   type CustomerRunEvent,
 } from '../customerRuns/contracts.js';
-import type {
-  AppendCustomerRunEventInput,
-} from './contracts.js';
+import type { AppendCustomerRunEventInput } from './contracts.js';
 
 export function prepareCustomerRunEventBatch(input: {
   runId: string;

@@ -20,17 +20,19 @@ export async function loadOrAppendAgentCurrentUserTurn(
   if (conflictingTurn) {
     throw new Error(
       `session_response_profile_mismatch:${input.sessionId}:` +
-        `${conflictingTurn.metadata?.responseProfile ??
-          responseProfileForChannel(conflictingTurn.channel)}:` +
+        `${
+          conflictingTurn.metadata?.responseProfile ??
+          responseProfileForChannel(conflictingTurn.channel)
+        }:` +
         responseProfile,
     );
   }
 
   let currentUserTurn = input.externalMessageId
     ? await input.store.findTurnByExternalMessage(
-      input.sessionId,
-      input.externalMessageId,
-    )
+        input.sessionId,
+        input.externalMessageId,
+      )
     : undefined;
   if (currentUserTurn) {
     return currentUserTurn;
@@ -60,17 +62,15 @@ export async function loadOrAppendAgentCurrentUserTurn(
     channel: input.channel,
     role: 'user',
     // A structured action is server-verified typed authority, not customer
-    // prose. Persist only an empty audit turn so checkpoint/publication
-    // identity remains durable without leaking synthetic UI action text into
+    // prose. Persist only an empty audit turn so publication identity remains
+    // durable without leaking synthetic UI action text into
     // conversation or model context.
     text: input.trustedCustomerAction ? '' : input.text,
     externalMessageId: input.externalMessageId ?? null,
     externalUserId: input.customerId,
     deliveryStatus: 'received',
     metadata:
-      Object.keys(currentTurnMetadata).length > 0
-        ? currentTurnMetadata
-        : null,
+      Object.keys(currentTurnMetadata).length > 0 ? currentTurnMetadata : null,
   });
   emitDashboardEvent(input, 'customer_message_received', {
     turnId: currentUserTurn.id,

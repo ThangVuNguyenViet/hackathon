@@ -61,7 +61,10 @@ function requiredString(value: unknown, field: string, file: string): string {
   return value.trim();
 }
 
-function parseFrontmatter(value: Record<string, unknown>, file: string): PolicyFrontmatter {
+function parseFrontmatter(
+  value: Record<string, unknown>,
+  file: string,
+): PolicyFrontmatter {
   const type = requiredString(value.type, 'type', file);
   const id = requiredString(value.id, 'id', file);
   const title = requiredString(value.title, 'title', file);
@@ -69,16 +72,28 @@ function parseFrontmatter(value: Record<string, unknown>, file: string): PolicyF
   const kind = requiredString(value.kind, 'kind', file);
   const retrievedAt = requiredString(value.retrieved_at, 'retrieved_at', file);
   const approvedAt = requiredString(value.approved_at, 'approved_at', file);
-  const approvalStatus = requiredString(value.approval_status, 'approval_status', file);
+  const approvalStatus = requiredString(
+    value.approval_status,
+    'approval_status',
+    file,
+  );
   const audience = requiredString(value.audience, 'audience', file);
   const tags = value.tags;
 
   if (type !== 'Policy') throw new Error(`${file}: type must be Policy`);
-  if (kind !== 'policy' && kind !== 'allergen') throw new Error(`${file}: unsupported kind ${kind}`);
-  if (!APPROVED_SOURCES.has(resource)) throw new Error(`${file}: source is not approved: ${resource}`);
-  if (approvalStatus !== 'approved') throw new Error(`${file}: only approved content can be bundled`);
-  if (audience !== 'customer_public') throw new Error(`${file}: only customer_public content can be bundled`);
-  if (!Array.isArray(tags) || tags.length === 0 || !tags.every((tag) => typeof tag === 'string' && tag.trim())) {
+  if (kind !== 'policy' && kind !== 'allergen')
+    throw new Error(`${file}: unsupported kind ${kind}`);
+  if (!APPROVED_SOURCES.has(resource))
+    throw new Error(`${file}: source is not approved: ${resource}`);
+  if (approvalStatus !== 'approved')
+    throw new Error(`${file}: only approved content can be bundled`);
+  if (audience !== 'customer_public')
+    throw new Error(`${file}: only customer_public content can be bundled`);
+  if (
+    !Array.isArray(tags) ||
+    tags.length === 0 ||
+    !tags.every((tag) => typeof tag === 'string' && tag.trim())
+  ) {
     throw new Error(`${file}: tags must be a non-empty string array`);
   }
 
@@ -107,9 +122,7 @@ function slugify(value: string): string {
 }
 
 function recordKind(value: unknown): unknown {
-  return typeof value === 'object' &&
-      value !== null &&
-      'kind' in value
+  return typeof value === 'object' && value !== null && 'kind' in value
     ? value.kind
     : undefined;
 }
@@ -124,13 +137,16 @@ export function parsePolicyDocument(
   if (!body) throw new Error(`${sourceFile}: policy body is empty`);
 
   const sections = body.split(/^## /m).slice(1);
-  if (!sections.length) throw new Error(`${sourceFile}: expected at least one level-two heading`);
+  if (!sections.length)
+    throw new Error(`${sourceFile}: expected at least one level-two heading`);
   return sections.map((section) => {
     const firstNewline = section.indexOf('\n');
-    if (firstNewline <= 0) throw new Error(`${sourceFile}: malformed level-two heading`);
+    if (firstNewline <= 0)
+      throw new Error(`${sourceFile}: malformed level-two heading`);
     const heading = section.slice(0, firstNewline).trim();
     const sectionBody = section.slice(firstNewline + 1).trim();
-    if (!sectionBody) throw new Error(`${sourceFile}: empty section ${heading}`);
+    if (!sectionBody)
+      throw new Error(`${sourceFile}: empty section ${heading}`);
     const id = `${metadata.id}/${slugify(heading)}`;
     const title = `${metadata.title} — ${heading}`;
     const markdown = `## ${heading}\n\n${sectionBody}`;
@@ -176,32 +192,47 @@ export function parsePolicyDocument(
   });
 }
 
-export async function buildPolicyFixtures(backendRoot: string, check = false): Promise<void> {
+export async function buildPolicyFixtures(
+  backendRoot: string,
+  check = false,
+): Promise<void> {
   const policyRoot = join(backendRoot, 'knowledge/kfc-okf/policies');
-  const fixturePath = join(backendRoot, 'fixtures/generated/content-pages.json');
+  const fixturePath = join(
+    backendRoot,
+    'fixtures/generated/content-pages.json',
+  );
   const policyFiles = (await readdir(policyRoot))
     .filter((file) => file.endsWith('.md'))
     .sort();
   const generated = (
-    await Promise.all(policyFiles.map(async (file) => {
-      const absolutePath = join(policyRoot, file);
-      const sourceFile = relative(backendRoot, absolutePath);
-      return parsePolicyDocument(await readFile(absolutePath, 'utf8'), sourceFile);
-    }))
+    await Promise.all(
+      policyFiles.map(async (file) => {
+        const absolutePath = join(policyRoot, file);
+        const sourceFile = relative(backendRoot, absolutePath);
+        return parsePolicyDocument(
+          await readFile(absolutePath, 'utf8'),
+          sourceFile,
+        );
+      }),
+    )
   ).flat();
   const ids = generated.map((record) => record.id);
-  if (new Set(ids).size !== ids.length) throw new Error('duplicate generated policy section id');
+  if (new Set(ids).size !== ids.length)
+    throw new Error('duplicate generated policy section id');
 
   const existing: unknown = JSON.parse(await readFile(fixturePath, 'utf8'));
   if (!Array.isArray(existing)) {
     throw new Error('content page fixture must be an array');
   }
-  const preserved = existing.filter((record) =>
-    recordKind(record) !== 'policy' && recordKind(record) !== 'allergen');
+  const preserved = existing.filter(
+    (record) =>
+      recordKind(record) !== 'policy' && recordKind(record) !== 'allergen',
+  );
   const output = `${JSON.stringify([...preserved, ...generated], null, 2)}\n`;
   if (check) {
     const current = await readFile(fixturePath, 'utf8');
-    if (current !== output) throw new Error('policy fixtures are stale; run npm run policies:build');
+    if (current !== output)
+      throw new Error('policy fixtures are stale; run npm run policies:build');
     return;
   }
   await writeFile(fixturePath, output);
@@ -211,5 +242,7 @@ if (import.meta.url === `file://${process.argv[1]}`) {
   const backendRoot = process.cwd();
   const check = process.argv.includes('--check');
   await buildPolicyFixtures(backendRoot, check);
-  console.log(`${check ? 'Checked' : 'Built'} policy fixtures from ${basename(join(backendRoot, 'knowledge/kfc-okf'))}`);
+  console.log(
+    `${check ? 'Checked' : 'Built'} policy fixtures from ${basename(join(backendRoot, 'knowledge/kfc-okf'))}`,
+  );
 }

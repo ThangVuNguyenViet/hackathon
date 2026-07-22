@@ -33,12 +33,8 @@ import {
   type AgentRunRow,
   type D1Result,
 } from './d1StoreSupport.js';
-import {
-  d1ActiveSessionAuthoritySource,
-} from './d1StoreSessionAuthority.js';
-import {
-  assertAgentRunExecutionClaim,
-} from './agentRunExecutionLease.js';
+import { d1ActiveSessionAuthoritySource } from './d1StoreSessionAuthority.js';
+import { assertAgentRunExecutionClaim } from './agentRunExecutionLease.js';
 import {
   d1AgentRunTextDeliveryColumns,
   d1AgentRunTextDeliveryInsertPlaceholders,
@@ -53,9 +49,7 @@ import {
   d1UnknownRunUpdateSql,
 } from './d1StoreAgentRunTextDeliverySql.js';
 
-export class D1StoreAgentRunTextDeliveryOperations
-  extends D1StoreVerifiedRefOperations
-{
+export class D1StoreAgentRunTextDeliveryOperations extends D1StoreVerifiedRefOperations {
   override async claimAgentRunExecution(
     input: ClaimAgentRunExecutionInput,
   ): Promise<ClaimAgentRunExecutionResult> {
@@ -244,9 +238,7 @@ export class D1StoreAgentRunTextDeliveryOperations
         rebound.record.runExecutionAttempt,
         rebound.record.runExecutionLeaseToken,
         rebound.record.runExecutionLeaseTokenDigest,
-        JSON.stringify(
-          rebound.record.priorRunExecutionLeaseTokenDigests,
-        ),
+        JSON.stringify(rebound.record.priorRunExecutionLeaseTokenDigests),
         rebound.record.deliveryBindingDigest,
         rebound.record.updatedAt,
         existing.runId,
@@ -254,9 +246,7 @@ export class D1StoreAgentRunTextDeliveryOperations
         existing.runExecutionOriginAttempt,
         existing.runExecutionLeaseToken,
         existing.runExecutionLeaseTokenDigest,
-        JSON.stringify(
-          existing.priorRunExecutionLeaseTokenDigests,
-        ),
+        JSON.stringify(existing.priorRunExecutionLeaseTokenDigests),
         existing.lastDeliveryRunExecutionAttempt,
         existing.deliveryBindingDigest,
         existing.status,
@@ -267,8 +257,7 @@ export class D1StoreAgentRunTextDeliveryOperations
       .first<AgentRunTextDeliveryStorageRow>();
     if (!changed) {
       const current = await this.getAgentRunTextDelivery(pending.runId);
-      return current &&
-        sameAgentRunTextDeliveryBinding(current, rebound.record)
+      return current && sameAgentRunTextDeliveryBinding(current, rebound.record)
         ? { status: 'replay', record: current }
         : { status: 'conflict', ...(current ? { record: current } : {}) };
     }
@@ -296,9 +285,7 @@ export class D1StoreAgentRunTextDeliveryOperations
   async beginAgentRunTextDeliveryAttempt(
     input: BeginAgentRunTextDeliveryAttemptInput,
   ): Promise<BeginAgentRunTextDeliveryAttemptResult> {
-    const existing = await this.getAgentRunTextDelivery(
-      input.execution.runId,
-    );
+    const existing = await this.getAgentRunTextDelivery(input.execution.runId);
     if (!existing) {
       return d1BlockedDeliveryBegin('execution_binding_mismatch');
     }
@@ -381,9 +368,7 @@ export class D1StoreAgentRunTextDeliveryOperations
           ),
       ]);
     } catch (error) {
-      if (await this.deliveryAttemptTokenExists(
-        input.deliveryAttemptToken,
-      )) {
+      if (await this.deliveryAttemptTokenExists(input.deliveryAttemptToken)) {
         return d1BlockedDeliveryBegin('delivery_attempt_token_reused');
       }
       throw error;
@@ -405,13 +390,8 @@ export class D1StoreAgentRunTextDeliveryOperations
   async completeAgentRunTextDeliveryAttempt(
     input: CompleteAgentRunTextDeliveryAttemptInput,
   ): Promise<CompleteAgentRunTextDeliveryAttemptResult> {
-    const existing = await this.getAgentRunTextDelivery(
-      input.execution.runId,
-    );
-    if (
-      !existing ||
-      !(await this.d1StoredRunExecutionMatches(existing))
-    ) {
+    const existing = await this.getAgentRunTextDelivery(input.execution.runId);
+    if (!existing || !(await this.d1StoredRunExecutionMatches(existing))) {
       return d1BlockedDeliveryCompletion('execution_binding_mismatch');
     }
     const transition = completeAgentRunTextDeliveryAttempt(existing, input);
@@ -458,10 +438,7 @@ export class D1StoreAgentRunTextDeliveryOperations
     const updated = d1FirstResult<AgentRunTextDeliveryStorageRow>(results[0]);
     if (updated && Number(results[1]?.meta.changes ?? 0) === 1) {
       const record = await this.deliveryRecordFromRow(updated);
-      if (
-        record.status === 'pending' ||
-        record.status === 'sending'
-      ) {
+      if (record.status === 'pending' || record.status === 'sending') {
         throw new Error('d1_agent_run_text_delivery_completion_state_invalid');
       }
       return {
@@ -475,13 +452,8 @@ export class D1StoreAgentRunTextDeliveryOperations
   async reconcileAgentRunTextDelivery(
     input: ReconcileAgentRunTextDeliveryInput,
   ): Promise<ReconcileAgentRunTextDeliveryResult> {
-    const existing = await this.getAgentRunTextDelivery(
-      input.execution.runId,
-    );
-    if (
-      !existing ||
-      !(await this.d1StoredRunExecutionMatches(existing))
-    ) {
+    const existing = await this.getAgentRunTextDelivery(input.execution.runId);
+    if (!existing || !(await this.d1StoredRunExecutionMatches(existing))) {
       return {
         status: 'reconciliation_blocked',
         reason: 'execution_binding_mismatch',
@@ -501,7 +473,9 @@ export class D1StoreAgentRunTextDeliveryOperations
       throw new Error('d1_agent_run_text_delivery_reconcile_source_invalid');
     }
     if (!this.db.batch) {
-      throw new Error('d1_atomic_agent_run_text_delivery_reconcile_unavailable');
+      throw new Error(
+        'd1_atomic_agent_run_text_delivery_reconcile_unavailable',
+      );
     }
     const next = transition.record;
     const results = await this.db.batch([
@@ -548,10 +522,13 @@ export class D1StoreAgentRunTextDeliveryOperations
 
   private async reconcileExpiredSendingDelivery(
     input: ClaimAgentRunExecutionInput,
-  ): Promise<Extract<
-    ClaimAgentRunExecutionResult,
-    { status: 'reconciliation_required' }
-  > | undefined> {
+  ): Promise<
+    | Extract<
+        ClaimAgentRunExecutionResult,
+        { status: 'reconciliation_required' }
+      >
+    | undefined
+  > {
     const row = await this.db
       .prepare(
         `SELECT ${d1DeliverySelectColumns('delivery')}
@@ -656,10 +633,7 @@ export class D1StoreAgentRunTextDeliveryOperations
         ),
     ]);
     const runRow = d1FirstResult<AgentRunRow>(results[1]);
-    if (
-      !d1FirstResult<AgentRunTextDeliveryStorageRow>(results[0]) ||
-      !runRow
-    ) {
+    if (!d1FirstResult<AgentRunTextDeliveryStorageRow>(results[0]) || !runRow) {
       return undefined;
     }
     return {
@@ -684,9 +658,7 @@ export class D1StoreAgentRunTextDeliveryOperations
       .all<{ delivery_attempt_token: string }>();
     return agentRunTextDeliveryFromStorageRow(
       row,
-      (attempts.results ?? []).map(
-        (attempt) => attempt.delivery_attempt_token,
-      ),
+      (attempts.results ?? []).map((attempt) => attempt.delivery_attempt_token),
     );
   }
 
@@ -753,7 +725,7 @@ export class D1StoreAgentRunTextDeliveryOperations
   private async deliveryAttemptTokenExists(token: string): Promise<boolean> {
     const row = await this.db
       .prepare(
-         `SELECT 1 AS found
+        `SELECT 1 AS found
          FROM agent_run_text_delivery_attempts
          WHERE delivery_attempt_token = ?
          LIMIT 1`,
@@ -816,13 +788,13 @@ export class D1StoreAgentRunTextDeliveryOperations
       { status: 'pending' | 'sending' }
     >,
   ): Promise<
-    Exclude<
-      AgentRunTextDeliveryRecord,
-      { status: 'pending' | 'sending' }
-    > | undefined
+    | Exclude<AgentRunTextDeliveryRecord, { status: 'pending' | 'sending' }>
+    | undefined
   > {
-    const row = await this.updateSendingDeliveryStatement(existing, next)
-      .first<AgentRunTextDeliveryStorageRow>();
+    const row = await this.updateSendingDeliveryStatement(
+      existing,
+      next,
+    ).first<AgentRunTextDeliveryStorageRow>();
     if (!row) return undefined;
     const record = await this.deliveryRecordFromRow(row);
     if (record.status === 'pending' || record.status === 'sending') {
@@ -865,14 +837,10 @@ export class D1StoreAgentRunTextDeliveryOperations
   private async classifyBlockedBegin(
     input: BeginAgentRunTextDeliveryAttemptInput,
   ): Promise<BeginAgentRunTextDeliveryAttemptResult> {
-    if (await this.deliveryAttemptTokenExists(
-      input.deliveryAttemptToken,
-    )) {
+    if (await this.deliveryAttemptTokenExists(input.deliveryAttemptToken)) {
       return d1BlockedDeliveryBegin('delivery_attempt_token_reused');
     }
-    const current = await this.getAgentRunTextDelivery(
-      input.execution.runId,
-    );
+    const current = await this.getAgentRunTextDelivery(input.execution.runId);
     return current
       ? beginAgentRunTextDeliveryAttempt(current, input)
       : d1BlockedDeliveryBegin('execution_binding_mismatch');
@@ -881,9 +849,7 @@ export class D1StoreAgentRunTextDeliveryOperations
   private async classifyBlockedCompletion(
     input: CompleteAgentRunTextDeliveryAttemptInput,
   ): Promise<CompleteAgentRunTextDeliveryAttemptResult> {
-    const current = await this.getAgentRunTextDelivery(
-      input.execution.runId,
-    );
+    const current = await this.getAgentRunTextDelivery(input.execution.runId);
     return current
       ? completeAgentRunTextDeliveryAttempt(current, input)
       : d1BlockedDeliveryCompletion('execution_binding_mismatch');

@@ -1,16 +1,10 @@
-import type {
-  CommitPausedCustomerRunIntakeInput,
-} from './contracts.js';
-import type {
-  ConversationTurn,
-} from '../domain/types.js';
+import type { CommitPausedCustomerRunIntakeInput } from './contracts.js';
+import type { ConversationTurn } from '../domain/types.js';
 import type {
   CustomerRun,
   CustomerRunEvent,
 } from '../customerRuns/contracts.js';
-import {
-  prepareCustomerRunEventBatch,
-} from './customerRunEventCommit.js';
+import { prepareCustomerRunEventBatch } from './customerRunEventCommit.js';
 
 export function validatePausedCustomerRunIntake(
   input: CommitPausedCustomerRunIntakeInput,
@@ -110,9 +104,7 @@ export function assertExactPausedCustomerRunReplay(input: {
   assertExactPausedCustomerUserTurn(operation, turn);
 }
 
-function isExactSupersededPayload(
-  payload: Record<string, unknown>,
-): boolean {
+function isExactSupersededPayload(payload: Record<string, unknown>): boolean {
   const keys = Object.keys(payload).sort();
   return (
     keys.length === 3 &&
@@ -132,9 +124,7 @@ function canonicalJson(value: unknown): string {
   if (typeof value === 'object' && value !== null) {
     return `{${Object.entries(value)
       .sort(([left], [right]) => left.localeCompare(right))
-      .map(([key, entry]) =>
-        `${JSON.stringify(key)}:${canonicalJson(entry)}`
-      )
+      .map(([key, entry]) => `${JSON.stringify(key)}:${canonicalJson(entry)}`)
       .join(',')}}`;
   }
   return JSON.stringify(value);

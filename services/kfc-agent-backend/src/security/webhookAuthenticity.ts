@@ -1,6 +1,8 @@
 function decodeHex(value: string): Uint8Array | undefined {
   if (!/^[0-9a-f]{64}$/i.test(value)) return undefined;
-  return Uint8Array.from(value.match(/.{2}/g) ?? [], (byte) => Number.parseInt(byte, 16));
+  return Uint8Array.from(value.match(/.{2}/g) ?? [], (byte) =>
+    Number.parseInt(byte, 16),
+  );
 }
 
 function equalBytes(left: Uint8Array, right: Uint8Array): boolean {
@@ -17,7 +19,8 @@ export async function verifyMetaWebhookSignature(input: {
   signatureHeader: string | null;
   appSecret: string;
 }): Promise<boolean> {
-  if (!input.appSecret || !input.signatureHeader?.startsWith('sha256=')) return false;
+  if (!input.appSecret || !input.signatureHeader?.startsWith('sha256='))
+    return false;
   const received = decodeHex(input.signatureHeader.slice('sha256='.length));
   if (!received) return false;
 
@@ -28,6 +31,12 @@ export async function verifyMetaWebhookSignature(input: {
     false,
     ['sign'],
   );
-  const expected = new Uint8Array(await crypto.subtle.sign('HMAC', key, Uint8Array.from(input.rawBody).buffer));
+  const expected = new Uint8Array(
+    await crypto.subtle.sign(
+      'HMAC',
+      key,
+      Uint8Array.from(input.rawBody).buffer,
+    ),
+  );
   return equalBytes(expected, received);
 }

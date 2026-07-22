@@ -1,4 +1,7 @@
-import type { CatalogObservation, CommerceEnvironment } from '../catalog/catalogObservation.js';
+import type {
+  CatalogObservation,
+  CommerceEnvironment,
+} from '../catalog/catalogObservation.js';
 import { z } from 'zod';
 
 export interface VerifiedCommerceFactGroup<T> {
@@ -39,7 +42,12 @@ function dependencySafeFacts<T>(
   while (changed) {
     changed = false;
     for (const [key, group] of Object.entries(current)) {
-      if (group.dependencies.some((dependency) => current[dependency.key]?.revision !== dependency.revision)) {
+      if (
+        group.dependencies.some(
+          (dependency) =>
+            current[dependency.key]?.revision !== dependency.revision,
+        )
+      ) {
         delete current[key];
         changed = true;
       }
@@ -48,13 +56,27 @@ function dependencySafeFacts<T>(
   return current;
 }
 
-function projectionTimes<T>(facts: Record<string, VerifiedCommerceFactGroup<T>>): {
+function projectionTimes<T>(
+  facts: Record<string, VerifiedCommerceFactGroup<T>>,
+): {
   verifiedAt: string;
   expiresAt: string;
 } {
   return {
-    verifiedAt: new Date(Math.max(...Object.values(facts).map((group) => timestamp(group.verifiedAt, 'verifiedAt')))).toISOString(),
-    expiresAt: new Date(Math.min(...Object.values(facts).map((group) => timestamp(group.expiresAt, 'expiresAt')))).toISOString(),
+    verifiedAt: new Date(
+      Math.max(
+        ...Object.values(facts).map((group) =>
+          timestamp(group.verifiedAt, 'verifiedAt'),
+        ),
+      ),
+    ).toISOString(),
+    expiresAt: new Date(
+      Math.min(
+        ...Object.values(facts).map((group) =>
+          timestamp(group.expiresAt, 'expiresAt'),
+        ),
+      ),
+    ).toISOString(),
   };
 }
 
@@ -67,20 +89,31 @@ export function createVerifiedCommerceProjection<T>(input: {
   now?: Date;
 }): VerifiedCommerceProjection<T> {
   if (input.observation.environment !== input.environment) {
-    throw new Error('Catalog observation belongs to another commerce environment');
+    throw new Error(
+      'Catalog observation belongs to another commerce environment',
+    );
   }
   if (!input.subjectId.trim() || !input.journeyId.trim()) {
     throw new Error('Subject and journey bindings are required');
   }
   const now = (input.now ?? new Date()).getTime();
-  if (input.observation.expiresAt && timestamp(input.observation.expiresAt, 'observation.expiresAt') <= now) {
+  if (
+    input.observation.expiresAt &&
+    timestamp(input.observation.expiresAt, 'observation.expiresAt') <= now
+  ) {
     throw new Error('Bound catalog observation is expired');
   }
 
   const submitted: Record<string, VerifiedCommerceFactGroup<T>> = {};
   for (const group of input.factGroups) {
-    if (!group.key.trim() || Object.hasOwn(submitted, group.key) || !group.revision.trim()) {
-      throw new Error('Verified commerce fact groups require unique keys and revisions');
+    if (
+      !group.key.trim() ||
+      Object.hasOwn(submitted, group.key) ||
+      !group.revision.trim()
+    ) {
+      throw new Error(
+        'Verified commerce fact groups require unique keys and revisions',
+      );
     }
     if (
       group.environment !== input.environment ||
@@ -88,22 +121,35 @@ export function createVerifiedCommerceProjection<T>(input: {
       group.subjectId !== input.subjectId ||
       group.journeyId !== input.journeyId
     ) {
-      throw new Error(`Verified commerce fact group ${group.key} has conflicting bindings`);
+      throw new Error(
+        `Verified commerce fact group ${group.key} has conflicting bindings`,
+      );
     }
     const verifiedAt = timestamp(group.verifiedAt, `${group.key}.verifiedAt`);
     const expiresAt = timestamp(group.expiresAt, `${group.key}.expiresAt`);
-    if (verifiedAt > now) throw new Error(`Verified commerce fact group ${group.key} is future-dated`);
-    if (expiresAt <= verifiedAt) throw new Error(`Verified commerce fact group ${group.key} has invalid expiry`);
+    if (verifiedAt > now)
+      throw new Error(
+        `Verified commerce fact group ${group.key} is future-dated`,
+      );
+    if (expiresAt <= verifiedAt)
+      throw new Error(
+        `Verified commerce fact group ${group.key} has invalid expiry`,
+      );
     submitted[group.key] = group;
   }
-  if (Object.keys(submitted).length === 0) throw new Error('At least one verified commerce fact group is required');
+  if (Object.keys(submitted).length === 0)
+    throw new Error('At least one verified commerce fact group is required');
 
   for (const group of Object.values(submitted)) {
     const dependencyKeys = new Set<string>();
     for (const dependency of group.dependencies) {
-      if (dependencyKeys.has(dependency.key)) throw new Error(`Duplicate dependency ${group.key}/${dependency.key}`);
+      if (dependencyKeys.has(dependency.key))
+        throw new Error(`Duplicate dependency ${group.key}/${dependency.key}`);
       dependencyKeys.add(dependency.key);
-      if (dependency.key === group.key || submitted[dependency.key]?.revision !== dependency.revision) {
+      if (
+        dependency.key === group.key ||
+        submitted[dependency.key]?.revision !== dependency.revision
+      ) {
         throw new Error(`Unbound dependency ${group.key}/${dependency.key}`);
       }
     }
@@ -111,14 +157,21 @@ export function createVerifiedCommerceProjection<T>(input: {
   const visit = (key: string, path: Set<string>): void => {
     if (path.has(key)) throw new Error(`Cyclic fact dependency at ${key}`);
     const next = new Set(path).add(key);
-    for (const dependency of submitted[key]!.dependencies) visit(dependency.key, next);
+    for (const dependency of submitted[key]!.dependencies)
+      visit(dependency.key, next);
   };
   for (const key of Object.keys(submitted)) visit(key, new Set());
 
-  const facts = dependencySafeFacts(Object.fromEntries(
-    Object.entries(submitted).filter(([, group]) => timestamp(group.expiresAt, `${group.key}.expiresAt`) > now),
-  ));
-  if (Object.keys(facts).length === 0) throw new Error('No current verified commerce fact group remains');
+  const facts = dependencySafeFacts(
+    Object.fromEntries(
+      Object.entries(submitted).filter(
+        ([, group]) =>
+          timestamp(group.expiresAt, `${group.key}.expiresAt`) > now,
+      ),
+    ),
+  );
+  if (Object.keys(facts).length === 0)
+    throw new Error('No current verified commerce fact group remains');
   const times = projectionTimes(facts);
   return {
     environment: input.environment,
@@ -150,16 +203,24 @@ export function assertVerifiedCommerceProjectionCurrent<T>(
     projection.journeyId !== current.journeyId ||
     projection.catalogObservationId !== current.catalogObservationId
   ) {
-    throw new Error('Verified commerce projection is stale or environment-conflicted');
+    throw new Error(
+      'Verified commerce projection is stale or environment-conflicted',
+    );
   }
   const now = (current.now ?? new Date()).getTime();
-  const facts = dependencySafeFacts(Object.fromEntries(
-    Object.entries(projection.facts).filter(([, group]) =>
-      current.factRevisions[group.key] === group.revision && timestamp(group.expiresAt, `${group.key}.expiresAt`) > now,
+  const facts = dependencySafeFacts(
+    Object.fromEntries(
+      Object.entries(projection.facts).filter(
+        ([, group]) =>
+          current.factRevisions[group.key] === group.revision &&
+          timestamp(group.expiresAt, `${group.key}.expiresAt`) > now,
+      ),
     ),
-  ));
+  );
   if (Object.keys(facts).length === 0) {
-    throw new Error('Verified commerce projection is stale or environment-conflicted');
+    throw new Error(
+      'Verified commerce projection is stale or environment-conflicted',
+    );
   }
   return { ...projection, ...projectionTimes(facts), facts };
 }

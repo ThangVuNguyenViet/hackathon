@@ -6,7 +6,8 @@ let d1InitializationDatabase: D1DatabaseLike | undefined;
 
 export function initializeWorkerStore(store: D1Store, db: D1DatabaseLike) {
   const shouldResetForTestDatabase =
-    db.constructor?.name === "FakeD1Database" && d1InitializationDatabase !== db;
+    db.constructor?.name === 'FakeD1Database' &&
+    d1InitializationDatabase !== db;
   if (!d1InitializationPromise || shouldResetForTestDatabase) {
     d1InitializationDatabase = db;
     d1InitializationPromise = store.initialize().catch((error) => {

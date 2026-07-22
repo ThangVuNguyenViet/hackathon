@@ -14,16 +14,12 @@ import type {
   SessionControl,
   StoredEvent,
 } from './contracts.js';
-import type {
-  MemoryIrreversibleOperationRecord,
-} from './memoryStoreConfirmationResumeOperations.js';
+import type { MemoryIrreversibleOperationRecord } from './memoryStoreIrreversibleOperations.js';
 import {
   memoryVerifiedRefStorageSnapshot,
   type MemoryVerifiedRefStorageSnapshot,
 } from './memoryStoreVerifiedRefOperations.js';
-import {
-  prepareAssistantTurnCommit,
-} from './runCommitPreparation.js';
+import { prepareAssistantTurnCommit } from './runCommitPreparation.js';
 
 interface MemoryRunCommitState {
   customerRuns: ReadonlyMap<string, CustomerRun>;
@@ -83,7 +79,7 @@ export function appendMemoryEventIfRunCurrent(input: {
 export function commitMemoryAssistantTurnIfRunCurrent(input: {
   operation: CommitAssistantTurnIfRunCurrentInput;
   state: MemoryRunCommitState;
-  confirmationPauseGenerations: ReadonlyMap<string, number>;
+  sessionGenerations: ReadonlyMap<string, number>;
   verifiedRefs: Map<string, MemoryVerifiedRefStorageSnapshot>;
   turns: ConversationTurn[];
   events: StoredEvent[];
@@ -93,32 +89,26 @@ export function commitMemoryAssistantTurnIfRunCurrent(input: {
   const notAfter = input.operation.notAfter;
   if (
     notAfter !== undefined &&
-    (
-      !Number.isFinite(Date.parse(notAfter)) ||
-      Date.parse(notAfter) <= now
-    )
+    (!Number.isFinite(Date.parse(notAfter)) || Date.parse(notAfter) <= now)
   ) {
     return { status: 'stale' };
   }
-  if (!memoryRunCommitFenceIsCurrent({
-    guard: {
-      sessionId: input.operation.stateEvent.sessionId,
-      fence: input.operation.fence,
-      ...(notAfter === undefined ? {} : { notAfter }),
-    },
-    ...input.state,
-    now,
-  })) {
+  if (
+    !memoryRunCommitFenceIsCurrent({
+      guard: {
+        sessionId: input.operation.stateEvent.sessionId,
+        fence: input.operation.fence,
+        ...(notAfter === undefined ? {} : { notAfter }),
+      },
+      ...input.state,
+      now,
+    })
+  ) {
     return { status: 'stale' };
   }
-  const prepared = prepareAssistantTurnCommit(
-    input.operation,
-    new Date(now),
-  );
+  const prepared = prepareAssistantTurnCommit(input.operation, new Date(now));
   const sessionGeneration =
-    input.confirmationPauseGenerations.get(
-      prepared.turn.sessionId,
-    ) ?? 0;
+    input.sessionGenerations.get(prepared.turn.sessionId) ?? 0;
   for (const record of prepared.verifiedRefs) {
     if (input.verifiedRefs.has(record.ref.id)) {
       throw new Error('verified_ref_id_collision');
@@ -145,20 +135,16 @@ export function memoryRunCommitFenceIsCurrent(
   const { guard } = input;
   if (
     guard.notAfter !== undefined &&
-    (
-      !Number.isFinite(Date.parse(guard.notAfter)) ||
-      Date.parse(guard.notAfter) <= input.now
-    )
+    (!Number.isFinite(Date.parse(guard.notAfter)) ||
+      Date.parse(guard.notAfter) <= input.now)
   ) {
     return false;
   }
   const control = input.sessionControls.get(guard.sessionId);
-  const authorityGeneration =
-    control?.sessionAuthorityGeneration ?? 0;
+  const authorityGeneration = control?.sessionAuthorityGeneration ?? 0;
   if (
     (control?.agentMode ?? 'ai_active') !== 'ai_active' ||
-    authorityGeneration !==
-      guard.fence.sessionAuthorityGeneration
+    authorityGeneration !== guard.fence.sessionAuthorityGeneration
   ) {
     return false;
   }
@@ -176,8 +162,7 @@ export function memoryRunCommitFenceIsCurrent(
         run.sessionAuthorityGeneration === authorityGeneration &&
         run.status === 'running' &&
         run.executionAttempt === guard.fence.executionAttempt &&
-        run.executionLeaseToken ===
-          guard.fence.executionLeaseToken &&
+        run.executionLeaseToken === guard.fence.executionLeaseToken &&
         run.executionLeaseExpiresAt !== null &&
         Date.parse(run.executionLeaseExpiresAt) > input.now,
       );
@@ -192,9 +177,7 @@ export function memoryRunCommitFenceIsCurrent(
       );
     }
     case 'operation_lease': {
-      const reserved = input.irreversibleOperations.get(
-        guard.fence.requestId,
-      );
+      const reserved = input.irreversibleOperations.get(guard.fence.requestId);
       const expected: IrreversibleOperationInput = {
         requestId: guard.fence.requestId,
         sessionId: guard.sessionId,

@@ -1,4 +1,7 @@
-import type { DashboardEvent, MonitorSessionIntelligence } from '../domain/types.js';
+import type {
+  DashboardEvent,
+  MonitorSessionIntelligence,
+} from '../domain/types.js';
 import { parseMonitorSessionIntelligencePayload } from '../monitor/sessionIntelligence.js';
 
 type DashboardEventListener = (event: DashboardEvent) => void;
@@ -37,9 +40,7 @@ export class DashboardEventBus {
     return this.events.filter((event) => event.sessionId === sessionId);
   }
 
-  listSessionSummaries(
-    options: DashboardSessionSummaryOptions = {},
-  ): Array<{
+  listSessionSummaries(options: DashboardSessionSummaryOptions = {}): Array<{
     sessionId: string;
     latestEventType: DashboardEvent['type'];
     updatedAt: string;
@@ -62,19 +63,33 @@ export class DashboardEventBus {
       };
       next.latestEvent = event;
       if (event.type === 'session_intelligence_updated') {
-        next.sessionIntelligence = parseMonitorSessionIntelligencePayload(event.payload) ?? next.sessionIntelligence;
+        next.sessionIntelligence =
+          parseMonitorSessionIntelligencePayload(event.payload) ??
+          next.sessionIntelligence;
       } else {
         next.latestBusinessEvent = event;
       }
       latestBySession.set(event.sessionId, next);
     }
-    const updatedSinceMs = options.updatedSince === undefined ? undefined : Date.parse(options.updatedSince);
+    const updatedSinceMs =
+      options.updatedSince === undefined
+        ? undefined
+        : Date.parse(options.updatedSince);
     return [...latestBySession.values()]
-      .filter((summary) => updatedSinceMs === undefined || Date.parse(summary.latestEvent.createdAt) >= updatedSinceMs)
-      .sort((a, b) => Date.parse(b.latestEvent.createdAt) - Date.parse(a.latestEvent.createdAt))
+      .filter(
+        (summary) =>
+          updatedSinceMs === undefined ||
+          Date.parse(summary.latestEvent.createdAt) >= updatedSinceMs,
+      )
+      .sort(
+        (a, b) =>
+          Date.parse(b.latestEvent.createdAt) -
+          Date.parse(a.latestEvent.createdAt),
+      )
       .map((summary) => ({
         sessionId: summary.latestEvent.sessionId,
-        latestEventType: (summary.latestBusinessEvent ?? summary.latestEvent).type,
+        latestEventType: (summary.latestBusinessEvent ?? summary.latestEvent)
+          .type,
         updatedAt: summary.latestEvent.createdAt,
         sessionIntelligence: summary.sessionIntelligence,
       }));

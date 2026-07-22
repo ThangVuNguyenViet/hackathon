@@ -1,34 +1,37 @@
-import type { CommerceResult } from "./contracts.js";
+import type { CommerceResult } from './contracts.js';
 import type {
   CommerceProofGatewayMutationState,
   GatewayProviderRuntimeBinding,
   StoredCancellationMutation,
   StoredCommerceOrderMutation,
-} from "./gatewayMutationContracts.js";
+} from './gatewayMutationContracts.js';
 import type {
   createCommerceProofOmsClient,
   createCommerceProofPosClient,
   OmsResponse,
   PosResponse,
-} from "./httpClients.js";
+} from './httpClients.js';
 
 type OmsClient = ReturnType<typeof createCommerceProofOmsClient>;
 type PosClient = ReturnType<typeof createCommerceProofPosClient>;
 
 interface ExpectedProviderState {
-  omsStatuses: ReadonlySet<OmsResponse["omsStatus"]>;
-  posStatuses: ReadonlySet<PosResponse["posStatus"]>;
+  omsStatuses: ReadonlySet<OmsResponse['omsStatus']>;
+  posStatuses: ReadonlySet<PosResponse['posStatus']>;
 }
 
-const createdOmsStatuses = new Set<OmsResponse["omsStatus"]>(["created"]);
-const cancelledOmsStatuses = new Set<OmsResponse["omsStatus"]>(["cancelled"]);
-const uncertainOmsCancellationStatuses =
-  new Set<OmsResponse["omsStatus"]>(["created", "cancelled"]);
-const acceptedPosStatuses = new Set<PosResponse["posStatus"]>(["accepted"]);
-const cancelledPosStatuses =
-  new Set<PosResponse["posStatus"]>(["cancelled"]);
-const uncertainPosCancellationStatuses =
-  new Set<PosResponse["posStatus"]>(["accepted", "cancelled"]);
+const createdOmsStatuses = new Set<OmsResponse['omsStatus']>(['created']);
+const cancelledOmsStatuses = new Set<OmsResponse['omsStatus']>(['cancelled']);
+const uncertainOmsCancellationStatuses = new Set<OmsResponse['omsStatus']>([
+  'created',
+  'cancelled',
+]);
+const acceptedPosStatuses = new Set<PosResponse['posStatus']>(['accepted']);
+const cancelledPosStatuses = new Set<PosResponse['posStatus']>(['cancelled']);
+const uncertainPosCancellationStatuses = new Set<PosResponse['posStatus']>([
+  'accepted',
+  'cancelled',
+]);
 
 export async function validateRestoredGatewayProviderState(input: {
   state: CommerceProofGatewayMutationState;
@@ -41,7 +44,7 @@ export async function validateRestoredGatewayProviderState(input: {
     input.state.providerRuntimeBinding.omsInstanceId !== live.omsInstanceId ||
     input.state.providerRuntimeBinding.posInstanceId !== live.posInstanceId
   ) {
-    throw new Error("gateway_provider_runtime_binding_mismatch");
+    throw new Error('gateway_provider_runtime_binding_mismatch');
   }
   const cancellationByOrderId = new Map(
     [...input.state.cancellationsByIdempotencyKey.values()].map(
@@ -72,7 +75,7 @@ export async function readGatewayProviderRuntimeBinding(input: {
     input.pos.getRuntimeIdentity(),
   ]);
   if (!omsRuntime.ok || !posRuntime.ok) {
-    throw new Error("gateway_provider_runtime_identity_unavailable");
+    throw new Error('gateway_provider_runtime_identity_unavailable');
   }
   return {
     omsInstanceId: omsRuntime.value.instanceId,
@@ -113,7 +116,7 @@ async function validateOmsPredecessor(
     response.value.omsOrderId !== stored.omsOrderId ||
     !expected.omsStatuses.has(response.value.omsStatus)
   ) {
-    throw new Error("gateway_restored_oms_predecessor_unverified");
+    throw new Error('gateway_restored_oms_predecessor_unverified');
   }
 }
 
@@ -137,7 +140,7 @@ async function validatePosPredecessor(
     response.value.posTicketId !== posTicketId ||
     !expected.posStatuses.has(response.value.posStatus)
   ) {
-    throw new Error("gateway_restored_pos_predecessor_unverified");
+    throw new Error('gateway_restored_pos_predecessor_unverified');
   }
 }
 
@@ -147,14 +150,13 @@ function expectedProviderState(
 ): ExpectedProviderState {
   if (cancellation) return cancellationProviderState(cancellation);
   const outcome = completedOutcome(order);
-  if (outcome === "pos_rejected") {
+  if (outcome === 'pos_rejected') {
     return {
-      omsStatuses:
-        order.omsCompensationEvidence
-          ? cancelledOmsStatuses
-          : order.state === "oms_compensation_unknown"
-            ? uncertainOmsCancellationStatuses
-            : createdOmsStatuses,
+      omsStatuses: order.omsCompensationEvidence
+        ? cancelledOmsStatuses
+        : order.state === 'oms_compensation_unknown'
+          ? uncertainOmsCancellationStatuses
+          : createdOmsStatuses,
       posStatuses: acceptedPosStatuses,
     };
   }
@@ -168,20 +170,20 @@ function cancellationProviderState(
   cancellation: StoredCancellationMutation,
 ): ExpectedProviderState {
   if (
-    cancellation.state === "pos_cancel_pending" ||
-    cancellation.state === "pos_cancel_unknown"
+    cancellation.state === 'pos_cancel_pending' ||
+    cancellation.state === 'pos_cancel_unknown'
   ) {
     return {
       omsStatuses: createdOmsStatuses,
       posStatuses:
-        cancellation.state === "pos_cancel_unknown"
+        cancellation.state === 'pos_cancel_unknown'
           ? uncertainPosCancellationStatuses
           : acceptedPosStatuses,
     };
   }
   if (
-    cancellation.state === "pos_cancel_failed" ||
-    cancellation.completionKind === "pos_cancellation_failed"
+    cancellation.state === 'pos_cancel_failed' ||
+    cancellation.completionKind === 'pos_cancellation_failed'
   ) {
     return {
       omsStatuses: createdOmsStatuses,
@@ -189,20 +191,20 @@ function cancellationProviderState(
     };
   }
   if (
-    cancellation.state === "oms_cancel_pending" ||
-    cancellation.state === "oms_cancel_unknown"
+    cancellation.state === 'oms_cancel_pending' ||
+    cancellation.state === 'oms_cancel_unknown'
   ) {
     return {
       omsStatuses:
-        cancellation.state === "oms_cancel_unknown"
+        cancellation.state === 'oms_cancel_unknown'
           ? uncertainOmsCancellationStatuses
           : createdOmsStatuses,
       posStatuses: cancelledPosStatuses,
     };
   }
   if (
-    cancellation.state === "oms_cancel_failed" ||
-    cancellation.completionKind === "oms_cancellation_failed"
+    cancellation.state === 'oms_cancel_failed' ||
+    cancellation.completionKind === 'oms_cancellation_failed'
   ) {
     return {
       omsStatuses: createdOmsStatuses,
@@ -217,6 +219,6 @@ function cancellationProviderState(
 
 function completedOutcome(
   order: StoredCommerceOrderMutation,
-): CommerceResult["outcome"] | undefined {
-  return order.state === "completed" ? order.response?.outcome : undefined;
+): CommerceResult['outcome'] | undefined {
+  return order.state === 'completed' ? order.response?.outcome : undefined;
 }

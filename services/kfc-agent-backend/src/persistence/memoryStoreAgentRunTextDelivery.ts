@@ -18,9 +18,7 @@ import {
   type ReconcileAgentRunTextDeliveryInput,
   type ReconcileAgentRunTextDeliveryResult,
 } from './agentRunTextDelivery.js';
-import {
-  sameAgentRunTextDeliveryBinding,
-} from './agentRunTextDeliveryStorage.js';
+import { sameAgentRunTextDeliveryBinding } from './agentRunTextDeliveryStorage.js';
 import type {
   ClaimAgentRunExecutionResult,
   CreateAgentRunTextDeliveryResult,
@@ -28,9 +26,7 @@ import type {
   SupersedeAgentRunExecutionIfNoLongerCurrentInput,
   SupersedeAgentRunExecutionIfNoLongerCurrentResult,
 } from './contracts.js';
-import {
-  captureActiveMemorySessionAuthority,
-} from './memoryStoreSessionAuthority.js';
+import { captureActiveMemorySessionAuthority } from './memoryStoreSessionAuthority.js';
 
 export interface MemoryAgentRunTextDeliveryState {
   agentRuns: Map<string, AgentRun>;
@@ -68,10 +64,7 @@ export async function createMemoryAgentRunTextDelivery(
   if (rebound.status !== 'rebound') {
     return { status: 'conflict', record: structuredClone(existing) };
   }
-  storage.deliveries.set(
-    rebound.record.runId,
-    structuredClone(rebound.record),
-  );
+  storage.deliveries.set(rebound.record.runId, structuredClone(rebound.record));
   return { status: 'rebound', record: structuredClone(rebound.record) };
 }
 
@@ -97,12 +90,7 @@ export function beginMemoryAgentRunTextDeliveryAttempt(
   }
   const transition = beginAgentRunTextDeliveryAttempt(existing, input);
   if (transition.status !== 'dispatch_authorized') return transition;
-  if (
-    memoryDeliveryAttemptTokenExists(
-      input.deliveryAttemptToken,
-      storage,
-    )
-  ) {
+  if (memoryDeliveryAttemptTokenExists(input.deliveryAttemptToken, storage)) {
     return {
       status: 'dispatch_blocked',
       reason: 'delivery_attempt_token_reused',
@@ -182,10 +170,7 @@ export function reconcileMemoryAgentRunTextDelivery(
     };
   }
   const transition = reconcileAgentRunTextDelivery(existing, input);
-  if (
-    transition.status !== 'reconciled' &&
-    transition.status !== 'replay'
-  ) {
+  if (transition.status !== 'reconciled' && transition.status !== 'replay') {
     return transition;
   }
   storage.deliveries.set(
@@ -254,10 +239,9 @@ export function reconcileExpiredSendingMemoryAgentRun(input: {
   ) {
     return undefined;
   }
-  const reconciledAt = new Date(Math.max(
-    Date.parse(input.reconciledAt),
-    Date.parse(delivery.updatedAt),
-  )).toISOString();
+  const reconciledAt = new Date(
+    Math.max(Date.parse(input.reconciledAt), Date.parse(delivery.updatedAt)),
+  ).toISOString();
   const transition = reconcileAgentRunTextDelivery(delivery, {
     execution: {
       runId: run.id,
@@ -291,8 +275,7 @@ export function supersedeMemoryAgentRunExecutionIfNoLongerCurrent(
     !run ||
     run.sessionId !== input.sessionId ||
     run.generation !== input.fence.generation ||
-    run.sessionAuthorityGeneration !==
-      input.fence.sessionAuthorityGeneration ||
+    run.sessionAuthorityGeneration !== input.fence.sessionAuthorityGeneration ||
     run.executionAttempt !== input.fence.executionAttempt ||
     run.executionLeaseToken !== input.fence.executionLeaseToken ||
     run.status !== 'running'
@@ -359,7 +342,7 @@ function memoryDeliveryExecutionIsCurrent(
     run.assistantTurnId === delivery.assistantTurnId &&
     run.executionAttempt === delivery.runExecutionAttempt &&
     run.executionLeaseToken === delivery.runExecutionLeaseToken &&
-    memoryRunOwnerIsCurrent(run, storage, now)
+    memoryRunOwnerIsCurrent(run, storage, now),
   );
 }
 
@@ -371,7 +354,7 @@ function memoryStoredRunExecutionMatches(
   return Boolean(
     run &&
     run.executionAttempt === delivery.runExecutionAttempt &&
-    run.executionLeaseToken === delivery.runExecutionLeaseToken
+    run.executionLeaseToken === delivery.runExecutionLeaseToken,
   );
 }
 
@@ -422,10 +405,7 @@ function reconcileMemoryAgentRun(
 
 function completeMemoryAgentRunDelivery(
   storage: MemoryAgentRunTextDeliveryState,
-  delivery: Extract<
-    AgentRunTextDeliveryRecord,
-    { status: 'confirmed_sent' }
-  >,
+  delivery: Extract<AgentRunTextDeliveryRecord, { status: 'confirmed_sent' }>,
   updatedAt: string,
 ): AgentRun {
   const run = storage.agentRuns.get(delivery.runId);

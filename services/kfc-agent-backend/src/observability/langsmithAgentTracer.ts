@@ -2,7 +2,11 @@ import { Client, RunTree } from 'langsmith';
 import { getLangchainCallbacks } from 'langsmith/langchain';
 import { withRunTree } from 'langsmith/traceable';
 import type { Callbacks } from '@langchain/core/callbacks/manager';
-import type { AgentTraceSpan, AgentTraceSpanInput, AgentTracer } from './agentTracing.js';
+import type {
+  AgentTraceSpan,
+  AgentTraceSpanInput,
+  AgentTracer,
+} from './agentTracing.js';
 
 export interface LangSmithRunConfig {
   name: string;
@@ -33,15 +37,10 @@ export interface LangSmithAgentTracerOptions {
 }
 
 const traceFailureError = 'agent_trace_failed_closed';
-const opaqueCorrelationIdPattern =
-  /^[A-Za-z0-9][A-Za-z0-9._:/-]{0,255}$/u;
+const opaqueCorrelationIdPattern = /^[A-Za-z0-9][A-Za-z0-9._:/-]{0,255}$/u;
 
 function isRecord(value: unknown): value is Record<string, unknown> {
-  return (
-    typeof value === 'object' &&
-    value !== null &&
-    !Array.isArray(value)
-  );
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
 function safeRawEventMetadata(
@@ -99,9 +98,7 @@ function privacySafeLangSmithMetadata(
 function privacySafeLangSmithError(
   values: Record<string, unknown>,
 ): Record<string, unknown> {
-  return Object.hasOwn(values, 'error')
-    ? { error: traceFailureError }
-    : {};
+  return Object.hasOwn(values, 'error') ? { error: traceFailureError } : {};
 }
 
 const safeProviderAttemptPurposes = new Set([
@@ -122,15 +119,8 @@ const safeProviderErrorClasses = new Set([
   'timeout',
   'unknown',
 ]);
-const safeSpanStatuses = new Set([
-  'completed',
-  'interrupted',
-  'paused',
-]);
-const safeExecutionOutcomes = new Set([
-  'error',
-  'success',
-]);
+const safeSpanStatuses = new Set(['completed', 'interrupted', 'paused']);
+const safeExecutionOutcomes = new Set(['error', 'success']);
 const safeGraphDestinations = new Set([
   '__end__',
   'call_model',
@@ -151,12 +141,10 @@ function safeBoundedInteger(
   value: unknown,
   maximum: number,
 ): number | undefined {
-  return (
-      typeof value === 'number' &&
-      Number.isSafeInteger(value) &&
-      value >= 0 &&
-      value <= maximum
-    )
+  return typeof value === 'number' &&
+    Number.isSafeInteger(value) &&
+    value >= 0 &&
+    value <= maximum
     ? value
     : undefined;
 }
@@ -194,37 +182,12 @@ export function privacySafeLangSmithOutputs(
   ] as const) {
     if (typeof outputs[key] === 'boolean') safe[key] = outputs[key];
   }
-  copySafeEnum(
-    safe,
-    outputs,
-    'purpose',
-    safeProviderAttemptPurposes,
-  );
-  copySafeEnum(
-    safe,
-    outputs,
-    'outcome',
-    safeProviderAttemptOutcomes,
-  );
-  copySafeEnum(
-    safe,
-    outputs,
-    'errorClass',
-    safeProviderErrorClasses,
-  );
+  copySafeEnum(safe, outputs, 'purpose', safeProviderAttemptPurposes);
+  copySafeEnum(safe, outputs, 'outcome', safeProviderAttemptOutcomes);
+  copySafeEnum(safe, outputs, 'errorClass', safeProviderErrorClasses);
   copySafeEnum(safe, outputs, 'status', safeSpanStatuses);
-  copySafeEnum(
-    safe,
-    outputs,
-    'executionOutcome',
-    safeExecutionOutcomes,
-  );
-  copySafeEnum(
-    safe,
-    outputs,
-    'destination',
-    safeGraphDestinations,
-  );
+  copySafeEnum(safe, outputs, 'executionOutcome', safeExecutionOutcomes);
+  copySafeEnum(safe, outputs, 'destination', safeGraphDestinations);
   return safe;
 }
 
@@ -258,10 +221,7 @@ class LangSmithTraceSpan implements AgentTraceSpan {
   }
 
   async fail(_error: unknown): Promise<void> {
-    const endOperation = this.run.end(
-      undefined,
-      traceFailureError,
-    );
+    const endOperation = this.run.end(undefined, traceFailureError);
     void endOperation.catch(() => undefined);
     this.enqueue(async () => {
       await endOperation;
@@ -270,7 +230,9 @@ class LangSmithTraceSpan implements AgentTraceSpan {
   }
 
   async langchainCallbacks(): Promise<Callbacks | undefined> {
-    return this.run instanceof RunTree ? getLangchainCallbacks(this.run) : undefined;
+    return this.run instanceof RunTree
+      ? getLangchainCallbacks(this.run)
+      : undefined;
   }
 
   async withActiveTrace<T>(fn: () => Promise<T>): Promise<T> {
@@ -303,10 +265,13 @@ export class LangSmithAgentTracer implements AgentTracer {
       omitTracedRuntimeInfo: true,
     });
     this.createRoot = (config) => new RunTree({ ...config, client });
-    this.flushPending = options.flush ?? (() => client.awaitPendingTraceBatches());
+    this.flushPending =
+      options.flush ?? (() => client.awaitPendingTraceBatches());
   }
 
-  async startTurn(input: Omit<AgentTraceSpanInput, 'runType'>): Promise<AgentTraceSpan> {
+  async startTurn(
+    input: Omit<AgentTraceSpanInput, 'runType'>,
+  ): Promise<AgentTraceSpan> {
     const root = this.createRoot({
       name: input.name,
       run_type: 'chain',
@@ -316,7 +281,9 @@ export class LangSmithAgentTracer implements AgentTracer {
       project_name: this.options.projectName,
     });
     this.pendingOperations.push(() => root.postRun());
-    return new LangSmithTraceSpan(root, (operation) => this.pendingOperations.push(operation));
+    return new LangSmithTraceSpan(root, (operation) =>
+      this.pendingOperations.push(operation),
+    );
   }
 
   async flush(): Promise<void> {

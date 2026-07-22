@@ -1,7 +1,5 @@
 import { z } from 'zod';
-import type {
-  ChannelTextSendOutcome,
-} from '../clients/interfaces.js';
+import type { ChannelTextSendOutcome } from '../clients/interfaces.js';
 import type { ConversationTurn } from '../domain/types.js';
 
 export const NON_AGENT_TEXT_DELIVERY_SCHEMA_VERSION =
@@ -16,17 +14,18 @@ const identifierSchema = z
   .refine((value) => value === value.trim(), {
     message: 'identifier_must_be_trimmed',
   });
-const instantSchema = z
-  .string()
-  .refine((value) => {
+const instantSchema = z.string().refine(
+  (value) => {
     try {
       return new Date(value).toISOString() === value;
     } catch {
       return false;
     }
-  }, {
+  },
+  {
     message: 'instant_must_be_canonical_utc',
-  });
+  },
+);
 const attemptSchema = z
   .number()
   .int()
@@ -40,77 +39,92 @@ const outcomeCodeSchema = z
     message: 'outcome_code_must_be_trimmed',
   });
 
-const baseSchema = z.object({
-  schemaVersion: z.literal(NON_AGENT_TEXT_DELIVERY_SCHEMA_VERSION),
-  requestKey: sha256Schema,
-  sessionBindingDigest: sha256Schema,
-  reservedSessionAuthorityGeneration: z.number().int().nonnegative(),
-  channel: z.enum(['kfc', 'messenger', 'zalo']),
-  assistantTurnId: identifierSchema,
-  agentBindingDigest: sha256Schema,
-  recipientBindingDigest: sha256Schema,
-  presentationBindingDigest: sha256Schema,
-  deliveryBindingDigest: sha256Schema,
-  createdAt: instantSchema,
-  updatedAt: instantSchema,
-}).strict();
+const baseSchema = z
+  .object({
+    schemaVersion: z.literal(NON_AGENT_TEXT_DELIVERY_SCHEMA_VERSION),
+    requestKey: sha256Schema,
+    sessionBindingDigest: sha256Schema,
+    reservedSessionAuthorityGeneration: z.number().int().nonnegative(),
+    channel: z.enum(['kfc', 'messenger', 'zalo']),
+    assistantTurnId: identifierSchema,
+    agentBindingDigest: sha256Schema,
+    recipientBindingDigest: sha256Schema,
+    presentationBindingDigest: sha256Schema,
+    deliveryBindingDigest: sha256Schema,
+    createdAt: instantSchema,
+    updatedAt: instantSchema,
+  })
+  .strict();
 
-const pendingSchema = baseSchema.extend({
-  status: z.literal('pending'),
-  deliveryAttempt: z.literal(0),
-  deliveryAttemptToken: z.null(),
-  sendingLeaseExpiresAt: z.null(),
-  providerMessageId: z.null(),
-  outcomeCode: z.null(),
-}).strict();
+const pendingSchema = baseSchema
+  .extend({
+    status: z.literal('pending'),
+    deliveryAttempt: z.literal(0),
+    deliveryAttemptToken: z.null(),
+    sendingLeaseExpiresAt: z.null(),
+    providerMessageId: z.null(),
+    outcomeCode: z.null(),
+  })
+  .strict();
 
-const sendingSchema = baseSchema.extend({
-  status: z.literal('sending'),
-  deliveryAttempt: attemptSchema,
-  deliveryAttemptToken: identifierSchema,
-  sendingLeaseExpiresAt: instantSchema,
-  providerMessageId: z.null(),
-  outcomeCode: z.null(),
-}).strict();
+const sendingSchema = baseSchema
+  .extend({
+    status: z.literal('sending'),
+    deliveryAttempt: attemptSchema,
+    deliveryAttemptToken: identifierSchema,
+    sendingLeaseExpiresAt: instantSchema,
+    providerMessageId: z.null(),
+    outcomeCode: z.null(),
+  })
+  .strict();
 
-const confirmedSentSchema = baseSchema.extend({
-  status: z.literal('confirmed_sent'),
-  deliveryAttempt: attemptSchema,
-  deliveryAttemptToken: identifierSchema,
-  sendingLeaseExpiresAt: z.null(),
-  providerMessageId: identifierSchema.nullable(),
-  outcomeCode: z.null(),
-}).strict().refine(
-  (value) => value.channel === 'kfc' || value.providerMessageId !== null,
-  { message: 'provider_message_id_required' },
-);
+const confirmedSentSchema = baseSchema
+  .extend({
+    status: z.literal('confirmed_sent'),
+    deliveryAttempt: attemptSchema,
+    deliveryAttemptToken: identifierSchema,
+    sendingLeaseExpiresAt: z.null(),
+    providerMessageId: identifierSchema.nullable(),
+    outcomeCode: z.null(),
+  })
+  .strict()
+  .refine(
+    (value) => value.channel === 'kfc' || value.providerMessageId !== null,
+    { message: 'provider_message_id_required' },
+  );
 
-const confirmedNotSentSchema = baseSchema.extend({
-  status: z.literal('confirmed_not_sent'),
-  deliveryAttempt: attemptSchema,
-  deliveryAttemptToken: identifierSchema,
-  sendingLeaseExpiresAt: z.null(),
-  providerMessageId: z.null(),
-  outcomeCode: outcomeCodeSchema,
-}).strict();
+const confirmedNotSentSchema = baseSchema
+  .extend({
+    status: z.literal('confirmed_not_sent'),
+    deliveryAttempt: attemptSchema,
+    deliveryAttemptToken: identifierSchema,
+    sendingLeaseExpiresAt: z.null(),
+    providerMessageId: z.null(),
+    outcomeCode: outcomeCodeSchema,
+  })
+  .strict();
 
-const resetAbandonedSchema = baseSchema.extend({
-  status: z.literal('confirmed_not_sent'),
-  deliveryAttempt: z.literal(0),
-  deliveryAttemptToken: z.null(),
-  sendingLeaseExpiresAt: z.null(),
-  providerMessageId: z.null(),
-  outcomeCode: z.literal('non_agent_delivery_abandoned_by_reset'),
-}).strict();
+const resetAbandonedSchema = baseSchema
+  .extend({
+    status: z.literal('confirmed_not_sent'),
+    deliveryAttempt: z.literal(0),
+    deliveryAttemptToken: z.null(),
+    sendingLeaseExpiresAt: z.null(),
+    providerMessageId: z.null(),
+    outcomeCode: z.literal('non_agent_delivery_abandoned_by_reset'),
+  })
+  .strict();
 
-const outcomeUnknownSchema = baseSchema.extend({
-  status: z.literal('outcome_unknown'),
-  deliveryAttempt: attemptSchema,
-  deliveryAttemptToken: identifierSchema,
-  sendingLeaseExpiresAt: z.null(),
-  providerMessageId: z.null(),
-  outcomeCode: outcomeCodeSchema,
-}).strict();
+const outcomeUnknownSchema = baseSchema
+  .extend({
+    status: z.literal('outcome_unknown'),
+    deliveryAttempt: attemptSchema,
+    deliveryAttemptToken: identifierSchema,
+    sendingLeaseExpiresAt: z.null(),
+    providerMessageId: z.null(),
+    outcomeCode: outcomeCodeSchema,
+  })
+  .strict();
 
 export const nonAgentTextDeliveryRecordSchema = z.union([
   pendingSchema,
@@ -358,10 +372,7 @@ export function beginNonAgentTextDeliveryAttempt(
   const updatedAt = nextInstant(record.updatedAt, input.updatedAt);
   if (!updatedAt) return blockedBegin('updated_at_invalid', record);
   const leaseExpiresAt = instantSchema.safeParse(input.leaseExpiresAt);
-  if (
-    !leaseExpiresAt.success ||
-    leaseExpiresAt.data <= updatedAt
-  ) {
+  if (!leaseExpiresAt.success || leaseExpiresAt.data <= updatedAt) {
     return blockedBegin('sending_lease_invalid', record);
   }
   return {
@@ -450,10 +461,7 @@ export function reconcileNonAgentTextDelivery(
   rawRecord: NonAgentTextDeliveryRecord,
   input: Pick<
     ReconcileNonAgentTextDeliveryInput,
-    | 'deliveryAttempt'
-    | 'deliveryAttemptToken'
-    | 'reason'
-    | 'reconciledAt'
+    'deliveryAttempt' | 'deliveryAttemptToken' | 'reason' | 'reconciledAt'
   >,
 ): ReconcileNonAgentTextDeliveryResult {
   const record = nonAgentTextDeliveryRecordSchema.parse(rawRecord);

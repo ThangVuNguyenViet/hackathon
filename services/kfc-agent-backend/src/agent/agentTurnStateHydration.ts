@@ -1,20 +1,12 @@
-import {
-  selectedPaymentMethodAuthoritySchema,
-} from '../domain/opaqueProviderId.js';
+import { selectedPaymentMethodAuthoritySchema } from '../domain/opaqueProviderId.js';
 import type { ConversationTurn } from '../domain/types.js';
 import type { AgentTurnInput } from './agentTurn.js';
-import {
-  agentStateWithCurrentOrderStatusEvidence,
-} from './orderStatusEvidenceProjection.js';
+import { agentStateWithCurrentOrderStatusEvidence } from './orderStatusEvidenceProjection.js';
 import type { AgentState } from './agentState.js';
-import {
-  loadPriorVerifiedState,
-} from './verifiedState.js';
+import { loadPriorVerifiedState } from './verifiedState.js';
 import { countCustomerTurns } from '../monitor/sessionIntelligence.js';
 import { buildBoundedRecentTurns } from '../session/sessionContext.js';
-import {
-  semanticConversationTurns,
-} from './trustedActionConversation.js';
+import { semanticConversationTurns } from './trustedActionConversation.js';
 
 export interface LoadedAgentTurnState {
   state: AgentState;
@@ -28,20 +20,13 @@ export function assembleLoadedTurnState(input: {
   semanticTurns: ConversationTurn[];
   currentUserTurn?: ConversationTurn;
 }): LoadedAgentTurnState {
-  const {
-    turnInput,
-    prior,
-    semanticTurns,
-    currentUserTurn,
-  } = input;
+  const { turnInput, prior, semanticTurns, currentUserTurn } = input;
   const priorSelectedPaymentMethod =
-    selectedPaymentMethodAuthoritySchema.safeParse(
-      prior.selectedPaymentMethod,
-    );
+    selectedPaymentMethodAuthoritySchema.safeParse(prior.selectedPaymentMethod);
   const publicationTurns =
     turnInput.trustedCustomerAction &&
-      currentUserTurn &&
-      !semanticTurns.some((turn) => turn.id === currentUserTurn.id)
+    currentUserTurn &&
+    !semanticTurns.some((turn) => turn.id === currentUserTurn.id)
       ? [...semanticTurns, currentUserTurn]
       : semanticTurns;
   return {
@@ -57,13 +42,11 @@ export function assembleLoadedTurnState(input: {
       orderPreview: prior.orderPreview,
       order: prior.order,
       cancellationStatusChecked: prior.cancellationStatusChecked,
-      userConfirmedOrder: false,
       escalationReasons: [],
       retrievedEvidence: [],
       selectedModifiers: prior.selectedModifiers,
       fulfillment: prior.fulfillment,
-      exactCartAvailabilityObservation:
-        prior.exactCartAvailabilityObservation,
+      exactCartAvailabilityObservation: prior.exactCartAvailabilityObservation,
       promotionContext: prior.promotionContext,
       promotionOffers: prior.promotionOffers,
       contentEvidence: prior.contentEvidence,
@@ -71,7 +54,6 @@ export function assembleLoadedTurnState(input: {
       verifiedCollections: prior.verifiedCollections,
       activeCollectionKeys: prior.activeCollectionKeys,
       activeMenuCollection: prior.activeMenuCollection,
-      commerceApprovalReceipts: prior.commerceApprovalReceipts,
       menuItemDetail: prior.menuItemDetail,
       menuModifierOptions: prior.menuModifierOptions,
       customerContext: prior.customerContext,
@@ -115,8 +97,7 @@ export async function rehydrateExactTurnStateReadOnly(
     currentUserTurn.role !== 'user' ||
     currentUserTurn.sessionId !== input.sessionId ||
     currentUserTurn.channel !== input.channel ||
-    (currentUserTurn.externalUserId ?? null) !==
-      (input.customerId ?? null)
+    (currentUserTurn.externalUserId ?? null) !== (input.customerId ?? null)
   ) {
     throw new Error('agent_current_user_turn_missing');
   }

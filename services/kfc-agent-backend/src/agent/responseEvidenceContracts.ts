@@ -29,20 +29,14 @@ export interface ResponseClaimEvidence {
 }
 
 interface ToolResponseEvidenceContract {
-  claimKinds: readonly [
-    ResponseClaimKind,
-    ...ResponseClaimKind[],
-  ];
+  claimKinds: readonly [ResponseClaimKind, ...ResponseClaimKind[]];
   requiredScopes: readonly CustomerAccessScope[];
   currentSessionCheckout?: boolean;
   privateData: boolean;
 }
 
 export interface ResolvedToolResponseEvidenceContract {
-  claimKinds: [
-    ResponseClaimKind,
-    ...ResponseClaimKind[],
-  ];
+  claimKinds: [ResponseClaimKind, ...ResponseClaimKind[]];
   requiredScopes: CustomerAccessScope[];
   currentSessionCheckout: boolean;
   privateData: boolean;
@@ -276,8 +270,6 @@ export function responseEvidenceContractForTool(
   };
 }
 
-export function isPrivateResponseEvidenceTool(
-  toolName: ToolName,
-): boolean {
+export function isPrivateResponseEvidenceTool(toolName: ToolName): boolean {
   return toolResponseEvidenceContracts[toolName].privateData;
 }

@@ -49,9 +49,7 @@ export function verifiedRefStorageValues(
   rawSessionGeneration: number,
 ): readonly unknown[] {
   const record = verifiedRefRecordSchema.parse(rawRecord);
-  const sessionGeneration = sessionGenerationSchema.parse(
-    rawSessionGeneration,
-  );
+  const sessionGeneration = sessionGenerationSchema.parse(rawSessionGeneration);
   return [
     record.schemaVersion,
     record.ref.id,

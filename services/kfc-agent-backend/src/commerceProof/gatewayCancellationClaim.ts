@@ -3,16 +3,16 @@ import {
   sameProviderMutationBinding,
   type CommerceProofGatewayMutationState,
   type StoredCancellationMutation,
-} from "./gatewayMutationContracts.js";
-import type { GatewayMutationDurability } from "./gatewayMutationDurability.js";
+} from './gatewayMutationContracts.js';
+import type { GatewayMutationDurability } from './gatewayMutationDurability.js';
 import {
   deriveGatewayProviderMutationIdentity,
   gatewayPosCancellationAction,
-} from "./gatewayMutationIdentity.js";
+} from './gatewayMutationIdentity.js';
 
 type CancellationClaim =
-  | { kind: "claimed"; stored: StoredCancellationMutation }
-  | { kind: "conflict" };
+  | { kind: 'claimed'; stored: StoredCancellationMutation }
+  | { kind: 'conflict' };
 
 export function claimStoredCancellation(input: {
   state: CommerceProofGatewayMutationState;
@@ -26,8 +26,9 @@ export function claimStoredCancellation(input: {
   posTicketId: string;
 }): Promise<CancellationClaim> {
   return input.durability.commitStateUpdate((candidateState) => {
-    const existingForKey =
-      candidateState.cancellationsByIdempotencyKey.get(input.idempotencyKey);
+    const existingForKey = candidateState.cancellationsByIdempotencyKey.get(
+      input.idempotencyKey,
+    );
     if (existingForKey) {
       const exactBinding = sameProviderMutationBinding(
         existingForKey.bindingFingerprint,
@@ -36,15 +37,16 @@ export function claimStoredCancellation(input: {
         input.canonicalPayload,
       );
       const exactAuthority = claimGatewayMutationAuthority(candidateState, {
-        kind: "cancelOrder",
+        kind: 'cancelOrder',
         idempotencyKey: input.idempotencyKey,
         bindingFingerprint: input.bindingFingerprint,
         canonicalPayload: input.canonicalPayload,
       });
       return {
-        output: exactBinding && exactAuthority
-          ? { kind: "claimed" as const, stored: existingForKey }
-          : { kind: "conflict" as const },
+        output:
+          exactBinding && exactAuthority
+            ? { kind: 'claimed' as const, stored: existingForKey }
+            : { kind: 'conflict' as const },
         publish() {},
       };
     }
@@ -57,7 +59,7 @@ export function claimStoredCancellation(input: {
     );
     if (existingForOrder) {
       return {
-        output: { kind: "conflict" as const },
+        output: { kind: 'conflict' as const },
         publish() {},
       };
     }
@@ -72,27 +74,27 @@ export function claimStoredCancellation(input: {
     const candidateStored: StoredCancellationMutation = {
       bindingFingerprint: input.bindingFingerprint,
       canonicalPayload: input.canonicalPayload,
-      state: "pos_cancel_pending",
+      state: 'pos_cancel_pending',
       context,
       posCancelIdentity: deriveGatewayProviderMutationIdentity(
         {
           idempotencyKey: input.idempotencyKey,
           bindingFingerprint: input.bindingFingerprint,
         },
-        "pos_cancel",
+        'pos_cancel',
         gatewayPosCancellationAction(context),
       ),
     };
     if (
       !claimGatewayMutationAuthority(candidateState, {
-        kind: "cancelOrder",
+        kind: 'cancelOrder',
         idempotencyKey: input.idempotencyKey,
         bindingFingerprint: input.bindingFingerprint,
         canonicalPayload: input.canonicalPayload,
       })
     ) {
       return {
-        output: { kind: "conflict" as const },
+        output: { kind: 'conflict' as const },
         publish() {},
       };
     }
@@ -101,7 +103,7 @@ export function claimStoredCancellation(input: {
       candidateStored,
     );
     return {
-      output: { kind: "claimed" as const, stored: candidateStored },
+      output: { kind: 'claimed' as const, stored: candidateStored },
       publish() {
         input.state.authorityByIdempotencyKey.set(
           input.idempotencyKey,

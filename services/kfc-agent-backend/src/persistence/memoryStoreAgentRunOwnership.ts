@@ -1,7 +1,4 @@
-import type {
-  AgentRun,
-  SessionAgentState,
-} from '../domain/types.js';
+import type { AgentRun, SessionAgentState } from '../domain/types.js';
 import type {
   AdvanceSessionAgentGenerationInput,
   AdvanceSessionAgentGenerationResult,
@@ -21,9 +18,7 @@ import {
   agentRunExecutionReconciliationReason,
   assertAgentRunExecutionClaim,
 } from './agentRunExecutionLease.js';
-import {
-  captureActiveMemorySessionAuthority,
-} from './memoryStoreSessionAuthority.js';
+import { captureActiveMemorySessionAuthority } from './memoryStoreSessionAuthority.js';
 
 interface MemoryAgentRunState {
   agentRuns: Map<string, AgentRun>;
@@ -66,14 +61,18 @@ export function listDueMemorySessionAgentStates(
   sessionAgentStates: Map<string, SessionAgentState>,
 ): SessionAgentState[] {
   return [...sessionAgentStates.values()]
-    .filter((state) =>
-      state.currentRunId === null &&
-      state.debounceDeadlineAt !== null &&
-      state.debounceDeadlineAt <= now)
-    .sort((left, right) =>
-      String(left.debounceDeadlineAt).localeCompare(
-        String(right.debounceDeadlineAt),
-      ) || left.sessionId.localeCompare(right.sessionId))
+    .filter(
+      (state) =>
+        state.currentRunId === null &&
+        state.debounceDeadlineAt !== null &&
+        state.debounceDeadlineAt <= now,
+    )
+    .sort(
+      (left, right) =>
+        String(left.debounceDeadlineAt).localeCompare(
+          String(right.debounceDeadlineAt),
+        ) || left.sessionId.localeCompare(right.sessionId),
+    )
     .slice(0, limit);
 }
 
@@ -158,12 +157,11 @@ export function claimMemoryAgentRunExecution(
       ...run,
       status: 'reconciliation_required',
       deliveryStatus: 'not_applicable',
-      errorCode: agentRunExecutionReconciliationErrorCode(
-        reconciliationReason,
-      ),
-      errorMessage: reconciliationReason === 'attempts_exhausted'
-        ? 'Agent run execution attempts exhausted'
-        : 'Irreversible provider outcome requires reconciliation',
+      errorCode: agentRunExecutionReconciliationErrorCode(reconciliationReason),
+      errorMessage:
+        reconciliationReason === 'attempts_exhausted'
+          ? 'Agent run execution attempts exhausted'
+          : 'Irreversible provider outcome requires reconciliation',
       completedAt: input.claimedAt,
       updatedAt: input.claimedAt,
     };
@@ -224,8 +222,7 @@ export function updateMemoryAgentRunIfExecutionCurrent(
   if (
     run?.sessionId !== input.sessionId ||
     run.generation !== input.fence.generation ||
-    run.sessionAuthorityGeneration !==
-      input.fence.sessionAuthorityGeneration ||
+    run.sessionAuthorityGeneration !== input.fence.sessionAuthorityGeneration ||
     run.status !== 'running' ||
     run.executionAttempt !== input.fence.executionAttempt ||
     run.executionLeaseToken !== input.fence.executionLeaseToken ||

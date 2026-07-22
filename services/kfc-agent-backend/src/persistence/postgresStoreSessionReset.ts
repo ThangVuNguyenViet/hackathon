@@ -8,15 +8,9 @@ import {
   type Queryable,
   type SessionControlRow,
 } from './postgresStoreSupport.js';
-import {
-  lockPostgresSessionAuthority,
-} from './postgresStoreSessionAuthority.js';
-import {
-  isConnectablePostgres,
-} from './postgresStoreRunOwner.js';
-import {
-  nonAgentTextDeliverySessionBindingDigest,
-} from './nonAgentTextDelivery.js';
+import { lockPostgresSessionAuthority } from './postgresStoreSessionAuthority.js';
+import { isConnectablePostgres } from './postgresStoreRunOwner.js';
+import { nonAgentTextDeliverySessionBindingDigest } from './nonAgentTextDelivery.js';
 
 export async function resetPostgresSession(input: {
   db: Queryable;
@@ -39,21 +33,20 @@ export async function resetPostgresSession(input: {
       [input.sessionId],
     );
     const nextAuthorityGeneration =
-      Number(
-        currentControl.rows[0]?.session_authority_generation ?? 0,
-      ) + 1;
+      Number(currentControl.rows[0]?.session_authority_generation ?? 0) + 1;
     const resetAt = new Date().toISOString();
-    const sessionBindingDigest =
-      await nonAgentTextDeliverySessionBindingDigest(input.sessionId);
+    const sessionBindingDigest = await nonAgentTextDeliverySessionBindingDigest(
+      input.sessionId,
+    );
     await client.query(
-      `INSERT INTO confirmation_pause_sessions (session_id, generation)
+      `INSERT INTO session_generations (session_id, generation)
        VALUES ($1, 0)
        ON CONFLICT (session_id) DO NOTHING`,
       [input.sessionId],
     );
     await client.query(
       `SELECT generation
-       FROM confirmation_pause_sessions
+       FROM session_generations
        WHERE session_id = $1
        FOR UPDATE`,
       [input.sessionId],
@@ -81,32 +74,19 @@ export async function resetPostgresSession(input: {
       [sessionBindingDigest, resetAt],
     );
     const unresolved = await client.query<{ unresolved: boolean }>(
-      `SELECT (
-         EXISTS (
-           SELECT 1
-           FROM irreversible_operations
-           WHERE session_id = $1
-             AND operation = 'confirmation_resume'
-             AND NOT (
-               status = 'completed'
-               AND result_json IS NOT NULL
-               AND completed_at IS NOT NULL
-             )
-         )
-         OR EXISTS (
+      `SELECT EXISTS (
            SELECT 1
            FROM non_agent_text_deliveries
-           WHERE session_binding_digest = $2
+           WHERE session_binding_digest = $1
              AND status = 'sending'
-         )
-       ) AS unresolved`,
-      [input.sessionId, sessionBindingDigest],
+         ) AS unresolved`,
+      [sessionBindingDigest],
     );
     if (unresolved.rows[0]?.unresolved !== false) {
       throw new SessionResetConflictError();
     }
     await client.query(
-      `UPDATE confirmation_pause_sessions
+      `UPDATE session_generations
        SET generation = generation + 1
        WHERE session_id = $1`,
       [input.sessionId],
@@ -142,7 +122,6 @@ export async function resetPostgresSession(input: {
        ), deleted_irreversible_operations AS (
          DELETE FROM irreversible_operations
          WHERE session_id = $1
-           AND operation <> 'confirmation_resume'
        )
        DELETE FROM dashboard_events WHERE session_id = $1`,
       [input.sessionId],

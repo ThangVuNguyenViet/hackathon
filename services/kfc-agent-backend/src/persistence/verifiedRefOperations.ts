@@ -23,35 +23,43 @@ const resolveVerifiedRefInputSchema = z
   .strict();
 
 const runCommitFenceSchema = z.discriminatedUnion('kind', [
-  z.object({
-    kind: z.literal('agent_run'),
-    runId: z.string().min(1),
-    generation: z.number().int().nonnegative(),
-    sessionAuthorityGeneration: z.number().int().nonnegative(),
-    executionAttempt: z.number().int().positive(),
-    executionLeaseToken: z.string().min(32).max(256),
-  }).strict(),
-  z.object({
-    kind: z.literal('customer_run'),
-    runId: z.string().min(1),
-    sessionAuthorityGeneration: z.number().int().nonnegative(),
-  }).strict(),
-  z.object({
-    kind: z.literal('operation_lease'),
-    requestId: z.string().min(1),
-    operation: z.string().min(1),
-    bindingFingerprint: z.string().min(1),
-    attempt: z.number().int().positive(),
-    leaseToken: z.string().min(1),
-    sessionAuthorityGeneration: z.number().int().nonnegative(),
-  }).strict(),
+  z
+    .object({
+      kind: z.literal('agent_run'),
+      runId: z.string().min(1),
+      generation: z.number().int().nonnegative(),
+      sessionAuthorityGeneration: z.number().int().nonnegative(),
+      executionAttempt: z.number().int().positive(),
+      executionLeaseToken: z.string().min(32).max(256),
+    })
+    .strict(),
+  z
+    .object({
+      kind: z.literal('customer_run'),
+      runId: z.string().min(1),
+      sessionAuthorityGeneration: z.number().int().nonnegative(),
+    })
+    .strict(),
+  z
+    .object({
+      kind: z.literal('operation_lease'),
+      requestId: z.string().min(1),
+      operation: z.string().min(1),
+      bindingFingerprint: z.string().min(1),
+      attempt: z.number().int().positive(),
+      leaseToken: z.string().min(1),
+      sessionAuthorityGeneration: z.number().int().nonnegative(),
+    })
+    .strict(),
 ]);
 
-const runCommitGuardSchema = z.object({
-  sessionId: z.string().min(1),
-  fence: runCommitFenceSchema,
-  notAfter: verifiedRefTimestampSchema.optional(),
-}).strict();
+const runCommitGuardSchema = z
+  .object({
+    sessionId: z.string().min(1),
+    fence: runCommitFenceSchema,
+    notAfter: verifiedRefTimestampSchema.optional(),
+  })
+  .strict();
 
 const claimVerifiedRefInputSchema = z
   .object({
@@ -68,7 +76,8 @@ const claimVerifiedRefInputSchema = z
       context.addIssue({
         code: z.ZodIssueCode.custom,
         path: ['runFence', 'sessionId'],
-        message: 'Verified reference run fence must match its principal session',
+        message:
+          'Verified reference run fence must match its principal session',
       });
     }
   });
@@ -92,9 +101,11 @@ export function verifiedRefSnapshotMatches(
 ): boolean {
   const snapshot = {
     record: verifiedRefRecordSchema.parse(rawSnapshot.record),
-    sessionGeneration: z.number().int().nonnegative().parse(
-      rawSnapshot.sessionGeneration,
-    ),
+    sessionGeneration: z
+      .number()
+      .int()
+      .nonnegative()
+      .parse(rawSnapshot.sessionGeneration),
   };
   const { record } = snapshot;
   return (

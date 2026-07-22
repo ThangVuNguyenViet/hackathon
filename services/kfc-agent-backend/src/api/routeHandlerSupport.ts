@@ -1,14 +1,14 @@
-import { existsSync } from "node:fs";
-import { dirname, join } from "node:path";
-import { fileURLToPath } from "node:url";
-import { z } from "zod";
+import { existsSync } from 'node:fs';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { z } from 'zod';
 import type {
   ChannelMediaDeliveryResult,
   ExternalClients,
   MessengerClient,
   MessengerSenderAction,
-} from "../clients/interfaces.js";
-import type { KfcCommerceGatewayClients } from "../clients/kfcCommerceGateway.js";
+} from '../clients/interfaces.js';
+import type { KfcCommerceGatewayClients } from '../clients/kfcCommerceGateway.js';
 import {
   LifecycleError,
   type CreateLifecycleInput,
@@ -18,25 +18,25 @@ import {
   type MutationContext,
   type SandboxLifecycleControls,
   projectLifecycleCommerceClients,
-} from "../commerce/lifecycleProvider.js";
-import { createCatalogObservationClients } from "../clients/catalogObservationClients.js";
+} from '../commerce/lifecycleProvider.js';
+import { createCatalogObservationClients } from '../clients/catalogObservationClients.js';
 import {
   fetchCatalogObservation,
   type CatalogObservation,
   type CommerceEnvironment,
-} from "../catalog/catalogObservation.js";
-import type { ConversationEvent } from "../channels/conversationEvent.js";
-import type { MessengerHistorySyncCoordinator } from "../channels/messengerHistory.js";
+} from '../catalog/catalogObservation.js';
+import type { ConversationEvent } from '../channels/conversationEvent.js';
+import type { MessengerHistorySyncCoordinator } from '../channels/messengerHistory.js';
 import {
   createMessengerClient,
   normalizeMessengerWebhook,
   verifyMessengerChallenge,
-} from "../channels/messenger.js";
-import { createZaloClient, normalizeZaloWebhook } from "../channels/zalo.js";
-import { DashboardEventBus } from "../dashboard/eventBus.js";
-import { dashboardSessionTarget } from "../dashboard/sessionVisibility.js";
-import type { GeneratedFixtures } from "../fixtures/schema.js";
-import { loadGeneratedFixtures } from "../fixtures/loadFixtures.js";
+} from '../channels/messenger.js';
+import { createZaloClient, normalizeZaloWebhook } from '../channels/zalo.js';
+import { DashboardEventBus } from '../dashboard/eventBus.js';
+import { dashboardSessionTarget } from '../dashboard/sessionVisibility.js';
+import type { GeneratedFixtures } from '../fixtures/schema.js';
+import { loadGeneratedFixtures } from '../fixtures/loadFixtures.js';
 import type {
   AgentMode,
   Channel,
@@ -45,13 +45,11 @@ import type {
   CustomerAccessContext,
   MonitorSessionIntelligence,
   ToolResult,
-} from "../domain/types.js";
-import { customerCommandFromVerifiedAction } from "../domain/customerCommand.js";
-import {
-  isKfcGenUiAttachment,
-} from "../genui/kfcGenUi.js";
-import { runAgentTurn } from "../agent/kfcAgent.js";
-import type { AgentState } from "../agent/agentState.js";
+} from '../domain/types.js';
+import { customerCommandFromVerifiedAction } from '../domain/customerCommand.js';
+import { isKfcGenUiAttachment } from '../genui/kfcGenUi.js';
+import { runAgentTurn } from '../agent/kfcAgent.js';
+import type { AgentState } from '../agent/agentState.js';
 import {
   calculateMonitorSessionIntelligence,
   preserveMonitorContext,
@@ -59,41 +57,44 @@ import {
   monitorContextReevaluationCustomerTurnThreshold,
   resolveMonitorSessionIntelligence,
   type MonitorSessionIntelligenceJudge,
-} from "../monitor/sessionIntelligence.js";
-import type { AgentTracer } from "../observability/agentTracing.js";
+} from '../monitor/sessionIntelligence.js';
+import type { AgentTracer } from '../observability/agentTracing.js';
 import {
   createMockClients,
   type MockClientOptions,
-} from "../mock/createMockClients.js";
+} from '../mock/createMockClients.js';
 import {
   applyMockedUpstreamFixtureOverrides,
   mockedUpstreamApiProfileSchema,
   mockedUpstreamClientOptions,
-} from "../mock/mockedUpstreamProfile.js";
-import type { ToolName } from "../ordering/types.js";
-import { CustomerRunCoordinator, type CustomerRunObservation } from "../customerRuns/runtime.js";
+} from '../mock/mockedUpstreamProfile.js';
+import type { ToolName } from '../ordering/types.js';
+import {
+  CustomerRunCoordinator,
+  type CustomerRunObservation,
+} from '../customerRuns/runtime.js';
 import {
   kfcSessionMatchesCustomer,
   type CustomerRunStartRequest,
-} from "../customerRuns/contracts.js";
+} from '../customerRuns/contracts.js';
 import {
   MemoryStore,
   type ConversationStore,
   type WebhookDelivery,
-} from "../persistence/memoryStore.js";
+} from '../persistence/memoryStore.js';
 import {
   buildBoundedRecentTurns,
   sessionIdForConversationEvent,
-} from "../session/sessionContext.js";
+} from '../session/sessionContext.js';
 import {
   textOnlyPresentation,
   type ChannelPresentationPlan,
-} from "../presentation/channelPresentation.js";
+} from '../presentation/channelPresentation.js';
 import {
   ShowcaseService,
   ShowcaseValidationError,
   type ShowcaseScenarioSource,
-} from "../showcase/showcase.js";
+} from '../showcase/showcase.js';
 import type {
   HandlerResponse,
   ReadinessCheckResult,
@@ -105,11 +106,11 @@ export function messengerDeliveryFailureForStorage(input: {
   errorCode?: string;
   errorMessage?: string;
 }): string {
-  if (input.errorCode === "messenger_access_token_invalid") {
+  if (input.errorCode === 'messenger_access_token_invalid') {
     return input.errorMessage ?? input.errorCode;
   }
   return (
-    input.errorCode ?? input.errorMessage ?? "assistant_reply_delivery_failed"
+    input.errorCode ?? input.errorMessage ?? 'assistant_reply_delivery_failed'
   );
 }
 
@@ -117,11 +118,11 @@ export function eventFromMessengerDelivery(
   delivery: WebhookDelivery,
 ): ConversationEvent | undefined {
   const text = delivery.payload.text;
-  if (typeof text !== "string" || text.length === 0) return undefined;
+  if (typeof text !== 'string' || text.length === 0) return undefined;
   const eventType =
-    delivery.payload.eventType === "postback" ? "postback" : "message";
+    delivery.payload.eventType === 'postback' ? 'postback' : 'message';
   return {
-    channel: "messenger",
+    channel: 'messenger',
     externalUserId: delivery.externalUserId,
     externalThreadId: delivery.externalThreadId,
     text,
@@ -131,7 +132,7 @@ export function eventFromMessengerDelivery(
     platformEventName: eventType,
     shouldRunAgent: true,
     rawEvent:
-      typeof delivery.payload.rawEvent === "object" &&
+      typeof delivery.payload.rawEvent === 'object' &&
       delivery.payload.rawEvent !== null &&
       !Array.isArray(delivery.payload.rawEvent)
         ? (delivery.payload.rawEvent as Record<string, unknown>)
@@ -147,11 +148,11 @@ export async function sendMessengerSenderAction(
 ): Promise<boolean> {
   const result = await client.sendSenderAction(recipientId, action);
   if (result.ok) {
-    console.log("messenger_sender_action_sent", { action, rawEventId });
+    console.log('messenger_sender_action_sent', { action, rawEventId });
     return true;
   }
 
-  console.warn("messenger_sender_action_failed", {
+  console.warn('messenger_sender_action_failed', {
     action,
     rawEventId,
     errorCode: result.errorCode,
@@ -165,37 +166,37 @@ export function dashboardEventId(sessionId: string, type: string): string {
 }
 
 export async function checkCommerceGatewayReadiness(
-  config: NonNullable<ReadinessOptions["commerce"]>,
+  config: NonNullable<ReadinessOptions['commerce']>,
 ) {
   if (!config.baseUrl) {
     return {
       ok: false,
-      mode: "gateway" as const,
+      mode: 'gateway' as const,
       configured: false,
       reachable: false,
       authenticated: false,
-      commerceEnvironment: "unavailable" as const,
-      providerImplementation: "unavailable" as const,
-      message: "Missing KFC_COMMERCE_GATEWAY_BASE_URL",
+      commerceEnvironment: 'unavailable' as const,
+      providerImplementation: 'unavailable' as const,
+      message: 'Missing KFC_COMMERCE_GATEWAY_BASE_URL',
     };
   }
   if (!config.token) {
     return {
       ok: false,
-      mode: "gateway" as const,
+      mode: 'gateway' as const,
       configured: false,
       reachable: false,
       authenticated: false,
-      commerceEnvironment: "unavailable" as const,
-      providerImplementation: "unavailable" as const,
-      message: "Missing KFC_COMMERCE_GATEWAY_TOKEN",
+      commerceEnvironment: 'unavailable' as const,
+      providerImplementation: 'unavailable' as const,
+      message: 'Missing KFC_COMMERCE_GATEWAY_TOKEN',
     };
   }
 
   const startedAt = performance.now();
   try {
     const response = await (config.fetchImpl ?? fetch)(
-      `${config.baseUrl.replace(/\/$/, "")}/ready`,
+      `${config.baseUrl.replace(/\/$/, '')}/ready`,
       {
         headers: { authorization: `Bearer ${config.token}` },
         signal: AbortSignal.timeout(config.timeoutMs ?? 3000),
@@ -205,7 +206,9 @@ export async function checkCommerceGatewayReadiness(
     const authenticated = response.status !== 401 && response.status !== 403;
     const capabilities = new Set(
       Array.isArray(payload.capabilities)
-        ? payload.capabilities.filter((value): value is string => typeof value === "string")
+        ? payload.capabilities.filter(
+            (value): value is string => typeof value === 'string',
+          )
         : [],
     );
     const requiredCapabilities = config.requiredCapabilities ?? [];
@@ -226,18 +229,20 @@ export async function checkCommerceGatewayReadiness(
       missingLocalCapabilities.length === 0;
     return {
       ok,
-      mode: "gateway" as const,
+      mode: 'gateway' as const,
       configured: true,
       reachable: true,
       authenticated,
       commerceEnvironment:
-        payload.commerceEnvironment === "sandbox" || payload.commerceEnvironment === "production"
+        payload.commerceEnvironment === 'sandbox' ||
+        payload.commerceEnvironment === 'production'
           ? payload.commerceEnvironment
-          : ("unavailable" as const),
+          : ('unavailable' as const),
       providerImplementation:
-        typeof payload.providerImplementation === "string" && payload.providerImplementation.length > 0
+        typeof payload.providerImplementation === 'string' &&
+        payload.providerImplementation.length > 0
           ? payload.providerImplementation
-          : ("unavailable" as const),
+          : ('unavailable' as const),
       latencyMs: Math.round(performance.now() - startedAt),
       capabilities: [...capabilities],
       missingCapabilities,
@@ -246,22 +251,23 @@ export async function checkCommerceGatewayReadiness(
       ...(ok
         ? {}
         : {
-            message: missingCapabilities.length > 0
-              ? `Commerce gateway missing capabilities: ${missingCapabilities.join(", ")}`
-              : missingLocalCapabilities.length > 0
-                ? `Commerce runtime missing local capabilities: ${missingLocalCapabilities.join(", ")}`
-                : `Commerce gateway readiness returned HTTP ${response.status}`,
+            message:
+              missingCapabilities.length > 0
+                ? `Commerce gateway missing capabilities: ${missingCapabilities.join(', ')}`
+                : missingLocalCapabilities.length > 0
+                  ? `Commerce runtime missing local capabilities: ${missingLocalCapabilities.join(', ')}`
+                  : `Commerce gateway readiness returned HTTP ${response.status}`,
           }),
     };
   } catch (error) {
     return {
       ok: false,
-      mode: "gateway" as const,
+      mode: 'gateway' as const,
       configured: true,
       reachable: false,
       authenticated: false,
-      commerceEnvironment: "unavailable" as const,
-      providerImplementation: "unavailable" as const,
+      commerceEnvironment: 'unavailable' as const,
+      providerImplementation: 'unavailable' as const,
       latencyMs: Math.round(performance.now() - startedAt),
       message: error instanceof Error ? error.message : String(error),
     };
@@ -269,11 +275,19 @@ export async function checkCommerceGatewayReadiness(
 }
 
 export async function checkCatalogReadiness(
-  config: RouteOptions["catalog"],
+  config: RouteOptions['catalog'],
 ): Promise<ReadinessCheckResult> {
-  if (!config) return { ok: false, configured: false, message: "Missing current catalog provider configuration" };
+  if (!config)
+    return {
+      ok: false,
+      configured: false,
+      message: 'Missing current catalog provider configuration',
+    };
   try {
-    const observation = await fetchCatalogObservation({ ...config, fetchImpl: config.fetchImpl });
+    const observation = await fetchCatalogObservation({
+      ...config,
+      fetchImpl: config.fetchImpl,
+    });
     return {
       ok: observation.itemCount > 0,
       configured: true,
@@ -286,13 +300,19 @@ export async function checkCatalogReadiness(
         modifierTreeCount: observation.modifierTreeCount,
         providerFingerprint: observation.providerFingerprint,
       },
-      message: observation.itemCount > 0 ? undefined : "Current catalog provider returned no items",
+      message:
+        observation.itemCount > 0
+          ? undefined
+          : 'Current catalog provider returned no items',
     };
   } catch (error) {
     return {
       ok: false,
       configured: true,
-      message: error instanceof Error ? error.message : "Current catalog provider failed",
+      message:
+        error instanceof Error
+          ? error.message
+          : 'Current catalog provider failed',
     };
   }
 }
@@ -306,7 +326,7 @@ export async function runReadinessCheck(
     return {
       ok: false,
       message:
-        error instanceof Error ? error.message : "Readiness check failed",
+        error instanceof Error ? error.message : 'Readiness check failed',
     };
   }
 }
@@ -325,34 +345,36 @@ export async function checkFixtures(
       message:
         error instanceof Error
           ? error.message
-          : "Generated fixtures unavailable",
+          : 'Generated fixtures unavailable',
     };
   }
 }
 
-export function checkMessengerConfig(options: RouteOptions): ReadinessCheckResult {
+export function checkMessengerConfig(
+  options: RouteOptions,
+): ReadinessCheckResult {
   const missing = [
-    !options.messengerVerifyToken ? "MESSENGER_VERIFY_TOKEN" : undefined,
-    !options.metaAppSecret ? "META_APP_SECRET" : undefined,
-    !options.metaPageId ? "META_PAGE_ID" : undefined,
-    !options.messengerPageAccessToken ? "META_PAGE_ACCESS_TOKEN" : undefined,
-    !options.metaInboxUrlTemplate ? "META_INBOX_URL_TEMPLATE" : undefined,
+    !options.messengerVerifyToken ? 'MESSENGER_VERIFY_TOKEN' : undefined,
+    !options.metaAppSecret ? 'META_APP_SECRET' : undefined,
+    !options.metaPageId ? 'META_PAGE_ID' : undefined,
+    !options.messengerPageAccessToken ? 'META_PAGE_ACCESS_TOKEN' : undefined,
+    !options.metaInboxUrlTemplate ? 'META_INBOX_URL_TEMPLATE' : undefined,
   ].filter((value): value is string => Boolean(value));
   const configured = missing.length === 0;
   return {
     ok: configured,
     configured,
     required: true,
-    message: configured ? undefined : `Missing ${missing.join(", ")}`,
+    message: configured ? undefined : `Missing ${missing.join(', ')}`,
   };
 }
 
 export function checkZaloConfig(options: RouteOptions): ReadinessCheckResult {
   const required = options.readiness?.zaloRequired ?? true;
   const missing = [
-    !options.zaloOaId ? "ZALO_OA_ID" : undefined,
-    !options.zaloAccessToken ? "ZALO_ACCESS_TOKEN" : undefined,
-    !options.zaloInboxUrlTemplate ? "ZALO_INBOX_URL_TEMPLATE" : undefined,
+    !options.zaloOaId ? 'ZALO_OA_ID' : undefined,
+    !options.zaloAccessToken ? 'ZALO_ACCESS_TOKEN' : undefined,
+    !options.zaloInboxUrlTemplate ? 'ZALO_INBOX_URL_TEMPLATE' : undefined,
   ].filter((value): value is string => Boolean(value));
   const configured = missing.length === 0;
   return {
@@ -360,7 +382,7 @@ export function checkZaloConfig(options: RouteOptions): ReadinessCheckResult {
     configured,
     required,
     message:
-      configured || !required ? undefined : `Missing ${missing.join(", ")}`,
+      configured || !required ? undefined : `Missing ${missing.join(', ')}`,
   };
 }
 
@@ -373,37 +395,37 @@ export function deeplinkForSession(
     zaloInboxUrlTemplate?: string;
   },
 ): {
-  status: "available" | "unavailable";
+  status: 'available' | 'unavailable';
   url: string | null;
   reason?: string;
 } {
-  if (sessionId.startsWith("kfc:")) {
+  if (sessionId.startsWith('kfc:')) {
     return {
-      status: "unavailable",
+      status: 'unavailable',
       url: null,
-      reason: "KFC chat deeplink disabled",
+      reason: 'KFC chat deeplink disabled',
     };
   }
 
   const target = channelTargetForSession(sessionId);
   if (!target)
-    return { status: "unavailable", url: null, reason: "Unknown channel" };
+    return { status: 'unavailable', url: null, reason: 'Unknown channel' };
 
-  if (target.channel === "messenger") {
+  if (target.channel === 'messenger') {
     if (!config.metaInboxUrlTemplate)
       return {
-        status: "unavailable",
+        status: 'unavailable',
         url: null,
-        reason: "Missing META_INBOX_URL_TEMPLATE",
+        reason: 'Missing META_INBOX_URL_TEMPLATE',
       };
     if (!config.metaPageId)
       return {
-        status: "unavailable",
+        status: 'unavailable',
         url: null,
-        reason: "Missing META_PAGE_ID",
+        reason: 'Missing META_PAGE_ID',
       };
     return {
-      status: "available",
+      status: 'available',
       url: renderInboxUrlTemplate(config.metaInboxUrlTemplate, {
         pageId: config.metaPageId,
         externalUserId: target.externalUserId,
@@ -412,17 +434,17 @@ export function deeplinkForSession(
     };
   }
 
-  if (target.channel === "zalo") {
+  if (target.channel === 'zalo') {
     if (!config.zaloInboxUrlTemplate)
       return {
-        status: "unavailable",
+        status: 'unavailable',
         url: null,
-        reason: "Missing ZALO_INBOX_URL_TEMPLATE",
+        reason: 'Missing ZALO_INBOX_URL_TEMPLATE',
       };
     if (!config.zaloOaId)
-      return { status: "unavailable", url: null, reason: "Missing ZALO_OA_ID" };
+      return { status: 'unavailable', url: null, reason: 'Missing ZALO_OA_ID' };
     return {
-      status: "available",
+      status: 'available',
       url: renderInboxUrlTemplate(config.zaloInboxUrlTemplate, {
         pageId: config.zaloOaId,
         externalUserId: target.externalUserId,
@@ -431,7 +453,7 @@ export function deeplinkForSession(
     };
   }
 
-  return { status: "unavailable", url: null, reason: "Unknown channel" };
+  return { status: 'unavailable', url: null, reason: 'Unknown channel' };
 }
 
 export function renderInboxUrlTemplate(
@@ -439,13 +461,13 @@ export function renderInboxUrlTemplate(
   values: { pageId: string; externalUserId: string; sessionId: string },
 ): string {
   return template
-    .replaceAll("{pageId}", encodeURIComponent(values.pageId))
-    .replaceAll("{externalUserId}", encodeURIComponent(values.externalUserId))
-    .replaceAll("{sessionId}", encodeURIComponent(values.sessionId));
+    .replaceAll('{pageId}', encodeURIComponent(values.pageId))
+    .replaceAll('{externalUserId}', encodeURIComponent(values.externalUserId))
+    .replaceAll('{sessionId}', encodeURIComponent(values.sessionId));
 }
 
 export type ChannelProfileTarget = {
-  channel: "messenger" | "zalo";
+  channel: 'messenger' | 'zalo';
   externalUserId: string;
 };
 
@@ -454,7 +476,7 @@ export function channelTargetForSession(
 ): ChannelProfileTarget | undefined {
   const target = dashboardSessionTarget(sessionId);
   const channel =
-    target?.channel === "messenger" || target?.channel === "zalo"
+    target?.channel === 'messenger' || target?.channel === 'zalo'
       ? target.channel
       : undefined;
   if (target && channel) {

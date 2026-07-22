@@ -27,19 +27,19 @@ import {
   nonAgentTextDeliveryTurnBindingMatches,
   samePreparedNonAgentTextDeliveryTurn,
 } from './nonAgentTextDelivery.js';
-import {
-  effectiveMemorySessionControl,
-} from './memoryStoreSessionAuthority.js';
+import { effectiveMemorySessionControl } from './memoryStoreSessionAuthority.js';
 
-export abstract class MemoryStoreNonAgentTextDeliveryOperations
-  extends MemoryStoreAgentRunTextDeliveryOperations
-{
-  protected readonly nonAgentTextDeliveries =
-    new Map<string, NonAgentTextDeliveryRecord>();
+export abstract class MemoryStoreNonAgentTextDeliveryOperations extends MemoryStoreAgentRunTextDeliveryOperations {
+  protected readonly nonAgentTextDeliveries = new Map<
+    string,
+    NonAgentTextDeliveryRecord
+  >();
   private readonly nonAgentTextDeliveryAttemptTokens = new Set<string>();
 
-  protected abstract memoryNonAgentSessionControls():
-    ReadonlyMap<string, SessionControl>;
+  protected abstract memoryNonAgentSessionControls(): ReadonlyMap<
+    string,
+    SessionControl
+  >;
   protected abstract memoryNonAgentTurns(): readonly ConversationTurn[];
   protected abstract appendMemoryNonAgentTurn(
     input: AppendConversationTurnInput,
@@ -48,11 +48,12 @@ export abstract class MemoryStoreNonAgentTextDeliveryOperations
   async reserveNonAgentTextDelivery(
     input: ReserveNonAgentTextDeliveryInput,
   ): Promise<ReserveNonAgentTextDeliveryResult> {
-    return this.withConfirmationPauseLock(async () =>
+    return this.withStoreLock(async () =>
       reserveMemoryNonAgentTextDelivery(input, {
         sessionControls: this.memoryNonAgentSessionControls(),
         nonAgentTextDeliveries: this.nonAgentTextDeliveries,
-      }));
+      }),
+    );
   }
 
   async getNonAgentTextDelivery(
@@ -65,12 +66,12 @@ export abstract class MemoryStoreNonAgentTextDeliveryOperations
   async prepareNonAgentTextDeliveryTurn(
     input: PrepareNonAgentTextDeliveryTurnInput,
   ): Promise<PrepareNonAgentTextDeliveryTurnResult> {
-    return this.withConfirmationPauseLock(async () => {
+    return this.withStoreLock(async () => {
       const record = this.nonAgentTextDeliveries.get(input.requestKey);
       if (
         !record ||
         record.sessionBindingDigest !==
-          await nonAgentTextDeliverySessionBindingDigest(input.sessionId)
+          (await nonAgentTextDeliverySessionBindingDigest(input.sessionId))
       ) {
         return { status: 'prepare_blocked', reason: 'not_found' };
       }
@@ -82,7 +83,9 @@ export abstract class MemoryStoreNonAgentTextDeliveryOperations
         record.reservedSessionAuthorityGeneration !==
           input.expectedSessionAuthorityGeneration ||
         record.agentBindingDigest !==
-          await nonAgentTextDeliveryAgentBindingDigest(input.expectedAgentId) ||
+          (await nonAgentTextDeliveryAgentBindingDigest(
+            input.expectedAgentId,
+          )) ||
         control.sessionAuthorityGeneration !==
           input.expectedSessionAuthorityGeneration ||
         control.agentMode !== 'human_paused' ||
@@ -104,15 +107,16 @@ export abstract class MemoryStoreNonAgentTextDeliveryOperations
           record: structuredClone(record),
         };
       }
-      if (!await nonAgentTextDeliveryTurnBindingMatches(record, input)) {
+      if (!(await nonAgentTextDeliveryTurnBindingMatches(record, input))) {
         return {
           status: 'prepare_blocked',
           reason: 'turn_binding_conflict',
           record: structuredClone(record),
         };
       }
-      const existing = this.memoryNonAgentTurns()
-        .find((turn) => turn.id === input.turn.id);
+      const existing = this.memoryNonAgentTurns().find(
+        (turn) => turn.id === input.turn.id,
+      );
       if (existing) {
         return samePreparedNonAgentTextDeliveryTurn(existing, input.turn)
           ? {
@@ -146,31 +150,31 @@ export abstract class MemoryStoreNonAgentTextDeliveryOperations
   async beginNonAgentTextDeliveryAttempt(
     input: BeginNonAgentTextDeliveryAttemptInput,
   ): Promise<BeginNonAgentTextDeliveryAttemptResult> {
-    return this.withConfirmationPauseLock(async () =>
+    return this.withStoreLock(async () =>
       beginMemoryNonAgentTextDeliveryAttempt(input, {
         sessionControls: this.memoryNonAgentSessionControls(),
         nonAgentTextDeliveries: this.nonAgentTextDeliveries,
         attemptTokens: this.nonAgentTextDeliveryAttemptTokens,
-      }));
+      }),
+    );
   }
 
   async completeNonAgentTextDeliveryAttempt(
     input: CompleteNonAgentTextDeliveryAttemptInput,
   ): Promise<CompleteNonAgentTextDeliveryAttemptResult> {
-    return this.withConfirmationPauseLock(async () =>
+    return this.withStoreLock(async () =>
       completeMemoryNonAgentTextDeliveryAttempt(
         input,
         this.nonAgentTextDeliveries,
-      ));
+      ),
+    );
   }
 
   async reconcileNonAgentTextDelivery(
     input: ReconcileNonAgentTextDeliveryInput,
   ): Promise<ReconcileNonAgentTextDeliveryResult> {
-    return this.withConfirmationPauseLock(async () =>
-      reconcileMemoryNonAgentTextDelivery(
-        input,
-        this.nonAgentTextDeliveries,
-      ));
+    return this.withStoreLock(async () =>
+      reconcileMemoryNonAgentTextDelivery(input, this.nonAgentTextDeliveries),
+    );
   }
 }

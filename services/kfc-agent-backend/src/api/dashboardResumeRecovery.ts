@@ -72,8 +72,8 @@ function latestUnansweredCustomerTurn(
 }
 
 function recoveryConversationEvent(input: {
-  turn: ConversationTurn,
-  channel: 'messenger' | 'zalo',
+  turn: ConversationTurn;
+  channel: 'messenger' | 'zalo';
   externalMessageId: string;
   externalUserId: string;
 }): ConversationEvent {

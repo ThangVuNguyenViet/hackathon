@@ -12,12 +12,8 @@ import {
   assertExactPausedCustomerUserTurn,
   validatePausedCustomerRunIntake,
 } from './pausedCustomerRunIntake.js';
-import {
-  isConnectablePostgres,
-} from './postgresStoreRunOwner.js';
-import {
-  lockPostgresSessionAuthority,
-} from './postgresStoreSessionAuthority.js';
+import { isConnectablePostgres } from './postgresStoreRunOwner.js';
+import { lockPostgresSessionAuthority } from './postgresStoreSessionAuthority.js';
 import {
   customerRunEventFromRow,
   customerRunFromRow,
@@ -40,27 +36,18 @@ export async function commitPostgresPausedCustomerRunIntake(input: {
   const client = await input.db.connect();
   try {
     await client.query('BEGIN');
-    await lockPostgresSessionAuthority(
-      client,
-      input.operation.run.sessionId,
-    );
+    await lockPostgresSessionAuthority(client, input.operation.run.sessionId);
     const existing = await client.query<CustomerRunRow>(
       `SELECT *
        FROM customer_runs
        WHERE session_id = $1
          AND client_message_id = $2
        FOR UPDATE`,
-      [
-        input.operation.run.sessionId,
-        input.operation.run.clientMessageId,
-      ],
+      [input.operation.run.sessionId, input.operation.run.clientMessageId],
     );
     if (existing.rows[0]) {
       const run = customerRunFromRow(existing.rows[0]);
-      if (
-        run.requestFingerprint !==
-        input.operation.run.requestFingerprint
-      ) {
+      if (run.requestFingerprint !== input.operation.run.requestFingerprint) {
         throw new CustomerRunIdempotencyConflictError(
           input.operation.run.sessionId,
           input.operation.run.clientMessageId,
@@ -173,10 +160,7 @@ async function ensureUserTurn(
     [input.run.sessionId, input.run.clientMessageId],
   );
   if (existing.rows[0]) {
-    assertExactPausedCustomerUserTurn(
-      input,
-      turnFromRow(existing.rows[0]),
-    );
+    assertExactPausedCustomerUserTurn(input, turnFromRow(existing.rows[0]));
     return existing.rows[0];
   }
   const turn = await client.query<ConversationTurnRow>(

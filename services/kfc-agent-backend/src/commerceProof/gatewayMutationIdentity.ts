@@ -1,8 +1,5 @@
-import { createHash } from "node:crypto";
-import {
-  commerceContractVersion,
-  type CommerceCommand,
-} from "./contracts.js";
+import { createHash } from 'node:crypto';
+import { commerceContractVersion, type CommerceCommand } from './contracts.js';
 
 export interface GatewayProviderMutationIdentity {
   idempotencyKey: string;
@@ -45,7 +42,7 @@ export function gatewayPosSubmitInput(
 
 export function gatewayOmsCompensationAction(
   omsOrderId: string,
-  context: Omit<GatewayCancellationContext, "omsOrderId" | "posTicketId">,
+  context: Omit<GatewayCancellationContext, 'omsOrderId' | 'posTicketId'>,
 ) {
   return { omsOrderId, ...context };
 }
@@ -65,23 +62,25 @@ export function gatewayOmsCancellationAction(
 export function deriveGatewayProviderMutationIdentity(
   parent: GatewayProviderMutationIdentity,
   operation:
-    | "oms_create"
-    | "pos_submit"
-    | "oms_compensate"
-    | "pos_cancel"
-    | "oms_cancel",
+    | 'oms_create'
+    | 'pos_submit'
+    | 'oms_compensate'
+    | 'pos_cancel'
+    | 'oms_cancel',
   canonicalChildAction: unknown,
 ): GatewayProviderMutationIdentity {
   return {
     idempotencyKey: `kfc:${operation}:${sha256(parent.idempotencyKey)}`,
-    bindingFingerprint: sha256(JSON.stringify({
-      parentBindingFingerprint: parent.bindingFingerprint,
-      operation,
-      canonicalChildAction,
-    })),
+    bindingFingerprint: sha256(
+      JSON.stringify({
+        parentBindingFingerprint: parent.bindingFingerprint,
+        operation,
+        canonicalChildAction,
+      }),
+    ),
   };
 }
 
 function sha256(value: string): string {
-  return createHash("sha256").update(value).digest("hex");
+  return createHash('sha256').update(value).digest('hex');
 }

@@ -1,14 +1,9 @@
 import type { BaseMessage } from '@langchain/core/messages';
-import {
-  AIMessage,
-  HumanMessage,
-} from '@langchain/core/messages';
+import { AIMessage, HumanMessage } from '@langchain/core/messages';
 import type { ConversationTurn } from '../domain/types.js';
 import type { AgentTurnInput } from './agentTurn.js';
 import type { AgentState } from './agentState.js';
-import {
-  semanticConversationTurns,
-} from './trustedActionConversation.js';
+import { semanticConversationTurns } from './trustedActionConversation.js';
 
 export function freshMessages(
   state: AgentState,
@@ -19,15 +14,19 @@ export function freshMessages(
   const history: BaseMessage[] = [];
   const appendTurnMessage = (turn: ConversationTurn): void => {
     if (turn.role === 'user') {
-      history.push(new HumanMessage({
-        id: `conversation:${turn.id}`,
-        content: turn.text,
-      }));
+      history.push(
+        new HumanMessage({
+          id: `conversation:${turn.id}`,
+          content: turn.text,
+        }),
+      );
     } else if (turn.role === 'assistant') {
-      history.push(new AIMessage({
-        id: `conversation:${turn.id}`,
-        content: turn.text,
-      }));
+      history.push(
+        new AIMessage({
+          id: `conversation:${turn.id}`,
+          content: turn.text,
+        }),
+      );
     }
   };
   if (input.trustedCustomerAction) {

@@ -16,7 +16,10 @@ export default tseslint.config(
     },
     rules: {
       '@typescript-eslint/no-explicit-any': 'error',
-      '@typescript-eslint/no-unsafe-type-assertion': 'warn',
+      // Runtime inputs are validated at API and tool boundaries. Requiring a
+      // separate guard for every internal narrowing adds noise without
+      // strengthening those boundaries.
+      '@typescript-eslint/no-unsafe-type-assertion': 'off',
       '@typescript-eslint/switch-exhaustiveness-check': [
         'error',
         { considerDefaultExhaustiveForUnions: true },

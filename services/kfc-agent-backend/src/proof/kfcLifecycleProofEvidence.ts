@@ -2,84 +2,90 @@ import { z } from 'zod';
 
 const boundedId = z.string().min(1).max(256);
 const digest = z.string().regex(/^[0-9a-f]{64}$/u);
-const paymentAttemptSchema = z.object({
-  attemptId: boundedId,
-  status: z.enum([
-    'pending',
-    'paid',
-    'failed',
-    'expired',
-    'cancelled',
-  ]),
-  orderId: z.string().max(256).nullable(),
-}).strict();
-const orderStateSchema = z.object({
-  status: z.enum([
-    'accepted',
-    'rejected',
-    'preparing',
-    'ready',
-    'completed',
-    'cancelled',
-  ]),
-  orderId: z.string().max(256).nullable(),
-}).strict();
-const deliveryAttemptSchema = z.object({
-  attemptId: boundedId,
-  status: z.enum([
-    'pending_dispatch',
-    'assigned',
-    'delivering',
-    'delivered',
-    'failed',
-    'cancelled',
-  ]),
-  orderId: z.string().max(256).nullable(),
-}).strict();
-const lifecycleInstanceSchema = z.object({
-  instanceId: boundedId,
-  environment: z.enum(['production', 'sandbox']),
-  scenarioDefinitionVersion: boundedId,
-  releaseId: boundedId,
-  catalogObservationId: boundedId,
-  catalogHash: digest,
-  customerBinding: boundedId,
-  sessionBinding: boundedId,
-  paymentPolicy: z.enum(['prepaid', 'pay_on_fulfillment']),
-  fulfillmentPolicy: z.enum(['delivery', 'pickup']),
-  logicalTime: z.number().finite(),
-  expiresAt: z.number().finite(),
-  revision: z.number().int().nonnegative(),
-  state: z.object({
-    payment: paymentAttemptSchema.nullable(),
-    order: orderStateSchema.nullable(),
-    delivery: deliveryAttemptSchema.nullable(),
-  }).strict(),
-  sealedAt: z.number().finite().nullable(),
-  resetFrom: z.string().max(256).nullable(),
-}).strict();
-const lifecycleAuditEntrySchema = z.object({
-  revision: z.number().int().nonnegative(),
-  eventId: boundedId,
-  eventType: z.string().min(1).max(128),
-  outcome: z.enum([
-    'committed',
-    'fault_before_commit',
-    'fault_after_commit',
-    'control',
-  ]),
-  priorRevision: z.number().int().nonnegative().nullable(),
-  createdAt: z.string().min(1).max(64),
-}).strict();
-const lifecycleProofSourceSchema = z.object({
-  instance: lifecycleInstanceSchema.nullable(),
-  audit: z.array(lifecycleAuditEntrySchema).max(256),
-}).strict();
+const paymentAttemptSchema = z
+  .object({
+    attemptId: boundedId,
+    status: z.enum(['pending', 'paid', 'failed', 'expired', 'cancelled']),
+    orderId: z.string().max(256).nullable(),
+  })
+  .strict();
+const orderStateSchema = z
+  .object({
+    status: z.enum([
+      'accepted',
+      'rejected',
+      'preparing',
+      'ready',
+      'completed',
+      'cancelled',
+    ]),
+    orderId: z.string().max(256).nullable(),
+  })
+  .strict();
+const deliveryAttemptSchema = z
+  .object({
+    attemptId: boundedId,
+    status: z.enum([
+      'pending_dispatch',
+      'assigned',
+      'delivering',
+      'delivered',
+      'failed',
+      'cancelled',
+    ]),
+    orderId: z.string().max(256).nullable(),
+  })
+  .strict();
+const lifecycleInstanceSchema = z
+  .object({
+    instanceId: boundedId,
+    environment: z.enum(['production', 'sandbox']),
+    scenarioDefinitionVersion: boundedId,
+    releaseId: boundedId,
+    catalogObservationId: boundedId,
+    catalogHash: digest,
+    customerBinding: boundedId,
+    sessionBinding: boundedId,
+    paymentPolicy: z.enum(['prepaid', 'pay_on_fulfillment']),
+    fulfillmentPolicy: z.enum(['delivery', 'pickup']),
+    logicalTime: z.number().finite(),
+    expiresAt: z.number().finite(),
+    revision: z.number().int().nonnegative(),
+    state: z
+      .object({
+        payment: paymentAttemptSchema.nullable(),
+        order: orderStateSchema.nullable(),
+        delivery: deliveryAttemptSchema.nullable(),
+      })
+      .strict(),
+    sealedAt: z.number().finite().nullable(),
+    resetFrom: z.string().max(256).nullable(),
+  })
+  .strict();
+const lifecycleAuditEntrySchema = z
+  .object({
+    revision: z.number().int().nonnegative(),
+    eventId: boundedId,
+    eventType: z.string().min(1).max(128),
+    outcome: z.enum([
+      'committed',
+      'fault_before_commit',
+      'fault_after_commit',
+      'control',
+    ]),
+    priorRevision: z.number().int().nonnegative().nullable(),
+    createdAt: z.string().min(1).max(64),
+  })
+  .strict();
+const lifecycleProofSourceSchema = z
+  .object({
+    instance: lifecycleInstanceSchema.nullable(),
+    audit: z.array(lifecycleAuditEntrySchema).max(256),
+  })
+  .strict();
 
 export type KfcLifecycleProofMissingReason =
-  | 'lifecycle_audit'
-  | 'lifecycle_evidence'
-  | 'lifecycle_instance';
+  'lifecycle_audit' | 'lifecycle_evidence' | 'lifecycle_instance';
 
 export interface KfcLifecycleProofEvidenceProjection {
   complete: boolean;
@@ -130,8 +136,7 @@ export function projectKfcLifecycleProofEvidence(
       ? {
           instanceId: instance.instanceId,
           environment: instance.environment,
-          scenarioDefinitionVersion:
-            instance.scenarioDefinitionVersion,
+          scenarioDefinitionVersion: instance.scenarioDefinitionVersion,
           releaseId: instance.releaseId,
           catalogObservationId: instance.catalogObservationId,
           catalogHash: instance.catalogHash,
@@ -143,8 +148,7 @@ export function projectKfcLifecycleProofEvidence(
           state: {
             paymentStatus: instance.state.payment?.status ?? null,
             orderStatus: instance.state.order?.status ?? null,
-            deliveryStatus:
-              instance.state.delivery?.status ?? null,
+            deliveryStatus: instance.state.delivery?.status ?? null,
           },
           sealed: instance.sealedAt !== null,
         }

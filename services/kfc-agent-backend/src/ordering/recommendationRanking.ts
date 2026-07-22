@@ -23,17 +23,25 @@ export function rankEligibleRecommendations<T>(
   limit = 3,
 ): RecommendationCandidate<T>[] {
   const eligible = candidates.filter((candidate) => candidate.eligible);
-  const scoringAvailable = eligible.every((candidate) =>
-    candidate.score && Object.values(candidate.score).every(Number.isFinite),
+  const scoringAvailable = eligible.every(
+    (candidate) =>
+      candidate.score && Object.values(candidate.score).every(Number.isFinite),
   );
   const ranked = [...eligible].sort((left, right) => {
     if (!scoringAvailable) return left.itemCode.localeCompare(right.itemCode);
     const total = (candidate: RecommendationCandidate<T>): number => {
       const score = candidate.score!;
-      return score.requestMatch + score.partySizeFit + score.budgetFit +
-        score.preferenceMatch - score.cartDisruption;
+      return (
+        score.requestMatch +
+        score.partySizeFit +
+        score.budgetFit +
+        score.preferenceMatch -
+        score.cartDisruption
+      );
     };
-    return total(right) - total(left) || left.itemCode.localeCompare(right.itemCode);
+    return (
+      total(right) - total(left) || left.itemCode.localeCompare(right.itemCode)
+    );
   });
   const requestedLimit = Number.isInteger(limit) ? Math.max(0, limit) : 3;
   return safetyRerank(ranked).slice(0, Math.min(3, requestedLimit));

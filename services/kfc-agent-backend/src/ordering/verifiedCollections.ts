@@ -1,5 +1,5 @@
 import type { MenuItem } from '../domain/types.js';
-import { digestCommerceAction } from './approvalReceipt.js';
+import { digestCommerceAction } from './commerceDigest.js';
 import type {
   CollectionScope,
   CollectionToolName,
@@ -8,7 +8,9 @@ import type {
   VerifiedCollectionStore,
 } from './types.js';
 
-export function normalizedCollectionScope(scope: CollectionScope): CollectionScope {
+export function normalizedCollectionScope(
+  scope: CollectionScope,
+): CollectionScope {
   if (scope.scope === 'all') return scope;
   return {
     scope: 'filtered',
@@ -57,7 +59,8 @@ export function replaceVerifiedCollection(
   return {
     ...(store ?? {}),
     [toolName]: {
-      ...((store?.[toolName] as Record<string, VerifiedCollectionSnapshot<unknown>> | undefined) ?? {}),
+      ...((store?.[toolName] as
+        Record<string, VerifiedCollectionSnapshot<unknown>> | undefined) ?? {}),
       [snapshot.key]: snapshot,
     },
   };
@@ -68,9 +71,10 @@ export function latestVerifiedCollection<Item>(
   toolName: CollectionToolName,
   scope: CollectionScope,
 ): VerifiedCollectionSnapshot<Item> | undefined {
-  return (store?.[toolName] as Record<string, VerifiedCollectionSnapshot<Item>> | undefined)?.[
-    verifiedCollectionKey(scope)
-  ];
+  return (
+    store?.[toolName] as
+      Record<string, VerifiedCollectionSnapshot<Item>> | undefined
+  )?.[verifiedCollectionKey(scope)];
 }
 
 export interface CompleteMenuTextProjection {
@@ -87,17 +91,23 @@ export function projectVerifiedMenuCollectionToText(
   maxChunkCharacters = 1_800,
 ): CompleteMenuTextProjection {
   if (!Number.isInteger(maxChunkCharacters) || maxChunkCharacters < 200) {
-    throw new Error('Menu text projection chunk size must be an integer of at least 200 characters');
+    throw new Error(
+      'Menu text projection chunk size must be an integer of at least 200 characters',
+    );
   }
   const chunks: string[] = [];
   let current = '';
   let currentCategory: string | undefined;
 
   for (const item of collection.items) {
-    const categoryLine = item.category === currentCategory ? '' : `${item.category}\n`;
+    const categoryLine =
+      item.category === currentCategory ? '' : `${item.category}\n`;
     const itemLine = `${item.name} | ${new Intl.NumberFormat('vi-VN').format(item.priceVnd)} VND | ${item.code}\n`;
     const next = `${categoryLine}${itemLine}`;
-    if (current.length > 0 && current.length + next.length > maxChunkCharacters) {
+    if (
+      current.length > 0 &&
+      current.length + next.length > maxChunkCharacters
+    ) {
       chunks.push(current.trimEnd());
       current = '';
       currentCategory = undefined;

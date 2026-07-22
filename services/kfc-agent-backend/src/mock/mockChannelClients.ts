@@ -25,14 +25,12 @@ function mockTextOutcome(
     return {
       status: 'delivery_outcome_unknown',
       errorCode: 'mock_delivery_provider_message_id_invalid',
-      message:
-        'Mock delivery reported success without a valid provider ID',
+      message: 'Mock delivery reported success without a valid provider ID',
     };
   }
   return {
     status: 'delivery_outcome_unknown',
-    errorCode:
-      result.errorCode ?? 'legacy_mock_delivery_outcome_unknown',
+    errorCode: result.errorCode ?? 'legacy_mock_delivery_outcome_unknown',
     message: result.message,
   };
 }
@@ -43,8 +41,10 @@ function withMessengerTextOutcome(
   return {
     ...client,
     async sendTextWithOutcome(recipientId, text) {
-      return client.sendTextWithOutcome?.(recipientId, text) ??
-        mockTextOutcome(await client.sendText(recipientId, text));
+      return (
+        client.sendTextWithOutcome?.(recipientId, text) ??
+        mockTextOutcome(await client.sendText(recipientId, text))
+      );
     },
   };
 }
@@ -55,8 +55,10 @@ function withZaloTextOutcome(
   return {
     ...client,
     async sendTextWithOutcome(recipientId, text) {
-      return client.sendTextWithOutcome?.(recipientId, text) ??
-        mockTextOutcome(await client.sendText(recipientId, text));
+      return (
+        client.sendTextWithOutcome?.(recipientId, text) ??
+        mockTextOutcome(await client.sendText(recipientId, text))
+      );
     },
   };
 }
@@ -102,8 +104,7 @@ function defaultChannelClients(): ConfiguredChannelClients {
         return {
           status: 'not_dispatched',
           errorCode: 'channel_client_not_configured',
-          message:
-            'Zalo delivery must be provided by a live channel client',
+          message: 'Zalo delivery must be provided by a live channel client',
         };
       },
       async getProfile() {

@@ -79,12 +79,6 @@ export interface AgentTurnInput {
       | { kind: 'response_composition' },
   ) => Promise<void>;
   tracer?: AgentTracer;
-  /**
-   * Internal override for deterministic deadline tests. Production defaults
-   * to the canonical ten-second turn ceiling; the latency gate separately
-   * requires the production p95 to remain below eight seconds.
-   */
-  turnDeadlineMs?: number;
 }
 
 export interface AgentTurnOutput {
@@ -116,7 +110,6 @@ export type VerifiedStateSnapshot = Pick<
   | 'verifiedCollections'
   | 'activeCollectionKeys'
   | 'activeMenuCollection'
-  | 'commerceApprovalReceipts'
   | 'menuItemDetail'
   | 'menuModifierOptions'
   | 'customerContext'

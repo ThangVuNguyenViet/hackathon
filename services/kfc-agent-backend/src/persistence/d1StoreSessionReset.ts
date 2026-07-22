@@ -2,12 +2,8 @@ import {
   SessionResetConflictError,
   type SessionResetHook,
 } from './contracts.js';
-import type {
-  D1DatabaseLike,
-} from './d1StoreSupport.js';
-import {
-  nonAgentTextDeliverySessionBindingDigest,
-} from './nonAgentTextDelivery.js';
+import type { D1DatabaseLike } from './d1StoreSupport.js';
+import { nonAgentTextDeliverySessionBindingDigest } from './nonAgentTextDelivery.js';
 
 export async function resetD1Session(input: {
   db: D1DatabaseLike;
@@ -17,43 +13,36 @@ export async function resetD1Session(input: {
   if (!input.db.batch) {
     throw new Error('d1_atomic_session_reset_unavailable');
   }
-  const generationRow = await input.db.prepare(
-    `INSERT INTO confirmation_pause_sessions (session_id, generation)
+  const generationRow = await input.db
+    .prepare(
+      `INSERT INTO session_generations (session_id, generation)
      VALUES (?, 0)
      ON CONFLICT(session_id) DO UPDATE SET
-       generation = confirmation_pause_sessions.generation
+       generation = session_generations.generation
      RETURNING generation`,
-  ).bind(input.sessionId).first<{ generation: number }>();
+    )
+    .bind(input.sessionId)
+    .first<{ generation: number }>();
   if (!generationRow) {
-    throw new Error('confirmation_pause_generation_missing');
+    throw new Error('session_generation_missing');
   }
   const expectedGeneration = generationRow.generation;
   const nextGeneration = expectedGeneration + 1;
   const resetAt = new Date().toISOString();
-  const sessionBindingDigest =
-    await nonAgentTextDeliverySessionBindingDigest(input.sessionId);
+  const sessionBindingDigest = await nonAgentTextDeliverySessionBindingDigest(
+    input.sessionId,
+  );
   const resetFenceSql = `EXISTS (
-    SELECT 1 FROM confirmation_pause_sessions
+    SELECT 1 FROM session_generations
     WHERE session_id = ? AND generation = ?
   )`;
   const statements = [
     input.db
       .prepare(
-        `UPDATE confirmation_pause_sessions
+        `UPDATE session_generations
          SET generation = generation + 1
          WHERE session_id = ?
            AND generation = ?
-           AND NOT EXISTS (
-             SELECT 1
-             FROM irreversible_operations
-             WHERE session_id = ?
-               AND operation = 'confirmation_resume'
-               AND NOT (
-                 status = 'completed'
-                 AND result_json IS NOT NULL
-                 AND completed_at IS NOT NULL
-               )
-           )
            AND NOT EXISTS (
              SELECT 1
              FROM non_agent_text_deliveries
@@ -62,13 +51,7 @@ export async function resetD1Session(input: {
                AND julianday(sending_lease_expires_at) > julianday(?)
            )`,
       )
-      .bind(
-        input.sessionId,
-        expectedGeneration,
-        input.sessionId,
-        sessionBindingDigest,
-        resetAt,
-      ),
+      .bind(input.sessionId, expectedGeneration, sessionBindingDigest, resetAt),
     input.db
       .prepare(
         `UPDATE non_agent_text_deliveries
@@ -79,12 +62,7 @@ export async function resetD1Session(input: {
            AND status = 'pending'
            AND ${resetFenceSql}`,
       )
-      .bind(
-        resetAt,
-        sessionBindingDigest,
-        input.sessionId,
-        nextGeneration,
-      ),
+      .bind(resetAt, sessionBindingDigest, input.sessionId, nextGeneration),
     input.db
       .prepare(
         `UPDATE non_agent_text_deliveries
@@ -105,62 +83,85 @@ export async function resetD1Session(input: {
         input.sessionId,
         nextGeneration,
       ),
-    input.db.prepare(
-      `DELETE FROM verified_refs
+    input.db
+      .prepare(
+        `DELETE FROM verified_refs
        WHERE session_id = ? AND ${resetFenceSql}`,
-    ).bind(input.sessionId, input.sessionId, nextGeneration),
-    input.db.prepare(
-      `DELETE FROM customer_run_events
+      )
+      .bind(input.sessionId, input.sessionId, nextGeneration),
+    input.db
+      .prepare(
+        `DELETE FROM customer_run_events
        WHERE run_id IN (
          SELECT id FROM customer_runs WHERE session_id = ?
        ) AND ${resetFenceSql}`,
-    ).bind(input.sessionId, input.sessionId, nextGeneration),
-    input.db.prepare(
-      `DELETE FROM agent_run_turns
+      )
+      .bind(input.sessionId, input.sessionId, nextGeneration),
+    input.db
+      .prepare(
+        `DELETE FROM agent_run_turns
        WHERE run_id IN (
          SELECT id FROM agent_runs WHERE session_id = ?
        ) AND ${resetFenceSql}`,
-    ).bind(input.sessionId, input.sessionId, nextGeneration),
-    input.db.prepare(
-      `DELETE FROM customer_runs
+      )
+      .bind(input.sessionId, input.sessionId, nextGeneration),
+    input.db
+      .prepare(
+        `DELETE FROM customer_runs
        WHERE session_id = ? AND ${resetFenceSql}`,
-    ).bind(input.sessionId, input.sessionId, nextGeneration),
-    input.db.prepare(
-      `DELETE FROM pending_customer_turns
+      )
+      .bind(input.sessionId, input.sessionId, nextGeneration),
+    input.db
+      .prepare(
+        `DELETE FROM pending_customer_turns
        WHERE session_id = ? AND ${resetFenceSql}`,
-    ).bind(input.sessionId, input.sessionId, nextGeneration),
-    input.db.prepare(
-      `DELETE FROM agent_runs
+      )
+      .bind(input.sessionId, input.sessionId, nextGeneration),
+    input.db
+      .prepare(
+        `DELETE FROM agent_runs
        WHERE session_id = ? AND ${resetFenceSql}`,
-    ).bind(input.sessionId, input.sessionId, nextGeneration),
-    input.db.prepare(
-      `DELETE FROM session_agent_state
+      )
+      .bind(input.sessionId, input.sessionId, nextGeneration),
+    input.db
+      .prepare(
+        `DELETE FROM session_agent_state
        WHERE session_id = ? AND ${resetFenceSql}`,
-    ).bind(input.sessionId, input.sessionId, nextGeneration),
-    input.db.prepare(
-      `DELETE FROM webhook_deliveries
+      )
+      .bind(input.sessionId, input.sessionId, nextGeneration),
+    input.db
+      .prepare(
+        `DELETE FROM webhook_deliveries
        WHERE session_id = ? AND ${resetFenceSql}`,
-    ).bind(input.sessionId, input.sessionId, nextGeneration),
-    input.db.prepare(
-      `DELETE FROM irreversible_operations
-       WHERE session_id = ?
-         AND operation <> 'confirmation_resume'
-         AND ${resetFenceSql}`,
-    ).bind(input.sessionId, input.sessionId, nextGeneration),
-    input.db.prepare(
-      `DELETE FROM conversation_turns
+      )
+      .bind(input.sessionId, input.sessionId, nextGeneration),
+    input.db
+      .prepare(
+        `DELETE FROM irreversible_operations
        WHERE session_id = ? AND ${resetFenceSql}`,
-    ).bind(input.sessionId, input.sessionId, nextGeneration),
-    input.db.prepare(
-      `DELETE FROM conversation_events
+      )
+      .bind(input.sessionId, input.sessionId, nextGeneration),
+    input.db
+      .prepare(
+        `DELETE FROM conversation_turns
        WHERE session_id = ? AND ${resetFenceSql}`,
-    ).bind(input.sessionId, input.sessionId, nextGeneration),
-    input.db.prepare(
-      `DELETE FROM dashboard_events
+      )
+      .bind(input.sessionId, input.sessionId, nextGeneration),
+    input.db
+      .prepare(
+        `DELETE FROM conversation_events
        WHERE session_id = ? AND ${resetFenceSql}`,
-    ).bind(input.sessionId, input.sessionId, nextGeneration),
-    input.db.prepare(
-      `INSERT INTO session_controls (
+      )
+      .bind(input.sessionId, input.sessionId, nextGeneration),
+    input.db
+      .prepare(
+        `DELETE FROM dashboard_events
+       WHERE session_id = ? AND ${resetFenceSql}`,
+      )
+      .bind(input.sessionId, input.sessionId, nextGeneration),
+    input.db
+      .prepare(
+        `INSERT INTO session_controls (
          session_id, agent_mode, assigned_agent_id,
          session_authority_generation, updated_at
        )
@@ -179,15 +180,16 @@ export async function resetD1Session(input: {
            session_controls.session_authority_generation + 1,
          updated_at = excluded.updated_at
        WHERE ${resetFenceSql}`,
-    ).bind(
-      input.sessionId,
-      input.sessionId,
-      resetAt,
-      input.sessionId,
-      nextGeneration,
-      input.sessionId,
-      nextGeneration,
-    ),
+      )
+      .bind(
+        input.sessionId,
+        input.sessionId,
+        resetAt,
+        input.sessionId,
+        nextGeneration,
+        input.sessionId,
+        nextGeneration,
+      ),
   ];
   const results = await input.db.batch(statements);
   if (Number(results[0]?.meta.changes ?? 0) !== 1) {

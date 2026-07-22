@@ -39,8 +39,8 @@ function isProtocolWhitespace(codePoint: number): boolean {
 }
 
 function containsProtocolNonWhitespace(value: string): boolean {
-  return [...value].some((character) =>
-    !isProtocolWhitespace(character.codePointAt(0)!),
+  return [...value].some(
+    (character) => !isProtocolWhitespace(character.codePointAt(0)!),
   );
 }
 
@@ -84,16 +84,20 @@ const authorityRevisionSchema = z
     message: 'Authority token must not require normalization',
   });
 
-export const paymentMethodCollectionAuthoritySchema = z.object({
-  collectionKey: authorityRevisionSchema,
-  collectionRevision: authorityRevisionSchema,
-  providerRevision: authorityRevisionSchema,
-}).strict();
+export const paymentMethodCollectionAuthoritySchema = z
+  .object({
+    collectionKey: authorityRevisionSchema,
+    collectionRevision: authorityRevisionSchema,
+    providerRevision: authorityRevisionSchema,
+  })
+  .strict();
 
 export const selectedPaymentMethodAuthoritySchema =
-  paymentMethodCollectionAuthoritySchema.extend({
-    methodId: opaqueProviderIdSchema,
-  }).strict();
+  paymentMethodCollectionAuthoritySchema
+    .extend({
+      methodId: opaqueProviderIdSchema,
+    })
+    .strict();
 
 export type PaymentMethodCollectionAuthority = z.infer<
   typeof paymentMethodCollectionAuthoritySchema

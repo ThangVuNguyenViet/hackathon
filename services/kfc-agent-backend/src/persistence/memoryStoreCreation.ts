@@ -11,12 +11,8 @@ import {
   type IrreversibleOperationReservation,
   type SessionControl,
 } from './contracts.js';
-import type {
-  MemoryIrreversibleOperationRecord,
-} from './memoryStoreConfirmationResumeOperations.js';
-import {
-  captureActiveMemorySessionAuthority,
-} from './memoryStoreSessionAuthority.js';
+import type { MemoryIrreversibleOperationRecord } from './memoryStoreIrreversibleOperations.js';
+import { captureActiveMemorySessionAuthority } from './memoryStoreSessionAuthority.js';
 
 interface MemoryCreationState {
   sessionControls: Map<string, SessionControl>;
@@ -46,10 +42,7 @@ export function reserveMemoryIrreversibleOperation(
         result: structuredClone(existing.result!),
       };
     }
-    if (
-      existing.status !== 'unknown' &&
-      existing.leaseExpiresAt > Date.now()
-    ) {
+    if (existing.status !== 'unknown' && existing.leaseExpiresAt > Date.now()) {
       return { status: 'pending' };
     }
     existing.status = 'attempting';
@@ -174,8 +167,7 @@ export function createMemoryAgentRun(input: {
     executionLeaseToken: null,
     executionLeaseExpiresAt: null,
     supersededByRunId: input.operation.supersededByRunId ?? null,
-    irreversibleSideEffectAt:
-      input.operation.irreversibleSideEffectAt ?? null,
+    irreversibleSideEffectAt: input.operation.irreversibleSideEffectAt ?? null,
     irreversibleToolName: input.operation.irreversibleToolName ?? null,
     assistantTurnId: input.operation.assistantTurnId ?? null,
     deliveryExternalMessageId:

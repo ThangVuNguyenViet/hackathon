@@ -26,9 +26,16 @@ export interface BuildFixturesOptions {
   backendRoot: string;
 }
 
-export async function buildFixtures(options: BuildFixturesOptions): Promise<void> {
-  const catalogBaselines = await validateCatalogBaselineCorpus(options.repoRoot);
-  const sourceBackendRoot = join(options.repoRoot, 'services/kfc-agent-backend');
+export async function buildFixtures(
+  options: BuildFixturesOptions,
+): Promise<void> {
+  const catalogBaselines = await validateCatalogBaselineCorpus(
+    options.repoRoot,
+  );
+  const sourceBackendRoot = join(
+    options.repoRoot,
+    'services/kfc-agent-backend',
+  );
   const sourceGenerated = join(sourceBackendRoot, 'fixtures/generated');
   const targetGenerated = join(options.backendRoot, 'fixtures/generated');
 
@@ -40,12 +47,21 @@ export async function buildFixtures(options: BuildFixturesOptions): Promise<void
     }
   }
 
-  const targetCatalogBaselines = join(options.backendRoot, 'fixtures/catalog-baselines');
-  const sourceCatalogBaselines = join(sourceBackendRoot, 'fixtures/catalog-baselines');
+  const targetCatalogBaselines = join(
+    options.backendRoot,
+    'fixtures/catalog-baselines',
+  );
+  const sourceCatalogBaselines = join(
+    sourceBackendRoot,
+    'fixtures/catalog-baselines',
+  );
   if (sourceCatalogBaselines !== targetCatalogBaselines) {
     await rm(targetCatalogBaselines, { recursive: true, force: true });
     await mkdir(targetCatalogBaselines, { recursive: true });
-    await cp(join(sourceCatalogBaselines, 'manifest.json'), join(targetCatalogBaselines, 'manifest.json'));
+    await cp(
+      join(sourceCatalogBaselines, 'manifest.json'),
+      join(targetCatalogBaselines, 'manifest.json'),
+    );
     for (const observation of catalogBaselines.observations) {
       if (observation.format === 'raw_api') {
         await cp(

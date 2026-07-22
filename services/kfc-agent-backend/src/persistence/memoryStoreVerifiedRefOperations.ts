@@ -6,9 +6,7 @@ import {
   type VerifiedRefLifecycle,
   type VerifiedRefRecord,
 } from '../domain/verifiedRef.js';
-import type {
-  AuthenticatedCommerceApprovalPrincipal,
-} from '../ordering/types.js';
+import type { VerifiedRefPrincipal } from '../ordering/types.js';
 import type {
   ClaimVerifiedRefInput,
   ClaimVerifiedRefResult,
@@ -28,9 +26,7 @@ interface PersistenceLock {
   release(): void;
 }
 
-export interface MemoryVerifiedRefStorageSnapshot
-  extends VerifiedRefStorageSnapshot
-{
+export interface MemoryVerifiedRefStorageSnapshot extends VerifiedRefStorageSnapshot {
   /** Immutable storage owner used by reset without parsing the payload. */
   sessionId: string;
   /** Immutable lookup envelope checked before parsing untrusted payload data. */
@@ -39,7 +35,7 @@ export interface MemoryVerifiedRefStorageSnapshot
 
 interface MemoryVerifiedRefAuthority {
   readonly ref: VerifiedRef;
-  readonly principal: AuthenticatedCommerceApprovalPrincipal;
+  readonly principal: VerifiedRefPrincipal;
   readonly verifiedRevision: string;
   readonly lifecycle: VerifiedRefLifecycle;
   readonly createdAt: string;
@@ -47,9 +43,11 @@ interface MemoryVerifiedRefAuthority {
 }
 
 export abstract class MemoryStoreVerifiedRefOperations {
-  protected readonly confirmationPauseGenerations = new Map<string, number>();
-  protected readonly verifiedRefs =
-    new Map<string, MemoryVerifiedRefStorageSnapshot>();
+  protected readonly sessionGenerations = new Map<string, number>();
+  protected readonly verifiedRefs = new Map<
+    string,
+    MemoryVerifiedRefStorageSnapshot
+  >();
   private persistenceLock: Promise<void> = Promise.resolve();
 
   protected abstract verifiedRefRunFenceIsCurrent(
@@ -61,12 +59,11 @@ export abstract class MemoryStoreVerifiedRefOperations {
   ): Promise<IssueVerifiedRefResult> {
     const record = issueVerifiedRefRecord(rawInput);
     const capturedGeneration =
-      this.confirmationPauseGenerations.get(record.principal.sessionId) ?? 0;
-    return this.withConfirmationPauseLock(async () => {
+      this.sessionGenerations.get(record.principal.sessionId) ?? 0;
+    return this.withStoreLock(async () => {
       if (
-        (this.confirmationPauseGenerations.get(
-          record.principal.sessionId,
-        ) ?? 0) !== capturedGeneration
+        (this.sessionGenerations.get(record.principal.sessionId) ?? 0) !==
+        capturedGeneration
       ) {
         return { status: 'generation_conflict' };
       }
@@ -88,11 +85,11 @@ export abstract class MemoryStoreVerifiedRefOperations {
     rawInput: ResolveVerifiedRefInput,
   ): Promise<VerifiedRefRecord | undefined> {
     const input = parseResolveVerifiedRefInput(rawInput);
-    return this.withConfirmationPauseLock(async () => {
+    return this.withStoreLock(async () => {
       const snapshot = this.verifiedRefs.get(input.ref.id);
       if (!snapshot) return undefined;
       const currentGeneration =
-        this.confirmationPauseGenerations.get(input.principal.sessionId) ?? 0;
+        this.sessionGenerations.get(input.principal.sessionId) ?? 0;
       if (
         !memoryVerifiedRefAuthorityMatches(
           snapshot,
@@ -103,9 +100,7 @@ export abstract class MemoryStoreVerifiedRefOperations {
       ) {
         return undefined;
       }
-      return cloneVerifiedRefRecord(
-        parseMemoryVerifiedRefRecord(snapshot),
-      );
+      return cloneVerifiedRefRecord(parseMemoryVerifiedRefRecord(snapshot));
     });
   }
 
@@ -113,14 +108,14 @@ export abstract class MemoryStoreVerifiedRefOperations {
     rawInput: ClaimVerifiedRefInput,
   ): Promise<ClaimVerifiedRefResult> {
     const input = parseClaimVerifiedRefInput(rawInput);
-    return this.withConfirmationPauseLock(async () => {
+    return this.withStoreLock(async () => {
       if (!this.verifiedRefRunFenceIsCurrent(input.runFence)) {
         return { status: 'unavailable' };
       }
       const snapshot = this.verifiedRefs.get(input.ref.id);
       if (!snapshot) return { status: 'unavailable' };
       const currentGeneration =
-        this.confirmationPauseGenerations.get(input.principal.sessionId) ?? 0;
+        this.sessionGenerations.get(input.principal.sessionId) ?? 0;
       if (
         !memoryVerifiedRefAuthorityMatches(
           snapshot,
@@ -158,7 +153,7 @@ export abstract class MemoryStoreVerifiedRefOperations {
     });
   }
 
-  protected async withConfirmationPauseLock<Result>(
+  protected async withStoreLock<Result>(
     operation: () => Promise<Result>,
   ): Promise<Result> {
     const previous = this.persistenceLock;

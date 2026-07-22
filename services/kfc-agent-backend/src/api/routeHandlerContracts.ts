@@ -1,18 +1,16 @@
-import { existsSync } from "node:fs";
-import { dirname, join } from "node:path";
-import { fileURLToPath } from "node:url";
-import { z } from "zod";
-import type { BaseChatModel } from "@langchain/core/language_models/chat_models";
-import type {
-  VerifiedMessengerGuestCheckoutIngress,
-} from '../security/guestCheckoutAuthority.js';
+import { existsSync } from 'node:fs';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { z } from 'zod';
+import type { BaseChatModel } from '@langchain/core/language_models/chat_models';
+import type { VerifiedMessengerGuestCheckoutIngress } from '../security/guestCheckoutAuthority.js';
 import type {
   ChannelMediaDeliveryResult,
   ExternalClients,
   MessengerClient,
   MessengerSenderAction,
-} from "../clients/interfaces.js";
-import type { KfcCommerceGatewayClients } from "../clients/kfcCommerceGateway.js";
+} from '../clients/interfaces.js';
+import type { KfcCommerceGatewayClients } from '../clients/kfcCommerceGateway.js';
 import {
   LifecycleError,
   type CreateLifecycleInput,
@@ -22,25 +20,25 @@ import {
   type MutationContext,
   type SandboxLifecycleControls,
   projectLifecycleCommerceClients,
-} from "../commerce/lifecycleProvider.js";
-import { createCatalogObservationClients } from "../clients/catalogObservationClients.js";
+} from '../commerce/lifecycleProvider.js';
+import { createCatalogObservationClients } from '../clients/catalogObservationClients.js';
 import {
   fetchCatalogObservation,
   type CatalogObservation,
   type CommerceEnvironment,
-} from "../catalog/catalogObservation.js";
-import type { ConversationEvent } from "../channels/conversationEvent.js";
-import type { MessengerHistorySyncCoordinator } from "../channels/messengerHistory.js";
+} from '../catalog/catalogObservation.js';
+import type { ConversationEvent } from '../channels/conversationEvent.js';
+import type { MessengerHistorySyncCoordinator } from '../channels/messengerHistory.js';
 import {
   createMessengerClient,
   normalizeMessengerWebhook,
   verifyMessengerChallenge,
-} from "../channels/messenger.js";
-import { createZaloClient, normalizeZaloWebhook } from "../channels/zalo.js";
-import { DashboardEventBus } from "../dashboard/eventBus.js";
-import { dashboardSessionTarget } from "../dashboard/sessionVisibility.js";
-import type { GeneratedFixtures } from "../fixtures/schema.js";
-import { loadGeneratedFixtures } from "../fixtures/loadFixtures.js";
+} from '../channels/messenger.js';
+import { createZaloClient, normalizeZaloWebhook } from '../channels/zalo.js';
+import { DashboardEventBus } from '../dashboard/eventBus.js';
+import { dashboardSessionTarget } from '../dashboard/sessionVisibility.js';
+import type { GeneratedFixtures } from '../fixtures/schema.js';
+import { loadGeneratedFixtures } from '../fixtures/loadFixtures.js';
 import type {
   AgentMode,
   Channel,
@@ -49,13 +47,11 @@ import type {
   CustomerAccessContext,
   MonitorSessionIntelligence,
   ToolResult,
-} from "../domain/types.js";
-import { customerCommandFromVerifiedAction } from "../domain/customerCommand.js";
-import {
-  isKfcGenUiAttachment,
-} from "../genui/kfcGenUi.js";
-import { runAgentTurn } from "../agent/kfcAgent.js";
-import type { AgentState } from "../agent/agentState.js";
+} from '../domain/types.js';
+import { customerCommandFromVerifiedAction } from '../domain/customerCommand.js';
+import { isKfcGenUiAttachment } from '../genui/kfcGenUi.js';
+import { runAgentTurn } from '../agent/kfcAgent.js';
+import type { AgentState } from '../agent/agentState.js';
 import {
   calculateMonitorSessionIntelligence,
   preserveMonitorContext,
@@ -63,76 +59,76 @@ import {
   monitorContextReevaluationCustomerTurnThreshold,
   resolveMonitorSessionIntelligence,
   type MonitorSessionIntelligenceJudge,
-} from "../monitor/sessionIntelligence.js";
-import type {
-  AgentModelIdentity,
-  AgentProfileMode,
-} from "../config/agentModelProfile.js";
-import type { MonitorModelIdentity } from "../config/monitorModelProfile.js";
-import type { AgentTracer } from "../observability/agentTracing.js";
+} from '../monitor/sessionIntelligence.js';
+import type { AgentModelIdentity } from '../config/agentModelProfile.js';
+import type { MonitorModelIdentity } from '../config/monitorModelProfile.js';
+import type { AgentTracer } from '../observability/agentTracing.js';
 import {
   createMockClients,
   type MockClientOptions,
-} from "../mock/createMockClients.js";
+} from '../mock/createMockClients.js';
 import {
   applyMockedUpstreamFixtureOverrides,
   mockedUpstreamApiProfileSchema,
   mockedUpstreamClientOptions,
-} from "../mock/mockedUpstreamProfile.js";
-import type { ToolName } from "../ordering/types.js";
-import { CustomerRunCoordinator, type CustomerRunObservation } from "../customerRuns/runtime.js";
+} from '../mock/mockedUpstreamProfile.js';
+import type { ToolName } from '../ordering/types.js';
+import {
+  CustomerRunCoordinator,
+  type CustomerRunObservation,
+} from '../customerRuns/runtime.js';
 import {
   kfcSessionMatchesCustomer,
   type CustomerRunStartRequest,
-} from "../customerRuns/contracts.js";
+} from '../customerRuns/contracts.js';
 import {
   MemoryStore,
   type ConversationStore,
   type WebhookDelivery,
-} from "../persistence/memoryStore.js";
+} from '../persistence/memoryStore.js';
 import {
   buildBoundedRecentTurns,
   sessionIdForConversationEvent,
-} from "../session/sessionContext.js";
+} from '../session/sessionContext.js';
 import {
   textOnlyPresentation,
   type ChannelPresentationPlan,
-} from "../presentation/channelPresentation.js";
+} from '../presentation/channelPresentation.js';
 import {
   ShowcaseService,
   ShowcaseValidationError,
   type ShowcaseScenarioSource,
-} from "../showcase/showcase.js";
+} from '../showcase/showcase.js';
 
 export function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
 export function canonicalJson(value: unknown): string {
   if (Array.isArray(value)) {
-    return `[${value.map(canonicalJson).join(",")}]`;
+    return `[${value.map(canonicalJson).join(',')}]`;
   }
   if (isRecord(value)) {
     return `{${Object.keys(value)
       .sort()
       .map((key) => `${JSON.stringify(key)}:${canonicalJson(value[key])}`)
-      .join(",")}}`;
+      .join(',')}}`;
   }
   return JSON.stringify(value);
 }
 
 export async function sha256Fingerprint(value: unknown): Promise<string> {
   const bytes = new TextEncoder().encode(canonicalJson(value));
-  const digest = await crypto.subtle.digest("SHA-256", bytes);
+  const digest = await crypto.subtle.digest('SHA-256', bytes);
   return [...new Uint8Array(digest)]
-    .map((byte) => byte.toString(16).padStart(2, "0"))
-    .join("");
+    .map((byte) => byte.toString(16).padStart(2, '0'))
+    .join('');
 }
 
 export const kfcSessionIdSchema = z
   .string()
-  .refine((value) => value.startsWith("kfc:"), {
-    message: "KFC chat sessions must use the kfc: prefix",
+  .refine((value) => value.startsWith('kfc:'), {
+    message: 'KFC chat sessions must use the kfc: prefix',
   });
 
 export const kfcChatPayloadSchema = z
@@ -145,8 +141,8 @@ export const kfcChatPayloadSchema = z
   })
   .strict()
   .refine(kfcSessionMatchesCustomer, {
-    path: ["sessionId"],
-    message: "KFC session must match the supplied customer ID",
+    path: ['sessionId'],
+    message: 'KFC session must match the supplied customer ID',
   });
 
 export const kfcGenUiActionPayloadSchema = z
@@ -154,33 +150,49 @@ export const kfcGenUiActionPayloadSchema = z
     sessionId: kfcSessionIdSchema,
     customerId: z.string().min(1),
     clientMessageId: z.string().min(1),
-    action: z.object({
-      attachmentId: z.string().min(1).max(256),
-      actionId: z.string().min(1).max(256),
-      value: z.string().max(1_000).optional(),
-      payload: z.record(z.unknown()).optional(),
-    }).strict(),
+    action: z
+      .object({
+        attachmentId: z.string().min(1).max(256),
+        actionId: z.string().min(1).max(256),
+        value: z.string().max(1_000).optional(),
+        payload: z.record(z.unknown()).optional(),
+      })
+      .strict(),
   })
   .strict()
   .refine(kfcSessionMatchesCustomer, {
-    path: ["sessionId"],
-    message: "KFC session must match the supplied customer ID",
+    path: ['sessionId'],
+    message: 'KFC session must match the supplied customer ID',
   });
 
-export const kfcSmartMenuBatchPayloadSchema = z.object({
-  items: z.array(z.object({
-    itemCode: z.string().min(1),
-    quantity: z.number().int().min(1).max(99),
-  }).strict()).min(1).max(5),
-}).strict().superRefine((payload, context) => {
-  const seen = new Set<string>();
-  payload.items.forEach((item, index) => {
-    if (seen.has(item.itemCode)) {
-      context.addIssue({ code: z.ZodIssueCode.custom, path: ['items', index, 'itemCode'], message: 'Item codes must be unique' });
-    }
-    seen.add(item.itemCode);
+export const kfcSmartMenuBatchPayloadSchema = z
+  .object({
+    items: z
+      .array(
+        z
+          .object({
+            itemCode: z.string().min(1),
+            quantity: z.number().int().min(1).max(99),
+          })
+          .strict(),
+      )
+      .min(1)
+      .max(5),
+  })
+  .strict()
+  .superRefine((payload, context) => {
+    const seen = new Set<string>();
+    payload.items.forEach((item, index) => {
+      if (seen.has(item.itemCode)) {
+        context.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ['items', index, 'itemCode'],
+          message: 'Item codes must be unique',
+        });
+      }
+      seen.add(item.itemCode);
+    });
   });
-});
 
 export const messengerHistorySyncPayloadSchema = z
   .object({
@@ -207,49 +219,95 @@ export const sessionControlPayloadSchema = z.object({
 
 export const dashboardSessionDefaultLookbackMs = 24 * 60 * 60 * 1000;
 
-export const humanMessagePayloadSchema = z.object({
-  agentId: z.string().min(1),
-  clientRequestId: z.string().min(1).max(200),
-  text: z.string().min(1),
-}).strict();
+export const humanMessagePayloadSchema = z
+  .object({
+    agentId: z.string().min(1),
+    clientRequestId: z.string().min(1).max(200),
+    text: z.string().min(1),
+  })
+  .strict();
 
-export const lifecycleTransitionSchema: z.ZodType<LifecycleTransition> = z.discriminatedUnion("type", [
-  z.object({ type: z.literal("payment_pending"), attemptId: z.string().min(1), orderId: z.string().min(1).optional() }).strict(),
-  ...(["payment_paid", "payment_failed", "payment_expired", "payment_cancelled", "order_accepted", "order_rejected", "order_preparing", "order_ready", "order_completed", "order_cancelled", "delivery_assigned", "delivery_started", "delivery_delivered", "delivery_cancelled", "delivery_failed"] as const)
-    .map((type) => type === "order_accepted" || type === "order_rejected"
-      ? z.object({ type: z.literal(type), orderId: z.string().min(1).optional() }).strict()
-      : z.object({ type: z.literal(type) }).strict()),
-  z.object({ type: z.literal("delivery_pending"), attemptId: z.string().min(1), orderId: z.string().min(1).optional() }).strict(),
-]);
+export const lifecycleTransitionSchema: z.ZodType<LifecycleTransition> =
+  z.discriminatedUnion('type', [
+    z
+      .object({
+        type: z.literal('payment_pending'),
+        attemptId: z.string().min(1),
+        orderId: z.string().min(1).optional(),
+      })
+      .strict(),
+    ...(
+      [
+        'payment_paid',
+        'payment_failed',
+        'payment_expired',
+        'payment_cancelled',
+        'order_accepted',
+        'order_rejected',
+        'order_preparing',
+        'order_ready',
+        'order_completed',
+        'order_cancelled',
+        'delivery_assigned',
+        'delivery_started',
+        'delivery_delivered',
+        'delivery_cancelled',
+        'delivery_failed',
+      ] as const
+    ).map((type) =>
+      type === 'order_accepted' || type === 'order_rejected'
+        ? z
+            .object({
+              type: z.literal(type),
+              orderId: z.string().min(1).optional(),
+            })
+            .strict()
+        : z.object({ type: z.literal(type) }).strict(),
+    ),
+    z
+      .object({
+        type: z.literal('delivery_pending'),
+        attemptId: z.string().min(1),
+        orderId: z.string().min(1).optional(),
+      })
+      .strict(),
+  ]);
 
-export const lifecycleEventPayloadSchema = z.object({
-  expectedRevision: z.number().int().nonnegative(),
-  idempotencyKey: z.string().min(1).max(200),
-  event: lifecycleTransitionSchema,
-  traceId: z.string().min(1).optional(),
-  runId: z.string().min(1).optional(),
-  requestId: z.string().min(1).optional(),
-}).strict();
+export const lifecycleEventPayloadSchema = z
+  .object({
+    expectedRevision: z.number().int().nonnegative(),
+    idempotencyKey: z.string().min(1).max(200),
+    event: lifecycleTransitionSchema,
+    traceId: z.string().min(1).optional(),
+    runId: z.string().min(1).optional(),
+    requestId: z.string().min(1).optional(),
+  })
+  .strict();
 
-export const confirmationResumePayloadSchema = z.object({
-  requestId: z.string().uuid(),
-  decision: z.enum(["approve", "reject"]),
-  approvalCapability: z.string().min(1).max(8_192),
-}).strict();
-
-export const kfcProofPreconditionsSchema = z.object({
-  customerId: z.string().min(1),
-  authenticated: z.boolean(),
-  orderId: z.string().min(1).optional(),
-  verifiedState: z.record(z.unknown()).optional(),
-  providerProfile: mockedUpstreamApiProfileSchema.nullable().optional(),
-}).strict();
+export const kfcProofPreconditionsSchema = z
+  .object({
+    customerId: z.string().min(1),
+    authenticated: z.boolean(),
+    orderId: z.string().min(1).optional(),
+    verifiedState: z.record(z.unknown()).optional(),
+    providerProfile: mockedUpstreamApiProfileSchema.nullable().optional(),
+  })
+  .strict();
 
 export function lifecycleErrorResponse(error: unknown): HandlerResponse {
   if (error instanceof LifecycleError) {
-    return { status: error.statusCode, body: { errorCode: error.code, message: error.message } };
+    return {
+      status: error.statusCode,
+      body: { errorCode: error.code, message: error.message },
+    };
   }
-  return { status: 500, body: { errorCode: "lifecycle_control_failed", message: error instanceof Error ? error.message : String(error) } };
+  return {
+    status: 500,
+    body: {
+      errorCode: 'lifecycle_control_failed',
+      message: error instanceof Error ? error.message : String(error),
+    },
+  };
 }
 
 export interface ReadinessCheckResult {
@@ -257,7 +315,16 @@ export interface ReadinessCheckResult {
   message?: string;
   required?: boolean;
   configured?: boolean;
-  observation?: Pick<CatalogObservation, "id" | "sha256" | "observedAt" | "expiresAt" | "itemCount" | "modifierTreeCount" | "providerFingerprint">;
+  observation?: Pick<
+    CatalogObservation,
+    | 'id'
+    | 'sha256'
+    | 'observedAt'
+    | 'expiresAt'
+    | 'itemCount'
+    | 'modifierTreeCount'
+    | 'providerFingerprint'
+  >;
 }
 
 export interface ReadinessOptions {
@@ -276,7 +343,7 @@ export interface ReadinessOptions {
     samplingRate: number;
   };
   commerce?: {
-    mode: "fixture" | "gateway";
+    mode: 'fixture' | 'gateway';
     baseUrl?: string;
     token?: string;
     fetchImpl?: typeof fetch;
@@ -290,14 +357,18 @@ export interface ReadinessOptions {
     implementedCapabilities?: string[];
   };
   pos?: {
-    mode: "disabled" | "http";
+    mode: 'disabled' | 'http';
     baseUrl?: string;
     token?: string;
     simulated?: boolean;
   };
-  release?: { gitSha: string; deploymentId: string; builtAt: string; dirty: boolean };
+  release?: {
+    gitSha: string;
+    deploymentId: string;
+    builtAt: string;
+    dirty: boolean;
+  };
   runtime?: {
-    agentProfileMode?: AgentProfileMode;
     commerceEnvironment?: CommerceEnvironment;
     agent: AgentModelIdentity;
     monitor?: MonitorModelIdentity;
@@ -338,8 +409,9 @@ export interface RouteOptions {
   kfcCommerceGateway?: KfcCommerceGatewayClients;
   kfcCommerceProvider?: Pick<
     ExternalClients,
-    "cart" | "inventory" | "storeLocator" | "fulfillment"
-  > & Partial<Pick<ExternalClients, "customer">>;
+    'cart' | 'inventory' | 'storeLocator' | 'fulfillment'
+  > &
+    Partial<Pick<ExternalClients, 'customer'>>;
   catalog?: {
     environment: CommerceEnvironment;
     sourceUrl: string;
@@ -348,11 +420,13 @@ export interface RouteOptions {
   };
   lifecycle?: {
     environment: CommerceEnvironment;
-    controls: Pick<SandboxLifecycleControls, "create" | "get" | "transition">;
+    controls: Pick<SandboxLifecycleControls, 'create' | 'get' | 'transition'>;
     createInput(sessionId: string): Promise<CreateLifecycleInput>;
     binding(instanceId: string): Promise<LifecycleBinding>;
     activeForSession?(sessionId: string): Promise<LifecycleInstance | null>;
-    proofForSession?(sessionId: string): Promise<{ instance: LifecycleInstance | null; audit: unknown[] }>;
+    proofForSession?(
+      sessionId: string,
+    ): Promise<{ instance: LifecycleInstance | null; audit: unknown[] }>;
   };
   showcase?: {
     source: ShowcaseScenarioSource;
@@ -368,7 +442,7 @@ export interface HandlerResponse<T = unknown> {
 }
 
 export interface MessengerWebhookEventProcessingResult {
-  status: "processed" | "failed" | "skipped";
+  status: 'processed' | 'failed' | 'skipped';
   errorCode?: string;
   errorMessage?: string;
 }
@@ -382,7 +456,7 @@ export interface StaleMessengerDeliveryRecoveryResult {
   deliveries: Array<{
     externalEventId: string;
     sessionId: string;
-    status: MessengerWebhookEventProcessingResult["status"] | "invalid";
+    status: MessengerWebhookEventProcessingResult['status'] | 'invalid';
     errorCode?: string;
     errorMessage?: string;
   }>;
@@ -398,14 +472,20 @@ export interface RouteHandlers {
   lifecycleEvent(instanceId: string, body: unknown): Promise<HandlerResponse>;
   messengerProofEnvelope(sessionId: string): Promise<HandlerResponse>;
   kfcProofEnvelope(sessionId: string): Promise<HandlerResponse>;
-  kfcProofPreconditions(sessionId: string, body: unknown): Promise<HandlerResponse>;
+  kfcProofPreconditions(
+    sessionId: string,
+    body: unknown,
+  ): Promise<HandlerResponse>;
   chatKfcMessage(body: unknown): Promise<HandlerResponse>;
   chatKfcGenUiAction(body: unknown): Promise<HandlerResponse>;
   chatKfcStartRun(body: unknown): Promise<HandlerResponse>;
   chatKfcCancelRun(runId: string): Promise<HandlerResponse>;
   showcaseCatalog(): Promise<HandlerResponse>;
   showcaseComplete(body: unknown): Promise<HandlerResponse>;
-  chatKfcSessionUpdates(sessionId: string, afterTurnId?: string): Promise<HandlerResponse>;
+  chatKfcSessionUpdates(
+    sessionId: string,
+    afterTurnId?: string,
+  ): Promise<HandlerResponse>;
   messengerVerify(query: Record<string, unknown>): HandlerResponse<string>;
   messengerWebhook(
     body: unknown,
@@ -441,7 +521,7 @@ export interface RouteHandlers {
 }
 
 export function defaultFixturesRoot(): string {
-  if (existsSync(join(process.cwd(), "fixtures/generated")))
+  if (existsSync(join(process.cwd(), 'fixtures/generated')))
     return process.cwd();
-  return join(dirname(fileURLToPath(import.meta.url)), "../..");
+  return join(dirname(fileURLToPath(import.meta.url)), '../..');
 }

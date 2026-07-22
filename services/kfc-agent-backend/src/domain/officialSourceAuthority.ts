@@ -7,14 +7,16 @@ export const OFFICIAL_SOURCE_PAYLOAD_SCHEMA_VERSION =
   'kfc-official-content-payload-v1' as const;
 export const OFFICIAL_CONTENT_SNIPPET_MAX_CHARS = 1_334;
 
-export const officialSourceAuthoritySchema = z.object({
-  kind: z.literal('official_kfc'),
-  issuer: z.literal(OFFICIAL_SOURCE_AUTHORITY_ISSUER),
-  authorityRef: z.string().trim().min(1),
-  subject: z.string().trim().min(1),
-  revision: z.string().regex(/^[a-f0-9]{64}$/),
-  attestedAt: z.string().trim().min(1),
-}).strict();
+export const officialSourceAuthoritySchema = z
+  .object({
+    kind: z.literal('official_kfc'),
+    issuer: z.literal(OFFICIAL_SOURCE_AUTHORITY_ISSUER),
+    authorityRef: z.string().trim().min(1),
+    subject: z.string().trim().min(1),
+    revision: z.string().regex(/^[a-f0-9]{64}$/),
+    attestedAt: z.string().trim().min(1),
+  })
+  .strict();
 
 export type OfficialSourceAuthority = z.infer<
   typeof officialSourceAuthoritySchema
@@ -96,9 +98,7 @@ export function officialSourceRevisionFor(
     .digest('hex');
 }
 
-function trustedRevisionFor(
-  input: OfficialSourcePayload,
-): string | undefined {
+function trustedRevisionFor(input: OfficialSourcePayload): string | undefined {
   const revision = officialSourceRevisionFor(input);
   return TRUSTED_OFFICIAL_SOURCE_REVISIONS[input.id] === revision
     ? revision
@@ -131,11 +131,12 @@ export function isOfficialSourceAuthorityFor(
   const parsed = officialSourceAuthoritySchema.safeParse(raw);
   const revision = trustedRevisionFor(input);
   if (!parsed.success || !revision) return false;
-  return parsed.data.authorityRef ===
-      `kfc-official-content:${input.id}` &&
+  return (
+    parsed.data.authorityRef === `kfc-official-content:${input.id}` &&
     parsed.data.subject === input.id &&
     parsed.data.revision === revision &&
-    parsed.data.attestedAt === input.approvedAt;
+    parsed.data.attestedAt === input.approvedAt
+  );
 }
 
 export function sameOfficialSourceAuthority(
@@ -144,12 +145,14 @@ export function sameOfficialSourceAuthority(
 ): boolean {
   const parsedLeft = officialSourceAuthoritySchema.safeParse(left);
   const parsedRight = officialSourceAuthoritySchema.safeParse(right);
-  return parsedLeft.success &&
+  return (
+    parsedLeft.success &&
     parsedRight.success &&
     parsedLeft.data.kind === parsedRight.data.kind &&
     parsedLeft.data.issuer === parsedRight.data.issuer &&
     parsedLeft.data.authorityRef === parsedRight.data.authorityRef &&
     parsedLeft.data.subject === parsedRight.data.subject &&
     parsedLeft.data.revision === parsedRight.data.revision &&
-    parsedLeft.data.attestedAt === parsedRight.data.attestedAt;
+    parsedLeft.data.attestedAt === parsedRight.data.attestedAt
+  );
 }

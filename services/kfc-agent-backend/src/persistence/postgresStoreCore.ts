@@ -48,18 +48,10 @@ import {
   type CustomerRun,
   type CustomerRunEvent,
 } from '../customerRuns/contracts.js';
-import {
-  createPostgresCustomerRun,
-} from './postgresStoreCustomerRunCreation.js';
-import {
-  appendPostgresCustomerRunEventsIfRunCurrent,
-} from './postgresStoreCustomerRunEventCommit.js';
-import {
-  commitPostgresPausedCustomerRunIntake,
-} from './postgresStorePausedCustomerRunIntake.js';
-import {
-  initializePostgresNonAgentTextDeliverySchema,
-} from './postgresStoreNonAgentTextDelivery.js';
+import { createPostgresCustomerRun } from './postgresStoreCustomerRunCreation.js';
+import { appendPostgresCustomerRunEventsIfRunCurrent } from './postgresStoreCustomerRunEventCommit.js';
+import { commitPostgresPausedCustomerRunIntake } from './postgresStorePausedCustomerRunIntake.js';
+import { initializePostgresNonAgentTextDeliverySchema } from './postgresStoreNonAgentTextDelivery.js';
 import {
   Queryable,
   ConversationTurnRow,
@@ -89,7 +81,7 @@ import {
   agentRunFromRow,
   agentRunTurnFromRow,
   sessionAgentStateFromRow,
-  defaultSessionAgentState
+  defaultSessionAgentState,
 } from './postgresStoreSupport.js';
 import {
   completePostgresIrreversibleOperation,
@@ -123,45 +115,10 @@ export abstract class PostgresStoreCore {
 
   async initialize(): Promise<void> {
     await this.db.query(`
-      CREATE TABLE IF NOT EXISTS confirmation_pause_sessions (
+      CREATE TABLE IF NOT EXISTS session_generations (
         session_id text PRIMARY KEY,
         generation integer NOT NULL CHECK (generation >= 0)
       )
-    `);
-    await this.db.query(`
-      CREATE TABLE IF NOT EXISTS confirmation_pauses (
-        schema_version text NOT NULL,
-        request_id text PRIMARY KEY,
-        checkpoint_thread_id text NOT NULL,
-        checkpoint_namespace text NOT NULL,
-        checkpoint_id text NOT NULL,
-        session_id text NOT NULL,
-        session_generation integer NOT NULL CHECK (session_generation >= 0),
-        pause_identity_digest text NOT NULL,
-        customer_id text NOT NULL,
-        channel text NOT NULL,
-        action_json jsonb NOT NULL,
-        action_digest text NOT NULL,
-        approval_binding_json jsonb NOT NULL,
-        approval_binding_digest text NOT NULL,
-        principal_json jsonb NOT NULL,
-        authenticated_subject text NOT NULL,
-        authentication_evidence_ref text NOT NULL,
-        created_at timestamptz NOT NULL,
-        expires_at timestamptz NOT NULL,
-        status text NOT NULL CHECK (status IN ('pending', 'rejected', 'expired')),
-        rejection_receipt_id text,
-        rejection_receipt_json jsonb,
-        rejected_at timestamptz,
-        completion_status text NOT NULL CHECK (completion_status IN ('pending', 'completed', 'failed')),
-        result_json jsonb,
-        completion_error text,
-        completed_at timestamptz
-      )
-    `);
-    await this.db.query(`
-      CREATE INDEX IF NOT EXISTS confirmation_pauses_session_idx
-      ON confirmation_pauses (session_id, created_at)
     `);
     await this.db.query(`
       CREATE TABLE IF NOT EXISTS irreversible_operations (
@@ -638,14 +595,18 @@ export abstract class PostgresStoreCore {
     }
   }
 
-  async reserveIrreversibleOperation(input: IrreversibleOperationInput): Promise<IrreversibleOperationReservation> {
+  async reserveIrreversibleOperation(
+    input: IrreversibleOperationInput,
+  ): Promise<IrreversibleOperationReservation> {
     return reservePostgresIrreversibleOperation({
       db: this.db,
       operation: input,
     });
   }
 
-  async getIrreversibleOperation(input: IrreversibleOperationInput): Promise<IrreversibleOperationReservation | undefined> {
+  async getIrreversibleOperation(
+    input: IrreversibleOperationInput,
+  ): Promise<IrreversibleOperationReservation | undefined> {
     return getPostgresIrreversibleOperation({
       db: this.db,
       operation: input,
@@ -687,9 +648,7 @@ export abstract class PostgresStoreCore {
     });
   }
 
-  async createCustomerRun(
-    input: CreateCustomerRunInput,
-  ): Promise<CustomerRun> {
+  async createCustomerRun(input: CreateCustomerRunInput): Promise<CustomerRun> {
     return createPostgresCustomerRun({
       db: this.db,
       operation: input,
@@ -716,7 +675,10 @@ export abstract class PostgresStoreCore {
     return result.rows[0] ? customerRunFromRow(result.rows[0]) : undefined;
   }
 
-  async updateCustomerRun(runId: string, patch: CustomerRunPatch): Promise<CustomerRun> {
+  async updateCustomerRun(
+    runId: string,
+    patch: CustomerRunPatch,
+  ): Promise<CustomerRun> {
     const assignments: string[] = [];
     const values: unknown[] = [runId];
     const add = (column: string, value: unknown) => {
@@ -879,5 +841,4 @@ export abstract class PostgresStoreCore {
     );
     return result.rows.map(customerRunEventFromRow);
   }
-
 }

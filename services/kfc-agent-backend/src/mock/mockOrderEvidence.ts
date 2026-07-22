@@ -1,6 +1,4 @@
-import {
-  orderWithoutDeliveryEstimate,
-} from '../domain/orderStatusEvidence.js';
+import { orderWithoutDeliveryEstimate } from '../domain/orderStatusEvidence.js';
 import type { Order, ToolResult } from '../domain/types.js';
 
 export function recentOrderResultWithoutStatusEvidence(

@@ -10,9 +10,7 @@ export interface AgentRunTextDeliveryStorageRow {
   run_execution_origin_attempt: number;
   run_execution_lease_token: string;
   run_execution_lease_token_digest: string;
-  prior_run_execution_lease_token_digests:
-    | string
-    | readonly string[];
+  prior_run_execution_lease_token_digests: string | readonly string[];
   channel: AgentRunTextDeliveryRecord['channel'];
   assistant_turn_id: string;
   recipient_binding_digest: string;
@@ -36,12 +34,9 @@ export function agentRunTextDeliveryFromStorageRow(
     schemaVersion: row.schema_version,
     runId: row.run_id,
     runExecutionAttempt: Number(row.run_execution_attempt),
-    runExecutionOriginAttempt: Number(
-      row.run_execution_origin_attempt,
-    ),
+    runExecutionOriginAttempt: Number(row.run_execution_origin_attempt),
     runExecutionLeaseToken: row.run_execution_lease_token,
-    runExecutionLeaseTokenDigest:
-      row.run_execution_lease_token_digest,
+    runExecutionLeaseTokenDigest: row.run_execution_lease_token_digest,
     priorRunExecutionLeaseTokenDigests: stringArray(
       row.prior_run_execution_lease_token_digests,
     ),
@@ -106,9 +101,7 @@ function canonicalInstant(value: string | Date): string {
 }
 
 function stringArray(value: string | readonly string[]): string[] {
-  const parsed: unknown = typeof value === 'string'
-    ? JSON.parse(value)
-    : value;
+  const parsed: unknown = typeof value === 'string' ? JSON.parse(value) : value;
   if (
     !Array.isArray(parsed) ||
     !parsed.every((entry) => typeof entry === 'string')

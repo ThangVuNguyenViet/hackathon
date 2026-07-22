@@ -89,8 +89,7 @@ export function claimMemoryAgentRunRecord(
 ): ClaimAgentRunResult {
   const existing = [...storage.agentRuns.values()].find(
     (run) =>
-      run.sessionId === input.sessionId &&
-      run.generation === input.generation,
+      run.sessionId === input.sessionId && run.generation === input.generation,
   );
   if (existing) return { run: existing, claimed: false };
   return {
@@ -123,9 +122,7 @@ export function listMemoryAgentRuns(
     .filter((run) => run.sessionId === sessionId)
     .sort((left, right) => {
       const generation = left.generation - right.generation;
-      return generation === 0
-        ? left.id.localeCompare(right.id)
-        : generation;
+      return generation === 0 ? left.id.localeCompare(right.id) : generation;
     });
 }
 

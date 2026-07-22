@@ -204,7 +204,9 @@ export interface IrreversibleOperationRow {
 }
 
 export function normalizeDate(value: Date | string): string {
-  return value instanceof Date ? value.toISOString() : new Date(value).toISOString();
+  return value instanceof Date
+    ? value.toISOString()
+    : new Date(value).toISOString();
 }
 
 export function turnFromRow(row: ConversationTurnRow): ConversationTurn {
@@ -222,7 +224,9 @@ export function turnFromRow(row: ConversationTurnRow): ConversationTurn {
   };
 }
 
-export function profileFromRow(row: ConversationProfileRow): ConversationProfile {
+export function profileFromRow(
+  row: ConversationProfileRow,
+): ConversationProfile {
   return {
     channel: row.channel,
     externalUserId: row.external_user_id,
@@ -257,7 +261,9 @@ export function nullableDate(value: Date | string | null): string | null {
   return value === null ? null : normalizeDate(value);
 }
 
-export function webhookDeliveryFromRow(row: WebhookDeliveryRow): WebhookDelivery {
+export function webhookDeliveryFromRow(
+  row: WebhookDeliveryRow,
+): WebhookDelivery {
   return {
     channel: row.channel,
     externalEventId: row.external_event_id,
@@ -306,7 +312,9 @@ export function customerRunFromRow(row: CustomerRunRow): CustomerRun {
   };
 }
 
-export function customerRunEventFromRow(row: CustomerRunEventRow): CustomerRunEvent {
+export function customerRunEventFromRow(
+  row: CustomerRunEventRow,
+): CustomerRunEvent {
   return customerRunEventSchema.parse({
     schemaVersion: Number(row.schema_version),
     eventId: row.event_id,
@@ -328,7 +336,9 @@ export function defaultSessionControl(sessionId: string): SessionControl {
   };
 }
 
-export function pendingCustomerTurnFromRow(row: PendingCustomerTurnRow): PendingCustomerTurn {
+export function pendingCustomerTurnFromRow(
+  row: PendingCustomerTurnRow,
+): PendingCustomerTurn {
   return {
     turnId: row.turn_id,
     sessionId: row.session_id,
@@ -380,7 +390,9 @@ export function agentRunTurnFromRow(row: AgentRunTurnRow): AgentRunTurn {
   };
 }
 
-export function sessionAgentStateFromRow(row: SessionAgentStateRow): SessionAgentState {
+export function sessionAgentStateFromRow(
+  row: SessionAgentStateRow,
+): SessionAgentState {
   return {
     sessionId: row.session_id,
     currentRunId: row.current_run_id,

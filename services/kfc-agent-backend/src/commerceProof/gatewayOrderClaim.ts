@@ -1,21 +1,21 @@
-import type { CommerceCommand } from "./contracts.js";
+import type { CommerceCommand } from './contracts.js';
 import {
   claimGatewayMutationAuthority,
   sameProviderMutationBinding,
   type CommerceProofGatewayMutationState,
   type GatewayProviderRuntimeBinding,
   type StoredCommerceOrderMutation,
-} from "./gatewayMutationContracts.js";
-import type { GatewayMutationDurability } from "./gatewayMutationDurability.js";
+} from './gatewayMutationContracts.js';
+import type { GatewayMutationDurability } from './gatewayMutationDurability.js';
 import {
   deriveGatewayProviderMutationIdentity,
   gatewayOmsCreateInput,
-} from "./gatewayMutationIdentity.js";
-import { bindGatewayProviderRuntime } from "./gatewayRestoreValidation.js";
+} from './gatewayMutationIdentity.js';
+import { bindGatewayProviderRuntime } from './gatewayRestoreValidation.js';
 
 type OrderClaim =
-  | { kind: "claimed"; stored: StoredCommerceOrderMutation }
-  | { kind: "conflict" };
+  | { kind: 'claimed'; stored: StoredCommerceOrderMutation }
+  | { kind: 'conflict' };
 
 export function claimStoredCommerceOrder(input: {
   state: CommerceProofGatewayMutationState;
@@ -26,12 +26,9 @@ export function claimStoredCommerceOrder(input: {
 }): Promise<OrderClaim> {
   return input.durability.commitStateUpdate((candidateState) => {
     if (
-      !bindGatewayProviderRuntime(
-        candidateState,
-        input.providerRuntimeBinding,
-      )
+      !bindGatewayProviderRuntime(candidateState, input.providerRuntimeBinding)
     ) {
-      throw new Error("gateway_provider_runtime_binding_mismatch");
+      throw new Error('gateway_provider_runtime_binding_mismatch');
     }
     const existing = candidateState.ordersByIdempotencyKey.get(
       input.command.idempotencyKey,
@@ -44,48 +41,48 @@ export function claimStoredCommerceOrder(input: {
         input.canonicalPayload,
       );
       const exactAuthority = claimGatewayMutationAuthority(candidateState, {
-        kind: "placeOrder",
+        kind: 'placeOrder',
         idempotencyKey: input.command.idempotencyKey,
         bindingFingerprint: input.command.bindingFingerprint,
         canonicalPayload: input.canonicalPayload,
       });
       return {
-        output: exactBinding && exactAuthority
-          ? { kind: "claimed" as const, stored: existing }
-          : { kind: "conflict" as const },
+        output:
+          exactBinding && exactAuthority
+            ? { kind: 'claimed' as const, stored: existing }
+            : { kind: 'conflict' as const },
         publish() {},
       };
     }
     if (candidateState.nextCommerceSequence >= Number.MAX_SAFE_INTEGER) {
-      throw new Error("gateway_commerce_sequence_exhausted");
+      throw new Error('gateway_commerce_sequence_exhausted');
     }
     const nextCommerceSequence = candidateState.nextCommerceSequence + 1;
-    const commerceOrderId =
-      `COM-${String(nextCommerceSequence).padStart(4, "0")}`;
+    const commerceOrderId = `COM-${String(nextCommerceSequence).padStart(4, '0')}`;
     const candidateStored: StoredCommerceOrderMutation = {
       command: input.command,
       canonicalPayload: input.canonicalPayload,
       commerceOrderId,
-      state: "oms_create_pending",
+      state: 'oms_create_pending',
       omsCreateIdentity: deriveGatewayProviderMutationIdentity(
         {
           idempotencyKey: input.command.idempotencyKey,
           bindingFingerprint: input.command.bindingFingerprint,
         },
-        "oms_create",
+        'oms_create',
         gatewayOmsCreateInput(input.command, commerceOrderId),
       ),
     };
     if (
       !claimGatewayMutationAuthority(candidateState, {
-        kind: "placeOrder",
+        kind: 'placeOrder',
         idempotencyKey: input.command.idempotencyKey,
         bindingFingerprint: input.command.bindingFingerprint,
         canonicalPayload: input.canonicalPayload,
       })
     ) {
       return {
-        output: { kind: "conflict" as const },
+        output: { kind: 'conflict' as const },
         publish() {},
       };
     }
@@ -99,7 +96,7 @@ export function claimStoredCommerceOrder(input: {
       input.command.idempotencyKey,
     );
     return {
-      output: { kind: "claimed" as const, stored: candidateStored },
+      output: { kind: 'claimed' as const, stored: candidateStored },
       publish() {
         input.state.providerRuntimeBinding = input.providerRuntimeBinding;
         input.state.nextCommerceSequence = nextCommerceSequence;

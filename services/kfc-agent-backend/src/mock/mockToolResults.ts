@@ -8,10 +8,7 @@ export const mockProviderProvenance = [
   },
 ];
 
-export function mockSuccess<T>(
-  value: T,
-  message = 'ok',
-): ToolResult<T> {
+export function mockSuccess<T>(value: T, message = 'ok'): ToolResult<T> {
   return { ok: true, value, message, provenance: mockProviderProvenance };
 }
 
@@ -22,12 +19,11 @@ export function mockFailure<T>(
   return { ok: false, errorCode, message, provenance: mockProviderProvenance };
 }
 
-export function withMockProvenance<T>(
-  result: ToolResult<T>,
-): ToolResult<T> {
+export function withMockProvenance<T>(result: ToolResult<T>): ToolResult<T> {
   return {
     ...result,
-    provenance:
-      result.provenance?.length ? result.provenance : mockProviderProvenance,
+    provenance: result.provenance?.length
+      ? result.provenance
+      : mockProviderProvenance,
   };
 }

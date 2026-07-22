@@ -1,52 +1,58 @@
 import { z } from 'zod';
 import type { Cart } from '../domain/types.js';
-import { digestCommerceAction } from './approvalReceipt.js';
+import { digestCommerceAction } from './commerceDigest.js';
 import type { Disposition } from './types.js';
 
 export const EXACT_CART_AVAILABILITY_OBSERVATION_V2_SCHEMA_VERSION =
   'kfc-exact-cart-availability-observation-v2' as const;
 
-const nonBlankString = z.string().min(1).refine(
-  (value) => value.trim().length > 0,
-);
+const nonBlankString = z
+  .string()
+  .min(1)
+  .refine((value) => value.trim().length > 0);
 
-const exactCartAvailabilityObservationRowV2Schema = z.object({
-  itemCode: nonBlankString,
-  quantity: z.number().int().positive(),
-  status: z.enum(['available', 'unavailable', 'blocked']),
-}).strict();
+const exactCartAvailabilityObservationRowV2Schema = z
+  .object({
+    itemCode: nonBlankString,
+    quantity: z.number().int().positive(),
+    status: z.enum(['available', 'unavailable', 'blocked']),
+  })
+  .strict();
 
-export const inventoryAvailabilityProviderRevisionV2Schema = z.object({
-  authority: z.literal('inventory_availability'),
-  revision: nonBlankString,
-}).strict();
+export const inventoryAvailabilityProviderRevisionV2Schema = z
+  .object({
+    authority: z.literal('inventory_availability'),
+    revision: nonBlankString,
+  })
+  .strict();
 
 export type InventoryAvailabilityProviderRevisionV2 = z.infer<
   typeof inventoryAvailabilityProviderRevisionV2Schema
 >;
 
-export const exactCartAvailabilityObservationV2Schema = z.object({
-  schemaVersion: z.literal(
-    EXACT_CART_AVAILABILITY_OBSERVATION_V2_SCHEMA_VERSION,
-  ),
-  observationId: nonBlankString,
-  cartRevision: nonBlankString,
-  storeId: nonBlankString,
-  disposition: z.enum(['pickup', 'delivery']),
-  inventoryProviderRevision: inventoryAvailabilityProviderRevisionV2Schema,
-  observedAt: z.string().datetime(),
-  expiresAt: z.string().datetime(),
-  complete: z.boolean(),
-  rows: z.array(exactCartAvailabilityObservationRowV2Schema),
-}).strict();
+export const exactCartAvailabilityObservationV2Schema = z
+  .object({
+    schemaVersion: z.literal(
+      EXACT_CART_AVAILABILITY_OBSERVATION_V2_SCHEMA_VERSION,
+    ),
+    observationId: nonBlankString,
+    cartRevision: nonBlankString,
+    storeId: nonBlankString,
+    disposition: z.enum(['pickup', 'delivery']),
+    inventoryProviderRevision: inventoryAvailabilityProviderRevisionV2Schema,
+    observedAt: z.string().datetime(),
+    expiresAt: z.string().datetime(),
+    complete: z.boolean(),
+    rows: z.array(exactCartAvailabilityObservationRowV2Schema),
+  })
+  .strict();
 
 export type ExactCartAvailabilityObservationV2 = z.infer<
   typeof exactCartAvailabilityObservationV2Schema
 >;
 
 export type ExactCartAvailabilityProtectedAction =
-  | 'previewOrder'
-  | 'placeOrder';
+  'previewOrder' | 'placeOrder';
 
 export type ExactCartAvailabilityErrorCode =
   | 'cart_availability_action_invalid'
@@ -70,15 +76,13 @@ export type ExactCartAvailabilityErrorCode =
   | 'cart_availability_blocked';
 
 export interface ExactCartAvailabilityGrant {
-  readonly schemaVersion:
-    typeof EXACT_CART_AVAILABILITY_OBSERVATION_V2_SCHEMA_VERSION;
+  readonly schemaVersion: typeof EXACT_CART_AVAILABILITY_OBSERVATION_V2_SCHEMA_VERSION;
   readonly action: ExactCartAvailabilityProtectedAction;
   readonly observationId: string;
   readonly cartRevision: string;
   readonly storeId: string;
   readonly disposition: Disposition;
-  readonly inventoryProviderRevision:
-    InventoryAvailabilityProviderRevisionV2;
+  readonly inventoryProviderRevision: InventoryAvailabilityProviderRevisionV2;
   readonly observedAt: string;
   readonly expiresAt: string;
   readonly complete: true;
@@ -106,9 +110,7 @@ export interface ExactCartAvailabilityAuthorityInput {
   readonly activeStoreId: string | null | undefined;
   readonly activeDisposition: Disposition | null | undefined;
   readonly activeInventoryProviderRevision:
-    | InventoryAvailabilityProviderRevisionV2
-    | null
-    | undefined;
+    InventoryAvailabilityProviderRevisionV2 | null | undefined;
   readonly nowMs: number;
 }
 
@@ -155,8 +157,10 @@ function exactCartQuantities(
 function observationHasUniqueRows(
   observation: ExactCartAvailabilityObservationV2,
 ): boolean {
-  return new Set(observation.rows.map(({ itemCode }) => itemCode)).size ===
-    observation.rows.length;
+  return (
+    new Set(observation.rows.map(({ itemCode }) => itemCode)).size ===
+    observation.rows.length
+  );
 }
 
 function observationHasExactCartRows(
@@ -222,7 +226,10 @@ export async function authorizeExactCartAvailability(
   if (!hasNonBlankValue(input.activeStoreId)) {
     return failure('cart_availability_active_store_required');
   }
-  if (input.activeDisposition === null || input.activeDisposition === undefined) {
+  if (
+    input.activeDisposition === null ||
+    input.activeDisposition === undefined
+  ) {
     return failure('cart_availability_active_disposition_required');
   }
   if (!isDisposition(input.activeDisposition)) {
@@ -245,7 +252,7 @@ export async function authorizeExactCartAvailability(
   const observation = parsed.data;
   if (
     observation.cartRevision !==
-    await exactCartAvailabilityRevision(input.cart)
+    (await exactCartAvailabilityRevision(input.cart))
   ) {
     return failure('cart_availability_cart_revision_mismatch');
   }

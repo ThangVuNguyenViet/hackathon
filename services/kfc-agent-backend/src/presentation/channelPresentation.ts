@@ -7,7 +7,8 @@ import {
   type ResponseProfile,
 } from './responseProfile.js';
 
-export type ChannelPresentationMode = 'structured_companion' | 'standalone_text';
+export type ChannelPresentationMode =
+  'structured_companion' | 'standalone_text';
 
 export interface ChannelCapabilities {
   presentationMode: ChannelPresentationMode;
@@ -82,12 +83,17 @@ export function getChannelCapabilities(channel: Channel): ChannelCapabilities {
   }
 }
 
-export function textOnlyPresentation(text: string, channel: Channel = 'messenger'): ChannelPresentationPlan {
+export function textOnlyPresentation(
+  text: string,
+  channel: Channel = 'messenger',
+): ChannelPresentationPlan {
   const profile = responseProfileForChannel(channel);
   return profile === 'genui' ? { profile, text } : { profile, text };
 }
 
-export function buildChannelPresentation(input: BuildChannelPresentationInput): ChannelPresentationPlan {
+export function buildChannelPresentation(
+  input: BuildChannelPresentationInput,
+): ChannelPresentationPlan {
   const profile = resolveResponseProfile(input);
   if (profile === 'social') {
     if (input.genUi) {
@@ -102,7 +108,9 @@ export function buildChannelPresentation(input: BuildChannelPresentationInput): 
   };
 }
 
-export function buildSocialPresentation(input: BuildSocialPresentationInput): ChannelPresentationPlan {
+export function buildSocialPresentation(
+  input: BuildSocialPresentationInput,
+): ChannelPresentationPlan {
   if (responseProfileForChannel(input.channel) !== 'social') {
     throw new Error('Social presenter received a non-social channel');
   }
@@ -126,27 +134,52 @@ export function assertPresentationMatchesChannel(
     responseProfile: expectedProfile,
   });
   if (presentation.profile !== resolvedProfile) {
-    throw new Error(`Presentation profile mismatch: expected ${resolvedProfile}, got ${presentation.profile}`);
+    throw new Error(
+      `Presentation profile mismatch: expected ${resolvedProfile}, got ${presentation.profile}`,
+    );
   }
-  if (presentation.profile === 'social' && 'genUi' in presentation && presentation.genUi !== undefined) {
+  if (
+    presentation.profile === 'social' &&
+    'genUi' in presentation &&
+    presentation.genUi !== undefined
+  ) {
     throw new Error('Social presentation contains forbidden GenUI metadata');
   }
-  if (presentation.profile === 'genui' && 'media' in presentation && presentation.media !== undefined) {
-    throw new Error('GenUI presentation contains forbidden social media delivery data');
+  if (
+    presentation.profile === 'genui' &&
+    'media' in presentation &&
+    presentation.media !== undefined
+  ) {
+    throw new Error(
+      'GenUI presentation contains forbidden social media delivery data',
+    );
   }
 }
 
-function renderTrustedMediaFromState(state: AgentState): ChannelPresentationMedia[] {
+function renderTrustedMediaFromState(
+  state: AgentState,
+): ChannelPresentationMedia[] {
   const candidates = [
     ...(state.menuItemDetail ? [state.menuItemDetail] : []),
     ...(state.menuSearchResults ?? []),
     ...(state.promotionOffers ?? []),
-  ].map((item) => record(item)).filter((item): item is Record<string, unknown> => Boolean(item));
+  ]
+    .map((item) => record(item))
+    .filter((item): item is Record<string, unknown> => Boolean(item));
   return candidates.flatMap((item, index) => {
     const imageUrl = trustedKfcImageUrl(item.imageUrl);
-    const title = nonEmptyString(item.name) ?? nonEmptyString(item.offerName) ?? nonEmptyString(item.title) ?? nonEmptyString(item.campaign);
+    const title =
+      nonEmptyString(item.name) ??
+      nonEmptyString(item.offerName) ??
+      nonEmptyString(item.title) ??
+      nonEmptyString(item.campaign);
     if (!imageUrl || !title) return [];
-    const entityId = nonEmptyString(item.code) ?? nonEmptyString(item.itemCode) ?? nonEmptyString(item.offerId) ?? nonEmptyString(item.id) ?? 'item';
+    const entityId =
+      nonEmptyString(item.code) ??
+      nonEmptyString(item.itemCode) ??
+      nonEmptyString(item.offerId) ??
+      nonEmptyString(item.id) ??
+      'item';
     return [{ key: `social:${entityId}:${index}`, imageUrl, title }];
   });
 }
@@ -156,7 +189,10 @@ function trustedKfcImageUrl(value: unknown): string | undefined {
   if (!text) return undefined;
   try {
     const url = new URL(text);
-    return url.protocol === 'https:' && url.hostname === 'static.kfcvietnam.com.vn' ? url.toString() : undefined;
+    return url.protocol === 'https:' &&
+      url.hostname === 'static.kfcvietnam.com.vn'
+      ? url.toString()
+      : undefined;
   } catch {
     return undefined;
   }
@@ -164,12 +200,14 @@ function trustedKfcImageUrl(value: unknown): string | undefined {
 
 function record(value: unknown): Record<string, unknown> | undefined {
   return typeof value === 'object' && value !== null && !Array.isArray(value)
-    ? value as Record<string, unknown>
+    ? (value as Record<string, unknown>)
     : undefined;
 }
 
 function nonEmptyString(value: unknown): string | undefined {
-  return typeof value === 'string' && value.trim().length > 0 ? value.trim() : undefined;
+  return typeof value === 'string' && value.trim().length > 0
+    ? value.trim()
+    : undefined;
 }
 
 function assertNever(value: never): never {

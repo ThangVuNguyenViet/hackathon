@@ -1,7 +1,4 @@
-import type {
-  AgentRun,
-  PendingCustomerTurn,
-} from '../domain/types.js';
+import type { AgentRun, PendingCustomerTurn } from '../domain/types.js';
 import type { RunCommitFence } from '../persistence/contracts.js';
 import {
   issueVerifiedMessengerGuestCheckoutAuthority,
@@ -27,9 +24,7 @@ export async function messengerGuestAuthorityForClaimedRun(input: {
   run: AgentRun;
   firstLinkedTurn: PendingCustomerTurn;
   commitFence: Extract<RunCommitFence, { kind: 'agent_run' }>;
-  verifiedIngress:
-    | readonly VerifiedMessengerGuestCheckoutIngress[]
-    | undefined;
+  verifiedIngress: readonly VerifiedMessengerGuestCheckoutIngress[] | undefined;
   now?: number;
 }): Promise<GuestCheckoutAuthority | undefined> {
   if (input.run.channel !== 'messenger') return undefined;
@@ -41,8 +36,7 @@ export async function messengerGuestAuthorityForClaimedRun(input: {
       candidate.surfaceSubjectRef === input.run.externalUserId &&
       candidate.externalThreadRef ===
         input.run.sessionId.slice('messenger:'.length) &&
-      candidate.externalMessageId ===
-        input.firstLinkedTurn.externalMessageId &&
+      candidate.externalMessageId === input.firstLinkedTurn.externalMessageId &&
       candidate.receivedAt === input.firstLinkedTurn.receivedAt &&
       input.firstLinkedTurn.externalUserId === input.run.externalUserId &&
       freshMessengerGuestIngress(candidate, now),

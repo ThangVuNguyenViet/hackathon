@@ -4,13 +4,9 @@ import type {
   CompleteAgentRunTextDeliveryAttemptResult,
 } from './agentRunTextDelivery.js';
 import type { AgentRun } from '../domain/types.js';
-import type {
-  SupersedeAgentRunExecutionIfNoLongerCurrentInput,
-} from './contracts.js';
+import type { SupersedeAgentRunExecutionIfNoLongerCurrentInput } from './contracts.js';
 import type { D1Result } from './d1StoreSupport.js';
-import {
-  d1ActiveSessionAuthoritySource,
-} from './d1StoreSessionAuthority.js';
+import { d1ActiveSessionAuthoritySource } from './d1StoreSessionAuthority.js';
 
 export const d1AgentRunTextDeliveryColumns = `
   schema_version,
@@ -154,8 +150,7 @@ export function d1ExactRunFence(
     run.id === input.fence.runId &&
     run.sessionId === input.sessionId &&
     run.generation === input.fence.generation &&
-    run.sessionAuthorityGeneration ===
-      input.fence.sessionAuthorityGeneration &&
+    run.sessionAuthorityGeneration === input.fence.sessionAuthorityGeneration &&
     run.executionAttempt === input.fence.executionAttempt &&
     run.executionLeaseToken === input.fence.executionLeaseToken &&
     run.status === 'running'

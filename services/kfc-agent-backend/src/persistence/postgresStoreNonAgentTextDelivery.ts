@@ -22,12 +22,8 @@ import {
   type ReserveNonAgentTextDeliveryInput,
   type ReserveNonAgentTextDeliveryResult,
 } from './nonAgentTextDelivery.js';
-import {
-  lockPostgresSessionAuthority,
-} from './postgresStoreSessionAuthority.js';
-import {
-  isConnectablePostgres,
-} from './postgresStoreRunOwner.js';
+import { lockPostgresSessionAuthority } from './postgresStoreSessionAuthority.js';
+import { isConnectablePostgres } from './postgresStoreRunOwner.js';
 import {
   type ConversationTurnRow,
   type Queryable,
@@ -202,7 +198,7 @@ export async function reservePostgresNonAgentTextDelivery(input: {
           ? { status: 'replay', record: existing }
           : { status: 'conflict' };
       }
-      if (!await exactHumanAuthority(client, input.reservation)) {
+      if (!(await exactHumanAuthority(client, input.reservation))) {
         return { status: 'stale_authority' };
       }
       const result = await client.query<NonAgentTextDeliveryRow>(
@@ -246,7 +242,7 @@ export async function preparePostgresNonAgentTextDeliveryTurn(input: {
       if (
         !record ||
         record.sessionBindingDigest !==
-          await nonAgentTextDeliverySessionBindingDigest(operation.sessionId)
+          (await nonAgentTextDeliverySessionBindingDigest(operation.sessionId))
       ) {
         return blockedPrepare('not_found');
       }
@@ -254,10 +250,10 @@ export async function preparePostgresNonAgentTextDeliveryTurn(input: {
         record.reservedSessionAuthorityGeneration !==
           operation.expectedSessionAuthorityGeneration ||
         record.agentBindingDigest !==
-          await nonAgentTextDeliveryAgentBindingDigest(
+          (await nonAgentTextDeliveryAgentBindingDigest(
             operation.expectedAgentId,
-          ) ||
-        !await exactHumanAuthority(client, operation)
+          )) ||
+        !(await exactHumanAuthority(client, operation))
       ) {
         return blockedPrepare('stale_authority', record);
       }
@@ -267,7 +263,7 @@ export async function preparePostgresNonAgentTextDeliveryTurn(input: {
       ) {
         return blockedPrepare('delivery_not_dispatchable', record);
       }
-      if (!await nonAgentTextDeliveryTurnBindingMatches(record, operation)) {
+      if (!(await nonAgentTextDeliveryTurnBindingMatches(record, operation))) {
         return blockedPrepare('turn_binding_conflict', record);
       }
       const existing = await client.query<ConversationTurnRow>(
@@ -345,15 +341,9 @@ export async function beginPostgresNonAgentTextDeliveryAttempt(input: {
     input.db,
     input.attempt.sessionId,
     async (client) => {
-      const existing = await readRecord(
-        client,
-        input.attempt.requestKey,
-        true,
-      );
+      const existing = await readRecord(client, input.attempt.requestKey, true);
       const expectedSessionBindingDigest =
-        await nonAgentTextDeliverySessionBindingDigest(
-          input.attempt.sessionId,
-        );
+        await nonAgentTextDeliverySessionBindingDigest(input.attempt.sessionId);
       if (
         !existing ||
         existing.sessionBindingDigest !== expectedSessionBindingDigest
@@ -371,7 +361,7 @@ export async function beginPostgresNonAgentTextDeliveryAttempt(input: {
         existing.reservedSessionAuthorityGeneration !==
           input.attempt.expectedSessionAuthorityGeneration ||
         existing.agentBindingDigest !== expectedAgentBindingDigest ||
-        !await exactHumanAuthority(client, input.attempt)
+        !(await exactHumanAuthority(client, input.attempt))
       ) {
         return {
           status: 'dispatch_blocked',
@@ -435,9 +425,9 @@ export async function completePostgresNonAgentTextDeliveryAttempt(input: {
       }
       if (
         existing.sessionBindingDigest !==
-          await nonAgentTextDeliverySessionBindingDigest(
-            input.completion.sessionId,
-          )
+        (await nonAgentTextDeliverySessionBindingDigest(
+          input.completion.sessionId,
+        ))
       ) {
         return {
           status: 'transition_blocked',
@@ -477,9 +467,9 @@ export async function reconcilePostgresNonAgentTextDelivery(input: {
       }
       if (
         existing.sessionBindingDigest !==
-          await nonAgentTextDeliverySessionBindingDigest(
-            input.reconciliation.sessionId,
-          )
+        (await nonAgentTextDeliverySessionBindingDigest(
+          input.reconciliation.sessionId,
+        ))
       ) {
         return {
           status: 'reconciliation_blocked',
@@ -634,9 +624,7 @@ function storageValues(record: NonAgentTextDeliveryRecord): unknown[] {
   ];
 }
 
-function mutableStorageValues(
-  record: NonAgentTextDeliveryRecord,
-): unknown[] {
+function mutableStorageValues(record: NonAgentTextDeliveryRecord): unknown[] {
   return [
     record.status,
     record.deliveryAttempt,
@@ -655,8 +643,9 @@ function recordFromRow(
     schemaVersion: row.schema_version,
     requestKey: row.request_key,
     sessionBindingDigest: row.session_binding_digest,
-    reservedSessionAuthorityGeneration:
-      Number(row.reserved_session_authority_generation),
+    reservedSessionAuthorityGeneration: Number(
+      row.reserved_session_authority_generation,
+    ),
     channel: row.channel,
     assistantTurnId: row.assistant_turn_id,
     agentBindingDigest: row.agent_binding_digest,

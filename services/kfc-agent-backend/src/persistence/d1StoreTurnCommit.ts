@@ -3,16 +3,9 @@ import type {
   CommitAssistantTurnIfRunCurrentResult,
   RunCommitFence,
 } from './contracts.js';
-import type {
-  D1DatabaseLike,
-  D1PreparedStatement,
-} from './d1StoreSupport.js';
-import {
-  prepareAssistantTurnCommit,
-} from './runCommitPreparation.js';
-import {
-  verifiedRefStorageValues,
-} from './verifiedRef.js';
+import type { D1DatabaseLike, D1PreparedStatement } from './d1StoreSupport.js';
+import { prepareAssistantTurnCommit } from './runCommitPreparation.js';
+import { verifiedRefStorageValues } from './verifiedRef.js';
 
 export interface D1RunCommitPredicate {
   sql: string;
@@ -33,27 +26,24 @@ export async function commitD1AssistantTurnIfRunCurrent(input: {
   if (prepared.verifiedRefs.length > 0) {
     const eligible = assistantTurnEligibility(input.operation);
     statements.push(
-      input.db.prepare(
-        `INSERT OR IGNORE INTO confirmation_pause_sessions
+      input.db
+        .prepare(
+          `INSERT OR IGNORE INTO session_generations
            (session_id, generation)
          SELECT ?, 0
          WHERE ${eligible.sql}`,
-      ).bind(
-        prepared.turn.sessionId,
-        ...eligible.bindings,
-      ),
+        )
+        .bind(prepared.turn.sessionId, ...eligible.bindings),
     );
     for (const record of prepared.verifiedRefs) {
       const values = verifiedRefStorageValues(record, 0);
-      const withoutGeneration = [
-        ...values.slice(0, 4),
-        ...values.slice(5),
-      ];
+      const withoutGeneration = [...values.slice(0, 4), ...values.slice(5)];
       const current = assistantTurnEligibility(input.operation);
       requiredResultIndexes.push(statements.length);
       statements.push(
-        input.db.prepare(
-          `INSERT INTO verified_refs (
+        input.db
+          .prepare(
+            `INSERT INTO verified_refs (
              schema_version, ref_id, kind, session_id,
              session_generation, customer_id, channel,
              authenticated_subject, authentication_evidence_ref,
@@ -61,40 +51,47 @@ export async function commitD1AssistantTurnIfRunCurrent(input: {
              expires_at, claimed_use_id, claimed_at
            )
            SELECT ?, ?, ?, ?, generation, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
-           FROM confirmation_pause_sessions
+           FROM session_generations
            WHERE session_id = ?
              AND ${current.sql}`,
-        ).bind(
-          ...withoutGeneration,
-          prepared.turn.sessionId,
-          ...current.bindings,
-        ),
+          )
+          .bind(
+            ...withoutGeneration,
+            prepared.turn.sessionId,
+            ...current.bindings,
+          ),
       );
     }
   }
 
   requiredResultIndexes.push(statements.length);
-  statements.push(eventStatement(
-    input.db,
-    prepared.stateEvent,
-    assistantTurnEligibility(input.operation),
-  ));
+  statements.push(
+    eventStatement(
+      input.db,
+      prepared.stateEvent,
+      assistantTurnEligibility(input.operation),
+    ),
+  );
   requiredResultIndexes.push(statements.length);
-  statements.push(turnStatement(
-    input.db,
-    prepared.turn,
-    assistantTurnEligibility(input.operation),
-  ));
+  statements.push(
+    turnStatement(
+      input.db,
+      prepared.turn,
+      assistantTurnEligibility(input.operation),
+    ),
+  );
   requiredResultIndexes.push(statements.length);
-  statements.push(eventStatement(
-    input.db,
-    prepared.turnEvent,
-    assistantTurnEligibility(input.operation),
-  ));
+  statements.push(
+    eventStatement(
+      input.db,
+      prepared.turnEvent,
+      assistantTurnEligibility(input.operation),
+    ),
+  );
 
   const results = await input.db.batch(statements);
-  const changes = requiredResultIndexes.map(
-    (index) => Number(results[index]?.meta.changes ?? 0),
+  const changes = requiredResultIndexes.map((index) =>
+    Number(results[index]?.meta.changes ?? 0),
   );
   if (changes.every((count) => count === 0)) return { status: 'stale' };
   if (!changes.every((count) => count === 1)) {
@@ -114,19 +111,21 @@ function eventStatement(
   },
   eligible: D1RunCommitPredicate,
 ): D1PreparedStatement {
-  return db.prepare(
-    `INSERT INTO conversation_events
+  return db
+    .prepare(
+      `INSERT INTO conversation_events
        (id, session_id, source_type, payload, created_at)
      SELECT ?, ?, ?, ?, ?
      WHERE ${eligible.sql}`,
-  ).bind(
-    event.id,
-    event.sessionId,
-    event.sourceType,
-    JSON.stringify(event.payload),
-    event.createdAt,
-    ...eligible.bindings,
-  );
+    )
+    .bind(
+      event.id,
+      event.sessionId,
+      event.sourceType,
+      JSON.stringify(event.payload),
+      event.createdAt,
+      ...eligible.bindings,
+    );
 }
 
 function turnStatement(
@@ -145,26 +144,28 @@ function turnStatement(
   },
   eligible: D1RunCommitPredicate,
 ): D1PreparedStatement {
-  return db.prepare(
-    `INSERT INTO conversation_turns (
+  return db
+    .prepare(
+      `INSERT INTO conversation_turns (
        id, session_id, channel, role, text, external_message_id,
        external_user_id, delivery_status, metadata, created_at
      )
      SELECT ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
      WHERE ${eligible.sql}`,
-  ).bind(
-    turn.id,
-    turn.sessionId,
-    turn.channel,
-    turn.role,
-    turn.text,
-    turn.externalMessageId,
-    turn.externalUserId,
-    turn.deliveryStatus,
-    JSON.stringify(turn.metadata),
-    turn.createdAt,
-    ...eligible.bindings,
-  );
+    )
+    .bind(
+      turn.id,
+      turn.sessionId,
+      turn.channel,
+      turn.role,
+      turn.text,
+      turn.externalMessageId,
+      turn.externalUserId,
+      turn.deliveryStatus,
+      JSON.stringify(turn.metadata),
+      turn.createdAt,
+      ...eligible.bindings,
+    );
 }
 
 export function d1RunCommitEligibility(input: {
@@ -172,10 +173,7 @@ export function d1RunCommitEligibility(input: {
   fence: RunCommitFence;
   notAfter?: string;
 }): D1RunCommitPredicate {
-  const owner = runOwnerPredicate(
-    input.sessionId,
-    input.fence,
-  );
+  const owner = runOwnerPredicate(input.sessionId, input.fence);
   return {
     sql: `(? IS NULL OR unixepoch('now') < unixepoch(?))
       AND ${owner.sql}`,
@@ -193,9 +191,7 @@ function assistantTurnEligibility(
   return d1RunCommitEligibility({
     sessionId: input.stateEvent.sessionId,
     fence: input.fence,
-    ...(input.notAfter === undefined
-      ? {}
-      : { notAfter: input.notAfter }),
+    ...(input.notAfter === undefined ? {} : { notAfter: input.notAfter }),
   });
 }
 
@@ -205,9 +201,9 @@ function runOwnerPredicate(
 ): D1RunCommitPredicate {
   const owner: D1RunCommitPredicate = (() => {
     switch (fence.kind) {
-    case 'agent_run':
-      return {
-        sql: `EXISTS (
+      case 'agent_run':
+        return {
+          sql: `EXISTS (
           SELECT 1
           FROM session_agent_state AS state
           INNER JOIN agent_runs AS run
@@ -224,18 +220,18 @@ function runOwnerPredicate(
             AND run.execution_lease_expires_at IS NOT NULL
             AND unixepoch('now') < unixepoch(run.execution_lease_expires_at)
         )`,
-        bindings: [
-          sessionId,
-          fence.runId,
-          fence.generation,
-          fence.sessionAuthorityGeneration,
-          fence.executionAttempt,
-          fence.executionLeaseToken,
-        ],
-      };
-    case 'customer_run':
-      return {
-        sql: `EXISTS (
+          bindings: [
+            sessionId,
+            fence.runId,
+            fence.generation,
+            fence.sessionAuthorityGeneration,
+            fence.executionAttempt,
+            fence.executionLeaseToken,
+          ],
+        };
+      case 'customer_run':
+        return {
+          sql: `EXISTS (
           SELECT 1
           FROM customer_runs AS run
           WHERE run.id = ?
@@ -243,15 +239,11 @@ function runOwnerPredicate(
             AND run.session_authority_generation = ?
             AND run.status IN ('accepted', 'running')
         )`,
-        bindings: [
-          fence.runId,
-          sessionId,
-          fence.sessionAuthorityGeneration,
-        ],
-      };
-    case 'operation_lease':
-      return {
-        sql: `EXISTS (
+          bindings: [fence.runId, sessionId, fence.sessionAuthorityGeneration],
+        };
+      case 'operation_lease':
+        return {
+          sql: `EXISTS (
           SELECT 1
           FROM irreversible_operations AS operation
           WHERE operation.request_id = ?
@@ -264,16 +256,16 @@ function runOwnerPredicate(
             AND operation.lease_token = ?
             AND unixepoch('now') < unixepoch(operation.lease_expires_at)
         )`,
-        bindings: [
-          fence.requestId,
-          sessionId,
-          fence.operation,
-          fence.bindingFingerprint,
-          fence.sessionAuthorityGeneration,
-          fence.attempt,
-          fence.leaseToken,
-        ],
-      };
+          bindings: [
+            fence.requestId,
+            sessionId,
+            fence.operation,
+            fence.bindingFingerprint,
+            fence.sessionAuthorityGeneration,
+            fence.attempt,
+            fence.leaseToken,
+          ],
+        };
     }
   })();
   return {

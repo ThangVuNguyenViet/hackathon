@@ -128,7 +128,6 @@ async function executeModelTool(input: {
 }): Promise<ToolCallResult> {
   const toolName = toolNameFor(input.call);
   const args = toolArguments(input.call);
-  if (toolName === 'placeOrder') input.state.userConfirmedOrder = true;
   const bindingFingerprint = await stateRevision({
     sessionId: input.turnInput.sessionId,
     externalMessageId: input.turnInput.externalMessageId ?? null,

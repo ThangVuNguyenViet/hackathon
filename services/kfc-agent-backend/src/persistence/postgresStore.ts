@@ -45,10 +45,11 @@ import { PostgresStoreAgentRunTextDeliveryOperations } from './postgresStoreAgen
 
 export class PostgresStore
   extends PostgresStoreAgentRunTextDeliveryOperations
-  implements ConversationStore
-{}
+  implements ConversationStore {}
 
-export async function createPostgresPersistence(input: { databaseUrl: string }): Promise<{
+export async function createPostgresPersistence(input: {
+  databaseUrl: string;
+}): Promise<{
   pool: Pool;
   store: PostgresStore;
   dashboardEvents: DashboardEvent[];

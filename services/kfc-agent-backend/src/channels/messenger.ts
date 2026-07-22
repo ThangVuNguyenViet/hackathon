@@ -70,7 +70,10 @@ export function verifyMessengerChallenge(
   return { statusCode: 403, body: 'Forbidden' };
 }
 
-export function normalizeMessengerWebhook(payload: unknown, pageId: string): ConversationEvent[] {
+export function normalizeMessengerWebhook(
+  payload: unknown,
+  pageId: string,
+): ConversationEvent[] {
   const body = messengerWebhookSchema.parse(payload);
   const events: ConversationEvent[] = [];
 
@@ -89,7 +92,10 @@ export function normalizeMessengerWebhook(payload: unknown, pageId: string): Con
         externalThreadId: item.sender.id,
         text,
         eventType: item.postback ? 'postback' : 'message',
-        rawEventId: item.message?.mid ?? item.postback?.mid ?? `${item.sender.id}:${timestamp}`,
+        rawEventId:
+          item.message?.mid ??
+          item.postback?.mid ??
+          `${item.sender.id}:${timestamp}`,
         receivedAt: new Date(timestamp).toISOString(),
         platformEventName: item.postback ? 'postback' : 'message',
         shouldRunAgent: true,
@@ -145,9 +151,10 @@ export function createMessengerClient(input: {
       return {
         status: 'delivery_outcome_unknown',
         errorCode: 'messenger_delivery_outcome_unknown',
-        message: error instanceof Error
-          ? error.message
-          : 'Messenger delivery outcome is unknown',
+        message:
+          error instanceof Error
+            ? error.message
+            : 'Messenger delivery outcome is unknown',
       };
     }
 
@@ -175,10 +182,7 @@ export function createMessengerClient(input: {
     if (body.error) {
       return {
         status: 'confirmed_not_sent',
-        errorCode: messengerGraphErrorCode(
-          body.error,
-          'messenger_send_failed',
-        ),
+        errorCode: messengerGraphErrorCode(body.error, 'messenger_send_failed'),
         message: body.error?.message ?? 'Messenger send was rejected',
       };
     }
@@ -197,7 +201,10 @@ export function createMessengerClient(input: {
 
   return {
     sendTextWithOutcome,
-    async sendText(recipientId, text): Promise<ToolResult<{ messageId: string }>> {
+    async sendText(
+      recipientId,
+      text,
+    ): Promise<ToolResult<{ messageId: string }>> {
       return channelTextSendOutcomeToLegacyToolResult(
         await sendTextWithOutcome(recipientId, text),
       );
@@ -206,25 +213,60 @@ export function createMessengerClient(input: {
       const items: ChannelMediaDeliveryResult['items'] = [];
       for (const item of media) {
         try {
-          const response = await fetchImpl(`${graphApiBaseUrl}/me/messages?access_token=${input.pageAccessToken}`, {
-            method: 'POST', headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              recipient: { id: recipientId }, messaging_type: 'RESPONSE',
-              message: { attachment: { type: 'image', payload: { url: item.imageUrl, is_reusable: true } } },
-            }),
-          });
-          const body = (await response.json()) as { message_id?: string; error?: { message?: string } };
+          const response = await fetchImpl(
+            `${graphApiBaseUrl}/me/messages?access_token=${input.pageAccessToken}`,
+            {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                recipient: { id: recipientId },
+                messaging_type: 'RESPONSE',
+                message: {
+                  attachment: {
+                    type: 'image',
+                    payload: { url: item.imageUrl, is_reusable: true },
+                  },
+                },
+              }),
+            },
+          );
+          const body = (await response.json()) as {
+            message_id?: string;
+            error?: { message?: string };
+          };
           if (!response.ok || !body.message_id) {
-            items.push({ key: item.key, status: 'failed', errorCode: 'messenger_media_send_failed', errorMessage: body.error?.message ?? 'Messenger media send failed' });
+            items.push({
+              key: item.key,
+              status: 'failed',
+              errorCode: 'messenger_media_send_failed',
+              errorMessage:
+                body.error?.message ?? 'Messenger media send failed',
+            });
           } else {
-            items.push({ key: item.key, status: 'sent', messageId: body.message_id });
+            items.push({
+              key: item.key,
+              status: 'sent',
+              messageId: body.message_id,
+            });
           }
         } catch (error) {
-          items.push({ key: item.key, status: 'failed', errorCode: 'messenger_media_send_failed', errorMessage: error instanceof Error ? error.message : 'Messenger media send failed' });
+          items.push({
+            key: item.key,
+            status: 'failed',
+            errorCode: 'messenger_media_send_failed',
+            errorMessage:
+              error instanceof Error
+                ? error.message
+                : 'Messenger media send failed',
+          });
         }
       }
       const sent = items.filter((item) => item.status === 'sent').length;
-      return { status: sent === items.length ? 'sent' : sent === 0 ? 'failed' : 'partial', items };
+      return {
+        status:
+          sent === items.length ? 'sent' : sent === 0 ? 'failed' : 'partial',
+        items,
+      };
     },
     async sendSenderAction(
       recipientId: string,
@@ -239,14 +281,17 @@ export function createMessengerClient(input: {
       }
 
       try {
-        const response = await fetchImpl(`${graphApiBaseUrl}/me/messages?access_token=${input.pageAccessToken}`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            recipient: { id: recipientId },
-            sender_action: action,
-          }),
-        });
+        const response = await fetchImpl(
+          `${graphApiBaseUrl}/me/messages?access_token=${input.pageAccessToken}`,
+          {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              recipient: { id: recipientId },
+              sender_action: action,
+            }),
+          },
+        );
         const body = (await response.json()) as {
           recipient_id?: string;
           error?: { message?: string; code?: number; error_subcode?: number };
@@ -254,17 +299,27 @@ export function createMessengerClient(input: {
         if (!response.ok || !body.recipient_id) {
           return {
             ok: false,
-            errorCode: messengerGraphErrorCode(body.error, 'messenger_sender_action_failed'),
+            errorCode: messengerGraphErrorCode(
+              body.error,
+              'messenger_sender_action_failed',
+            ),
             message: body.error?.message ?? 'Messenger sender action failed',
           };
         }
 
-        return { ok: true, value: { recipientId: body.recipient_id }, message: action };
+        return {
+          ok: true,
+          value: { recipientId: body.recipient_id },
+          message: action,
+        };
       } catch (error) {
         return {
           ok: false,
           errorCode: 'messenger_sender_action_failed',
-          message: error instanceof Error ? error.message : 'Messenger sender action failed',
+          message:
+            error instanceof Error
+              ? error.message
+              : 'Messenger sender action failed',
         };
       }
     },
@@ -290,12 +345,17 @@ export function createMessengerClient(input: {
         if (!response.ok || body.error) {
           return {
             ok: false,
-            errorCode: messengerGraphErrorCode(body.error, 'messenger_profile_failed'),
+            errorCode: messengerGraphErrorCode(
+              body.error,
+              'messenger_profile_failed',
+            ),
             message: body.error?.message ?? 'Messenger profile lookup failed',
           };
         }
 
-        const displayName = [body.first_name, body.last_name].filter(Boolean).join(' ').trim() || null;
+        const displayName =
+          [body.first_name, body.last_name].filter(Boolean).join(' ').trim() ||
+          null;
         return {
           ok: true,
           value: {
@@ -309,7 +369,10 @@ export function createMessengerClient(input: {
         return {
           ok: false,
           errorCode: 'messenger_profile_failed',
-          message: error instanceof Error ? error.message : 'Messenger profile lookup failed',
+          message:
+            error instanceof Error
+              ? error.message
+              : 'Messenger profile lookup failed',
         };
       }
     },
@@ -317,11 +380,15 @@ export function createMessengerClient(input: {
 }
 
 function messengerGraphErrorCode(
-  error: { message?: string; code?: number; error_subcode?: number } | undefined,
+  error:
+    { message?: string; code?: number; error_subcode?: number } | undefined,
   fallback: string,
 ): string {
   const message = error?.message ?? '';
-  if (error?.code === 190 || /access token|session has expired|oauth/i.test(message)) {
+  if (
+    error?.code === 190 ||
+    /access token|session has expired|oauth/i.test(message)
+  ) {
     return 'messenger_access_token_invalid';
   }
   return fallback;

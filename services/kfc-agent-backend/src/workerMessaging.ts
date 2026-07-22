@@ -1,19 +1,28 @@
 import { AgentRunCoordinator } from './agentRuns/coordinator.js';
 import type { ConversationEvent } from './channels/conversationEvent.js';
-import { createMessengerClient, normalizeMessengerWebhook } from './channels/messenger.js';
-import { createMessengerHistoryClient, MessengerHistorySyncCoordinator, MessengerHistorySyncService } from './channels/messengerHistory.js';
+import {
+  createMessengerClient,
+  normalizeMessengerWebhook,
+} from './channels/messenger.js';
+import {
+  createMessengerHistoryClient,
+  MessengerHistorySyncCoordinator,
+  MessengerHistorySyncService,
+} from './channels/messengerHistory.js';
 import { normalizeZaloWebhook } from './channels/zalo.js';
 import { DashboardEventBus } from './dashboard/eventBus.js';
 import { dashboardSessionTarget } from './dashboard/sessionVisibility.js';
 import type { HandlerResponse } from './api/routeHandlers.js';
-import {
-  verifyMessengerGuestCheckoutIngress,
-} from './security/guestCheckoutAuthority.js';
+import { verifyMessengerGuestCheckoutIngress } from './security/guestCheckoutAuthority.js';
 import { verifyMetaWebhookSignature } from './security/webhookAuthenticity.js';
 import { sessionIdForConversationEvent } from './session/sessionContext.js';
 import { D1Store } from './persistence/d1Store.js';
 import { initializeWorkerStore } from './workerStore.js';
-import { readJson, scheduleDashboardEvent, workerDashboardSessionDefaultLookbackMs } from './workerHttp.js';
+import {
+  readJson,
+  scheduleDashboardEvent,
+  workerDashboardSessionDefaultLookbackMs,
+} from './workerHttp.js';
 import { workerSessionResetHook } from './workerLifecycle.js';
 import type {
   MessengerAgentRunWakeupJob,
@@ -30,14 +39,14 @@ export async function enqueueMessengerWebhook(
   if (!env.MESSENGER_WEBHOOK_QUEUE) {
     return {
       status: 503,
-      body: { errorCode: "messenger_webhook_queue_not_configured" },
+      body: { errorCode: 'messenger_webhook_queue_not_configured' },
     };
   }
 
   if (!env.META_APP_SECRET) {
     return {
       status: 503,
-      body: { errorCode: "messenger_webhook_authenticity_not_configured" },
+      body: { errorCode: 'messenger_webhook_authenticity_not_configured' },
     };
   }
   const rawBody = new Uint8Array(await request.arrayBuffer());
@@ -47,29 +56,29 @@ export async function enqueueMessengerWebhook(
       body: { errorCode: 'messenger_webhook_payload_too_large' },
     };
   }
-  const signatureHeader =
-    request.headers.get("x-hub-signature-256");
-  if (!await verifyMetaWebhookSignature({
-    rawBody,
-    signatureHeader,
-    appSecret: env.META_APP_SECRET,
-  })) {
-    return {
-      status: 401,
-      body: { errorCode: "invalid_messenger_webhook_signature" },
-    };
-  }
-  const verifiedIngress =
-    await verifyMessengerGuestCheckoutIngress({
+  const signatureHeader = request.headers.get('x-hub-signature-256');
+  if (
+    !(await verifyMetaWebhookSignature({
       rawBody,
       signatureHeader,
       appSecret: env.META_APP_SECRET,
-      pageId: env.META_PAGE_ID ?? '',
-    });
+    }))
+  ) {
+    return {
+      status: 401,
+      body: { errorCode: 'invalid_messenger_webhook_signature' },
+    };
+  }
+  const verifiedIngress = await verifyMessengerGuestCheckoutIngress({
+    rawBody,
+    signatureHeader,
+    appSecret: env.META_APP_SECRET,
+    pageId: env.META_PAGE_ID ?? '',
+  });
 
   const events = normalizeMessengerWebhook(
     JSON.parse(new TextDecoder().decode(rawBody)),
-    env.META_PAGE_ID ?? "",
+    env.META_PAGE_ID ?? '',
   );
   const stats = {
     received: events.length,
@@ -77,18 +86,17 @@ export async function enqueueMessengerWebhook(
     skippedDuplicates: 0,
     failed: 0,
   };
-  console.log("messenger_webhook_received", { received: events.length });
+  console.log('messenger_webhook_received', { received: events.length });
   if (events.length === 0) return { status: 200, body: stats };
   const dashboard = new DashboardEventBus({
-    persistEvent: (event) =>
-      scheduleDashboardEvent(env, store, event, context),
+    persistEvent: (event) => scheduleDashboardEvent(env, store, event, context),
   });
 
   for (const event of events) {
     const sessionId = sessionIdForConversationEvent(event);
     if (await store.findTurnByExternalMessage(sessionId, event.rawEventId)) {
       stats.skippedDuplicates += 1;
-      console.log("messenger_webhook_duplicate_skipped", {
+      console.log('messenger_webhook_duplicate_skipped', {
         rawEventId: event.rawEventId,
         sessionId,
       });
@@ -96,7 +104,7 @@ export async function enqueueMessengerWebhook(
     }
 
     const reservation = await store.reserveWebhookDelivery({
-      channel: "messenger",
+      channel: 'messenger',
       externalEventId: event.rawEventId,
       externalThreadId: event.externalThreadId,
       externalUserId: event.externalUserId,
@@ -110,7 +118,7 @@ export async function enqueueMessengerWebhook(
     });
     if (!reservation.reserved) {
       stats.skippedDuplicates += 1;
-      console.log("messenger_webhook_duplicate_skipped", {
+      console.log('messenger_webhook_duplicate_skipped', {
         rawEventId: event.rawEventId,
         sessionId,
       });
@@ -119,7 +127,7 @@ export async function enqueueMessengerWebhook(
 
     try {
       const humanPaused =
-        (await store.getSessionControl(sessionId)).agentMode === "human_paused";
+        (await store.getSessionControl(sessionId)).agentMode === 'human_paused';
       if (!humanPaused) {
         scheduleImmediateMessengerTyping(env, event, context);
         const coordinator = new AgentRunCoordinator({ store, dashboard });
@@ -138,18 +146,16 @@ export async function enqueueMessengerWebhook(
             ? {
                 ...wakeup,
                 messengerIngressProof: {
-                  schemaVersion:
-                    'kfc-messenger-ingress-proof-v1',
+                  schemaVersion: 'kfc-messenger-ingress-proof-v1',
                   rawBodyBytes: Array.from(rawBody),
                   signatureHeader,
                 },
               }
             : wakeup;
-        await env.MESSENGER_WEBHOOK_QUEUE.send(
-          wakeupWithIngress,
-          { delaySeconds: 0 },
-        );
-        console.log("agent_run_wakeup_queued", {
+        await env.MESSENGER_WEBHOOK_QUEUE.send(wakeupWithIngress, {
+          delaySeconds: 0,
+        });
+        console.log('agent_run_wakeup_queued', {
           rawEventId: event.rawEventId,
           sessionId,
           generation: wakeup.generation,
@@ -157,27 +163,27 @@ export async function enqueueMessengerWebhook(
         });
       } else {
         await env.MESSENGER_WEBHOOK_QUEUE.send({
-          channel: "messenger_control_event",
+          channel: 'messenger_control_event',
           event,
           sessionId,
           queuedAt: new Date().toISOString(),
         });
       }
       stats.queued += 1;
-      console.log("messenger_webhook_queued", {
+      console.log('messenger_webhook_queued', {
         rawEventId: event.rawEventId,
         sessionId,
       });
     } catch (error) {
       const message =
-        error instanceof Error ? error.message : "Messenger queue send failed";
+        error instanceof Error ? error.message : 'Messenger queue send failed';
       await store.markWebhookDeliveryFailed(
-        "messenger",
+        'messenger',
         event.rawEventId,
         message,
       );
       stats.failed += 1;
-      console.error("messenger_webhook_queue_failed", {
+      console.error('messenger_webhook_queue_failed', {
         rawEventId: event.rawEventId,
         sessionId,
         message,
@@ -201,10 +207,10 @@ export function scheduleImmediateMessengerTyping(
   const task = (async () => {
     const seen = await messenger.sendSenderAction(
       event.externalUserId,
-      "mark_seen",
+      'mark_seen',
     );
     if (!seen.ok) {
-      console.warn("messenger_immediate_mark_seen_failed", {
+      console.warn('messenger_immediate_mark_seen_failed', {
         rawEventId: event.rawEventId,
         errorCode: seen.errorCode,
         message: seen.message,
@@ -212,10 +218,10 @@ export function scheduleImmediateMessengerTyping(
     }
     const typing = await messenger.sendSenderAction(
       event.externalUserId,
-      "typing_on",
+      'typing_on',
     );
     if (!typing.ok) {
-      console.warn("messenger_immediate_typing_failed", {
+      console.warn('messenger_immediate_typing_failed', {
         rawEventId: event.rawEventId,
         errorCode: typing.errorCode,
         message: typing.message,
@@ -231,14 +237,14 @@ export function staleDeliveryRecoveryOptionsFromUrl(url: URL): {
   limit?: number;
 } {
   return {
-    olderThanMs: numberSearchParam(url, "olderThanMs"),
-    limit: numberSearchParam(url, "limit"),
+    olderThanMs: numberSearchParam(url, 'olderThanMs'),
+    limit: numberSearchParam(url, 'limit'),
   };
 }
 
 export function numberSearchParam(url: URL, name: string): number | undefined {
   const value = url.searchParams.get(name);
-  if (value === null || value === "") return undefined;
+  if (value === null || value === '') return undefined;
   const parsed = Number(value);
   return Number.isFinite(parsed) ? parsed : undefined;
 }
@@ -291,7 +297,7 @@ export async function backfillWorkerMessengerProfiles(
       sessionId: string;
       externalUserId: string;
       displayName: string | null;
-      status: "updated" | "skipped" | "failed";
+      status: 'updated' | 'skipped' | 'failed';
     }>;
   }>
 > {
@@ -318,7 +324,7 @@ export async function backfillWorkerMessengerProfiles(
     await store.listDashboardSessionSummaries()
   ).flatMap((summary) => {
     const target = dashboardSessionTarget(summary.sessionId);
-    return target?.channel === "messenger"
+    return target?.channel === 'messenger'
       ? [
           {
             sessionId: summary.sessionId,
@@ -339,7 +345,7 @@ export async function backfillWorkerMessengerProfiles(
       sessionId: string;
       externalUserId: string;
       displayName: string | null;
-      status: "updated" | "skipped" | "failed";
+      status: 'updated' | 'skipped' | 'failed';
     }>,
   };
 
@@ -350,7 +356,7 @@ export async function backfillWorkerMessengerProfiles(
       result.profiles.push({
         ...target,
         displayName: existing.displayName,
-        status: "skipped",
+        status: 'skipped',
       });
       continue;
     }
@@ -367,12 +373,12 @@ export async function backfillWorkerMessengerProfiles(
         result.profiles.push({
           ...target,
           displayName: null,
-          status: "failed",
+          status: 'failed',
         });
         continue;
       }
       await store.upsertProfile({
-        channel: "messenger",
+        channel: 'messenger',
         externalUserId: target.externalUserId,
         displayName: profile.displayName,
         avatarUrl: profile.avatarUrl,
@@ -383,7 +389,7 @@ export async function backfillWorkerMessengerProfiles(
       result.profiles.push({
         ...target,
         displayName: profile.displayName,
-        status: "updated",
+        status: 'updated',
       });
     } catch {
       try {
@@ -394,7 +400,7 @@ export async function backfillWorkerMessengerProfiles(
         );
         if (conversationProfile) {
           await store.upsertProfile({
-            channel: "messenger",
+            channel: 'messenger',
             externalUserId: target.externalUserId,
             displayName: conversationProfile.displayName,
             avatarUrl: conversationProfile.avatarUrl,
@@ -405,7 +411,7 @@ export async function backfillWorkerMessengerProfiles(
           result.profiles.push({
             ...target,
             displayName: conversationProfile.displayName,
-            status: "updated",
+            status: 'updated',
           });
           continue;
         }
@@ -413,7 +419,7 @@ export async function backfillWorkerMessengerProfiles(
         // Fall through and record the individual profile as failed.
       }
       result.failed += 1;
-      result.profiles.push({ ...target, displayName: null, status: "failed" });
+      result.profiles.push({ ...target, displayName: null, status: 'failed' });
     }
   }
 
@@ -428,7 +434,7 @@ export async function enqueueZaloWebhook(
   if (!env.MESSENGER_WEBHOOK_QUEUE) {
     return {
       status: 503,
-      body: { errorCode: "zalo_webhook_queue_not_configured" },
+      body: { errorCode: 'zalo_webhook_queue_not_configured' },
     };
   }
 
@@ -442,7 +448,7 @@ export async function enqueueZaloWebhook(
 
   let events: ReturnType<typeof normalizeZaloWebhook> = [];
   try {
-    events = normalizeZaloWebhook(body, env.ZALO_OA_ID ?? "");
+    events = normalizeZaloWebhook(body, env.ZALO_OA_ID ?? '');
   } catch {
     return {
       status: 200,
@@ -459,8 +465,7 @@ export async function enqueueZaloWebhook(
   const store = new D1Store(env.DB, workerSessionResetHook(env));
   await initializeWorkerStore(store, env.DB);
   const dashboard = new DashboardEventBus({
-    persistEvent: (event) =>
-      scheduleDashboardEvent(env, store, event, context),
+    persistEvent: (event) => scheduleDashboardEvent(env, store, event, context),
   });
   const stats = {
     received: events.length,
@@ -475,14 +480,14 @@ export async function enqueueZaloWebhook(
     }
     const processAsControlEvent =
       !event.shouldRunAgent ||
-      (await store.getSessionControl(sessionId)).agentMode === "human_paused";
+      (await store.getSessionControl(sessionId)).agentMode === 'human_paused';
     if (!processAsControlEvent) {
       if (await store.findTurnByExternalMessage(sessionId, event.rawEventId)) {
         stats.skippedDuplicates += 1;
         continue;
       }
       const reservation = await store.reserveWebhookDelivery({
-        channel: "zalo",
+        channel: 'zalo',
         externalEventId: event.rawEventId,
         externalThreadId: event.externalThreadId,
         externalUserId: event.externalUserId,
@@ -504,7 +509,7 @@ export async function enqueueZaloWebhook(
       await env.MESSENGER_WEBHOOK_QUEUE.send(wakeup, { delaySeconds: 0 });
     } else {
       await env.MESSENGER_WEBHOOK_QUEUE.send({
-        channel: "zalo_control_event",
+        channel: 'zalo_control_event',
         payload: body,
         queuedAt: new Date().toISOString(),
       });

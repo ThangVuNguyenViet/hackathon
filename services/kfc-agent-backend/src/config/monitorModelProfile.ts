@@ -1,30 +1,17 @@
 import type { BaseChatModel } from '@langchain/core/language_models/chat_models';
 import {
-  agentModelProfiles,
   createAgentChatModel,
+  resolveAgentModelProfile,
   type AgentProvider,
 } from './agentModelProfile.js';
 
-export const monitorModelProfiles = {
-  openai: {
-    provider: 'openai',
-    model: 'gpt-4.1-mini',
-    profile: 'openai-gpt-4.1-mini-monitor',
-  },
-  google: {
-    provider: 'google',
-    model: 'gemini-3.1-flash-lite',
-    profile: 'google-gemini-3.1-flash-lite-thinking-low-monitor',
-    thinkingLevel: 'LOW',
-  },
-} as const;
-
 export type MonitorProvider = AgentProvider;
-export type MonitorModelProfile =
-  (typeof monitorModelProfiles)[MonitorProvider];
-export type MonitorModelIdentity = Readonly<
-  Pick<MonitorModelProfile, 'provider' | 'model' | 'profile'>
->;
+export interface MonitorModelProfile {
+  provider: MonitorProvider;
+  model: string;
+  profile: string;
+}
+export type MonitorModelIdentity = Readonly<MonitorModelProfile>;
 
 export function resolveMonitorModelProfile(input: {
   agentProvider: AgentProvider;
@@ -32,14 +19,15 @@ export function resolveMonitorModelProfile(input: {
   model?: string;
 }): MonitorModelProfile {
   const provider = input.provider ?? input.agentProvider;
-  const profile = monitorModelProfiles[provider];
-  const configuredModel = input.model?.trim();
-  if (configuredModel && configuredModel !== profile.model) {
-    throw new Error(
-      `KFC monitor model drift: ${provider} must use ${profile.model}, received ${configuredModel}`,
-    );
-  }
-  return profile;
+  const agentProfile = resolveAgentModelProfile({
+    provider,
+    model: input.model,
+  });
+  return {
+    provider,
+    model: agentProfile.model,
+    profile: `monitor:${provider}:${agentProfile.model}`,
+  };
 }
 
 export function createMonitorChatModel(input: {
@@ -48,12 +36,8 @@ export function createMonitorChatModel(input: {
   openAiBaseUrl?: string;
   googleApiKey?: string;
 }): BaseChatModel {
-  const providerProfile = agentModelProfiles[input.profile.provider];
-  if (providerProfile.model !== input.profile.model) {
-    throw new Error('KFC monitor runtime profile binding is invalid');
-  }
   return createAgentChatModel({
-    profile: providerProfile,
+    profile: resolveAgentModelProfile(input.profile),
     openAiApiKey: input.openAiApiKey,
     openAiBaseUrl: input.openAiBaseUrl,
     googleApiKey: input.googleApiKey,

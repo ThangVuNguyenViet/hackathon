@@ -1,9 +1,6 @@
 import type { HandoffClient } from '../clients/interfaces.js';
 import type { ProviderMutationReplayRegistry } from '../clients/providerMutationReplay.js';
-import {
-  mockFailure as fail,
-  mockSuccess as ok,
-} from './mockToolResults.js';
+import { mockFailure as fail, mockSuccess as ok } from './mockToolResults.js';
 
 interface MockHandoff {
   sessionId: string;
@@ -25,8 +22,7 @@ export function createMockHandoffClient(
     ) {
       return mutationReplay.run(mutationIdentity, () => {
         sequence += 1;
-        const escalationId =
-          `handoff_${sessionId}_${sequence}_${reasons.join('_')}`;
+        const escalationId = `handoff_${sessionId}_${sequence}_${reasons.join('_')}`;
         handoffs.set(escalationId, {
           sessionId,
           status: 'active',

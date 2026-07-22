@@ -1,19 +1,12 @@
 import type { AgentRun } from '../domain/types.js';
-import type {
-  ClaimAgentRunResult,
-  CreateAgentRunInput,
-} from './contracts.js';
+import type { ClaimAgentRunResult, CreateAgentRunInput } from './contracts.js';
 import {
   agentRunFromRow,
   type AgentRunRow,
   type Queryable,
 } from './postgresStoreSupport.js';
-import {
-  isConnectablePostgres,
-} from './postgresStoreRunOwner.js';
-import {
-  captureActivePostgresSessionAuthority,
-} from './postgresStoreSessionAuthority.js';
+import { isConnectablePostgres } from './postgresStoreRunOwner.js';
+import { captureActivePostgresSessionAuthority } from './postgresStoreSessionAuthority.js';
 
 const insertAgentRunSql = `INSERT INTO agent_runs (
   id, session_id, generation, session_authority_generation,

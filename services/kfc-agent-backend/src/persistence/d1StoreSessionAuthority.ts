@@ -24,8 +24,9 @@ export async function transitionD1SessionAuthority(input: {
 }): Promise<TransitionSessionAuthorityResult> {
   const operation = input.operation;
   const updatedAt = operation.updatedAt ?? new Date().toISOString();
-  const changed = await input.db.prepare(
-    `INSERT INTO session_controls (
+  const changed = await input.db
+    .prepare(
+      `INSERT INTO session_controls (
        session_id, agent_mode, assigned_agent_id,
        session_authority_generation, updated_at
      )
@@ -44,26 +45,25 @@ export async function transitionD1SessionAuthority(input: {
          session_controls.assigned_agent_id IS NOT excluded.assigned_agent_id
        )
      RETURNING *`,
-  ).bind(
-    operation.sessionId,
-    operation.agentMode,
-    operation.assignedAgentId,
-    updatedAt,
-    operation.expectedGeneration,
-    operation.agentMode,
-    operation.assignedAgentId,
-    operation.expectedGeneration,
-  ).first<SessionControlRow>();
+    )
+    .bind(
+      operation.sessionId,
+      operation.agentMode,
+      operation.assignedAgentId,
+      updatedAt,
+      operation.expectedGeneration,
+      operation.agentMode,
+      operation.assignedAgentId,
+      operation.expectedGeneration,
+    )
+    .first<SessionControlRow>();
   if (changed) {
     return {
       status: 'transitioned',
       control: sessionControlFromRow(changed),
     };
   }
-  const control = await readD1SessionControl(
-    input.db,
-    operation.sessionId,
-  );
+  const control = await readD1SessionControl(input.db, operation.sessionId);
   return {
     status:
       control.agentMode === operation.agentMode &&
@@ -78,8 +78,9 @@ async function readD1SessionControl(
   db: D1DatabaseLike,
   sessionId: string,
 ): Promise<SessionControl> {
-  const row = await db.prepare(
-    `SELECT * FROM session_controls WHERE session_id = ? LIMIT 1`,
-  ).bind(sessionId).first<SessionControlRow>();
+  const row = await db
+    .prepare(`SELECT * FROM session_controls WHERE session_id = ? LIMIT 1`)
+    .bind(sessionId)
+    .first<SessionControlRow>();
   return row ? sessionControlFromRow(row) : defaultSessionControl(sessionId);
 }

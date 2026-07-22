@@ -140,7 +140,7 @@ export class D1StoreVerifiedRefOperations extends D1StoreAgentOperations {
     const sessionId = record.principal.sessionId;
     await this.db
       .prepare(
-        `INSERT OR IGNORE INTO confirmation_pause_sessions (
+        `INSERT OR IGNORE INTO session_generations (
            session_id, generation
          ) VALUES (?, 0)`,
       )
@@ -149,7 +149,7 @@ export class D1StoreVerifiedRefOperations extends D1StoreAgentOperations {
     const captured = await this.db
       .prepare(
         `SELECT generation
-         FROM confirmation_pause_sessions
+         FROM session_generations
          WHERE session_id = ?
          LIMIT 1`,
       )
@@ -162,7 +162,7 @@ export class D1StoreVerifiedRefOperations extends D1StoreAgentOperations {
       .prepare(
         `INSERT OR IGNORE INTO verified_refs (${verifiedRefColumns})
          SELECT ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
-         FROM confirmation_pause_sessions
+         FROM session_generations
          WHERE session_id = ?
            AND generation = ?`,
       )
@@ -177,7 +177,7 @@ export class D1StoreVerifiedRefOperations extends D1StoreAgentOperations {
     const current = await this.db
       .prepare(
         `SELECT generation
-         FROM confirmation_pause_sessions
+         FROM session_generations
          WHERE session_id = ?
          LIMIT 1`,
       )
@@ -230,7 +230,7 @@ export class D1StoreVerifiedRefOperations extends D1StoreAgentOperations {
            AND expires_at > ?
            AND session_generation = (
              SELECT generation
-             FROM confirmation_pause_sessions
+             FROM session_generations
              WHERE session_id = ?
            )
            AND ${eligibility.sql}
@@ -317,10 +317,10 @@ export class D1StoreVerifiedRefOperations extends D1StoreAgentOperations {
       .prepare(
         `SELECT ${verifiedRefSelectColumns}
          FROM verified_refs
-         INNER JOIN confirmation_pause_sessions
-           ON confirmation_pause_sessions.session_id =
+         INNER JOIN session_generations
+           ON session_generations.session_id =
                 verified_refs.session_id
-          AND confirmation_pause_sessions.generation =
+          AND session_generations.generation =
                 verified_refs.session_generation
          WHERE verified_refs.ref_id = ?
            AND verified_refs.kind = ?

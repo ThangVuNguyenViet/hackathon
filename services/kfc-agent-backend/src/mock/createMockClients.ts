@@ -36,12 +36,13 @@ import {
   checkMockInventoryWithAuthority,
   mockInventoryProviderRevision,
 } from './mockInventoryAuthority.js';
-import { mockConfirmationProviderRevision } from './mockConfirmationAuthority.js';
 import type { MockedUpstreamApiProfile } from './mockedUpstreamProfile.js';
 export type { MockClientOptions } from './mockClientOptions.js';
 export type { MockedUpstreamApiProfile } from './mockedUpstreamProfile.js';
 
-function governedContentResult(value: ContentEvidence[]): ToolResult<ContentEvidence[]> {
+function governedContentResult(
+  value: ContentEvidence[],
+): ToolResult<ContentEvidence[]> {
   const provenance: SourceProvenance[] = value.map((content) => ({
     fixtureMode: 'public_crawl_seed',
     sourceFile: content.sourceFile,
@@ -79,8 +80,16 @@ function toMenuItem(item: MenuItem): MenuItem {
   };
 }
 
-function priceCart(items: CartItem[], voucherCode: string | null, deliveryFeeVnd = 0, discountVnd = 0): Cart {
-  const subtotalVnd = items.reduce((sum, item) => sum + item.quantity * item.unitPriceVnd, 0);
+function priceCart(
+  items: CartItem[],
+  voucherCode: string | null,
+  deliveryFeeVnd = 0,
+  discountVnd = 0,
+): Cart {
+  const subtotalVnd = items.reduce(
+    (sum, item) => sum + item.quantity * item.unitPriceVnd,
+    0,
+  );
   return {
     id: 'cart_mock',
     items,
@@ -92,9 +101,16 @@ function priceCart(items: CartItem[], voucherCode: string | null, deliveryFeeVnd
   };
 }
 
-function priceItem(basePriceVnd: number, modifiers?: SelectedModifier[]): number {
+function priceItem(
+  basePriceVnd: number,
+  modifiers?: SelectedModifier[],
+): number {
   return (
-    basePriceVnd + (modifiers?.reduce((sum, modifier) => sum + modifier.priceDeltaVnd * modifier.quantity, 0) ?? 0)
+    basePriceVnd +
+    (modifiers?.reduce(
+      (sum, modifier) => sum + modifier.priceDeltaVnd * modifier.quantity,
+      0,
+    ) ?? 0)
   );
 }
 
@@ -110,32 +126,47 @@ function normalizeLocationPart(value: string): string {
     .trim();
 }
 
-export function createMockClients(fixtures: GeneratedFixtures, options: MockClientOptions = {}): ExternalClients {
+export function createMockClients(
+  fixtures: GeneratedFixtures,
+  options: MockClientOptions = {},
+): ExternalClients {
   const data = new OrderingDataService(fixtures);
   const mutationReplay = new ProviderMutationReplayRegistry();
-  const menuByCode = new Map(fixtures.menuItems.map((item) => [item.code, toMenuItem(item)]));
-  const storeById = new Map(fixtures.stores.map((store) => [store.storeId, store]));
+  const menuByCode = new Map(
+    fixtures.menuItems.map((item) => [item.code, toMenuItem(item)]),
+  );
+  const storeById = new Map(
+    fixtures.stores.map((store) => [store.storeId, store]),
+  );
   const orders = new Map<string, Order>();
   const fulfillmentQuoteByStoreAndMethod = new Map(
-    fixtures.fulfillmentQuotes.map((quote) => [`${quote.storeId}:${quote.method}`, quote]),
+    fixtures.fulfillmentQuotes.map((quote) => [
+      `${quote.storeId}:${quote.method}`,
+      quote,
+    ]),
   );
   for (const order of options.initialOrders ?? []) {
     orders.set(order.id, order);
   }
-  const currentMockedUpstreamProfile = (): MockedUpstreamApiProfile | undefined =>
+  const currentMockedUpstreamProfile = ():
+    MockedUpstreamApiProfile | undefined =>
     options.mockedUpstreamApiProvider?.();
-  const catalogRevision = `fixture:${JSON.stringify(fixtures.menuItems.map((item) => [item.code, item.priceVnd, item.available]))}`;
-  const providerRevision = (): string =>
-    mockConfirmationProviderRevision(currentMockedUpstreamProfile());
   const currentUnavailableItemCodes = (): Set<string> =>
     new Set(currentMockedUpstreamProfile()?.unavailableItemCodes ?? []);
   const applyCurrentMenuAvailability = <T extends MenuItem>(item: T): T =>
-    currentUnavailableItemCodes().has(item.code) ? { ...item, available: false } : item;
-  const channelClients = createMockChannelClients(
-    options.channelClients,
-  );
-  const repriceCart = (items: CartItem[], voucherCode: string | null, deliveryFeeVnd = 0): Cart => {
-    const subtotalVnd = items.reduce((sum, item) => sum + item.quantity * item.unitPriceVnd, 0);
+    currentUnavailableItemCodes().has(item.code)
+      ? { ...item, available: false }
+      : item;
+  const channelClients = createMockChannelClients(options.channelClients);
+  const repriceCart = (
+    items: CartItem[],
+    voucherCode: string | null,
+    deliveryFeeVnd = 0,
+  ): Cart => {
+    const subtotalVnd = items.reduce(
+      (sum, item) => sum + item.quantity * item.unitPriceVnd,
+      0,
+    );
     if (!voucherCode) return priceCart(items, null, deliveryFeeVnd, 0);
 
     const validation = data.validateVoucherInput({
@@ -143,17 +174,34 @@ export function createMockClients(fixtures: GeneratedFixtures, options: MockClie
       subtotalVnd,
     });
     if (!validation.ok) return priceCart(items, null, deliveryFeeVnd, 0);
-    return priceCart(items, validation.publicCode, deliveryFeeVnd, validation.discountVnd);
+    return priceCart(
+      items,
+      validation.publicCode,
+      deliveryFeeVnd,
+      validation.discountVnd,
+    );
   };
-  const resolveModifiers = (change: CartChange): ToolResult<SelectedModifier[]> => {
+  const resolveModifiers = (
+    change: CartChange,
+  ): ToolResult<SelectedModifier[]> => {
     if (!change.modifiers?.length) return ok([]);
     const tree = data.getModifierTree(change.itemCode);
-    if (!tree) return fail('modifiers_not_found', `No modifier tree found for ${change.itemCode}`);
+    if (!tree)
+      return fail(
+        'modifiers_not_found',
+        `No modifier tree found for ${change.itemCode}`,
+      );
 
     type ModifierGroup = (typeof tree.modifierGroups)[number];
     type ParentSelection = { groupId: string; modifierId: string };
-    const indexedGroups = new Map<string, { group: ModifierGroup; parent?: ParentSelection }>();
-    const visitGroups = (groups: ModifierGroup[], parent?: ParentSelection): void => {
+    const indexedGroups = new Map<
+      string,
+      { group: ModifierGroup; parent?: ParentSelection }
+    >();
+    const visitGroups = (
+      groups: ModifierGroup[],
+      parent?: ParentSelection,
+    ): void => {
       for (const group of groups) {
         indexedGroups.set(group.groupId, { group, parent });
         for (const option of group.options) {
@@ -172,54 +220,94 @@ export function createMockClients(fixtures: GeneratedFixtures, options: MockClie
     const explicitKeys = new Set<string>();
     let resolutionFailure: ToolResult<SelectedModifier[]> | undefined;
 
-    const resolveSelection = (groupId: string, modifierId: string, requested?: RequestedModifier): boolean => {
+    const resolveSelection = (
+      groupId: string,
+      modifierId: string,
+      requested?: RequestedModifier,
+    ): boolean => {
       const indexed = indexedGroups.get(groupId);
       const group = indexed?.group;
-      const option = group?.options.find((candidate) => candidate.modifierId === modifierId);
+      const option = group?.options.find(
+        (candidate) => candidate.modifierId === modifierId,
+      );
       if (!group || !option) {
-        resolutionFailure = fail('invalid_modifier', `Modifier ${modifierId} is not verified for ${change.itemCode}`);
+        resolutionFailure = fail(
+          'invalid_modifier',
+          `Modifier ${modifierId} is not verified for ${change.itemCode}`,
+        );
         return false;
       }
       if (
-        (requested?.groupName !== undefined && requested.groupName !== group.name) ||
-        (requested?.modifierName !== undefined && requested.modifierName !== option.name) ||
-        (requested?.priceDeltaVnd !== undefined && requested.priceDeltaVnd !== option.priceDeltaVnd)
+        (requested?.groupName !== undefined &&
+          requested.groupName !== group.name) ||
+        (requested?.modifierName !== undefined &&
+          requested.modifierName !== option.name) ||
+        (requested?.priceDeltaVnd !== undefined &&
+          requested.priceDeltaVnd !== option.priceDeltaVnd)
       ) {
-        resolutionFailure = fail('invalid_modifier_evidence', `Modifier evidence does not match ${modifierId}`);
+        resolutionFailure = fail(
+          'invalid_modifier_evidence',
+          `Modifier evidence does not match ${modifierId}`,
+        );
         return false;
       }
 
       const selectionKey = `${group.groupId}:${option.modifierId}`;
       if (requested && explicitKeys.has(selectionKey)) {
-        resolutionFailure = fail('duplicate_modifier', `Modifier ${modifierId} was selected more than once`);
+        resolutionFailure = fail(
+          'duplicate_modifier',
+          `Modifier ${modifierId} was selected more than once`,
+        );
         return false;
       }
       if (requested) explicitKeys.add(selectionKey);
 
-      if (indexed.parent && !resolveSelection(indexed.parent.groupId, indexed.parent.modifierId)) {
+      if (
+        indexed.parent &&
+        !resolveSelection(indexed.parent.groupId, indexed.parent.modifierId)
+      ) {
         return false;
       }
 
-      const fixtureQuantity = typeof option.quantity === 'number' && option.quantity > 0 ? option.quantity : undefined;
+      const fixtureQuantity =
+        typeof option.quantity === 'number' && option.quantity > 0
+          ? option.quantity
+          : undefined;
       const fixedGroupQuantity =
-        typeof group.min === 'number' && group.min > 0 && group.min === group.max ? group.min : undefined;
-      const quantity = requested?.quantity ?? fixtureQuantity ?? fixedGroupQuantity;
+        typeof group.min === 'number' &&
+        group.min > 0 &&
+        group.min === group.max
+          ? group.min
+          : undefined;
+      const quantity =
+        requested?.quantity ?? fixtureQuantity ?? fixedGroupQuantity;
       if (!quantity || !Number.isInteger(quantity) || quantity <= 0) {
-        resolutionFailure = fail('invalid_modifier_quantity', `Modifier quantity is required for ${modifierId}`);
+        resolutionFailure = fail(
+          'invalid_modifier_quantity',
+          `Modifier quantity is required for ${modifierId}`,
+        );
         return false;
       }
 
       const existing = resolvedByKey.get(selectionKey);
       if (existing) {
-        if (requested?.quantity !== undefined && requested.quantity !== existing.quantity) {
-          resolutionFailure = fail('invalid_modifier_quantity', `Modifier quantity conflicts for ${modifierId}`);
+        if (
+          requested?.quantity !== undefined &&
+          requested.quantity !== existing.quantity
+        ) {
+          resolutionFailure = fail(
+            'invalid_modifier_quantity',
+            `Modifier quantity conflicts for ${modifierId}`,
+          );
           return false;
         }
         return true;
       }
 
       const conflictingSelection = resolved.find(
-        (selection) => selection.groupId === group.groupId && selection.modifierId !== option.modifierId,
+        (selection) =>
+          selection.groupId === group.groupId &&
+          selection.modifierId !== option.modifierId,
       );
       if (conflictingSelection && group.max === 1) {
         resolutionFailure = fail(
@@ -244,7 +332,13 @@ export function createMockClients(fixtures: GeneratedFixtures, options: MockClie
 
     for (const modifier of change.modifiers) {
       if (!resolveSelection(modifier.groupId, modifier.modifierId, modifier)) {
-        return resolutionFailure ?? fail('invalid_modifier', `Modifier ${modifier.modifierId} could not be resolved`);
+        return (
+          resolutionFailure ??
+          fail(
+            'invalid_modifier',
+            `Modifier ${modifier.modifierId} could not be resolved`,
+          )
+        );
       }
     }
 
@@ -257,14 +351,34 @@ export function createMockClients(fixtures: GeneratedFixtures, options: MockClie
     }
     for (const [groupId, selections] of selectedByGroup) {
       const indexed = indexedGroups.get(groupId)!;
-      const selectedQuantity = selections.reduce((sum, selection) => sum + selection.quantity, 0);
-      if (typeof indexed.group.min === 'number' && selectedQuantity < indexed.group.min) {
-        return fail('modifier_min_not_met', `Modifier group ${groupId} requires at least ${indexed.group.min}`);
+      const selectedQuantity = selections.reduce(
+        (sum, selection) => sum + selection.quantity,
+        0,
+      );
+      if (
+        typeof indexed.group.min === 'number' &&
+        selectedQuantity < indexed.group.min
+      ) {
+        return fail(
+          'modifier_min_not_met',
+          `Modifier group ${groupId} requires at least ${indexed.group.min}`,
+        );
       }
-      if (typeof indexed.group.max === 'number' && selectedQuantity > indexed.group.max) {
-        return fail('modifier_max_exceeded', `Modifier group ${groupId} allows at most ${indexed.group.max}`);
+      if (
+        typeof indexed.group.max === 'number' &&
+        selectedQuantity > indexed.group.max
+      ) {
+        return fail(
+          'modifier_max_exceeded',
+          `Modifier group ${groupId} allows at most ${indexed.group.max}`,
+        );
       }
-      if (indexed.parent && !selectedKeys.has(`${indexed.parent.groupId}:${indexed.parent.modifierId}`)) {
+      if (
+        indexed.parent &&
+        !selectedKeys.has(
+          `${indexed.parent.groupId}:${indexed.parent.modifierId}`,
+        )
+      ) {
         return fail(
           'modifier_parent_missing',
           `Nested modifier group ${groupId} requires its verified parent selection`,
@@ -273,10 +387,14 @@ export function createMockClients(fixtures: GeneratedFixtures, options: MockClie
     }
     return ok(resolved);
   };
-  const applyCartChanges = async (cart: Cart, changes: CartChange[]): Promise<ToolResult<Cart>> => {
+  const applyCartChanges = async (
+    cart: Cart,
+    changes: CartChange[],
+  ): Promise<ToolResult<Cart>> => {
     const unavailableItemCodes = currentUnavailableItemCodes();
     const unavailableAddition = changes.find(
-      (change) => change.quantity > 0 && unavailableItemCodes.has(change.itemCode),
+      (change) =>
+        change.quantity > 0 && unavailableItemCodes.has(change.itemCode),
     );
     if (unavailableAddition) {
       return fail(
@@ -288,14 +406,25 @@ export function createMockClients(fixtures: GeneratedFixtures, options: MockClie
     const resolvedModifiersByChange = new Map<CartChange, SelectedModifier[]>();
     for (const change of changes) {
       if (!Number.isInteger(change.quantity) || change.quantity < 0) {
-        return fail('invalid_quantity', `Invalid quantity for ${change.itemCode}`);
+        return fail(
+          'invalid_quantity',
+          `Invalid quantity for ${change.itemCode}`,
+        );
       }
       const item = menuByCode.get(change.itemCode);
-      if (!item) return fail('item_not_found', `No menu item found for ${change.itemCode}`);
-      if (!item.available) return fail('item_unavailable', `${item.name} is unavailable`);
+      if (!item)
+        return fail(
+          'item_not_found',
+          `No menu item found for ${change.itemCode}`,
+        );
+      if (!item.available)
+        return fail('item_unavailable', `${item.name} is unavailable`);
       const modifierResolution = resolveModifiers(change);
       if (!modifierResolution.ok) {
-        return fail(modifierResolution.errorCode ?? 'invalid_modifier', modifierResolution.message);
+        return fail(
+          modifierResolution.errorCode ?? 'invalid_modifier',
+          modifierResolution.message,
+        );
       }
       resolvedModifiersByChange.set(change, modifierResolution.value ?? []);
     }
@@ -304,7 +433,9 @@ export function createMockClients(fixtures: GeneratedFixtures, options: MockClie
     for (const change of changes) {
       const item = menuByCode.get(change.itemCode)!;
       const modifiers = resolvedModifiersByChange.get(change) ?? [];
-      nextItems = nextItems.filter((cartItem) => cartItem.itemCode !== change.itemCode);
+      nextItems = nextItems.filter(
+        (cartItem) => cartItem.itemCode !== change.itemCode,
+      );
       if (change.quantity > 0) {
         nextItems.push({
           itemCode: change.itemCode,
@@ -326,14 +457,23 @@ export function createMockClients(fixtures: GeneratedFixtures, options: MockClie
     address: FulfillmentAddressInput,
     itemCodes: string[] = [],
     method: FulfillmentMethod = 'delivery',
-  ): { store: ReturnType<typeof data.searchStores>[number]; resolvedAddress: Address } | undefined => {
+  ):
+    | {
+        store: ReturnType<typeof data.searchStores>[number];
+        resolvedAddress: Address;
+      }
+    | undefined => {
     const exactMatches = data.searchStores({
-      query: [address.line1, address.district, address.city].filter(Boolean).join(' '),
+      query: [address.line1, address.district, address.city]
+        .filter(Boolean)
+        .join(' '),
     });
     const normalizedLine1 = normalizeLocationPart(address.line1);
     const rankedExactMatches = exactMatches
       .map((store) => {
-        const normalizedName = normalizeLocationPart(store.name.replace(/^KFC\s+/i, ''));
+        const normalizedName = normalizeLocationPart(
+          store.name.replace(/^KFC\s+/i, ''),
+        );
         const normalizedAddress = normalizeLocationPart(store.address);
         const score =
           normalizedName === normalizedLine1
@@ -348,28 +488,25 @@ export function createMockClients(fixtures: GeneratedFixtures, options: MockClie
       .sort((left, right) => right.score - left.score);
     const uniquelyRankedStore =
       rankedExactMatches.length > 0 &&
-      (rankedExactMatches.length === 1 || rankedExactMatches[0]!.score > rankedExactMatches[1]!.score)
+      (rankedExactMatches.length === 1 ||
+        rankedExactMatches[0]!.score > rankedExactMatches[1]!.score)
         ? rankedExactMatches[0]!.store
         : undefined;
     const serviceAreaMatches = fixtures.fulfillmentServiceAreas.filter(
       (area) =>
         area.method === method &&
-        (
-          address.district === null ||
+        (address.district === null ||
           area.districts.some(
             (district) =>
               normalizeLocationPart(district) ===
               normalizeLocationPart(address.district!),
-          )
-        ) &&
-        (
-          address.city === null ||
+          )) &&
+        (address.city === null ||
           area.cities.some(
             (city) =>
               normalizeLocationPart(city) ===
               normalizeLocationPart(address.city!),
-          )
-        ),
+          )),
     );
     const rankedAreaMatches = uniquelyRankedStore
       ? serviceAreaMatches.filter(
@@ -405,35 +542,22 @@ export function createMockClients(fixtures: GeneratedFixtures, options: MockClie
     address: Address,
     itemCodes: string[] = [],
     method: FulfillmentMethod = 'delivery',
-  ) =>
-    resolveFulfillment(address, itemCodes, method)?.store;
+  ) => resolveFulfillment(address, itemCodes, method)?.store;
 
-  const membershipActions =
-    createMockMembershipActions(data, mutationReplay);
+  const membershipActions = createMockMembershipActions(data, mutationReplay);
 
   return {
     providerCapabilities: {
       handoffResolution: true,
     },
-    confirmationAuthority: {
-      environment: 'sandbox',
-      scenarioId: 'mock-commerce',
-      catalogObservationId: catalogRevision,
-      catalogObservationHash: catalogRevision,
-      providerRevision: providerRevision(),
-      async revalidate(binding) {
-        return binding.environment === 'sandbox' &&
-          binding.scenarioId === 'mock-commerce' &&
-          binding.catalogObservationId === catalogRevision &&
-          binding.catalogObservationHash === catalogRevision &&
-          binding.providerRevision === providerRevision()
-          ? { ok: true }
-          : { ok: false, reason: 'Mock commerce binding changed' };
-      },
-    },
     menu: {
       async searchMenu(query) {
-        return ok(data.searchMenu(query).map(toMenuItem).map(applyCurrentMenuAvailability));
+        return ok(
+          data
+            .searchMenu(query)
+            .map(toMenuItem)
+            .map(applyCurrentMenuAvailability),
+        );
       },
       async getItemDetails(code) {
         const item = data.getMenuItem(code);
@@ -443,7 +567,9 @@ export function createMockClients(fixtures: GeneratedFixtures, options: MockClie
       },
       async getModifierOptions(code) {
         const tree = data.getModifierTree(code);
-        return tree ? ok(tree) : fail('modifiers_not_found', `No modifier tree found for ${code}`);
+        return tree
+          ? ok(tree)
+          : fail('modifiers_not_found', `No modifier tree found for ${code}`);
       },
     },
     cart: {
@@ -480,17 +606,28 @@ export function createMockClients(fixtures: GeneratedFixtures, options: MockClie
       },
       async explainPromotion(offerId) {
         const offer = data.explainPromotion(offerId);
-        return offer ? ok(offer) : fail('promotion_not_found', `No promotion found for ${offerId}`);
+        return offer
+          ? ok(offer)
+          : fail('promotion_not_found', `No promotion found for ${offerId}`);
       },
       async validateVoucher(cart, voucherCode) {
         const validation = data.validateVoucherInput({
           inputCodeOrText: voucherCode,
           subtotalVnd: cart.subtotalVnd,
         });
-        if (!validation.ok) return fail(validation.reason, 'Voucher could not be validated from public fixture data');
+        if (!validation.ok)
+          return fail(
+            validation.reason,
+            'Voucher could not be validated from public fixture data',
+          );
         return ok(
           {
-            ...priceCart(cart.items, validation.publicCode, cart.deliveryFeeVnd, validation.discountVnd),
+            ...priceCart(
+              cart.items,
+              validation.publicCode,
+              cart.deliveryFeeVnd,
+              validation.discountVnd,
+            ),
             id: cart.id,
           },
           'voucher_applied',
@@ -510,7 +647,10 @@ export function createMockClients(fixtures: GeneratedFixtures, options: MockClie
         const profile = data.getMembershipProfile();
         return profile
           ? ok(profile)
-          : fail('membership_profile_not_found', 'No membership profile snapshot fixture is available');
+          : fail(
+              'membership_profile_not_found',
+              'No membership profile snapshot fixture is available',
+            );
       },
       async listRewards(input) {
         return ok(data.listMembershipRewards(input.query));
@@ -522,7 +662,10 @@ export function createMockClients(fixtures: GeneratedFixtures, options: MockClie
         const history = data.getMembershipPointHistory(input.days);
         return history
           ? ok(history)
-          : fail('membership_point_history_not_found', 'No membership point history fixture is available');
+          : fail(
+              'membership_point_history_not_found',
+              'No membership point history fixture is available',
+            );
       },
       async listTools(input) {
         return ok(data.listMembershipTools(input.sideEffect));
@@ -531,16 +674,14 @@ export function createMockClients(fixtures: GeneratedFixtures, options: MockClie
     },
     inventory: {
       async getAvailabilityRevision() {
-        return ok(await mockInventoryProviderRevision({
-          fixtures,
-          profile: currentMockedUpstreamProfile(),
-        }));
+        return ok(
+          await mockInventoryProviderRevision({
+            fixtures,
+            profile: currentMockedUpstreamProfile(),
+          }),
+        );
       },
-      async checkInventoryWithAuthority(
-        storeId,
-        itemCodes,
-        disposition,
-      ) {
+      async checkInventoryWithAuthority(storeId, itemCodes, disposition) {
         return checkMockInventoryWithAuthority({
           data,
           fixtures,
@@ -563,7 +704,11 @@ export function createMockClients(fixtures: GeneratedFixtures, options: MockClie
     storeLocator: {
       async assignStore(address: Address, _itemCodes: string[]) {
         const store = resolveStore(address, _itemCodes, 'delivery');
-        if (!store) return fail('store_not_found', 'No store matched the requested fulfillment address');
+        if (!store)
+          return fail(
+            'store_not_found',
+            'No store matched the requested fulfillment address',
+          );
         return ok({ storeId: store.storeId });
       },
       async findStores(input) {
@@ -579,11 +724,7 @@ export function createMockClients(fixtures: GeneratedFixtures, options: MockClie
     },
     fulfillment: {
       async quoteFulfillment(input, externalCallContext) {
-        const resolution = resolveFulfillment(
-          input.address,
-          [],
-          input.method,
-        );
+        const resolution = resolveFulfillment(input.address, [], input.method);
         if (!resolution) {
           return fail(
             'address_resolution_failed',
@@ -592,8 +733,14 @@ export function createMockClients(fixtures: GeneratedFixtures, options: MockClie
         }
         const { resolvedAddress, store } = resolution;
         const mockedProfile = currentMockedUpstreamProfile();
-        const mockedUnavailableItemCodes = new Set(mockedProfile?.unavailableItemCodes ?? []);
-        if (input.itemCodes.some((itemCode) => mockedUnavailableItemCodes.has(itemCode))) {
+        const mockedUnavailableItemCodes = new Set(
+          mockedProfile?.unavailableItemCodes ?? [],
+        );
+        if (
+          input.itemCodes.some((itemCode) =>
+            mockedUnavailableItemCodes.has(itemCode),
+          )
+        ) {
           return fail(
             'items_unavailable',
             'One or more items are unavailable in the current mocked upstream API response',
@@ -605,7 +752,10 @@ export function createMockClients(fixtures: GeneratedFixtures, options: MockClie
           itemIds: input.itemCodes,
         });
         if (!availability.ok)
-          return fail('items_unavailable', 'One or more items are unavailable for this store/disposition');
+          return fail(
+            'items_unavailable',
+            'One or more items are unavailable for this store/disposition',
+          );
         const mockedQuote =
           typeof mockedProfile?.deliveryFeeVnd === 'number' &&
           Number.isInteger(mockedProfile.deliveryFeeVnd) &&
@@ -635,7 +785,9 @@ export function createMockClients(fixtures: GeneratedFixtures, options: MockClie
                   externalCallContext,
                 )
               : (() => {
-                  const fixtureQuote = fulfillmentQuoteByStoreAndMethod.get(`${store.storeId}:${input.method}`);
+                  const fixtureQuote = fulfillmentQuoteByStoreAndMethod.get(
+                    `${store.storeId}:${input.method}`,
+                  );
                   return fixtureQuote
                     ? ok(
                         {
@@ -651,7 +803,10 @@ export function createMockClients(fixtures: GeneratedFixtures, options: MockClie
                 })()),
         );
         if (!quote.ok) {
-          return fail(quote.errorCode ?? 'fulfillment_quote_unavailable', quote.message);
+          return fail(
+            quote.errorCode ?? 'fulfillment_quote_unavailable',
+            quote.message,
+          );
         }
         return ok({
           method: input.method,
@@ -676,7 +831,10 @@ export function createMockClients(fixtures: GeneratedFixtures, options: MockClie
     invoice: {
       async collectInvoice(input) {
         if (!input.companyName || !input.taxCode || !input.email) {
-          return fail('invoice_fields_missing', 'Company name, tax code, and email are required for invoice requests');
+          return fail(
+            'invoice_fields_missing',
+            'Company name, tax code, and email are required for invoice requests',
+          );
         }
         return ok({
           companyName: input.companyName,
@@ -699,7 +857,10 @@ export function createMockClients(fixtures: GeneratedFixtures, options: MockClie
       async placeOrder(input, _externalCallContext, mutationIdentity) {
         return mutationReplay.run(mutationIdentity, async () => {
           if (!input.userConfirmed) {
-            return fail('confirmation_required', 'User confirmation is required before order placement');
+            return fail(
+              'confirmation_required',
+              'User confirmation is required before order placement',
+            );
           }
           const order: Order = orderWithoutDeliveryEstimate({
             ...input.preview,
@@ -733,10 +894,13 @@ export function createMockClients(fixtures: GeneratedFixtures, options: MockClie
       },
       async cancelOrder(orderId) {
         const order = orders.get(orderId);
-        if (!order) return fail('order_not_found', `Order ${orderId} was not found`);
+        if (!order)
+          return fail('order_not_found', `Order ${orderId} was not found`);
 
-        const cancelled: Order =
-          orderWithoutDeliveryEstimate({ ...order, status: 'cancelled' });
+        const cancelled: Order = orderWithoutDeliveryEstimate({
+          ...order,
+          status: 'cancelled',
+        });
         orders.set(orderId, cancelled);
         return ok(cancelled, 'order_cancelled');
       },
@@ -745,7 +909,12 @@ export function createMockClients(fixtures: GeneratedFixtures, options: MockClie
       async listMethods(input) {
         return ok(data.listPaymentMethods(input));
       },
-      async createPaymentLink(order, methodId, _externalCallContext, mutationIdentity) {
+      async createPaymentLink(
+        order,
+        methodId,
+        _externalCallContext,
+        mutationIdentity,
+      ) {
         return mutationReplay.run(mutationIdentity, async () => {
           if (order.id === '.' || order.id === '..') {
             return fail(
@@ -778,9 +947,14 @@ export function createMockClients(fixtures: GeneratedFixtures, options: MockClie
       },
       async checkPaymentStatus(orderId, externalCallContext) {
         if (options.paymentStatusProvider) {
-          return withMockProvenance(await options.paymentStatusProvider(orderId, externalCallContext));
+          return withMockProvenance(
+            await options.paymentStatusProvider(orderId, externalCallContext),
+          );
         }
-        return fail('payment_failed', 'Mock payment is configured to fail until retried or changed to COD');
+        return fail(
+          'payment_failed',
+          'Mock payment is configured to fail until retried or changed to COD',
+        );
       },
     },
     delivery: {
@@ -791,21 +965,36 @@ export function createMockClients(fixtures: GeneratedFixtures, options: MockClie
     customer: {
       async getSavedAddresses(customerId, externalCallContext) {
         if (options.savedAddressesProvider) {
-          return withMockProvenance(await options.savedAddressesProvider(customerId, externalCallContext));
+          return withMockProvenance(
+            await options.savedAddressesProvider(
+              customerId,
+              externalCallContext,
+            ),
+          );
         }
         return ok([]);
       },
       async getRecentOrder(customerId, externalCallContext) {
         if (options.recentOrderProvider) {
-          return recentOrderResultWithoutStatusEvidence(withMockProvenance(
-            await options.recentOrderProvider(customerId, externalCallContext),
-          ));
+          return recentOrderResultWithoutStatusEvidence(
+            withMockProvenance(
+              await options.recentOrderProvider(
+                customerId,
+                externalCallContext,
+              ),
+            ),
+          );
         }
         return ok(null);
       },
       async getFavoriteItems(customerId, externalCallContext) {
         if (options.favoriteItemsProvider) {
-          return withMockProvenance(await options.favoriteItemsProvider(customerId, externalCallContext));
+          return withMockProvenance(
+            await options.favoriteItemsProvider(
+              customerId,
+              externalCallContext,
+            ),
+          );
         }
         return ok([]);
       },

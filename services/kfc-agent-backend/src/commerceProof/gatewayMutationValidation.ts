@@ -1,6 +1,6 @@
-import { z } from "zod";
-import { opaqueProviderIdSchema } from "../domain/opaqueProviderId.js";
-import type { CommerceCommand } from "./contracts.js";
+import { z } from 'zod';
+import { opaqueProviderIdSchema } from '../domain/opaqueProviderId.js';
+import type { CommerceCommand } from './contracts.js';
 import {
   deriveGatewayProviderMutationIdentity,
   gatewayOmsCancellationAction,
@@ -10,24 +10,28 @@ import {
   gatewayPosSubmitInput,
   type GatewayCancellationContext,
   type GatewayProviderMutationIdentity,
-} from "./gatewayMutationIdentity.js";
+} from './gatewayMutationIdentity.js';
 import type {
   GatewayMutationSnapshotBindings,
   StoredCommerceOrderMutation,
   StoredGatewayMutationAuthority,
-} from "./gatewayMutationContracts.js";
+} from './gatewayMutationContracts.js';
 
 const pathSafeIdentifierSchema = opaqueProviderIdSchema.refine(
-  (value) => value !== "." && value !== "..",
-  { message: "Identifier must not be a URL dot segment" },
+  (value) => value !== '.' && value !== '..',
+  { message: 'Identifier must not be a URL dot segment' },
 );
-const canonicalPaymentPayloadSchema = z.object({
-  commerceOrderId: pathSafeIdentifierSchema,
-  methodId: opaqueProviderIdSchema,
-}).strict();
-const canonicalCancellationPayloadSchema = z.object({
-  commerceOrderId: pathSafeIdentifierSchema,
-}).strict();
+const canonicalPaymentPayloadSchema = z
+  .object({
+    commerceOrderId: pathSafeIdentifierSchema,
+    methodId: opaqueProviderIdSchema,
+  })
+  .strict();
+const canonicalCancellationPayloadSchema = z
+  .object({
+    commerceOrderId: pathSafeIdentifierSchema,
+  })
+  .strict();
 
 export function validateStoredOrderPhase(
   stored: StoredCommerceOrderMutation,
@@ -43,51 +47,47 @@ export function validateStoredOrderPhase(
   );
   const expectedOmsIdentity = deriveGatewayProviderMutationIdentity(
     rootIdentity,
-    "oms_create",
+    'oms_create',
     omsCreateInput,
   );
-  const completedOutcome = stored.state === "completed"
-    ? stored.response?.outcome
-    : undefined;
+  const completedOutcome =
+    stored.state === 'completed' ? stored.response?.outcome : undefined;
   const needsOmsSuccess =
     [
-      "pos_submit_pending",
-      "pos_submit_unknown",
-      "pos_submit_accepted",
-      "oms_compensation_pending",
-      "oms_compensation_unknown",
-      "oms_compensation_succeeded",
-      "oms_compensation_failed",
+      'pos_submit_pending',
+      'pos_submit_unknown',
+      'pos_submit_accepted',
+      'oms_compensation_pending',
+      'oms_compensation_unknown',
+      'oms_compensation_succeeded',
+      'oms_compensation_failed',
     ].includes(stored.state) ||
-    completedOutcome === "accepted" ||
-    completedOutcome === "pos_rejected";
+    completedOutcome === 'accepted' ||
+    completedOutcome === 'pos_rejected';
   const needsOmsFailure =
-    stored.state === "oms_create_failed" ||
-    completedOutcome === "failed";
+    stored.state === 'oms_create_failed' || completedOutcome === 'failed';
   const needsPosIdentity = needsOmsSuccess;
   const needsPosSuccess =
-    stored.state === "pos_submit_accepted" ||
-    completedOutcome === "accepted";
+    stored.state === 'pos_submit_accepted' || completedOutcome === 'accepted';
   const needsPosRejection =
     [
-      "oms_compensation_pending",
-      "oms_compensation_unknown",
-      "oms_compensation_succeeded",
-      "oms_compensation_failed",
-    ].includes(stored.state) ||
-    completedOutcome === "pos_rejected";
+      'oms_compensation_pending',
+      'oms_compensation_unknown',
+      'oms_compensation_succeeded',
+      'oms_compensation_failed',
+    ].includes(stored.state) || completedOutcome === 'pos_rejected';
   const compensationSucceeded =
-    stored.state === "oms_compensation_succeeded" ||
-    (completedOutcome === "pos_rejected" &&
-      stored.response?.omsStatus === "cancelled");
+    stored.state === 'oms_compensation_succeeded' ||
+    (completedOutcome === 'pos_rejected' &&
+      stored.response?.omsStatus === 'cancelled');
   const compensationFailed =
-    stored.state === "oms_compensation_failed" ||
-    (completedOutcome === "pos_rejected" &&
-      stored.response?.omsStatus === "cancellation_failed");
+    stored.state === 'oms_compensation_failed' ||
+    (completedOutcome === 'pos_rejected' &&
+      stored.response?.omsStatus === 'cancellation_failed');
   const expectedPosIdentity = stored.omsOrderId
     ? deriveGatewayProviderMutationIdentity(
         rootIdentity,
-        "pos_submit",
+        'pos_submit',
         gatewayPosSubmitInput(
           stored.command,
           stored.commerceOrderId,
@@ -98,7 +98,7 @@ export function validateStoredOrderPhase(
   const expectedCompensationIdentity = stored.omsOrderId
     ? deriveGatewayProviderMutationIdentity(
         rootIdentity,
-        "oms_compensate",
+        'oms_compensate',
         gatewayOmsCompensationAction(stored.omsOrderId, {
           traceId: stored.command.traceId,
           scenarioId: stored.command.scenarioId,
@@ -113,9 +113,9 @@ export function validateStoredOrderPhase(
         scenarioId: stored.command.scenarioId,
         commerceOrderId: stored.commerceOrderId,
         omsOrderId: stored.omsOrderId,
-        omsStatus: "created",
-        commerceEnvironment: "sandbox",
-        providerImplementation: "http-adapter",
+        omsStatus: 'created',
+        commerceEnvironment: 'sandbox',
+        providerImplementation: 'http-adapter',
       }
     : undefined;
   const expectedPosRejection = stored.omsOrderId
@@ -124,8 +124,8 @@ export function validateStoredOrderPhase(
         scenarioId: stored.command.scenarioId,
         commerceOrderId: stored.commerceOrderId,
         omsOrderId: stored.omsOrderId,
-        errorCode: "pos_order_rejected",
-        posStatus: "rejected",
+        errorCode: 'pos_order_rejected',
+        posStatus: 'rejected',
         statusCode: 409,
       }
     : undefined;
@@ -142,10 +142,9 @@ export function validateStoredOrderPhase(
       stored.omsCreateEvidence,
       expectedOmsEvidence,
     ) ||
-    needsOmsFailure !==
-      (stored.omsCreateFailureEvidence !== undefined) ||
+    needsOmsFailure !== (stored.omsCreateFailureEvidence !== undefined) ||
     (stored.omsCreateFailureEvidence !== undefined &&
-      (stored.omsCreateFailureEvidence.operation !== "oms_create" ||
+      (stored.omsCreateFailureEvidence.operation !== 'oms_create' ||
         !evidenceContextMatches(
           stored.omsCreateFailureEvidence,
           stored.command,
@@ -164,7 +163,7 @@ export function validateStoredOrderPhase(
         stored.commerceOrderId,
       ) ||
         stored.posSubmitEvidence.omsOrderId !== stored.omsOrderId ||
-        (completedOutcome === "accepted" &&
+        (completedOutcome === 'accepted' &&
           stored.posSubmitEvidence.posTicketId !==
             stored.response?.posTicketId))) ||
     !requiredIdentityMatches(
@@ -177,8 +176,7 @@ export function validateStoredOrderPhase(
       stored.posRejectionEvidence,
       expectedPosRejection,
     ) ||
-    compensationSucceeded !==
-      (stored.omsCompensationEvidence !== undefined) ||
+    compensationSucceeded !== (stored.omsCompensationEvidence !== undefined) ||
     (stored.omsCompensationEvidence !== undefined &&
       (!evidenceContextMatches(
         stored.omsCompensationEvidence,
@@ -189,8 +187,7 @@ export function validateStoredOrderPhase(
     compensationFailed !==
       (stored.omsCompensationFailureEvidence !== undefined) ||
     (stored.omsCompensationFailureEvidence !== undefined &&
-      (stored.omsCompensationFailureEvidence.operation !==
-        "oms_compensate" ||
+      (stored.omsCompensationFailureEvidence.operation !== 'oms_compensate' ||
         !evidenceContextMatches(
           stored.omsCompensationFailureEvidence,
           stored.command,
@@ -199,20 +196,20 @@ export function validateStoredOrderPhase(
         stored.omsCompensationFailureEvidence.omsOrderId !==
           stored.omsOrderId)) ||
     (stored.response !== undefined &&
-      ((stored.response.outcome !== "failed" &&
+      ((stored.response.outcome !== 'failed' &&
         stored.response.omsOrderId !== stored.omsOrderId) ||
-        (stored.response.outcome === "accepted" &&
-          (stored.response.posStatus !== "accepted" ||
+        (stored.response.outcome === 'accepted' &&
+          (stored.response.posStatus !== 'accepted' ||
             stored.response.posTicketId !==
               stored.posSubmitEvidence?.posTicketId)) ||
-        (stored.response.outcome === "pos_rejected" &&
-          (stored.response.posStatus !== "rejected" ||
+        (stored.response.outcome === 'pos_rejected' &&
+          (stored.response.posStatus !== 'rejected' ||
             (compensationSucceeded &&
-              stored.response.omsStatus !== "cancelled") ||
+              stored.response.omsStatus !== 'cancelled') ||
             (compensationFailed &&
-              stored.response.omsStatus !== "cancellation_failed")))))
+              stored.response.omsStatus !== 'cancellation_failed')))))
   ) {
-    snapshotIssue(context, "Stored order mutation phase is inconsistent");
+    snapshotIssue(context, 'Stored order mutation phase is inconsistent');
   }
 }
 
@@ -230,15 +227,15 @@ export function validateGatewayMutationSnapshotBindings(
   if (hasDurableMutationState && !snapshot.providerRuntimeBinding) {
     snapshotIssue(
       context,
-      "Durable mutations require an exact provider runtime binding",
+      'Durable mutations require an exact provider runtime binding',
     );
   }
   const collections = [
-    ["ordersByIdempotencyKey", snapshot.ordersByIdempotencyKey],
-    ["orderKeyByCommerceOrderId", snapshot.orderKeyByCommerceOrderId],
-    ["authorityByIdempotencyKey", snapshot.authorityByIdempotencyKey],
-    ["paymentLinksByIdempotencyKey", snapshot.paymentLinksByIdempotencyKey],
-    ["cancellationsByIdempotencyKey", snapshot.cancellationsByIdempotencyKey],
+    ['ordersByIdempotencyKey', snapshot.ordersByIdempotencyKey],
+    ['orderKeyByCommerceOrderId', snapshot.orderKeyByCommerceOrderId],
+    ['authorityByIdempotencyKey', snapshot.authorityByIdempotencyKey],
+    ['paymentLinksByIdempotencyKey', snapshot.paymentLinksByIdempotencyKey],
+    ['cancellationsByIdempotencyKey', snapshot.cancellationsByIdempotencyKey],
   ] as const;
   for (const [name, entries] of collections) {
     if (new Set(entries.map(([key]) => key)).size !== entries.length) {
@@ -263,7 +260,7 @@ export function validateGatewayMutationSnapshotBindings(
       ? Number.parseInt(sequenceText, 10)
       : Number.NaN;
     const expectedCommerceOrderId = Number.isSafeInteger(sequence)
-      ? `COM-${String(sequence).padStart(4, "0")}`
+      ? `COM-${String(sequence).padStart(4, '0')}`
       : undefined;
     if (
       !Number.isSafeInteger(sequence) ||
@@ -271,7 +268,7 @@ export function validateGatewayMutationSnapshotBindings(
       stored.commerceOrderId !== expectedCommerceOrderId ||
       seenCommerceSequences.has(sequence)
     ) {
-      snapshotIssue(context, "Stored commerce order ID is not sequence-bound");
+      snapshotIssue(context, 'Stored commerce order ID is not sequence-bound');
     } else {
       maximumSequence = Math.max(maximumSequence, sequence);
       seenCommerceSequences.add(sequence);
@@ -282,12 +279,12 @@ export function validateGatewayMutationSnapshotBindings(
       seenCommerceOrderIds.has(stored.commerceOrderId) ||
       !authorityMatches(
         authorities.get(key),
-        "placeOrder",
+        'placeOrder',
         stored.command.bindingFingerprint,
         stored.canonicalPayload,
       )
     ) {
-      snapshotIssue(context, "Stored order mutation bindings are inconsistent");
+      snapshotIssue(context, 'Stored order mutation bindings are inconsistent');
     }
     seenCommerceOrderIds.add(stored.commerceOrderId);
   }
@@ -295,11 +292,11 @@ export function validateGatewayMutationSnapshotBindings(
     snapshot.nextCommerceSequence !== maximumSequence ||
     seenCommerceSequences.size !== snapshot.nextCommerceSequence
   ) {
-    snapshotIssue(context, "Commerce order sequence is not monotonic");
+    snapshotIssue(context, 'Commerce order sequence is not monotonic');
   }
   for (const [commerceOrderId, key] of snapshot.orderKeyByCommerceOrderId) {
     if (orders.get(key)?.commerceOrderId !== commerceOrderId) {
-      snapshotIssue(context, "Commerce order reverse index is inconsistent");
+      snapshotIssue(context, 'Commerce order reverse index is inconsistent');
     }
   }
 
@@ -314,7 +311,7 @@ export function validateGatewayMutationSnapshotBindings(
       !orderIsReplayable(orders, orderKeys, payload.commerceOrderId) ||
       !authorityMatches(
         authorities.get(key),
-        "createPaymentLink",
+        'createPaymentLink',
         stored.bindingFingerprint,
         stored.canonicalPayload,
       ) ||
@@ -322,7 +319,7 @@ export function validateGatewayMutationSnapshotBindings(
         `https://pay.sandbox.invalid/method-${encodeURIComponent(payload.methodId)}/` +
           `order-${encodeURIComponent(payload.commerceOrderId)}`
     ) {
-      snapshotIssue(context, "Stored payment-link bindings are inconsistent");
+      snapshotIssue(context, 'Stored payment-link bindings are inconsistent');
     }
   }
 
@@ -334,32 +331,33 @@ export function validateGatewayMutationSnapshotBindings(
     const referencedOrder = payload
       ? replayableOrder(orders, orderKeys, payload.commerceOrderId)
       : undefined;
-    const accepted = referencedOrder?.response?.outcome === "accepted"
-      ? referencedOrder.response
-      : undefined;
+    const accepted =
+      referencedOrder?.response?.outcome === 'accepted'
+        ? referencedOrder.response
+        : undefined;
     const rootIdentity = {
       idempotencyKey: key,
       bindingFingerprint: stored.bindingFingerprint,
     };
     const expectedPosIdentity = deriveGatewayProviderMutationIdentity(
       rootIdentity,
-      "pos_cancel",
+      'pos_cancel',
       gatewayPosCancellationAction(stored.context),
     );
     const expectedOmsIdentity = deriveGatewayProviderMutationIdentity(
       rootIdentity,
-      "oms_cancel",
+      'oms_cancel',
       gatewayOmsCancellationAction(stored.context),
     );
     const needsPosSuccess =
       [
-        "oms_cancel_pending",
-        "oms_cancel_unknown",
-        "oms_cancel_succeeded",
-        "oms_cancel_failed",
+        'oms_cancel_pending',
+        'oms_cancel_unknown',
+        'oms_cancel_succeeded',
+        'oms_cancel_failed',
       ].includes(stored.state) ||
-      (stored.state === "completed" &&
-        stored.completionKind !== "pos_cancellation_failed");
+      (stored.state === 'completed' &&
+        stored.completionKind !== 'pos_cancellation_failed');
     const contextIsBound =
       payload?.commerceOrderId === stored.context.commerceOrderId &&
       accepted?.commerceOrderId === stored.context.commerceOrderId &&
@@ -372,23 +370,19 @@ export function validateGatewayMutationSnapshotBindings(
         stored.omsCancelIdentity,
         expectedOmsIdentity,
       ) &&
-      exactOptionalEvidence(
-        needsPosSuccess,
-        stored.posCancellationEvidence,
-        {
-          contractVersion: accepted?.contractVersion,
-          traceId: stored.context.traceId,
-          scenarioId: stored.context.scenarioId,
-          commerceOrderId: stored.context.commerceOrderId,
-          omsOrderId: stored.context.omsOrderId,
-          posTicketId: stored.context.posTicketId,
-          posStatus: "cancelled",
-          commerceEnvironment: "sandbox",
-          providerImplementation: "http-adapter",
-        },
-      ) &&
+      exactOptionalEvidence(needsPosSuccess, stored.posCancellationEvidence, {
+        contractVersion: accepted?.contractVersion,
+        traceId: stored.context.traceId,
+        scenarioId: stored.context.scenarioId,
+        commerceOrderId: stored.context.commerceOrderId,
+        omsOrderId: stored.context.omsOrderId,
+        posTicketId: stored.context.posTicketId,
+        posStatus: 'cancelled',
+        commerceEnvironment: 'sandbox',
+        providerImplementation: 'http-adapter',
+      }) &&
       (stored.posCancellationFailureEvidence === undefined ||
-        (stored.posCancellationFailureEvidence.operation === "pos_cancel" &&
+        (stored.posCancellationFailureEvidence.operation === 'pos_cancel' &&
           cancellationEvidenceContextMatches(
             stored.posCancellationFailureEvidence,
             stored.context,
@@ -400,18 +394,18 @@ export function validateGatewayMutationSnapshotBindings(
           scenarioId: stored.context.scenarioId,
           commerceOrderId: stored.context.commerceOrderId,
           omsOrderId: stored.context.omsOrderId,
-          omsStatus: "cancelled",
-          commerceEnvironment: "sandbox",
-          providerImplementation: "http-adapter",
+          omsStatus: 'cancelled',
+          commerceEnvironment: 'sandbox',
+          providerImplementation: 'http-adapter',
         })) &&
       (stored.omsCancellationFailureEvidence === undefined ||
-        (stored.omsCancellationFailureEvidence.operation === "oms_cancel" &&
+        (stored.omsCancellationFailureEvidence.operation === 'oms_cancel' &&
           cancellationEvidenceContextMatches(
             stored.omsCancellationFailureEvidence,
             stored.context,
           )));
     const completedResultIsBound =
-      stored.state !== "completed" ||
+      stored.state !== 'completed' ||
       (payload !== undefined &&
         stored.result?.commerceOrderId === payload.commerceOrderId &&
         stored.result.traceId === stored.context.traceId &&
@@ -424,22 +418,22 @@ export function validateGatewayMutationSnapshotBindings(
           accepted?.providerProvenance,
         ) &&
         ((stored.responseStatus === 200 &&
-          stored.result.outcome === "cancelled" &&
-          stored.result.customerStatus === "cancelled" &&
+          stored.result.outcome === 'cancelled' &&
+          stored.result.customerStatus === 'cancelled' &&
           stored.result.value.id === payload.commerceOrderId &&
           stored.result.value.commerceOrderId === payload.commerceOrderId &&
           stored.result.value.omsOrderId === stored.context.omsOrderId &&
           stored.result.value.posTicketId === stored.context.posTicketId &&
-          stored.result.value.posStatus === "cancelled" &&
-          stored.result.value.commerceOutcome === "cancelled" &&
-          stored.result.value.commerceCustomerStatus === "cancelled" &&
+          stored.result.value.posStatus === 'cancelled' &&
+          stored.result.value.commerceOutcome === 'cancelled' &&
+          stored.result.value.commerceCustomerStatus === 'cancelled' &&
           structurallyEqual(
             stored.result.value.commerceProviderProvenance,
             accepted?.providerProvenance,
           )) ||
           (stored.responseStatus === 409 &&
-            stored.result.outcome === "partial_cancellation" &&
-            stored.result.customerStatus === "failed")));
+            stored.result.outcome === 'partial_cancellation' &&
+            stored.result.customerStatus === 'failed')));
     if (
       !payload ||
       !contextIsBound ||
@@ -449,32 +443,35 @@ export function validateGatewayMutationSnapshotBindings(
       !completedResultIsBound ||
       !authorityMatches(
         authorities.get(key),
-        "cancelOrder",
+        'cancelOrder',
         stored.bindingFingerprint,
         stored.canonicalPayload,
       )
     ) {
-      snapshotIssue(context, "Stored cancellation bindings are inconsistent");
+      snapshotIssue(context, 'Stored cancellation bindings are inconsistent');
     }
     seenCancellationOrderIds.add(stored.context.commerceOrderId);
   }
 
   for (const [key, authority] of snapshot.authorityByIdempotencyKey) {
     const hasMutation =
-      authority.kind === "placeOrder"
+      authority.kind === 'placeOrder'
         ? orders.has(key)
-        : authority.kind === "createPaymentLink"
+        : authority.kind === 'createPaymentLink'
           ? payments.has(key)
           : cancellations.has(key);
     if (!hasMutation) {
-      snapshotIssue(context, "Mutation authority has no exact stored operation");
+      snapshotIssue(
+        context,
+        'Mutation authority has no exact stored operation',
+      );
     }
   }
 }
 
 function authorityMatches(
   authority: StoredGatewayMutationAuthority | undefined,
-  kind: StoredGatewayMutationAuthority["kind"],
+  kind: StoredGatewayMutationAuthority['kind'],
   bindingFingerprint: string,
   canonicalPayload: string,
 ): boolean {
@@ -488,10 +485,10 @@ function authorityMatches(
 function providerCheckpointMatches(
   required: boolean,
   omsOrderId: string | undefined,
-  omsStatus: "created" | undefined,
+  omsStatus: 'created' | undefined,
 ): boolean {
   return required
-    ? omsOrderId !== undefined && omsStatus === "created"
+    ? omsOrderId !== undefined && omsStatus === 'created'
     : omsOrderId === undefined && omsStatus === undefined;
 }
 
@@ -568,16 +565,13 @@ export function structurallyEqual(left: unknown, right: unknown): boolean {
     leftKeys.length === rightKeys.length &&
     leftKeys.every(
       (key, index) =>
-        key === rightKeys[index] &&
-        structurallyEqual(left[key], right[key]),
+        key === rightKeys[index] && structurallyEqual(left[key], right[key]),
     )
   );
 }
 
-function isPlainRecord(
-  value: unknown,
-): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
+function isPlainRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
 function providerIdentityEquals(
@@ -599,9 +593,9 @@ function replayableOrder(
 ): StoredCommerceOrderMutation | undefined {
   const key = orderKeys.get(commerceOrderId);
   const stored = key ? orders.get(key) : undefined;
-  return stored?.state === "completed" &&
-    stored.response?.outcome === "accepted" &&
-    stored.response.customerStatus === "accepted"
+  return stored?.state === 'completed' &&
+    stored.response?.outcome === 'accepted' &&
+    stored.response.customerStatus === 'accepted'
     ? stored
     : undefined;
 }

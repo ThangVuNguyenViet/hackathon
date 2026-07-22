@@ -7,9 +7,7 @@ import type {
   Order,
 } from '../domain/types.js';
 import type { VerifiedRef } from '../domain/verifiedRef.js';
-import {
-  agentStateWithCurrentOrderStatusEvidence,
-} from './orderStatusEvidenceProjection.js';
+import { agentStateWithCurrentOrderStatusEvidence } from './orderStatusEvidenceProjection.js';
 import {
   activeCartSupersedesSubmittedOrder,
   cartMatchesSubmittedOrder,
@@ -22,9 +20,7 @@ import type {
   VerifiedCollectionResult,
 } from '../ordering/types.js';
 import { paymentAttemptForVerifiedOrder } from '../ordering/paymentOrderAuthority.js';
-import {
-  responseEvidenceContractForTool,
-} from './responseEvidenceContracts.js';
+import { responseEvidenceContractForTool } from './responseEvidenceContracts.js';
 
 const terminalOrderStatuses = new Set<Order['status']>([
   'completed',
@@ -55,16 +51,8 @@ export interface ModelPublicationLifecycle {
     | 'terminal_hidden'
     | 'submitted_history_hidden';
   cart: 'none' | 'active' | 'terminal_history_hidden';
-  address:
-    | 'none'
-    | 'active'
-    | 'superseded_by_draft'
-    | 'history_hidden';
-  fulfillment:
-    | 'none'
-    | 'active'
-    | 'superseded_by_draft'
-    | 'history_hidden';
+  address: 'none' | 'active' | 'superseded_by_draft' | 'history_hidden';
+  fulfillment: 'none' | 'active' | 'superseded_by_draft' | 'history_hidden';
   payment: 'none' | 'active' | 'history_hidden';
   customerHistory: 'hidden';
 }
@@ -130,15 +118,10 @@ function projectAddressDraft(
   return Object.keys(projected).length > 0 ? projected : undefined;
 }
 
-function latestSuccessfulQuoteUsesSavedAddress(
-  state: AgentState,
-): boolean {
+function latestSuccessfulQuoteUsesSavedAddress(state: AgentState): boolean {
   const latestQuote = [...(state.toolTrace ?? [])]
     .reverse()
-    .find(
-      (entry) =>
-        entry.ok && entry.toolName === 'quoteFulfillment',
-    );
+    .find((entry) => entry.ok && entry.toolName === 'quoteFulfillment');
   if (!latestQuote) return false;
   const ref = latestQuote.arguments.savedAddressRef;
   return (
@@ -280,9 +263,7 @@ export function projectFulfillment(
   };
 }
 
-export function projectPromotionOffer(
-  value: Record<string, unknown>,
-): unknown {
+export function projectPromotionOffer(value: Record<string, unknown>): unknown {
   return {
     offerId: value.offerId,
     imageUrl: value.imageUrl,
@@ -309,9 +290,7 @@ export function projectPromotionOffer(
   };
 }
 
-export function projectPaymentMethod(
-  value: Record<string, unknown>,
-): unknown {
+export function projectPaymentMethod(value: Record<string, unknown>): unknown {
   return {
     methodId: value.methodId,
     displayName: value.displayName,
@@ -358,23 +337,27 @@ export function projectMenuModifierOptions(value: unknown): unknown {
                 return [];
               }
               const optionRecord = option as Record<string, unknown>;
-              return [{
-                modifierId: optionRecord.modifierId,
-                name: optionRecord.name,
-                priceDeltaVnd: optionRecord.priceDeltaVnd,
-                default: optionRecord.default,
-                quantity: optionRecord.quantity,
-              }];
+              return [
+                {
+                  modifierId: optionRecord.modifierId,
+                  name: optionRecord.name,
+                  priceDeltaVnd: optionRecord.priceDeltaVnd,
+                  default: optionRecord.default,
+                  quantity: optionRecord.quantity,
+                },
+              ];
             })
           : [];
-        return [{
-          groupId: groupRecord.groupId,
-          name: groupRecord.name,
-          min: groupRecord.min,
-          max: groupRecord.max,
-          depth: groupRecord.depth,
-          options,
-        }];
+        return [
+          {
+            groupId: groupRecord.groupId,
+            name: groupRecord.name,
+            min: groupRecord.min,
+            max: groupRecord.max,
+            depth: groupRecord.depth,
+            options,
+          },
+        ];
       })
     : [];
   return {
@@ -406,10 +389,12 @@ function projectCollectionItems(
       });
     case 'searchPromotions':
       return items.map((item) =>
-        projectPromotionOffer(item as Record<string, unknown>));
+        projectPromotionOffer(item as Record<string, unknown>),
+      );
     case 'listPaymentMethods':
       return items.map((item) =>
-        projectPaymentMethod(item as Record<string, unknown>));
+        projectPaymentMethod(item as Record<string, unknown>),
+      );
     case 'listMembershipRewards':
       return items.map((item) => {
         const record = item as Record<string, unknown>;
@@ -462,7 +447,8 @@ function projectCollectionItems(
     case 'searchContentPolicy':
     case 'answerAllergenQuestion':
       return items.map((item) =>
-        projectContentEvidence(item as ContentEvidence));
+        projectContentEvidence(item as ContentEvidence),
+      );
     default:
       return undefined;
   }
@@ -492,8 +478,7 @@ function projectActiveCollections(
   for (const toolName of projectedCollectionToolNames) {
     const contract = responseEvidenceContractForTool(toolName);
     if (
-      !contract.requiredScopes.every((scope) =>
-        authorizedScopes.has(scope))
+      !contract.requiredScopes.every((scope) => authorizedScopes.has(scope))
     ) {
       continue;
     }
@@ -551,46 +536,39 @@ export function projectModelPublicationState(input: {
   const canReadCustomer = authorizedScopes.has('customer:read');
   const canReadOrder = authorizedScopes.has('order:read');
   const canReadPayment = authorizedScopes.has('payment:read');
-  const terminalOrder = state.order !== undefined &&
-    terminalOrderStatuses.has(state.order.status);
-  const submittedOrderHistory =
-    activeCartSupersedesSubmittedOrder(state);
-  const activeOrder = state.order !== undefined &&
-    !terminalOrder &&
-    !submittedOrderHistory;
-  const activePreview = state.orderPreview !== undefined &&
+  const terminalOrder =
+    state.order !== undefined && terminalOrderStatuses.has(state.order.status);
+  const submittedOrderHistory = activeCartSupersedesSubmittedOrder(state);
+  const activeOrder =
+    state.order !== undefined && !terminalOrder && !submittedOrderHistory;
+  const activePreview =
+    state.orderPreview !== undefined &&
     !terminalOrderStatuses.has(state.orderPreview.status) &&
     (!terminalOrder || state.orderPreview.id !== state.order?.id);
-  const tiedTerminalCart = terminalOrder &&
-    cartMatchesSubmittedOrder(state.cart, state.order);
+  const tiedTerminalCart =
+    terminalOrder && cartMatchesSubmittedOrder(state.cart, state.order);
   const activeCart = state.cart !== undefined && !tiedTerminalCart;
   const addressDraft = projectAddressDraft(state.addressDraft);
-  const addressSuperseded = draftSupersedesAddress(
-    state.address,
-    addressDraft,
-  );
-  const privateSavedAddress =
-    latestSuccessfulQuoteUsesSavedAddress(state);
-  const activeCommerce = activeOrder ||
-    activePreview ||
-    activeCart ||
-    addressDraft !== undefined;
-  const retainAddress = !terminalOrder &&
+  const addressSuperseded = draftSupersedesAddress(state.address, addressDraft);
+  const privateSavedAddress = latestSuccessfulQuoteUsesSavedAddress(state);
+  const activeCommerce =
+    activeOrder || activePreview || activeCart || addressDraft !== undefined;
+  const retainAddress =
+    !terminalOrder &&
     activeCommerce &&
     !addressSuperseded &&
     !privateSavedAddress &&
     state.address !== undefined;
-  const retainFulfillment = !terminalOrder &&
+  const retainFulfillment =
+    !terminalOrder &&
     activeCommerce &&
     !addressSuperseded &&
     state.fulfillment !== undefined;
-  const retainPayment = !terminalOrder &&
+  const retainPayment =
+    !terminalOrder &&
     !submittedOrderHistory &&
     (activeOrder || activePreview || activeCart);
-  const activeCollections = projectActiveCollections(
-    state,
-    authorizedScopes,
-  );
+  const activeCollections = projectActiveCollections(state, authorizedScopes);
   const activeMenuItems = activeCollectionItems(
     activeCollections,
     'searchMenu',
@@ -609,9 +587,7 @@ export function projectModelPublicationState(input: {
   );
 
   const modelState: ModelPublicationState = {
-    ...(activeCart && state.cart
-      ? { cart: projectCart(state.cart) }
-      : {}),
+    ...(activeCart && state.cart ? { cart: projectCart(state.cart) } : {}),
     ...(activeCollections ? { activeCollections } : {}),
     ...(activeMenuItems
       ? { menuSearchResults: structuredClone(activeMenuItems) }
@@ -661,8 +637,7 @@ export function projectModelPublicationState(input: {
     ...(state.handoff ? { handoff: { active: true } } : {}),
     ...(canReadCustomer && activeCart && state.pendingSavedAddressRef
       ? {
-          pendingSavedAddressRef:
-            structuredClone(state.pendingSavedAddressRef),
+          pendingSavedAddressRef: structuredClone(state.pendingSavedAddressRef),
         }
       : {}),
   };
@@ -676,56 +651,53 @@ export function projectModelPublicationState(input: {
       order: !canReadOrder
         ? 'none'
         : terminalOrder
-        ? 'terminal_hidden'
-        : submittedOrderHistory
-          ? 'submitted_history_hidden'
-        : activeOrder
-          ? 'active'
-          : activePreview
-            ? 'preview'
-            : 'none',
-      cart: tiedTerminalCart && !canReadOrder
-        ? 'none'
-        : tiedTerminalCart
-        ? 'terminal_history_hidden'
-        : activeCart
-          ? 'active'
-          : 'none',
+          ? 'terminal_hidden'
+          : submittedOrderHistory
+            ? 'submitted_history_hidden'
+            : activeOrder
+              ? 'active'
+              : activePreview
+                ? 'preview'
+                : 'none',
+      cart:
+        tiedTerminalCart && !canReadOrder
+          ? 'none'
+          : tiedTerminalCart
+            ? 'terminal_history_hidden'
+            : activeCart
+              ? 'active'
+              : 'none',
       address: !canReadCustomer
         ? 'none'
         : addressSuperseded
-        ? 'superseded_by_draft'
-        : retainAddress
-          ? 'active'
-          : state.address
-            ? 'history_hidden'
-            : 'none',
+          ? 'superseded_by_draft'
+          : retainAddress
+            ? 'active'
+            : state.address
+              ? 'history_hidden'
+              : 'none',
       fulfillment: !canReadCustomer
         ? 'none'
         : addressSuperseded
-        ? 'superseded_by_draft'
-        : retainFulfillment
-          ? 'active'
-          : state.fulfillment
-            ? 'history_hidden'
-            : 'none',
+          ? 'superseded_by_draft'
+          : retainFulfillment
+            ? 'active'
+            : state.fulfillment
+              ? 'history_hidden'
+              : 'none',
       payment: !canReadPayment
         ? 'none'
         : retainPayment &&
-          (
-            authorizedPaymentAttempt ||
-            state.selectedPaymentMethod ||
-            state.paymentMethodEvidence
-          )
-        ? 'active'
-        : (terminalOrder || submittedOrderHistory) &&
-            (
-              authorizedPaymentAttempt ||
+            (authorizedPaymentAttempt ||
               state.selectedPaymentMethod ||
-              state.paymentMethodEvidence
-            )
-          ? 'history_hidden'
-          : 'none',
+              state.paymentMethodEvidence)
+          ? 'active'
+          : (terminalOrder || submittedOrderHistory) &&
+              (authorizedPaymentAttempt ||
+                state.selectedPaymentMethod ||
+                state.paymentMethodEvidence)
+            ? 'history_hidden'
+            : 'none',
       customerHistory: 'hidden',
     },
   };

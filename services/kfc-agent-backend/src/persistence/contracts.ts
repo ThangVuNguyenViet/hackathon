@@ -14,13 +14,7 @@ import {
   type CustomerRun,
   type CustomerRunEvent,
 } from '../customerRuns/contracts.js';
-import type {
-  AuthenticatedCommerceApprovalPrincipal,
-  CommerceApprovalBinding,
-  CommerceApprovalPrincipal,
-  CommerceApprovalReceipt,
-  ToolCallRequest,
-} from '../ordering/types.js';
+import type { VerifiedRefPrincipal } from '../ordering/types.js';
 import type {
   IssueVerifiedRefInput,
   VerifiedRef,
@@ -97,8 +91,7 @@ export type RunCommitFence =
     };
 
 export type AppendEventIfRunCurrentResult =
-  | { status: 'committed'; event: StoredEvent }
-  | { status: 'stale' };
+  { status: 'committed'; event: StoredEvent } | { status: 'stale' };
 
 export interface IsRunCommitFenceCurrentInput {
   sessionId: string;
@@ -153,87 +146,13 @@ export type CommitAssistantTurnIfRunCurrentResult =
     }
   | { status: 'stale' };
 
-export interface CommitConfirmationPauseIfRunCurrentInput {
-  fence: RunCommitFence;
-  notAfter?: string;
-  stateEvent: {
-    sessionId: string;
-    sourceType: string;
-    payload: Record<string, unknown>;
-  };
-  pause: CreateConfirmationPauseInput;
-}
-
-export type CommitConfirmationPauseIfRunCurrentResult =
-  | {
-      status: 'created' | 'replay';
-      stateEvent: StoredEvent;
-      pauseEvent: StoredEvent;
-      record: ConfirmationPauseRecord;
-    }
-  | { status: 'stale' | 'conflict' };
-
-export interface ConfirmationPauseRecord {
-  schemaVersion: 'kfc-confirmation-pause-v1';
-  requestId: string;
-  checkpointThreadId: string;
-  checkpointNamespace: string;
-  /** Legacy pause binding retained only for stored-data compatibility. */
-  checkpointId: string;
-  sessionId: string;
-  customerId: string;
-  channel: ConversationTurn['channel'];
-  action: ToolCallRequest;
-  /** Digest of the exact model-authored tool call and arguments. */
-  actionDigest: string;
-  /**
-   * Server-enriched approval authority. Its actionDigest may additionally
-   * bind verified order, collection, method, and provider evidence.
-   */
-  approvalBinding: CommerceApprovalBinding;
-  approvalBindingDigest: string;
-  principal: CommerceApprovalPrincipal;
-  createdAt: string;
-  expiresAt: string;
-  status: 'pending' | 'rejected' | 'expired';
-  rejectionReceipt: CommerceApprovalReceipt | null;
-  rejectedAt: string | null;
-  completionStatus: 'pending' | 'completed' | 'failed';
-  result: Record<string, unknown> | null;
-  completionError: string | null;
-  completedAt: string | null;
-}
-
-export type CreateConfirmationPauseInput = Pick<
-  ConfirmationPauseRecord,
-  | 'schemaVersion'
-  | 'requestId'
-  | 'checkpointThreadId'
-  | 'checkpointNamespace'
-  | 'checkpointId'
-  | 'sessionId'
-  | 'customerId'
-  | 'channel'
-  | 'action'
-  | 'actionDigest'
-  | 'approvalBinding'
-  | 'approvalBindingDigest'
-  | 'principal'
-  | 'createdAt'
-  | 'expiresAt'
->;
-
-export type CreateConfirmationPauseResult =
-  | { status: 'created' | 'replay'; record: ConfirmationPauseRecord }
-  | { status: 'conflict' };
-
 export type IssueVerifiedRefResult =
   | { status: 'created'; record: VerifiedRefRecord }
   | { status: 'generation_conflict' };
 
 export interface ResolveVerifiedRefInput {
   ref: VerifiedRef;
-  principal: AuthenticatedCommerceApprovalPrincipal;
+  principal: VerifiedRefPrincipal;
   expectedVerifiedRevision: string;
   /** Canonical server lookup time; never accept this from public request JSON. */
   now: string;
@@ -253,37 +172,6 @@ export type ClaimVerifiedRefResult =
   | { status: 'claimed' | 'replay'; record: VerifiedRefRecord }
   | { status: 'unavailable' };
 
-export interface ClaimConfirmationRejectionInput {
-  requestId: string;
-  actionDigest: string;
-  approvalBindingDigest: string;
-  principal: CommerceApprovalPrincipal;
-  /** Receipt already authenticated by the server-owned approval boundary. */
-  receipt: CommerceApprovalReceipt;
-  /** Canonical server decision time; never copy a client-supplied timestamp. */
-  rejectedAt: string;
-}
-
-export type ClaimConfirmationRejectionResult =
-  | { status: 'claimed' | 'replay'; record: ConfirmationPauseRecord }
-  | { status: 'conflict' | 'expired' | 'not_found' };
-
-export type ConfirmationResumeCompletion =
-  | { status: 'completed'; result: Record<string, unknown> }
-  | { status: 'failed'; error: string };
-
-export interface CompleteConfirmationResumeInput {
-  requestId: string;
-  receiptId: string;
-  /** Canonical server completion time. */
-  completedAt: string;
-  completion: ConfirmationResumeCompletion;
-}
-
-export type CompleteConfirmationResumeResult =
-  | { status: 'completed' | 'replay'; record: ConfirmationPauseRecord }
-  | { status: 'conflict' | 'lost' };
-
 export type AppendCustomerRunEventInput = Omit<CustomerRunEvent, 'sequence'> & {
   expectedSequence: number;
 };
@@ -295,8 +183,7 @@ export interface AppendCustomerRunEventsIfRunCurrentInput {
 }
 
 export type AppendCustomerRunEventsIfRunCurrentResult =
-  | { status: 'committed'; events: CustomerRunEvent[] }
-  | { status: 'stale' };
+  { status: 'committed'; events: CustomerRunEvent[] } | { status: 'stale' };
 
 export interface CommitPausedCustomerRunIntakeInput {
   expectedSessionAuthorityGeneration: number;
@@ -315,7 +202,10 @@ export type CommitPausedCustomerRunIntakeResult =
   | { status: 'stale' };
 
 export type CustomerRunPatch = Partial<
-  Pick<CustomerRun, 'status' | 'phase' | 'startedAt' | 'terminalAt' | 'updatedAt'>
+  Pick<
+    CustomerRun,
+    'status' | 'phase' | 'startedAt' | 'terminalAt' | 'updatedAt'
+  >
 >;
 
 export interface HistorySearchResult extends StoredEvent {
@@ -332,10 +222,7 @@ export interface ImportedConversationTurnResult {
 }
 
 export type WebhookDeliveryChannel = 'messenger' | 'zalo';
-export type WebhookDeliveryStatus =
-  | 'received'
-  | 'processed'
-  | 'failed';
+export type WebhookDeliveryStatus = 'received' | 'processed' | 'failed';
 
 export interface WebhookDelivery {
   channel: WebhookDeliveryChannel;
@@ -379,7 +266,10 @@ export type CreateCustomerRunInput = Omit<
   'sessionAuthorityGeneration'
 >;
 
-export type PendingCustomerTurnInput = Omit<PendingCustomerTurn, 'updatedAt'> & { updatedAt?: string };
+export type PendingCustomerTurnInput = Omit<
+  PendingCustomerTurn,
+  'updatedAt'
+> & { updatedAt?: string };
 
 export interface UpsertPendingCustomerTurnResult {
   turn: PendingCustomerTurn;
@@ -441,7 +331,9 @@ export type AgentRunPatch = Partial<
   >
 >;
 
-export type SessionAgentStateInput = Omit<SessionAgentState, 'updatedAt'> & { updatedAt?: string };
+export type SessionAgentStateInput = Omit<SessionAgentState, 'updatedAt'> & {
+  updatedAt?: string;
+};
 
 export interface AdvanceSessionAgentGenerationInput {
   sessionId: string;
@@ -511,8 +403,7 @@ export interface UpdateAgentRunIfExecutionCurrentInput {
 }
 
 export type UpdateAgentRunIfExecutionCurrentResult =
-  | { status: 'committed'; run: AgentRun }
-  | { status: 'stale'; run?: AgentRun };
+  { status: 'committed'; run: AgentRun } | { status: 'stale'; run?: AgentRun };
 
 export type CreateAgentRunTextDeliveryResult =
   | {
@@ -538,9 +429,7 @@ export type SupersedeAgentRunExecutionIfNoLongerCurrentResult =
   | { status: 'stale'; run?: AgentRun }
   | {
       status: 'reconciliation_required';
-      reason:
-        | 'irreversible_outcome_unknown'
-        | 'delivery_outcome_unknown';
+      reason: 'irreversible_outcome_unknown' | 'delivery_outcome_unknown';
       run: AgentRun;
     };
 
@@ -581,8 +470,7 @@ export type IrreversibleOperationReservation =
   | { status: 'completed'; result: Record<string, unknown> };
 
 export type IrreversibleOperationCompletion =
-  | { status: 'completed'; result: Record<string, unknown> }
-  | { status: 'lost' };
+  { status: 'completed'; result: Record<string, unknown> } | { status: 'lost' };
 
 export interface IrreversibleOperationOwner {
   attempt: number;
@@ -590,8 +478,7 @@ export interface IrreversibleOperationOwner {
   sessionAuthorityGeneration: number;
 }
 
-export interface MarkIrreversibleOperationOutcomeUnknownIfExpiredInput
-  extends IrreversibleOperationInput {
+export interface MarkIrreversibleOperationOutcomeUnknownIfExpiredInput extends IrreversibleOperationInput {
   /** Server-owned diagnostic persisted when the lease expires unresolved. */
   reason: string;
 }
@@ -604,29 +491,6 @@ export type MarkIrreversibleOperationOutcomeUnknownIfExpiredResult =
       lastError: string | null;
       transitioned: boolean;
     };
-
-export interface ReserveConfirmationResumeOperationInput
-  extends IrreversibleOperationInput {
-  operation: 'confirmation_resume';
-  expectedPause: CreateConfirmationPauseInput;
-  /**
-   * Session generation observed with expectedPause. The atomic claim must
-   * match this exact generation so a reset/recreate ABA cannot revive stale
-   * approval authority.
-   */
-  expectedSessionGeneration: number;
-  pauseIdentityDigest: string;
-  decision: CommerceApprovalReceipt['decision'];
-  receipt: CommerceApprovalReceipt;
-  providerIdempotencyKey: string;
-  /** Canonical server claim time; never accept this from public request JSON. */
-  claimedAt: string;
-  leaseTtlMs: number;
-}
-
-export type ReserveConfirmationResumeOperationResult =
-  | IrreversibleOperationReservation
-  | { status: 'conflict' | 'expired' | 'not_found' };
 
 export class SessionResetConflictError extends Error {
   readonly code = 'session_reset_conflict';
@@ -646,11 +510,16 @@ export function assertSameIrreversibleOperation(
     existing.operation !== input.operation ||
     existing.bindingFingerprint !== input.bindingFingerprint
   ) {
-    throw new Error(`Irreversible operation binding conflict: ${input.requestId}`);
+    throw new Error(
+      `Irreversible operation binding conflict: ${input.requestId}`,
+    );
   }
 }
 
-export type AppendConversationTurnInput = Omit<ConversationTurn, 'id' | 'createdAt'> & {
+export type AppendConversationTurnInput = Omit<
+  ConversationTurn,
+  'id' | 'createdAt'
+> & {
   /**
    * Optional server-authored stable identity for an already-reserved durable
    * publication. Public callers must never choose conversation turn IDs.
@@ -671,26 +540,46 @@ export interface ConversationStore {
     created: boolean;
   }>;
   getCustomerRun(runId: string): Promise<CustomerRun | undefined>;
-  findCustomerRunByRequest(sessionId: string, clientMessageId: string): Promise<CustomerRun | undefined>;
-  updateCustomerRun(runId: string, patch: CustomerRunPatch): Promise<CustomerRun>;
-  appendCustomerRunEvent(input: AppendCustomerRunEventInput): Promise<CustomerRunEvent>;
-  appendCustomerRunEvents(inputs: AppendCustomerRunEventInput[]): Promise<CustomerRunEvent[]>;
+  findCustomerRunByRequest(
+    sessionId: string,
+    clientMessageId: string,
+  ): Promise<CustomerRun | undefined>;
+  updateCustomerRun(
+    runId: string,
+    patch: CustomerRunPatch,
+  ): Promise<CustomerRun>;
+  appendCustomerRunEvent(
+    input: AppendCustomerRunEventInput,
+  ): Promise<CustomerRunEvent>;
+  appendCustomerRunEvents(
+    inputs: AppendCustomerRunEventInput[],
+  ): Promise<CustomerRunEvent[]>;
   appendCustomerRunEventsIfRunCurrent(
     input: AppendCustomerRunEventsIfRunCurrentInput,
   ): Promise<AppendCustomerRunEventsIfRunCurrentResult>;
   commitPausedCustomerRunIntake(
     input: CommitPausedCustomerRunIntakeInput,
   ): Promise<CommitPausedCustomerRunIntakeResult>;
-  listCustomerRunEvents(runId: string, afterSequence?: number): Promise<CustomerRunEvent[]>;
+  listCustomerRunEvents(
+    runId: string,
+    afterSequence?: number,
+  ): Promise<CustomerRunEvent[]>;
   appendTurn(input: AppendConversationTurnInput): Promise<ConversationTurn>;
-  upsertImportedTurn(input: ImportedConversationTurn): Promise<ImportedConversationTurnResult>;
+  upsertImportedTurn(
+    input: ImportedConversationTurn,
+  ): Promise<ImportedConversationTurnResult>;
   upsertProfile(input: ConversationProfile): Promise<ConversationProfile>;
   getProfile(
     channel: ConversationProfile['channel'],
     externalUserId: string,
   ): Promise<ConversationProfile | undefined>;
-  findTurnByExternalMessage(sessionId: string, externalMessageId: string): Promise<ConversationTurn | undefined>;
-  reserveWebhookDelivery(input: ReserveWebhookDeliveryInput): Promise<ReserveWebhookDeliveryResult>;
+  findTurnByExternalMessage(
+    sessionId: string,
+    externalMessageId: string,
+  ): Promise<ConversationTurn | undefined>;
+  reserveWebhookDelivery(
+    input: ReserveWebhookDeliveryInput,
+  ): Promise<ReserveWebhookDeliveryResult>;
   reserveNonAgentTextDelivery(
     input: ReserveNonAgentTextDeliveryInput,
   ): Promise<ReserveNonAgentTextDeliveryResult>;
@@ -709,13 +598,19 @@ export interface ConversationStore {
   reconcileNonAgentTextDelivery(
     input: ReconcileNonAgentTextDeliveryInput,
   ): Promise<ReconcileNonAgentTextDeliveryResult>;
-  markWebhookDeliveryProcessed(channel: WebhookDeliveryChannel, externalEventId: string): Promise<WebhookDelivery>;
+  markWebhookDeliveryProcessed(
+    channel: WebhookDeliveryChannel,
+    externalEventId: string,
+  ): Promise<WebhookDelivery>;
   markWebhookDeliveryFailed(
     channel: WebhookDeliveryChannel,
     externalEventId: string,
     lastError: string,
   ): Promise<WebhookDelivery>;
-  getWebhookDelivery(channel: WebhookDeliveryChannel, externalEventId: string): Promise<WebhookDelivery | undefined>;
+  getWebhookDelivery(
+    channel: WebhookDeliveryChannel,
+    externalEventId: string,
+  ): Promise<WebhookDelivery | undefined>;
   listWebhookDeliveries(sessionId: string): Promise<WebhookDelivery[]>;
   listStaleWebhookDeliveries(
     channel: WebhookDeliveryChannel,
@@ -735,9 +630,14 @@ export interface ConversationStore {
   transitionSessionAuthority(
     input: TransitionSessionAuthorityInput,
   ): Promise<TransitionSessionAuthorityResult>;
-  upsertPendingCustomerTurn(input: PendingCustomerTurnInput): Promise<UpsertPendingCustomerTurnResult>;
+  upsertPendingCustomerTurn(
+    input: PendingCustomerTurnInput,
+  ): Promise<UpsertPendingCustomerTurnResult>;
   listPendingCustomerTurns(sessionId: string): Promise<PendingCustomerTurn[]>;
-  markPendingCustomerTurnClaimed(turnId: string, runId: string): Promise<PendingCustomerTurn>;
+  markPendingCustomerTurnClaimed(
+    turnId: string,
+    runId: string,
+  ): Promise<PendingCustomerTurn>;
   createAgentRun(input: CreateAgentRunInput): Promise<AgentRun>;
   claimAgentRun(input: CreateAgentRunInput): Promise<ClaimAgentRunResult>;
   updateAgentRun(runId: string, patch: AgentRunPatch): Promise<AgentRun>;
@@ -749,7 +649,9 @@ export interface ConversationStore {
   linkAgentRunTurn(input: AgentRunTurn): Promise<AgentRunTurn>;
   listAgentRunTurns(runId: string): Promise<AgentRunTurn[]>;
   getSessionAgentState(sessionId: string): Promise<SessionAgentState>;
-  setSessionAgentState(input: SessionAgentStateInput): Promise<SessionAgentState>;
+  setSessionAgentState(
+    input: SessionAgentStateInput,
+  ): Promise<SessionAgentState>;
   advanceSessionAgentGeneration(
     input: AdvanceSessionAgentGenerationInput,
   ): Promise<AdvanceSessionAgentGenerationResult>;
@@ -777,9 +679,16 @@ export interface ConversationStore {
   reconcileAgentRunTextDelivery(
     input: ReconcileAgentRunTextDeliveryInput,
   ): Promise<ReconcileAgentRunTextDeliveryResult>;
-  listDueSessionAgentStates(now: string, limit: number): Promise<SessionAgentState[]>;
+  listDueSessionAgentStates(
+    now: string,
+    limit: number,
+  ): Promise<SessionAgentState[]>;
   listTurns(sessionId: string): Promise<ConversationTurn[]>;
-  appendEvent(sessionId: string, sourceType: string, payload: Record<string, unknown>): Promise<StoredEvent>;
+  appendEvent(
+    sessionId: string,
+    sourceType: string,
+    payload: Record<string, unknown>,
+  ): Promise<StoredEvent>;
   /**
    * Advisory exact-owner read for boundaries that must fail before provider
    * dispatch. Every durable publication still uses one of the atomic CAS
@@ -803,13 +712,6 @@ export interface ConversationStore {
   commitAssistantTurnIfRunCurrent(
     input: CommitAssistantTurnIfRunCurrentInput,
   ): Promise<CommitAssistantTurnIfRunCurrentResult>;
-  /**
-   * Atomically validates the durable owner and commits the pause's verified
-   * state, canonical approval record, and bounded creation audit.
-   */
-  commitConfirmationPauseIfRunCurrent(
-    input: CommitConfirmationPauseIfRunCurrentInput,
-  ): Promise<CommitConfirmationPauseIfRunCurrentResult>;
   listEvents(sessionId: string): Promise<StoredEvent[]>;
   issueVerifiedRef(
     input: IssueVerifiedRefInput,
@@ -824,36 +726,19 @@ export interface ConversationStore {
   claimVerifiedRef(
     input: ClaimVerifiedRefInput,
   ): Promise<ClaimVerifiedRefResult>;
-  createConfirmationPause(
-    input: CreateConfirmationPauseInput,
-  ): Promise<CreateConfirmationPauseResult>;
-  getConfirmationPause(
-    requestId: string,
-  ): Promise<ConfirmationPauseRecord | undefined>;
-  /**
-   * Internal generation-fenced view used only by the durable resume
-   * coordinator. Public callers receive getConfirmationPause's record view.
-   */
-  getConfirmationPauseStorageSnapshot(
-    requestId: string,
-  ): Promise<import('./confirmationPause.js').ConfirmationPauseStorageSnapshot | undefined>;
-  claimConfirmationRejection(
-    input: ClaimConfirmationRejectionInput,
-  ): Promise<ClaimConfirmationRejectionResult>;
-  completeConfirmationResume(
-    input: CompleteConfirmationResumeInput,
-  ): Promise<CompleteConfirmationResumeResult>;
-  /** Compatibility name for callers; authorization is backed only by the strict pause store. */
-  findConfirmationPause(requestId: string): Promise<ConfirmationPauseRecord | undefined>;
-  searchHistory(sessionId: string, query: string): Promise<HistorySearchResult[]>;
-  reserveIrreversibleOperation?(input: IrreversibleOperationInput): Promise<IrreversibleOperationReservation>;
-  getIrreversibleOperation?(input: IrreversibleOperationInput): Promise<IrreversibleOperationReservation | undefined>;
+  searchHistory(
+    sessionId: string,
+    query: string,
+  ): Promise<HistorySearchResult[]>;
+  reserveIrreversibleOperation?(
+    input: IrreversibleOperationInput,
+  ): Promise<IrreversibleOperationReservation>;
+  getIrreversibleOperation?(
+    input: IrreversibleOperationInput,
+  ): Promise<IrreversibleOperationReservation | undefined>;
   markIrreversibleOperationOutcomeUnknownIfExpired?(
     input: MarkIrreversibleOperationOutcomeUnknownIfExpiredInput,
   ): Promise<MarkIrreversibleOperationOutcomeUnknownIfExpiredResult>;
-  reserveConfirmationResumeOperation(
-    input: ReserveConfirmationResumeOperationInput,
-  ): Promise<ReserveConfirmationResumeOperationResult>;
   completeIrreversibleOperation?(
     input: IrreversibleOperationInput,
     owner: IrreversibleOperationOwner,

@@ -1,16 +1,17 @@
-import { z } from "zod";
+import { z } from 'zod';
 import type {
   ExternalCallContext,
   OmsClient,
   PaymentClient,
   ProviderMutationIdentity,
-} from "./interfaces.js";
-import type { ToolResult } from "../domain/types.js";
-import { opaqueProviderIdSchema } from "../domain/opaqueProviderId.js";
+} from './interfaces.js';
+import type { ToolResult } from '../domain/types.js';
+import { opaqueProviderIdSchema } from '../domain/opaqueProviderId.js';
+import { orderWithCurrentDeliveryEstimate } from '../domain/orderStatusEvidence.js';
 import {
-  orderWithCurrentDeliveryEstimate,
-} from "../domain/orderStatusEvidence.js";
-import { commerceContractVersion, commerceResultSchema } from "../commerceProof/contracts.js";
+  commerceContractVersion,
+  commerceResultSchema,
+} from '../commerceProof/contracts.js';
 import {
   providerOrderResultSchema,
   providerOrderStatusResultSchema,
@@ -18,7 +19,7 @@ import {
   providerPaymentMethodsResultSchema,
   providerPaymentStatusResultSchema,
   providerToolFailureSchema,
-} from "../commerce/providerResponseSchemas.js";
+} from '../commerce/providerResponseSchemas.js';
 
 export interface KfcCommerceGatewayOptions {
   baseUrl: string;
@@ -39,14 +40,14 @@ function failureDetail(error: unknown): string {
   return error instanceof Error
     ? error.message
     : error === undefined
-      ? "caller signal or deadline"
+      ? 'caller signal or deadline'
       : String(error);
 }
 
 function requestCancellationFailure<T>(error: unknown): ToolResult<T> {
   return {
     ok: false,
-    errorCode: "commerce_gateway_request_cancelled",
+    errorCode: 'commerce_gateway_request_cancelled',
     message: `KFC commerce gateway request was cancelled: ${failureDetail(error)}`,
   };
 }
@@ -54,7 +55,7 @@ function requestCancellationFailure<T>(error: unknown): ToolResult<T> {
 function mutationAmbiguityFailure<T>(error: unknown): ToolResult<T> {
   return {
     ok: false,
-    errorCode: "commerce_gateway_mutation_ambiguous",
+    errorCode: 'commerce_gateway_mutation_ambiguous',
     message: `KFC commerce gateway mutation outcome is ambiguous after dispatch: ${failureDetail(error)}`,
   };
 }
@@ -62,7 +63,7 @@ function mutationAmbiguityFailure<T>(error: unknown): ToolResult<T> {
 function invalidProviderResponseFailure<T>(error: unknown): ToolResult<T> {
   return {
     ok: false,
-    errorCode: "commerce_gateway_invalid_provider_response",
+    errorCode: 'commerce_gateway_invalid_provider_response',
     message: `KFC commerce gateway returned an invalid response: ${failureDetail(error)}`,
   };
 }
@@ -70,17 +71,16 @@ function invalidProviderResponseFailure<T>(error: unknown): ToolResult<T> {
 function invalidOrderIdentifierFailure<T>(orderId: string): ToolResult<T> {
   return {
     ok: false,
-    errorCode: "commerce_gateway_invalid_order_id",
-    message:
-      `KFC commerce gateway rejected unsafe order identifier ${JSON.stringify(orderId)}`,
+    errorCode: 'commerce_gateway_invalid_order_id',
+    message: `KFC commerce gateway rejected unsafe order identifier ${JSON.stringify(orderId)}`,
   };
 }
 
 function providerMutationIdentityRequiredFailure<T>(): ToolResult<T> {
   return {
     ok: false,
-    errorCode: "provider_mutation_identity_required",
-    message: "A provider mutation identity is required",
+    errorCode: 'provider_mutation_identity_required',
+    message: 'A provider mutation identity is required',
   };
 }
 
@@ -89,8 +89,8 @@ function providerMutationIdentityIsValid(
 ): identity is ProviderMutationIdentity {
   return Boolean(
     identity &&
-    typeof identity.idempotencyKey === "string" &&
-    typeof identity.bindingFingerprint === "string" &&
+    typeof identity.idempotencyKey === 'string' &&
+    typeof identity.bindingFingerprint === 'string' &&
     identity.idempotencyKey.length <= 512 &&
     opaqueProviderIdSchema.safeParse(identity.idempotencyKey).success &&
     /^[a-f0-9]{64}$/u.test(identity.bindingFingerprint),
@@ -98,7 +98,7 @@ function providerMutationIdentityIsValid(
 }
 
 function orderIdentifierIsPathSafe(orderId: string): boolean {
-  return orderId !== "." && orderId !== "..";
+  return orderId !== '.' && orderId !== '..';
 }
 
 type ValidatedPayload<T> =
@@ -131,7 +131,7 @@ export function createKfcCommerceGatewayClients(
   options: KfcCommerceGatewayOptions,
 ): KfcCommerceGatewayClients {
   const fetchImpl = options.fetchImpl ?? fetch;
-  const baseUrl = options.baseUrl.replace(/\/$/, "");
+  const baseUrl = options.baseUrl.replace(/\/$/, '');
 
   async function fetchValidated<T>(
     path: string,
@@ -143,9 +143,7 @@ export function createKfcCommerceGatewayClients(
     if (externalCallIsCancelled(externalCallContext)) {
       return {
         ok: false,
-        failure: requestCancellationFailure(
-          externalCallContext.signal.reason,
-        ),
+        failure: requestCancellationFailure(externalCallContext.signal.reason),
       };
     }
     try {
@@ -153,9 +151,9 @@ export function createKfcCommerceGatewayClients(
         ...init,
         signal: externalCallContext.signal,
         headers: {
-          accept: "application/json",
+          accept: 'application/json',
           authorization: `Bearer ${options.token}`,
-          ...(init.body ? { "content-type": "application/json" } : {}),
+          ...(init.body ? { 'content-type': 'application/json' } : {}),
           ...init.headers,
         },
       });
@@ -179,7 +177,7 @@ export function createKfcCommerceGatewayClients(
       }
       if (
         externalCallIsCancelled(externalCallContext) ||
-        (error instanceof Error && error.name === "AbortError")
+        (error instanceof Error && error.name === 'AbortError')
       ) {
         return {
           ok: false,
@@ -190,7 +188,7 @@ export function createKfcCommerceGatewayClients(
         ok: false,
         failure: {
           ok: false,
-          errorCode: "commerce_gateway_unavailable",
+          errorCode: 'commerce_gateway_unavailable',
           message: `KFC commerce gateway request failed: ${error instanceof Error ? error.message : String(error)}`,
         },
       };
@@ -221,7 +219,7 @@ export function createKfcCommerceGatewayClients(
           )
         : {
             ok: false,
-            errorCode: "commerce_gateway_http_error",
+            errorCode: 'commerce_gateway_http_error',
             message: `KFC commerce gateway returned HTTP ${validated.response.status}`,
           };
     }
@@ -232,11 +230,11 @@ export function createKfcCommerceGatewayClients(
     oms: {
       previewOrder: (input, externalCallContext) =>
         request(
-          "/v1/orders/preview",
+          '/v1/orders/preview',
           externalCallContext,
           providerOrderResultSchema,
           {
-            method: "POST",
+            method: 'POST',
             body: JSON.stringify(input),
           },
         ),
@@ -244,8 +242,8 @@ export function createKfcCommerceGatewayClients(
         if (!input.userConfirmed) {
           return {
             ok: false,
-            errorCode: "confirmation_required",
-            message: "User confirmation is required before order placement",
+            errorCode: 'confirmation_required',
+            message: 'User confirmation is required before order placement',
           };
         }
         if (!providerMutationIdentityIsValid(mutationIdentity)) {
@@ -254,18 +252,17 @@ export function createKfcCommerceGatewayClients(
         if (!input.context) {
           return {
             ok: false,
-            errorCode:
-              "commerce_gateway_mutation_identity_context_missing",
+            errorCode: 'commerce_gateway_mutation_identity_context_missing',
             message:
-              "Provider mutation identity requires the bound commerce request context",
+              'Provider mutation identity requires the bound commerce request context',
           };
         }
         const validated = await fetchValidated(
-          "/v1/orders",
+          '/v1/orders',
           externalCallContext,
           versionedPlaceOrderResponseSchema,
           {
-            method: "POST",
+            method: 'POST',
             body: JSON.stringify({
               contractVersion: commerceContractVersion,
               traceId: input.context.traceId,
@@ -274,7 +271,7 @@ export function createKfcCommerceGatewayClients(
               clientMessageId: input.context.clientMessageId,
               idempotencyKey: mutationIdentity.idempotencyKey,
               bindingFingerprint: mutationIdentity.bindingFingerprint,
-              toolName: "placeOrder",
+              toolName: 'placeOrder',
               order: {
                 previewId: input.preview.id,
                 storeId: input.preview.assignedStoreId,
@@ -283,7 +280,7 @@ export function createKfcCommerceGatewayClients(
                   quantity: item.quantity,
                 })),
                 totalVnd: input.preview.cart.totalVnd,
-                paymentMethod: "cash",
+                paymentMethod: 'cash',
                 userConfirmed: true,
               },
             }),
@@ -292,7 +289,7 @@ export function createKfcCommerceGatewayClients(
         );
         if (!validated.ok) return validated.failure;
         const response = validated.payload;
-        if ("ok" in response) {
+        if ('ok' in response) {
           return {
             ok: false,
             errorCode: response.errorCode,
@@ -300,17 +297,14 @@ export function createKfcCommerceGatewayClients(
           };
         }
         const commerce = response;
-        if (
-          !validated.response.ok &&
-          commerce.customerStatus !== "failed"
-        ) {
+        if (!validated.response.ok && commerce.customerStatus !== 'failed') {
           return mutationAmbiguityFailure(
             new Error(
               `Gateway returned HTTP ${validated.response.status} with an accepted commerce result`,
             ),
           );
         }
-        if (commerce.customerStatus === "failed" || !commerce.commerceOrderId) {
+        if (commerce.customerStatus === 'failed' || !commerce.commerceOrderId) {
           return {
             ok: false,
             errorCode: commerce.outcome,
@@ -323,11 +317,12 @@ export function createKfcCommerceGatewayClients(
             ...input.preview,
             id: commerce.commerceOrderId,
             status:
-              commerce.customerStatus === "cancelled"
-                ? "cancelled"
-                : commerce.customerStatus === "preparing" || commerce.customerStatus === "ready"
-                  ? "preparing"
-                  : "created",
+              commerce.customerStatus === 'cancelled'
+                ? 'cancelled'
+                : commerce.customerStatus === 'preparing' ||
+                    commerce.customerStatus === 'ready'
+                  ? 'preparing'
+                  : 'created',
             posTicketId: commerce.posTicketId,
             posStatus: orderPosStatus(commerce.posStatus),
             commerceOrderId: commerce.commerceOrderId,
@@ -350,14 +345,11 @@ export function createKfcCommerceGatewayClients(
           orderStatusResponseSchema,
         );
         if (!validated.ok) return validated.failure;
-        if ("ok" in validated.payload) {
-          if (
-            !validated.response.ok &&
-            validated.payload.ok
-          ) {
+        if ('ok' in validated.payload) {
+          if (!validated.response.ok && validated.payload.ok) {
             return {
               ok: false,
-              errorCode: "commerce_gateway_http_error",
+              errorCode: 'commerce_gateway_http_error',
               message: `KFC commerce gateway returned HTTP ${validated.response.status}`,
             };
           }
@@ -369,7 +361,7 @@ export function createKfcCommerceGatewayClients(
           );
           if (!order) {
             return invalidProviderResponseFailure(
-              new Error("Order status response did not contain an order"),
+              new Error('Order status response did not contain an order'),
             );
           }
           return {
@@ -383,11 +375,7 @@ export function createKfcCommerceGatewayClients(
           message: `Commerce status read failed: ${validated.payload.outcome}`,
         };
       },
-      async cancelOrder(
-        orderId,
-        externalCallContext,
-        mutationIdentity,
-      ) {
+      async cancelOrder(orderId, externalCallContext, mutationIdentity) {
         if (!providerMutationIdentityIsValid(mutationIdentity)) {
           return providerMutationIdentityRequiredFailure();
         }
@@ -399,7 +387,7 @@ export function createKfcCommerceGatewayClients(
           externalCallContext,
           cancellationResponseSchema,
           {
-            method: "POST",
+            method: 'POST',
             body: JSON.stringify({
               idempotencyKey: mutationIdentity.idempotencyKey,
               bindingFingerprint: mutationIdentity.bindingFingerprint,
@@ -408,11 +396,8 @@ export function createKfcCommerceGatewayClients(
           true,
         );
         if (!validated.ok) return validated.failure;
-        if ("ok" in validated.payload) {
-          if (
-            !validated.response.ok &&
-            validated.payload.ok
-          ) {
+        if ('ok' in validated.payload) {
+          if (!validated.response.ok && validated.payload.ok) {
             return mutationAmbiguityFailure(
               new Error(
                 `Gateway returned HTTP ${validated.response.status} with a successful cancellation body`,
@@ -422,8 +407,8 @@ export function createKfcCommerceGatewayClients(
           return validated.payload;
         }
         if (
-          validated.payload.outcome === "partial_cancellation" ||
-          validated.payload.customerStatus === "failed"
+          validated.payload.outcome === 'partial_cancellation' ||
+          validated.payload.customerStatus === 'failed'
         ) {
           return {
             ok: false,
@@ -432,18 +417,18 @@ export function createKfcCommerceGatewayClients(
           };
         }
         return mutationAmbiguityFailure(
-          new Error("Cancellation response omitted the cancelled order"),
+          new Error('Cancellation response omitted the cancelled order'),
         );
       },
     },
     payment: {
       listMethods: (input, externalCallContext) => {
         const query = new URLSearchParams();
-        if (input.query) query.set("query", input.query);
+        if (input.query) query.set('query', input.query);
         if (input.paymentSurface)
-          query.set("paymentSurface", input.paymentSurface);
+          query.set('paymentSurface', input.paymentSurface);
         return request(
-          `/v1/payment-methods${query.size > 0 ? `?${query}` : ""}`,
+          `/v1/payment-methods${query.size > 0 ? `?${query}` : ''}`,
           externalCallContext,
           providerPaymentMethodsResultSchema,
         );
@@ -455,9 +440,7 @@ export function createKfcCommerceGatewayClients(
         mutationIdentity,
       ) => {
         if (!mutationIdentity) {
-          return Promise.resolve(
-            providerMutationIdentityRequiredFailure(),
-          );
+          return Promise.resolve(providerMutationIdentityRequiredFailure());
         }
         if (!orderIdentifierIsPathSafe(order.id)) {
           return Promise.resolve(invalidOrderIdentifierFailure(order.id));
@@ -467,7 +450,7 @@ export function createKfcCommerceGatewayClients(
           externalCallContext,
           providerPaymentLinkResultSchema,
           {
-            method: "POST",
+            method: 'POST',
             body: JSON.stringify({
               methodId,
               idempotencyKey: mutationIdentity.idempotencyKey,
@@ -493,12 +476,12 @@ export function createKfcCommerceGatewayClients(
 
 function orderPosStatus(
   status: string | undefined,
-): "accepted" | "preparing" | "ready" | "cancelled" | "rejected" | undefined {
-  return status === "accepted" ||
-    status === "preparing" ||
-    status === "ready" ||
-    status === "cancelled" ||
-    status === "rejected"
+): 'accepted' | 'preparing' | 'ready' | 'cancelled' | 'rejected' | undefined {
+  return status === 'accepted' ||
+    status === 'preparing' ||
+    status === 'ready' ||
+    status === 'cancelled' ||
+    status === 'rejected'
     ? status
     : undefined;
 }

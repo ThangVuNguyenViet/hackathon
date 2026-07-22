@@ -1,6 +1,4 @@
-import type {
-  ConversationTurn,
-} from '../domain/types.js';
+import type { ConversationTurn } from '../domain/types.js';
 import {
   CustomerRunIdempotencyConflictError,
   type CustomerRun,
@@ -29,14 +27,12 @@ export function commitMemoryPausedCustomerRunIntake(input: {
   const requestKey = `${input.operation.run.sessionId}:${
     input.operation.run.clientMessageId
   }`;
-  const existingRunId =
-    input.customerRunRequestIndex.get(requestKey);
+  const existingRunId = input.customerRunRequestIndex.get(requestKey);
   if (existingRunId) {
     const existing = input.customerRuns.get(existingRunId);
     if (!existing) throw new Error('paused_customer_run_index_corrupt');
     if (
-      existing.requestFingerprint !==
-      input.operation.run.requestFingerprint
+      existing.requestFingerprint !== input.operation.run.requestFingerprint
     ) {
       throw new CustomerRunIdempotencyConflictError(
         input.operation.run.sessionId,
@@ -64,9 +60,7 @@ export function commitMemoryPausedCustomerRunIntake(input: {
     };
   }
 
-  const control = input.sessionControls.get(
-    input.operation.run.sessionId,
-  );
+  const control = input.sessionControls.get(input.operation.run.sessionId);
   if (
     control?.agentMode !== 'human_paused' ||
     control.sessionAuthorityGeneration !==
@@ -82,14 +76,12 @@ export function commitMemoryPausedCustomerRunIntake(input: {
   if (existingTurn) {
     assertExactPausedCustomerUserTurn(input.operation, existingTurn);
   }
-  const turn = existingTurn ??
-    createUserTurn(input.turns, input.operation);
+  const turn = existingTurn ?? createUserTurn(input.turns, input.operation);
   const run: CustomerRun = {
     ...input.operation.run,
     sessionAuthorityGeneration:
       input.operation.expectedSessionAuthorityGeneration,
-    nextEventSequence:
-      input.operation.run.nextEventSequence + 1,
+    nextEventSequence: input.operation.run.nextEventSequence + 1,
   };
   input.customerRuns.set(run.id, run);
   input.customerRunRequestIndex.set(requestKey, run.id);

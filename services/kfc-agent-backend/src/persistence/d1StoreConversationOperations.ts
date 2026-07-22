@@ -4,24 +4,22 @@ import type {
   DashboardEvent,
   ConversationTurn,
   MonitorSessionIntelligence,
-} from "../domain/types.js";
+} from '../domain/types.js';
 import {
   parseMonitorSessionIntelligencePayload,
   preserveMonitorContext,
-} from "../monitor/sessionIntelligence.js";
+} from '../monitor/sessionIntelligence.js';
 import type {
   AgentRun,
   AgentRunTurn,
   PendingCustomerTurn,
   SessionAgentState,
-} from "../domain/types.js";
+} from '../domain/types.js';
 import type {
   AgentRunPatch,
   AppendConversationTurnInput,
   CommitAssistantTurnIfRunCurrentInput,
   CommitAssistantTurnIfRunCurrentResult,
-  CommitConfirmationPauseIfRunCurrentInput,
-  CommitConfirmationPauseIfRunCurrentResult,
   ConversationStore,
   CreateAgentRunInput,
   HistorySearchResult,
@@ -44,7 +42,7 @@ import type {
   WebhookDeliveryChannel,
   AppendCustomerRunEventInput,
   CustomerRunPatch,
-} from "./memoryStore.js";
+} from './memoryStore.js';
 import type {
   BeginNonAgentTextDeliveryAttemptInput,
   BeginNonAgentTextDeliveryAttemptResult,
@@ -64,7 +62,7 @@ import {
   customerRunEventSchema,
   type CustomerRun,
   type CustomerRunEvent,
-} from "../customerRuns/contracts.js";
+} from '../customerRuns/contracts.js';
 import {
   D1Result,
   D1PreparedStatement,
@@ -100,19 +98,12 @@ import {
   agentRunFromRow,
   agentRunTurnFromRow,
   sessionAgentStateFromRow,
-  defaultSessionAgentState
+  defaultSessionAgentState,
 } from './d1StoreSupport.js';
 
 import { D1StoreCore } from './d1StoreCore.js';
-import {
-  transitionD1SessionAuthority,
-} from './d1StoreSessionAuthority.js';
-import {
-  commitD1AssistantTurnIfRunCurrent,
-} from './d1StoreTurnCommit.js';
-import {
-  commitD1ConfirmationPauseIfRunCurrent,
-} from './d1StorePauseCommit.js';
+import { transitionD1SessionAuthority } from './d1StoreSessionAuthority.js';
+import { commitD1AssistantTurnIfRunCurrent } from './d1StoreTurnCommit.js';
 import {
   beginD1NonAgentTextDeliveryAttempt,
   completeD1NonAgentTextDeliveryAttempt,
@@ -124,7 +115,11 @@ import {
 import { resetD1Session } from './d1StoreSessionReset.js';
 
 export abstract class D1StoreConversationOperations extends D1StoreCore {
-  abstract appendEvent(sessionId: string, sourceType: string, payload: Record<string, unknown>): Promise<StoredEvent>;
+  abstract appendEvent(
+    sessionId: string,
+    sourceType: string,
+    payload: Record<string, unknown>,
+  ): Promise<StoredEvent>;
   async commitAssistantTurnIfRunCurrent(
     input: CommitAssistantTurnIfRunCurrentInput,
   ): Promise<CommitAssistantTurnIfRunCurrentResult> {
@@ -133,15 +128,6 @@ export abstract class D1StoreConversationOperations extends D1StoreCore {
       operation: input,
     });
   }
-  async commitConfirmationPauseIfRunCurrent(
-    input: CommitConfirmationPauseIfRunCurrentInput,
-  ): Promise<CommitConfirmationPauseIfRunCurrentResult> {
-    return commitD1ConfirmationPauseIfRunCurrent({
-      db: this.db,
-      operation: input,
-    });
-  }
-
   async upsertProfile(
     input: ConversationProfile,
   ): Promise<ConversationProfile> {
@@ -169,7 +155,7 @@ export abstract class D1StoreConversationOperations extends D1StoreCore {
   }
 
   async getProfile(
-    channel: ConversationProfile["channel"],
+    channel: ConversationProfile['channel'],
     externalUserId: string,
   ): Promise<ConversationProfile | undefined> {
     const row = await this.db
@@ -441,7 +427,7 @@ export abstract class D1StoreConversationOperations extends D1StoreCore {
     return this.updateWebhookDelivery(
       channel,
       externalEventId,
-      "processed",
+      'processed',
       null,
     );
   }
@@ -454,7 +440,7 @@ export abstract class D1StoreConversationOperations extends D1StoreCore {
     return this.updateWebhookDelivery(
       channel,
       externalEventId,
-      "failed",
+      'failed',
       lastError,
     );
   }
@@ -473,9 +459,12 @@ export abstract class D1StoreConversationOperations extends D1StoreCore {
   }
 
   async listWebhookDeliveries(sessionId: string): Promise<WebhookDelivery[]> {
-    const rows = await this.db.prepare(
-      `SELECT * FROM webhook_deliveries WHERE session_id = ? ORDER BY received_at ASC, external_event_id ASC`,
-    ).bind(sessionId).all<WebhookDeliveryRow>();
+    const rows = await this.db
+      .prepare(
+        `SELECT * FROM webhook_deliveries WHERE session_id = ? ORDER BY received_at ASC, external_event_id ASC`,
+      )
+      .bind(sessionId)
+      .all<WebhookDeliveryRow>();
     return (rows.results ?? []).map(webhookDeliveryFromRow);
   }
 
@@ -498,7 +487,7 @@ export abstract class D1StoreConversationOperations extends D1StoreCore {
 
   async updateTurnDeliveryStatus(
     turnId: string,
-    deliveryStatus: ConversationTurn["deliveryStatus"],
+    deliveryStatus: ConversationTurn['deliveryStatus'],
     externalMessageId: string | null,
   ): Promise<ConversationTurn> {
     await this.db
@@ -528,7 +517,7 @@ export abstract class D1StoreConversationOperations extends D1StoreCore {
     sessionIds: string[],
   ): Promise<Map<string, SessionControl>> {
     if (sessionIds.length === 0) return new Map();
-    const placeholders = sessionIds.map(() => "?").join(", ");
+    const placeholders = sessionIds.map(() => '?').join(', ');
     const rows = await this.db
       .prepare(
         `SELECT session_id, agent_mode, assigned_agent_id,
@@ -576,9 +565,7 @@ export abstract class D1StoreConversationOperations extends D1StoreCore {
     await resetD1Session({
       db: this.db,
       sessionId,
-      ...(this.sessionResetHook
-        ? { resetHook: this.sessionResetHook }
-        : {}),
+      ...(this.sessionResetHook ? { resetHook: this.sessionResetHook } : {}),
     });
     return this.getSessionControl(sessionId);
   }
@@ -666,7 +653,7 @@ export abstract class D1StoreConversationOperations extends D1StoreCore {
   private async updateWebhookDelivery(
     channel: WebhookDeliveryChannel,
     externalEventId: string,
-    status: WebhookDelivery["status"],
+    status: WebhookDelivery['status'],
     lastError: string | null,
   ): Promise<WebhookDelivery> {
     const now = new Date().toISOString();
@@ -699,5 +686,4 @@ export abstract class D1StoreConversationOperations extends D1StoreCore {
       );
     return delivery;
   }
-
 }

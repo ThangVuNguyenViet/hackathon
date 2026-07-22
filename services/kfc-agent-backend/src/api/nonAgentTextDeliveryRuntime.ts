@@ -3,12 +3,8 @@ import type {
   ChannelTextSendOutcome,
 } from '../clients/interfaces.js';
 import type { ConversationTurn } from '../domain/types.js';
-import type {
-  ConversationStore,
-} from '../persistence/memoryStore.js';
-import type {
-  NonAgentTextDeliveryRecord,
-} from '../persistence/nonAgentTextDelivery.js';
+import type { ConversationStore } from '../persistence/memoryStore.js';
+import type { NonAgentTextDeliveryRecord } from '../persistence/nonAgentTextDelivery.js';
 
 type NonAgentTextChannel = 'kfc' | 'messenger' | 'zalo';
 const sendingLeaseMilliseconds = 30_000;
@@ -59,10 +55,7 @@ export async function deliverNonAgentText(input: {
     presentationText: input.text,
     createdAt: now.toISOString(),
   });
-  if (
-    reservation.status !== 'reserved' &&
-    reservation.status !== 'replay'
-  ) {
+  if (reservation.status !== 'reserved' && reservation.status !== 'replay') {
     return failedResult(
       reservation.status === 'stale_authority'
         ? 'human_message_session_authority_stale'
@@ -82,10 +75,7 @@ export async function deliverNonAgentText(input: {
       reason: 'sending_lease_expired',
       reconciledAt: now.toISOString(),
     });
-    if (
-      reconciled.status === 'reconciled' ||
-      reconciled.status === 'replay'
-    ) {
+    if (reconciled.status === 'reconciled' || reconciled.status === 'replay') {
       record = reconciled.record;
     }
   }
@@ -97,9 +87,8 @@ export async function deliverNonAgentText(input: {
     return replayExisting(input.store, input.sessionId, record);
   }
 
-  const client = input.channel === 'kfc'
-    ? undefined
-    : availableClient(input.client);
+  const client =
+    input.channel === 'kfc' ? undefined : availableClient(input.client);
   if (input.channel !== 'kfc' && !client) {
     return failedResult('human_message_delivery_client_missing');
   }
@@ -163,14 +152,15 @@ export async function deliverNonAgentText(input: {
     );
   }
 
-  const outcome = input.channel === 'kfc'
-    ? ({ status: 'confirmed_sent', messageId: '' } as const)
-    : await safeOutcome({
-        client: client!,
-        channel: input.channel,
-        recipientId: input.recipientId,
-        text: input.text,
-      });
+  const outcome =
+    input.channel === 'kfc'
+      ? ({ status: 'confirmed_sent', messageId: '' } as const)
+      : await safeOutcome({
+          client: client!,
+          channel: input.channel,
+          recipientId: input.recipientId,
+          text: input.text,
+        });
   let completed;
   try {
     completed = await input.store.completeNonAgentTextDeliveryAttempt({
@@ -190,8 +180,7 @@ export async function deliverNonAgentText(input: {
       reason: 'completion_persistence_failed',
       reconciledAt: new Date().toISOString(),
     });
-    return reconciled.status === 'reconciled' ||
-      reconciled.status === 'replay'
+    return reconciled.status === 'reconciled' || reconciled.status === 'replay'
       ? replayExisting(input.store, input.sessionId, reconciled.record)
       : failedResult('human_message_delivery_outcome_unknown', turn);
   }
@@ -290,13 +279,15 @@ async function replayExisting(
   sessionId: string,
   record: NonAgentTextDeliveryRecord,
 ): Promise<NonAgentTextDeliveryResult> {
-  let turn = (await store.listTurns(sessionId))
-    .find((candidate) => candidate.id === record.assistantTurnId);
+  let turn = (await store.listTurns(sessionId)).find(
+    (candidate) => candidate.id === record.assistantTurnId,
+  );
   if (record.status === 'confirmed_sent') {
-    if (turn && (
-      turn.deliveryStatus !== 'sent' ||
-      turn.externalMessageId !== record.providerMessageId
-    )) {
+    if (
+      turn &&
+      (turn.deliveryStatus !== 'sent' ||
+        turn.externalMessageId !== record.providerMessageId)
+    ) {
       turn = await store.updateTurnDeliveryStatus(
         turn.id,
         'sent',
@@ -328,7 +319,7 @@ async function replayExisting(
   return failedResult(
     record.status === 'sending'
       ? 'human_message_delivery_in_progress'
-      : record.outcomeCode ?? 'human_message_delivery_not_confirmed',
+      : (record.outcomeCode ?? 'human_message_delivery_not_confirmed'),
     turn,
     true,
   );

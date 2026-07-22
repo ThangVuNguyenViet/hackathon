@@ -1,13 +1,13 @@
-import { DashboardEventBus } from "./dashboard/eventBus.js";
-import { buildServer } from "./api/server.js";
-import { buildServerOptionsFromEnv } from "./api/serverOptions.js";
+import { DashboardEventBus } from './dashboard/eventBus.js';
+import { buildServer } from './api/server.js';
+import { buildServerOptionsFromEnv } from './api/serverOptions.js';
 import {
   createMessengerHistoryClient,
   MessengerHistorySyncCoordinator,
   MessengerHistorySyncService,
-} from "./channels/messengerHistory.js";
-import { loadEnv } from "./config/env.js";
-import { createPostgresPersistence } from "./persistence/postgresStore.js";
+} from './channels/messengerHistory.js';
+import { loadEnv } from './config/env.js';
+import { createPostgresPersistence } from './persistence/postgresStore.js';
 
 const env = loadEnv();
 const baseOptions = buildServerOptionsFromEnv(env);
@@ -41,7 +41,7 @@ const server = buildServer({
   readiness: {
     ...baseOptions.readiness,
     database: async () => {
-      await persistence.pool.query("SELECT 1");
+      await persistence.pool.query('SELECT 1');
       return { ok: true };
     },
     openAiConfigured: Boolean(env.OPENAI_API_KEY),
@@ -50,9 +50,9 @@ const server = buildServer({
   },
 });
 
-server.addHook("onClose", async () => {
+server.addHook('onClose', async () => {
   await persistence.pool.end();
 });
 
-await server.listen({ host: "0.0.0.0", port: env.PORT });
+await server.listen({ host: '0.0.0.0', port: env.PORT });
 messengerHistorySync?.syncInBackground();

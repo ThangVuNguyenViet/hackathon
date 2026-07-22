@@ -1,9 +1,7 @@
 import type { RouteOptions } from './api/routeHandlerContracts.js';
 import { buildServerOptionsFromEnv } from './api/serverOptions.js';
 import { checkMessengerToken } from './workerReadiness.js';
-import {
-  createWorkerMessengerHistorySync,
-} from './workerMessaging.js';
+import { createWorkerMessengerHistorySync } from './workerMessaging.js';
 import { workerLifecycleOptions } from './workerLifecycle.js';
 import { loadBundledGeneratedFixtures } from './fixtures/bundledFixtures.js';
 import { createMockClients } from './mock/createMockClients.js';
@@ -36,7 +34,6 @@ export interface BuiltWorkerRouteOptions {
 
 function workerModelEnv(env: WorkerEnv) {
   return {
-    KFC_AGENT_PROFILE_MODE: env.KFC_AGENT_PROFILE_MODE ?? 'production',
     KFC_AGENT_PROVIDER: env.KFC_AGENT_PROVIDER ?? 'google',
     KFC_AGENT_MODEL: env.KFC_AGENT_MODEL ?? '',
     KFC_MONITOR_PROVIDER: env.KFC_MONITOR_PROVIDER,
@@ -49,8 +46,7 @@ function workerModelEnv(env: WorkerEnv) {
 
 function openAiDiagnosticEnv(env: WorkerEnv, request?: Request) {
   const placement = request?.headers.get('cf-placement') ?? '';
-  const placedExecutionColo =
-    /(?:^|[-_])([A-Z0-9]{3})$/.exec(placement)?.[1];
+  const placedExecutionColo = /(?:^|[-_])([A-Z0-9]{3})$/.exec(placement)?.[1];
   const edgeColo = request
     ? (request as Request & { cf?: { colo?: string } }).cf?.colo
     : undefined;
@@ -73,8 +69,7 @@ function buildBaseWorkerRouteOptions(
     ...workerModelEnv(env),
     ...openAiDiagnosticEnv(env, request),
     LANGSMITH_API_KEY: env.LANGSMITH_API_KEY ?? '',
-    LANGSMITH_PROJECT:
-      env.LANGSMITH_PROJECT ?? 'kfc-agent-backend-worker',
+    LANGSMITH_PROJECT: env.LANGSMITH_PROJECT ?? 'kfc-agent-backend-worker',
     LANGSMITH_ENDPOINT:
       env.LANGSMITH_ENDPOINT ?? 'https://api.smith.langchain.com',
     LANGSMITH_TRACING_SAMPLING_RATE: Number(
@@ -91,8 +86,7 @@ function buildBaseWorkerRouteOptions(
     META_APP_SECRET: env.META_APP_SECRET ?? '',
     META_PAGE_ACCESS_TOKEN: env.META_PAGE_ACCESS_TOKEN ?? '',
     META_INBOX_URL_TEMPLATE: env.META_INBOX_URL_TEMPLATE ?? '',
-    MESSENGER_GRAPH_API_BASE_URL:
-      env.MESSENGER_GRAPH_API_BASE_URL ?? '',
+    MESSENGER_GRAPH_API_BASE_URL: env.MESSENGER_GRAPH_API_BASE_URL ?? '',
     ZALO_OA_ID: env.ZALO_OA_ID ?? '',
     ZALO_ACCESS_TOKEN: env.ZALO_ACCESS_TOKEN ?? '',
     ZALO_INBOX_URL_TEMPLATE: env.ZALO_INBOX_URL_TEMPLATE ?? '',
@@ -106,10 +100,8 @@ function buildBaseWorkerRouteOptions(
     CATALOG_TTL_SECONDS: env.CATALOG_TTL_SECONDS
       ? Number(env.CATALOG_TTL_SECONDS)
       : undefined,
-    KFC_COMMERCE_GATEWAY_BASE_URL:
-      env.KFC_COMMERCE_GATEWAY_BASE_URL ?? '',
-    KFC_COMMERCE_GATEWAY_TOKEN:
-      env.KFC_COMMERCE_GATEWAY_TOKEN ?? '',
+    KFC_COMMERCE_GATEWAY_BASE_URL: env.KFC_COMMERCE_GATEWAY_BASE_URL ?? '',
+    KFC_COMMERCE_GATEWAY_TOKEN: env.KFC_COMMERCE_GATEWAY_TOKEN ?? '',
     KFC_POS_MODE: env.KFC_POS_MODE ?? 'disabled',
     KFC_POS_BASE_URL: env.KFC_POS_BASE_URL ?? '',
     KFC_POS_TOKEN: env.KFC_POS_TOKEN ?? '',
@@ -178,8 +170,7 @@ export function buildWorkerRouteOptions(
       env,
     );
     routeOptions.customerRunPaceMs = surface.customerRunPaceMs;
-    routeOptions.customerRunMaxTextEvents =
-      surface.customerRunMaxTextEvents;
+    routeOptions.customerRunMaxTextEvents = surface.customerRunMaxTextEvents;
     routeOptions.readiness = fetchReadiness(
       env,
       options.readiness,

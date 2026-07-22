@@ -25,12 +25,8 @@ import {
   type Queryable,
   type SessionAgentStateRow,
 } from './postgresStoreSupport.js';
-import {
-  captureActivePostgresSessionAuthority,
-} from './postgresStoreSessionAuthority.js';
-import {
-  reconcileExpiredPostgresAgentRunTextDelivery,
-} from './postgresStoreAgentRunTextDeliveryRecovery.js';
+import { captureActivePostgresSessionAuthority } from './postgresStoreSessionAuthority.js';
+import { reconcileExpiredPostgresAgentRunTextDelivery } from './postgresStoreAgentRunTextDeliveryRecovery.js';
 
 export async function advancePostgresSessionAgentGeneration(input: {
   db: Queryable;
@@ -193,7 +189,7 @@ export async function claimPostgresAgentRunExecution(input: {
         ? undefined
         : (
             await client.query<AgentRunRow>(
-               `UPDATE agent_runs AS run
+              `UPDATE agent_runs AS run
                SET status = 'running',
                    execution_attempt = execution_attempt + 1,
                    execution_lease_token = $6,
@@ -408,9 +404,7 @@ export async function updatePostgresAgentRunIfExecutionCurrent(input: {
     await client.query('COMMIT');
     return {
       status: 'stale',
-      ...(existing.rows[0]
-        ? { run: agentRunFromRow(existing.rows[0]) }
-        : {}),
+      ...(existing.rows[0] ? { run: agentRunFromRow(existing.rows[0]) } : {}),
     };
   } catch (error) {
     await rollbackQuietly(client);
@@ -447,10 +441,7 @@ function postgresAgentRunPatchAssignments(patch: AgentRunPatch): {
   return { assignments, bindings };
 }
 
-async function readPostgresSessionAgentState(
-  db: Queryable,
-  sessionId: string,
-) {
+async function readPostgresSessionAgentState(db: Queryable, sessionId: string) {
   const result = await db.query<SessionAgentStateRow>(
     `SELECT * FROM session_agent_state WHERE session_id = $1 LIMIT 1`,
     [sessionId],

@@ -4,17 +4,17 @@ import type {
   DashboardEvent,
   ConversationTurn,
   MonitorSessionIntelligence,
-} from "../domain/types.js";
+} from '../domain/types.js';
 import {
   parseMonitorSessionIntelligencePayload,
   preserveMonitorContext,
-} from "../monitor/sessionIntelligence.js";
+} from '../monitor/sessionIntelligence.js';
 import type {
   AgentRun,
   AgentRunTurn,
   PendingCustomerTurn,
   SessionAgentState,
-} from "../domain/types.js";
+} from '../domain/types.js';
 import type {
   AgentRunPatch,
   AppendConversationTurnInput,
@@ -38,14 +38,14 @@ import type {
   WebhookDeliveryChannel,
   AppendCustomerRunEventInput,
   CustomerRunPatch,
-} from "./memoryStore.js";
+} from './memoryStore.js';
 import {
   CustomerRunIdempotencyConflictError,
   CustomerRunSequenceConflictError,
   customerRunEventSchema,
   type CustomerRun,
   type CustomerRunEvent,
-} from "../customerRuns/contracts.js";
+} from '../customerRuns/contracts.js';
 
 export interface D1Result<T = Record<string, unknown>> {
   results?: T[];
@@ -68,22 +68,22 @@ export interface D1DatabaseLike {
 export interface ConversationTurnRow {
   id: string;
   session_id: string;
-  channel: ConversationTurn["channel"];
-  role: ConversationTurn["role"];
+  channel: ConversationTurn['channel'];
+  role: ConversationTurn['role'];
   text: string;
   external_message_id: string | null;
   external_user_id: string | null;
-  delivery_status: ConversationTurn["deliveryStatus"];
+  delivery_status: ConversationTurn['deliveryStatus'];
   metadata: string | null;
   created_at: string;
 }
 
 export interface ConversationProfileRow {
-  channel: ConversationProfile["channel"];
+  channel: ConversationProfile['channel'];
   external_user_id: string;
   display_name: string | null;
   avatar_url: string | null;
-  profile_source: ConversationProfile["profileSource"];
+  profile_source: ConversationProfile['profileSource'];
   profile_updated_at: string;
 }
 
@@ -112,14 +112,14 @@ export interface IrreversibleOperationRow {
 export interface DashboardEventRow {
   id: string;
   session_id: string;
-  type: DashboardEvent["type"];
+  type: DashboardEvent['type'];
   payload: string;
   created_at: string;
 }
 
 export interface DashboardSessionSummary {
   sessionId: string;
-  latestEventType: DashboardEvent["type"];
+  latestEventType: DashboardEvent['type'];
   updatedAt: string;
   sessionIntelligence: MonitorSessionIntelligence | null;
 }
@@ -130,7 +130,7 @@ export interface WebhookDeliveryRow {
   external_thread_id: string;
   external_user_id: string;
   session_id: string;
-  status: WebhookDelivery["status"];
+  status: WebhookDelivery['status'];
   payload: string;
   received_at: string;
   processed_at: string | null;
@@ -151,12 +151,12 @@ export interface SessionControlRow {
 export interface PendingCustomerTurnRow {
   turn_id: string;
   session_id: string;
-  channel: PendingCustomerTurn["channel"];
+  channel: PendingCustomerTurn['channel'];
   external_message_id: string;
   external_user_id: string;
   text: string;
-  steer_mode: PendingCustomerTurn["steerMode"];
-  status: PendingCustomerTurn["status"];
+  steer_mode: PendingCustomerTurn['steerMode'];
+  status: PendingCustomerTurn['status'];
   claimed_run_id: string | null;
   received_at: string;
   updated_at: string;
@@ -167,9 +167,9 @@ export interface AgentRunRow {
   session_id: string;
   generation: number;
   session_authority_generation: number;
-  channel: AgentRun["channel"];
+  channel: AgentRun['channel'];
   external_user_id: string;
-  status: AgentRun["status"];
+  status: AgentRun['status'];
   execution_attempt: number;
   execution_lease_token: string | null;
   execution_lease_expires_at: string | null;
@@ -178,7 +178,7 @@ export interface AgentRunRow {
   irreversible_side_effect_at: string | null;
   irreversible_tool_name: string | null;
   assistant_turn_id: string | null;
-  delivery_status: AgentRun["deliveryStatus"];
+  delivery_status: AgentRun['deliveryStatus'];
   delivery_external_message_id: string | null;
   error_code: string | null;
   error_message: string | null;
@@ -211,8 +211,8 @@ export interface CustomerRunRow {
   request_fingerprint: string;
   generation: number;
   session_authority_generation: number;
-  status: CustomerRun["status"];
-  phase: CustomerRun["phase"];
+  status: CustomerRun['status'];
+  phase: CustomerRun['phase'];
   next_event_sequence: number;
   client_schema_version: number;
   accepted_at: string;
@@ -226,7 +226,7 @@ export interface CustomerRunEventRow {
   run_id: string;
   sequence: number;
   schema_version: 1;
-  type: CustomerRunEvent["type"];
+  type: CustomerRunEvent['type'];
   occurred_at: string;
   payload: string;
 }
@@ -581,43 +581,10 @@ export const schemaStatements = [
   )`,
   `CREATE INDEX IF NOT EXISTS customer_run_events_replay_idx
     ON customer_run_events (run_id, sequence)`,
-  `CREATE TABLE IF NOT EXISTS confirmation_pause_sessions (
+  `CREATE TABLE IF NOT EXISTS session_generations (
     session_id TEXT PRIMARY KEY,
     generation INTEGER NOT NULL CHECK (generation >= 0)
   )`,
-  `CREATE TABLE IF NOT EXISTS confirmation_pauses (
-    schema_version TEXT NOT NULL,
-    request_id TEXT PRIMARY KEY,
-    checkpoint_thread_id TEXT NOT NULL,
-    checkpoint_namespace TEXT NOT NULL,
-    checkpoint_id TEXT NOT NULL,
-    session_id TEXT NOT NULL,
-    session_generation INTEGER NOT NULL CHECK (session_generation >= 0),
-    session_authority_generation INTEGER NOT NULL
-      CHECK (session_authority_generation >= 0),
-    pause_identity_digest TEXT NOT NULL,
-    customer_id TEXT NOT NULL,
-    channel TEXT NOT NULL,
-    action_json TEXT NOT NULL,
-    action_digest TEXT NOT NULL,
-    approval_binding_json TEXT NOT NULL,
-    approval_binding_digest TEXT NOT NULL,
-    principal_json TEXT NOT NULL,
-    authenticated_subject TEXT NOT NULL,
-    authentication_evidence_ref TEXT NOT NULL,
-    created_at TEXT NOT NULL,
-    expires_at TEXT NOT NULL,
-    status TEXT NOT NULL CHECK (status IN ('pending', 'rejected', 'expired')),
-    rejection_receipt_id TEXT,
-    rejection_receipt_json TEXT,
-    rejected_at TEXT,
-    completion_status TEXT NOT NULL CHECK (completion_status IN ('pending', 'completed', 'failed')),
-    result_json TEXT,
-    completion_error TEXT,
-    completed_at TEXT
-  )`,
-  `CREATE INDEX IF NOT EXISTS confirmation_pauses_session_idx
-    ON confirmation_pauses (session_id, created_at)`,
   `CREATE TABLE IF NOT EXISTS irreversible_operations (
     request_id TEXT PRIMARY KEY,
     session_id TEXT NOT NULL,
@@ -634,7 +601,6 @@ export const schemaStatements = [
     completed_at TEXT
   )`,
 ];
-
 
 export function parsePayload(value: string): Record<string, unknown> {
   return JSON.parse(value) as Record<string, unknown>;
@@ -662,7 +628,9 @@ export function parseNullablePayload(
   return JSON.parse(value) as Record<string, unknown>;
 }
 
-export function profileFromRow(row: ConversationProfileRow): ConversationProfile {
+export function profileFromRow(
+  row: ConversationProfileRow,
+): ConversationProfile {
   return {
     channel: row.channel,
     externalUserId: row.external_user_id,
@@ -693,7 +661,9 @@ export function dashboardEventFromRow(row: DashboardEventRow): DashboardEvent {
   };
 }
 
-export function webhookDeliveryFromRow(row: WebhookDeliveryRow): WebhookDelivery {
+export function webhookDeliveryFromRow(
+  row: WebhookDeliveryRow,
+): WebhookDelivery {
   return {
     channel: row.channel,
     externalEventId: row.external_event_id,
@@ -742,7 +712,9 @@ export function customerRunFromRow(row: CustomerRunRow): CustomerRun {
   };
 }
 
-export function customerRunEventFromRow(row: CustomerRunEventRow): CustomerRunEvent {
+export function customerRunEventFromRow(
+  row: CustomerRunEventRow,
+): CustomerRunEvent {
   return customerRunEventSchema.parse({
     schemaVersion: Number(row.schema_version),
     eventId: row.event_id,
@@ -757,7 +729,7 @@ export function customerRunEventFromRow(row: CustomerRunEventRow): CustomerRunEv
 export function defaultSessionControl(sessionId: string): SessionControl {
   return {
     sessionId,
-    agentMode: "ai_active",
+    agentMode: 'ai_active',
     assignedAgentId: null,
     sessionAuthorityGeneration: 0,
     updatedAt: new Date().toISOString(),

@@ -1,12 +1,16 @@
 import type {
   CartClient,
   ExternalCallContext,
-  IrreversibleConfirmationAuthority,
   MenuClient,
   OmsClient,
   RecommendationClient,
 } from './interfaces.js';
-import type { Cart, MenuItem, MenuModifierGroup, ToolResult } from '../domain/types.js';
+import type {
+  Cart,
+  MenuItem,
+  MenuModifierGroup,
+  ToolResult,
+} from '../domain/types.js';
 import type { GeneratedMenuModifier } from '../fixtures/schema.js';
 import {
   revalidateCatalogPin,
@@ -25,12 +29,19 @@ function fail<T>(message: string): ToolResult<T> {
 }
 
 function normalized(value: string): string {
-  return value.toLowerCase().replace(/đ/g, 'd').normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+  return value
+    .toLowerCase()
+    .replace(/đ/g, 'd')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '');
 }
 
 type RawGroup = CatalogItemFact['modifierGroups'][number];
 
-function toModifierGroups(groups: CatalogItemFact['modifierGroups'], depth = 0): MenuModifierGroup[] {
+function toModifierGroups(
+  groups: CatalogItemFact['modifierGroups'],
+  depth = 0,
+): MenuModifierGroup[] {
   return groups.map((group) => ({
     groupId: group.id,
     name: group.name,
@@ -48,7 +59,10 @@ function toModifierGroups(groups: CatalogItemFact['modifierGroups'], depth = 0):
   }));
 }
 
-function toGeneratedGroups(groups: CatalogItemFact['modifierGroups'], depth = 0): GeneratedMenuModifier['modifierGroups'] {
+function toGeneratedGroups(
+  groups: CatalogItemFact['modifierGroups'],
+  depth = 0,
+): GeneratedMenuModifier['modifierGroups'] {
   return groups.map((group: RawGroup) => ({
     groupId: group.id,
     name: group.name,
@@ -99,8 +113,9 @@ export interface CatalogObservationClientOptions {
   now?: () => Date;
 }
 
-export function createCatalogObservationClients(options: CatalogObservationClientOptions): {
-  confirmationAuthority: IrreversibleConfirmationAuthority;
+export function createCatalogObservationClients(
+  options: CatalogObservationClientOptions,
+): {
   menu: MenuClient;
   recommendation: RecommendationClient;
   cart: CartClient;
@@ -109,8 +124,9 @@ export function createCatalogObservationClients(options: CatalogObservationClien
   const discoveryObservation = async (
     externalCallContext: ExternalCallContext,
   ): Promise<CatalogObservation> => {
-    const expiresAt = options.pinned.expiresAt
-      ?? new Date(Date.parse(options.pinned.observedAt) + 300_000).toISOString();
+    const expiresAt =
+      options.pinned.expiresAt ??
+      new Date(Date.parse(options.pinned.observedAt) + 300_000).toISOString();
     return Date.parse(expiresAt) <= (options.now?.() ?? new Date()).getTime()
       ? options.fetchCurrent(externalCallContext)
       : options.pinned;
@@ -122,26 +138,44 @@ export function createCatalogObservationClients(options: CatalogObservationClien
   ): Promise<ToolResult<true>> => {
     const current = await options.fetchCurrent(externalCallContext);
     const result = revalidateCatalogPin(options.pinned, current, itemCodes);
-    return result.ok ? ok(true) : fail(`Catalog changed for ${result.changedItemCodes.join(', ')}`);
+    return result.ok
+      ? ok(true)
+      : fail(`Catalog changed for ${result.changedItemCodes.join(', ')}`);
   };
 
   const menu: MenuClient = {
     async searchMenu(query, externalCallContext) {
       const observation = await discoveryObservation(externalCallContext);
       const words = normalized(query).split(/\s+/).filter(Boolean);
-      return ok(observation.items
-        .filter((item) => words.every((word) => normalized(`${item.name} ${item.category} ${item.itemCode}`).includes(word)))
-        .map(toMenuItem));
+      return ok(
+        observation.items
+          .filter((item) =>
+            words.every((word) =>
+              normalized(
+                `${item.name} ${item.category} ${item.itemCode}`,
+              ).includes(word),
+            ),
+          )
+          .map(toMenuItem),
+      );
     },
     async getItemDetails(code, externalCallContext) {
-      const item = (
-        await discoveryObservation(externalCallContext)
-      ).items.find((candidate) => candidate.itemCode === code);
-      return item ? ok(toMenuItem(item)) : { ok: false, errorCode: 'item_not_found', message: `No current item ${code}` };
+      const item = (await discoveryObservation(externalCallContext)).items.find(
+        (candidate) => candidate.itemCode === code,
+      );
+      return item
+        ? ok(toMenuItem(item))
+        : {
+            ok: false,
+            errorCode: 'item_not_found',
+            message: `No current item ${code}`,
+          };
     },
     async getModifierOptions(code, externalCallContext) {
       const observation = await discoveryObservation(externalCallContext);
-      const item = observation.items.find((candidate) => candidate.itemCode === code);
+      const item = observation.items.find(
+        (candidate) => candidate.itemCode === code,
+      );
       return item && item.modifierGroups.length > 0
         ? ok({
             itemCode: item.itemCode,
@@ -149,9 +183,16 @@ export function createCatalogObservationClients(options: CatalogObservationClien
             productCode: item.productCode,
             name: item.name,
             modifierGroups: toGeneratedGroups(item.modifierGroups),
-            provenance: { sourceFile: observation.sourceUrl, fixtureMode: 'current_api' },
+            provenance: {
+              sourceFile: observation.sourceUrl,
+              fixtureMode: 'current_api',
+            },
           })
-        : { ok: false, errorCode: 'modifiers_not_found', message: `No current modifiers for ${code}` };
+        : {
+            ok: false,
+            errorCode: 'modifiers_not_found',
+            message: `No current modifiers for ${code}`,
+          };
     },
   };
 
@@ -164,35 +205,49 @@ export function createCatalogObservationClients(options: CatalogObservationClien
           observation,
           subjectId: options.sessionId,
           journeyId: options.sessionId,
-          factGroups: [{
-            key: 'catalog',
-            environment: observation.environment,
-            providerFingerprint: observation.providerFingerprint,
-            subjectId: options.sessionId,
-            journeyId: options.sessionId,
-            revision: observation.id,
-            verifiedAt: observation.observedAt,
-            expiresAt: observation.expiresAt ?? new Date(Date.parse(observation.observedAt) + 300_000).toISOString(),
-            dependencies: [],
-            value: observation.items,
-          }],
+          factGroups: [
+            {
+              key: 'catalog',
+              environment: observation.environment,
+              providerFingerprint: observation.providerFingerprint,
+              subjectId: options.sessionId,
+              journeyId: options.sessionId,
+              revision: observation.id,
+              verifiedAt: observation.observedAt,
+              expiresAt:
+                observation.expiresAt ??
+                new Date(
+                  Date.parse(observation.observedAt) + 300_000,
+                ).toISOString(),
+              dependencies: [],
+              value: observation.items,
+            },
+          ],
         });
       } catch (error) {
-        return fail(error instanceof Error ? error.message : 'Catalog projection is stale');
+        return fail(
+          error instanceof Error
+            ? error.message
+            : 'Catalog projection is stale',
+        );
       }
       const inCart = new Set(cart.items.map((item) => item.itemCode));
-      return ok(rankEligibleRecommendations(observation.items.map((item) => ({
-        itemCode: item.itemCode,
-        eligible: !inCart.has(item.itemCode),
-        value: toMenuItem(item),
-        score: {
-          requestMatch: 0,
-          partySizeFit: 0,
-          budgetFit: -item.priceVnd,
-          preferenceMatch: 0,
-          cartDisruption: 0,
-        },
-      }))).map((candidate) => candidate.value));
+      return ok(
+        rankEligibleRecommendations(
+          observation.items.map((item) => ({
+            itemCode: item.itemCode,
+            eligible: !inCart.has(item.itemCode),
+            value: toMenuItem(item),
+            score: {
+              requestMatch: 0,
+              partySizeFit: 0,
+              budgetFit: -item.priceVnd,
+              preferenceMatch: 0,
+              cartDisruption: 0,
+            },
+          })),
+        ).map((candidate) => candidate.value),
+      );
     },
   };
 
@@ -208,11 +263,7 @@ export function createCatalogObservationClients(options: CatalogObservationClien
         externalCallContext,
       );
       return checked.ok
-        ? options.cart.applyChanges(
-            current,
-            changes,
-            externalCallContext,
-          )
+        ? options.cart.applyChanges(current, changes, externalCallContext)
         : fail<Cart>(checked.message);
     },
     async updateCart(
@@ -256,45 +307,18 @@ export function createCatalogObservationClients(options: CatalogObservationClien
         : fail(checked.message);
     },
     async placeOrder(input, externalCallContext, mutationIdentity) {
-      const checked = await verifyCart(
-        input.preview.cart,
-        externalCallContext,
-      );
+      const checked = await verifyCart(input.preview.cart, externalCallContext);
       return checked.ok
         ? options.oms.placeOrder(input, externalCallContext, mutationIdentity)
         : fail(checked.message);
     },
     getOrderStatus: (orderId, externalCallContext) =>
       options.oms.getOrderStatus(orderId, externalCallContext),
-    cancelOrder: (
-      orderId,
-      externalCallContext,
-      mutationIdentity,
-    ) =>
-      options.oms.cancelOrder(
-        orderId,
-        externalCallContext,
-        mutationIdentity,
-      ),
+    cancelOrder: (orderId, externalCallContext, mutationIdentity) =>
+      options.oms.cancelOrder(orderId, externalCallContext, mutationIdentity),
   };
 
   return {
-    confirmationAuthority: {
-      environment: options.pinned.environment,
-      scenarioId: 'live-agent',
-      catalogObservationId: options.pinned.id,
-      catalogObservationHash: options.pinned.sha256,
-      providerRevision: options.pinned.providerFingerprint,
-      async revalidate(binding, externalCallContext) {
-        const current = await options.fetchCurrent(externalCallContext);
-        return current.environment === binding.environment &&
-          current.providerFingerprint === binding.providerRevision &&
-          current.id === binding.catalogObservationId &&
-          current.sha256 === binding.catalogObservationHash
-          ? { ok: true }
-          : { ok: false, reason: 'Catalog or provider binding changed' };
-      },
-    },
     menu,
     recommendation,
     cart,

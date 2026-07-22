@@ -14,7 +14,7 @@ export class DashboardSocket {
   ) {}
 
   async fetch(request: Request): Promise<Response> {
-    if (request.method === "POST") {
+    if (request.method === 'POST') {
       const event = await request.text();
       for (const socket of this.state.getWebSockets()) {
         try {
@@ -26,8 +26,8 @@ export class DashboardSocket {
       return new Response(null, { status: 202 });
     }
 
-    if (request.headers.get("Upgrade")?.toLowerCase() !== "websocket") {
-      return new Response("Expected WebSocket upgrade", { status: 426 });
+    if (request.headers.get('Upgrade')?.toLowerCase() !== 'websocket') {
+      return new Response('Expected WebSocket upgrade', { status: 426 });
     }
 
     const pair = new WebSocketPair();

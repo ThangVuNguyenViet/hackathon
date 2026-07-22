@@ -1,5 +1,4 @@
-import type { CustomerAccessScope } from '../domain/types.js';
-import type { CommerceApprovalCapability, ToolName } from './types.js';
+import type { ToolName } from './types.js';
 
 export type ToolBoundary =
   | 'catalog'
@@ -53,20 +52,4 @@ export const toolBoundaries: Record<ToolName, ToolBoundary> = {
 
 export function getToolBoundary(toolName: ToolName): ToolBoundary {
   return toolBoundaries[toolName];
-}
-
-export const approvalCapabilityScopes: Record<CommerceApprovalCapability, CustomerAccessScope> = {
-  placeOrder: 'order:write',
-  createPaymentLink: 'payment:write',
-  acquireVoucher: 'membership:write',
-  redeemReward: 'membership:write',
-  handoff: 'handoff:write',
-  resolveHandoff: 'handoff:write',
-};
-
-export function approvalCapabilitySupportsGuestCheckout(
-  capability: CommerceApprovalCapability,
-): capability is 'placeOrder' | 'createPaymentLink' {
-  return capability === 'placeOrder' ||
-    capability === 'createPaymentLink';
 }

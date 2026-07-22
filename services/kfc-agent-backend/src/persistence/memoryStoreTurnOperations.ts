@@ -18,7 +18,8 @@ export async function appendMemoryConversationTurn(input: {
     ...input.turn,
     metadata: input.turn.metadata ?? null,
     id: input.turn.id ?? `turn_${input.turns.length + 1}`,
-    createdAt: input.turn.createdAt ??
+    createdAt:
+      input.turn.createdAt ??
       new Date('2026-07-07T00:00:00.000Z').toISOString(),
   };
   input.turns.push(turn);

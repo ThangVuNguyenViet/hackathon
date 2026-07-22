@@ -8,21 +8,33 @@ interface ScriptScenario {
   goal: string;
   useCases: string[];
   expectations: string[];
-  turns: Array<{ index: number; speaker: 'User' | 'Bot'; text: string; useCases: string[] }>;
+  turns: Array<{
+    index: number;
+    speaker: 'User' | 'Bot';
+    text: string;
+    useCases: string[];
+  }>;
 }
 
 const backendRoot = resolve(import.meta.dirname, '..');
-const scenariosRoot = resolve(backendRoot, '../../ai-talent-tracks/fnb/conversations');
-const datasetName = process.env.KFC_SHOWCASE_DATASET?.trim() || 'kfc-showcase-scenarios-v1';
-const baseUrl = (process.env.KFC_CHATBOT_URL?.trim() || 'https://kfc-ai-chatbot.pages.dev').replace(/\/$/, '');
+const scenariosRoot = resolve(
+  backendRoot,
+  '../../ai-talent-tracks/fnb/conversations',
+);
+const datasetName =
+  process.env.KFC_SHOWCASE_DATASET?.trim() || 'kfc-showcase-scenarios-v1';
+const baseUrl = (
+  process.env.KFC_CHATBOT_URL?.trim() || 'https://kfc-ai-chatbot.pages.dev'
+).replace(/\/$/, '');
 const apiKey = process.env.LANGSMITH_API_KEY?.trim();
 if (!apiKey) throw new Error('LANGSMITH_API_KEY is required');
 
 const client = new Client({ apiKey, apiUrl: process.env.LANGSMITH_ENDPOINT });
-const dataset = await client.hasDataset({ datasetName })
+const dataset = (await client.hasDataset({ datasetName }))
   ? await client.readDataset({ datasetName })
   : await client.createDataset(datasetName, {
-      description: 'PM-curated KFC showcase scenarios. Inputs are fixed customer turns; outputs are acceptance criteria.',
+      description:
+        'PM-curated KFC showcase scenarios. Inputs are fixed customer turns; outputs are acceptance criteria.',
       dataType: 'kv',
       metadata: { schemaVersion: 'kfc-showcase-v1' },
     });
@@ -34,7 +46,12 @@ for await (const example of client.listExamples({ datasetId: dataset.id })) {
 const scripts = readdirSync(scenariosRoot)
   .filter((name) => /^\d{2}-.*\.json$/.test(name))
   .sort()
-  .map((name) => JSON.parse(readFileSync(resolve(scenariosRoot, name), 'utf8')) as ScriptScenario);
+  .map(
+    (name) =>
+      JSON.parse(
+        readFileSync(resolve(scenariosRoot, name), 'utf8'),
+      ) as ScriptScenario,
+  );
 for (const scenario of scripts) {
   if (existing.has(scenario.id)) continue;
   await client.createExample({
@@ -54,7 +71,9 @@ for (const scenario of scripts) {
   });
 }
 
-const catalog = await requestJson<{ scenarios: Array<{ id: string; turns: Array<{ text: string }> }> }>('/showcase/scenarios');
+const catalog = await requestJson<{
+  scenarios: Array<{ id: string; turns: Array<{ text: string }> }>;
+}>('/showcase/scenarios');
 const completed: string[] = [];
 const stale: Array<{ scenarioId: string; mode: string; error: string }> = [];
 for (const scenario of catalog.scenarios) {
@@ -70,7 +89,10 @@ for (const scenario of catalog.scenarios) {
             customerId,
             clientMessageId: `${customerId}_${index + 1}`,
             text: turn.text,
-            metadata: { showcaseScenarioId: scenario.id, showcaseResponseMode: mode },
+            metadata: {
+              showcaseScenarioId: scenario.id,
+              showcaseResponseMode: mode,
+            },
           },
         });
       }
@@ -80,12 +102,22 @@ for (const scenario of catalog.scenarios) {
       });
       completed.push(`${scenario.id}:${mode}`);
     } catch (error) {
-      stale.push({ scenarioId: scenario.id, mode, error: error instanceof Error ? error.message : String(error) });
+      stale.push({
+        scenarioId: scenario.id,
+        mode,
+        error: error instanceof Error ? error.message : String(error),
+      });
     }
   }
 }
 
-console.log(JSON.stringify({ ok: stale.length === 0, datasetName, baseUrl, completed, stale }, null, 2));
+console.log(
+  JSON.stringify(
+    { ok: stale.length === 0, datasetName, baseUrl, completed, stale },
+    null,
+    2,
+  ),
+);
 if (stale.length > 0) process.exitCode = 1;
 
 async function requestJson<T = Record<string, unknown>>(
@@ -94,14 +126,23 @@ async function requestJson<T = Record<string, unknown>>(
 ): Promise<T> {
   const response = await fetch(`${baseUrl}${path}`, {
     method: options.method ?? 'GET',
-    headers: options.body === undefined ? undefined : { 'content-type': 'application/json' },
+    headers:
+      options.body === undefined
+        ? undefined
+        : { 'content-type': 'application/json' },
     body: options.body === undefined ? undefined : JSON.stringify(options.body),
   });
-  const body = await response.json() as T;
-  if (!response.ok) throw new Error(`${path} returned ${response.status}: ${JSON.stringify(body)}`);
+  const body = (await response.json()) as T;
+  if (!response.ok)
+    throw new Error(
+      `${path} returned ${response.status}: ${JSON.stringify(body)}`,
+    );
   return body;
 }
 
 function safeId(value: string): string {
-  return value.replace(/[^a-zA-Z0-9]+/g, '_').replace(/^_+|_+$/g, '').slice(0, 48);
+  return value
+    .replace(/[^a-zA-Z0-9]+/g, '_')
+    .replace(/^_+|_+$/g, '')
+    .slice(0, 48);
 }

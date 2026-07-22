@@ -1,12 +1,12 @@
-import { z } from "zod";
+import { z } from 'zod';
 import type {
   ExternalCallContext,
   ProviderMutationIdentity,
-} from "../clients/interfaces.js";
-import { opaqueProviderIdSchema } from "../domain/opaqueProviderId.js";
-import type { ToolResult } from "../domain/types.js";
-import type { PosClient } from "./posTypes.js";
-import { providerPosTicketResultSchema } from "./providerResponseSchemas.js";
+} from '../clients/interfaces.js';
+import { opaqueProviderIdSchema } from '../domain/opaqueProviderId.js';
+import type { ToolResult } from '../domain/types.js';
+import type { PosClient } from './posTypes.js';
+import { providerPosTicketResultSchema } from './providerResponseSchemas.js';
 
 export interface HttpPosClientOptions {
   baseUrl: string;
@@ -22,14 +22,14 @@ function failureDetail(error: unknown): string {
   return error instanceof Error
     ? error.message
     : error === undefined
-      ? "caller signal or deadline"
+      ? 'caller signal or deadline'
       : String(error);
 }
 
 function requestCancellationFailure<T>(error: unknown): ToolResult<T> {
   return {
     ok: false,
-    errorCode: "pos_request_cancelled",
+    errorCode: 'pos_request_cancelled',
     message: `POS request was cancelled: ${failureDetail(error)}`,
   };
 }
@@ -37,7 +37,7 @@ function requestCancellationFailure<T>(error: unknown): ToolResult<T> {
 function mutationAmbiguityFailure<T>(error: unknown): ToolResult<T> {
   return {
     ok: false,
-    errorCode: "pos_mutation_ambiguous",
+    errorCode: 'pos_mutation_ambiguous',
     message: `POS mutation outcome is ambiguous after dispatch: ${failureDetail(error)}`,
   };
 }
@@ -45,29 +45,29 @@ function mutationAmbiguityFailure<T>(error: unknown): ToolResult<T> {
 function invalidProviderResponseFailure<T>(error: unknown): ToolResult<T> {
   return {
     ok: false,
-    errorCode: "pos_invalid_provider_response",
+    errorCode: 'pos_invalid_provider_response',
     message: `POS returned an invalid response: ${failureDetail(error)}`,
   };
 }
 
 function unexpectedMutationStatusFailure<T>(
-  expectedStatus: "accepted" | "cancelled",
+  expectedStatus: 'accepted' | 'cancelled',
   actualStatus: unknown,
 ): ToolResult<T> {
-  if (actualStatus === "rejected") {
+  if (actualStatus === 'rejected') {
     return {
       ok: false,
-      errorCode: expectedStatus === "accepted"
-        ? "pos_order_rejected"
-        : "pos_cancellation_rejected",
+      errorCode:
+        expectedStatus === 'accepted'
+          ? 'pos_order_rejected'
+          : 'pos_cancellation_rejected',
       message: `POS returned rejected while ${expectedStatus} was required`,
     };
   }
   return {
     ok: false,
-    errorCode: "pos_mutation_ambiguous",
-    message:
-      `POS returned ${String(actualStatus)} while ${expectedStatus} was required`,
+    errorCode: 'pos_mutation_ambiguous',
+    message: `POS returned ${String(actualStatus)} while ${expectedStatus} was required`,
   };
 }
 
@@ -76,8 +76,8 @@ function providerMutationIdentityIsValid(
 ): identity is ProviderMutationIdentity {
   return Boolean(
     identity &&
-    typeof identity.idempotencyKey === "string" &&
-    typeof identity.bindingFingerprint === "string" &&
+    typeof identity.idempotencyKey === 'string' &&
+    typeof identity.bindingFingerprint === 'string' &&
     identity.idempotencyKey.length <= 512 &&
     opaqueProviderIdSchema.safeParse(identity.idempotencyKey).success &&
     /^[a-f0-9]{64}$/u.test(identity.bindingFingerprint),
@@ -87,13 +87,13 @@ function providerMutationIdentityIsValid(
 function providerMutationIdentityRequiredFailure<T>(): ToolResult<T> {
   return {
     ok: false,
-    errorCode: "provider_mutation_identity_required",
-    message: "A canonical provider mutation identity is required",
+    errorCode: 'provider_mutation_identity_required',
+    message: 'A canonical provider mutation identity is required',
   };
 }
 
 export function createHttpPosClient(options: HttpPosClientOptions): PosClient {
-  const baseUrl = options.baseUrl.replace(/\/$/, "");
+  const baseUrl = options.baseUrl.replace(/\/$/, '');
   const fetchImpl = options.fetchImpl ?? fetch;
 
   async function request<T>(
@@ -102,21 +102,19 @@ export function createHttpPosClient(options: HttpPosClientOptions): PosClient {
     schema: z.ZodType<ToolResult<T>>,
     init: RequestInit = {},
     mutation = false,
-    expectedMutationStatus?: "accepted" | "cancelled",
+    expectedMutationStatus?: 'accepted' | 'cancelled',
   ): Promise<ToolResult<T>> {
     if (externalCallIsCancelled(externalCallContext)) {
-      return requestCancellationFailure(
-        externalCallContext.signal.reason,
-      );
+      return requestCancellationFailure(externalCallContext.signal.reason);
     }
     try {
       const response = await fetchImpl(`${baseUrl}${path}`, {
         ...init,
         signal: externalCallContext.signal,
         headers: {
-          accept: "application/json",
+          accept: 'application/json',
           authorization: `Bearer ${options.token}`,
-          ...(init.body ? { "content-type": "application/json" } : {}),
+          ...(init.body ? { 'content-type': 'application/json' } : {}),
           ...init.headers,
         },
       });
@@ -143,17 +141,15 @@ export function createHttpPosClient(options: HttpPosClientOptions): PosClient {
       if (
         parsed.data.ok &&
         expectedMutationStatus !== undefined &&
-        (
-          typeof parsed.data.value !== "object" ||
+        (typeof parsed.data.value !== 'object' ||
           parsed.data.value === null ||
-          !("status" in parsed.data.value) ||
-          parsed.data.value.status !== expectedMutationStatus
-        )
+          !('status' in parsed.data.value) ||
+          parsed.data.value.status !== expectedMutationStatus)
       ) {
         const actualStatus =
-          typeof parsed.data.value === "object" &&
-            parsed.data.value !== null &&
-            "status" in parsed.data.value
+          typeof parsed.data.value === 'object' &&
+          parsed.data.value !== null &&
+          'status' in parsed.data.value
             ? parsed.data.value.status
             : undefined;
         return unexpectedMutationStatusFailure(
@@ -168,13 +164,13 @@ export function createHttpPosClient(options: HttpPosClientOptions): PosClient {
       }
       if (
         externalCallIsCancelled(externalCallContext) ||
-        (error instanceof Error && error.name === "AbortError")
+        (error instanceof Error && error.name === 'AbortError')
       ) {
         return requestCancellationFailure(error);
       }
       return {
         ok: false,
-        errorCode: "pos_unavailable",
+        errorCode: 'pos_unavailable',
         message: `POS request failed: ${error instanceof Error ? error.message : String(error)}`,
       };
     }
@@ -184,20 +180,20 @@ export function createHttpPosClient(options: HttpPosClientOptions): PosClient {
     submitOrder: ({ order }, externalCallContext, mutationIdentity) =>
       providerMutationIdentityIsValid(mutationIdentity)
         ? request(
-            "/v1/tickets",
+            '/v1/tickets',
             externalCallContext,
             providerPosTicketResultSchema,
             {
-              method: "POST",
+              method: 'POST',
               headers: {
-                "idempotency-key": mutationIdentity.idempotencyKey,
-                "x-provider-binding-fingerprint":
+                'idempotency-key': mutationIdentity.idempotencyKey,
+                'x-provider-binding-fingerprint':
                   mutationIdentity.bindingFingerprint,
               },
               body: JSON.stringify({ order }),
             },
             true,
-            "accepted",
+            'accepted',
           )
         : Promise.resolve(providerMutationIdentityRequiredFailure()),
     getTicket: (ticketId, externalCallContext) =>
@@ -206,26 +202,22 @@ export function createHttpPosClient(options: HttpPosClientOptions): PosClient {
         externalCallContext,
         providerPosTicketResultSchema,
       ),
-    cancelTicket: (
-      ticketId,
-      externalCallContext,
-      mutationIdentity,
-    ) =>
+    cancelTicket: (ticketId, externalCallContext, mutationIdentity) =>
       providerMutationIdentityIsValid(mutationIdentity)
         ? request(
             `/v1/tickets/${encodeURIComponent(ticketId)}/cancel`,
             externalCallContext,
             providerPosTicketResultSchema,
             {
-              method: "POST",
+              method: 'POST',
               headers: {
-                "idempotency-key": mutationIdentity.idempotencyKey,
-                "x-provider-binding-fingerprint":
+                'idempotency-key': mutationIdentity.idempotencyKey,
+                'x-provider-binding-fingerprint':
                   mutationIdentity.bindingFingerprint,
               },
             },
             true,
-            "cancelled",
+            'cancelled',
           )
         : Promise.resolve(providerMutationIdentityRequiredFailure()),
   };

@@ -1,7 +1,5 @@
 import { z } from 'zod';
-import type {
-  AuthenticatedCommerceApprovalPrincipal,
-} from '../ordering/types.js';
+import type { VerifiedRefPrincipal } from '../ordering/types.js';
 import type { Channel } from './types.js';
 
 export const VERIFIED_REF_SCHEMA_VERSION = 'kfc-verified-ref-v1' as const;
@@ -13,15 +11,10 @@ export const verifiedRefKindSchema = z.enum([
   'selected_action_effect',
 ]);
 
-export const verifiedRefLifecycleSchema = z.enum([
-  'replayable',
-  'one_shot',
-]);
+export const verifiedRefLifecycleSchema = z.enum(['replayable', 'one_shot']);
 
 export type VerifiedRefKind = z.infer<typeof verifiedRefKindSchema>;
-export type VerifiedRefLifecycle = z.infer<
-  typeof verifiedRefLifecycleSchema
->;
+export type VerifiedRefLifecycle = z.infer<typeof verifiedRefLifecycleSchema>;
 
 export type VerifiedRefJsonValue =
   | null
@@ -45,8 +38,9 @@ export const verifiedRefJsonValueSchema: z.ZodType<VerifiedRefJsonValue> =
     ]),
   );
 
-export const verifiedRefPayloadSchema: z.ZodType<VerifiedRefPayload> =
-  z.record(verifiedRefJsonValueSchema);
+export const verifiedRefPayloadSchema: z.ZodType<VerifiedRefPayload> = z.record(
+  verifiedRefJsonValueSchema,
+);
 
 export const verifiedRefTimestampSchema = z
   .string()
@@ -56,9 +50,7 @@ export const verifiedRefTimestampSchema = z
     'Timestamp must use canonical UTC millisecond precision',
   );
 
-export const verifiedRefRevisionSchema = z
-  .string()
-  .regex(/^[a-f0-9]{64}$/u);
+export const verifiedRefRevisionSchema = z.string().regex(/^[a-f0-9]{64}$/u);
 
 export const verifiedRefIdSchema = z
   .string()
@@ -75,19 +67,16 @@ const verifiedRefChannelSchema: z.ZodType<Channel> = z.enum([
   'zalo_mock',
 ]);
 
-export const verifiedRefPrincipalSchema: z.ZodType<
-  AuthenticatedCommerceApprovalPrincipal
-> =
-  z
-    .object({
-      principalKind: z.literal('authenticated_customer').optional(),
-      sessionId: z.string().min(1),
-      customerId: z.string().min(1),
-      channel: verifiedRefChannelSchema,
-      authenticatedSubject: z.string().min(1),
-      authenticationEvidenceRef: z.string().min(1),
-    })
-    .strict();
+export const verifiedRefPrincipalSchema: z.ZodType<VerifiedRefPrincipal> = z
+  .object({
+    principalKind: z.literal('authenticated_customer').optional(),
+    sessionId: z.string().min(1),
+    customerId: z.string().min(1),
+    channel: verifiedRefChannelSchema,
+    authenticatedSubject: z.string().min(1),
+    authenticationEvidenceRef: z.string().min(1),
+  })
+  .strict();
 
 export const verifiedRefSchema = z
   .object({
@@ -170,18 +159,14 @@ export const verifiedRefRecordSchema = z
   });
 
 export type VerifiedRef = z.infer<typeof verifiedRefSchema>;
-export type IssueVerifiedRefInput = z.infer<
-  typeof issueVerifiedRefInputSchema
->;
+export type IssueVerifiedRefInput = z.infer<typeof issueVerifiedRefInputSchema>;
 export type VerifiedRefRecord = z.infer<typeof verifiedRefRecordSchema>;
 
 /**
  * The only public issuance boundary. The caller supplies verified server-side
  * evidence but can neither select nor replay an opaque reference identifier.
  */
-export function issueVerifiedRefRecord(
-  rawInput: unknown,
-): VerifiedRefRecord {
+export function issueVerifiedRefRecord(rawInput: unknown): VerifiedRefRecord {
   const input = issueVerifiedRefInputSchema.parse(rawInput);
   return verifiedRefRecordSchema.parse({
     schemaVersion: VERIFIED_REF_SCHEMA_VERSION,

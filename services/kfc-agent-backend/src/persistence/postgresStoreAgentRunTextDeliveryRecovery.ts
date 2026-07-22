@@ -7,32 +7,23 @@ import {
   agentRunTextDeliveryFromStorageRow,
   type AgentRunTextDeliveryStorageRow,
 } from './agentRunTextDeliveryStorage.js';
-import type {
-  ClaimAgentRunExecutionResult,
-} from './contracts.js';
-import {
-  agentRunFromRow,
-  type AgentRunRow,
-} from './postgresStoreSupport.js';
+import type { ClaimAgentRunExecutionResult } from './contracts.js';
+import { agentRunFromRow, type AgentRunRow } from './postgresStoreSupport.js';
 
 interface DeliveryAttemptTokenRow {
   delivery_attempt_token: string;
 }
 
-export async function reconcileExpiredPostgresAgentRunTextDelivery(
-  input: {
-    client: PoolClient;
-    runId: string;
-    sessionId: string;
-    generation: number;
-    sessionAuthorityGeneration: number;
-    reconciledAt: string;
-  },
-): Promise<
-  Extract<
-    ClaimAgentRunExecutionResult,
-    { status: 'reconciliation_required' }
-  > | undefined
+export async function reconcileExpiredPostgresAgentRunTextDelivery(input: {
+  client: PoolClient;
+  runId: string;
+  sessionId: string;
+  generation: number;
+  sessionAuthorityGeneration: number;
+  reconciledAt: string;
+}): Promise<
+  | Extract<ClaimAgentRunExecutionResult, { status: 'reconciliation_required' }>
+  | undefined
 > {
   const locked = await input.client.query<{
     id: string;
@@ -64,18 +55,13 @@ export async function reconcileExpiredPostgresAgentRunTextDelivery(
   if (
     !delivery ||
     delivery.status !== 'sending' ||
-    delivery.runExecutionAttempt !==
-      Number(lockedRun.execution_attempt) ||
-    delivery.runExecutionLeaseToken !==
-      lockedRun.execution_lease_token
+    delivery.runExecutionAttempt !== Number(lockedRun.execution_attempt) ||
+    delivery.runExecutionLeaseToken !== lockedRun.execution_lease_token
   ) {
     return undefined;
   }
   const reconciledAt = new Date(
-    Math.max(
-      Date.parse(input.reconciledAt),
-      Date.parse(delivery.updatedAt),
-    ),
+    Math.max(Date.parse(input.reconciledAt), Date.parse(delivery.updatedAt)),
   ).toISOString();
   const transition = reconcileAgentRunTextDelivery(delivery, {
     execution: {
@@ -88,11 +74,7 @@ export async function reconcileExpiredPostgresAgentRunTextDelivery(
   });
   if (transition.status !== 'reconciled') return undefined;
   await updateDelivery(input.client, delivery, transition.record);
-  const run = await reconcileRun(
-    input.client,
-    transition.record,
-    reconciledAt,
-  );
+  const run = await reconcileRun(input.client, transition.record, reconciledAt);
   return {
     status: 'reconciliation_required',
     reason: 'delivery_outcome_unknown',
@@ -104,14 +86,13 @@ async function readLockedDelivery(
   client: PoolClient,
   runId: string,
 ): Promise<AgentRunTextDeliveryRecord | undefined> {
-  const deliveryResult =
-    await client.query<AgentRunTextDeliveryStorageRow>(
-      `SELECT *
+  const deliveryResult = await client.query<AgentRunTextDeliveryStorageRow>(
+    `SELECT *
        FROM agent_run_text_deliveries
        WHERE run_id = $1
        FOR UPDATE`,
-      [runId],
-    );
+    [runId],
+  );
   const row = deliveryResult.rows[0];
   if (!row) return undefined;
   const attempts = await client.query<DeliveryAttemptTokenRow>(
@@ -130,10 +111,7 @@ async function readLockedDelivery(
 
 async function updateDelivery(
   client: PoolClient,
-  existing: Extract<
-    AgentRunTextDeliveryRecord,
-    { status: 'sending' }
-  >,
+  existing: Extract<AgentRunTextDeliveryRecord, { status: 'sending' }>,
   next: Extract<
     AgentRunTextDeliveryRecord,
     { status: 'delivery_outcome_unknown' }

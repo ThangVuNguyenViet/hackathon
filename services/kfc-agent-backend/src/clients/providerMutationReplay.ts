@@ -1,5 +1,5 @@
-import type { ToolResult } from "../domain/types.js";
-import type { ProviderMutationIdentity } from "./interfaces.js";
+import type { ToolResult } from '../domain/types.js';
+import type { ProviderMutationIdentity } from './interfaces.js';
 
 interface ProviderMutationOutcome {
   bindingFingerprint: string;
@@ -27,9 +27,8 @@ export class ProviderMutationReplayRegistry {
     ) {
       return Promise.resolve({
         ok: false,
-        errorCode: "provider_mutation_identity_required",
-        message:
-          "A canonical provider mutation identity is required",
+        errorCode: 'provider_mutation_identity_required',
+        message: 'A canonical provider mutation identity is required',
       });
     }
     const existing = this.#outcomeByKey.get(identity.idempotencyKey);
@@ -37,9 +36,9 @@ export class ProviderMutationReplayRegistry {
       if (existing.bindingFingerprint !== identity.bindingFingerprint) {
         return Promise.resolve({
           ok: false,
-          errorCode: "provider_idempotency_conflict",
+          errorCode: 'provider_idempotency_conflict',
           message:
-            "Provider idempotency key conflicts with another bound action",
+            'Provider idempotency key conflicts with another bound action',
         });
       }
       return existing.result as Promise<ToolResult<Value>>;

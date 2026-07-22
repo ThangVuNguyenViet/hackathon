@@ -11,14 +11,10 @@ DASHBOARD_ORIGIN="${DASHBOARD_ORIGIN:-}"
 MAX_INSTANCES="${CLOUD_RUN_MAX_INSTANCES:-2}"
 MIN_INSTANCES="${CLOUD_RUN_MIN_INSTANCES:-0}"
 META_PAGE_ID="${META_PAGE_ID:-}"
-KFC_AGENT_PROFILE_MODE="${KFC_AGENT_PROFILE_MODE:-production}"
 KFC_AGENT_PROVIDER="${KFC_AGENT_PROVIDER:-}"
 KFC_AGENT_MODEL="${KFC_AGENT_MODEL:-}"
 KFC_MONITOR_PROVIDER="${KFC_MONITOR_PROVIDER:-$KFC_AGENT_PROVIDER}"
 KFC_MONITOR_MODEL="${KFC_MONITOR_MODEL:-}"
-KFC_CONFIRMATION_SIGNING_KEY_ID="${KFC_CONFIRMATION_SIGNING_KEY_ID:-primary}"
-KFC_CONFIRMATION_SIGNING_SECRET_NAME="${KFC_CONFIRMATION_SIGNING_SECRET_NAME:-KFC_CONFIRMATION_SIGNING_SECRET}"
-KFC_CONFIRMATION_PREVIOUS_SIGNING_KEYS_SECRET_NAME="${KFC_CONFIRMATION_PREVIOUS_SIGNING_KEYS_SECRET_NAME:-KFC_CONFIRMATION_PREVIOUS_SIGNING_KEYS}"
 
 if [[ -z "$PROJECT_ID" ]]; then
   echo "ERROR: Set GCP_PROJECT_ID to the Google Cloud project used for the hackathon deploy." >&2
@@ -30,37 +26,8 @@ if [[ -z "$META_PAGE_ID" ]]; then
   exit 64
 fi
 
-if [[ ! "$KFC_CONFIRMATION_SIGNING_KEY_ID" =~ ^[A-Za-z0-9._-]{1,64}$ ]]; then
-  echo "ERROR: KFC_CONFIRMATION_SIGNING_KEY_ID is invalid." >&2
-  exit 64
-fi
-if [[
-  ! "$KFC_CONFIRMATION_SIGNING_SECRET_NAME" =~ ^[A-Za-z0-9_-]{1,255}$ ||
-  ! "$KFC_CONFIRMATION_PREVIOUS_SIGNING_KEYS_SECRET_NAME" =~ ^[A-Za-z0-9_-]{1,255}$
-]]; then
-  echo "ERROR: Confirmation Secret Manager secret names are invalid." >&2
-  exit 64
-fi
-
-if [[ "$KFC_AGENT_PROFILE_MODE" != "production" && "$KFC_AGENT_PROFILE_MODE" != "qualification" ]]; then
-  echo "ERROR: KFC_AGENT_PROFILE_MODE must be production or qualification." >&2
-  exit 64
-fi
-
 if [[ "$KFC_AGENT_PROVIDER" != "google" && "$KFC_AGENT_PROVIDER" != "openai" ]]; then
   echo "ERROR: KFC_AGENT_PROVIDER must be google or openai." >&2
-  exit 64
-fi
-if [[ "$KFC_AGENT_PROVIDER" == "google" ]]; then
-  expected_agent_model="gemini-3.1-flash-lite"
-else
-  expected_agent_model="gpt-4.1-mini"
-fi
-if [[
-  -n "$KFC_AGENT_MODEL" &&
-  "$KFC_AGENT_MODEL" != "$expected_agent_model"
-]]; then
-  echo "ERROR: KFC_AGENT_MODEL must be $expected_agent_model when KFC_AGENT_PROVIDER=$KFC_AGENT_PROVIDER." >&2
   exit 64
 fi
 if [[ "$KFC_MONITOR_PROVIDER" != "google" && "$KFC_MONITOR_PROVIDER" != "openai" ]]; then
@@ -110,10 +77,8 @@ fi
 env_vars=(
   "NODE_ENV=production"
   "META_PAGE_ID=$META_PAGE_ID"
-  "KFC_AGENT_PROFILE_MODE=$KFC_AGENT_PROFILE_MODE"
   "KFC_AGENT_PROVIDER=$KFC_AGENT_PROVIDER"
   "KFC_MONITOR_PROVIDER=$KFC_MONITOR_PROVIDER"
-  "KFC_CONFIRMATION_SIGNING_KEY_ID=$KFC_CONFIRMATION_SIGNING_KEY_ID"
 )
 
 if [[ -n "$KFC_AGENT_MODEL" ]]; then
@@ -132,8 +97,6 @@ env_var_arg="$(IFS=,; echo "${env_vars[*]}")"
 
 secret_vars=(
   "DATABASE_URL=DATABASE_URL:latest"
-  "KFC_CONFIRMATION_SIGNING_SECRET=$KFC_CONFIRMATION_SIGNING_SECRET_NAME:latest"
-  "KFC_CONFIRMATION_PREVIOUS_SIGNING_KEYS=$KFC_CONFIRMATION_PREVIOUS_SIGNING_KEYS_SECRET_NAME:latest"
   "MESSENGER_VERIFY_TOKEN=MESSENGER_VERIFY_TOKEN:latest"
   "META_PAGE_ACCESS_TOKEN=META_PAGE_ACCESS_TOKEN:latest"
 )

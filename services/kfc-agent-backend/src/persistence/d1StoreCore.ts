@@ -4,17 +4,17 @@ import type {
   DashboardEvent,
   ConversationTurn,
   MonitorSessionIntelligence,
-} from "../domain/types.js";
+} from '../domain/types.js';
 import {
   parseMonitorSessionIntelligencePayload,
   preserveMonitorContext,
-} from "../monitor/sessionIntelligence.js";
+} from '../monitor/sessionIntelligence.js';
 import type {
   AgentRun,
   AgentRunTurn,
   PendingCustomerTurn,
   SessionAgentState,
-} from "../domain/types.js";
+} from '../domain/types.js';
 import type {
   AgentRunPatch,
   AppendConversationTurnInput,
@@ -47,14 +47,14 @@ import type {
   AppendCustomerRunEventsIfRunCurrentInput,
   AppendCustomerRunEventsIfRunCurrentResult,
   CustomerRunPatch,
-} from "./memoryStore.js";
+} from './memoryStore.js';
 import {
   CustomerRunIdempotencyConflictError,
   CustomerRunSequenceConflictError,
   customerRunEventSchema,
   type CustomerRun,
   type CustomerRunEvent,
-} from "../customerRuns/contracts.js";
+} from '../customerRuns/contracts.js';
 import {
   D1Result,
   D1PreparedStatement,
@@ -90,18 +90,12 @@ import {
   agentRunFromRow,
   agentRunTurnFromRow,
   sessionAgentStateFromRow,
-  defaultSessionAgentState
+  defaultSessionAgentState,
 } from './d1StoreSupport.js';
 import { isD1RunCommitFenceCurrent } from './d1StoreRunCommit.js';
-import {
-  d1ActiveSessionAuthoritySource,
-} from './d1StoreSessionAuthority.js';
-import {
-  appendD1CustomerRunEventsIfRunCurrent,
-} from './d1StoreCustomerRunEventCommit.js';
-import {
-  commitD1PausedCustomerRunIntake,
-} from './d1StorePausedCustomerRunIntake.js';
+import { d1ActiveSessionAuthoritySource } from './d1StoreSessionAuthority.js';
+import { appendD1CustomerRunEventsIfRunCurrent } from './d1StoreCustomerRunEventCommit.js';
+import { commitD1PausedCustomerRunIntake } from './d1StorePausedCustomerRunIntake.js';
 
 export abstract class D1StoreCore {
   constructor(
@@ -130,50 +124,62 @@ export abstract class D1StoreCore {
     await this.ensureSessionControlsTable();
   }
 
-  async reserveIrreversibleOperation(input: IrreversibleOperationInput): Promise<IrreversibleOperationReservation> {
+  async reserveIrreversibleOperation(
+    input: IrreversibleOperationInput,
+  ): Promise<IrreversibleOperationReservation> {
     const now = new Date();
     const leaseExpiresAt = new Date(now.getTime() + 30_000).toISOString();
     const leaseToken = crypto.randomUUID();
-    const inserted = await this.db.prepare(`INSERT OR IGNORE INTO irreversible_operations (
+    const inserted = await this.db
+      .prepare(
+        `INSERT OR IGNORE INTO irreversible_operations (
       request_id, session_id, operation, binding_fingerprint,
       session_authority_generation, result_json, status, attempt_count,
       lease_expires_at, lease_token, last_error, created_at, completed_at
     )
     SELECT ?, ?, ?, ?, authority.session_authority_generation,
            NULL, 'attempting', 1, ?, ?, NULL, ?, NULL
-    FROM (${d1ActiveSessionAuthoritySource}) AS authority`).bind(
-      input.requestId,
-      input.sessionId,
-      input.operation,
-      input.bindingFingerprint,
-      leaseExpiresAt,
-      leaseToken,
-      now.toISOString(),
-      input.sessionId,
-    ).run();
+    FROM (${d1ActiveSessionAuthoritySource}) AS authority`,
+      )
+      .bind(
+        input.requestId,
+        input.sessionId,
+        input.operation,
+        input.bindingFingerprint,
+        leaseExpiresAt,
+        leaseToken,
+        now.toISOString(),
+        input.sessionId,
+      )
+      .run();
     const current = await this.irreversibleOperationRow(input);
     if (!current) throw new Error('session_ai_authority_unavailable');
-    if (!(await this.isIrreversibleOperationAuthorityCurrent(
-      input,
-      current,
-    ))) {
+    if (!(await this.isIrreversibleOperationAuthorityCurrent(input, current))) {
       throw new Error('session_ai_authority_unavailable');
     }
     if (current.result_json)
-      return { status: 'completed', result: JSON.parse(current.result_json) as Record<string, unknown> };
+      return {
+        status: 'completed',
+        result: JSON.parse(current.result_json) as Record<string, unknown>,
+      };
     if (Number(inserted.meta.changes ?? 0) > 0)
       return {
         status: 'reserved',
         attempt: 1,
         leaseToken,
         reconciliation: false,
-        sessionAuthorityGeneration:
-          current.session_authority_generation,
+        sessionAuthorityGeneration: current.session_authority_generation,
       };
-    if (current.status === 'unknown' || (current.lease_expires_at !== null && current.lease_expires_at <= now.toISOString())) {
+    if (
+      current.status === 'unknown' ||
+      (current.lease_expires_at !== null &&
+        current.lease_expires_at <= now.toISOString())
+    ) {
       const nextAttempt = current.attempt_count + 1;
       const nextLeaseToken = crypto.randomUUID();
-      const claimed = await this.db.prepare(`UPDATE irreversible_operations
+      const claimed = await this.db
+        .prepare(
+          `UPDATE irreversible_operations
         SET status = 'attempting', attempt_count = attempt_count + 1,
             lease_expires_at = ?, lease_token = ?, last_error = NULL
         WHERE request_id = ? AND session_id = ? AND operation = ? AND binding_fingerprint = ?
@@ -183,25 +189,26 @@ export abstract class D1StoreCore {
             FROM (${d1ActiveSessionAuthoritySource}) AS authority
             WHERE authority.session_authority_generation =
               irreversible_operations.session_authority_generation
-          )`
-      ).bind(
-        leaseExpiresAt,
-        nextLeaseToken,
-        input.requestId,
-        input.sessionId,
-        input.operation,
-        input.bindingFingerprint,
-        now.toISOString(),
-        input.sessionId,
-      ).run();
+          )`,
+        )
+        .bind(
+          leaseExpiresAt,
+          nextLeaseToken,
+          input.requestId,
+          input.sessionId,
+          input.operation,
+          input.bindingFingerprint,
+          now.toISOString(),
+          input.sessionId,
+        )
+        .run();
       if (Number(claimed.meta.changes ?? 0) > 0) {
         return {
           status: 'reserved',
           attempt: nextAttempt,
           leaseToken: nextLeaseToken,
           reconciliation: true,
-          sessionAuthorityGeneration:
-            current.session_authority_generation,
+          sessionAuthorityGeneration: current.session_authority_generation,
         };
       }
     }
@@ -210,17 +217,19 @@ export abstract class D1StoreCore {
       : { status: 'pending' };
   }
 
-  async getIrreversibleOperation(input: IrreversibleOperationInput): Promise<IrreversibleOperationReservation | undefined> {
+  async getIrreversibleOperation(
+    input: IrreversibleOperationInput,
+  ): Promise<IrreversibleOperationReservation | undefined> {
     const current = await this.irreversibleOperationRow(input);
     if (!current) return undefined;
-    if (!(await this.isIrreversibleOperationAuthorityCurrent(
-      input,
-      current,
-    ))) {
+    if (!(await this.isIrreversibleOperationAuthorityCurrent(input, current))) {
       return undefined;
     }
     return current.result_json
-      ? { status: 'completed', result: JSON.parse(current.result_json) as Record<string, unknown> }
+      ? {
+          status: 'completed',
+          result: JSON.parse(current.result_json) as Record<string, unknown>,
+        }
       : current.status === 'unknown'
         ? { status: 'unknown', lastError: current.last_error }
         : { status: 'pending' };
@@ -229,8 +238,9 @@ export abstract class D1StoreCore {
   async markIrreversibleOperationOutcomeUnknownIfExpired(
     input: MarkIrreversibleOperationOutcomeUnknownIfExpiredInput,
   ): Promise<MarkIrreversibleOperationOutcomeUnknownIfExpiredResult> {
-    const changed = await this.db.prepare(
-      `UPDATE irreversible_operations
+    const changed = await this.db
+      .prepare(
+        `UPDATE irreversible_operations
        SET status = 'unknown',
            lease_expires_at = NULL,
            last_error = ?
@@ -246,21 +256,20 @@ export abstract class D1StoreCore {
            WHERE authority.session_authority_generation =
              irreversible_operations.session_authority_generation
          )`,
-    ).bind(
-      input.reason,
-      input.requestId,
-      input.sessionId,
-      input.operation,
-      input.bindingFingerprint,
-      input.sessionId,
-    ).run();
+      )
+      .bind(
+        input.reason,
+        input.requestId,
+        input.sessionId,
+        input.operation,
+        input.bindingFingerprint,
+        input.sessionId,
+      )
+      .run();
     const current = await this.irreversibleOperationRow(input);
     if (
       !current ||
-      !(await this.isIrreversibleOperationAuthorityCurrent(
-        input,
-        current,
-      ))
+      !(await this.isIrreversibleOperationAuthorityCurrent(input, current))
     ) {
       return { status: 'pending' };
     }
@@ -285,7 +294,9 @@ export abstract class D1StoreCore {
     owner: IrreversibleOperationOwner,
     result: Record<string, unknown>,
   ): Promise<IrreversibleOperationCompletion> {
-    await this.db.prepare(`UPDATE irreversible_operations
+    await this.db
+      .prepare(
+        `UPDATE irreversible_operations
       SET result_json = COALESCE(result_json, ?), status = 'completed',
           lease_expires_at = NULL, last_error = NULL, completed_at = COALESCE(completed_at, ?)
       WHERE request_id = ? AND session_id = ? AND operation = ? AND binding_fingerprint = ?
@@ -299,33 +310,40 @@ export abstract class D1StoreCore {
           FROM (${d1ActiveSessionAuthoritySource}) AS authority
           WHERE authority.session_authority_generation =
             irreversible_operations.session_authority_generation
-        )`
-    ).bind(
-      JSON.stringify(result),
-      new Date().toISOString(),
-      input.requestId,
-      input.sessionId,
-      input.operation,
-      input.bindingFingerprint,
-      owner.attempt,
-      owner.leaseToken,
-      owner.sessionAuthorityGeneration,
-      input.sessionId,
-    ).run();
+        )`,
+      )
+      .bind(
+        JSON.stringify(result),
+        new Date().toISOString(),
+        input.requestId,
+        input.sessionId,
+        input.operation,
+        input.bindingFingerprint,
+        owner.attempt,
+        owner.leaseToken,
+        owner.sessionAuthorityGeneration,
+        input.sessionId,
+      )
+      .run();
     const current = await this.irreversibleOperationRow(input);
     if (!current) {
-      throw new Error(`Irreversible operation reservation not found: ${input.requestId}`);
+      throw new Error(
+        `Irreversible operation reservation not found: ${input.requestId}`,
+      );
     }
-    const currentAuthority =
-      await this.isIrreversibleOperationAuthorityCurrent(input, current);
-    return (
-      currentAuthority &&
+    const currentAuthority = await this.isIrreversibleOperationAuthorityCurrent(
+      input,
+      current,
+    );
+    return currentAuthority &&
       current.session_authority_generation ===
         owner.sessionAuthorityGeneration &&
       current.status === 'completed' &&
       current.result_json
-    )
-      ? { status: 'completed', result: JSON.parse(current.result_json) as Record<string, unknown> }
+      ? {
+          status: 'completed',
+          result: JSON.parse(current.result_json) as Record<string, unknown>,
+        }
       : { status: 'lost' };
   }
 
@@ -334,7 +352,9 @@ export abstract class D1StoreCore {
     owner: IrreversibleOperationOwner,
     error: string,
   ): Promise<void> {
-    await this.db.prepare(`UPDATE irreversible_operations
+    await this.db
+      .prepare(
+        `UPDATE irreversible_operations
       SET status = 'unknown', lease_expires_at = NULL, last_error = ?
       WHERE request_id = ? AND session_id = ? AND operation = ? AND binding_fingerprint = ?
         AND status = 'attempting'
@@ -347,39 +367,48 @@ export abstract class D1StoreCore {
           FROM (${d1ActiveSessionAuthoritySource}) AS authority
           WHERE authority.session_authority_generation =
             irreversible_operations.session_authority_generation
-        )`
-    ).bind(
-      error,
-      input.requestId,
-      input.sessionId,
-      input.operation,
-      input.bindingFingerprint,
-      owner.attempt,
-      owner.leaseToken,
-      owner.sessionAuthorityGeneration,
-      input.sessionId,
-    ).run();
+        )`,
+      )
+      .bind(
+        error,
+        input.requestId,
+        input.sessionId,
+        input.operation,
+        input.bindingFingerprint,
+        owner.attempt,
+        owner.leaseToken,
+        owner.sessionAuthorityGeneration,
+        input.sessionId,
+      )
+      .run();
     if (!(await this.irreversibleOperationRow(input))) {
-      throw new Error(`Irreversible operation reservation not found: ${input.requestId}`);
+      throw new Error(
+        `Irreversible operation reservation not found: ${input.requestId}`,
+      );
     }
   }
 
   private async irreversibleOperationRow(
     input: IrreversibleOperationInput,
   ): Promise<IrreversibleOperationRow | null> {
-    const row = await this.db.prepare(
-      `SELECT request_id, session_id, operation, binding_fingerprint, result_json,
+    const row = await this.db
+      .prepare(
+        `SELECT request_id, session_id, operation, binding_fingerprint, result_json,
               session_authority_generation, status, attempt_count,
               lease_expires_at, lease_token, last_error
        FROM irreversible_operations WHERE request_id = ?`,
-    ).bind(input.requestId).first<IrreversibleOperationRow>();
+      )
+      .bind(input.requestId)
+      .first<IrreversibleOperationRow>();
     if (!row) return null;
     if (
       row.session_id !== input.sessionId ||
       row.operation !== input.operation ||
       row.binding_fingerprint !== input.bindingFingerprint
     ) {
-      throw new Error(`Irreversible operation binding conflict: ${input.requestId}`);
+      throw new Error(
+        `Irreversible operation binding conflict: ${input.requestId}`,
+      );
     }
     return row;
   }
@@ -388,20 +417,18 @@ export abstract class D1StoreCore {
     input: IrreversibleOperationInput,
     row: IrreversibleOperationRow,
   ): Promise<boolean> {
-    const current = await this.db.prepare(
-      `SELECT 1 AS current
+    const current = await this.db
+      .prepare(
+        `SELECT 1 AS current
        FROM (${d1ActiveSessionAuthoritySource}) AS authority
        WHERE authority.session_authority_generation = ?`,
-    ).bind(
-      input.sessionId,
-      row.session_authority_generation,
-    ).first<{ current: number }>();
+      )
+      .bind(input.sessionId, row.session_authority_generation)
+      .first<{ current: number }>();
     return current?.current === 1;
   }
 
-  async createCustomerRun(
-    input: CreateCustomerRunInput,
-  ): Promise<CustomerRun> {
+  async createCustomerRun(input: CreateCustomerRunInput): Promise<CustomerRun> {
     const insert = this.db
       .prepare(
         `INSERT OR IGNORE INTO customer_runs (
@@ -450,7 +477,7 @@ export abstract class D1StoreCore {
           const row = await select.first<CustomerRunRow>();
           return row ? customerRunFromRow(row) : undefined;
         })();
-    if (!stored) throw new Error("Customer run was not persisted");
+    if (!stored) throw new Error('Customer run was not persisted');
     if (stored.requestFingerprint !== input.requestFingerprint) {
       throw new CustomerRunIdempotencyConflictError(
         input.sessionId,
@@ -541,12 +568,7 @@ export abstract class D1StoreCore {
          SET next_event_sequence = ?, updated_at = ?
          WHERE id = ? AND next_event_sequence = ?`,
       )
-      .bind(
-        event.sequence + 1,
-        event.occurredAt,
-        event.runId,
-        event.sequence,
-      );
+      .bind(event.sequence + 1, event.occurredAt, event.runId, event.sequence);
     const results = await this.db.batch([
       insertRun,
       selectRun,
@@ -554,9 +576,8 @@ export abstract class D1StoreCore {
       advanceRun,
     ]);
     const row = results[1]?.results?.[0] as unknown as
-      | CustomerRunRow
-      | undefined;
-    if (!row) throw new Error("Customer run was not persisted");
+      CustomerRunRow | undefined;
+    if (!row) throw new Error('Customer run was not persisted');
     const stored = customerRunFromRow(row);
     if (stored.requestFingerprint !== input.requestFingerprint) {
       throw new CustomerRunIdempotencyConflictError(
@@ -609,7 +630,10 @@ export abstract class D1StoreCore {
     return row ? customerRunFromRow(row) : undefined;
   }
 
-  async updateCustomerRun(runId: string, patch: CustomerRunPatch): Promise<CustomerRun> {
+  async updateCustomerRun(
+    runId: string,
+    patch: CustomerRunPatch,
+  ): Promise<CustomerRun> {
     const assignments: string[] = [];
     const values: unknown[] = [];
     const add = (column: string, value: unknown) => {
@@ -617,13 +641,15 @@ export abstract class D1StoreCore {
       assignments.push(`${column} = ?`);
       values.push(value);
     };
-    add("status", patch.status);
-    add("phase", patch.phase);
-    add("started_at", patch.startedAt);
-    add("terminal_at", patch.terminalAt);
-    add("updated_at", patch.updatedAt ?? new Date().toISOString());
+    add('status', patch.status);
+    add('phase', patch.phase);
+    add('started_at', patch.startedAt);
+    add('terminal_at', patch.terminalAt);
+    add('updated_at', patch.updatedAt ?? new Date().toISOString());
     const update = this.db
-      .prepare(`UPDATE customer_runs SET ${assignments.join(", ")} WHERE id = ?`)
+      .prepare(
+        `UPDATE customer_runs SET ${assignments.join(', ')} WHERE id = ?`,
+      )
       .bind(...values, runId);
     const select = this.db
       .prepare(`SELECT * FROM customer_runs WHERE id = ? LIMIT 1`)
@@ -633,7 +659,8 @@ export abstract class D1StoreCore {
       if (Number(results[0]?.meta.changes ?? 0) !== 1) {
         throw new Error(`Customer run not found: ${runId}`);
       }
-      const row = results[1]?.results?.[0] as unknown as CustomerRunRow | undefined;
+      const row = results[1]?.results?.[0] as unknown as
+        CustomerRunRow | undefined;
       if (!row) throw new Error(`Customer run not found: ${runId}`);
       return customerRunFromRow(row);
     }
@@ -650,7 +677,9 @@ export abstract class D1StoreCore {
     input: AppendCustomerRunEventInput,
   ): Promise<CustomerRunEvent> {
     if (!this.db.batch) {
-      throw new Error("Atomic D1 batch support is required for customer run events");
+      throw new Error(
+        'Atomic D1 batch support is required for customer run events',
+      );
     }
     const { expectedSequence, ...eventInput } = input;
     const event = customerRunEventSchema.parse({
@@ -683,10 +712,16 @@ export abstract class D1StoreCore {
            SET next_event_sequence = ?, updated_at = ?
            WHERE id = ? AND next_event_sequence = ?`,
         )
-        .bind(event.sequence + 1, event.occurredAt, event.runId, event.sequence),
+        .bind(
+          event.sequence + 1,
+          event.occurredAt,
+          event.runId,
+          event.sequence,
+        ),
     ]);
     if (Number(results[0]?.meta.changes ?? 0) !== 1) {
-      const actual = (await this.getCustomerRun(event.runId))?.nextEventSequence ?? 0;
+      const actual =
+        (await this.getCustomerRun(event.runId))?.nextEventSequence ?? 0;
       throw new CustomerRunSequenceConflictError(
         event.runId,
         event.sequence,
@@ -701,7 +736,9 @@ export abstract class D1StoreCore {
   ): Promise<CustomerRunEvent[]> {
     if (inputs.length === 0) return [];
     if (!this.db.batch) {
-      throw new Error("Atomic D1 batch support is required for customer run events");
+      throw new Error(
+        'Atomic D1 batch support is required for customer run events',
+      );
     }
     const events = inputs.map(({ expectedSequence, ...eventInput }) =>
       customerRunEventSchema.parse({
@@ -795,7 +832,7 @@ export abstract class D1StoreCore {
     const columns = await this.db
       .prepare(`PRAGMA table_info(conversation_turns)`)
       .all<D1TableInfoRow>();
-    if ((columns.results ?? []).some((column) => column.name === "metadata"))
+    if ((columns.results ?? []).some((column) => column.name === 'metadata'))
       return;
     await this.db
       .prepare(`ALTER TABLE conversation_turns ADD COLUMN metadata TEXT`)
@@ -807,7 +844,7 @@ export abstract class D1StoreCore {
       .prepare(
         `SELECT name FROM sqlite_master WHERE type = 'table' AND name = ? LIMIT 1`,
       )
-      .bind("conversation_profiles")
+      .bind('conversation_profiles')
       .first<D1TableInfoRow>();
     if (table) return;
     await this.db
@@ -838,5 +875,4 @@ export abstract class D1StoreCore {
       )
       .run();
   }
-
 }

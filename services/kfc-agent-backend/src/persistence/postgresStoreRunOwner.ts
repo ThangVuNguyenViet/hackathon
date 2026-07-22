@@ -1,9 +1,7 @@
 import type { Pool, PoolClient } from 'pg';
 import type { RunCommitFence } from './contracts.js';
 import type { Queryable } from './postgresStoreSupport.js';
-import {
-  lockActivePostgresSessionAuthority,
-} from './postgresStoreSessionAuthority.js';
+import { lockActivePostgresSessionAuthority } from './postgresStoreSessionAuthority.js';
 
 export interface PostgresRunCommitGuard {
   sessionId: string;
@@ -25,12 +23,13 @@ export async function lockPostgresRunCommitOwner(
   client: PoolClient,
   input: PostgresRunCommitGuard,
 ): Promise<boolean> {
-  if (!await lockActivePostgresSessionAuthority({
-    client,
-    sessionId: input.sessionId,
-    expectedGeneration:
-      input.fence.sessionAuthorityGeneration,
-  })) {
+  if (
+    !(await lockActivePostgresSessionAuthority({
+      client,
+      sessionId: input.sessionId,
+      expectedGeneration: input.fence.sessionAuthorityGeneration,
+    }))
+  ) {
     return false;
   }
   switch (input.fence.kind) {

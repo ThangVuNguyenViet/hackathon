@@ -1,16 +1,11 @@
 import type { AgentRun } from '../domain/types.js';
-import type {
-  ClaimAgentRunResult,
-  CreateAgentRunInput,
-} from './contracts.js';
+import type { ClaimAgentRunResult, CreateAgentRunInput } from './contracts.js';
 import {
   agentRunFromRow,
   type AgentRunRow,
   type D1DatabaseLike,
 } from './d1StoreSupport.js';
-import {
-  d1ActiveSessionAuthoritySource,
-} from './d1StoreSessionAuthority.js';
+import { d1ActiveSessionAuthoritySource } from './d1StoreSessionAuthority.js';
 
 const insertAgentRunSql = `INSERT INTO agent_runs (
   id, session_id, generation, session_authority_generation,
@@ -29,15 +24,17 @@ export async function createD1AgentRun(input: {
   operation: CreateAgentRunInput;
 }): Promise<AgentRun> {
   const values = agentRunValues(input.operation);
-  const inserted = await input.db.prepare(insertAgentRunSql)
+  const inserted = await input.db
+    .prepare(insertAgentRunSql)
     .bind(...values, input.operation.sessionId)
     .run();
   if (Number(inserted.meta.changes ?? 0) !== 1) {
     throw new Error('session_ai_authority_unavailable');
   }
-  const row = await input.db.prepare(
-    `SELECT * FROM agent_runs WHERE id = ? LIMIT 1`,
-  ).bind(input.operation.id).first<AgentRunRow>();
+  const row = await input.db
+    .prepare(`SELECT * FROM agent_runs WHERE id = ? LIMIT 1`)
+    .bind(input.operation.id)
+    .first<AgentRunRow>();
   if (!row) throw new Error('d1_agent_run_insert_missing');
   return agentRunFromRow(row);
 }
@@ -47,24 +44,28 @@ export async function claimD1AgentRun(input: {
   operation: CreateAgentRunInput;
 }): Promise<ClaimAgentRunResult> {
   const values = agentRunValues(input.operation);
-  const inserted = await input.db.prepare(
-    insertAgentRunSql.replace(
-      'INSERT INTO agent_runs',
-      'INSERT OR IGNORE INTO agent_runs',
-    ),
-  ).bind(...values, input.operation.sessionId).run();
-  const row = await input.db.prepare(
-    `SELECT * FROM agent_runs
+  const inserted = await input.db
+    .prepare(
+      insertAgentRunSql.replace(
+        'INSERT INTO agent_runs',
+        'INSERT OR IGNORE INTO agent_runs',
+      ),
+    )
+    .bind(...values, input.operation.sessionId)
+    .run();
+  const row = await input.db
+    .prepare(
+      `SELECT * FROM agent_runs
      WHERE session_id = ? AND generation = ? LIMIT 1`,
-  ).bind(
-    input.operation.sessionId,
-    input.operation.generation,
-  ).first<AgentRunRow>();
-  if (!row) throw new Error(
-    `Agent run claim missing: ${
-      input.operation.sessionId
-    }/${input.operation.generation}`,
-  );
+    )
+    .bind(input.operation.sessionId, input.operation.generation)
+    .first<AgentRunRow>();
+  if (!row)
+    throw new Error(
+      `Agent run claim missing: ${
+        input.operation.sessionId
+      }/${input.operation.generation}`,
+    );
   return {
     run: agentRunFromRow(row),
     claimed: Number(inserted.meta.changes ?? 0) === 1,

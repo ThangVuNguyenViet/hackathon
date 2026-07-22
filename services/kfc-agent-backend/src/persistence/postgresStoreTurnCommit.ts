@@ -5,12 +5,8 @@ import type {
   CommitAssistantTurnIfRunCurrentResult,
 } from './contracts.js';
 import type { Queryable } from './postgresStoreSupport.js';
-import {
-  prepareAssistantTurnCommit,
-} from './runCommitPreparation.js';
-import {
-  verifiedRefStorageValues,
-} from './verifiedRef.js';
+import { prepareAssistantTurnCommit } from './runCommitPreparation.js';
+import { verifiedRefStorageValues } from './verifiedRef.js';
 import {
   isConnectablePostgres,
   lockPostgresRunCommitOwner,
@@ -29,27 +25,22 @@ export async function commitPostgresAssistantTurnIfRunCurrent(input: {
     await client.query('BEGIN');
     const sessionGeneration =
       prepared.verifiedRefs.length > 0
-        ? await lockVerifiedRefGeneration(
-            client,
-            prepared.turn.sessionId,
-          )
+        ? await lockVerifiedRefGeneration(client, prepared.turn.sessionId)
         : undefined;
-    if (!await lockPostgresRunCommitOwner(client, {
-      sessionId: input.operation.stateEvent.sessionId,
-      fence: input.operation.fence,
-      ...(input.operation.notAfter === undefined
-        ? {}
-        : { notAfter: input.operation.notAfter }),
-    })) {
+    if (
+      !(await lockPostgresRunCommitOwner(client, {
+        sessionId: input.operation.stateEvent.sessionId,
+        fence: input.operation.fence,
+        ...(input.operation.notAfter === undefined
+          ? {}
+          : { notAfter: input.operation.notAfter }),
+      }))
+    ) {
       await client.query('ROLLBACK');
       return { status: 'stale' };
     }
     for (const record of prepared.verifiedRefs) {
-      await insertVerifiedRef(
-        client,
-        record,
-        sessionGeneration!,
-      );
+      await insertVerifiedRef(client, record, sessionGeneration!);
     }
     await insertEvent(client, prepared.stateEvent);
     await client.query(
@@ -92,10 +83,10 @@ async function lockVerifiedRefGeneration(
   sessionId: string,
 ): Promise<number> {
   const result = await client.query<{ generation: number }>(
-    `INSERT INTO confirmation_pause_sessions (session_id, generation)
+    `INSERT INTO session_generations (session_id, generation)
      VALUES ($1, 0)
      ON CONFLICT (session_id) DO UPDATE SET
-       generation = confirmation_pause_sessions.generation
+       generation = session_generations.generation
      RETURNING generation`,
     [sessionId],
   );

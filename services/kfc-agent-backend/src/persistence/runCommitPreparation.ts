@@ -26,18 +26,16 @@ export function prepareAssistantTurnCommit(
     throw new Error('agent_turn_commit_shape_invalid');
   }
   const verifiedRefs = (input.verifiedRefs ?? []).map((value) =>
-    verifiedRefRecordSchema.parse(structuredClone(value))
+    verifiedRefRecordSchema.parse(structuredClone(value)),
   );
   if (
     verifiedRefs.some(
-      (record) =>
-        record.principal.sessionId !== input.assistantTurn.sessionId,
+      (record) => record.principal.sessionId !== input.assistantTurn.sessionId,
     )
   ) {
     throw new Error('agent_turn_commit_verified_ref_session_mismatch');
   }
-  const createdAt =
-    input.assistantTurn.createdAt ?? now.toISOString();
+  const createdAt = input.assistantTurn.createdAt ?? now.toISOString();
   const turn: ConversationTurn = {
     ...structuredClone(input.assistantTurn),
     metadata: structuredClone(input.assistantTurn.metadata ?? null),

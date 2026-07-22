@@ -12,9 +12,7 @@ import {
   buildVerifiedStateSnapshot,
   persistVerifiedStateSnapshot,
 } from './verifiedState.js';
-import {
-  kfcGenUiAttachmentForPersistence,
-} from '../genui/kfcGenUi.js';
+import { kfcGenUiAttachmentForPersistence } from '../genui/kfcGenUi.js';
 import { selectKfcGenUiAttachment } from '../genui/kfcGenUiSelector.js';
 import type { AgentTraceSpan } from '../observability/agentTracing.js';
 import type { ToolTraceEntry } from '../ordering/types.js';
@@ -46,26 +44,28 @@ export async function persistCompletedTurn(input: {
   const successfulToolNames = input.currentTurnToolTrace
     .filter((entry) => entry.ok)
     .map((entry) => entry.toolName);
-  const genUi = responseProfile === 'genui'
-    ? selectKfcGenUiAttachment({
-        state: input.state,
-        turnToolNames: successfulToolNames,
-      })
-    : undefined;
-  const presentation = responseProfile === 'genui'
-    ? buildChannelPresentation({
-        channel: input.turnInput.channel,
-        responseProfile,
-        graphResponseText: input.responseText,
-        genUi,
-      })
-    : input.turnInput.channel === 'kfc'
-      ? { profile: 'social' as const, text: input.responseText }
-      : buildSocialPresentation({
-          channel: input.turnInput.channel,
-          standaloneText: input.responseText,
+  const genUi =
+    responseProfile === 'genui'
+      ? selectKfcGenUiAttachment({
           state: input.state,
-        });
+          turnToolNames: successfulToolNames,
+        })
+      : undefined;
+  const presentation =
+    responseProfile === 'genui'
+      ? buildChannelPresentation({
+          channel: input.turnInput.channel,
+          responseProfile,
+          graphResponseText: input.responseText,
+          genUi,
+        })
+      : input.turnInput.channel === 'kfc'
+        ? { profile: 'social' as const, text: input.responseText }
+        : buildSocialPresentation({
+            channel: input.turnInput.channel,
+            standaloneText: input.responseText,
+            state: input.state,
+          });
   const metadata = {
     ...(input.turnInput.metadata?.release
       ? { release: input.turnInput.metadata.release }
@@ -73,9 +73,7 @@ export async function persistCompletedTurn(input: {
     ...(input.turnInput.responseProfile
       ? { responseProfile: input.turnInput.responseProfile }
       : {}),
-    ...(genUi
-      ? { genUi: kfcGenUiAttachmentForPersistence(genUi) }
-      : {}),
+    ...(genUi ? { genUi: kfcGenUiAttachmentForPersistence(genUi) } : {}),
   };
   const assistantTurn = {
     sessionId: input.turnInput.sessionId,
@@ -89,18 +87,21 @@ export async function persistCompletedTurn(input: {
   } as const;
   const fence = input.turnInput.runGuard?.commitFence;
   const turn = fence
-    ? await input.turnInput.store.commitAssistantTurnIfRunCurrent({
-        fence,
-        stateEvent: {
-          sessionId: input.turnInput.sessionId,
-          sourceType: verifiedStateSnapshotSourceType,
-          payload: { verifiedState: buildVerifiedStateSnapshot(input.state) },
-        },
-        assistantTurn,
-      }).then((result) => {
-        if (result.status === 'stale') throw new Error('customer_run_cancelled');
-        return result.turn;
-      })
+    ? await input.turnInput.store
+        .commitAssistantTurnIfRunCurrent({
+          fence,
+          stateEvent: {
+            sessionId: input.turnInput.sessionId,
+            sourceType: verifiedStateSnapshotSourceType,
+            payload: { verifiedState: buildVerifiedStateSnapshot(input.state) },
+          },
+          assistantTurn,
+        })
+        .then((result) => {
+          if (result.status === 'stale')
+            throw new Error('customer_run_cancelled');
+          return result.turn;
+        })
     : await persistVerifiedStateSnapshot(
         input.turnInput.store,
         input.state,

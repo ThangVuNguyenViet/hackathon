@@ -65,7 +65,8 @@ const supportReasons: CustomerLanguageMap = {
   cart_mutation_confirmation_required: 'Cần xác nhận thay đổi giỏ hàng',
   promotion_evidence_required: 'Cần kiểm tra lại thông tin ưu đãi',
   payment_tool_success_required: 'Cần kiểm tra lại trạng thái thanh toán',
-  allergen_certainty_not_allowed: 'Cần nhân viên kiểm tra thêm thông tin dị ứng',
+  allergen_certainty_not_allowed:
+    'Cần nhân viên kiểm tra thêm thông tin dị ứng',
   needs_verified_info: 'Cần nhân viên kiểm tra thêm thông tin',
 };
 
@@ -81,7 +82,11 @@ const paymentSupportStatuses: CustomerLanguageMap = {
   separate_channel_only: 'Chỉ hỗ trợ qua kênh thanh toán riêng',
 };
 
-function customerValue(value: unknown, values: CustomerLanguageMap, fallback: string): string | undefined {
+function customerValue(
+  value: unknown,
+  values: CustomerLanguageMap,
+  fallback: string,
+): string | undefined {
   if (typeof value !== 'string' || value.trim().length === 0) return undefined;
   return values[value.trim().toLowerCase()] ?? fallback;
 }

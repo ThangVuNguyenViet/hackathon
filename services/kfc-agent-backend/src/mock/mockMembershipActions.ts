@@ -3,16 +3,11 @@ import type {
   MembershipClient,
   ProviderMutationIdentity,
 } from '../clients/interfaces.js';
-import type {
-  ProviderMutationReplayRegistry,
-} from '../clients/providerMutationReplay.js';
+import type { ProviderMutationReplayRegistry } from '../clients/providerMutationReplay.js';
 import type { ToolResult } from '../domain/types.js';
 import type { OrderingDataService } from '../ordering/orderingDataService.js';
 import type { MembershipActionResult } from '../ordering/types.js';
-import {
-  mockFailure as fail,
-  mockSuccess as ok,
-} from './mockToolResults.js';
+import { mockFailure as fail, mockSuccess as ok } from './mockToolResults.js';
 
 type MockMembershipActions = Pick<
   MembershipClient,

@@ -2,72 +2,44 @@ import type { BaseChatModel } from '@langchain/core/language_models/chat_models'
 import { ChatGoogle } from '@langchain/google';
 import { ChatOpenAI } from '@langchain/openai';
 
-export const agentModelProfiles = {
-  openai: {
-    provider: 'openai',
-    model: 'gpt-4.1-mini',
-    profile: 'openai-gpt-4.1-mini',
-  },
-  google: {
-    provider: 'google',
-    model: 'gemini-3.1-flash-lite',
-    profile: 'google-gemini-3.1-flash-lite-thinking-low',
-    thinkingLevel: 'LOW',
-  },
-} as const;
+export type AgentProvider = 'openai' | 'google';
 
-export const qualificationAgentModelProfiles = {
-  openai: {
-    provider: 'openai',
-    model: 'gpt-4.1-mini',
-    profile: 'openai-gpt-4.1-mini-qualification',
-  },
-  google: {
-    provider: 'google',
-    model: 'gemini-3.1-flash-lite',
-    profile: 'google-gemini-3.1-flash-lite-thinking-high-qualification',
-    thinkingLevel: 'HIGH',
-  },
-} as const;
-
-export type AgentProvider = keyof typeof agentModelProfiles;
-export type AgentProfileMode = 'production' | 'qualification';
 export type AgentModelProfile =
-  | (typeof agentModelProfiles)[AgentProvider]
-  | (typeof qualificationAgentModelProfiles)[AgentProvider];
+  | {
+      provider: 'openai';
+      model: string;
+      profile: string;
+    }
+  | {
+      provider: 'google';
+      model: string;
+      profile: string;
+      thinkingLevel: 'LOW';
+    };
+
 export type AgentModelIdentity = Readonly<
   Pick<AgentModelProfile, 'provider' | 'model' | 'profile'>
 >;
 
-function modelProfilesForMode(mode: AgentProfileMode) {
-  return mode === 'qualification'
-    ? qualificationAgentModelProfiles
-    : agentModelProfiles;
-}
-
-function modelProfileForInput(input: {
-  provider: AgentProvider;
-  mode: AgentProfileMode;
-}): AgentModelProfile {
-  return modelProfilesForMode(input.mode)[input.provider];
-}
+const defaultModels: Record<AgentProvider, string> = {
+  openai: 'gpt-4.1-mini',
+  google: 'gemini-3.1-flash-lite',
+};
 
 export function resolveAgentModelProfile(input: {
   provider: AgentProvider;
   model?: string;
-  mode?: AgentProfileMode;
 }): AgentModelProfile {
-  const mode = input.mode ?? 'production';
-  const profile = modelProfileForInput({
-    provider: input.provider,
-    mode,
-  });
-  if (input.model?.trim() && input.model.trim() !== profile.model) {
-    throw new Error(
-      `KFC ${mode} agent model drift: ${input.provider} must use ${profile.model}, received ${input.model.trim()}`,
-    );
+  const model = input.model?.trim() || defaultModels[input.provider];
+  if (input.provider === 'openai') {
+    return { provider: 'openai', model, profile: `openai:${model}` };
   }
-  return profile;
+  return {
+    provider: 'google',
+    model,
+    profile: `google:${model}`,
+    thinkingLevel: 'LOW',
+  };
 }
 
 export function createAgentChatModel(input: {
@@ -78,7 +50,7 @@ export function createAgentChatModel(input: {
 }): BaseChatModel {
   if (input.profile.provider === 'openai') {
     if (!input.openAiApiKey?.trim()) {
-      throw new Error('OPENAI_API_KEY is required for the OpenAI KFC agent profile');
+      throw new Error('OPENAI_API_KEY is required for the OpenAI KFC agent');
     }
     return new ChatOpenAI({
       apiKey: input.openAiApiKey,
@@ -94,7 +66,7 @@ export function createAgentChatModel(input: {
   }
 
   if (!input.googleApiKey?.trim()) {
-    throw new Error('GOOGLE_API_KEY is required for the Google KFC agent profile');
+    throw new Error('GOOGLE_API_KEY is required for the Google KFC agent');
   }
   return new ChatGoogle({
     apiKey: input.googleApiKey,

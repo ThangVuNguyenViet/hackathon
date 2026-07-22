@@ -12,9 +12,7 @@ import type {
   AppendCustomerRunEventsIfRunCurrentResult,
   SessionControl,
 } from './contracts.js';
-import {
-  prepareCustomerRunEventBatch,
-} from './customerRunEventCommit.js';
+import { prepareCustomerRunEventBatch } from './customerRunEventCommit.js';
 
 export function appendMemoryCustomerRunEvents(input: {
   operations: readonly AppendCustomerRunEventInput[];
@@ -38,12 +36,11 @@ export function appendMemoryCustomerRunEvents(input: {
       );
     }
   }
-  const events = input.operations.map(
-    ({ expectedSequence, ...eventInput }) =>
-      customerRunEventSchema.parse({
-        ...eventInput,
-        sequence: expectedSequence,
-      }),
+  const events = input.operations.map(({ expectedSequence, ...eventInput }) =>
+    customerRunEventSchema.parse({
+      ...eventInput,
+      sequence: expectedSequence,
+    }),
   );
   input.customerRunEvents.push(...events);
   input.customerRuns.set(run.id, {
@@ -78,8 +75,7 @@ export function appendMemoryCustomerRunEventsIfRunCurrent(input: {
   });
   const run = input.customerRuns.get(input.operation.fence.runId);
   const control = input.sessionControls.get(input.operation.sessionId);
-  const authorityGeneration =
-    control?.sessionAuthorityGeneration ?? 0;
+  const authorityGeneration = control?.sessionAuthorityGeneration ?? 0;
   if (
     !run ||
     run.sessionId !== input.operation.sessionId ||
@@ -88,10 +84,7 @@ export function appendMemoryCustomerRunEventsIfRunCurrent(input: {
     run.sessionAuthorityGeneration !== authorityGeneration ||
     (run.status !== 'accepted' && run.status !== 'running') ||
     (control?.agentMode ?? 'ai_active') !== 'ai_active' ||
-    (
-      prepared.length > 0 &&
-      prepared[0]?.sequence !== run.nextEventSequence
-    )
+    (prepared.length > 0 && prepared[0]?.sequence !== run.nextEventSequence)
   ) {
     return { status: 'stale' };
   }
