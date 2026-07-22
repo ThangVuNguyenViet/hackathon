@@ -12,6 +12,7 @@ import {
 import {
   createAgentChatModel,
   resolveAgentModelProfile,
+  resolveRuntimeAgentIdentity,
 } from "../config/agentModelProfile.js";
 import {
   createMonitorChatModel,
@@ -93,9 +94,18 @@ export function buildServerOptionsFromEnv(
     ? new OpenAI({ apiKey: openAiApiKey, baseURL: openAiBaseUrl })
     : undefined;
   const googleApiKey = optionalValue(env.GOOGLE_API_KEY);
-  const agentIdentity = resolveAgentModelProfile({
+  const agentIdentity = resolveRuntimeAgentIdentity({
+    runtime: env.KFC_AGENT_RUNTIME,
     provider: env.KFC_AGENT_PROVIDER,
     model: optionalValue(env.KFC_AGENT_MODEL),
+    mode: env.KFC_AGENT_PROFILE_MODE,
+  });
+  const stateGraphProfile = resolveAgentModelProfile({
+    provider: env.KFC_AGENT_PROVIDER,
+    model:
+      env.KFC_AGENT_RUNTIME === 'stategraph'
+        ? optionalValue(env.KFC_AGENT_MODEL)
+        : undefined,
     mode: env.KFC_AGENT_PROFILE_MODE,
   });
   const monitorIdentity = resolveMonitorModelProfile({
@@ -106,11 +116,11 @@ export function buildServerOptionsFromEnv(
   const agentConfigured = agentIdentity.provider === "openai"
     ? Boolean(openAiApiKey)
     : Boolean(googleApiKey);
-  const agent = agentConfigured
+  const agent = agentConfigured && env.KFC_AGENT_RUNTIME === 'stategraph'
     ? {
         identity: agentIdentity,
         model: createAgentChatModel({
-          profile: agentIdentity,
+          profile: stateGraphProfile,
           openAiApiKey,
           openAiBaseUrl,
           googleApiKey,

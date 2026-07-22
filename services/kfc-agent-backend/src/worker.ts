@@ -40,7 +40,7 @@ import { D1CheckpointSaver } from "./persistence/d1CheckpointSaver.js";
 import type { ConversationStore } from "./persistence/memoryStore.js";
 import { sessionIdForConversationEvent } from "./session/sessionContext.js";
 import { fetchCatalogObservation } from "./catalog/catalogObservation.js";
-import { resolveAgentModelProfile } from "./config/agentModelProfile.js";
+import { resolveRuntimeAgentIdentity } from "./config/agentModelProfile.js";
 import { resolveMonitorModelProfile } from "./config/monitorModelProfile.js";
 import {
   D1LifecycleRepository,
@@ -209,7 +209,8 @@ function workerAgentReadiness(env: WorkerEnv): WorkerAgentReadiness {
   const agentProvider = env.KFC_AGENT_PROVIDER ?? "google";
   let agentReadiness: WorkerAgentReadiness;
   try {
-    const identity = resolveAgentModelProfile({
+    const identity = resolveRuntimeAgentIdentity({
+      runtime: env.KFC_AGENT_RUNTIME ?? "stategraph",
       provider: agentProvider,
       model: env.KFC_AGENT_MODEL,
       mode: env.KFC_AGENT_PROFILE_MODE,

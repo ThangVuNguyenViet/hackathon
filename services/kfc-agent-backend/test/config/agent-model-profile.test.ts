@@ -4,11 +4,26 @@ import {
   createAgentChatModel,
   qualificationAgentModelProfiles,
   resolveAgentModelProfile,
+  resolveRuntimeAgentIdentity,
 } from '../../src/config/agentModelProfile.js';
 import { groundedResponseToolDefinition } from '../../src/agent/responseGrounding.js';
 import { commerceToolDefinitions } from '../../src/agent/singleAgentRuntime.js';
 
 describe('KFC agent model profile', () => {
+  it('allows the direct Responses runtime to use its configured OpenAI model', () => {
+    expect(
+      resolveRuntimeAgentIdentity({
+        runtime: 'openai-responses',
+        provider: 'openai',
+        model: 'gpt-4.1-mini',
+      }),
+    ).toEqual({
+      provider: 'openai',
+      model: 'gpt-4.1-mini',
+      profile: 'openai-responses-gpt-4.1-mini',
+    });
+  });
+
   it('pins one affordable production model per provider and fails on drift', () => {
     expect(agentModelProfiles.openai).toMatchObject({
       provider: 'openai',

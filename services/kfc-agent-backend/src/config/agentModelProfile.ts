@@ -33,9 +33,11 @@ export type AgentProfileMode = 'production' | 'qualification';
 export type AgentModelProfile =
   | (typeof agentModelProfiles)[AgentProvider]
   | (typeof qualificationAgentModelProfiles)[AgentProvider];
-export type AgentModelIdentity = Readonly<
-  Pick<AgentModelProfile, 'provider' | 'model' | 'profile'>
->;
+export type AgentModelIdentity = Readonly<{
+  provider: AgentProvider;
+  model: string;
+  profile: string;
+}>;
 
 function modelProfilesForMode(mode: AgentProfileMode) {
   return mode === 'qualification'
@@ -66,6 +68,26 @@ export function resolveAgentModelProfile(input: {
     );
   }
   return profile;
+}
+
+export function resolveRuntimeAgentIdentity(input: {
+  runtime: 'stategraph' | 'openai-responses';
+  provider: AgentProvider;
+  model?: string;
+  mode?: AgentProfileMode;
+}): AgentModelIdentity {
+  if (input.runtime === 'openai-responses') {
+    if (input.provider !== 'openai') {
+      throw new Error('openai-responses requires the OpenAI provider');
+    }
+    const model = input.model?.trim() || 'gpt-4.1-mini';
+    return {
+      provider: 'openai',
+      model,
+      profile: `openai-responses-${model}`,
+    };
+  }
+  return resolveAgentModelProfile(input);
 }
 
 export function createAgentChatModel(input: {
