@@ -28,11 +28,15 @@ async function agentCollectionResult<Item>(input: {
   items: Item[];
   scope: CollectionScope;
   providerRevision: string;
+  total?: number;
+  complete?: boolean;
 }): Promise<AgentToolCallResult> {
   const snapshot = await buildVerifiedCollectionSnapshot({
     items: input.items,
     scope: input.scope,
     providerRevision: input.providerRevision,
+    ...(input.total === undefined ? {} : { total: input.total }),
+    ...(input.complete === undefined ? {} : { complete: input.complete }),
   });
   return {
     toolName: input.legacy.toolName,

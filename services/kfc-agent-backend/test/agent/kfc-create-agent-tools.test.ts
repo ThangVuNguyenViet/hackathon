@@ -2,6 +2,7 @@
 import { ToolMessage } from '@langchain/core/messages';
 import { describe, expect, it, vi } from 'vitest';
 import { commerceToolDefinitions } from '../../src/agent/agentToolDefinitions.js';
+import { providerPortableToolSchema } from '../../src/agent/providerPortableToolSchema.js';
 import type { KfcCreateAgentToolCoordinator } from '../../src/agent/kfcCreateAgentToolCoordinator.js';
 import {
   createKfcCreateAgentTools,
@@ -78,14 +79,16 @@ describe('KFC createAgent commerce tools', () => {
       const name = toolNames[index];
       expect(selected.name).toBe(name);
       expect(selected.description).toBe(definitions[index]?.description);
-      expect(selected.schema).toEqual(definitions[index]?.schema);
+      expect(providerPortableToolSchema(selected.schema)).toEqual(
+        definitions[index]?.schema,
+      );
     }
   });
 
   it.each([
     {
       name: 'searchMenu',
-      args: { scope: 'filtered', query: 'gà rán' },
+      args: { scope: 'filtered', query: 'gà rán', purpose: 'browse' },
       callId: 'read-call-1',
     },
     {
@@ -170,7 +173,7 @@ describe('KFC createAgent commerce tools', () => {
 
     const result = await invokeWithContext(
       selected,
-      { scope: 'all', query: null },
+      { scope: 'all', query: null, purpose: 'browse' },
       context,
       'read-call-1',
     );
@@ -193,7 +196,7 @@ describe('KFC createAgent commerce tools', () => {
     expect(execute).toHaveBeenCalledWith({
       id: 'read-call-1',
       toolName: 'searchMenu',
-      arguments: { scope: 'all', query: null },
+      arguments: { scope: 'all', query: null, purpose: 'browse' },
     });
     expect(fallback).not.toHaveBeenCalled();
   });

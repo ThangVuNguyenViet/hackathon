@@ -247,6 +247,7 @@ describe('recent live conversation regressions', () => {
         authoredToolCall('searchMenu', {
           scope: 'filtered',
           query: 'Combo Đẫy Đà 129K',
+          purpose: 'browse',
         }),
         authoredToolCall('updateCart', {
           changes: [
@@ -311,6 +312,7 @@ describe('recent live conversation regressions', () => {
       tools: [[authoredToolCall('searchMenu', {
         scope: 'filtered',
         query: 'Pepsi',
+        purpose: 'browse',
       })]],
       customerText: 'Please choose from the current Pepsi options.',
     });
@@ -352,6 +354,7 @@ describe('recent live conversation regressions', () => {
       tools: [[authoredToolCall('searchMenu', {
         scope: 'filtered',
         query: 'Combo Gà Rôm Rả 245k',
+        purpose: 'browse',
       })]],
       customerText: 'Combo Gà Rôm Rả 245k có thể chọn gà cay.',
     });
@@ -431,6 +434,7 @@ describe('recent live conversation regressions', () => {
       tools: [[authoredToolCall('searchMenu', {
         scope: 'filtered',
         query: 'pepsi',
+        purpose: 'browse',
       })]],
       customerText: 'Please choose the Pepsi variant you want.',
     });
@@ -457,6 +461,7 @@ describe('recent live conversation regressions', () => {
       tools: [[authoredToolCall('searchMenu', {
         scope: 'filtered',
         query: 'combo gà cay',
+        purpose: 'browse',
       })]],
       customerText: 'Please choose a spicy-chicken combo.',
     });
@@ -524,6 +529,7 @@ describe('recent live conversation regressions', () => {
         [authoredToolCall('searchMenu', {
           scope: 'filtered',
           query: 'combo gà cay',
+          purpose: 'browse',
         })],
         [authoredToolCall('getModifierOptions', { code: '20711' })],
       ],

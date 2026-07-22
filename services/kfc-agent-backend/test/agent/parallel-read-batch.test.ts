@@ -40,7 +40,7 @@ function parallelReadRequest(
       }
     : {
         toolName,
-        arguments: { scope: 'all', query: null },
+        arguments: { scope: 'all', query: null, purpose: 'browse' },
       };
 }
 

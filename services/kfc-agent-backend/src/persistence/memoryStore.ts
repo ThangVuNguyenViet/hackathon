@@ -664,7 +664,8 @@ export class MemoryStore
         turnId,
         runId,
         this.memoryAgentRunState(),
-      ));
+      ),
+    );
   }
 
   async createAgentRun(input: CreateAgentRunInput): Promise<AgentRun> {

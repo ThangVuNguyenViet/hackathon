@@ -137,7 +137,7 @@ async function boundedCatalogPublicationBundle(): Promise<ModelPublicationBundle
     '20751',
   );
   if (!item) throw new Error('menu fixture missing');
-  const collectionKey = 'menu:all';
+  const collectionKey = 'menu:filtered';
   state.activeCollectionKeys = { searchMenu: collectionKey };
   state.verifiedCollections = {
     searchMenu: {
@@ -150,7 +150,7 @@ async function boundedCatalogPublicationBundle(): Promise<ModelPublicationBundle
           total: 1,
           returned: 1,
           complete: true,
-          scope: { scope: 'all' },
+          scope: { scope: 'filtered', query: 'Combo Hợp Gu 99K' },
         },
       },
     },
@@ -186,6 +186,39 @@ async function compositeCatalogPublicationBundle(): Promise<ModelPublicationBund
   return publicationBundle(state);
 }
 
+async function freshFullMenuPublication() {
+  const state = publicationState();
+  const fixtures = await loadGeneratedFixtures(process.cwd());
+  const items = new OrderingDataService(fixtures, {
+    currentDate: '2026-07-13',
+  }).searchMenu('');
+  const exemplar = items[0];
+  if (!exemplar) throw new Error('full-menu fixture missing');
+  const collectionKey = 'menu:all:fresh';
+  const collection = {
+    key: collectionKey,
+    revision: 'fresh-catalog-revision',
+    providerRevision: 'fresh-provider-revision',
+    result: {
+      items,
+      total: items.length,
+      returned: items.length,
+      complete: true,
+      scope: { scope: 'all' as const },
+    },
+  };
+  state.menuSearchResults = items;
+  state.activeMenuCollection = collection;
+  state.activeCollectionKeys = { searchMenu: collectionKey };
+  state.verifiedCollections = {
+    searchMenu: { [collectionKey]: collection },
+  };
+  return {
+    state,
+    exemplar,
+    bundle: await publicationBundle(state),
+  };
+}
 const claims: ResponseFactualClaims = {
   evidenceReferences: [
     {
@@ -297,6 +330,39 @@ async function selectedActionBoundaryFixture() {
 }
 
 describe('response publication boundary', () => {
+  it('keeps a fresh full-menu model context under 16 KiB without catalog item payload', async () => {
+    const { state, exemplar, bundle } = await freshFullMenuPublication();
+    const serialized = modelPublicationContext(bundle, null);
+    const context = JSON.parse(serialized) as {
+      publication: {
+        modelState: {
+          activeCollections?: {
+            searchMenu?: Record<string, unknown>;
+          };
+        };
+        evidence: Array<{ value: unknown }>;
+      };
+    };
+
+    expect(Buffer.byteLength(serialized, 'utf8')).toBeLessThanOrEqual(
+      16 * 1024,
+    );
+    expect(
+      context.publication.modelState.activeCollections?.searchMenu,
+    ).not.toHaveProperty('items');
+    expect(JSON.stringify(context.publication.evidence)).not.toContain(
+      '"items"',
+    );
+    expect(serialized).not.toContain('"code"');
+    expect(serialized).not.toContain('"description"');
+    expect(serialized).not.toContain('"imageUrl"');
+    expect(serialized).not.toContain(exemplar.code);
+    expect(serialized).not.toContain(exemplar.description);
+    expect(serialized).not.toContain(exemplar.imageUrl);
+    const fullMenu = state.activeMenuCollection;
+    if (!fullMenu) throw new Error('full-menu graph state missing');
+    expect(fullMenu.result.items).toHaveLength(fullMenu.result.total);
+  });
   it('materializes repeated publication values once in a prompt-only value table', () => {
     const sentinel = `unique-menu-payload-${'x'.repeat(512)}`;
     const items = [{ code: 'item-1', name: sentinel }];
@@ -1343,7 +1409,6 @@ describe('response publication boundary', () => {
       },
     ]);
   });
-
   it('classifies duplicate issued private evidence authorities as correctable while final attestation stays strict', async () => {
     const bundle = await privatePublicationBundle();
     const privateClaims: ResponseFactualClaims = {

@@ -97,6 +97,7 @@ import {
   textOnlyPresentation,
   type ChannelPresentationPlan,
 } from '../presentation/channelPresentation.js';
+import { catalogMediaIntentFromPersisted } from '../presentation/catalogMediaIntent.js';
 import {
   ShowcaseService,
   ShowcaseValidationError,
@@ -665,7 +666,18 @@ export function createRouteMessengerRuntime(
                 : reconciled.record.outcomeCode,
           };
         }
-        presentation = textOnlyPresentation(assistantTurn.text, run.channel);
+        const catalogMediaIntent = catalogMediaIntentFromPersisted(
+          assistantTurn.metadata?.catalogMediaIntent,
+        );
+        presentation = catalogMediaIntent
+          ? {
+              profile: 'social',
+              text: assistantTurn.text,
+              ...(catalogMediaIntent.outcome === 'selected'
+                ? { media: catalogMediaIntent.media }
+                : {}),
+            }
+          : textOnlyPresentation(assistantTurn.text, run.channel);
         deliveryAssistantTurnId = assistantTurn.id;
       } else {
         output = await runAgentTurn({

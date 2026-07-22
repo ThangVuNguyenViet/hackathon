@@ -333,9 +333,16 @@ export function createKfcSemanticAgentNode(
           : {}),
       };
     };
-    const failureUpdate = (error: unknown): KfcAgentStateUpdate => ({
-      ...runtimeUpdate(),
-      ...publicationUpdate(),
+    const failureUpdate = (
+      error: unknown,
+      rejectedResult?: Awaited<ReturnType<KfcSemanticAgentLike['invoke']>>,
+    ): KfcAgentStateUpdate => ({
+      ...(rejectedResult
+        ? resultUpdate(rejectedResult)
+        : {
+            ...runtimeUpdate(),
+            ...publicationUpdate(),
+          }),
       failure: failureCode(error),
     });
 
@@ -356,12 +363,17 @@ export function createKfcSemanticAgentNode(
     };
     const invokeCorrection = async (
       feedback: string,
+      rejected: {
+        errorCode: string;
+        result: Awaited<ReturnType<KfcSemanticAgentLike['invoke']>>;
+      } | null = null,
     ): Promise<KfcAgentStateUpdate> => {
       try {
         consumeSemanticCorrection(createAgentRuntime);
       } catch {
         return failureUpdate(
           new Error('agent_semantic_correction_limit_exceeded'),
+          rejected?.result,
         );
       }
       await dependencies.assertRuntimeActive(state);
@@ -382,17 +394,20 @@ export function createKfcSemanticAgentNode(
                 ? 'agent_semantic_correction_limit_exceeded'
                 : correctedValidation.errorCode,
             ),
+            correctedResult,
           );
         }
         return resultUpdate(correctedResult);
       } catch (correctedError) {
         if (isGraphInterrupt(correctedError)) throw correctedError;
         await recordDeadlineObservation(correctedError);
-        return failureUpdate(
-          hasStructuredOutputParsingCause(correctedError)
-            ? new Error('agent_semantic_correction_limit_exceeded')
-            : correctedError,
-        );
+        return rejected
+          ? failureUpdate(new Error(rejected.errorCode), rejected.result)
+          : failureUpdate(
+              hasStructuredOutputParsingCause(correctedError)
+                ? new Error('agent_semantic_correction_limit_exceeded')
+                : correctedError,
+            );
       }
     };
 
@@ -404,12 +419,13 @@ export function createKfcSemanticAgentNode(
       const validation = await validateStructuredResult(result);
       if (validation.ok) return resultUpdate(result);
       if (!validation.correctable) {
-        return failureUpdate(new Error(validation.errorCode));
+        return failureUpdate(new Error(validation.errorCode), result);
       }
       return invokeCorrection(
         validation.errorCode === 'agent_response_publication_rejected'
           ? publicationCorrectionFeedback(currentPublicationState())
           : boundedGroundedResponseFeedback(validation.errorCode),
+        { errorCode: validation.errorCode, result },
       );
     } catch (error) {
       if (isGraphInterrupt(error)) {

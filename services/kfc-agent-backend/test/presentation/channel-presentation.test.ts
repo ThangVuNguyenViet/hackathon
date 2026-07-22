@@ -40,8 +40,8 @@ const genUi: KfcGenUiAttachment = {
 describe('channel presentation profile isolation', () => {
   it.each<[Channel, string, boolean, boolean, boolean]>([
     ['kfc', 'structured_companion', true, false, false],
-    ['messenger', 'standalone_text', false, true, false],
-    ['zalo', 'standalone_text', false, true, false],
+    ['messenger', 'standalone_text', false, true, true],
+    ['zalo', 'standalone_text', false, true, true],
     ['messenger_mock', 'standalone_text', false, true, false],
     ['zalo_mock', 'standalone_text', false, true, false],
   ])(
@@ -127,7 +127,7 @@ describe('channel presentation profile isolation', () => {
     },
   );
 
-  it('keeps social agent text mode text-only even when trusted media exists', () => {
+  it('does not infer native media from persisted commerce state', () => {
     const presentation = buildSocialPresentation({
       channel: 'messenger',
       standaloneText: 'Combo Hợp Gu 99K có giá 99.000đ.',
@@ -154,6 +154,35 @@ describe('channel presentation profile isolation', () => {
       text: 'Combo Hợp Gu 99K có giá 99.000đ.',
     });
     expect(presentation.genUi).toBeUndefined();
+  });
+
+  it('renders only the persisted current-turn catalog media intent', () => {
+    const imageUrl =
+      'https://static.kfcvietnam.com.vn/images/items/lg/HOPGU.jpg';
+    const presentation = buildSocialPresentation({
+      channel: 'messenger',
+      standaloneText: 'Mình gợi ý ba lựa chọn phù hợp.',
+      state: state(),
+      catalogMediaIntent: {
+        schemaVersion: 'kfc-catalog-media-intent-v1',
+        intentId: 'intent-current-search',
+        toolName: 'searchMenu',
+        toolCallId: 'call-current-search',
+        evidenceId: 'current:searchMenu:evidence',
+        currentTurnRevision: 'turn-revision',
+        activeVerifiedRevision: 'collection-revision',
+        outcome: 'selected',
+        media: [
+          { key: 'catalog:20751:0', imageUrl, title: 'Combo Hợp Gu 99K' },
+        ],
+      },
+    });
+
+    expect(presentation).toEqual({
+      profile: 'social',
+      text: 'Mình gợi ý ba lựa chọn phù hợp.',
+      media: [{ key: 'catalog:20751:0', imageUrl, title: 'Combo Hợp Gu 99K' }],
+    });
   });
 
   it('does not deliver untrusted catalog media', () => {

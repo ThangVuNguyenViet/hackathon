@@ -642,12 +642,14 @@ export abstract class PostgresStoreConversationOperations extends PostgresStoreC
       `,
       [turnId, runId],
     );
-    const row = updated.rows[0] ?? (
-      await this.db.query<PendingCustomerTurnRow>(
-        `SELECT * FROM pending_customer_turns WHERE turn_id = $1 LIMIT 1`,
-        [turnId],
-      )
-    ).rows[0];
+    const row =
+      updated.rows[0] ??
+      (
+        await this.db.query<PendingCustomerTurnRow>(
+          `SELECT * FROM pending_customer_turns WHERE turn_id = $1 LIMIT 1`,
+          [turnId],
+        )
+      ).rows[0];
     if (!row) throw new Error(`Pending customer turn not found: ${turnId}`);
     return pendingCustomerTurnFromRow(row);
   }

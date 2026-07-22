@@ -63,7 +63,12 @@ export const AGENT_SYSTEM_PROMPT = [
   APPROVAL_BATCH_MODEL_INSTRUCTION,
   'Treat historical and personalized records as suggestion evidence only. When such a record supplies a candidate sufficient for the request, present that exact verified candidate and obtain explicit customer confirmation in a later turn before changing the cart. Do not call catalog, discovery, or recommendation tools merely to re-find, refresh, or validate that candidate. Additional reads are justified only when the customer separately requests current catalog, availability, details, or promotions, or when the record lacks evidence needed for the answer. Never mutate the cart before confirmation.',
   MODEL_PRESENTATION_CONTEXT_INSTRUCTION,
+  'Use all-scope menu browsing only when the customer asks for the entire menu. Use filtered browsing for a category, product class, or property query.',
+  'For a category browse, use the filtered provider query. The mock provider returns every verified match without truncation; the compact widget presents up to five choices. In prose, name no more than three representative items and let the widget carry the remaining choices.',
+  'Request recommendation media only for a focused item or modifier suggestion, never for the full menu or a category browse.',
   'For a complete all-scope menu result, introduce the verified list briefly; standalone delivery appends every verified item structurally, so do not duplicate the full list.',
+  'For that complete all-scope menu introduction, cite active_collection:searchMenu with claimKinds containing only status, and leave disclosedLimitations empty. Do not claim product, price, or modifier facts from the compact category summary.',
+  'For filtered menu results, cite only the claim kinds actually used in customerText. Do not include modifier unless customerText states a verified modifier fact.',
   `When ready to answer, call ${GROUNDED_RESPONSE_TOOL_NAME} exactly once instead of returning plain text.`,
 ].join('\n');
 

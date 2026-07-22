@@ -6,6 +6,7 @@ import { MemorySaver } from '@langchain/langgraph';
 import { describe, expect, it, vi } from 'vitest';
 import { createKfcAgentStateGraph } from '../../src/agent/agentStateGraph.js';
 import { commerceToolDefinitions } from '../../src/agent/agentToolDefinitions.js';
+import { createKfcCreateAgentTools } from '../../src/agent/kfcCreateAgentTools.js';
 import {
   AGENT_SYSTEM_PROMPT,
   providerFailureReportCode,
@@ -69,6 +70,23 @@ describe('grounded response submission', () => {
     );
   });
 
+  it('distinguishes full-menu browsing, category browsing, and focused recommendations', () => {
+    expect(AGENT_SYSTEM_PROMPT).toContain(
+      'Use all-scope menu browsing only when the customer asks for the entire menu',
+    );
+    expect(AGENT_SYSTEM_PROMPT).toContain(
+      'For a category browse, use the filtered provider query. The mock provider returns every verified match without truncation; the compact widget presents up to five choices. In prose, name no more than three representative items',
+    );
+    expect(AGENT_SYSTEM_PROMPT).toContain(
+      'Request recommendation media only for a focused item or modifier suggestion',
+    );
+    expect(AGENT_SYSTEM_PROMPT).toContain(
+      'cite active_collection:searchMenu with claimKinds containing only status, and leave disclosedLimitations empty',
+    );
+    expect(AGENT_SYSTEM_PROMPT).toContain(
+      'Do not include modifier unless customerText states a verified modifier fact',
+    );
+  });
   it('keeps historical cart confirmation in model policy, not deterministic text routing', () => {
     expect(AGENT_SYSTEM_PROMPT).toContain(
       'present that exact verified candidate and obtain explicit customer confirmation in a later turn before changing the cart',
@@ -199,6 +217,40 @@ describe('grounded response submission', () => {
         selectedActionResponse: { type: 'null' },
       },
     });
+
+    const quoteDefinition = createKfcCreateAgentTools().filter(
+      ({ name }) => name === 'quoteFulfillment',
+    );
+    const openaiQuote = openai.bindTools(quoteDefinition);
+    if (!(openaiQuote instanceof ChatOpenAI)) {
+      throw new Error('expected_bound_openai_quote_model');
+    }
+    const openaiQuoteTool = openaiQuote.invocationParams().tools?.[0];
+    expect(openaiQuoteTool).toMatchObject({
+      type: 'function',
+      name: 'quoteFulfillment',
+      strict: true,
+      parameters: {
+        type: 'object',
+        additionalProperties: false,
+        required: ['address', 'savedAddressRef', 'method'],
+      },
+    });
+    expect(
+      openaiQuoteTool &&
+        'parameters' in openaiQuoteTool &&
+        openaiQuoteTool.parameters,
+    ).not.toHaveProperty('anyOf');
+    const googleQuote = google.invocationParams({ tools: quoteDefinition });
+    expect(
+      googleQuote.tools?.[0]?.functionDeclarations?.[0]?.parameters,
+    ).toMatchObject({
+      type: 'object',
+      required: ['address', 'savedAddressRef', 'method'],
+    });
+    expect(
+      googleQuote.tools?.[0]?.functionDeclarations?.[0]?.parameters,
+    ).not.toHaveProperty('anyOf');
   });
 
   it('surfaces only safe diagnostics from the actual Google request boundary', async () => {
@@ -325,7 +377,7 @@ describe('grounded response submission', () => {
     const claims = groundedResponseClaims({
       evidenceReferences: [
         {
-          evidenceId: 'menu_search_results',
+          evidenceId: 'active_collection:searchMenu',
           claimKinds: ['product', 'price'],
         },
       ],
@@ -334,7 +386,7 @@ describe('grounded response submission', () => {
       .respondWithTools([
         {
           name: 'searchMenu',
-          args: { scope: 'all', query: null },
+          args: { scope: 'all', query: null, purpose: 'browse' },
         },
       ])
       .respond(

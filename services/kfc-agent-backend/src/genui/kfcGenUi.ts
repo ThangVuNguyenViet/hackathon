@@ -9,6 +9,7 @@ export const KFC_GENUI_SCHEMA_VERSION = 'kfc-genui-v1' as const;
 
 export const KFC_GENUI_WIDGET_KINDS = [
   'smartMenuPicker',
+  'fullMenuBrowser',
   'productDetailCard',
   'modifierPicker',
   'promotionGallery',

@@ -136,6 +136,7 @@ describe('maintained StateGraph catalog and fulfillment invariants', () => {
         args: {
           scope: 'filtered',
           query: 'combo gà cay',
+          purpose: 'browse',
         },
       }])
       .respond(groundedResponseModelReply({
@@ -186,6 +187,7 @@ describe('maintained StateGraph catalog and fulfillment invariants', () => {
         args: {
           scope: 'filtered',
           query: 'combo gà cay',
+          purpose: 'browse',
         },
       }])
       .respondWithTools([{

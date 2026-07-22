@@ -10,7 +10,10 @@ import {
 } from 'langchain';
 import { isGraphInterrupt } from '@langchain/langgraph';
 import { agentToolCallDisposition } from '../ordering/toolCallDisposition.js';
-import { toolNames } from '../ordering/toolCatalog.js';
+import {
+  agentToolArgumentSchemas,
+  toolNames,
+} from '../ordering/toolCatalog.js';
 import type { ToolName } from '../ordering/types.js';
 import { isValidApprovalBatchShape } from './agentApprovalBatchShape.js';
 import {
@@ -19,6 +22,7 @@ import {
   relevantToolState,
 } from './agentToolCallLedger.js';
 import type { KfcAcceptedToolCall } from './kfcCreateAgentToolCoordinator.js';
+import { prepareModelQuoteFulfillment } from './modelQuoteFulfillmentPreparation.js';
 import { parallelReadBatchEligibility } from './parallelReadBatch.js';
 import {
   classifyProviderFailure,
@@ -29,6 +33,12 @@ import {
   kfcCreateAgentContextSchema,
   type KfcCreateAgentRuntime,
 } from './kfcCreateAgentRuntime.js';
+import type { ModelPublicationBundle } from './modelPublicationProjection.js';
+import type {
+  PendingToolCall,
+  SingleAgentRuntimeContext,
+} from './singleAgentRuntime.js';
+import { buildPrivacySafeLangSmithMetadata } from '../observability/langsmithDiagnosticMetadata.js';
 
 interface AuthoredToolCall {
   id?: string;
@@ -72,6 +82,12 @@ function causeChain(error: unknown): unknown[] {
 
 const preservedBoundaryFailureCodes = new Set([
   'agent_approval_receipt_binding_mismatch',
+  'agent_address_authority_mismatch',
+  'structured_action_saved_address_ref_unavailable',
+  'structured_action_saved_address_payload_invalid',
+  'structured_action_verified_state_stale',
+  'structured_action_saved_address_conflicts_with_draft',
+  'structured_action_cart_required',
   'agent_provider_call_limit_exceeded',
   'agent_turn_deadline_exceeded',
   'customer_run_cancelled',
@@ -241,50 +257,79 @@ async function acceptedToolCalls(input: {
   advertisedToolNames: readonly ToolName[];
   runtime: KfcCreateAgentRuntime;
   state: Parameters<typeof relevantToolState>[1];
-}): Promise<KfcAcceptedToolCall[]> {
+  publicationBundle?: ModelPublicationBundle;
+  singleRuntime: SingleAgentRuntimeContext;
+}): Promise<{
+  calls: KfcAcceptedToolCall[];
+  state: Parameters<typeof relevantToolState>[1];
+}> {
   const seen = new Set<string>();
-  return Promise.all(
-    input.calls.map(async (call) => {
-      if (!call.id || !isToolName(call.name)) {
-        rejectAuthoredBatch(input.runtime);
+  let preparedState = input.state;
+  const accepted: KfcAcceptedToolCall[] = [];
+  for (const call of input.calls) {
+    if (!call.id || !isToolName(call.name)) {
+      rejectAuthoredBatch(input.runtime);
+    }
+    const disposition = agentToolCallDisposition(call.name, call.args);
+    if (!disposition.success) rejectAuthoredBatch(input.runtime);
+    let preparedCall: PendingToolCall = {
+      id: call.id,
+      toolName: disposition.data.toolName,
+      arguments: disposition.data.arguments,
+      ...(disposition.data.toolName === 'quoteFulfillment'
+        ? { auditArguments: structuredClone(call.args) }
+        : {}),
+    };
+    if (disposition.data.toolName === 'quoteFulfillment') {
+      if (!input.publicationBundle) {
+        throw new Error('agent_model_publication_authority_invalid');
       }
-      const disposition = agentToolCallDisposition(call.name, call.args);
-      if (!disposition.success) rejectAuthoredBatch(input.runtime);
-      const signatureDigest = await canonicalToolCallSignature({
-        sessionId: input.state.sessionId,
-        customerId: input.state.customerId,
-        channel: input.state.channel,
-        toolName: disposition.data.toolName,
-        arguments: disposition.data.arguments,
-        activeToolNames: input.advertisedToolNames,
-        relevantState: relevantToolState(
-          disposition.data.toolName,
-          input.state,
-        ),
+      const currentUserTurn = preparedState.recentTurns
+        ?.filter(({ role }) => role === 'user')
+        .at(-1);
+      const prepared = await prepareModelQuoteFulfillment({
+        call: preparedCall,
+        callCount: input.calls.length,
+        publicationBundle: input.publicationBundle,
+        currentUserTurn,
+        runtime: input.singleRuntime,
+        state: preparedState,
+        useId: `create-agent-tool:${currentUserTurn?.id ?? 'missing'}:${call.id}`,
       });
-      if (seen.has(signatureDigest)) {
-        throw new Error('agent_authored_tool_batch_no_progress');
-      }
-      seen.add(signatureDigest);
-      const handling = classifyToolCallSignature({
-        entries: input.runtime.toolCallLedger,
-        signatureDigest,
-        toolName: disposition.data.toolName,
-        effect: disposition.data.effect,
-      });
-      if (handling.kind === 'no_progress') {
-        throw new Error('agent_authored_tool_batch_no_progress');
-      }
-      return {
-        id: call.id,
-        toolName: disposition.data.toolName,
-        arguments: disposition.data.arguments,
-        signatureDigest,
-        effect: disposition.data.effect,
-        handling,
-      };
-    }),
-  );
+      if (!prepared.ok) throw new Error(prepared.errorCode);
+      preparedCall = prepared.call;
+      preparedState = prepared.state;
+    }
+    const signatureDigest = await canonicalToolCallSignature({
+      sessionId: preparedState.sessionId,
+      customerId: preparedState.customerId,
+      channel: preparedState.channel,
+      toolName: preparedCall.toolName,
+      arguments: preparedCall.arguments,
+      activeToolNames: input.advertisedToolNames,
+      relevantState: relevantToolState(preparedCall.toolName, preparedState),
+    });
+    if (seen.has(signatureDigest)) {
+      throw new Error('agent_authored_tool_batch_no_progress');
+    }
+    seen.add(signatureDigest);
+    const handling = classifyToolCallSignature({
+      entries: input.runtime.toolCallLedger,
+      signatureDigest,
+      toolName: preparedCall.toolName,
+      effect: disposition.data.effect,
+    });
+    if (handling.kind === 'no_progress') {
+      throw new Error('agent_authored_tool_batch_no_progress');
+    }
+    accepted.push({
+      ...preparedCall,
+      signatureDigest,
+      effect: disposition.data.effect,
+      handling,
+    });
+  }
+  return { calls: accepted, state: preparedState };
 }
 
 async function invokePhysicalProviderAttempt<Request>(input: {
@@ -317,10 +362,14 @@ async function invokePhysicalProviderAttempt<Request>(input: {
     attemptSpan = undefined;
   }
   const endAttemptSpan = async (
+    provider: Parameters<
+      typeof buildPrivacySafeLangSmithMetadata
+    >[0]['provider'],
     outputs: Record<string, unknown>,
   ): Promise<void> => {
     try {
-      await attemptSpan?.end(outputs);
+      const diagnostics = await buildPrivacySafeLangSmithMetadata({ provider });
+      await attemptSpan?.end({ ...outputs, diagnostics });
     } catch {
       // Observability is diagnostic-only and must never change agent behavior.
     }
@@ -337,12 +386,15 @@ async function invokePhysicalProviderAttempt<Request>(input: {
     });
     input.runtime.providerFailure = null;
     input.runtime.providerFailureDiagnostic = null;
-    await endAttemptSpan({
-      attempt,
-      purpose,
-      outcome: 'success',
-      toolCallCount: result.tool_calls?.length ?? 0,
-    });
+    await endAttemptSpan(
+      { attempt, outcome: 'success' },
+      {
+        attempt,
+        purpose,
+        outcome: 'success',
+        toolCallCount: result.tool_calls?.length ?? 0,
+      },
+    );
     return result;
   } catch (error) {
     const classified = classifyNestedProviderFailure(error);
@@ -358,14 +410,23 @@ async function invokePhysicalProviderAttempt<Request>(input: {
       retryable: classified.retryable,
     };
     input.runtime.providerFailureDiagnostic = classified.diagnostic;
-    await endAttemptSpan({
-      attempt,
-      purpose,
-      outcome: 'error',
-      errorClass: classified.errorClass,
-      retryable: classified.retryable,
-      toolCallCount: 0,
-    });
+    await endAttemptSpan(
+      {
+        attempt,
+        outcome: 'error',
+        httpStatus: classified.diagnostic.httpStatus,
+        errorCode: classified.diagnostic.errorType,
+        retryable: classified.retryable,
+      },
+      {
+        attempt,
+        purpose,
+        outcome: 'error',
+        errorClass: classified.errorClass,
+        retryable: classified.retryable,
+        toolCallCount: 0,
+      },
+    );
     throw error;
   }
 }
@@ -532,15 +593,19 @@ export function createKfcCreateAgentMiddleware() {
         context.createAgentRuntime,
       );
       if (context.toolCoordinator) {
-        const currentState =
-          context.toolCoordinator.snapshot()?.state ?? context.state;
+        const snapshot = context.toolCoordinator.snapshot();
+        const currentState = snapshot?.state ?? context.state;
+        const accepted = await acceptedToolCalls({
+          calls,
+          advertisedToolNames,
+          runtime: context.createAgentRuntime,
+          state: currentState,
+          publicationBundle: snapshot?.bundle,
+          singleRuntime: context.runtime,
+        });
         context.toolCoordinator.acceptBatch(
-          await acceptedToolCalls({
-            calls,
-            advertisedToolNames,
-            runtime: context.createAgentRuntime,
-            state: currentState,
-          }),
+          accepted.calls,
+          ...(accepted.state === currentState ? [] : [accepted.state]),
         );
       }
     },
@@ -550,7 +615,22 @@ export function createKfcCreateAgentMiddleware() {
     contextSchema: kfcCreateAgentContextSchema,
     wrapToolCall: async (request, handler) => {
       try {
-        return await handler(request);
+        if (request.toolCall.name !== 'quoteFulfillment') {
+          return await handler(request);
+        }
+        const parsed = agentToolArgumentSchemas.quoteFulfillment.safeParse(
+          request.toolCall.args,
+        );
+        if (!parsed.success) {
+          throw new Error('invalid_tool_arguments');
+        }
+        return await handler({
+          ...request,
+          toolCall: {
+            ...request.toolCall,
+            args: parsed.data,
+          },
+        });
       } catch (error) {
         if (isGraphInterrupt(error)) throw error;
         const preserved = preservedBoundaryFailureCode(error);

@@ -154,19 +154,14 @@ function normalizeSchemaNode(
   return normalized;
 }
 
-function objectBranch(value: unknown): boolean {
-  return isRecord(value) && value.type === 'object';
-}
-
 function ensureObjectRoot(value: unknown): JsonObject {
   if (!isRecord(value)) {
     throw new Error('provider_tool_schema_root_must_be_object');
   }
-  if (value.type === 'object') return value;
-  const union = value.anyOf;
-  if (Array.isArray(union) && union.length > 0 && union.every(objectBranch)) {
-    return { ...value, type: 'object' };
+  if (Object.hasOwn(value, 'anyOf')) {
+    throw new Error('provider_tool_schema_root_must_be_object');
   }
+  if (value.type === 'object') return value;
   throw new Error('provider_tool_schema_root_must_be_object');
 }
 
@@ -178,7 +173,7 @@ export function providerPortableToolSchema(
   schema: StructuredToolParams['schema'],
 ): JSONSchema {
   const generated = toJsonSchema(schema);
-  return ensureObjectRoot(
-    normalizeSchemaNode(generated, generated, new Set()),
-  ) as JSONSchema;
+  const normalized = normalizeSchemaNode(generated, generated, new Set());
+  const root = ensureObjectRoot(normalized);
+  return root as JSONSchema;
 }

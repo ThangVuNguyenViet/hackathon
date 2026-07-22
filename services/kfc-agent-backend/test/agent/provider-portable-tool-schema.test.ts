@@ -12,6 +12,7 @@ import {
 } from '../../src/agent/responseGrounding.js';
 import {
   agentToolArgumentSchemas,
+  parseAgentToolArguments,
   toolNames,
 } from '../../src/ordering/toolCatalog.js';
 
@@ -62,6 +63,33 @@ function stringArray(value: unknown, label: string): string[] {
   return value;
 }
 
+function assertStrictObjects(value: unknown, path = '$'): void {
+  if (Array.isArray(value)) {
+    value.forEach((entry, index) =>
+      assertStrictObjects(entry, `${path}[${index}]`),
+    );
+    return;
+  }
+  if (!isRecord(value)) return;
+  if (value.type === 'object') {
+    expect(value.additionalProperties, path).toBe(false);
+    const properties = schemaRecord(value.properties, `${path}.properties`);
+    if (Object.keys(properties).length === 0) {
+      expect(
+        value.required === undefined || Array.isArray(value.required),
+      ).toBe(true);
+    } else {
+      expect(
+        stringArray(value.required, `${path}.required`).sort(),
+        path,
+      ).toEqual(Object.keys(properties).sort());
+    }
+  }
+  for (const [key, entry] of Object.entries(value)) {
+    assertStrictObjects(entry, `${path}.${key}`);
+  }
+}
+
 describe('provider-portable commerce tool schemas', () => {
   it('serializes every commerce tool to the shared provider subset', () => {
     const definitions = commerceToolDefinitions();
@@ -80,6 +108,7 @@ describe('provider-portable commerce tool schemas', () => {
           forbidden,
         );
       }
+      assertStrictObjects(definition.schema, definition.name);
     }
   });
 
@@ -284,44 +313,52 @@ describe('provider-portable commerce tool schemas', () => {
 
   it('dereferences and normalizes provider-incompatible schema keywords', () => {
     const sharedPositiveInteger = z.number().int().positive();
-    const schema = z.union([
-      z
-        .object({
-          kind: z.literal('first'),
-          count: sharedPositiveInteger,
-        })
-        .strict(),
-      z
-        .object({
-          kind: z.literal('second'),
-          count: sharedPositiveInteger,
-          ratio: z.number().gt(0).lt(1),
-        })
-        .strict(),
-    ]);
+    const schema = z
+      .object({
+        selection: z.union([
+          z
+            .object({
+              kind: z.literal('first'),
+              count: sharedPositiveInteger,
+            })
+            .strict(),
+          z
+            .object({
+              kind: z.literal('second'),
+              count: sharedPositiveInteger,
+              ratio: z.number().gt(0).lt(1),
+            })
+            .strict(),
+        ]),
+      })
+      .strict();
 
     const portable = providerPortableToolSchema(schema);
     const serialized = JSON.stringify(portable);
 
     expect(portable).toMatchObject({
       type: 'object',
-      anyOf: [
-        {
-          type: 'object',
-          properties: {
-            kind: { type: 'string', enum: ['first'] },
-            count: { type: 'integer', minimum: 1 },
-          },
+      properties: {
+        selection: {
+          anyOf: [
+            {
+              type: 'object',
+              properties: {
+                kind: { type: 'string', enum: ['first'] },
+                count: { type: 'integer', minimum: 1 },
+              },
+            },
+            {
+              type: 'object',
+              properties: {
+                kind: { type: 'string', enum: ['second'] },
+                count: { type: 'integer', minimum: 1 },
+                ratio: { type: 'number', minimum: 0, maximum: 1 },
+              },
+            },
+          ],
         },
-        {
-          type: 'object',
-          properties: {
-            kind: { type: 'string', enum: ['second'] },
-            count: { type: 'integer', minimum: 1 },
-            ratio: { type: 'number', minimum: 0, maximum: 1 },
-          },
-        },
-      ],
+      },
     });
     for (const forbidden of forbiddenKeywords) {
       expect(serialized).not.toContain(`"${forbidden}"`);
@@ -382,8 +419,41 @@ describe('provider-portable commerce tool schemas', () => {
     ).toBe(false);
   });
 
+  it('publishes explicit menu intent to providers without making legacy checkpoints unreadable', () => {
+    const schema = schemaRecord(
+      providerPortableToolSchema(agentToolArgumentSchemas.searchMenu),
+      'searchMenu',
+    );
+    expect(stringArray(schema.required, 'searchMenu.required')).toEqual(
+      expect.arrayContaining(['scope', 'query', 'purpose']),
+    );
+    expect(
+      schemaRecord(schema.properties, 'searchMenu.properties'),
+    ).toHaveProperty('purpose');
+    const legacyMenu = parseAgentToolArguments('searchMenu', {
+      scope: 'all',
+      query: null,
+    });
+    expect(legacyMenu.success ? legacyMenu.data : undefined).toEqual({
+      scope: 'all',
+      query: null,
+      purpose: 'browse',
+    });
+  });
+
   it('rejects a non-object provider tool schema', () => {
     expect(() => providerPortableToolSchema(z.string())).toThrow(
+      'provider_tool_schema_root_must_be_object',
+    );
+  });
+
+  it('rejects a root anyOf instead of disguising it as an object', () => {
+    const schema = z.union([
+      z.object({ itemId: z.string() }).strict(),
+      z.object({ quantity: z.number().int().positive() }).strict(),
+    ]);
+
+    expect(() => providerPortableToolSchema(schema)).toThrow(
       'provider_tool_schema_root_must_be_object',
     );
   });

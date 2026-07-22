@@ -97,6 +97,7 @@ describe('KFC GenUI contract', () => {
   it('defines the MVP widget kinds', () => {
     expect(KFC_GENUI_WIDGET_KINDS).toEqual([
       'smartMenuPicker',
+      'fullMenuBrowser',
       'productDetailCard',
       'modifierPicker',
       'promotionGallery',
@@ -127,6 +128,73 @@ describe('KFC GenUI contract', () => {
 });
 
 describe('POST /chat/kfc/genui-action', () => {
+  it('rejects direct-add attempts for unavailable or modifier-required full-menu items', async () => {
+    const store = new MemoryStore();
+    const server = buildServer({
+      store,
+      lifecycle: sandboxIdentityLifecycle(),
+      ...testAgent(
+        fakeModel()
+          .respondWithTools([{
+            name: 'searchMenu',
+            args: { scope: 'all', query: null, purpose: 'browse' },
+          }])
+          .respond(groundedResponseModelReply({
+            customerText: 'Đây là toàn bộ thực đơn hiện có.',
+          })),
+      ),
+    });
+    const sessionId = 'kfc:blocked_full_menu_item';
+    await authenticateKfcAction(server, sessionId, 'blocked_full_menu_item');
+
+    const menuResponse = await server.inject({
+      method: 'POST',
+      url: '/chat/kfc/message',
+      payload: {
+        sessionId,
+        customerId: 'blocked_full_menu_item',
+        clientMessageId: 'blocked_full_menu_item_menu',
+        text: 'Menu có gì?',
+      },
+    });
+    expect(menuResponse.statusCode, menuResponse.body).toBe(200);
+    const menu = menuResponse.json().genUi as {
+      id: string;
+      widgetKind: string;
+      data: { items: Array<Record<string, unknown>> };
+    };
+    expect(menu.widgetKind).toBe('fullMenuBrowser');
+    const blockedItem = menu.data.items.find((item) =>
+      item.available !== true ||
+      item.isCustomize === true ||
+      item.hasModifiers === true ||
+      (Array.isArray(item.modifierGroups) && item.modifierGroups.length > 0));
+    expect(blockedItem).toBeDefined();
+
+    const actionResponse = await server.inject({
+      method: 'POST',
+      url: '/chat/kfc/genui-action',
+      payload: {
+        sessionId,
+        customerId: 'blocked_full_menu_item',
+        clientMessageId: 'blocked_full_menu_item_action',
+        action: {
+          attachmentId: menu.id,
+          actionId: 'add_items',
+          payload: {
+            items: [{ itemCode: blockedItem!.code, quantity: 1 }],
+          },
+        },
+      },
+    });
+
+    expect(actionResponse.statusCode).toBe(422);
+    expect(actionResponse.json()).toEqual({
+      errorCode: 'invalid_action_payload',
+    });
+    expect((await loadPriorVerifiedState(store, sessionId)).cart).toBeUndefined();
+  });
+
   it('applies trusted modifier selections by group and preserves previous selections', async () => {
     const model = fakeModel()
       .respondWithTools([{
@@ -134,6 +202,7 @@ describe('POST /chat/kfc/genui-action', () => {
         args: {
           scope: 'filtered',
           query: 'Combo Đẫy Đà 129K',
+          purpose: 'recommend',
         },
       }])
       .respondWithTools([
@@ -147,6 +216,8 @@ describe('POST /chat/kfc/genui-action', () => {
             }],
           },
         },
+      ])
+      .respondWithTools([
         {
           name: 'getModifierOptions',
           args: { code: '20752' },
@@ -307,6 +378,7 @@ describe('POST /chat/kfc/genui-action', () => {
         args: {
           scope: 'filtered',
           query: 'Combo Hợp Gu 99K',
+          purpose: 'recommend',
         },
       }])
       .respondWithTools([
@@ -333,6 +405,7 @@ describe('POST /chat/kfc/genui-action', () => {
             district: 'Biên Hòa',
             city: 'Đồng Nai',
           },
+          savedAddressRef: null,
           method: 'delivery',
         },
       }])
@@ -476,6 +549,7 @@ describe('POST /chat/kfc/genui-action', () => {
         args: {
           scope: 'filtered',
           query: 'Combo Hợp Gu 99K',
+          purpose: 'recommend',
         },
       }])
       .respond(groundedResponseModelReply({
@@ -598,6 +672,7 @@ describe('POST /chat/kfc/genui-action', () => {
             args: {
               scope: 'all',
               query: null,
+              purpose: 'browse',
             },
           }])
           .respond(groundedResponseModelReply({
@@ -623,7 +698,9 @@ describe('POST /chat/kfc/genui-action', () => {
     });
 
     expect(menuResponse.statusCode).toBe(200);
-    expect(menuResponse.json().genUi).toMatchObject({ widgetKind: 'smartMenuPicker' });
+    expect(menuResponse.json().genUi).toMatchObject({
+      widgetKind: 'fullMenuBrowser',
+    });
 
     const actionResponse = await server.inject({
       method: 'POST',

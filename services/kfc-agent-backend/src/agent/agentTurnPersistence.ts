@@ -41,6 +41,9 @@ import {
   resolveResponseProfile,
 } from '../presentation/responseProfile.js';
 import {
+  selectCatalogMediaIntent,
+} from '../presentation/catalogMediaIntent.js';
+import {
   currentTurnPaymentStatusFromIssuedExecutions,
   currentTurnRecentOrderFromIssuedExecutions,
   type GraphExecutedToolResult,
@@ -231,6 +234,25 @@ export async function persistCompletedTurn(input: {
           ...projectVerifiedMenuCollectionToText(activeMenu).chunks,
         ].join('\n\n')
       : input.responseText;
+  const catalogMediaIntent =
+    responseProfile === 'social' &&
+      input.modelPublicationAuthority &&
+      input.responseFactualClaims
+      ? await selectCatalogMediaIntent({
+          state: input.state,
+          currentTurnToolTrace: input.currentTurnToolTrace,
+          currentTurnResponseEvidence:
+            input.currentTurnResponseEvidence ?? [],
+          citedEvidenceIds:
+            input.responseFactualClaims.evidenceReferences.map(
+              ({ evidenceId }) => evidenceId,
+            ),
+          authorityDigest:
+            input.modelPublicationAuthority.authorityDigest,
+          currentTurnRevision:
+            input.modelPublicationAuthority.currentTurnRevision,
+        })
+      : undefined;
   const presentation =
     responseProfile === 'genui'
       ? buildChannelPresentation({
@@ -245,6 +267,7 @@ export async function persistCompletedTurn(input: {
           channel: input.turnInput.channel,
           standaloneText,
           state: input.state,
+          ...(catalogMediaIntent ? { catalogMediaIntent } : {}),
         });
   assertPresentationMatchesChannel(
     input.turnInput.channel,
@@ -275,6 +298,9 @@ export async function persistCompletedTurn(input: {
               recentOrderPresentation !== undefined,
           }),
         }
+      : {}),
+    ...(presentation.profile === 'social' && catalogMediaIntent
+      ? { catalogMediaIntent }
       : {}),
   };
   const assistantTurn = {

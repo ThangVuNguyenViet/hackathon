@@ -33,7 +33,7 @@ const state = {
 } as AgentGraphState;
 
 describe('Messenger verified projection parity', () => {
-  it('renders approved facts and verified media without GenUI or a model replay', () => {
+  it('does not infer media from projection state without a current-turn intent', () => {
     const result = evaluateMessengerProjectionParity({
       projection,
       state,
@@ -45,7 +45,6 @@ describe('Messenger verified projection parity', () => {
     expect(result).toEqual({
       profile: 'social',
       text: 'Combo Nhóm 2: 129.000đ. Bạn muốn chọn món nào?',
-      media: [{ key: 'social:20702:0', imageUrl, title: 'Combo Nhóm 2' }],
     });
     expect('genUi' in result).toBe(false);
   });

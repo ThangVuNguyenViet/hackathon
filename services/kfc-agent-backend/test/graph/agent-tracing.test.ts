@@ -157,7 +157,7 @@ describe('agent turn tracing', () => {
       .respondWithTools([
         {
           name: 'searchMenu',
-          args: { scope: 'filtered', query: 'combo' },
+          args: { scope: 'filtered', query: 'combo', purpose: 'browse' },
         },
       ])
       .respond(
@@ -1014,7 +1014,7 @@ describe('agent turn tracing', () => {
       },
       {
         name: 'searchMenu',
-        args: { scope: 'all', query: null },
+        args: { scope: 'all', query: null, purpose: 'browse' },
       },
     ]);
     const tracer = new CaptureTracer();

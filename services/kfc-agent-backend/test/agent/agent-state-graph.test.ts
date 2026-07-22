@@ -559,7 +559,7 @@ describe('KFC agent StateGraph', () => {
       .respondWithTools([
         {
           name: 'searchMenu',
-          args: { scope: 'all', query: null },
+          args: { scope: 'all', query: null, purpose: 'browse' },
         },
       ])
       .respond(
@@ -1109,7 +1109,11 @@ describe('KFC agent StateGraph', () => {
       .respondWithTools([
         {
           name: 'searchMenu',
-          args: { scope: 'filtered', query: 'combo' },
+          args: {
+            scope: 'filtered',
+            query: 'combo',
+            purpose: 'browse',
+          },
         },
       ])
       .respond(
@@ -1149,7 +1153,11 @@ describe('KFC agent StateGraph', () => {
     const model = fakeModel().respondWithTools([
       {
         name: 'searchMenu',
-        args: { scope: 'filtered', query: 'combo' },
+        args: {
+          scope: 'filtered',
+          query: 'combo',
+          purpose: 'browse',
+        },
       },
     ]);
     const input = turnInput(model, 'state-graph-tool-error');
@@ -1721,7 +1729,7 @@ describe('KFC agent StateGraph', () => {
       .respondWithTools([
         {
           name: 'searchMenu',
-          args: { scope: 'filtered', query: 'combo' },
+          args: { scope: 'filtered', query: 'combo', purpose: 'browse' },
         },
         {
           name: 'findStores',
@@ -1802,7 +1810,11 @@ describe('KFC agent StateGraph', () => {
     const model = fakeModel().respondWithTools([
       {
         name: 'searchMenu',
-        args: { scope: 'filtered', query: 'combo' },
+        args: {
+          scope: 'filtered',
+          query: 'combo',
+          purpose: 'browse',
+        },
       },
     ]);
     const input = {
@@ -1931,7 +1943,7 @@ describe('KFC agent StateGraph', () => {
       .respondWithTools([
         {
           name: 'searchMenu',
-          args: { scope: 'all', query: null },
+          args: { scope: 'all', query: null, purpose: 'browse' },
         },
       ])
       .respondWithTools([

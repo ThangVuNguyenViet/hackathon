@@ -277,7 +277,11 @@ describe('KFC createAgent middleware', () => {
         name: 'findStores',
         args: { query: 'Quận 1', city: null, district: null },
       },
-      { id: 'a', name: 'searchMenu', args: { scope: 'all', query: null } },
+      {
+        id: 'a',
+        name: 'searchMenu',
+        args: { scope: 'all', query: null, purpose: 'browse' },
+      },
     ];
 
     expect(
@@ -445,7 +449,7 @@ describe('KFC createAgent middleware', () => {
       {
         id: 'menu',
         name: 'searchMenu',
-        args: { scope: 'all', query: null },
+        args: { scope: 'all', query: null, purpose: 'browse' },
         type: 'tool_call' as const,
       },
       {
@@ -472,7 +476,7 @@ describe('KFC createAgent middleware', () => {
       {
         id: 'menu',
         toolName: 'searchMenu',
-        arguments: { scope: 'all', query: null },
+        arguments: { scope: 'all', query: null, purpose: 'browse' },
         effect: 'provider_read',
         handling: { kind: 'execute' },
         signatureDigest: expect.stringMatching(/^[0-9a-f]{64}$/u),
@@ -496,7 +500,7 @@ describe('KFC createAgent middleware', () => {
       customerId: state.customerId,
       channel: state.channel,
       toolName: 'searchMenu',
-      arguments: { scope: 'all', query: null },
+      arguments: { scope: 'all', query: null, purpose: 'browse' },
       activeToolNames,
       relevantState: relevantToolState('searchMenu', state),
     });
@@ -528,7 +532,7 @@ describe('KFC createAgent middleware', () => {
         {
           id: 'menu-repeat',
           name: 'searchMenu',
-          args: { scope: 'all', query: null },
+          args: { scope: 'all', query: null, purpose: 'browse' },
           type: 'tool_call',
         },
       ]),
@@ -798,7 +802,10 @@ describe('KFC nested createAgent factory', () => {
     );
 
     expect(searchMenu?.description).toContain(
-      'For filtered scope, pass only concise product names or exact identifiers needed for matching; combine independent alternatives with OR. Do not copy the full customer sentence into query.',
+      'Use filtered+browse for category or broad catalog browsing such as combo availability, and filtered+recommend only for a focused item or modifier suggestion.',
+    );
+    expect(searchMenu?.description).toContain(
+      'Return the complete menu for scope all, or every verified provider match for scope filtered without truncation.',
     );
     expect(searchMenu?.description).not.toMatch(/20698|20709/u);
   });
@@ -870,7 +877,7 @@ describe('KFC nested createAgent factory', () => {
             {
               id: 'read',
               name: 'searchMenu',
-              args: { scope: 'all', query: null },
+              args: { scope: 'all', query: null, purpose: 'browse' },
               type: 'tool_call',
             },
           ],
