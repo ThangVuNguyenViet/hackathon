@@ -14,9 +14,9 @@ void main() {
     final second = CustomerChatState.initial();
 
     expect(first.customerId, startsWith('anon_customer_'));
-    expect(first.sessionId, 'kfc:${first.customerId}');
+    expect(first.sessionId, 'kfc:${first.customerId}:genui');
     expect(second.customerId, startsWith('anon_customer_'));
-    expect(second.sessionId, 'kfc:${second.customerId}');
+    expect(second.sessionId, 'kfc:${second.customerId}:genui');
     expect(second.sessionId, isNot(first.sessionId));
     expect(second.customerId, isNot(first.customerId));
   });
@@ -37,6 +37,198 @@ void main() {
     );
     expect(state.activeGenUi?.widgetKind, KfcGenUiWidgetKind.smartMenuPicker);
   });
+
+  test('text runs send the selected response mode metadata', () async {
+    final repository = _RecordingStartRepository();
+    final controller = CustomerChatController(repository: repository);
+
+    await controller.sendQuickPrompt('Gợi ý combo');
+    expect(repository.metadataCalls.last, {'showcaseResponseMode': 'genui'});
+
+    controller.setResponseMode(CustomerChatResponseMode.text);
+    await controller.sendQuickPrompt('Chỉ trả lời bằng chữ');
+
+    expect(controller.state.value.responseMode, CustomerChatResponseMode.text);
+    expect(repository.metadataCalls.last, {'showcaseResponseMode': 'text'});
+  });
+
+  test('response modes retain separate sessions and transcripts', () async {
+    final controller = CustomerChatController(
+      repository: const FixtureCustomerChatRepository(
+        eventDelay: Duration.zero,
+      ),
+    );
+    final genUiSessionId = controller.state.value.sessionId;
+
+    await controller.sendQuickPrompt('Gợi ý combo');
+    final genUiMessages = controller.state.value.messages;
+
+    controller.setResponseMode(CustomerChatResponseMode.text);
+    final textSessionId = controller.state.value.sessionId;
+    expect(textSessionId, isNot(genUiSessionId));
+    expect(textSessionId, 'kfc:${controller.state.value.customerId}:text');
+    expect(controller.state.value.messages, hasLength(1));
+
+    await controller.sendQuickPrompt('Chỉ trả lời bằng chữ');
+    final textMessages = controller.state.value.messages;
+
+    controller.setResponseMode(CustomerChatResponseMode.genui);
+    expect(controller.state.value.sessionId, genUiSessionId);
+    expect(controller.state.value.messages, genUiMessages);
+
+    controller.setResponseMode(CustomerChatResponseMode.text);
+    expect(controller.state.value.sessionId, textSessionId);
+    expect(controller.state.value.messages, textMessages);
+  });
+
+  test('response mode cannot change while a run is active', () {
+    final controller = CustomerChatController(
+      initialState: CustomerChatState(
+        sessionId: 'kfc:busy',
+        customerId: 'busy',
+        activeDraft: ActiveAssistantDraft.accepted(runId: 'busy-run'),
+      ),
+    );
+
+    controller.setResponseMode(CustomerChatResponseMode.text);
+
+    expect(controller.state.value.responseMode, CustomerChatResponseMode.genui);
+  });
+
+  test('selected menu items are named in the customer transcript', () async {
+    const attachment = KfcGenUiAttachment(
+      id: 'named_menu_selection',
+      lifecycleStage: 'menu',
+      widgetKind: KfcGenUiWidgetKind.smartMenuPicker,
+      status: KfcGenUiStatus.active,
+      title: 'Chọn món',
+      data: {
+        'items': [
+          {'code': 'combo_1', 'name': 'Combo Hợp Gu 99K'},
+        ],
+      },
+      actions: [KfcGenUiActionSpec(id: 'add_items', label: 'Xác nhận')],
+    );
+    final controller = CustomerChatController(
+      repository: const FixtureCustomerChatRepository(
+        eventDelay: Duration.zero,
+      ),
+      initialState: const CustomerChatState(
+        sessionId: 'kfc:named_selection:genui',
+        customerId: 'named_selection',
+        messages: [
+          CustomerChatMessage(
+            id: 'menu_turn',
+            role: CustomerChatRole.assistant,
+            text: 'Bạn chọn món nhé.',
+            genUi: attachment,
+          ),
+        ],
+      ),
+    );
+
+    await controller.submitAction(
+      const KfcGenUiAction(
+        attachmentId: 'named_menu_selection',
+        actionId: 'add_items',
+        payload: {
+          'items': [
+            {'itemCode': 'combo_1', 'quantity': 2},
+          ],
+        },
+      ),
+    );
+
+    expect(
+      controller.state.value.messages
+          .where((message) => message.role == CustomerChatRole.customer)
+          .first
+          .text,
+      'Thêm vào giỏ: 2 × Combo Hợp Gu 99K',
+    );
+  });
+
+  test(
+    'payment transcript uses the verified display name, not method id',
+    () async {
+      const paymentPicker = KfcGenUiAttachment(
+        id: 'payment_picker',
+        lifecycleStage: 'payment_method',
+        widgetKind: KfcGenUiWidgetKind.paymentMethodPicker,
+        status: KfcGenUiStatus.active,
+        title: 'Chọn phương thức',
+        data: {
+          'methods': [
+            {
+              'methodId': 'zalopay_wallet',
+              'displayName': 'Ví ZaloPay',
+              'supported': true,
+              'supportStatus': 'listed_supported',
+            },
+          ],
+        },
+        actions: [
+          KfcGenUiActionSpec(
+            id: 'select_payment_method',
+            label: 'Chọn phương thức',
+          ),
+        ],
+      );
+      const paymentStatus = KfcGenUiAttachment(
+        id: 'payment_status',
+        lifecycleStage: 'post_order',
+        widgetKind: KfcGenUiWidgetKind.paymentOrderStatus,
+        status: KfcGenUiStatus.active,
+        title: 'Trạng thái đơn hàng',
+        actions: [
+          KfcGenUiActionSpec(
+            id: 'open_payment',
+            label: 'Mở thanh toán',
+            value: 'zalopay_wallet',
+          ),
+        ],
+      );
+      final controller = CustomerChatController(
+        repository: const FixtureCustomerChatRepository(
+          eventDelay: Duration.zero,
+        ),
+        initialState: const CustomerChatState(
+          sessionId: 'kfc:payment_transcript:genui',
+          customerId: 'payment_transcript',
+          messages: [
+            CustomerChatMessage(
+              id: 'payment_picker_turn',
+              role: CustomerChatRole.assistant,
+              text: 'Chọn phương thức.',
+              genUi: paymentPicker,
+            ),
+            CustomerChatMessage(
+              id: 'payment_status_turn',
+              role: CustomerChatRole.assistant,
+              text: 'Mở thanh toán.',
+              genUi: paymentStatus,
+            ),
+          ],
+        ),
+      );
+
+      await controller.submitAction(
+        const KfcGenUiAction(
+          attachmentId: 'payment_status',
+          actionId: 'open_payment',
+          value: 'zalopay_wallet',
+        ),
+      );
+
+      expect(
+        controller.state.value.messages
+            .where((message) => message.role == CustomerChatRole.customer)
+            .first
+            .text,
+        'Tiếp tục thanh toán bằng Ví ZaloPay',
+      );
+    },
+  );
 
   test(
     'message identities do not collide after a controller restart',
@@ -794,6 +986,7 @@ class _RecordingStartRepository extends FixtureCustomerChatRepository {
   _RecordingStartRepository() : super(eventDelay: Duration.zero);
 
   var startCount = 0;
+  final metadataCalls = <Map<String, Object?>?>[];
 
   @override
   Future<CustomerRunStartResponse> startRun({
@@ -805,6 +998,7 @@ class _RecordingStartRepository extends FixtureCustomerChatRepository {
     Map<String, Object?>? metadata,
   }) async {
     startCount += 1;
+    metadataCalls.add(metadata);
     return const CustomerRunStartResponse(
       schemaVersion: 1,
       runId: 'unexpected_run',

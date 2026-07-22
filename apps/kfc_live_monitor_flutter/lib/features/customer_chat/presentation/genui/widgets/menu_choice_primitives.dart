@@ -126,8 +126,6 @@ bool isSelectableMenuItem(
       ? item['available'] == true
       : item['available'] != false;
   return availabilityIsValid &&
-      item['isCustomize'] != true &&
-      item['hasModifiers'] != true &&
       (modifierGroups == null ||
           (modifierGroups is List && modifierGroups.isEmpty));
 }

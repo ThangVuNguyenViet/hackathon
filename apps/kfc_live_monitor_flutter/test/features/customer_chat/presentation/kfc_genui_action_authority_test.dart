@@ -22,11 +22,8 @@ void main() {
     await _pump(tester, attachment, emitted.add);
 
     final increase = tester.widget<ShadIconButton>(
-      find.descendant(
-        of: find.byKey(
-          CustomerChatKeys.genUiMenuQuantityIncrease(attachment.id, '20751'),
-        ),
-        matching: find.byType(ShadIconButton),
+      find.byKey(
+        CustomerChatKeys.genUiMenuQuantityIncrease(attachment.id, '20751'),
       ),
     );
     final confirm = tester.widget<ShadButton>(
@@ -92,7 +89,7 @@ void main() {
     expect(confirm.onPressed, isNull);
   });
 
-  testWidgets('production smart-menu disables ineligible verified items', (
+  testWidgets('production smart-menu enables verified customizable items', (
     tester,
   ) async {
     final emitted = <KfcGenUiAction>[];
@@ -122,6 +119,7 @@ void main() {
             'name': 'Cần tùy chỉnh',
             'available': true,
             'isCustomize': true,
+            'hasModifiers': true,
           },
         ],
       },
@@ -130,29 +128,38 @@ void main() {
     await _pump(tester, attachment, emitted.add);
 
     ShadIconButton increase(String itemCode) => tester.widget<ShadIconButton>(
-      find.descendant(
-        of: find.byKey(
-          CustomerChatKeys.genUiMenuQuantityIncrease(attachment.id, itemCode),
-        ),
-        matching: find.byType(ShadIconButton),
+      find.byKey(
+        CustomerChatKeys.genUiMenuQuantityIncrease(attachment.id, itemCode),
       ),
     );
 
     expect(increase('available').onPressed, isNotNull);
     expect(increase('missing_flag').onPressed, isNull);
-    expect(increase('customizable').onPressed, isNull);
+    expect(increase('customizable').onPressed, isNotNull);
     await tester.tap(
       find.byKey(
-        CustomerChatKeys.genUiMenuQuantityIncrease(attachment.id, 'available'),
+        CustomerChatKeys.genUiMenuQuantityIncrease(
+          attachment.id,
+          'customizable',
+        ),
       ),
     );
     await tester.pump();
+    expect(
+      find.descendant(
+        of: find.byKey(
+          CustomerChatKeys.genUiMenuQuantity(attachment.id, 'customizable'),
+        ),
+        matching: find.text('1'),
+      ),
+      findsOneWidget,
+    );
     await tester.tap(
       find.byKey(CustomerChatKeys.genUiAction(attachment.id, 'add_items')),
     );
     expect(emitted.single.payload, {
       'items': [
-        {'itemCode': 'available', 'quantity': 1},
+        {'itemCode': 'customizable', 'quantity': 1},
       ],
     });
   });
@@ -244,12 +251,7 @@ void main() {
       await tester.pump();
     }
 
-    final increase = tester.widget<ShadIconButton>(
-      find.descendant(
-        of: increaseFinder,
-        matching: find.byType(ShadIconButton),
-      ),
-    );
+    final increase = tester.widget<ShadIconButton>(increaseFinder);
     expect(increase.onPressed, isNull);
     await tester.tap(
       find.byKey(CustomerChatKeys.genUiAction(attachment.id, 'add_items')),
@@ -711,14 +713,8 @@ ShadIconButton _cartIncrease(
   KfcGenUiAttachment attachment,
 ) {
   return tester.widget<ShadIconButton>(
-    find.descendant(
-      of: find.byKey(
-        CustomerChatKeys.genUiCartQuantityIncrease(
-          attachment.id,
-          'combo_zinger',
-        ),
-      ),
-      matching: find.byType(ShadIconButton),
+    find.byKey(
+      CustomerChatKeys.genUiCartQuantityIncrease(attachment.id, 'combo_zinger'),
     ),
   );
 }

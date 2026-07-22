@@ -2,13 +2,15 @@ import { createHmac } from "node:crypto";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import worker, {
   DashboardSocket,
-  WORKER_CUSTOMER_RUN_MAX_TEXT_EVENTS,
-  WORKER_CUSTOMER_RUN_PACE_MS,
   scheduleAgentBackground,
   type MessengerWebhookJob,
   type QueueBinding,
   type WorkerEnv,
 } from "../../src/worker.js";
+import {
+  WORKER_CUSTOMER_RUN_MAX_TEXT_EVENTS,
+  WORKER_CUSTOMER_RUN_PACE_MS,
+} from "../../src/workerRuntimeConstants.js";
 import type { AgentTracer } from "../../src/observability/agentTracing.js";
 import { agentCheckpointThreadBelongsToSession } from "../../src/session/sessionContext.js";
 import { FakeD1Database } from "../support/fakeD1Database.js";

@@ -400,6 +400,42 @@ export function createRouteCommerceRuntime(input: { options: RouteOptions; store
 
   async function kfcProofAccessContext(sessionId: string, customerId: string): Promise<CustomerAccessContext | undefined> {
     const event = await latestKfcProofPreconditions(sessionId);
+    if (
+      !event &&
+      options.readiness?.commerce?.mode === "fixture"
+    ) {
+      const issuedAt = new Date();
+      return {
+        tenantScope: "kfc-vietnam",
+        customerSurface: "kfc-app-chat",
+        sessionRef: sessionId,
+        surfaceSubjectRef: "not-applicable",
+        kfcSubjectRef: customerId,
+        authenticationState: "authenticated",
+        membershipState: "member",
+        channelAccountLinkState: "not-applicable",
+        subjectBindingState: "verified",
+        authenticationEvidence: {
+          state: "verified",
+          method: "sandbox-fixture-session",
+          issuer: "kfc-agent-backend",
+          audience: "kfc-agent-backend",
+          authenticatedAt: issuedAt.toISOString(),
+          expiresAt: new Date(issuedAt.getTime() + 60 * 60 * 1000).toISOString(),
+          evidenceRef: sessionId,
+        },
+        authorizedScopes: [
+          "customer:read",
+          "membership:read",
+          "membership:write",
+          "order:read",
+          "order:write",
+          "payment:read",
+          "payment:write",
+          "handoff:write",
+        ],
+      };
+    }
     if (event?.payload.authenticated !== true || event.payload.customerId !== customerId || typeof event.payload.expiresAt !== "string") return undefined;
     return {
       tenantScope: "kfc-vietnam",

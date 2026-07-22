@@ -1,11 +1,12 @@
-import { existsSync } from "node:fs";
-import { dirname, join } from "node:path";
-import { fileURLToPath } from "node:url";
-import { z } from "zod";
-import type { BaseCheckpointSaver } from "@langchain/langgraph";
+import { existsSync } from 'node:fs';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { z } from 'zod';
+import type { BaseCheckpointSaver } from '@langchain/langgraph';
 import {
   createKfcOpenAiTools,
   createKfcToolSession,
+  hydrateKfcToolSession,
   verifiedKfcToolSessionContext,
   type KfcToolSession,
 } from '../agent/kfcOpenAiTools.js';
@@ -14,12 +15,13 @@ import {
   selectKfcOpenAiGenUi,
 } from '../agent/kfcOpenAiGenUi.js';
 import { createAgentTurnExternalCallScope } from '../agent/agentExternalCallScope.js';
+import { prepareStructuredCustomerAction } from '../agent/structuredCustomerAction.js';
 import type {
   ExternalClients,
   MessengerClient,
   MessengerSenderAction,
-} from "../clients/interfaces.js";
-import type { KfcCommerceGatewayClients } from "../clients/kfcCommerceGateway.js";
+} from '../clients/interfaces.js';
+import type { KfcCommerceGatewayClients } from '../clients/kfcCommerceGateway.js';
 import {
   LifecycleError,
   type CreateLifecycleInput,
@@ -29,24 +31,24 @@ import {
   type MutationContext,
   type SandboxLifecycleControls,
   projectLifecycleCommerceClients,
-} from "../commerce/lifecycleProvider.js";
-import { createCatalogObservationClients } from "../clients/catalogObservationClients.js";
+} from '../commerce/lifecycleProvider.js';
+import { createCatalogObservationClients } from '../clients/catalogObservationClients.js';
 import {
   fetchCatalogObservation,
   type CatalogObservation,
   type CommerceEnvironment,
-} from "../catalog/catalogObservation.js";
-import type { ConversationEvent } from "../channels/conversationEvent.js";
-import type { MessengerHistorySyncCoordinator } from "../channels/messengerHistory.js";
+} from '../catalog/catalogObservation.js';
+import type { ConversationEvent } from '../channels/conversationEvent.js';
+import type { MessengerHistorySyncCoordinator } from '../channels/messengerHistory.js';
 import {
   createMessengerClient,
   normalizeMessengerWebhook,
   verifyMessengerChallenge,
-} from "../channels/messenger.js";
-import { createZaloClient, normalizeZaloWebhook } from "../channels/zalo.js";
-import { DashboardEventBus } from "../dashboard/eventBus.js";
-import type { GeneratedFixtures } from "../fixtures/schema.js";
-import { loadGeneratedFixtures } from "../fixtures/loadFixtures.js";
+} from '../channels/messenger.js';
+import { createZaloClient, normalizeZaloWebhook } from '../channels/zalo.js';
+import { DashboardEventBus } from '../dashboard/eventBus.js';
+import type { GeneratedFixtures } from '../fixtures/schema.js';
+import { loadGeneratedFixtures } from '../fixtures/loadFixtures.js';
 import type {
   AgentMode,
   ConversationProfile,
@@ -54,53 +56,97 @@ import type {
   ConversationTurnMetadata,
   CustomerAccessContext,
   ToolResult,
-} from "../domain/types.js";
-import type { TrustedCustomerActionEnvelope } from "../domain/customerCommand.js";
+} from '../domain/types.js';
+import type { TrustedCustomerActionEnvelope } from '../domain/customerCommand.js';
 import {
   isKfcGenUiAttachment,
   kfcGenUiAttachmentForPersistence,
   type KfcGenUiAttachment,
-} from "../genui/kfcGenUi.js";
-import { runAgentTurn } from "../graph/buildGraph.js";
-import type { AgentTurnOutput } from "../graph/agentTurnState.js";
+} from '../genui/kfcGenUi.js';
+import { runAgentTurn } from '../graph/buildGraph.js';
+import type { AgentTurnOutput } from '../graph/agentTurnState.js';
 import type { AgentGraphState } from '../graph/state.js';
-import type { AgentTracer } from "../observability/agentTracing.js";
+import { loadPriorVerifiedState } from '../graph/verifiedState.js';
+import type { AgentTracer } from '../observability/agentTracing.js';
 import {
   createMockClients,
   type MockClientOptions,
-} from "../mock/createMockClients.js";
+} from '../mock/createMockClients.js';
 import {
   applyMockedUpstreamFixtureOverrides,
   mockedUpstreamApiProfileSchema,
   mockedUpstreamClientOptions,
-} from "../mock/mockedUpstreamProfile.js";
-import type { ToolName } from "../ordering/types.js";
-import { CustomerRunCoordinator, type CustomerRunObservation } from "../customerRuns/runtime.js";
+} from '../mock/mockedUpstreamProfile.js';
+import type { ToolName } from '../ordering/types.js';
+import {
+  CustomerRunCoordinator,
+  type CustomerRunObservation,
+} from '../customerRuns/runtime.js';
 import {
   kfcSessionMatchesCustomer,
   type CustomerRunStartRequest,
-} from "../customerRuns/contracts.js";
+} from '../customerRuns/contracts.js';
 import {
   MemoryStore,
   type ConversationStore,
   type RunCommitFence,
   type WebhookDelivery,
-} from "../persistence/memoryStore.js";
-import {
-  sessionIdForConversationEvent,
-} from "../session/sessionContext.js";
+} from '../persistence/memoryStore.js';
+import { sessionIdForConversationEvent } from '../session/sessionContext.js';
 import {
   buildChannelPresentation,
   textOnlyPresentation,
   type ChannelPresentationPlan,
-} from "../presentation/channelPresentation.js";
+} from '../presentation/channelPresentation.js';
 import {
   ShowcaseService,
   ShowcaseValidationError,
   type ShowcaseScenarioSource,
-} from "../showcase/showcase.js";
-import { isRecord, canonicalJson, sha256Fingerprint, kfcSessionIdSchema, kfcChatPayloadSchema, kfcGenUiActionPayloadSchema, kfcSmartMenuBatchPayloadSchema, messengerHistorySyncPayloadSchema, staleMessengerRecoveryPayloadSchema, sessionControlPayloadSchema, dashboardSessionDefaultLookbackMs, humanMessagePayloadSchema, lifecycleTransitionSchema, lifecycleEventPayloadSchema, confirmationResumePayloadSchema, kfcProofPreconditionsSchema, lifecycleErrorResponse, ReadinessCheckResult, ReadinessOptions, RouteOptions, HandlerResponse, MessengerWebhookEventProcessingResult, StaleMessengerDeliveryRecoveryResult, RouteHandlers, defaultFixturesRoot } from './routeHandlerContracts.js';
-import { messengerDeliveryFailureForStorage, eventFromMessengerDelivery, sendMessengerSenderAction, dashboardEventId, checkCommerceGatewayReadiness, checkCatalogReadiness, runReadinessCheck, checkFixtures, checkMessengerConfig, checkZaloConfig, deeplinkForSession, renderInboxUrlTemplate, ChannelProfileTarget, channelTargetForSession, humanChannelTargetForSession } from './routeHandlerSupport.js';
+} from '../showcase/showcase.js';
+import {
+  isRecord,
+  canonicalJson,
+  sha256Fingerprint,
+  kfcSessionIdSchema,
+  kfcChatPayloadSchema,
+  kfcGenUiActionPayloadSchema,
+  kfcSmartMenuBatchPayloadSchema,
+  messengerHistorySyncPayloadSchema,
+  staleMessengerRecoveryPayloadSchema,
+  sessionControlPayloadSchema,
+  dashboardSessionDefaultLookbackMs,
+  humanMessagePayloadSchema,
+  lifecycleTransitionSchema,
+  lifecycleEventPayloadSchema,
+  confirmationResumePayloadSchema,
+  kfcProofPreconditionsSchema,
+  lifecycleErrorResponse,
+  ReadinessCheckResult,
+  ReadinessOptions,
+  RouteOptions,
+  HandlerResponse,
+  MessengerWebhookEventProcessingResult,
+  StaleMessengerDeliveryRecoveryResult,
+  RouteHandlers,
+  defaultFixturesRoot,
+} from './routeHandlerContracts.js';
+import {
+  messengerDeliveryFailureForStorage,
+  eventFromMessengerDelivery,
+  sendMessengerSenderAction,
+  dashboardEventId,
+  checkCommerceGatewayReadiness,
+  checkCatalogReadiness,
+  runReadinessCheck,
+  checkFixtures,
+  checkMessengerConfig,
+  checkZaloConfig,
+  deeplinkForSession,
+  renderInboxUrlTemplate,
+  ChannelProfileTarget,
+  channelTargetForSession,
+  humanChannelTargetForSession,
+} from './routeHandlerSupport.js';
 
 import type { RouteCommerceRuntime } from './routeCommerceRuntime.js';
 import {
@@ -110,12 +156,12 @@ import {
   persistCanonicalConfirmationPause,
   type ConfirmationApprovalPausePointer,
 } from './confirmationPausePersistence.js';
-import { createRouteMonitorRuntime } from "./routeMonitorRuntime.js";
-import { reserveKfcSynchronousRequest } from "./synchronousRequestReservation.js";
+import { createRouteMonitorRuntime } from './routeMonitorRuntime.js';
+import { reserveKfcSynchronousRequest } from './synchronousRequestReservation.js';
 import {
   deliverChannelAssistantReply,
   type DeliverChannelAssistantReplyInput,
-} from "./agentRunTextDeliveryRuntime.js";
+} from './agentRunTextDeliveryRuntime.js';
 
 export interface StreamingRunObserver {
   observe: (observation: CustomerRunObservation) => Promise<void>;
@@ -175,15 +221,11 @@ function durableKfcAgentResponseBody(input: {
 }): DurableKfcAgentResponseBody {
   return {
     responseText: input.output.responseText,
-    presentation: persistenceSafePresentation(
-      input.output.presentation,
-    ),
+    presentation: persistenceSafePresentation(input.output.presentation),
     replyIntent: input.output.replyIntent,
     ...(input.output.genUi
       ? {
-          genUi: kfcGenUiAttachmentForPersistence(
-            input.output.genUi,
-          ),
+          genUi: kfcGenUiAttachmentForPersistence(input.output.genUi),
         }
       : {}),
     ...(input.output.status ? { status: input.output.status } : {}),
@@ -204,11 +246,7 @@ function currentOwnerKfcAgentResponse(input: {
   transientGenUi?: KfcGenUiAttachment;
 }): HandlerResponse {
   const { response, completedByOwner } = input.completion;
-  if (
-    !completedByOwner ||
-    !input.transientGenUi ||
-    !isRecord(response.body)
-  ) {
+  if (!completedByOwner || !input.transientGenUi || !isRecord(response.body)) {
     return response;
   }
   return {
@@ -220,8 +258,30 @@ function currentOwnerKfcAgentResponse(input: {
   };
 }
 
-export function createRouteAgentRuntime(input: { options: RouteOptions; store: ConversationStore; dashboard: DashboardEventBus; showcase: ShowcaseService | undefined; streamingRunObservers: StreamingRunObservers } & RouteCommerceRuntime) {
-  const { options, store, dashboard, showcase, streamingRunObservers, getFixtures, withConfiguredCommerce, createWebhookClients, createDeliveryClients, dashboardProfileForTarget, createFirstPartyKfcClients, kfcProofAccessContext, latestKfcProofPreconditions } = input;
+export function createRouteAgentRuntime(
+  input: {
+    options: RouteOptions;
+    store: ConversationStore;
+    dashboard: DashboardEventBus;
+    showcase: ShowcaseService | undefined;
+    streamingRunObservers: StreamingRunObservers;
+  } & RouteCommerceRuntime,
+) {
+  const {
+    options,
+    store,
+    dashboard,
+    showcase,
+    streamingRunObservers,
+    getFixtures,
+    withConfiguredCommerce,
+    createWebhookClients,
+    createDeliveryClients,
+    dashboardProfileForTarget,
+    createFirstPartyKfcClients,
+    kfcProofAccessContext,
+    latestKfcProofPreconditions,
+  } = input;
   const locallyActiveSynchronousRequests = new Set<string>();
   const openAiToolSessions = new Map<
     string,
@@ -249,7 +309,9 @@ export function createRouteAgentRuntime(input: { options: RouteOptions; store: C
   }): Promise<HandlerResponse> {
     const trustedMetadata: ConversationTurnMetadata = {
       ...input.metadata,
-      ...(options.readiness?.release ? { release: options.readiness.release } : {}),
+      ...(options.readiness?.release
+        ? { release: options.readiness.release }
+        : {}),
     };
     const requestFingerprint = await sha256Fingerprint({
       customerId: input.customerId,
@@ -257,19 +319,23 @@ export function createRouteAgentRuntime(input: { options: RouteOptions; store: C
       metadata: trustedMetadata,
       trustedCustomerAction: input.trustedCustomerAction ?? null,
     });
-    if (!options.openAiAgent && !options.agent && process.env.NODE_ENV !== "test") {
+    if (
+      !options.openAiAgent &&
+      !options.agent &&
+      process.env.NODE_ENV !== 'test'
+    ) {
       return {
         status: 503,
-        body: { errorCode: "kfc_agent_not_configured" },
+        body: { errorCode: 'kfc_agent_not_configured' },
       };
     }
     const initialControl = await store.getSessionControl(input.sessionId);
-    if (initialControl.agentMode === "human_paused") {
+    if (initialControl.agentMode === 'human_paused') {
       if (input.trustedCustomerAction) {
         return {
           status: 409,
           body: {
-            errorCode: "trusted_genui_action_requires_ai_active_session",
+            errorCode: 'trusted_genui_action_requires_ai_active_session',
             agentMode: initialControl.agentMode,
           },
         };
@@ -281,36 +347,31 @@ export function createRouteAgentRuntime(input: { options: RouteOptions; store: C
       if (!existingTurn) {
         const turn = await store.appendTurn({
           sessionId: input.sessionId,
-          channel: "kfc",
-          role: "user",
+          channel: 'kfc',
+          role: 'user',
           text: input.text,
           externalMessageId: input.clientMessageId,
           externalUserId: input.customerId,
-          deliveryStatus: "received",
+          deliveryStatus: 'received',
           metadata: trustedMetadata,
         });
         emitConversationTurnCreatedEvent(turn);
       }
-      const currentControl =
-        await store.getSessionControl(input.sessionId);
-      if (currentControl.agentMode === "human_paused") {
+      const currentControl = await store.getSessionControl(input.sessionId);
+      if (currentControl.agentMode === 'human_paused') {
         if (!existingTurn) {
-          await store.appendEvent(
-            input.sessionId,
-            "assistant_reply_skipped",
-            {
-              reason: "human_paused",
-              channel: "kfc",
-              externalMessageId: input.clientMessageId,
-            },
-          );
+          await store.appendEvent(input.sessionId, 'assistant_reply_skipped', {
+            reason: 'human_paused',
+            channel: 'kfc',
+            externalMessageId: input.clientMessageId,
+          });
         }
         return {
           status: 200,
           body: {
             sessionId: input.sessionId,
-            responseText: "",
-            presentation: textOnlyPresentation("", "kfc"),
+            responseText: '',
+            presentation: textOnlyPresentation('', 'kfc'),
             suppressed: true,
             agentMode: currentControl.agentMode,
             ...(existingTurn ? { replayed: true } : {}),
@@ -338,15 +399,12 @@ export function createRouteAgentRuntime(input: { options: RouteOptions; store: C
               const rawPause = response.body.pause;
               if (rawPause === undefined) return response;
               const pointer =
-                confirmationApprovalPausePointerSchema.safeParse(
-                  rawPause,
-                );
+                confirmationApprovalPausePointerSchema.safeParse(rawPause);
               if (!pointer.success) {
                 return {
                   status: 503,
                   body: {
-                    errorCode:
-                      'agent_approval_authority_unavailable',
+                    errorCode: 'agent_approval_authority_unavailable',
                   },
                 };
               }
@@ -354,22 +412,20 @@ export function createRouteAgentRuntime(input: { options: RouteOptions; store: C
                 return {
                   status: 503,
                   body: {
-                    errorCode:
-                      'agent_approval_authority_unconfigured',
+                    errorCode: 'agent_approval_authority_unconfigured',
                   },
                 };
               }
               try {
-                const publicPause =
-                  await confirmationPauseForPublicResponse({
-                    pause: pointer.data,
-                    store,
-                    accessContext: await kfcProofAccessContext(
-                      input.sessionId,
-                      input.customerId,
-                    ),
-                    keyRing: options.confirmationApprovalKeyRing,
-                  });
+                const publicPause = await confirmationPauseForPublicResponse({
+                  pause: pointer.data,
+                  store,
+                  accessContext: await kfcProofAccessContext(
+                    input.sessionId,
+                    input.customerId,
+                  ),
+                  keyRing: options.confirmationApprovalKeyRing,
+                });
                 return {
                   ...response,
                   body: {
@@ -381,8 +437,7 @@ export function createRouteAgentRuntime(input: { options: RouteOptions; store: C
                 return {
                   status: 503,
                   body: {
-                    errorCode:
-                      'agent_approval_authority_unavailable',
+                    errorCode: 'agent_approval_authority_unavailable',
                   },
                 };
               }
@@ -390,24 +445,27 @@ export function createRouteAgentRuntime(input: { options: RouteOptions; store: C
           }
         : {}),
     });
-    if (reservation.status === "response") return reservation.response;
+    if (reservation.status === 'response') return reservation.response;
 
     try {
-      const accessContext = await kfcProofAccessContext(input.sessionId, input.customerId);
-      const runGuard = input.runGuard ?? (
-        streamingObserver
+      const accessContext = await kfcProofAccessContext(
+        input.sessionId,
+        input.customerId,
+      );
+      const runGuard =
+        input.runGuard ??
+        (streamingObserver
           ? {
               isCurrent: streamingObserver.isCurrent,
               commitFence: streamingObserver.commitFence,
             }
-          : reservation.fence.runGuard
-      );
+          : reservation.fence.runGuard);
       if (!(await runGuard.isCurrent())) {
-        await reservation.fence.fail("agent_run_superseded");
+        await reservation.fence.fail('agent_run_superseded');
         return {
           status: 409,
           body: {
-            errorCode: "agent_run_superseded",
+            errorCode: 'agent_run_superseded',
             sessionId: input.sessionId,
             suppressed: true,
           },
@@ -422,14 +480,18 @@ export function createRouteAgentRuntime(input: { options: RouteOptions; store: C
               input.sessionId,
               trustedMetadata,
             );
+            const freshSession = await createKfcToolSession(
+              clients,
+              input.sessionId,
+              input.customerId,
+              'kfc',
+              externalCalls.context,
+            );
             toolRuntime = {
               clients,
-              session: await createKfcToolSession(
-                clients,
-                input.sessionId,
-                input.customerId,
-                'kfc',
-                externalCalls.context,
+              session: hydrateKfcToolSession(
+                freshSession,
+                await loadPriorVerifiedState(store, input.sessionId),
               ),
             };
             openAiToolSessions.set(input.sessionId, toolRuntime);
@@ -442,6 +504,62 @@ export function createRouteAgentRuntime(input: { options: RouteOptions; store: C
                 customerCommand: input.trustedCustomerAction.command,
               }
             : trustedMetadata;
+          const directTools = createKfcOpenAiTools({
+            clients: toolRuntime.clients,
+            session: toolRuntime.session,
+            accessContext,
+          });
+          let requiredToolCalls:
+            | Array<{ name: string; arguments: Record<string, unknown> }>
+            | undefined;
+          if (input.trustedCustomerAction) {
+            const verifiedStateEvent = [
+              ...(await store.listEvents(input.sessionId)),
+            ]
+              .reverse()
+              .find(({ sourceType }) => sourceType === 'graph:verified_state');
+            const verifiedState = verifiedStateEvent?.payload.verifiedState;
+            if (!isRecord(verifiedState)) {
+              return {
+                status: 409,
+                body: { errorCode: 'trusted_genui_state_unavailable' },
+              };
+            }
+            const preparation = prepareStructuredCustomerAction({
+              envelope: input.trustedCustomerAction,
+              revisionValidated: false,
+              state: verifiedState as unknown as AgentGraphState,
+            });
+            if (preparation.kind === 'reject') {
+              return {
+                status: 422,
+                body: { errorCode: preparation.errorCode },
+              };
+            }
+            if (
+              preparation.kind === 'present' &&
+              input.trustedCustomerAction.command.kind ===
+                'select_payment_method' &&
+              preparation.state.selectedPaymentMethod
+            ) {
+              toolRuntime.session.selectedPaymentMethod =
+                preparation.state.selectedPaymentMethod;
+            }
+            if (preparation.kind === 'execute') {
+              requiredToolCalls = [
+                {
+                  name: preparation.call.toolName,
+                  arguments: preparation.call.arguments,
+                },
+                ...(input.trustedCustomerAction.command.kind ===
+                  'confirm_order' &&
+                preparation.call.toolName === 'previewOrder' &&
+                preparation.afterTool === 'prepare'
+                  ? [{ name: 'placeOrder', arguments: {} }]
+                  : []),
+              ];
+            }
+          }
           let directVerifiedState: AgentGraphState | undefined;
           const directOutput = await options.openAiAgent.respond({
             sessionId: input.sessionId,
@@ -454,21 +572,24 @@ export function createRouteAgentRuntime(input: { options: RouteOptions; store: C
             verifiedBusinessContext: verifiedKfcToolSessionContext(
               toolRuntime.session,
             ),
-            tools: createKfcOpenAiTools({
-              clients: toolRuntime.clients,
-              session: toolRuntime.session,
-              accessContext,
-            }),
-            selectGenUi: (result) => {
-              const selectionInput = {
-                session: toolRuntime.session,
-                latestUserMessage: input.text,
-                toolCalls: result.toolCalls,
-                customerCommand: directMetadata.customerCommand,
-              };
-              directVerifiedState = projectKfcOpenAiGenUiState(selectionInput).state;
-              return selectKfcOpenAiGenUi(selectionInput);
-            },
+            tools: directTools,
+            requiredToolCalls,
+            allowModelToolCalls: !input.trustedCustomerAction,
+            ...(directMetadata.responseProfile === 'social'
+              ? {}
+              : {
+                  selectGenUi: (result) => {
+                    const selectionInput = {
+                      session: toolRuntime.session,
+                      latestUserMessage: input.text,
+                      toolCalls: result.toolCalls,
+                      customerCommand: directMetadata.customerCommand,
+                    };
+                    directVerifiedState =
+                      projectKfcOpenAiGenUiState(selectionInput).state;
+                    return selectKfcOpenAiGenUi(selectionInput);
+                  },
+                }),
           });
           if (directOutput.genUi && directVerifiedState) {
             await store.appendEvent(input.sessionId, 'graph:verified_state', {
@@ -477,6 +598,7 @@ export function createRouteAgentRuntime(input: { options: RouteOptions; store: C
           }
           const presentation = buildChannelPresentation({
             channel: 'kfc',
+            responseProfile: directMetadata.responseProfile,
             graphResponseText: directOutput.responseText,
             genUi: directOutput.genUi,
           });
@@ -490,7 +612,6 @@ export function createRouteAgentRuntime(input: { options: RouteOptions; store: C
             responseText: directOutput.responseText,
             presentation,
             ...(directOutput.genUi ? { genUi: directOutput.genUi } : {}),
-            toolCalls: directOutput.toolCalls,
             usage: directOutput.usage,
             replayed: false,
           };
@@ -505,10 +626,7 @@ export function createRouteAgentRuntime(input: { options: RouteOptions; store: C
           );
           if (completion.completedByOwner) {
             dashboard.emitEvent({
-              id: dashboardEventId(
-                input.sessionId,
-                'assistant_reply_sent',
-              ),
+              id: dashboardEventId(input.sessionId, 'assistant_reply_sent'),
               sessionId: input.sessionId,
               type: 'assistant_reply_sent',
               payload: {
@@ -527,13 +645,16 @@ export function createRouteAgentRuntime(input: { options: RouteOptions; store: C
       const output = await runAgentTurn({
         sessionId: input.sessionId,
         customerId: input.customerId,
-        channel: "kfc",
+        channel: 'kfc',
         responseProfile: trustedMetadata.responseProfile,
         text: input.text,
         externalMessageId: input.clientMessageId,
         metadata: trustedMetadata,
         trustedCustomerAction: input.trustedCustomerAction,
-        clients: await createFirstPartyKfcClients(input.sessionId, trustedMetadata),
+        clients: await createFirstPartyKfcClients(
+          input.sessionId,
+          trustedMetadata,
+        ),
         store,
         dashboard,
         agentModel: options.agent?.model,
@@ -548,15 +669,15 @@ export function createRouteAgentRuntime(input: { options: RouteOptions; store: C
         if (output.assistantTurnId) {
           await store.updateTurnDeliveryStatus(
             output.assistantTurnId,
-            "failed",
+            'failed',
             null,
           );
         }
-        await reservation.fence.fail("agent_run_superseded");
+        await reservation.fence.fail('agent_run_superseded');
         return {
           status: 409,
           body: {
-            errorCode: "agent_run_superseded",
+            errorCode: 'agent_run_superseded',
             sessionId: input.sessionId,
             suppressed: true,
           },
@@ -568,16 +689,14 @@ export function createRouteAgentRuntime(input: { options: RouteOptions; store: C
         .find((turn) => turn.externalMessageId === input.clientMessageId);
 
       let publicPause:
-        | Awaited<
-            ReturnType<typeof confirmationPausePointerForDurableEvent>
-          >
+        | Awaited<ReturnType<typeof confirmationPausePointerForDurableEvent>>
         | undefined;
       if (output.pause) {
         await persistCanonicalConfirmationPause({
           store,
           sessionId: input.sessionId,
           customerId: input.customerId,
-          channel: "kfc",
+          channel: 'kfc',
           pause: output.pause,
           accessContext,
           checkpointer: options.checkpointer,
@@ -590,11 +709,10 @@ export function createRouteAgentRuntime(input: { options: RouteOptions; store: C
               }
             : {}),
         });
-        publicPause =
-          await confirmationPausePointerForDurableEvent({
-            pause: output.pause,
-            store,
-          });
+        publicPause = await confirmationPausePointerForDurableEvent({
+          pause: output.pause,
+          store,
+        });
       }
 
       const responseBody = durableKfcAgentResponseBody({
@@ -614,7 +732,7 @@ export function createRouteAgentRuntime(input: { options: RouteOptions; store: C
         if (output.assistantTurnId) {
           await store.updateTurnDeliveryStatus(
             output.assistantTurnId,
-            "failed",
+            'failed',
             null,
           );
         }
@@ -624,16 +742,16 @@ export function createRouteAgentRuntime(input: { options: RouteOptions; store: C
       if (output.assistantTurnId) {
         await store.updateTurnDeliveryStatus(
           output.assistantTurnId,
-          "sent",
+          'sent',
           null,
         );
         dashboard.emitEvent({
-          id: dashboardEventId(input.sessionId, "assistant_reply_sent"),
+          id: dashboardEventId(input.sessionId, 'assistant_reply_sent'),
           sessionId: input.sessionId,
-          type: "assistant_reply_sent",
+          type: 'assistant_reply_sent',
           payload: {
-            deliveryStatus: "sent",
-            deliveryPath: "kfc_http_response",
+            deliveryStatus: 'sent',
+            deliveryPath: 'kfc_http_response',
             assistantTurnId: output.assistantTurnId,
           },
           createdAt: new Date().toISOString(),
@@ -655,12 +773,12 @@ export function createRouteAgentRuntime(input: { options: RouteOptions; store: C
       await reservation.fence.fail(error);
       if (
         error instanceof Error &&
-        error.message === "customer_run_cancelled"
+        error.message === 'customer_run_cancelled'
       ) {
         return {
           status: 409,
           body: {
-            errorCode: "agent_run_superseded",
+            errorCode: 'agent_run_superseded',
             sessionId: input.sessionId,
             suppressed: true,
           },
@@ -670,9 +788,8 @@ export function createRouteAgentRuntime(input: { options: RouteOptions; store: C
     }
   }
 
-  const deliverAssistantReply = (
-    delivery: DeliverChannelAssistantReplyInput,
-  ) => deliverChannelAssistantReply({ store, dashboard, delivery });
+  const deliverAssistantReply = (delivery: DeliverChannelAssistantReplyInput) =>
+    deliverChannelAssistantReply({ store, dashboard, delivery });
 
   async function persistEventProfile(event: ConversationEvent): Promise<void> {
     if (event.profile?.displayName || event.profile?.avatarUrl) {
@@ -699,18 +816,18 @@ export function createRouteAgentRuntime(input: { options: RouteOptions; store: C
   function emitConversationTurnCreatedEvent(turn: {
     id: string;
     sessionId: string;
-    role: "user" | "assistant" | "tool" | "system";
-    channel: ConversationEvent["channel"];
-    deliveryStatus: ConversationTurn["deliveryStatus"];
+    role: 'user' | 'assistant' | 'tool' | 'system';
+    channel: ConversationEvent['channel'];
+    deliveryStatus: ConversationTurn['deliveryStatus'];
     externalMessageId: string | null;
     externalUserId: string | null;
     text: string;
     metadata?: ConversationTurnMetadata | null;
   }): void {
     dashboard.emitEvent({
-      id: dashboardEventId(turn.sessionId, "conversation_turn_created"),
+      id: dashboardEventId(turn.sessionId, 'conversation_turn_created'),
       sessionId: turn.sessionId,
-      type: "conversation_turn_created",
+      type: 'conversation_turn_created',
       payload: {
         turnId: turn.id,
         role: turn.role,
@@ -727,15 +844,15 @@ export function createRouteAgentRuntime(input: { options: RouteOptions; store: C
 
   function emitSessionModeEvent(input: {
     sessionId: string;
-    updateType: "human_joined" | "human_message_sent" | "ai_resumed";
+    updateType: 'human_joined' | 'human_message_sent' | 'ai_resumed';
     agentMode: AgentMode;
     agentId?: string | null;
     text?: string;
   }): void {
     dashboard.emitEvent({
-      id: dashboardEventId(input.sessionId, "session_updated"),
+      id: dashboardEventId(input.sessionId, 'session_updated'),
       sessionId: input.sessionId,
-      type: "session_updated",
+      type: 'session_updated',
       payload: {
         updateType: input.updateType,
         agentMode: input.agentMode,
@@ -750,17 +867,18 @@ export function createRouteAgentRuntime(input: { options: RouteOptions; store: C
     const events = await store.listEvents(sessionId);
     for (let index = events.length - 1; index >= 0; index -= 1) {
       const event = events[index];
-      if (event?.sourceType !== "graph:verified_state") continue;
+      if (event?.sourceType !== 'graph:verified_state') continue;
       const value = event.payload.verifiedState;
-      if (
-        typeof value !== "object" ||
-        value === null ||
-        Array.isArray(value)
-      ) {
+      if (typeof value !== 'object' || value === null || Array.isArray(value)) {
         return;
       }
-      const { handoff: _handoff, ...verifiedState } = value as Record<string, unknown>;
-      await store.appendEvent(sessionId, "graph:verified_state", { verifiedState });
+      const { handoff: _handoff, ...verifiedState } = value as Record<
+        string,
+        unknown
+      >;
+      await store.appendEvent(sessionId, 'graph:verified_state', {
+        verifiedState,
+      });
       return;
     }
   }
@@ -768,15 +886,15 @@ export function createRouteAgentRuntime(input: { options: RouteOptions; store: C
   async function persistedHandoffStatus(
     sessionId: string,
     agentMode: AgentMode,
-  ): Promise<"queued" | "joined" | undefined> {
-    if (agentMode === "human_paused") return "joined";
+  ): Promise<'queued' | 'joined' | undefined> {
+    if (agentMode === 'human_paused') return 'joined';
     const events = await store.listEvents(sessionId);
     for (let index = events.length - 1; index >= 0; index -= 1) {
       const event = events[index];
-      if (event?.sourceType !== "graph:verified_state") continue;
+      if (event?.sourceType !== 'graph:verified_state') continue;
       const verifiedState = event.payload.verifiedState;
       return isRecord(verifiedState) && isRecord(verifiedState.handoff)
-        ? "queued"
+        ? 'queued'
         : undefined;
     }
     return undefined;
@@ -789,17 +907,17 @@ export function createRouteAgentRuntime(input: { options: RouteOptions; store: C
     const turn = await store.appendTurn({
       sessionId,
       channel: event.channel,
-      role: "user",
+      role: 'user',
       text: event.text,
       externalMessageId: event.rawEventId,
       externalUserId: event.externalUserId,
-      deliveryStatus: "received",
+      deliveryStatus: 'received',
       metadata: turnMetadataFor(event),
     });
     dashboard.emitEvent({
-      id: dashboardEventId(sessionId, "customer_message_received"),
+      id: dashboardEventId(sessionId, 'customer_message_received'),
       sessionId,
-      type: "customer_message_received",
+      type: 'customer_message_received',
       payload: {
         turnId: turn.id,
         channel: turn.channel,
@@ -818,14 +936,14 @@ export function createRouteAgentRuntime(input: { options: RouteOptions; store: C
     event: ConversationEvent,
   ): Promise<boolean> {
     const control = await store.getSessionControl(sessionId);
-    if (control.agentMode !== "human_paused") return false;
+    if (control.agentMode !== 'human_paused') return false;
     await persistNonAgentInboundEvent(sessionId, event);
     dashboard.emitEvent({
-      id: dashboardEventId(sessionId, "assistant_reply_skipped"),
+      id: dashboardEventId(sessionId, 'assistant_reply_skipped'),
       sessionId,
-      type: "assistant_reply_skipped",
+      type: 'assistant_reply_skipped',
       payload: {
-        reason: "human_paused",
+        reason: 'human_paused',
         agentMode: control.agentMode,
         agentId: control.assignedAgentId,
         channel: event.channel,
@@ -839,12 +957,12 @@ export function createRouteAgentRuntime(input: { options: RouteOptions; store: C
   }
 
   function latestUnansweredCustomerTurn(
-    turns: Awaited<ReturnType<ConversationStore["listTurns"]>>,
+    turns: Awaited<ReturnType<ConversationStore['listTurns']>>,
   ) {
     for (let index = turns.length - 1; index >= 0; index -= 1) {
       const turn = turns[index];
-      if (turn.role === "assistant") return null;
-      if (turn.role === "user") return turn;
+      if (turn.role === 'assistant') return null;
+      if (turn.role === 'user') return turn;
     }
     return null;
   }
@@ -868,14 +986,30 @@ export function createRouteAgentRuntime(input: { options: RouteOptions; store: C
     return {
       replied: false,
       turnId: pendingTurn.id,
-      errorCode: "agent_run_execution_required",
-      errorMessage:
-        `AI resume for ${target.channel} requires a claimed AgentRun`,
+      errorCode: 'agent_run_execution_required',
+      errorMessage: `AI resume for ${target.channel} requires a claimed AgentRun`,
     };
   }
 
-
-  return { kfcAgentResponse, deferAiMonitorRefinement, deliverAssistantReply, persistEventProfile, turnMetadataFor, emitConversationTurnCreatedEvent, emitSessionModeEvent, emitSessionControlIntelligence, resumedOwnershipSummary, clearPersistedHandoff, persistedHandoffStatus, shouldEvaluateDashboardMonitorContext, ensureDashboardMonitorContext, persistNonAgentInboundEvent, pauseIfHumanJoined, latestUnansweredCustomerTurn, replyToLatestUnansweredCustomerTurn };
+  return {
+    kfcAgentResponse,
+    deferAiMonitorRefinement,
+    deliverAssistantReply,
+    persistEventProfile,
+    turnMetadataFor,
+    emitConversationTurnCreatedEvent,
+    emitSessionModeEvent,
+    emitSessionControlIntelligence,
+    resumedOwnershipSummary,
+    clearPersistedHandoff,
+    persistedHandoffStatus,
+    shouldEvaluateDashboardMonitorContext,
+    ensureDashboardMonitorContext,
+    persistNonAgentInboundEvent,
+    pauseIfHumanJoined,
+    latestUnansweredCustomerTurn,
+    replyToLatestUnansweredCustomerTurn,
+  };
 }
 
 export type RouteAgentRuntime = ReturnType<typeof createRouteAgentRuntime>;

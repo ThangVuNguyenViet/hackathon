@@ -113,6 +113,10 @@ function activeMenuItem(
   state: AgentGraphState,
   itemCode: string,
 ): NonNullable<AgentGraphState['menuSearchResults']>[number] | undefined {
+  const directItem = state.menuSearchResults?.find(
+    (candidate) => candidate.code === itemCode,
+  );
+  if (directItem) return directItem;
   for (const toolName of ['searchMenu', 'recommendAddOns'] as const) {
     const key = state.activeCollectionKeys?.[toolName];
     const snapshot = key
@@ -157,13 +161,7 @@ function cartChange(
     state.cart?.items.some((item) => item.itemCode === itemCode) === true;
   if (!inCart) {
     const menuItem = activeMenuItem(state, itemCode);
-    if (
-      quantity === 0 ||
-      !menuItem?.available ||
-      menuItem.isCustomize ||
-      menuItem.hasModifiers ||
-      (menuItem.modifierGroups?.length ?? 0) > 0
-    ) {
+    if (quantity === 0 || !menuItem?.available) {
       return undefined;
     }
   }
@@ -481,6 +479,14 @@ export function prepareStructuredCustomerAction(input: {
         ? { kind: 'present', state: input.state }
         : reject('structured_action_content_evidence_unverified');
     case 'submit_address':
+      return command.value
+        ? reject('structured_action_semantic_input_required')
+        : {
+            kind: 'present',
+            state: presentationState(input.state, {
+              preferredSurface: 'fulfillment',
+            }),
+          };
     case 'apply_voucher':
     case 'add_support_detail':
       return reject('structured_action_semantic_input_required');

@@ -6,6 +6,7 @@ import type {
 import type { KfcGenUiAttachment } from '../genui/kfcGenUi.js';
 import { selectKfcGenUiAttachment } from '../genui/kfcGenUiSelector.js';
 import type { ToolCallResult, ToolName } from '../ordering/types.js';
+import { replaceVerifiedCollection } from '../ordering/verifiedCollections.js';
 import type { OpenAiToolCallTrace } from './openAiKfcAgent.js';
 import type { KfcToolSession } from './kfcOpenAiTools.js';
 
@@ -153,6 +154,15 @@ export function projectKfcOpenAiGenUiState(input: SelectKfcOpenAiGenUiInput): {
       ? { orderPreview: input.session.orderPreview }
       : {}),
     ...(input.session.order ? { order: input.session.order } : {}),
+    ...(input.session.selectedPaymentMethod
+      ? { selectedPaymentMethod: input.session.selectedPaymentMethod }
+      : {}),
+    ...(input.session.activeCollectionKeys
+      ? { activeCollectionKeys: input.session.activeCollectionKeys }
+      : {}),
+    ...(input.session.verifiedCollections
+      ? { verifiedCollections: input.session.verifiedCollections }
+      : {}),
     ...(input.session.paymentAttempt
       ? { paymentAttempt: input.session.paymentAttempt }
       : {}),
@@ -194,7 +204,29 @@ export function projectKfcOpenAiGenUiState(input: SelectKfcOpenAiGenUiInput): {
         state.contentEvidence = result.value;
         break;
       case 'listPaymentMethods':
-        state.paymentMethodEvidence = result.value;
+        {
+          const collectionKey =
+            input.session.activeCollectionKeys?.listPaymentMethods;
+          const collection = collectionKey
+            ? input.session.verifiedCollections?.listPaymentMethods?.[
+                collectionKey
+              ]
+            : undefined;
+          state.paymentMethodEvidence = collection
+            ? collection.result.items
+            : result.value;
+          if (collection) {
+            state.activeCollectionKeys = {
+              ...state.activeCollectionKeys,
+              listPaymentMethods: collection.key,
+            };
+            state.verifiedCollections = replaceVerifiedCollection(
+              state.verifiedCollections,
+              'listPaymentMethods',
+              collection,
+            );
+          }
+        }
         break;
       case 'collectInvoice':
         state.invoiceRequest = result.value;

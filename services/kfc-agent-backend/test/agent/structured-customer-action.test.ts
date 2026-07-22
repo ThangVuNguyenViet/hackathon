@@ -472,7 +472,6 @@ describe('trusted structured customer action preparation', () => {
 
   it.each([
     ['unavailable', { available: false }],
-    ['customizable', { isCustomize: true }],
   ] satisfies Array<[string, Partial<MenuItem>]>)(
     'rejects a verified menu item that is %s',
     (_label, itemOverrides) => {
@@ -496,6 +495,58 @@ describe('trusted structured customer action preparation', () => {
       });
     },
   );
+
+  it('uses the fixture default configuration for a customizable item', () => {
+    const currentState = withVerifiedMenu([
+      menuItem('customizable-item', {
+        isCustomize: true,
+        hasModifiers: true,
+      }),
+    ]);
+
+    expect(
+      prepareStructuredCustomerAction({
+        envelope: envelope(currentState, {
+          kind: 'cart_update',
+          itemCode: 'customizable-item',
+          quantity: 1,
+        }),
+        revisionValidated: false,
+        state: currentState,
+      }),
+    ).toMatchObject({
+      kind: 'execute',
+      call: {
+        toolName: 'updateCart',
+        arguments: {
+          changes: [
+            {
+              itemCode: 'customizable-item',
+              quantity: 1,
+              modifiers: [],
+            },
+          ],
+        },
+      },
+    });
+  });
+
+  it('presents the address step when no address value was supplied', () => {
+    const currentState = state({ cart: cart() });
+
+    expect(
+      prepareStructuredCustomerAction({
+        envelope: envelope(currentState, { kind: 'submit_address' }),
+        revisionValidated: false,
+        state: currentState,
+      }),
+    ).toMatchObject({
+      kind: 'present',
+      state: {
+        trustedPresentation: { preferredSurface: 'fulfillment' },
+      },
+    });
+  });
 
   it('projects edit-cart and accepted-fulfillment presentation state only', () => {
     const currentState = fulfillmentReadyState({

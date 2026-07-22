@@ -559,11 +559,8 @@ void main() {
 
       expect(find.text('5/5 món khác nhau đã chọn'), findsOneWidget);
       final sixthIncrease = tester.widget<ShadIconButton>(
-        find.descendant(
-          of: find.byKey(
-            CustomerChatKeys.genUiMenuQuantityIncrease(fixture.id, 'drink_3'),
-          ),
-          matching: find.byType(ShadIconButton),
+        find.byKey(
+          CustomerChatKeys.genUiMenuQuantityIncrease(fixture.id, 'drink_3'),
         ),
       );
       expect(sixthIncrease.onPressed, isNull);

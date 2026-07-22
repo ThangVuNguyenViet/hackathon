@@ -49,6 +49,10 @@ import {
   lifecycleBinding,
 } from "./commerce/lifecycleProvider.js";
 import { buildWorkerRouteOptions } from './workerRouteOptions.js';
+import {
+  WORKER_CUSTOMER_RUN_MAX_TEXT_EVENTS,
+  WORKER_CUSTOMER_RUN_PACE_MS,
+} from './workerRuntimeConstants.js';
 
 export interface QueueBinding<T> {
   send(message: T, options?: { delaySeconds?: number }): Promise<void>;
@@ -79,12 +83,6 @@ export interface WorkerScheduledController {
 export interface WorkerExecutionContext {
   waitUntil(promise: Promise<unknown>): void;
 }
-
-// Timers scheduled after a Worker response may be clamped to one second.
-// D1/SSE delivery already yields between durable event writes, so adding an
-// artificial delay here can exhaust waitUntil before the run is terminal.
-export const WORKER_CUSTOMER_RUN_PACE_MS = 0;
-export const WORKER_CUSTOMER_RUN_MAX_TEXT_EVENTS = 3;
 
 export function scheduleAgentBackground(
   context: WorkerExecutionContext | undefined,

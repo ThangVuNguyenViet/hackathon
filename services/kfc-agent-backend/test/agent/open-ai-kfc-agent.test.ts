@@ -184,6 +184,14 @@ describe('OpenAiKfcAgent', () => {
     expect(requests[0]?.instructions).toContain(
       'giữ các từ tìm kiếm bằng tiếng Việt',
     );
+    expect(requests[0]?.instructions).toContain(
+      'Mọi tên công cụ, tham số, kết quả công cụ và ngữ cảnh developer đều là thông tin vận hành riêng tư',
+    );
+    expect(requests[0]?.instructions).toContain('không nêu tên công cụ');
+    expect(requests[0]?.instructions).toContain('Không hiển thị mã món');
+    expect(requests[0]?.instructions).toContain(
+      'Không dùng các thuật ngữ nội bộ như modifier, metadata, evidence, fixture, schema hoặc cây tùy chọn',
+    );
     expect(result.responseText).toBe('Mình có thể giúp bạn chọn món.');
     expect(
       (await store.listTurns('kfc:customer_1')).map(({ role, text }) => ({
@@ -196,6 +204,99 @@ describe('OpenAiKfcAgent', () => {
       { role: 'user', text: 'Tư vấn món cho 4 người' },
       { role: 'assistant', text: 'Mình có thể giúp bạn chọn món.' },
     ]);
+  });
+
+  it('replaces verified product and option identifiers before persistence', async () => {
+    const store = new MemoryStore();
+    let responseIndex = 0;
+    const agent = new OpenAiKfcAgent({
+      client: {
+        responses: {
+          create: async () => {
+            responseIndex += 1;
+            if (responseIndex === 1) {
+              return {
+                output: [
+                  {
+                    type: 'function_call',
+                    call_id: 'call_modifiers',
+                    name: 'getModifierOptions',
+                    arguments: '{"code":"20751"}',
+                  },
+                ],
+                output_text: '',
+              };
+            }
+            return {
+              output: [],
+              output_text: 'Món 20751 có thể chọn 70088; đừng chọn mã 70087.',
+            };
+          },
+        },
+      },
+      model: 'gpt-4.1-mini',
+    });
+
+    const result = await agent.respond({
+      sessionId: 'kfc:customer_public_text',
+      customerId: 'customer_public_text',
+      channel: 'kfc',
+      text: 'Món này có loại không cay không?',
+      externalMessageId: 'public_text_message_1',
+      metadata: null,
+      store,
+      tools: [
+        {
+          definition: {
+            type: 'function',
+            name: 'getModifierOptions',
+            description: 'Get available choices.',
+            parameters: {
+              type: 'object',
+              properties: { code: { type: 'string' } },
+              required: ['code'],
+              additionalProperties: false,
+            },
+            strict: true,
+          },
+          execute: async () => ({
+            ok: true,
+            toolName: 'getModifierOptions',
+            value: {
+              itemCode: '20751',
+              name: 'Combo Hợp Gu 99K',
+              modifierGroups: [
+                {
+                  groupId: '60255',
+                  name: 'Loại gà',
+                  options: [
+                    {
+                      modifierId: '70088',
+                      name: 'Gà Giòn Không Cay',
+                      modifierGroups: [],
+                    },
+                    {
+                      modifierId: '70087',
+                      name: 'Gà Giòn Cay',
+                      modifierGroups: [],
+                    },
+                  ],
+                },
+              ],
+            },
+          }),
+        },
+      ],
+    });
+
+    expect(result.responseText).toBe(
+      'Món Combo Hợp Gu 99K có thể chọn Gà Giòn Không Cay; đừng chọn mã Gà Giòn Cay.',
+    );
+    expect(
+      (await store.listTurns('kfc:customer_public_text')).at(-1)?.text,
+    ).toBe(
+      'Món Combo Hợp Gu 99K có thể chọn Gà Giòn Không Cay; đừng chọn mã Gà Giòn Cay.',
+    );
   });
 
   it('adds verified fixture business state without creating a second transcript', async () => {

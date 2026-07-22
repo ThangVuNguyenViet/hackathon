@@ -10,11 +10,15 @@ import type {
   CustomerAccessContext,
   Order,
 } from '../domain/types.js';
+import type { SelectedPaymentMethodAuthority } from '../domain/opaqueProviderId.js';
+import type { AgentGraphState } from '../graph/state.js';
 import { toolArgumentSchemas, toolNames } from '../ordering/toolCatalog.js';
 import {
   executeToolCall,
   type ExecutorContext,
 } from '../ordering/toolExecutor.js';
+import { adaptAgentToolResult } from '../ordering/agentToolResultAdapter.js';
+import { replaceVerifiedCollection } from '../ordering/verifiedCollections.js';
 import type {
   CartWithModifiers,
   FulfillmentState,
@@ -33,7 +37,10 @@ export interface KfcToolSession {
   fulfillment?: FulfillmentState;
   orderPreview?: Order;
   order?: Order;
+  selectedPaymentMethod?: SelectedPaymentMethodAuthority;
   paymentAttempt?: PaymentAttempt;
+  activeCollectionKeys?: AgentGraphState['activeCollectionKeys'];
+  verifiedCollections?: AgentGraphState['verifiedCollections'];
   externalCallContext: ExternalCallContext;
   toolCallSequence: number;
 }
@@ -42,6 +49,43 @@ export interface CreateKfcOpenAiToolsInput {
   clients: ExternalClients;
   session: KfcToolSession;
   accessContext?: CustomerAccessContext;
+}
+
+export function hydrateKfcToolSession(
+  session: KfcToolSession,
+  state: Partial<
+    Pick<
+      KfcToolSession,
+      | 'cart'
+      | 'address'
+      | 'fulfillment'
+      | 'orderPreview'
+      | 'order'
+      | 'selectedPaymentMethod'
+      | 'paymentAttempt'
+      | 'activeCollectionKeys'
+      | 'verifiedCollections'
+    >
+  >,
+): KfcToolSession {
+  return {
+    ...session,
+    ...(state.cart ? { cart: state.cart } : {}),
+    ...(state.address ? { address: state.address } : {}),
+    ...(state.fulfillment ? { fulfillment: state.fulfillment } : {}),
+    ...(state.orderPreview ? { orderPreview: state.orderPreview } : {}),
+    ...(state.order ? { order: state.order } : {}),
+    ...(state.selectedPaymentMethod
+      ? { selectedPaymentMethod: state.selectedPaymentMethod }
+      : {}),
+    ...(state.paymentAttempt ? { paymentAttempt: state.paymentAttempt } : {}),
+    ...(state.activeCollectionKeys
+      ? { activeCollectionKeys: state.activeCollectionKeys }
+      : {}),
+    ...(state.verifiedCollections
+      ? { verifiedCollections: state.verifiedCollections }
+      : {}),
+  };
 }
 
 export function verifiedKfcToolSessionContext(
@@ -53,6 +97,9 @@ export function verifiedKfcToolSessionContext(
     ...(session.fulfillment ? { fulfillment: session.fulfillment } : {}),
     ...(session.orderPreview ? { orderPreview: session.orderPreview } : {}),
     ...(session.order ? { order: session.order } : {}),
+    ...(session.selectedPaymentMethod
+      ? { selectedPaymentMethod: session.selectedPaymentMethod }
+      : {}),
     ...(session.paymentAttempt
       ? { paymentAttempt: session.paymentAttempt }
       : {}),
@@ -208,8 +255,17 @@ function executionContext(
       ...(session.fulfillment ? { fulfillment: session.fulfillment } : {}),
       ...(session.orderPreview ? { orderPreview: session.orderPreview } : {}),
       ...(session.order ? { order: session.order } : {}),
+      ...(session.selectedPaymentMethod
+        ? { selectedPaymentMethod: session.selectedPaymentMethod }
+        : {}),
       ...(session.paymentAttempt
         ? { paymentAttempt: session.paymentAttempt }
+        : {}),
+      ...(session.activeCollectionKeys
+        ? { activeCollectionKeys: session.activeCollectionKeys }
+        : {}),
+      ...(session.verifiedCollections
+        ? { verifiedCollections: session.verifiedCollections }
         : {}),
     },
   };
@@ -282,25 +338,53 @@ export function createKfcOpenAiTools(
       strict: false,
     },
     async execute(arguments_: Record<string, unknown>) {
+      const directArguments =
+        toolName === 'listPaymentMethods'
+          ? Object.fromEntries(
+              Object.entries(arguments_).filter(([, value]) => value !== null),
+            )
+          : arguments_;
       const effectiveArguments =
         toolName === 'quoteFulfillment' && input.session.cart.items.length > 0
           ? {
-              ...arguments_,
+              ...directArguments,
               itemCodes: input.session.cart.items.map((item) => item.itemCode),
             }
-          : arguments_;
-      const result = await executeToolCall(
+          : directArguments;
+      const context = executionContext(
+        input.session,
+        input.accessContext,
+        toolName,
+        effectiveArguments,
+      );
+      const legacyResult = await executeToolCall(
         input.clients,
         { toolName, arguments: effectiveArguments },
-        executionContext(
-          input.session,
-          input.accessContext,
-          toolName,
-          effectiveArguments,
-        ),
+        context,
       );
-      applyResult(input.session, result, effectiveArguments);
-      return result;
+      if (toolName === 'listPaymentMethods') {
+        const result = await adaptAgentToolResult({
+          clients: input.clients,
+          request: { toolName, arguments: effectiveArguments },
+          context,
+          legacy: legacyResult,
+          scope: { scope: 'all' },
+        });
+        if (result.ok && result.verifiedCollection) {
+          input.session.activeCollectionKeys = {
+            ...input.session.activeCollectionKeys,
+            listPaymentMethods: result.verifiedCollection.key,
+          };
+          input.session.verifiedCollections = replaceVerifiedCollection(
+            input.session.verifiedCollections,
+            'listPaymentMethods',
+            result.verifiedCollection,
+          );
+        }
+        return result;
+      }
+      applyResult(input.session, legacyResult, effectiveArguments);
+      return legacyResult;
     },
   }));
 }

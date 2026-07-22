@@ -462,7 +462,7 @@ describe('selectKfcGenUiAttachment', () => {
     expect(items[0]).not.toHaveProperty('servingCoverageVerified');
   });
 
-  it('selects PaymentMethodPicker from verified payment-method evidence', () => {
+  it('selects PaymentMethodPicker from verified evidence after order creation', () => {
     const methods = [
       {
         methodId: 'zalopay_wallet',
@@ -490,6 +490,7 @@ describe('selectKfcGenUiAttachment', () => {
     const attachment = selectKfcGenUiAttachment({
       state: state({
         latestUserMessage: 'KFC hỗ trợ phương thức thanh toán nào?',
+        order: orderWithPaymentStatus('pending'),
         paymentMethodEvidence: methods,
         activeCollectionKeys: {
           listPaymentMethods: paymentMethodCollection.collectionKey,

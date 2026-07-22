@@ -8,6 +8,21 @@ import {
 } from '../../src/customerRuns/contracts.js';
 
 describe('customer run contracts', () => {
+  it.each(['genui', 'text'] as const)(
+    'accepts a customer-bound %s response-mode session',
+    (mode) => {
+      expect(
+        customerRunStartRequestSchema.parse({
+          schemaVersion: 1,
+          sessionId: `kfc:customer_1:${mode}`,
+          customerId: 'customer_1',
+          clientMessageId: `message_${mode}`,
+          input: { kind: 'text', text: 'Xin chào' },
+        }).sessionId,
+      ).toBe(`kfc:customer_1:${mode}`);
+    },
+  );
+
   it('accepts one closed text input', () => {
     const parsed = customerRunStartRequestSchema.parse({
       schemaVersion: 1,

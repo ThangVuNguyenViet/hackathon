@@ -654,7 +654,7 @@ void main() {
   );
 
   test(
-    'production menu authority enforces eligibility and data.items source',
+    'production menu authority enforces availability and actual modifier trees',
     () {
       const authority = KfcGenUiAuthority(
         schemaVersion: 'kfc-genui-v1',
@@ -690,6 +690,14 @@ void main() {
               'name': 'Có modifier',
               'available': true,
               'hasModifiers': true,
+            },
+            {
+              'code': 'modifier_tree',
+              'name': 'Có cây modifier',
+              'available': true,
+              'modifierGroups': [
+                {'groupId': 'size'},
+              ],
             },
           ],
         },
@@ -731,12 +739,7 @@ void main() {
         ),
         isNotNull,
       );
-      for (final itemCode in [
-        'missing_flag',
-        'unavailable',
-        'customizable',
-        'has_modifiers',
-      ]) {
+      for (final itemCode in ['missing_flag', 'unavailable', 'modifier_tree']) {
         expect(
           menu.bindAction(
             actionId: 'add_items',
@@ -747,6 +750,20 @@ void main() {
             },
           ),
           isNull,
+          reason: itemCode,
+        );
+      }
+      for (final itemCode in ['customizable', 'has_modifiers']) {
+        expect(
+          menu.bindAction(
+            actionId: 'add_items',
+            payload: {
+              'items': [
+                {'itemCode': itemCode, 'quantity': 1},
+              ],
+            },
+          ),
+          isNotNull,
           reason: itemCode,
         );
       }

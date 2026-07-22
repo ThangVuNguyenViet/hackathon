@@ -15,6 +15,55 @@ import 'package:kfc_live_monitor/features/customer_chat/testing/customer_chat_ke
 import '../../test_app.dart';
 
 void main() {
+  testWidgets('header switches subsequent responses between GenUI and text', (
+    tester,
+  ) async {
+    final controller = CustomerChatController();
+    await tester.pumpWidget(
+      TestApp(child: CustomerChatScreen(controller: controller)),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(CustomerChatKeys.responseModeControl), findsOneWidget);
+    expect(find.text('Generative UI'), findsOneWidget);
+    expect(find.text('Text only'), findsOneWidget);
+    expect(controller.state.value.responseMode, CustomerChatResponseMode.genui);
+
+    await tester.tap(find.byKey(CustomerChatKeys.responseModeText));
+    await tester.pump();
+
+    expect(controller.state.value.responseMode, CustomerChatResponseMode.text);
+  });
+
+  testWidgets('header disables response mode changes while processing', (
+    tester,
+  ) async {
+    final controller = CustomerChatController(
+      initialState: CustomerChatState(
+        sessionId: 'kfc:busy',
+        customerId: 'busy',
+        activeDraft: ActiveAssistantDraft.accepted(runId: 'busy-run'),
+      ),
+    );
+    await tester.pumpWidget(
+      TestApp(child: CustomerChatScreen(controller: controller)),
+    );
+    await tester.pump();
+
+    expect(
+      tester
+          .widget<ShadButton>(find.byKey(CustomerChatKeys.responseModeGenUi))
+          .enabled,
+      isFalse,
+    );
+    expect(
+      tester
+          .widget<ShadButton>(find.byKey(CustomerChatKeys.responseModeText))
+          .enabled,
+      isFalse,
+    );
+  });
+
   testWidgets('quick prompt renders customer chat GenUI', (tester) async {
     tester.view.physicalSize = const Size(920, 900);
     tester.view.devicePixelRatio = 1.0;

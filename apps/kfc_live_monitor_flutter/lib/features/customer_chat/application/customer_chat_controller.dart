@@ -23,7 +23,9 @@ class CustomerChatController extends BeaconController {
   }) : _repository = repository,
        _handoffPollInterval = handoffPollInterval,
        _reconnectDelays = reconnectDelays {
-    state.value = initialState ?? CustomerChatState.initial();
+    final resolvedState = initialState ?? CustomerChatState.initial();
+    state.value = resolvedState;
+    _modeStates[resolvedState.responseMode] = resolvedState;
   }
 
   final CustomerChatRepository _repository;
@@ -32,8 +34,9 @@ class CustomerChatController extends BeaconController {
   StreamSubscription<CustomerRunEventEnvelope>? _runSubscription;
   Future<void>? _activeRunCompletion;
   Timer? _handoffTimer;
-  final Set<String> _seenRemoteTurns = {};
-  String? _lastRemoteTurnId;
+  final Map<CustomerChatResponseMode, CustomerChatState> _modeStates = {};
+  final Map<String, Set<String>> _seenRemoteTurnsBySession = {};
+  final Map<String, String> _lastRemoteTurnIdBySession = {};
   var _disposed = false;
   var _messageSequence = 0;
 
@@ -49,6 +52,22 @@ class CustomerChatController extends BeaconController {
 
   void updateDraft(String value) {
     state.value = state.value.copyWith(draftText: value, clearError: true);
+  }
+
+  void setResponseMode(CustomerChatResponseMode mode) {
+    if (state.value.isSending || state.value.responseMode == mode) return;
+    final current = state.value;
+    _modeStates[current.responseMode] = current;
+    _handoffTimer?.cancel();
+    _handoffTimer = null;
+    state.value = _modeStates.putIfAbsent(
+      mode,
+      () => CustomerChatState.initial(
+        customerId: current.customerId,
+        responseMode: mode,
+      ),
+    );
+    if (state.value.handoffStatus != null) _startHandoffPolling();
   }
 
   Future<void> sendDraft() {
@@ -193,6 +212,9 @@ class CustomerChatController extends BeaconController {
         clientMessageId: customerMessage.id,
         text: text,
         action: action,
+        metadata: text == null
+            ? null
+            : {'showcaseResponseMode': state.value.responseMode.name},
       );
       if (_disposed) return;
       state.value = state.value.copyWith(
@@ -351,19 +373,26 @@ class CustomerChatController extends BeaconController {
   }
 
   Future<void> _pollHandoff() async {
+    final sessionId = state.value.sessionId;
     try {
       final updates = await _repository.getSessionUpdates(
-        sessionId: state.value.sessionId,
-        afterTurnId: _lastRemoteTurnId,
+        sessionId: sessionId,
+        afterTurnId: _lastRemoteTurnIdBySession[sessionId],
       );
-      if (_disposed) return;
-      if (updates.turns.isNotEmpty) _lastRemoteTurnId = updates.turns.last.id;
+      if (_disposed || state.value.sessionId != sessionId) return;
+      if (updates.turns.isNotEmpty) {
+        _lastRemoteTurnIdBySession[sessionId] = updates.turns.last.id;
+      }
+      final seenRemoteTurns = _seenRemoteTurnsBySession.putIfAbsent(
+        sessionId,
+        () => <String>{},
+      );
       final newMessages = updates.turns
           .where(
             (turn) =>
                 turn.isHumanAgent &&
                 turn.role == 'assistant' &&
-                _seenRemoteTurns.add(turn.id),
+                seenRemoteTurns.add(turn.id),
           )
           .map(
             (turn) => CustomerChatMessage(
@@ -421,7 +450,7 @@ class CustomerChatController extends BeaconController {
         : '';
     return switch (action.actionId) {
       'add_item' => 'Thêm $quantityPrefix${action.value ?? 'món này'} vào giỏ',
-      'add_items' => 'Xác nhận các món đã chọn',
+      'add_items' => _addItemsCustomerText(action),
       'customize_item' => 'Tùy chỉnh ${action.value ?? 'combo'}',
       'continue_to_fulfillment' => 'Tiếp tục giao hàng',
       'edit_cart' => 'Sửa giỏ hàng',
@@ -433,9 +462,9 @@ class CustomerChatController extends BeaconController {
       'confirm_order' => 'Tôi đặt đơn này',
       'apply_voucher' => 'Áp mã giảm giá',
       'open_payment' =>
-        action.value == null
+        _paymentMethodDisplayName(action.value) == null
             ? 'Tiếp tục thanh toán'
-            : 'Tiếp tục thanh toán bằng ${action.value}',
+            : 'Tiếp tục thanh toán bằng ${_paymentMethodDisplayName(action.value)}',
       'change_payment_method' => 'Đổi phương thức thanh toán',
       'select_payment_method' =>
         'Chọn ${action.value ?? 'phương thức thanh toán'}',
@@ -444,6 +473,76 @@ class CustomerChatController extends BeaconController {
       'send_issue_summary' => 'Gửi tóm tắt lỗi cho nhân viên',
       _ => action.value ?? action.actionId,
     };
+  }
+
+  String? _paymentMethodDisplayName(String? methodId) {
+    if (methodId == null || methodId.isEmpty) return null;
+    for (final message in state.value.messages.reversed) {
+      final methods = message.genUi?.data['methods'];
+      if (methods is! List) continue;
+      for (final method in methods) {
+        if (method is! Map || method['methodId'] != methodId) continue;
+        final displayName = method['displayName'];
+        if (displayName is String && displayName.trim().isNotEmpty) {
+          return displayName.trim();
+        }
+      }
+    }
+    return null;
+  }
+
+  String _addItemsCustomerText(KfcGenUiAction action) {
+    const fallback = 'Xác nhận các món đã chọn';
+    final catalogItems = state.value
+        .actionAttachment(action.attachmentId)
+        ?.data['items'];
+    final selectedItems = action.payload['items'];
+    if (catalogItems is! List ||
+        selectedItems is! List ||
+        selectedItems.isEmpty) {
+      return fallback;
+    }
+
+    final namesByCode = <String, String>{};
+    final duplicateCodes = <String>{};
+    for (final rawItem in catalogItems) {
+      if (rawItem is! Map) continue;
+      final code = rawItem['code'];
+      final name = rawItem['name'];
+      if (code is! String ||
+          code.isEmpty ||
+          name is! String ||
+          name.trim().isEmpty) {
+        continue;
+      }
+      if (namesByCode.containsKey(code)) duplicateCodes.add(code);
+      namesByCode[code] = name.trim();
+    }
+    for (final code in duplicateCodes) {
+      namesByCode.remove(code);
+    }
+
+    final selections = <String>[];
+    for (final rawSelection in selectedItems) {
+      if (rawSelection is! Map) return fallback;
+      final itemCode = rawSelection['itemCode'];
+      final rawQuantity = rawSelection['quantity'];
+      final quantity = rawQuantity is num && rawQuantity.isFinite
+          ? rawQuantity.toInt()
+          : null;
+      final name = itemCode is String ? namesByCode[itemCode] : null;
+      if (name == null ||
+          quantity == null ||
+          quantity < 1 ||
+          quantity > 99 ||
+          rawQuantity != quantity) {
+        return fallback;
+      }
+      selections.add('$quantity × $name');
+    }
+    return selections.isEmpty
+        ? fallback
+        : 'Thêm vào giỏ: ${selections.join(', ')}';
   }
 }
 

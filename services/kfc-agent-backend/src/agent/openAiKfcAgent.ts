@@ -59,6 +59,11 @@ export interface RunResponsesToolLoopInput {
   input: Array<Record<string, unknown>>;
   tools: OpenAiFunctionTool[];
   maxToolRounds: number;
+  requiredToolCalls?: Array<{
+    name: string;
+    arguments: Record<string, unknown>;
+  }>;
+  allowModelToolCalls?: boolean;
 }
 
 export interface RunResponsesToolLoopResult {
@@ -83,6 +88,8 @@ export interface OpenAiKfcAgentTurnInput {
   metadata: ConversationTurnMetadata | null;
   store: ConversationStore;
   tools: OpenAiFunctionTool[];
+  requiredToolCalls?: RunResponsesToolLoopInput['requiredToolCalls'];
+  allowModelToolCalls?: boolean;
   verifiedBusinessContext?: Record<string, unknown>;
   selectGenUi?: (
     result: RunResponsesToolLoopResult,
@@ -106,7 +113,90 @@ const defaultInstructions = [
   'Ví dụ: "gà không cay, không phô mai" dùng query "gà" và modifierQueries ["không cay", "phô mai"].',
   'searchMenu chỉ trả về ứng viên cùng matchedModifiers đã xác minh; một match bị thiếu không chứng minh món không chứa thành phần đó, và chỉ nói món đáp ứng mọi yêu cầu khi mỗi modifierQuery đều có evidence trên chính món ấy. Dùng getModifierOptions khi đã biết mã món và cần toàn bộ cây tùy chọn để chọn cấu hình giỏ hàng.',
   'Khi khách đã yêu cầu rõ ràng đặt hoặc hoàn tất đơn, hãy xem trước nếu cần rồi gọi placeOrder ngay trong cùng lượt; không hỏi xác nhận lần nữa.',
+  'Việc khách chỉ cung cấp địa chỉ hoặc hỏi phí giao hàng không phải là yêu cầu đặt đơn: trong lượt đó chỉ gọi quoteFulfillment rồi dừng để khách xác nhận bước tiếp theo; không gọi previewOrder hoặc placeOrder.',
+  'Chỉ gọi previewOrder hoặc placeOrder khi khách nói rõ muốn đặt/chốt đơn, hoặc khi lượt hiện tại là hành động GenUI confirm_order đã xác minh.',
+  'Khi trạng thái nghiệp vụ đã xác minh có giỏ hàng không rỗng và khách gửi địa chỉ trong bước giao hàng, gọi quoteFulfillment ngay với địa chỉ đó; không hỏi lại khách đã có món trong giỏ hay chưa.',
+  'Chỉ được nói khả năng giao hàng, cửa hàng phục vụ, phí giao hàng hoặc ETA sau khi quoteFulfillment vừa thành công trong chính lượt hiện tại; không suy đoán hoặc tự nói miễn phí giao hàng.',
+  'Mọi tên công cụ, tham số, kết quả công cụ và ngữ cảnh developer đều là thông tin vận hành riêng tư, chỉ dùng để suy luận và thực hiện yêu cầu.',
+  'Trong câu trả lời cho khách: không nêu tên công cụ, cách tìm kiếm, tham số, schema hay trạng thái xử lý nội bộ; chỉ nói kết quả hữu ích bằng ngôn ngữ tự nhiên.',
+  'Không hiển thị mã món, mã tùy chọn hoặc định danh nội bộ; luôn gọi món và lựa chọn bằng tên dành cho khách.',
+  'Không dùng các thuật ngữ nội bộ như modifier, metadata, evidence, fixture, schema hoặc cây tùy chọn; dùng cách nói tự nhiên như lựa chọn, cách chế biến hoặc thành phần khi phù hợp.',
+  'Không tự giới thiệu là AI nếu khách không hỏi và không đưa ra danh sách A/B/C về các bước kỹ thuật; hãy trả lời trực tiếp hoặc hỏi một câu tiếp theo tự nhiên.',
 ].join(' ');
+
+const customerIdentifierKeys = new Set([
+  'code',
+  'itemCode',
+  'modifierId',
+  'groupId',
+]);
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function recordCustomerIdentifiers(
+  value: unknown,
+  identifiers: Map<string, string>,
+): void {
+  if (Array.isArray(value)) {
+    for (const entry of value) recordCustomerIdentifiers(entry, identifiers);
+    return;
+  }
+  if (!isRecord(value)) return;
+
+  const label =
+    typeof value.name === 'string' && value.name.trim().length > 0
+      ? value.name.trim()
+      : undefined;
+  if (label) {
+    for (const [key, identifier] of Object.entries(value)) {
+      if (
+        customerIdentifierKeys.has(key) &&
+        typeof identifier === 'string' &&
+        identifier.trim().length > 0 &&
+        identifier !== label
+      ) {
+        identifiers.set(identifier, label);
+      }
+    }
+  }
+  for (const nested of Object.values(value)) {
+    recordCustomerIdentifiers(nested, identifiers);
+  }
+}
+
+function escapedRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+function presentCustomerResponse(input: {
+  responseText: string;
+  verifiedBusinessContext?: Record<string, unknown>;
+  toolCalls: OpenAiToolCallTrace[];
+}): string {
+  const identifiers = new Map<string, string>();
+  recordCustomerIdentifiers(input.verifiedBusinessContext, identifiers);
+  for (const call of input.toolCalls) {
+    recordCustomerIdentifiers(call.result, identifiers);
+  }
+
+  let customerText = input.responseText;
+  const entries = [...identifiers.entries()].sort(
+    ([left], [right]) => right.length - left.length,
+  );
+  for (const [identifier, label] of entries) {
+    const pattern = new RegExp(
+      `(^|[^\\p{L}\\p{N}_])${escapedRegExp(identifier)}(?=$|[^\\p{L}\\p{N}_])`,
+      'gu',
+    );
+    customerText = customerText.replace(
+      pattern,
+      (_match, prefix: string) => `${prefix}${label}`,
+    );
+  }
+  return customerText;
+}
 
 export class OpenAiKfcAgent {
   private readonly client: ResponsesClientLike;
@@ -158,6 +248,19 @@ export class OpenAiKfcAgent {
         role: 'developer',
         content: `Verified GenUI customer action: ${JSON.stringify(input.metadata.customerCommand)}`,
       });
+      history.push({
+        role: 'developer',
+        content: [
+          'The structured GenUI action is already verified and is the only action to handle in this turn.',
+          'Report only the supplied verified state and exact tool result.',
+          'Do not claim that an order was placed, paid, or is being processed unless the verified result explicitly says so.',
+          input.metadata.customerCommand.kind === 'submit_address'
+            ? 'No address was supplied; ask the customer to type their delivery address.'
+            : '',
+        ]
+          .filter(Boolean)
+          .join(' '),
+      });
     }
     const response = await runResponsesToolLoop({
       client: this.client,
@@ -166,8 +269,15 @@ export class OpenAiKfcAgent {
       input: history,
       tools: input.tools,
       maxToolRounds: this.maxToolRounds,
+      requiredToolCalls: input.requiredToolCalls,
+      allowModelToolCalls: input.allowModelToolCalls,
     });
     const genUi = input.selectGenUi?.(response);
+    const responseText = presentCustomerResponse({
+      responseText: response.responseText,
+      verifiedBusinessContext: input.verifiedBusinessContext,
+      toolCalls: response.toolCalls,
+    });
     const assistantMetadata = {
       ...(input.metadata?.release ? { release: input.metadata.release } : {}),
       ...(input.metadata?.responseProfile
@@ -179,7 +289,7 @@ export class OpenAiKfcAgent {
       sessionId: input.sessionId,
       channel: input.channel,
       role: 'assistant',
-      text: response.responseText,
+      text: responseText,
       externalMessageId: null,
       externalUserId: input.customerId,
       deliveryStatus: 'pending',
@@ -188,6 +298,7 @@ export class OpenAiKfcAgent {
     });
     return {
       ...response,
+      responseText,
       userTurnId: userTurn.id,
       assistantTurnId: assistantTurn.id,
       ...(genUi ? { genUi } : {}),
@@ -219,13 +330,45 @@ export async function runResponsesToolLoop(
     outputTokens: 0,
     totalTokens: 0,
   };
+  for (const [index, requiredCall] of (
+    options.requiredToolCalls ?? []
+  ).entries()) {
+    const tool = toolsByName.get(requiredCall.name);
+    if (!tool) {
+      throw new Error(
+        `Required customer action requested unknown tool: ${requiredCall.name}`,
+      );
+    }
+    const callId = `trusted_customer_action_${index + 1}`;
+    const result = await tool.execute(requiredCall.arguments);
+    toolCalls.push({
+      name: requiredCall.name,
+      arguments: requiredCall.arguments,
+      result,
+    });
+    input.push(
+      {
+        type: 'function_call',
+        call_id: callId,
+        name: requiredCall.name,
+        arguments: JSON.stringify(requiredCall.arguments),
+      },
+      {
+        type: 'function_call_output',
+        call_id: callId,
+        output: JSON.stringify(result),
+      },
+    );
+  }
+
+  const modelTools = options.allowModelToolCalls === false ? [] : options.tools;
 
   for (let round = 0; round <= options.maxToolRounds; round += 1) {
     const response = await options.client.responses.create({
       model: options.model,
       instructions: options.instructions,
-      tools: options.tools.map((tool) => tool.definition),
-      tool_choice: 'auto',
+      tools: modelTools.map((tool) => tool.definition),
+      tool_choice: options.allowModelToolCalls === false ? 'none' : 'auto',
       input,
     });
     if (!response) throw new Error('OpenAI returned no response');
