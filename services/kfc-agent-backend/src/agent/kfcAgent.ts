@@ -1,13 +1,10 @@
 import type { BaseChatModel } from '@langchain/core/language_models/chat_models';
 import {
   HumanMessage,
-  SystemMessage,
-  ToolMessage,
   isAIMessage,
   type BaseMessage,
 } from '@langchain/core/messages';
-import type { StructuredToolParams } from '@langchain/core/tools';
-import type { ToolCall } from '@langchain/core/messages/tool';
+import { createAgent, tool, type ToolRuntime } from 'langchain';
 import type { ExternalCallContext } from '../clients/interfaces.js';
 import type { AgentTurnInput, AgentTurnOutput } from './agentTurn.js';
 import type { AgentState } from './agentState.js';
@@ -39,9 +36,6 @@ import { assembleLoadedTurnState } from './agentTurnStateHydration.js';
 import { loadOrAppendAgentCurrentUserTurn } from './agentTurnIntake.js';
 import { semanticConversationTurns } from './trustedActionConversation.js';
 
-const DEFAULT_MAX_TOOL_ROUNDS = 20;
-const toolNameSet: ReadonlySet<string> = new Set(toolNames);
-
 export const KFC_AGENT_INSTRUCTIONS = [
   'Bạn là trợ lý KFC Việt Nam thân thiện, tự nhiên và chủ động.',
   'Hiểu yêu cầu của khách và tự chọn công cụ phù hợp. Không cần giải thích quy trình nội bộ.',
@@ -51,14 +45,6 @@ export const KFC_AGENT_INSTRUCTIONS = [
   'Khi công cụ báo thiếu dữ liệu hoặc thất bại, nói ngắn gọn điều còn thiếu và tiếp tục tự nhiên.',
   'Trả lời bằng ngôn ngữ của khách.',
 ].join('\n');
-
-function toolDefinitions(): StructuredToolParams[] {
-  return toolNames.map((name) => ({
-    name,
-    description: agentToolDescriptions[name],
-    schema: providerPortableToolSchema(toolArgumentSchemas[name]),
-  }));
-}
 
 function verifiedContext(state: AgentState): Record<string, unknown> {
   return {
@@ -72,20 +58,21 @@ function verifiedContext(state: AgentState): Record<string, unknown> {
   };
 }
 
-function modelMessages(
+function systemPrompt(state: AgentState): string {
+  const context = verifiedContext(state);
+  if (Object.keys(context).length === 0) return KFC_AGENT_INSTRUCTIONS;
+  return [
+    KFC_AGENT_INSTRUCTIONS,
+    `Verified current business state. Reuse these exact identifiers and values: ${JSON.stringify(context)}`,
+  ].join('\n\n');
+}
+
+function conversationMessages(
   input: AgentTurnInput,
   state: AgentState,
   currentUserTurn: Awaited<ReturnType<typeof loadOrAppendAgentCurrentUserTurn>>,
 ): BaseMessage[] {
-  const context = verifiedContext(state);
-  const messages: BaseMessage[] = [new SystemMessage(KFC_AGENT_INSTRUCTIONS)];
-  if (Object.keys(context).length > 0) {
-    messages.push(
-      new SystemMessage(
-        `Verified current business state. Reuse these exact identifiers and values: ${JSON.stringify(context)}`,
-      ),
-    );
-  }
+  const messages: BaseMessage[] = [];
   messages.push(...freshMessages(state, input, currentUserTurn));
   if (input.trustedCustomerAction) {
     messages.push(
@@ -97,47 +84,35 @@ function modelMessages(
   return messages;
 }
 
-function toolNameFor(call: ToolCall): ToolName {
-  if (!isToolName(call.name)) {
-    throw new Error(`Unknown KFC tool requested by model: ${call.name}`);
+function toolArguments(
+  toolName: ToolName,
+  value: unknown,
+): Record<string, unknown> {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) {
+    throw new Error(`Invalid arguments for KFC tool: ${toolName}`);
   }
-  return call.name;
-}
-
-function isToolName(value: string): value is ToolName {
-  return toolNameSet.has(value);
-}
-
-function toolArguments(call: ToolCall): Record<string, unknown> {
-  if (
-    typeof call.args !== 'object' ||
-    call.args === null ||
-    Array.isArray(call.args)
-  ) {
-    throw new Error(`Invalid arguments for KFC tool: ${call.name}`);
-  }
-  return call.args as Record<string, unknown>;
+  return value as Record<string, unknown>;
 }
 
 async function executeModelTool(input: {
   turnInput: AgentTurnInput;
   state: AgentState;
-  call: ToolCall;
+  toolName: ToolName;
+  args: Record<string, unknown>;
+  callId: string;
   externalCallContext: ExternalCallContext;
   currentTurnToolTrace: ToolTraceEntry[];
 }): Promise<ToolCallResult> {
-  const toolName = toolNameFor(input.call);
-  const args = toolArguments(input.call);
   const bindingFingerprint = await stateRevision({
     sessionId: input.turnInput.sessionId,
     externalMessageId: input.turnInput.externalMessageId ?? null,
-    callId: input.call.id ?? null,
-    toolName,
-    args,
+    callId: input.callId,
+    toolName: input.toolName,
+    args: input.args,
   });
   const result = await executeToolCall(
     input.turnInput.clients,
-    { toolName, arguments: args },
+    { toolName: input.toolName, arguments: input.args },
     {
       ...toolExecutionContext(input.turnInput),
       externalCallContext: input.externalCallContext,
@@ -156,62 +131,73 @@ async function executeModelTool(input: {
     input.turnInput,
     input.state,
     result,
-    args,
+    input.args,
     input.currentTurnToolTrace,
   );
   return result;
 }
 
-async function runToolLoop(input: {
+function createKfcTools(input: {
+  turnInput: AgentTurnInput;
+  state: AgentState;
+  externalCallContext: ExternalCallContext;
+  currentTurnToolTrace: ToolTraceEntry[];
+}) {
+  let executionQueue: Promise<void> = Promise.resolve();
+  return toolNames.map((toolName) =>
+    tool(
+      async (value: unknown, runtime: ToolRuntime) => {
+        const args = toolArguments(toolName, value);
+        const execution = executionQueue.then(() =>
+          executeModelTool({
+            ...input,
+            toolName,
+            args,
+            callId: runtime.toolCallId,
+          }),
+        );
+        executionQueue = execution.then(
+          () => undefined,
+          () => undefined,
+        );
+        return JSON.stringify(await execution);
+      },
+      {
+        name: toolName,
+        description: agentToolDescriptions[toolName],
+        schema: providerPortableToolSchema(toolArgumentSchemas[toolName]),
+      },
+    ),
+  );
+}
+
+async function runModelAgent(input: {
   turnInput: AgentTurnInput;
   model: BaseChatModel;
   state: AgentState;
   messages: BaseMessage[];
   externalCallContext: ExternalCallContext;
   currentTurnToolTrace: ToolTraceEntry[];
-  maxToolRounds?: number;
 }): Promise<string> {
-  const bound = input.model.bindTools?.(toolDefinitions());
-  if (!bound) throw new Error('kfc_agent_model_does_not_support_tools');
-  const messages = [...input.messages];
-  const maxToolRounds = input.maxToolRounds ?? DEFAULT_MAX_TOOL_ROUNDS;
-
-  for (let round = 0; round <= maxToolRounds; round += 1) {
-    await input.turnInput.observeRun?.({ kind: 'planning' });
-    const response = await bound.invoke(messages, {
+  const agent = createAgent({
+    model: input.model,
+    tools: createKfcTools(input),
+    systemPrompt: systemPrompt(input.state),
+  });
+  await input.turnInput.observeRun?.({ kind: 'planning' });
+  const result = await agent.invoke(
+    { messages: input.messages },
+    {
       signal: input.externalCallContext.signal,
-    });
-    if (!isAIMessage(response))
-      throw new Error('kfc_agent_model_response_invalid');
-    messages.push(response);
-    const calls = response.tool_calls ?? [];
-    if (calls.length === 0) {
-      const text = messageText(response);
-      if (!text) throw new Error('kfc_agent_model_response_empty');
-      return text;
-    }
-    if (round === maxToolRounds) {
-      throw new Error(`kfc_agent_tool_round_limit:${maxToolRounds}`);
-    }
-
-    for (const call of calls) {
-      const result = await executeModelTool({
-        turnInput: input.turnInput,
-        state: input.state,
-        call,
-        externalCallContext: input.externalCallContext,
-        currentTurnToolTrace: input.currentTurnToolTrace,
-      });
-      messages.push(
-        new ToolMessage({
-          name: call.name,
-          tool_call_id: call.id ?? `${call.name}:${round}`,
-          content: JSON.stringify(result),
-        }),
-      );
-    }
+    },
+  );
+  const response = result.messages.at(-1);
+  if (!response || !isAIMessage(response)) {
+    throw new Error('kfc_agent_model_response_invalid');
   }
-  throw new Error('kfc_agent_tool_loop_ended_unexpectedly');
+  const text = messageText(response);
+  if (!text) throw new Error('kfc_agent_model_response_empty');
+  return text;
 }
 
 export async function runAgentTurn(
@@ -235,7 +221,7 @@ export async function runAgentTurn(
       channel: input.channel,
       text: input.text,
     },
-    metadata: { runtime: 'simple-model-tool-loop' },
+    metadata: { runtime: 'langchain-create-agent' },
     tags: ['kfc-agent'],
   });
   const abortController = new AbortController();
@@ -272,11 +258,11 @@ export async function runAgentTurn(
       state.cart = created.value;
     }
     const currentTurnToolTrace: ToolTraceEntry[] = [];
-    const responseText = await runToolLoop({
+    const responseText = await runModelAgent({
       turnInput: input,
       model: input.agentModel,
       state,
-      messages: modelMessages(input, state, currentUserTurn),
+      messages: conversationMessages(input, state, currentUserTurn),
       externalCallContext,
       currentTurnToolTrace,
     });
