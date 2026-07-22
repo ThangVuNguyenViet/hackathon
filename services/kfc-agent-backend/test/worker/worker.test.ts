@@ -539,6 +539,9 @@ describe("Cloudflare Worker backend", () => {
       );
     }) as typeof fetch;
     const workerEnv = env({
+      KFC_AGENT_RUNTIME: "openai-responses",
+      KFC_AGENT_PROVIDER: "openai",
+      KFC_AGENT_MODEL: "gpt-4.1-mini",
       GOOGLE_API_KEY: "google_test_key",
       OPENAI_API_KEY: "openai_test_key",
       MESSENGER_FETCH: messengerFetch,
@@ -561,17 +564,21 @@ describe("Cloudflare Worker backend", () => {
       proof: {
         deployment: { gitSha: "0123456789abcdef", deploymentId: "worker-deployment-1", builtAt: "2026-07-11T08:30:00Z", dirty: false },
         commerceEnvironment: null,
-        graph: { runtime: "langchain-create-agent-v1", checkpoint: "d1-v1" },
+        graph: {
+          runtime: "openai-responses-v1",
+          checkpoint: "d1-conversation-v1",
+        },
         versions: {
           agent: {
-            provider: "google",
-            model: "gemini-3.1-flash-lite",
-            profile: "google-gemini-3.1-flash-lite-thinking-low",
+            provider: "openai",
+            model: "gpt-4.1-mini",
+            profile: "openai-responses-gpt-4.1-mini",
           },
           monitor: {
-            provider: "google",
-            model: "gemini-3.1-flash-lite",
-            profile: "google-gemini-3.1-flash-lite-thinking-low-monitor",
+            provider: "openai",
+            model: "gpt-5-mini-2025-08-07",
+            profile:
+              "openai-gpt-5-mini-2025-08-07-reasoning-low-verbosity-low",
           },
           ledger: "kfc-scenario-ledger-v1",
         },
