@@ -66,6 +66,29 @@ void main() {
       await _pumpDecision(tester, fixture, actions.add);
 
       expect(_networkUrl(tester), contains('3-Fried-Chicken.jpg'));
+      expect(find.byType(GridView), findsOneWidget);
+      expect(find.text('Loại gà'), findsOneWidget);
+      expect(find.text('Chọn 1'), findsNothing);
+      final spicyTopLeft = tester.getTopLeft(
+        find.byKey(
+          CustomerChatKeys.genUiModifierOption(
+            fixture.id,
+            'flavor',
+            'hot-spicy',
+          ),
+        ),
+      );
+      final currentTopLeft = tester.getTopLeft(
+        find.byKey(
+          CustomerChatKeys.genUiModifierOption(
+            fixture.id,
+            'flavor',
+            'keep-current',
+          ),
+        ),
+      );
+      expect(currentTopLeft.dy, spicyTopLeft.dy);
+      expect(currentTopLeft.dx, greaterThan(spicyTopLeft.dx));
 
       await tester.tap(
         find.byKey(
@@ -104,6 +127,97 @@ void main() {
       expect(find.byType(Image), findsOneWidget);
     },
   );
+
+  testWidgets(
+    'modifier provider quantities stay out of the plain option selector',
+    (tester) async {
+      const fixture = KfcGenUiAttachment(
+        id: 'fixed-quantity-modifier',
+        lifecycleStage: 'modifier',
+        widgetKind: KfcGenUiWidgetKind.modifierPicker,
+        status: KfcGenUiStatus.active,
+        title: 'Tùy chỉnh món',
+        data: {
+          'modifierTree': {
+            'itemCode': 'three-chicken',
+            'name': '3 Miếng Gà',
+            'modifierGroups': [
+              {
+                'groupId': '60027',
+                'name': 'Tùy chọn',
+                'min': 3,
+                'max': 3,
+                'options': [
+                  {'modifierId': '70087', 'name': 'Gà Giòn Cay', 'quantity': 3},
+                  {
+                    'modifierId': '70088',
+                    'name': 'Gà Giòn Không Cay',
+                    'quantity': 0,
+                  },
+                ],
+              },
+            ],
+          },
+        },
+        actions: [
+          KfcGenUiActionSpec(
+            id: 'customize_item:60027:70087',
+            label: 'Gà Giòn Cay',
+            value: 'Gà Giòn Cay',
+            payload: {
+              'itemCode': 'three-chicken',
+              'groupId': '60027',
+              'modifierId': '70087',
+            },
+          ),
+          KfcGenUiActionSpec(
+            id: 'customize_item:60027:70088',
+            label: 'Gà Giòn Không Cay',
+            value: 'Gà Giòn Không Cay',
+            payload: {
+              'itemCode': 'three-chicken',
+              'groupId': '60027',
+              'modifierId': '70088',
+            },
+          ),
+        ],
+      );
+
+      await _pumpDecision(tester, fixture, (_) {});
+
+      expect(find.text('Chọn 3'), findsNothing);
+      expect(find.text('3 phần'), findsNothing);
+      expect(find.byType(GridView), findsOneWidget);
+    },
+  );
+
+  testWidgets('modifier grid collapses to one column on a narrow surface', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(300, 800);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    final fixture = kfcGenUiFixture(KfcGenUiWidgetKind.modifierPicker);
+
+    await _pumpDecision(tester, fixture, (_) {});
+
+    final spicyTopLeft = tester.getTopLeft(
+      find.byKey(
+        CustomerChatKeys.genUiModifierOption(fixture.id, 'flavor', 'hot-spicy'),
+      ),
+    );
+    final currentTopLeft = tester.getTopLeft(
+      find.byKey(
+        CustomerChatKeys.genUiModifierOption(
+          fixture.id,
+          'flavor',
+          'keep-current',
+        ),
+      ),
+    );
+    expect(currentTopLeft.dx, spicyTopLeft.dx);
+    expect(currentTopLeft.dy, greaterThan(spicyTopLeft.dy));
+  });
 
   testWidgets(
     'modifier renders only options backed by unique trusted backend actions',

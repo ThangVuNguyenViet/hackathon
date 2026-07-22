@@ -25,10 +25,11 @@ class _ModifierPickerState extends State<ModifierPicker> {
 
   @override
   Widget build(BuildContext context) {
-    final options = _trustedModifierOptions(
+    final groups = _trustedModifierGroups(
       widget.attachment.data,
       widget.attachment.actionableActions,
     );
+    final options = [for (final group in groups) ...group.options];
     final optionIdCounts = <String, int>{};
     for (final option in options) {
       optionIdCounts.update(
@@ -66,46 +67,104 @@ class _ModifierPickerState extends State<ModifierPicker> {
         ),
         Text(productName, style: decisionTitleStyle),
         const SizedBox(height: KfcOpsTokens.spacingSm),
-        for (final option in options)
-          Padding(
-            key: optionIdCounts[_optionId(option)] == 1
-                ? CustomerChatKeys.genUiModifierOption(
-                    widget.attachment.id,
-                    _optionId(option),
-                  )
-                : null,
-            padding: const EdgeInsets.only(bottom: KfcOpsTokens.spacingSm),
-            child: SizedBox(
-              width: double.infinity,
-              child: ShadButton.raw(
-                key: CustomerChatKeys.genUiModifierOption(
-                  widget.attachment.id,
-                  decisionText(option['_groupId']),
-                  _optionId(option),
-                ),
-                variant: _selectedIdentity == _identity(option)
-                    ? ShadButtonVariant.primary
-                    : ShadButtonVariant.outline,
-                backgroundColor: _selectedIdentity == _identity(option)
-                    ? KfcOpsTokens.primary
-                    : KfcOpsTokens.surfaceContainerLowest,
-                foregroundColor: _selectedIdentity == _identity(option)
-                    ? KfcOpsTokens.onPrimary
-                    : KfcOpsTokens.onSurface,
-                hoverBackgroundColor: KfcOpsTokens.surfaceContainerLow,
-                hoverForegroundColor: KfcOpsTokens.onSurface,
-                height: 40,
-                onPressed: () => _selectOption(option),
-                child: Align(
-                  alignment: Alignment.centerLeft,
-                  child: Text(
-                    decisionText(option['name'], fallback: 'Lựa chọn'),
-                  ),
-                ),
-              ),
+        for (final (index, group) in groups.indexed) ...[
+          Text(
+            group.name,
+            style: const TextStyle(
+              color: KfcOpsTokens.onSurface,
+              fontSize: 13,
+              fontWeight: FontWeight.w700,
+              height: 18 / 13,
             ),
           ),
+          const SizedBox(height: KfcOpsTokens.spacingSm),
+          LayoutBuilder(
+            builder: (context, constraints) {
+              final maxExtent = constraints.maxWidth < 320
+                  ? constraints.maxWidth
+                  : 220.0;
+              return GridView.builder(
+                shrinkWrap: true,
+                physics: const NeverScrollableScrollPhysics(),
+                itemCount: group.options.length,
+                gridDelegate: SliverGridDelegateWithMaxCrossAxisExtent(
+                  maxCrossAxisExtent: maxExtent,
+                  mainAxisExtent: 64,
+                  crossAxisSpacing: KfcOpsTokens.spacingSm,
+                  mainAxisSpacing: KfcOpsTokens.spacingSm,
+                ),
+                itemBuilder: (context, optionIndex) {
+                  final option = group.options[optionIndex];
+                  return _optionButton(option, optionIdCounts);
+                },
+              );
+            },
+          ),
+          if (index < groups.length - 1)
+            const SizedBox(height: KfcOpsTokens.spacingMd),
+        ],
       ],
+    );
+  }
+
+  Widget _optionButton(
+    Map<String, Object?> option,
+    Map<String, int> optionIdCounts,
+  ) {
+    final selected = _selectedIdentity == _identity(option);
+    final detail = _optionDetail(option);
+    return KeyedSubtree(
+      key: optionIdCounts[_optionId(option)] == 1
+          ? CustomerChatKeys.genUiModifierOption(
+              widget.attachment.id,
+              _optionId(option),
+            )
+          : null,
+      child: ShadButton.raw(
+        key: CustomerChatKeys.genUiModifierOption(
+          widget.attachment.id,
+          decisionText(option['_groupId']),
+          _optionId(option),
+        ),
+        variant: selected
+            ? ShadButtonVariant.primary
+            : ShadButtonVariant.outline,
+        backgroundColor: selected
+            ? KfcOpsTokens.primary
+            : KfcOpsTokens.surfaceContainerLowest,
+        foregroundColor: selected
+            ? KfcOpsTokens.onPrimary
+            : KfcOpsTokens.onSurface,
+        hoverBackgroundColor: KfcOpsTokens.surfaceContainerLow,
+        hoverForegroundColor: KfcOpsTokens.onSurface,
+        height: 64,
+        onPressed: () => _selectOption(option),
+        child: Align(
+          alignment: Alignment.centerLeft,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                decisionText(option['name'], fallback: 'Lựa chọn'),
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+              ),
+              if (detail.isNotEmpty)
+                Text(
+                  detail,
+                  style: TextStyle(
+                    color: selected
+                        ? KfcOpsTokens.onPrimary
+                        : KfcOpsTokens.secondary,
+                    fontSize: 10,
+                    height: 14 / 10,
+                  ),
+                ),
+            ],
+          ),
+        ),
+      ),
     );
   }
 
@@ -124,25 +183,68 @@ class _ModifierPickerState extends State<ModifierPicker> {
   }
 }
 
-List<Map<String, Object?>> _modifierOptions(Map<String, Object?> data) {
+typedef _ModifierGroup = ({
+  String groupId,
+  String name,
+  List<Map<String, Object?>> options,
+});
+
+List<_ModifierGroup> _modifierGroups(Map<String, Object?> data) {
   final direct = decisionList(data['options']);
-  if (direct.isNotEmpty) return direct;
+  if (direct.isNotEmpty) {
+    final grouped = <String, List<Map<String, Object?>>>{};
+    for (final option in direct) {
+      final groupId = decisionText(option['groupId']);
+      grouped.putIfAbsent(groupId, () => []).add({
+        ...option,
+        '_groupId': groupId,
+      });
+    }
+    return [
+      for (final entry in grouped.entries)
+        (
+          groupId: entry.key,
+          name: decisionText(
+            entry.value.first['groupName'],
+            fallback: 'Lựa chọn',
+          ),
+          options: entry.value,
+        ),
+    ];
+  }
   final tree = decisionMap(data['modifierTree']);
-  final groups = tree.isNotEmpty
+  final rawGroups = tree.isNotEmpty
       ? decisionList(tree['modifierGroups'])
       : decisionList(data['modifierGroups']);
-  return [
-    for (final group in groups)
-      for (final option in decisionList(group['options']))
-        {...option, '_groupId': group['groupId']},
-  ];
+  final groups = <_ModifierGroup>[];
+  void visit(List<Map<String, Object?>> values) {
+    for (final group in values) {
+      final groupId = decisionText(group['groupId']);
+      final options = [
+        for (final option in decisionList(group['options']))
+          {...option, '_groupId': groupId},
+      ];
+      groups.add((
+        groupId: groupId,
+        name: decisionText(group['name'], fallback: 'Lựa chọn'),
+        options: options,
+      ));
+      for (final option in options) {
+        visit(decisionList(option['modifierGroups']));
+      }
+    }
+  }
+
+  visit(rawGroups);
+  return groups;
 }
 
-List<Map<String, Object?>> _trustedModifierOptions(
+List<_ModifierGroup> _trustedModifierGroups(
   Map<String, Object?> data,
   List<KfcGenUiActionSpec> actions,
 ) {
-  final options = _modifierOptions(data);
+  final groups = _modifierGroups(data);
+  final options = [for (final group in groups) ...group.options];
   final identityCounts = <(String, String), int>{};
   for (final option in options) {
     identityCounts.update(
@@ -151,13 +253,27 @@ List<Map<String, Object?>> _trustedModifierOptions(
       ifAbsent: () => 1,
     );
   }
-  return options
-      .where(
-        (option) =>
-            identityCounts[_identity(option)] == 1 &&
-            _exactModifierAction(data, option, actions) != null,
-      )
-      .toList(growable: false);
+  return [
+    for (final group in groups)
+      if (group.options
+              .where(
+                (option) =>
+                    identityCounts[_identity(option)] == 1 &&
+                    _exactModifierAction(data, option, actions) != null,
+              )
+              .toList(growable: false)
+          case final trusted when trusted.isNotEmpty)
+        (groupId: group.groupId, name: group.name, options: trusted),
+  ];
+}
+
+String _optionDetail(Map<String, Object?> option) {
+  final details = <String>[];
+  final priceDelta = option['priceDeltaVnd'];
+  if (priceDelta is num && priceDelta > 0) {
+    details.add('+${moneyVnd(priceDelta)}');
+  }
+  return details.join(' · ');
 }
 
 KfcGenUiActionSpec? _exactModifierAction(

@@ -442,9 +442,19 @@ KfcGenUiAttachment kfcGenUiFixture(KfcGenUiWidgetKind kind) {
             {
               'groupId': 'flavor',
               'name': 'Loại gà',
+              'min': 1,
+              'max': 1,
               'options': [
-                {'modifierId': 'hot-spicy', 'name': 'Gà Giòn Cay'},
-                {'modifierId': 'keep-current', 'name': 'Giữ lựa chọn hiện tại'},
+                {
+                  'modifierId': 'hot-spicy',
+                  'name': 'Gà Giòn Cay',
+                  'quantity': 1,
+                },
+                {
+                  'modifierId': 'keep-current',
+                  'name': 'Giữ lựa chọn hiện tại',
+                  'quantity': 1,
+                },
               ],
             },
           ],
