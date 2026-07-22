@@ -650,7 +650,7 @@ afterAll(async () => {
 }, liveTraceFlushHookTimeoutMs);
 
 describe.runIf(liveRequested)(selectedSuiteName, () => {
-  it.concurrent.each(selectedCaseRows)(
+  it.each(selectedCaseRows)(
     '%s [%s] repetition %d',
     async (_fileName, mode, diagnosticRepetition, scenarioCase) => {
       const agentModel = agentModelForSelectedExecution();

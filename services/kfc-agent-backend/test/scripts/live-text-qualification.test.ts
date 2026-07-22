@@ -1099,7 +1099,9 @@ describe('mandatory live text qualification artifact', () => {
         "const value = assertObject(manifest, 'live text qualification manifest');",
       ),
     );
-    expect(runner).toContain("'--maxConcurrency=9'");
+    expect(runner).not.toContain('--maxConcurrency');
+    expect(replay).toContain('it.each(selectedCaseRows)(');
+    expect(replay).not.toContain('it.concurrent.each(selectedCaseRows)(');
     expect(
       runner.match(
         /assertCleanQualificationSource\(repositoryRoot, gitSha\)/gu,
@@ -1118,8 +1120,8 @@ describe('mandatory live text qualification artifact', () => {
     expect(packageJson.scripts['test:live:scenarios']).toContain(
       'RUN_LIVE_AI_SCENARIOS=1',
     );
-    expect(packageJson.scripts['test:live:scenarios']).toContain(
-      '--maxConcurrency=9',
+    expect(packageJson.scripts['test:live:scenarios']).not.toContain(
+      '--maxConcurrency',
     );
     expect(workflow).toContain(
       'Run mandatory OpenAI and Google text qualification (3 repetitions)',

@@ -74,7 +74,6 @@ function runVitest(reportPath, environment) {
         'vitest',
         'run',
         'test/scenarios/live-ai-scenario-replay.test.ts',
-        '--maxConcurrency=9',
         '--reporter=json',
         `--outputFile=${reportPath}`,
       ],

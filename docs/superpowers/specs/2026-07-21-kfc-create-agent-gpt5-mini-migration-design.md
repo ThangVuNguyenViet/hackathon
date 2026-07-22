@@ -375,7 +375,7 @@ New hybrid-runtime tests cover:
 10. Fix required existing blockers: D1 millisecond lease precision, 60-second memory boundary, deadline failure precedence, named latency signals, membership durable-resume test setup, observability category mappings, typing, and formatting.
 11. Run the complete offline quality gate.
 12. Run paid scenarios 03, 07, and 01 with GPT-5 mini.
-13. Run the complete nine-scenario/46-turn Text replay with `--maxConcurrency=9`.
+13. Run the complete 11-scenario/50-turn Text replay serially.
 14. Deploy only if every required gate passes.
 
 ## Verification gates

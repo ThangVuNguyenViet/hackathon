@@ -939,9 +939,10 @@ KFC_LIVE_OUTCOME_JUDGE_PROVIDER=openai \
 npm --prefix services/kfc-agent-backend run test:live:scenarios
 ```
 
-The package script already supplies `--maxConcurrency=9`.
+The live scenario matrix runs serially so provider latency in one scenario does
+not consume another scenario's turn deadline.
 
-Expected: nine scenario tests and all 46 canonical turns pass in one run.
+Expected: 11 scenario tests and all 50 canonical turns pass in one run.
 
 - [ ] **Step 2: Record demo evidence**
 
