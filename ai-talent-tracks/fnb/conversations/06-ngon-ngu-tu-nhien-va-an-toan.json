@@ -27,7 +27,7 @@
     {
       "index": 4,
       "speaker": "Bot",
-      "text": "Dạ được. Bạn muốn đổi 2 miếng gà cay lúc nãy sang gà không cay, hay muốn xem thêm burger không cay và không thêm phô mai?",
+      "text": "Bạn có thể đổi sang 2 miếng Gà Giòn Không Cay. Nếu muốn burger, Burger Gà Yo (không cay) cũng phù hợp và mình sẽ không thêm phô mai. Bạn thích gà hay burger hơn?",
       "useCases": ["UC-32"]
     },
     {

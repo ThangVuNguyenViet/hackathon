@@ -2,7 +2,7 @@
   "id": "09-phuong-thuc-thanh-toan",
   "title": "09: Phương thức thanh toán website/app",
   "channel": "kfc",
-  "goal": "User hỏi các phương thức thanh toán, bot tra cứu fixture chính sách thanh toán đã crawl và phân biệt MoMo không được liệt kê cho checkout website/app.",
+  "goal": "User hỏi các phương thức thanh toán, bot tra cứu dữ liệu thanh toán được quản trị và trả lời trực tiếp rằng website/app KFC không hỗ trợ MoMo.",
   "useCases": ["UC-16"],
   "finalState": "payment_methods_answered",
   "turns": [
@@ -27,14 +27,14 @@
     {
       "index": 4,
       "speaker": "Bot",
-      "text": "Dạ, hiện mình chưa thấy MoMo trong các phương thức thanh toán được công bố trên website hoặc ứng dụng KFC. Bạn có thể chọn thanh toán khi nhận hàng, thẻ ATM nội địa, thẻ Visa/Master hoặc ZaloPay nhé.",
+      "text": "Hiện website và ứng dụng KFC không hỗ trợ thanh toán bằng MoMo. Bạn có thể chọn thanh toán khi nhận hàng, thẻ ATM nội địa, thẻ Visa/Master hoặc ZaloPay nhé.",
       "useCases": ["UC-16"]
     }
   ],
   "expectations": [
     "Bot dùng tool `listPaymentMethods` để trả lời, không suy diễn từ bộ nhớ hoặc heuristic.",
     "Bot nêu đúng các phương thức đang được liệt kê trong fixture chính sách thanh toán.",
-    "Bot trả lời MoMo là không được liệt kê cho checkout website/app.",
+    "Bot trả lời trực tiếp rằng website/app KFC không hỗ trợ MoMo.",
     "Bot không tạo order hoặc payment link cho MoMo."
   ]
 }

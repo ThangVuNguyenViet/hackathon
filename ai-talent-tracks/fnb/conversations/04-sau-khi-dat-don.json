@@ -51,7 +51,7 @@
     {
       "index": 8,
       "speaker": "Bot",
-      "text": "Dạ mình sẽ kiểm tra trạng thái đơn. Nếu đơn chưa được chuẩn bị, mình sẽ thêm 1 khoai vào đơn hiện tại. Nếu đơn đã xử lý, mình có thể tạo đơn bổ sung cho bạn.",
+      "text": "Đơn hiện chưa được chuẩn bị nên vẫn có thể thêm 1 khoai tây chiên. Bạn xác nhận muốn thêm món này vào đơn hiện tại nhé?",
       "useCases": ["UC-26"]
     },
     {

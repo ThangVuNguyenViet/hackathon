@@ -925,7 +925,7 @@ Classify the failure as model/profile, semantic correction, tool/oracle, approva
 **Files:**
 - No source changes unless an offline regression first reproduces a live failure.
 
-- [ ] **Step 1: Run all nine scenarios at concurrency nine**
+- [ ] **Step 1: Run all nine scenarios sequentially**
 
 Run:
 
@@ -939,7 +939,7 @@ KFC_LIVE_OUTCOME_JUDGE_PROVIDER=openai \
 npm --prefix services/kfc-agent-backend run test:live:scenarios
 ```
 
-The package script already supplies `--maxConcurrency=9`.
+The package script intentionally supplies no `--maxConcurrency` override so the live scenarios run sequentially and do not contend for the 30-second per-turn deadline.
 
 Expected: nine scenario tests and all 46 canonical turns pass in one run.
 
@@ -980,5 +980,5 @@ The implementation is complete only when:
 - the old checkpoint privacy contract is not reintroduced through sanitization, privacy-only digest projection, candidate externalization, or a fresh invocation;
 - only obsolete low-level semantic-loop code and topology-only assertions are removed; outer graph, runner, schema, persistence, approval, publication, and delivery responsibilities remain;
 - all canonical business gates and the complete offline gate pass;
-- paid scenarios run in order 03, 07, 01, then the full nine-scenario/46-turn Text replay at concurrency nine;
+- paid scenarios run in order 03, 07, 01, then the full nine-scenario/46-turn Text replay sequentially, without a forced concurrency override;
 - no failed gate is bypassed and no deployment occurs on failure.

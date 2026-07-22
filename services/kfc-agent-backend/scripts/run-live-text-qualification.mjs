@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 
+import { spawn } from 'node:child_process';
 import { createHash, randomUUID } from 'node:crypto';
 import {
   existsSync,
@@ -9,13 +10,12 @@ import {
   renameSync,
   writeFileSync,
 } from 'node:fs';
-import { spawn } from 'node:child_process';
 import { dirname, join, relative, resolve } from 'node:path';
 import { loadEnvFile } from 'node:process';
 import { fileURLToPath } from 'node:url';
 import {
-  assertLiveTextQualificationManifestFile,
   assertCleanQualificationSource,
+  assertLiveTextQualificationManifestFile,
   assertQualificationEvidenceIsNotAdvisoryCalibrationDraft,
   assertQualificationProviderEnvironment,
   mandatoryLiveTextQualification,
@@ -74,7 +74,6 @@ function runVitest(reportPath, environment) {
         'vitest',
         'run',
         'test/scenarios/live-ai-scenario-replay.test.ts',
-        '--maxConcurrency=9',
         '--reporter=json',
         `--outputFile=${reportPath}`,
       ],

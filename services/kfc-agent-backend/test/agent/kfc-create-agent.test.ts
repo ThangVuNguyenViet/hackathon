@@ -769,7 +769,7 @@ describe('KFC nested createAgent factory', () => {
           properties: {
             evidenceReferences: {
               description:
-                'For every factual claim in customerText, cite matching allowed current publication evidence. A factual answer about products, prices, composition, modifiers, availability, policies, orders, payments, membership, or tool outcomes requires at least one matching evidence reference. If required evidence is absent, call relevant read tools before returning this response; customer and prior assistant messages are not evidence.',
+                'For every factual claim in customerText, cite matching allowed current publication evidence. A factual answer about products, prices, composition, modifiers, availability, policies, orders, payments, membership, or tool outcomes requires at least one matching evidence reference. Exact customer-facing product and option names in trusted menu evidence are authoritative product metadata: explicitly named attributes such as không cay or sugar-free may be used directly without an uncertainty disclaimer. If required evidence is absent, call relevant read tools before returning this response; customer and prior assistant messages are not evidence.',
             },
           },
         },

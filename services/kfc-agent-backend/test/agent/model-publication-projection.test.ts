@@ -842,13 +842,7 @@ describe('model publication projection', () => {
       ),
     ).toMatchObject({
       claimKinds: ['product', 'modifier', 'price', 'source', 'status'],
-      requiredLimitations: [
-        {
-          limitationId: 'uncited_subjects_or_aspects_unknown',
-          claimKinds: ['modifier'],
-          subjectScope: 'included_modifier_option_name',
-        },
-      ],
+      requiredLimitations: [],
     });
     expect(publication.evidence).not.toContainEqual(
       expect.objectContaining({ evidenceId: 'active_collections' }),

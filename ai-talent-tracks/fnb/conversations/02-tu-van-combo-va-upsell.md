@@ -12,9 +12,9 @@
 | Lượt | Người nói | Nội dung | Use case |
 |---:|---|---|---|
 | 1 | User | Không biết ăn gì, gợi ý cho nhóm 4 người với, ngân sách khoảng 300k. | UC-02, UC-03, UC-11, UC-13 |
-| 2 | Bot | Dạ mình sẽ tìm các lựa chọn cho 4 người trong khoảng 300.000đ. Bạn thích gà rán, burger hay món cơm? Nếu muốn mình cũng có thể gợi ý thêm món tráng miệng. | UC-02, UC-03, UC-11, UC-13 |
+| 2 | Bot | Với nhóm 4 người và khoảng 300.000đ, 2 Combo Đẫy Đà 129K là một lựa chọn vừa ngân sách. Bạn thích ưu tiên gà rán, burger hay món cơm để mình gợi ý sát hơn? | UC-02, UC-03, UC-11, UC-13 |
 | 3 | User | Không cần thêm món tráng miệng. Cho mình xem toàn bộ menu trước; hôm nay có ưu đãi gì phù hợp không? | UC-04, UC-09 |
-| 4 | Bot | Dạ mình sẽ lấy menu theo danh mục để bạn xem và kiểm tra các ưu đãi đang áp dụng cho đơn nhóm dưới 300.000đ. Mình chỉ đề xuất những ưu đãi phù hợp với nhu cầu của bạn. | UC-04, UC-09 |
+| 4 | Bot | Menu có các nhóm gà rán, burger, cơm, combo, món ăn nhẹ và nước. Với nhóm 4 người khoảng 300.000đ, 2 Combo Đẫy Đà 129K có tổng 258.000đ và là lựa chọn phù hợp ngân sách. | UC-04, UC-09 |
 | 5 | User | Món gà nào bán chạy? Nếu gọi lẻ thì cho mình 10 miếng gà rán và 4 Pepsi tiêu chuẩn. | UC-12 |
 | 6 | Bot | Dạ 10 miếng gà rán và 4 Pepsi tiêu chuẩn gọi lẻ tạm tính 404.000đ. Mình thấy 2 Combo Đẫy Đà 129K có đúng 10 miếng gà rán và 4 Pepsi tiêu chuẩn, tổng 258.000đ, tiết kiệm 146.000đ và phù hợp ngân sách hơn. Mình chưa đổi giỏ; bạn có muốn đổi sang 2 combo này không? | UC-12 |
 | 7 | User | Hợp lý đó, đổi sang 2 Combo Đẫy Đà 129K giúp mình. | Filler |

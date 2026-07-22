@@ -84,37 +84,16 @@ const toolResponseEvidenceContracts = {
   searchMenu: {
     claimKinds: ['product', 'modifier', 'price', 'source', 'status'],
     requiredScopes: [],
-    requiredLimitations: [
-      {
-        limitationId: 'uncited_subjects_or_aspects_unknown',
-        claimKinds: ['modifier'],
-        subjectScope: 'included_modifier_option_name',
-      },
-    ],
     privateData: false,
   },
   getItemDetails: {
     claimKinds: ['product', 'modifier', 'price', 'source', 'status'],
     requiredScopes: [],
-    requiredLimitations: [
-      {
-        limitationId: 'uncited_subjects_or_aspects_unknown',
-        claimKinds: ['modifier'],
-        subjectScope: 'included_modifier_option_name',
-      },
-    ],
     privateData: false,
   },
   getModifierOptions: {
     claimKinds: ['product', 'modifier', 'price', 'source', 'status'],
     requiredScopes: [],
-    requiredLimitations: [
-      {
-        limitationId: 'uncited_subjects_or_aspects_unknown',
-        claimKinds: ['modifier'],
-        subjectScope: 'included_modifier_option_name',
-      },
-    ],
     privateData: false,
   },
   updateCart: {
@@ -144,13 +123,6 @@ const toolResponseEvidenceContracts = {
   recommendAddOns: {
     claimKinds: ['product', 'modifier', 'price', 'source', 'status'],
     requiredScopes: [],
-    requiredLimitations: [
-      {
-        limitationId: 'uncited_subjects_or_aspects_unknown',
-        claimKinds: ['modifier'],
-        subjectScope: 'included_modifier_option_name',
-      },
-    ],
     privateData: false,
   },
   findStores: {
@@ -322,7 +294,8 @@ const toolResponseEvidenceContracts = {
 export function responseEvidenceContractForTool(
   toolName: ToolName,
 ): ResolvedToolResponseEvidenceContract {
-  const contract = toolResponseEvidenceContracts[toolName];
+  const contract: ToolResponseEvidenceContract =
+    toolResponseEvidenceContracts[toolName];
   return {
     claimKinds: [...contract.claimKinds] as [
       ResponseClaimKind,
@@ -330,16 +303,14 @@ export function responseEvidenceContractForTool(
     ],
     requiredScopes: [...contract.requiredScopes],
     requiredLimitations:
-      'requiredLimitations' in contract
-        ? contract.requiredLimitations.map((requirement) => ({
-            limitationId: requirement.limitationId,
-            claimKinds: [...requirement.claimKinds] as [
-              ResponseClaimKind,
-              ...ResponseClaimKind[],
-            ],
-            subjectScope: requirement.subjectScope,
-          }))
-        : [],
+      contract.requiredLimitations?.map((requirement) => ({
+        limitationId: requirement.limitationId,
+        claimKinds: [...requirement.claimKinds] as [
+          ResponseClaimKind,
+          ...ResponseClaimKind[],
+        ],
+        subjectScope: requirement.subjectScope,
+      })) ?? [],
     currentSessionCheckout:
       'currentSessionCheckout' in contract &&
       contract.currentSessionCheckout === true,

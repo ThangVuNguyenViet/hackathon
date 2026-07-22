@@ -307,10 +307,10 @@ describe('loadScenarioScript', () => {
       /thanh toán khi nhận hàng.*ZaloPay/i,
     );
     expect(paymentMethods.turns[3]?.text).toMatch(
-      /chưa thấy MoMo.*phương thức thanh toán.*công bố.*website hoặc ứng dụng KFC/i,
+      /website và ứng dụng KFC không hỗ trợ thanh toán bằng MoMo/i,
     );
     expect(paymentMethods.turns[3]?.text).not.toMatch(
-      /KFC chưa hỗ trợ thanh toán bằng MoMo/i,
+      /KFC không hỗ trợ thanh toán bằng MoMo trên mọi kênh/i,
     );
   });
 

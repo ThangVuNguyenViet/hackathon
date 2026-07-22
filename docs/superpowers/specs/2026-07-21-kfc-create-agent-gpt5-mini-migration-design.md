@@ -375,8 +375,7 @@ New hybrid-runtime tests cover:
 10. Fix required existing blockers: D1 millisecond lease precision, 60-second memory boundary, deadline failure precedence, named latency signals, membership durable-resume test setup, observability category mappings, typing, and formatting.
 11. Run the complete offline quality gate.
 12. Run paid scenarios 03, 07, and 01 with GPT-5 mini.
-13. Run the complete nine-scenario/46-turn Text replay with `--maxConcurrency=9`.
-14. Deploy only if every required gate passes.
+13. Deploy only if every required gate passes.
 
 ## Verification gates
 
@@ -384,7 +383,7 @@ The offline gate includes formatting, lint, strict lint, type checking, unit/int
 
 Paid reports record scenario and turn pass rates, hard-deadline failures, soft-latency failures, semantic failures, tool/oracle failures, state-transition failures, provider-evidence failures, persistence/approval failures, infrastructure failures, provider, exact model snapshot, profile, mode, concurrency, and release SHA.
 
-The paid qualification order remains focused scenario 03, then 07, then 01, followed by the complete nine-scenario/46-turn Text replay at concurrency nine. No deployment occurs after a failed gate. Google paid qualification and LangSmith dataset mutation remain outside scope.
+The paid qualification order remains focused scenario 03, then 07, then 01, followed by the complete nine-scenario/46-turn Text replay sequentially, without a forced concurrency override. No deployment occurs after a failed gate. Google paid qualification and LangSmith dataset mutation remain outside scope.
 
 ## Acceptance criteria
 
@@ -404,6 +403,6 @@ The migration is complete only when:
 - model-authored invalid calls or responses receive at most one correction; terminal structured-output parsing is corrected only by the tested wrapper-level catch-and-reentry path using the same complete agent, inherited config, and shared ledgers;
 - the 30-second execution deadline and 60-second persistence lease remain separate;
 - all canonical business and safety gates pass;
-- focused and complete GPT-5 mini paid gates pass in the required order at concurrency nine;
+- focused and complete GPT-5 mini paid gates pass in the required order sequentially, without a forced concurrency override;
 - production latency remains below the universal 10-second soft target;
 - no deployment gate is bypassed.

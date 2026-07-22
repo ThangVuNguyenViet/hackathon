@@ -460,7 +460,7 @@ describe('response publication boundary', () => {
       .parse(JSON.parse(modelPublicationContext(bundle, null)));
 
     expect(context.responseContract.requiredShape.customerText).toBe(
-      'Directly answer the latest customer request as the assistant using relevant verified publication evidence. Write only customer-useful prose in the customer language. Never expose schema field names, enum values, evidence identifiers, source labels, validation bookkeeping, tool terminology, or graph state terminology. Render uncertainty naturally without copying internal labels. If the customer asks for advice without an action, comply silently instead of repeating that no cart or order change occurred. Do not copy, concatenate, or merely restate customer messages or the conversation transcript.',
+      'Directly answer the latest customer request as the assistant using relevant verified publication evidence. Give the concrete requested facts; never evade by saying they are present in the menu, match displayed names, or are available in evidence. Write only customer-useful prose in the customer language. Never expose schema field names, enum values, evidence identifiers, source labels, validation bookkeeping, tool terminology, or graph state terminology. Render uncertainty naturally without copying internal labels. If the customer asks for advice without an action, comply silently instead of repeating that no cart or order change occurred. Do not copy, concatenate, or merely restate customer messages or the conversation transcript.',
     );
   });
 
@@ -482,7 +482,7 @@ describe('response publication boundary', () => {
     expect(
       context.responseContract.requiredShape.factualClaims.evidenceReferences,
     ).toBe(
-      'For every factual claim in customerText, cite matching allowed current publication evidence. A factual answer about products, prices, composition, modifiers, availability, policies, orders, payments, membership, or tool outcomes requires at least one matching evidence reference. If required evidence is absent, call relevant read tools before returning this response; customer and prior assistant messages are not evidence.',
+      'For every factual claim in customerText, cite matching allowed current publication evidence. A factual answer about products, prices, composition, modifiers, availability, policies, orders, payments, membership, or tool outcomes requires at least one matching evidence reference. Exact customer-facing product and option names in trusted menu evidence are authoritative product metadata: explicitly named attributes such as không cay or sugar-free may be used directly without an uncertainty disclaimer. If required evidence is absent, call relevant read tools before returning this response; customer and prior assistant messages are not evidence.',
     );
   });
 
@@ -720,154 +720,26 @@ describe('response publication boundary', () => {
     });
   });
 
-  it('requires disclosure when cited evidence has bounded subject or aspect coverage', async () => {
+  it('accepts a concrete combo explanation from trusted menu metadata', async () => {
     const bundle = await boundedCatalogPublicationBundle();
-    const evidenceReference = {
-      evidenceId: 'active_collection:searchMenu',
-      claimKinds: ['modifier'],
-    };
-
-    expect(
-      validateGroundedResponse({
-        raw: groundedResponse(bundle, {
-          factualClaims: {
-            evidenceReferences: [evidenceReference],
-            disclosedLimitations: [],
-            hasUnsupportedFactualClaim: false,
-          },
-        }),
-        bundle,
-      }),
-    ).toEqual({
-      ok: false,
-      errorCode: 'agent_response_evidence_limitation_mismatch',
-    });
-
-    const disclosure = {
-      limitationId: 'uncited_subjects_or_aspects_unknown',
-      coverageStatus: 'unknown_or_unverified',
-      evidenceSubject: 'Combo Hợp Gu 99K',
-      customerCriterion: 'not spicy',
-      unverifiedAspect: 'spice level',
-      customerDisclosure:
-        'Whether Combo Hợp Gu 99K is not spicy is unverified because its spice level is unknown.',
-    };
-    const genericDisclosure = {
-      ...disclosure,
-      evidenceSubject: 'uncited subjects or aspects',
-      customerCriterion: 'unknown or unverified',
-      unverifiedAspect: 'unknown or unverified',
-      customerDisclosure:
-        'Uncited subjects or aspects are unknown or unverified.',
-    };
-    const offQuestionDisclosure = {
-      ...disclosure,
-      customerCriterion: 'modifier options beyond defaults',
-      unverifiedAspect: 'modifier options beyond defaults',
-      customerDisclosure:
-        'Combo Hợp Gu 99K modifier options beyond defaults are unverified.',
-    };
-    expect(
-      validateGroundedResponse({
-        raw: groundedResponse(bundle, {
-          customerText: genericDisclosure.customerDisclosure,
-          factualClaims: {
-            evidenceReferences: [evidenceReference],
-            disclosedLimitations: [genericDisclosure],
-            hasUnsupportedFactualClaim: false,
-          },
-        }),
-        bundle,
-      }),
-    ).toEqual({
-      ok: false,
-      errorCode: 'agent_response_evidence_limitation_mismatch',
+    const evidence = bundle.evidence.find(
+      ({ evidenceId }) => evidenceId === 'active_collection:searchMenu',
+    );
+    expect(evidence).toMatchObject({
+      claimKinds: ['product', 'modifier', 'price', 'source', 'status'],
+      requiredLimitations: [],
     });
 
     expect(
       validateGroundedResponse({
         raw: groundedResponse(bundle, {
-          customerText: offQuestionDisclosure.customerDisclosure,
-          factualClaims: {
-            evidenceReferences: [evidenceReference],
-            disclosedLimitations: [offQuestionDisclosure],
-            hasUnsupportedFactualClaim: false,
-          },
-        }),
-        bundle,
-        currentUserMessage: 'I want something not spicy.',
-      }),
-    ).toEqual({
-      ok: false,
-      errorCode: 'agent_response_evidence_limitation_mismatch',
-    });
-
-    expect(
-      validateGroundedResponse({
-        raw: groundedResponse(bundle, {
-          factualClaims: {
-            evidenceReferences: [evidenceReference],
-            disclosedLimitations: [disclosure],
-            hasUnsupportedFactualClaim: false,
-          },
-        }),
-        bundle,
-        currentUserMessage: 'I want something not spicy.',
-      }),
-    ).toEqual({
-      ok: false,
-      errorCode: 'agent_response_evidence_limitation_mismatch',
-    });
-
-    expect(
-      validateGroundedResponse({
-        raw: groundedResponse(bundle, {
-          customerText: disclosure.customerDisclosure,
-          factualClaims: {
-            evidenceReferences: [evidenceReference],
-            disclosedLimitations: [disclosure],
-            hasUnsupportedFactualClaim: false,
-          },
-        }),
-        bundle,
-        currentUserMessage: 'I want something not spicy.',
-      }),
-    ).toEqual({
-      ok: false,
-      errorCode: 'agent_response_evidence_limitation_mismatch',
-    });
-
-    const modifierDisclosure = {
-      ...disclosure,
-      evidenceSubject: 'Pepsi Không Calo',
-      customerCriterion: 'caffeine-free',
-      unverifiedAspect: 'caffeine content',
-      customerDisclosure:
-        'The available menu does not state the caffeine content of Pepsi Không Calo, so I cannot verify whether it is caffeine-free.',
-    };
-    expect(
-      validateGroundedResponse({
-        raw: groundedResponse(bundle, {
-          customerText: modifierDisclosure.customerDisclosure,
-          factualClaims: {
-            evidenceReferences: [evidenceReference],
-            disclosedLimitations: [modifierDisclosure],
-            hasUnsupportedFactualClaim: false,
-          },
-        }),
-        bundle,
-        currentUserMessage: 'I want a caffeine-free drink.',
-      }),
-    ).toMatchObject({ ok: true });
-
-    expect(
-      validateGroundedResponse({
-        raw: groundedResponse(bundle, {
+          customerText:
+            'Combo Hợp Gu 99K gồm 3 miếng gà rán, 1 Burger Tôm và lựa chọn Pepsi Không Calo.',
           factualClaims: {
             evidenceReferences: [
               {
                 evidenceId: 'active_collection:searchMenu',
-                claimKinds: ['price'],
+                claimKinds: ['product', 'modifier'],
               },
             ],
             disclosedLimitations: [],
@@ -875,13 +747,7 @@ describe('response publication boundary', () => {
           },
         }),
         bundle,
-      }),
-    ).toMatchObject({ ok: true });
-
-    expect(
-      validateGroundedResponse({
-        raw: groundedResponse(bundle),
-        bundle,
+        currentUserMessage: 'Combo này có gì?',
       }),
     ).toMatchObject({ ok: true });
   });
@@ -966,54 +832,22 @@ describe('response publication boundary', () => {
     ).toMatchObject({ ok: true });
   });
 
-  it('rejects an optional criterion-matching modifier as the unresolved composite subject', async () => {
+  it('accepts an explicitly named non-spicy option as trusted product metadata', async () => {
     const bundle = await compositeCatalogPublicationBundle();
-    const evidenceReference = {
-      evidenceId: 'active_collection:searchMenu',
-      claimKinds: ['modifier'],
-    };
-    const invalidDisclosure = {
-      limitationId: 'uncited_subjects_or_aspects_unknown',
-      coverageStatus: 'unknown_or_unverified',
-      evidenceSubject: 'Gà Giòn Không Cay',
-      customerCriterion: 'không cay',
-      unverifiedAspect: 'modifier option availability',
-      customerDisclosure:
-        'Mình chưa có thông tin rõ Gà Giòn Không Cay có cay hay không.',
-    };
 
     expect(
       validateGroundedResponse({
         raw: groundedResponse(bundle, {
-          customerText: invalidDisclosure.customerDisclosure,
+          customerText:
+            'Bạn có thể chọn Gà Giòn Không Cay cho lựa chọn không cay.',
           factualClaims: {
-            evidenceReferences: [evidenceReference],
-            disclosedLimitations: [invalidDisclosure],
-            hasUnsupportedFactualClaim: false,
-          },
-        }),
-        bundle,
-        currentUserMessage: 'Mình muốn ăn không cay thì nên chọn combo nào?',
-      }),
-    ).toEqual({
-      ok: false,
-      errorCode: 'agent_response_evidence_limitation_mismatch',
-    });
-
-    const validDisclosure = {
-      ...invalidDisclosure,
-      evidenceSubject: '1 Miếng Gà Lắc Tiêu Chanh',
-      unverifiedAspect: 'modifier option spice-level coverage',
-      customerDisclosure:
-        'Mình chưa có thông tin rõ 1 Miếng Gà Lắc Tiêu Chanh có cay hay không.',
-    };
-    expect(
-      validateGroundedResponse({
-        raw: groundedResponse(bundle, {
-          customerText: validDisclosure.customerDisclosure,
-          factualClaims: {
-            evidenceReferences: [evidenceReference],
-            disclosedLimitations: [validDisclosure],
+            evidenceReferences: [
+              {
+                evidenceId: 'active_collection:searchMenu',
+                claimKinds: ['product', 'modifier'],
+              },
+            ],
+            disclosedLimitations: [],
             hasUnsupportedFactualClaim: false,
           },
         }),

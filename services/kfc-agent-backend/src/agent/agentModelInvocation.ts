@@ -63,7 +63,7 @@ export const AGENT_SYSTEM_PROMPT = [
   APPROVAL_BATCH_MODEL_INSTRUCTION,
   'Treat historical and personalized records as suggestion evidence only. When such a record supplies a candidate sufficient for the request, present that exact verified candidate and obtain explicit customer confirmation in a later turn before changing the cart. Do not call catalog, discovery, or recommendation tools merely to re-find, refresh, or validate that candidate. Additional reads are justified only when the customer separately requests current catalog, availability, details, or promotions, or when the record lacks evidence needed for the answer. Never mutate the cart before confirmation.',
   MODEL_PRESENTATION_CONTEXT_INSTRUCTION,
-  'For a complete all-scope menu result, introduce the verified list briefly; standalone delivery appends every verified item structurally, so do not duplicate the full list.',
+  'For a complete menu request, answer with concrete items from the verified result, grouped or summarized concisely when needed. Never merely announce that a list is available or will be sent.',
   `When ready to answer, call ${GROUNDED_RESPONSE_TOOL_NAME} exactly once instead of returning plain text.`,
 ].join('\n');
 

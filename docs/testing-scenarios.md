@@ -266,9 +266,9 @@ Mirror copy: `ai-talent-tracks/fnb/conversations/01-dat-mon-ro-rang-giao-hang.md
 | Turn | Speaker | Text                                                                                                                                                                                                                          | Use cases                  |
 | ---: | ------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------- |
 |    1 | User    | Không biết ăn gì, gợi ý cho nhóm 4 người với, ngân sách khoảng 300k.                                                                                                                                                          | UC-02, UC-03, UC-11, UC-13 |
-|    2 | Bot     | Dạ mình sẽ tìm các lựa chọn cho 4 người trong khoảng 300.000đ. Bạn thích gà rán, burger hay món cơm? Nếu muốn mình cũng có thể gợi ý thêm món tráng miệng.                                                                    | UC-02, UC-03, UC-11, UC-13 |
+|    2 | Bot     | Với nhóm 4 người và khoảng 300.000đ, 2 Combo Đẫy Đà 129K là một lựa chọn vừa ngân sách. Bạn thích ưu tiên gà rán, burger hay món cơm để mình gợi ý sát hơn?                                                                | UC-02, UC-03, UC-11, UC-13 |
 |    3 | User    | Không cần thêm món tráng miệng. Cho mình xem toàn bộ menu trước; hôm nay có ưu đãi gì phù hợp không?                                                                                                                          | UC-04, UC-09               |
-|    4 | Bot     | Dạ mình sẽ lấy menu theo danh mục để bạn xem và kiểm tra các ưu đãi đang áp dụng cho đơn nhóm dưới 300.000đ. Mình chỉ đề xuất những ưu đãi phù hợp với nhu cầu của bạn.                                                       | UC-04, UC-09               |
+|    4 | Bot     | Menu có các nhóm gà rán, burger, cơm, combo, món ăn nhẹ và nước. Với nhóm 4 người khoảng 300.000đ, 2 Combo Đẫy Đà 129K có tổng 258.000đ và là lựa chọn phù hợp ngân sách.                                                     | UC-04, UC-09               |
 |    5 | User    | Món gà nào bán chạy? Nếu gọi lẻ thì cho mình 10 miếng gà rán và 4 Pepsi tiêu chuẩn.                                                                                                                                           | UC-12                      |
 |    6 | Bot     | Dạ, gọi lẻ 10 miếng gà rán và 4 Pepsi tiêu chuẩn sẽ là 404.000đ. Nếu chọn 2 Combo Đẫy Đà 129K, bạn vẫn có đủ 10 miếng gà và 4 Pepsi nhưng tổng chỉ 258.000đ, tiết kiệm 146.000đ. Bạn có muốn mình đổi sang 2 combo này không? | UC-12                      |
 |    7 | User    | Hợp lý đó, đổi sang 2 Combo Đẫy Đà 129K giúp mình.                                                                                                                                                                            | Filler                     |
@@ -336,7 +336,7 @@ Mirror copy: `ai-talent-tracks/fnb/conversations/03-ton-kho-dia-chi-va-cua-hang.
 |    5 | User    | Khoảng bao lâu tới?                                                                                                                                                | UC-21     |
 |    6 | Bot     | Dạ thời gian giao dự kiến là 25-30 phút nữa, tùy tình trạng giao hàng thực tế.                                                                                     | UC-21     |
 |    7 | User    | Mình thêm 1 khoai nữa được không?                                                                                                                                  | UC-26     |
-|    8 | Bot     | Dạ mình sẽ kiểm tra trạng thái đơn. Nếu đơn chưa được chuẩn bị, mình sẽ thêm 1 khoai vào đơn hiện tại. Nếu đơn đã xử lý, mình có thể tạo đơn bổ sung cho bạn.      | UC-26     |
+|    8 | Bot     | Đơn hiện chưa được chuẩn bị nên vẫn có thể thêm 1 khoai tây chiên. Bạn xác nhận muốn thêm món này vào đơn hiện tại nhé?                                        | UC-26     |
 |    9 | User    | Mình muốn hủy đơn vừa đặt.                                                                                                                                         | UC-20     |
 |   10 | Bot     | Dạ đơn của bạn hiện chưa được chuẩn bị, mình có thể hỗ trợ hủy đơn. Bạn xác nhận muốn hủy đơn này không ạ?                                                         | UC-20     |
 |   11 | User    | Nếu đơn đã chuẩn bị hoặc đang giao rồi thì sao, mình vẫn muốn hủy.                                                                                                 | UC-20     |
@@ -399,8 +399,8 @@ Mirror copy: `ai-talent-tracks/fnb/conversations/05-khieu-nai-va-human-handoff.m
 | ---: | ------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------- |
 |    1 | User    | Cho tui 2 gà kai vs 1 pesi nha.                                                                                                                                                                            | UC-31     |
 |    2 | Bot     | Dạ mình hiểu là bạn muốn đặt 2 miếng gà cay và 1 Pepsi đúng không ạ?                                                                                                                                       | UC-31     |
-|    3 | User    | Ừ. Món nào không cay với không có phô mai vậy?                                                                                                                                                             | UC-32     |
-|    4 | Bot     | Dạ mình có thể gợi ý các món không cay và không có phô mai. Tuy nhiên, để đảm bảo an toàn về thành phần, mình khuyến nghị bạn kiểm tra lại thông tin dị ứng với nhân viên cửa hàng trước khi xác nhận đơn. | UC-32     |
+|    3 | User    | Ừ. Mình thích món không cay và không thêm phô mai, gợi ý giúp mình với.                                                                                                                                    | UC-32     |
+|    4 | Bot     | Bạn có thể đổi sang 2 miếng Gà Giòn Không Cay. Nếu muốn burger, Burger Gà Yo (không cay) cũng phù hợp và mình sẽ không thêm phô mai. Bạn thích gà hay burger hơn?                                      | UC-32     |
 |    5 | User    | abcxyz haha                                                                                                                                                                                                | UC-33     |
 |    6 | Bot     | Dạ mình là trợ lý đặt món KFC. Hiện mình có thể hỗ trợ bạn xem menu, gợi ý combo, đặt món, theo dõi đơn hàng hoặc kết nối nhân viên. Bạn muốn mình hỗ trợ phần nào ạ?                                      | UC-33     |
 |    7 | User    | Cho mình cái đó đi.                                                                                                                                                                                        | UC-34     |
@@ -413,7 +413,7 @@ Mirror copy: `ai-talent-tracks/fnb/conversations/05-khieu-nai-va-human-handoff.m
 Expectations:
 
 - Bot hiểu tiếng lóng/sai chính tả nhưng phải xác nhận lại.
-- Bot không cam kết tuyệt đối về dị ứng nếu dữ liệu chưa đủ.
+- Yêu cầu không cay và không thêm phô mai là sở thích thông thường; bot không suy diễn thành dị ứng hoặc cam kết an toàn y khoa.
 - Spam hoặc nội dung ngoài phạm vi không tạo đơn.
 - Câu mơ hồ phải dẫn tới clarification hoặc lịch sử đơn, không tự thêm món.
 - Bot từ chối yêu cầu thông tin cá nhân và đề xuất kênh hỗ trợ chính thức.
@@ -488,20 +488,20 @@ Mirror copy: `ai-talent-tracks/fnb/conversations/08-thanh-toan-loi-va-don-bat-th
 - Channel: `kfc`
 - Final state: `payment_methods_answered`
 - Use cases: UC-16
-- Goal: User hỏi các phương thức thanh toán; bot dùng nội dung được quản trị để phân biệt phương thức được công bố cho website hoặc ứng dụng KFC với phương thức chưa thấy trong danh sách.
+- Goal: User hỏi các phương thức thanh toán; bot dùng dữ liệu được quản trị để trả lời trực tiếp phương thức nào được hỗ trợ trên website hoặc ứng dụng KFC.
 
 | Turn | Speaker | Text                                                                                                                                                                                        | Use cases |
 | ---: | ------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------- |
 |    1 | User    | KFC có những phương thức thanh toán nào trên website/app?                                                                                                                                   | UC-16     |
 |    2 | Bot     | Trên website hoặc ứng dụng KFC, bạn có thể thanh toán khi nhận hàng, bằng thẻ ATM nội địa, thẻ Visa/Master hoặc ZaloPay.                                                                    | UC-16     |
 |    3 | User    | Vậy thanh toán MoMo được không?                                                                                                                                                             | UC-16     |
-|    4 | Bot     | Hiện mình chưa thấy MoMo trong các phương thức thanh toán được công bố trên website hoặc ứng dụng KFC. Bạn có thể chọn thanh toán khi nhận hàng, thẻ ATM nội địa, Visa/Master hoặc ZaloPay. | UC-16     |
+|    4 | Bot     | Hiện website và ứng dụng KFC không hỗ trợ thanh toán bằng MoMo. Bạn có thể chọn thanh toán khi nhận hàng, thẻ ATM nội địa, thẻ Visa/Master hoặc ZaloPay nhé.                | UC-16     |
 
 Expectations:
 
 - Bot dùng tool `listPaymentMethods` để trả lời, không suy diễn từ bộ nhớ hoặc heuristic.
 - Bot nêu đúng các phương thức được công bố trong nội dung thanh toán được quản trị.
-- Bot giới hạn câu trả lời về MoMo ở việc chưa thấy phương thức này trong danh sách website hoặc ứng dụng, không suy diễn thành tuyên bố hỗ trợ toàn cục.
+- Bot trả lời trực tiếp rằng website hoặc ứng dụng KFC không hỗ trợ MoMo, nhưng không suy diễn thành tuyên bố về mọi kênh thanh toán khác.
 - Bot không tạo order hoặc payment link cho MoMo.
 
 Mirror copy: `ai-talent-tracks/fnb/conversations/09-phuong-thuc-thanh-toan.md`

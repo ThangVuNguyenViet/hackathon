@@ -217,7 +217,7 @@ grep -q 'publication_identity_revalidation' "$ROOT_DIR/scripts/run-kfc-deployed-
 grep -q 'Qualified Worker identity changed before publication' "$ROOT_DIR/scripts/run-kfc-deployed-acceptance.sh"
 grep -q 'Qualified Pages identity changed before publication' "$ROOT_DIR/scripts/run-kfc-deployed-acceptance.sh"
 grep -q "latency/report.json" "$ROOT_DIR/scripts/run-kfc-deployed-acceptance.sh"
-! grep -q -- '--maxConcurrency=1' "$ROOT_DIR/services/kfc-agent-backend/package.json"
+! grep -q -- '--maxConcurrency' "$ROOT_DIR/services/kfc-agent-backend/package.json"
 grep -q 'rehearsalNumber !== 1' "$ROOT_DIR/scripts/lib/kfc-acceptance-checks.mjs"
 grep -q 'final-run.json' "$ROOT_DIR/scripts/run-kfc-deployed-acceptance.sh"
 test "$(grep -c 'KFC_GENUI_BRANCH_SESSIONS=' "$ROOT_DIR/scripts/run-kfc-deployed-acceptance.sh")" -eq 1

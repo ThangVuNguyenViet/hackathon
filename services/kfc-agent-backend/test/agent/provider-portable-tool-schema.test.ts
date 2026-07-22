@@ -123,6 +123,11 @@ describe('provider-portable commerce tool schemas', () => {
   });
 
   it('publishes strict state-specific selected-action response contracts', () => {
+    expect(
+      JSON.stringify(ordinaryGroundedResponseToolDefinition.schema),
+    ).toContain(
+      'Give the concrete requested facts; never evade by saying they are present in the menu, match displayed names, or are available in evidence',
+    );
     expect(ordinaryGroundedResponseToolDefinition.description).toContain(
       'factualClaims: { evidenceReferences, disclosedLimitations, hasUnsupportedFactualClaim }',
     );
@@ -133,7 +138,7 @@ describe('provider-portable commerce tool schemas', () => {
       'Include no disclosedLimitations limitationId that is not required by cited evidence',
     );
     expect(ordinaryGroundedResponseToolDefinition.description).toContain(
-      'For uncited_subjects_or_aspects_unknown, bind a concrete evidenceSubject from cited evidence and a concrete customerCriterion excerpt verbatim from the latest customer request in structured metadata, name the internal unverifiedAspect, and write customerDisclosure as a natural sentence in the customer language that states the relevant uncertainty without copying internal field names or enum values; never rank or recommend based on an unknown criterion, and never infer an attribute or likelihood from a product or component name, omitted field, or missing option',
+      'Exact customer-facing product and option names in trusted menu evidence may directly support attributes explicitly present in those names. Do not infer an attribute from an omitted field, a missing option, or metadata that does not state it',
     );
     expect(ordinaryGroundedResponseToolDefinition.description).toContain(
       'When a required limitation has subjectScope included_modifier_option_name, evidenceSubject must exactly equal the name of a nested included modifier option whose modifierId is present and whose default is true; never use the enclosing product name, a modifier-group name, or an unselected alternative',

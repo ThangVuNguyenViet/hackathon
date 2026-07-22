@@ -1,18 +1,12 @@
-import { createHash } from 'node:crypto';
 import { execFileSync } from 'node:child_process';
+import { createHash } from 'node:crypto';
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
-import { join } from 'node:path';
 import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
-import { qualificationAgentModelProfiles } from '../../src/config/agentModelProfile.js';
 import {
-  buildLiveQualityDatasetCases,
-  liveQualityInventoryDigest,
-} from '../../src/evaluation/liveQualityDataset.js';
-import { LIVE_QUALITY_INVENTORY_VERSION } from '../../src/evaluation/liveQualityContracts.js';
-import {
-  assertLiveTextQualificationManifestFile,
   assertCleanQualificationSource,
+  assertLiveTextQualificationManifestFile,
   assertQualificationProviderEnvironment,
   mandatoryLiveTextQualification,
   officialOpenAiQualificationBaseUrl,
@@ -24,6 +18,12 @@ import {
   resolveQualificationConcurrency,
   runQualificationJobs,
 } from '../../scripts/lib/kfc-qualification-concurrency.mjs';
+import { qualificationAgentModelProfiles } from '../../src/config/agentModelProfile.js';
+import { LIVE_QUALITY_INVENTORY_VERSION } from '../../src/evaluation/liveQualityContracts.js';
+import {
+  buildLiveQualityDatasetCases,
+  liveQualityInventoryDigest,
+} from '../../src/evaluation/liveQualityDataset.js';
 import { liveScenarioCases } from '../scenarios/scenarioCoverageLedger.js';
 
 const gitSha = 'a'.repeat(40);
@@ -1099,7 +1099,6 @@ describe('mandatory live text qualification artifact', () => {
         "const value = assertObject(manifest, 'live text qualification manifest');",
       ),
     );
-    expect(runner).toContain("'--maxConcurrency=9'");
     expect(
       runner.match(
         /assertCleanQualificationSource\(repositoryRoot, gitSha\)/gu,
@@ -1118,8 +1117,9 @@ describe('mandatory live text qualification artifact', () => {
     expect(packageJson.scripts['test:live:scenarios']).toContain(
       'RUN_LIVE_AI_SCENARIOS=1',
     );
-    expect(packageJson.scripts['test:live:scenarios']).toContain(
-      '--maxConcurrency=9',
+    expect(runner).not.toContain('--maxConcurrency');
+    expect(packageJson.scripts['test:live:scenarios']).not.toContain(
+      '--maxConcurrency',
     );
     expect(workflow).toContain(
       'Run mandatory OpenAI and Google text qualification (3 repetitions)',

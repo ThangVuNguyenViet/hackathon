@@ -47,7 +47,7 @@
     {
       "index": 2,
       "speaker": "Bot",
-      "text": "Dạ mình sẽ tìm các lựa chọn cho 4 người trong khoảng 300.000đ. Bạn thích gà rán, burger hay món cơm? Nếu muốn mình cũng có thể gợi ý thêm món tráng miệng.",
+      "text": "Với nhóm 4 người và khoảng 300.000đ, 2 Combo Đẫy Đà 129K là một lựa chọn vừa ngân sách. Bạn thích ưu tiên gà rán, burger hay món cơm để mình gợi ý sát hơn?",
       "useCases": ["UC-02", "UC-03", "UC-11", "UC-13"]
     },
     {
@@ -59,7 +59,7 @@
     {
       "index": 4,
       "speaker": "Bot",
-      "text": "Dạ, mình sẽ gửi menu theo từng nhóm món để bạn dễ xem. Với ngân sách khoảng 300.000đ cho 4 người, mình cũng sẽ chỉ ra những ưu đãi phù hợp nhất nhé.",
+      "text": "Menu có các nhóm gà rán, burger, cơm, combo, món ăn nhẹ và nước. Với nhóm 4 người khoảng 300.000đ, 2 Combo Đẫy Đà 129K có tổng 258.000đ và là lựa chọn phù hợp ngân sách.",
       "useCases": ["UC-04", "UC-09"]
     },
     {
