@@ -739,7 +739,7 @@ describe("Cloudflare Worker backend", () => {
     );
   });
 
-  it("keeps social routing and its monitor judge on their respective Worker response paths", async () => {
+  it("uses the direct OpenAI agent path for first-party KFC Worker chat", async () => {
     const db = new FakeD1Database();
     const backgroundWork: Promise<unknown>[] = [];
     const modelCalls = new Map<string, number>();
@@ -778,6 +778,34 @@ describe("Cloudflare Worker backend", () => {
           }),
         });
       }
+      if (body.model === "openai-agent-test") {
+        return Response.json({
+          id: "resp_worker_direct_agent",
+          object: "response",
+          status: "completed",
+          output_text: "model direct reply",
+          output: [
+            {
+              id: "msg_worker_direct_agent",
+              type: "message",
+              role: "assistant",
+              status: "completed",
+              content: [
+                {
+                  type: "output_text",
+                  text: "model direct reply",
+                  annotations: [],
+                },
+              ],
+            },
+          ],
+          usage: {
+            input_tokens: 12,
+            output_tokens: 3,
+            total_tokens: 15,
+          },
+        });
+      }
       throw new Error(`Unexpected OpenAI model: ${body.model}`);
     });
     vi.stubGlobal("fetch", openAiFetch);
@@ -797,6 +825,7 @@ describe("Cloudflare Worker backend", () => {
           DB: db,
           OPENAI_API_KEY: "test_key",
           OPENAI_BASE_URL: "https://openai.local/v1",
+          OPENAI_MODEL: "openai-agent-test",
           OPENAI_SMALL_TALK_ROUTER_MODEL: "small-talk-router-test",
           OPENAI_MONITOR_JUDGE_MODEL: "monitor-judge-test",
         }),
@@ -805,21 +834,23 @@ describe("Cloudflare Worker backend", () => {
 
       expect(response.status).toBe(200);
       expect(await response.json()).toMatchObject({
-        responseText: "model social reply",
+        agentRuntime: "openai-responses",
+        responseText: "model direct reply",
         sessionId: "kfc:worker_social_contract",
         customerId: "worker_social_contract",
       });
-      expect(modelCalls.get("small-talk-router-test")).toBe(1);
+      expect(modelCalls.get("openai-agent-test")).toBe(1);
+      expect(modelCalls.get("small-talk-router-test")).toBeUndefined();
 
       await Promise.all([...backgroundWork]);
       await Promise.all([...backgroundWork]);
 
-      expect(modelCalls.get("monitor-judge-test")).toBe(1);
+      expect(modelCalls.get("monitor-judge-test")).toBeUndefined();
       expect(
         db.tables.dashboard_events.filter(
           (event) => event.type === "session_intelligence_updated",
         ),
-      ).toHaveLength(2);
+      ).toHaveLength(0);
     } finally {
       vi.unstubAllGlobals();
     }

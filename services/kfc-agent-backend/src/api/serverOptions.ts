@@ -1,7 +1,15 @@
 import type { BuildServerOptions } from "./server.js";
 import type { AppEnv } from "../config/env.js";
+import OpenAI from "openai";
+import {
+  OpenAiKfcAgent,
+  type ResponsesClientLike,
+} from "../agent/openAiKfcAgent.js";
 import { OpenAIMonitorJudge } from "../llm/monitorJudge.js";
-import { OpenAIContentSemanticRanker } from "../llm/contentSemanticRanker.js";
+import {
+  OpenAIContentSemanticRanker,
+  type EmbeddingsClientLike,
+} from "../llm/contentSemanticRanker.js";
 import { OpenAIResponseComposer } from "../llm/responseComposer.js";
 import { OpenAISmallTalkRouter } from "../llm/smallTalkRouter.js";
 import { OpenAIToolPlanner } from "../llm/toolPlanner.js";
@@ -19,6 +27,9 @@ function optionalValue(value: string | undefined): string | undefined {
 export function buildServerOptionsFromEnv(env: AppEnv): BuildServerOptions {
   const openAiApiKey = optionalValue(env.OPENAI_API_KEY);
   const openAiBaseUrl = optionalValue(env.OPENAI_BASE_URL);
+  const openAiClient = openAiApiKey
+    ? new OpenAI({ apiKey: openAiApiKey, baseURL: openAiBaseUrl })
+    : undefined;
   const plannerProvider = env.TOOL_PLANNER_PROVIDER;
   const plannerModel = optionalValue(env.TOOL_PLANNER_MODEL) ?? env.OPENAI_TOOL_PLANNER_MODEL;
   const plannerFastModel = optionalValue(env.TOOL_PLANNER_FAST_MODEL) ?? env.OPENAI_TOOL_PLANNER_FAST_MODEL;
@@ -75,6 +86,12 @@ export function buildServerOptionsFromEnv(env: AppEnv): BuildServerOptions {
     zaloAccessToken: optionalValue(env.ZALO_ACCESS_TOKEN),
     zaloInboxUrlTemplate: optionalValue(env.ZALO_INBOX_URL_TEMPLATE),
     zaloApiBaseUrl: optionalValue(env.ZALO_API_BASE_URL),
+    openAiAgent: openAiClient
+      ? new OpenAiKfcAgent({
+          client: openAiClient as unknown as ResponsesClientLike,
+          model: env.OPENAI_MODEL,
+        })
+      : undefined,
     responseComposer: openAiApiKey
       ? new OpenAIResponseComposer({
           apiKey: openAiApiKey,
@@ -115,9 +132,7 @@ export function buildServerOptionsFromEnv(env: AppEnv): BuildServerOptions {
     mockClientOptions: openAiApiKey
       ? {
           contentSemanticRanker: new OpenAIContentSemanticRanker({
-            apiKey: openAiApiKey,
-            baseUrl: openAiBaseUrl,
-            diagnosticContext: openAiDiagnosticContext,
+            client: openAiClient as unknown as EmbeddingsClientLike,
           }),
         }
       : undefined,

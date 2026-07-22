@@ -1,39 +1,27 @@
-import { z } from 'zod';
 import type { ContentEvidence } from '../ordering/types.js';
-import {
-  assertOpenAiResponseOk,
-  createOpenAiRequestMetadata,
-  openAiRequestHeaders,
-  type OpenAiDiagnosticContext,
-} from './openAiDiagnostics.js';
 
 export interface ContentSemanticRanker {
   rank(query: string, candidates: ContentEvidence[]): Promise<ContentEvidence[]>;
 }
 
 export interface OpenAIContentSemanticRankerOptions {
-  apiKey: string;
-  baseUrl?: string;
-  fetchImpl?: typeof fetch;
-  timeoutMs?: number;
-  diagnosticContext?: OpenAiDiagnosticContext;
+  client: EmbeddingsClientLike;
 }
 
-const embeddingResponseSchema = z.object({
-  data: z.array(z.object({
-    index: z.number().int().nonnegative(),
-    embedding: z.array(z.number()),
-  })),
-});
+export interface EmbeddingsClientLike {
+  embeddings: {
+    create(request: {
+      model: string;
+      input: string[];
+      encoding_format: 'float';
+    }): Promise<{
+      data: Array<{ index: number; embedding: number[] }>;
+    }>;
+  };
+}
 
 const model = 'text-embedding-3-small';
-const defaultBaseUrl = 'https://api.openai.com/v1';
-const defaultTimeoutMs = 4_000;
 const resultLimit = 3;
-
-function trimTrailingSlash(value: string): string {
-  return value.endsWith('/') ? value.slice(0, -1) : value;
-}
 
 function candidateKey(candidate: ContentEvidence): string {
   return candidate.contentHash ?? `${candidate.id}:${candidate.snippet}`;
@@ -62,19 +50,11 @@ function cosineSimilarity(left: number[], right: number[]): number {
 }
 
 export class OpenAIContentSemanticRanker implements ContentSemanticRanker {
-  private readonly apiKey: string;
-  private readonly baseUrl: string;
-  private readonly fetchImpl: typeof fetch;
-  private readonly timeoutMs: number;
-  private readonly diagnosticContext?: OpenAiDiagnosticContext;
+  private readonly client: EmbeddingsClientLike;
   private readonly candidateEmbeddings = new Map<string, number[]>();
 
   constructor(options: OpenAIContentSemanticRankerOptions) {
-    this.apiKey = options.apiKey;
-    this.baseUrl = trimTrailingSlash(options.baseUrl ?? defaultBaseUrl);
-    this.fetchImpl = options.fetchImpl ?? ((input, init) => fetch(input, init));
-    this.timeoutMs = options.timeoutMs ?? defaultTimeoutMs;
-    this.diagnosticContext = options.diagnosticContext;
+    this.client = options.client;
   }
 
   async rank(query: string, candidates: ContentEvidence[]): Promise<ContentEvidence[]> {
@@ -111,32 +91,13 @@ export class OpenAIContentSemanticRanker implements ContentSemanticRanker {
   }
 
   private async createEmbeddings(input: string[]): Promise<number[][]> {
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), this.timeoutMs);
-    const requestMetadata = createOpenAiRequestMetadata(
-      'content semantic ranker',
+    const response = await this.client.embeddings.create({
       model,
-      this.diagnosticContext,
-    );
-    try {
-      const response = await this.fetchImpl(`${this.baseUrl}/embeddings`, {
-        method: 'POST',
-        signal: controller.signal,
-        headers: openAiRequestHeaders(this.apiKey, requestMetadata),
-        body: JSON.stringify({
-          model,
-          input,
-          encoding_format: 'float',
-        }),
-      });
-      const body: unknown = await response.json().catch(() => ({}));
-      assertOpenAiResponseOk(response, body, requestMetadata);
-      const parsed = embeddingResponseSchema.parse(body);
-      return parsed.data
-        .sort((left, right) => left.index - right.index)
-        .map(({ embedding }) => embedding);
-    } finally {
-      clearTimeout(timeout);
-    }
+      input,
+      encoding_format: 'float',
+    });
+    return response.data
+      .sort((left, right) => left.index - right.index)
+      .map(({ embedding }) => embedding);
   }
 }

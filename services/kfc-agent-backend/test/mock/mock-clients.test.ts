@@ -35,9 +35,9 @@ describe('mock clients', () => {
 
   it('searches Vietnamese menu fixtures and builds priced carts', async () => {
     const clients = createMockClients(fixtures);
-    const search = await clients.menu.searchMenu('Combo 99K');
+    const search = await clients.menu.searchMenu({ query: 'Combo 99K' });
     expect(search.ok).toBe(true);
-    expect(search.value?.[0]?.code).toBe('20751');
+    expect(search.value?.items[0]?.code).toBe('20751');
 
     const cart = await clients.cart.createCart('session_1');
     const updated = await clients.cart.updateCart(cart.value!, '20751', 2);
@@ -136,12 +136,12 @@ describe('mock clients', () => {
 
   it('matches menu items from AI-normalized item text', async () => {
     const clients = createMockClients(fixtures);
-    const search = await clients.menu.searchMenu('Combo Hợp Gu 99K');
-    const addMoreSearch = await clients.menu.searchMenu('Combo Hợp Gu 99K');
+    const search = await clients.menu.searchMenu({ query: 'Combo Hợp Gu 99K' });
+    const addMoreSearch = await clients.menu.searchMenu({ query: 'Combo Hợp Gu 99K' });
 
     expect(search.ok).toBe(true);
-    expect(search.value?.[0]?.code).toBe('20751');
-    expect(addMoreSearch.value?.[0]?.code).toBe('20751');
+    expect(search.value?.items[0]?.code).toBe('20751');
+    expect(addMoreSearch.value?.items[0]?.code).toBe('20751');
   });
 
   it('honors store item exclusions when checking inventory', async () => {
@@ -257,7 +257,7 @@ describe('mock clients', () => {
     expect(details.value?.modifierGroups.length).toBeGreaterThan(0);
   });
 
-  it('exposes fixture-backed modifier metadata through menu search and item details', async () => {
+  it('keeps menu search compact while item details expose fixture-backed modifier metadata', async () => {
     const generated = await loadGeneratedFixtures(process.cwd());
     const tree = generated.menuModifiers.find((candidate) => candidate.modifierGroups[0]?.options[0]);
     expect(tree).toBeDefined();
@@ -265,19 +265,16 @@ describe('mock clients', () => {
     expect(item).toBeDefined();
     const clients = createMockClients(generated);
 
-    const search = await clients.menu.searchMenu(item!.name);
-    const result = search.value?.find((candidate) => candidate.code === item!.code);
+    const search = await clients.menu.searchMenu({ query: item!.name });
+    const result = search.value?.items.find((candidate) => candidate.code === item!.code);
     const details = await clients.menu.getItemDetails(item!.code);
 
     expect(result).toMatchObject({
-      itemId: item!.itemId,
-      productCode: item!.productCode,
       isCustomize: item!.isCustomize,
-      isQuickCombo: item!.isQuickCombo,
       hasModifiers: true,
-      modifierGroups: expect.any(Array),
     });
-    expect(details.value?.modifierGroups).toEqual(result?.modifierGroups);
+    expect(result).not.toHaveProperty('modifierGroups');
+    expect(details.value?.modifierGroups).toEqual(expect.any(Array));
   });
 
   it('applies fixture-backed demo-stable KFC50 validation', async () => {

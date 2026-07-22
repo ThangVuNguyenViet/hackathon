@@ -68,6 +68,7 @@ describe('buildServerOptionsFromEnv', () => {
         'https://oa.zalo.me/chatv2?oaid={pageId}&uid={externalUserId}',
       zaloApiBaseUrl: 'https://zalo.local',
       demoAdminToken: 'demo_admin_local',
+      openAiAgent: expect.any(Object),
       responseComposer: expect.any(Object),
       toolPlanner: expect.any(Object),
       smallTalkRouter: expect.any(Object),
@@ -88,6 +89,7 @@ describe('buildServerOptionsFromEnv', () => {
     } as NodeJS.ProcessEnv);
 
     expect(buildServerOptionsFromEnv(env).responseComposer).toBeUndefined();
+    expect(buildServerOptionsFromEnv(env).openAiAgent).toBeUndefined();
     expect(buildServerOptionsFromEnv(env).toolPlanner).toBeUndefined();
     expect(buildServerOptionsFromEnv(env).smallTalkRouter).toBeUndefined();
     expect(buildServerOptionsFromEnv(env).mockClientOptions).toBeUndefined();

@@ -258,7 +258,7 @@ describe('recent live conversation regressions', () => {
     expect(output.genUi?.widgetKind).toBe('smartMenuPicker');
   });
 
-  it('suggests modifier-compatible combos for an ambiguous spicy-combo request without selecting one', async () => {
+  it('suggests compact deterministic combos for an ambiguous spicy-combo request without selecting one', async () => {
     const fixtures = await loadGeneratedFixtures(process.cwd());
     const output = await runAgentTurn({
       sessionId: 'kfc:spicy_combo_modifier_search',
@@ -279,29 +279,12 @@ describe('recent live conversation regressions', () => {
 
     expect(output.state.cart).toBeUndefined();
     expect(output.genUi?.widgetKind).toBe('smartMenuPicker');
-    expect(output.genUi?.data.items).toEqual(expect.arrayContaining([
-      expect.objectContaining({
-        code: '20751',
-        name: 'Combo Hợp Gu 99K',
-        modifierGroups: expect.arrayContaining([
-          expect.objectContaining({
-            options: expect.arrayContaining([
-              expect.objectContaining({
-                modifierGroups: expect.arrayContaining([
-                  expect.objectContaining({
-                    options: expect.arrayContaining([
-                      expect.objectContaining({ name: 'Gà Giòn Cay', priceDeltaVnd: 0 }),
-                      expect.objectContaining({ name: 'Gà Giòn Không Cay', priceDeltaVnd: 0 }),
-                    ]),
-                  }),
-                ]),
-              }),
-            ]),
-          }),
-        ]),
-      }),
-      expect.objectContaining({ code: '20752', name: 'Combo Đẫy Đà 129K' }),
-    ]));
+    const genUiItems = output.genUi?.data.items as Array<Record<string, unknown> & { name: string; category: string }>;
+    expect(genUiItems.length).toBeGreaterThan(0);
+    expect(genUiItems.every((item) =>
+      `${item.name} ${item.category}`.toLowerCase().includes('combo'),
+    )).toBe(true);
+    expect(genUiItems.every((item) => !('modifierGroups' in item))).toBe(true);
   });
 
   it('uses current modifier-aware catalog evidence for a social menu question instead of stale order results', async () => {

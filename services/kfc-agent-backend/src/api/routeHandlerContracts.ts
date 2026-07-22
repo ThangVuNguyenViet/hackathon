@@ -3,6 +3,7 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { z } from "zod";
 import type { BaseCheckpointSaver } from "@langchain/langgraph";
+import type { OpenAiKfcAgent } from "../agent/openAiKfcAgent.js";
 import type {
   ChannelMediaDeliveryResult,
   ExternalClients,
@@ -313,6 +314,7 @@ export interface RouteOptions {
   monitorJudge?: MonitorSessionIntelligenceJudge;
   agentTracer?: AgentTracer;
   checkpointer?: BaseCheckpointSaver;
+  openAiAgent?: OpenAiKfcAgent;
   defer?: (task: () => Promise<void>) => void;
   customerRunPaceMs?: number;
   customerRunMaxTextEvents?: number;

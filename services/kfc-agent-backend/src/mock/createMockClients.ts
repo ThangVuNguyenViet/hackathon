@@ -119,7 +119,7 @@ export function createMockClients(fixtures: GeneratedFixtures, options: MockClie
   const providerRevision = (): string => `mock:${JSON.stringify(currentMockedUpstreamProfile() ?? {})}`;
   const currentUnavailableItemCodes = (): Set<string> =>
     new Set(currentMockedUpstreamProfile()?.unavailableItemCodes ?? []);
-  const applyCurrentMenuAvailability = <T extends MenuItem>(item: T): T =>
+  const applyCurrentMenuAvailability = <T extends { code: string; available: boolean }>(item: T): T =>
     currentUnavailableItemCodes().has(item.code)
       ? { ...item, available: false }
       : item;
@@ -422,8 +422,10 @@ export function createMockClients(fixtures: GeneratedFixtures, options: MockClie
           );
         }
       },
-      async searchMenu(query) {
-        return ok(data.searchMenu(query).map(toMenuItem).map(applyCurrentMenuAvailability));
+      async searchMenu(input) {
+        const result = data.searchMenuTool(input);
+        const items = result.items.map(applyCurrentMenuAvailability).filter((item) => item.available);
+        return ok({ ...result, total: items.length, items });
       },
       async getItemDetails(code) {
         const item = data.getMenuItem(code);

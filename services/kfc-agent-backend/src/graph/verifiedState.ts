@@ -417,8 +417,19 @@ export function applyToolResultToState(
       emitSessionUpdate(input, { updateType: 'promotion_answered' });
       return;
     case 'searchMenu': {
-      const nextResults = result.value;
-      const isSpecificLookup = typeof args.query === 'string' && args.query.trim().length > 0;
+      const detailedByCode = new Map(
+        [...(state.menuSearchResults ?? []), ...(state.plannerMenuSearchResults ?? [])]
+          .filter((item) => item.modifierGroups?.length)
+          .map((item) => [item.code, item]),
+      );
+      const nextResults = result.value.items.map((item) => ({
+        ...item,
+        originalPriceVnd: item.originalPriceVnd ?? null,
+        ...(detailedByCode.get(item.code)?.modifierGroups
+          ? { modifierGroups: detailedByCode.get(item.code)!.modifierGroups }
+          : {}),
+      }));
+      const isSpecificLookup = result.value.mode === 'search' && typeof args.query === 'string' && args.query.trim().length > 0;
       if (!isSpecificLookup) {
         state.menuSearchResults = nextResults;
         state.plannerMenuSearchResults = nextResults.slice(0, 24);

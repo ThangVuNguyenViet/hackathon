@@ -580,10 +580,15 @@ export async function planNaturalLanguageTurn(
               ? { fulfillment: { storeId: uniqueLocation.storeId, disposition: uniqueLocation.method } }
               : {}),
           }),
-          input.clients.menu.searchMenu(call.arguments.query),
+          input.clients.menu.searchMenu({ query: call.arguments.query }),
         ]);
         if (planningResult.ok && planningResult.value) focusedCandidates.push(...planningResult.value.candidates);
-        if (searchResult.ok && searchResult.value) focusedMenuResults.push(...searchResult.value.slice(0, 3));
+        if (searchResult.ok && searchResult.value) {
+          focusedMenuResults.push(...searchResult.value.items.slice(0, 3).map((item) => ({
+            ...item,
+            originalPriceVnd: item.originalPriceVnd ?? null,
+          })));
+        }
       }
       const seenPlanningCodes = new Set<string>();
       menuCatalogContext = {

@@ -2,17 +2,18 @@ import type { ExternalClients } from '../clients/interfaces.js';
 import type {
   Address,
   Cart,
+  Channel,
   CustomerAccessContext,
   CustomerAccessScope,
   Order,
   ToolResult,
   ToolSideEffectClass,
 } from '../domain/types.js';
-import type { AgentGraphState } from '../graph/state.js';
 import { authorizeCustomerAccess } from '../security/customerAccessContext.js';
 import { parseToolArguments, toolArgumentSchemas } from './toolCatalog.js';
 import type {
   CartWithModifiers,
+  FulfillmentState,
   SourceProvenance,
   ToolCallFailure,
   ToolCallRequest,
@@ -22,13 +23,29 @@ import type {
   ToolResultByName,
 } from './types.js';
 
-interface ExecutorContext {
-  state?: AgentGraphState;
-  accessContext?: CustomerAccessContext;
+export interface ToolExecutionState {
+  sessionId: string;
+  customerId: string;
+  channel: Channel;
   cart?: CartWithModifiers;
   address?: Address;
   order?: Order;
   orderPreview?: Order;
+  fulfillment?: FulfillmentState;
+  userConfirmedOrder?: boolean;
+}
+
+export interface ExecutorContext {
+  state?: ToolExecutionState;
+  accessContext?: CustomerAccessContext;
+  customerId?: string;
+  channel?: Channel;
+  cart?: CartWithModifiers;
+  address?: Address;
+  order?: Order;
+  orderPreview?: Order;
+  fulfillment?: FulfillmentState;
+  userConfirmedOrder?: boolean;
   sessionId?: string;
   clientMessageId?: string;
   commerceTraceId?: string;
@@ -145,7 +162,7 @@ function buildVoucherCart(subtotalVnd: number): Cart {
 }
 
 function normalizeExecution(
-  requestOrState: ToolCallRequest | AgentGraphState,
+  requestOrState: ToolCallRequest | ToolExecutionState,
   maybeRequest?: ToolCallRequest,
   maybeContext?: ExecutorContext,
 ): { request: ToolCallRequest; context: ExecutorContext } {
@@ -219,13 +236,13 @@ export async function executeToolCall(
 ): Promise<ToolCallResult>;
 export async function executeToolCall(
   clients: ExternalClients,
-  state: AgentGraphState,
+  state: ToolExecutionState,
   request: ToolCallRequest,
   context?: ExecutorContext,
 ): Promise<ToolCallResult>;
 export async function executeToolCall(
   clients: ExternalClients,
-  requestOrState: ToolCallRequest | AgentGraphState,
+  requestOrState: ToolCallRequest | ToolExecutionState,
   maybeRequestOrContext?: ToolCallRequest | ExecutorContext,
   maybeContext?: ExecutorContext,
 ): Promise<ToolCallResult> {
@@ -244,14 +261,15 @@ export async function executeToolCall(
   const order = getOrder(context);
   const orderPreview = getOrderPreview(context);
   const sessionId = getSessionId(context);
-  const customerId = context.state?.customerId;
+  const customerId = context.customerId ?? context.state?.customerId;
+  const channel = context.channel ?? context.state?.channel;
   const requiredScope = privateToolScopes[request.toolName];
   if (requiredScope) {
-    if (!sessionId || !customerId || !context.state?.channel) {
+    if (!sessionId || !customerId || !channel) {
       return result(request, false, undefined, 'Trusted customer access context is required', 'authentication_required');
     }
     const access = authorizeCustomerAccess(context.accessContext, {
-      channel: context.state.channel,
+      channel,
       sessionId,
       customerId,
       scope: requiredScope,
@@ -279,7 +297,7 @@ export async function executeToolCall(
   switch (request.toolName) {
     case 'searchMenu': {
       const args = toolArgumentSchemas.searchMenu.parse(request.arguments);
-      return resultFromToolResult(request.toolName, await clients.menu.searchMenu(args.query));
+      return resultFromToolResult(request.toolName, await clients.menu.searchMenu(args));
     }
     case 'getItemDetails': {
       const args = toolArgumentSchemas.getItemDetails.parse(request.arguments);
@@ -382,12 +400,13 @@ export async function executeToolCall(
     case 'previewOrder':
       if (!cart) return result(request, false, undefined, 'Cart is required before previewOrder', 'cart_required');
       if (!address) return result(request, false, undefined, 'Address is required before previewOrder', 'address_required');
-      if (!context.state?.fulfillment?.storeId) {
+      const fulfillment = context.fulfillment ?? context.state?.fulfillment;
+      if (!fulfillment?.storeId) {
         return result(request, false, undefined, 'Fulfillment store is required before previewOrder', 'fulfillment_required');
       }
       return resultFromToolResult(
         request.toolName,
-        await clients.oms.previewOrder({ cart, address, storeId: context.state.fulfillment.storeId }),
+        await clients.oms.previewOrder({ cart, address, storeId: fulfillment.storeId }),
       );
     case 'placeOrder':
       if (!orderPreview) {
@@ -397,7 +416,7 @@ export async function executeToolCall(
         request.toolName,
         await clients.oms.placeOrder({
           preview: orderPreview,
-          userConfirmed: context.state?.userConfirmedOrder ?? false,
+          userConfirmed: context.userConfirmedOrder ?? context.state?.userConfirmedOrder ?? false,
           context:
             context.sessionId && context.clientMessageId
               ? {

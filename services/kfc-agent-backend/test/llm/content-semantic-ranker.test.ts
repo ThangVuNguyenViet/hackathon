@@ -34,19 +34,17 @@ describe('OpenAIContentSemanticRanker', () => {
       ],
       [[0, 1]],
     ];
-    const fetchImpl = vi.fn<typeof fetch>(async (_input, init) => {
-      const input = JSON.parse(String(init?.body)).input as string[];
+    const create = vi.fn(async ({ input }: { input: string[] }) => {
       const embeddings = responses.shift();
       expect(embeddings).toBeDefined();
-      expect(input).toHaveLength(embeddings?.length ?? 0);
-      return new Response(JSON.stringify({
-        data: embeddings?.map((embedding, index) => ({ index, embedding })),
-      }), { status: 200 });
+      if (!embeddings) throw new Error('Missing fake embedding response');
+      expect(input).toHaveLength(embeddings.length);
+      return {
+        data: embeddings.map((embedding, index) => ({ index, embedding })),
+      };
     });
     const ranker = new OpenAIContentSemanticRanker({
-      apiKey: 'test-key',
-      baseUrl: 'https://openai.example/v1',
-      fetchImpl,
+      client: { embeddings: { create } },
     });
 
     await expect(ranker.rank('How is my information protected?', candidates))
@@ -54,12 +52,12 @@ describe('OpenAIContentSemanticRanker', () => {
     await expect(ranker.rank('food sensitivity details', candidates))
       .resolves.toEqual([candidates[0], candidates[3], candidates[2]]);
 
-    expect(fetchImpl).toHaveBeenCalledTimes(2);
-    expect(fetchImpl).toHaveBeenNthCalledWith(
+    expect(create).toHaveBeenCalledTimes(2);
+    expect(create).toHaveBeenNthCalledWith(
       2,
-      'https://openai.example/v1/embeddings',
       expect.objectContaining({
-        body: expect.stringContaining('"input":["food sensitivity details"]'),
+        input: ['food sensitivity details'],
+        model: 'text-embedding-3-small',
       }),
     );
   });

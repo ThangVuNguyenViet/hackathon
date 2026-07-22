@@ -40,7 +40,21 @@ const addressSchema = z
   }));
 
 export const toolArgumentSchemas = {
-  searchMenu: z.object({ query: z.string().optional().default('') }).strict(),
+  searchMenu: z.object({
+    query: z.string().optional().default('').describe(
+      'Complete customer menu request, preserving product, combo, group-size, drink, and budget wording.',
+    ),
+    mode: z.enum(['search', 'full']).optional().default('search').describe(
+      'Use full only when the customer asks to see the complete menu; otherwise use search.',
+    ),
+    category: z.string().min(1).optional().describe('Optional exact menu category filter.'),
+    maxPriceVnd: z.number().int().nonnegative().optional().describe(
+      'Maximum item price in VND when the customer states a budget.',
+    ),
+    partySize: z.number().int().positive().optional().describe(
+      'Number of people when the customer asks for a group recommendation.',
+    ),
+  }).strict(),
   getItemDetails: z.object({ code: z.string().min(1) }).strict(),
   getModifierOptions: z.object({ code: z.string().min(1) }).strict(),
   updateCart: z.union([

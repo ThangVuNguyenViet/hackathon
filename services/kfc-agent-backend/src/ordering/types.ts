@@ -28,6 +28,36 @@ export type Disposition = "pickup" | "delivery";
 export type FulfillmentMethod = "pickup" | "delivery";
 export type ContentKind = "promotion" | "news" | "allergen" | "policy";
 
+export type MenuSearchMode = 'search' | 'full';
+
+export interface MenuSearchInput {
+  query?: string;
+  mode?: MenuSearchMode;
+  category?: string;
+  maxPriceVnd?: number;
+  partySize?: number;
+}
+
+export interface CompactMenuItem {
+  code: string;
+  name: string;
+  category: string;
+  description: string;
+  priceVnd: number;
+  originalPriceVnd?: number;
+  imageUrl: string;
+  available: boolean;
+  isCustomize: boolean;
+  hasModifiers: boolean;
+}
+
+export interface MenuSearchResult {
+  mode: MenuSearchMode;
+  query: string;
+  total: number;
+  items: CompactMenuItem[];
+}
+
 export interface SourceProvenance {
   fixtureMode: FixtureMode;
   sourceFile: string;
@@ -315,7 +345,7 @@ export interface ToolCallRequest {
 }
 
 export interface ToolResultByName {
-  searchMenu: MenuItem[];
+  searchMenu: MenuSearchResult;
   getItemDetails: MenuItem;
   getModifierOptions: GeneratedMenuModifier;
   updateCart: Cart;

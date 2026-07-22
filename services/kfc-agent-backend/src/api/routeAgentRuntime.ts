@@ -3,6 +3,13 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { z } from "zod";
 import type { BaseCheckpointSaver } from "@langchain/langgraph";
+import {
+  createKfcOpenAiTools,
+  createKfcToolSession,
+  verifiedKfcToolSessionContext,
+  type KfcToolSession,
+} from "../agent/kfcOpenAiTools.js";
+import { selectKfcOpenAiGenUi } from "../agent/kfcOpenAiGenUi.js";
 import type {
   ChannelMediaDeliveryResult,
   ExternalClients,
@@ -91,6 +98,7 @@ import {
   sessionIdForConversationEvent,
 } from "../session/sessionContext.js";
 import {
+  buildChannelPresentation,
   textOnlyPresentation,
   type ChannelPresentationPlan,
 } from "../presentation/channelPresentation.js";
@@ -108,6 +116,7 @@ export type StreamingRunObservers = Map<string, { observe: (observation: Custome
 
 export function createRouteAgentRuntime(input: { options: RouteOptions; store: ConversationStore; dashboard: DashboardEventBus; showcase: ShowcaseService | undefined; streamingRunObservers: StreamingRunObservers } & RouteCommerceRuntime) {
   const { options, store, dashboard, showcase, streamingRunObservers, getFixtures, withConfiguredCommerce, createWebhookClients, createDeliveryClients, dashboardProfileForTarget, createFirstPartyKfcClients, kfcProofAccessContext, latestKfcProofPreconditions } = input;
+  const openAiToolSessions = new Map<string, { clients: ExternalClients; session: KfcToolSession }>();
   async function kfcAgentResponse(input: {
     sessionId: string;
     customerId: string;
@@ -183,6 +192,65 @@ export function createRouteAgentRuntime(input: { options: RouteOptions; store: C
           agentMode: sessionControl.agentMode,
         },
       };
+    }
+
+    if (options.openAiAgent) {
+      let toolRuntime = openAiToolSessions.get(input.sessionId);
+      if (!toolRuntime) {
+        const clients = await createFirstPartyKfcClients(input.sessionId, trustedMetadata);
+        toolRuntime = {
+          clients,
+          session: await createKfcToolSession(clients, input.sessionId, input.customerId, "kfc"),
+        };
+        openAiToolSessions.set(input.sessionId, toolRuntime);
+      }
+      const directOutput = await options.openAiAgent.respond({
+        sessionId: input.sessionId,
+        customerId: input.customerId,
+        channel: "kfc",
+        text: input.text,
+        externalMessageId: input.clientMessageId,
+        metadata: trustedMetadata,
+        store,
+        verifiedBusinessContext: verifiedKfcToolSessionContext(toolRuntime.session),
+        tools: createKfcOpenAiTools({
+          clients: toolRuntime.clients,
+          session: toolRuntime.session,
+          accessContext: await kfcProofAccessContext(input.sessionId, input.customerId),
+        }),
+        selectGenUi: (result) => selectKfcOpenAiGenUi({
+          session: toolRuntime.session,
+          latestUserMessage: input.text,
+          toolCalls: result.toolCalls,
+          customerCommand: trustedMetadata.customerCommand,
+        }),
+      });
+      await store.updateTurnDeliveryStatus(directOutput.assistantTurnId, "sent", null);
+      const presentation = buildChannelPresentation({
+        channel: "kfc",
+        graphResponseText: directOutput.responseText,
+        genUi: directOutput.genUi,
+      });
+      const responseBody = {
+        agentRuntime: "openai-responses",
+        status: "completed",
+        sessionId: input.sessionId,
+        customerId: input.customerId,
+        userTurnId: directOutput.userTurnId,
+        assistantTurnId: directOutput.assistantTurnId,
+        responseText: directOutput.responseText,
+        presentation,
+        ...(directOutput.genUi ? { genUi: directOutput.genUi } : {}),
+        toolCalls: directOutput.toolCalls,
+        usage: directOutput.usage,
+        replayed: false,
+      };
+      await store.appendEvent(input.sessionId, "kfc_request_completed", {
+        clientMessageId: input.clientMessageId,
+        requestFingerprint,
+        response: responseBody,
+      });
+      return { status: 200, body: responseBody };
     }
 
     const output = await runAgentTurn({

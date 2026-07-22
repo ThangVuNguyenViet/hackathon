@@ -27,6 +27,8 @@ import type {
   MenuPlanningContextInput,
   MenuPlanningModifierGroup,
   MenuPlanningModifierRequirement,
+  MenuSearchInput,
+  MenuSearchResult,
   MembershipActionResult,
   MenuComposition,
   PaymentLinkMethod,
@@ -153,6 +155,183 @@ function menuComposition(item: GeneratedMenuItem): MenuComposition | undefined {
   };
 }
 
+const SEARCH_FILLER_TOKENS = new Set([
+  'co',
+  'cho',
+  'duoi',
+  'gia',
+  'goi',
+  'minh',
+  'nguoi',
+  'tim',
+  'toi',
+  'va',
+]);
+
+function normalizedMenuText(value: string): string {
+  return searchableTokens(value).join(' ');
+}
+
+function phrasePresent(value: string, phrase: string): boolean {
+  return ` ${value} `.includes(` ${phrase} `);
+}
+
+function quantityBefore(text: string, pattern: string): number {
+  const matches = [...text.matchAll(new RegExp(`(\\d+)\\s+${pattern}`, 'g'))];
+  return matches.reduce((maximum, match) => Math.max(maximum, Number(match[1] ?? 0)), 0);
+}
+
+function inferredMenuComposition(item: GeneratedMenuItem): MenuComposition {
+  const normalized = normalizedMenuText(`${item.name} ${item.description}`);
+  const verified = menuComposition(item);
+  return {
+    friedChickenPieces: verified?.friedChickenPieces
+      ?? quantityBefore(normalized, 'mieng\\s+ga(?:\\s+ran)?'),
+    standardPepsi: verified?.standardPepsi
+      ?? quantityBefore(normalized, '(?:ly|lon)\\s+pepsi'),
+  };
+}
+
+function inferredPartyCapacity(item: GeneratedMenuItem): number | undefined {
+  const normalized = normalizedMenuText(`${item.name} ${item.category} ${item.description}`);
+  const explicitGroupSize = quantityBefore(normalized, 'nguoi');
+  if (explicitGroupSize > 0) return explicitGroupSize;
+  const composition = inferredMenuComposition(item);
+  if (composition.friedChickenPieces > 0 && composition.standardPepsi > 0) {
+    return Math.min(composition.friedChickenPieces, composition.standardPepsi);
+  }
+  return composition.standardPepsi || composition.friedChickenPieces || undefined;
+}
+
+function priceLimitFromQuery(query: string): number | undefined {
+  const normalized = normalizedMenuText(query);
+  const match = normalized.match(/(?:duoi|toi da)\s+(\d+(?:[.,]\d+)?)\s*(k|nghin|trieu)?/);
+  if (!match) return undefined;
+  const amount = Number(match[1]?.replace(',', '.'));
+  if (!Number.isFinite(amount)) return undefined;
+  return Math.round(amount * (match[2] === 'trieu' ? 1_000_000 : match[2] ? 1_000 : 1));
+}
+
+function partySizeFromQuery(query: string): number | undefined {
+  const normalized = normalizedMenuText(query);
+  const match = normalized.match(/(\d+)\s+nguoi/);
+  return match ? Number(match[1]) : undefined;
+}
+
+function compactMenuItem(
+  item: GeneratedMenuItem,
+  hasModifiers: boolean,
+): MenuSearchResult['items'][number] {
+  return {
+    code: item.code,
+    name: item.name,
+    category: item.category,
+    description: item.description,
+    priceVnd: item.priceVnd,
+    ...(item.originalPriceVnd === null ? {} : { originalPriceVnd: item.originalPriceVnd }),
+    imageUrl: item.imageUrl,
+    available: item.available,
+    isCustomize: item.isCustomize,
+    hasModifiers,
+  };
+}
+
+function distinctiveQueryTokens(query: string, maxPriceVnd?: number, partySize?: number): string[] {
+  const priceTokens = new Set(maxPriceVnd === undefined
+    ? []
+    : [String(maxPriceVnd), ...(maxPriceVnd % 1_000 === 0 ? [`${maxPriceVnd / 1_000}k`] : [])]);
+  return [...new Set(searchableTokens(query).filter((token) =>
+    !SEARCH_FILLER_TOKENS.has(token) &&
+    !['combo', 'ga', 'ran', 'nuoc'].includes(token) &&
+    token !== String(partySize ?? '') &&
+    !priceTokens.has(token),
+  ))];
+}
+
+function matchesSemanticIntent(item: GeneratedMenuItem, query: string): boolean {
+  const normalizedQuery = normalizedMenuText(query);
+  const queryTokens = searchableTokens(query);
+  const searchableText = normalizedMenuText(`${item.name} ${item.category} ${item.description}`);
+  const composition = inferredMenuComposition(item);
+  const wantsCombo = queryTokens.includes('combo');
+  const wantsFriedChicken = phrasePresent(normalizedQuery, 'ga ran');
+  const wantsDrink = queryTokens.includes('nuoc') || queryTokens.includes('pepsi') || phrasePresent(normalizedQuery, 'thuc uong');
+  const isCombo = searchableText.includes('combo');
+  const hasFriedChicken = phrasePresent(searchableText, 'ga ran') || composition.friedChickenPieces > 0;
+  const hasDrink = searchableText.includes('pepsi') ||
+    normalizedMenuText(item.category).includes('thuc uong') ||
+    composition.standardPepsi > 0;
+  return (!wantsCombo || isCombo) &&
+    (!wantsFriedChicken || hasFriedChicken) &&
+    (!wantsDrink || hasDrink);
+}
+
+function searchScore(
+  item: GeneratedMenuItem,
+  modifier: GeneratedMenuModifier | undefined,
+  query: string,
+  partySize?: number,
+): number {
+  const normalizedQuery = normalizedMenuText(query);
+  const queryTokens = [...new Set(searchableTokens(query).filter((token) => !SEARCH_FILLER_TOKENS.has(token)))];
+  const name = normalizedMenuText(item.name);
+  const description = normalizedMenuText(item.description);
+  const category = normalizedMenuText(item.category);
+  const aliases = normalizedMenuText(item.orderingMetadata?.searchAliases.join(' ') ?? '');
+  const componentAliases = normalizedMenuText(Object.values(item.orderingMetadata?.componentSearchAliases ?? {}).flat().join(' '));
+  const modifierAliases = normalizedMenuText(modifierSearchText(modifier));
+  const composition = inferredMenuComposition(item);
+  const wantsCombo = queryTokens.includes('combo');
+  const wantsFriedChicken = phrasePresent(normalizedQuery, 'ga ran');
+  const wantsDrink = queryTokens.includes('nuoc') || queryTokens.includes('pepsi') || phrasePresent(normalizedQuery, 'thuc uong');
+
+  let score = 0;
+  if (name === normalizedQuery && normalizedQuery) score += 1_000;
+  else if (normalizedQuery && name.startsWith(normalizedQuery)) score += 500;
+
+  for (const token of queryTokens) {
+    if (phrasePresent(name, token)) score += 30;
+    else if (name.includes(token)) score += 20;
+    if (phrasePresent(category, token)) score += 18;
+    else if (category.includes(token)) score += 10;
+    if (phrasePresent(description, token)) score += 12;
+    else if (description.includes(token)) score += 6;
+    if (aliases.includes(token)) score += 22;
+    if (componentAliases.includes(token)) score += 14;
+    if (modifierAliases.includes(token)) score += 16;
+  }
+
+  if (wantsCombo && (name.includes('combo') || category.includes('combo'))) score += 100;
+  if (wantsFriedChicken) {
+    if (phrasePresent(name, 'ga ran')) score += 160;
+    else if (phrasePresent(category, 'ga ran')) score += 100;
+    else if (phrasePresent(description, 'ga ran')) score += 70;
+    else if (composition.friedChickenPieces > 0 || componentAliases.includes('ga ran')) score += 45;
+  }
+  if (wantsDrink) {
+    if (category.includes('thuc uong')) score += 80;
+    else if (description.includes('pepsi') || name.includes('pepsi')) score += 55;
+    else if (composition.standardPepsi > 0 || componentAliases.includes('pepsi')) score += 40;
+  }
+  if (
+    wantsFriedChicken &&
+    wantsDrink &&
+    composition.friedChickenPieces > 0 &&
+    composition.standardPepsi > 0
+  ) score += 60;
+
+  if (partySize) {
+    const capacity = inferredPartyCapacity(item);
+    const isGroupCandidate = name.includes('combo') || category.includes('combo') || category.includes('nhom');
+    if (isGroupCandidate) score += 40;
+    if (capacity === partySize) score += 180;
+    else if (capacity && capacity > partySize) score += Math.max(40, 120 - (capacity - partySize) * 15);
+    else if (capacity) score += Math.max(0, 30 - (partySize - capacity) * 10);
+  }
+
+  return score;
+}
+
 export class OrderingDataService {
   private readonly menuByCode: Map<string, GeneratedMenuItem>;
   private readonly menuByItemId: Map<string, GeneratedMenuItem>;
@@ -200,6 +379,56 @@ export class OrderingDataService {
       .map((item, fixtureIndex) => ({ item, fixtureIndex, relevance: menuSearchRelevance(item, query) }))
       .sort((left, right) => right.relevance - left.relevance || left.fixtureIndex - right.fixtureIndex)
       .map(({ item }) => menuItemWithModifierData(item, this.modifierByItemId.get(item.itemId), true));
+  }
+
+  searchMenuTool(input: MenuSearchInput): MenuSearchResult {
+    const mode = input.mode ?? 'search';
+    const query = input.query?.trim() ?? '';
+    const normalizedCategory = input.category ? normalizedMenuText(input.category) : undefined;
+    const maxPriceVnd = input.maxPriceVnd ?? priceLimitFromQuery(query);
+    const partySize = input.partySize ?? partySizeFromQuery(query);
+    const substantiveQueryTokens = searchableTokens(query).filter((token) =>
+      !SEARCH_FILLER_TOKENS.has(token) &&
+      !(maxPriceVnd !== undefined && /^\d+(?:k|nghin|trieu)?$/.test(token)),
+    );
+    const distinctiveTokens = distinctiveQueryTokens(query, maxPriceVnd, partySize);
+    const filtered = this.fixtures.menuItems.filter((item) =>
+      item.available &&
+      (normalizedCategory === undefined || normalizedMenuText(item.category) === normalizedCategory) &&
+      (maxPriceVnd === undefined || item.priceVnd <= maxPriceVnd),
+    );
+    const ranked = mode === 'full' || !query || (substantiveQueryTokens.length === 0 && partySize === undefined)
+      ? filtered
+      : filtered
+        .map((item, fixtureIndex) => {
+          const modifier = this.modifierByItemId.get(item.itemId);
+          const searchableText = normalizedMenuText([
+            item.name,
+            item.description,
+            item.category,
+            ...(item.orderingMetadata?.searchAliases ?? []),
+            ...Object.values(item.orderingMetadata?.componentSearchAliases ?? {}).flat(),
+            modifierSearchText(modifier),
+          ].join(' '));
+          const searchableTokenSet = new Set(searchableTokens(searchableText));
+          const hasDistinctiveMatch = distinctiveTokens.length === 0 ||
+            distinctiveTokens.every((token) => searchableTokenSet.has(token));
+          return {
+            item,
+            fixtureIndex,
+            score: hasDistinctiveMatch && matchesSemanticIntent(item, query)
+              ? searchScore(item, modifier, query, partySize)
+              : 0,
+          };
+        })
+        .filter(({ score }) => score > 0)
+        .sort((left, right) => right.score - left.score || left.fixtureIndex - right.fixtureIndex)
+        .map(({ item }) => item);
+    const items = ranked.map((item) => compactMenuItem(
+      item,
+      Boolean(this.modifierByItemId.get(item.itemId)?.modifierGroups.length),
+    ));
+    return { mode, query, total: items.length, items };
   }
 
   getMenuPlanningContext(input: MenuPlanningContextInput): MenuPlanningContext {

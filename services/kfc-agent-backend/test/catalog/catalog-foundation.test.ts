@@ -73,9 +73,9 @@ describe('catalog foundation', () => {
       now: () => new Date('2026-07-14T00:01:00.000Z'),
     });
 
-    await expect(clients.menu.searchMenu('')).resolves.toMatchObject({
+    await expect(clients.menu.searchMenu({ mode: 'full' })).resolves.toMatchObject({
       ok: true,
-      value: [expect.objectContaining({ code: 'new' })],
+      value: { items: [expect.objectContaining({ code: 'new' })] },
     });
     expect(fetchCurrent).toHaveBeenCalledOnce();
   });

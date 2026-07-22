@@ -10,6 +10,8 @@ import type {
   MenuPlanningContextInput,
   ComboConversionProposal,
   MembershipActionResult,
+  MenuSearchInput,
+  MenuSearchResult,
   ModifierSelectionInput,
   PromotionValidationResult,
 } from '../ordering/types.js';
@@ -61,7 +63,7 @@ export interface ChannelMediaDeliveryResult {
 
 export interface MenuClient {
   getPlanningContext(input: MenuPlanningContextInput): Promise<ToolResult<MenuPlanningContext>>;
-  searchMenu(query: string): Promise<ToolResult<MenuItem[]>>;
+  searchMenu(input: MenuSearchInput): Promise<ToolResult<MenuSearchResult>>;
   getItemDetails(code: string): Promise<ToolResult<MenuItem>>;
   getModifierOptions(code: string): Promise<ToolResult<GeneratedMenuModifier>>;
 }

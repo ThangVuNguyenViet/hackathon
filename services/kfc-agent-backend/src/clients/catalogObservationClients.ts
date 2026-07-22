@@ -24,7 +24,29 @@ function fail<T>(message: string): ToolResult<T> {
 }
 
 function normalized(value: string): string {
-  return value.toLowerCase().replace(/đ/g, 'd').normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+  return value
+    .toLowerCase()
+    .replace(/đ/g, 'd')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-z0-9]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function compactObservedItem(item: CatalogItemFact) {
+  return {
+    code: item.itemCode,
+    name: item.name,
+    category: item.category,
+    description: item.description,
+    priceVnd: item.priceVnd,
+    ...(item.originalPriceVnd === null ? {} : { originalPriceVnd: item.originalPriceVnd }),
+    imageUrl: item.imageUrl,
+    available: true,
+    isCustomize: item.isCustomize,
+    hasModifiers: item.modifierGroups.length > 0,
+  };
 }
 
 type RawGroup = CatalogItemFact['modifierGroups'][number];
@@ -117,12 +139,34 @@ export function createCatalogObservationClients(options: CatalogObservationClien
   };
 
   const menu: MenuClient = {
-    async searchMenu(query) {
+    async searchMenu(input) {
       const observation = await discoveryObservation();
-      const words = normalized(query).split(/\s+/).filter(Boolean);
-      return ok(observation.items
-        .filter((item) => words.every((word) => normalized(`${item.name} ${item.category} ${item.itemCode}`).includes(word)))
-        .map(toMenuItem));
+      const mode = input.mode ?? 'search';
+      const query = input.query?.trim() ?? '';
+      const words = normalized(query).split(/\s+/).filter((word) => !['co', 'cho', 'duoi', 'nguoi', 'va'].includes(word));
+      const category = input.category ? normalized(input.category) : undefined;
+      const filtered = observation.items.filter((item) =>
+        (category === undefined || normalized(item.category) === category) &&
+        (input.maxPriceVnd === undefined || item.priceVnd <= input.maxPriceVnd),
+      );
+      const ranked = mode === 'full' || !query
+        ? filtered
+        : filtered
+          .map((item, fixtureIndex) => {
+            const name = normalized(item.name);
+            const description = normalized(item.description);
+            const itemCategory = normalized(item.category);
+            const score = words.reduce((total, word) => total +
+              (name.includes(word) ? 20 : 0) +
+              (itemCategory.includes(word) ? 10 : 0) +
+              (description.includes(word) ? 5 : 0), 0);
+            return { item, fixtureIndex, score };
+          })
+          .filter(({ score }) => score > 0)
+          .sort((left, right) => right.score - left.score || left.fixtureIndex - right.fixtureIndex)
+          .map(({ item }) => item);
+      const items = ranked.map(compactObservedItem);
+      return ok({ mode, query, total: items.length, items });
     },
     async getItemDetails(code) {
       const item = (await discoveryObservation()).items.find((candidate) => candidate.itemCode === code);
@@ -143,45 +187,52 @@ export function createCatalogObservationClients(options: CatalogObservationClien
         : { ok: false, errorCode: 'modifiers_not_found', message: `No current modifiers for ${code}` };
     },
     async getPlanningContext(input) {
-      const matches = await menu.searchMenu(input.query);
+      const matches = await menu.searchMenu({ query: input.query });
       if (!matches.ok) return { ok: false, errorCode: matches.errorCode, message: matches.message };
+      const observation = await discoveryObservation();
+      const observedByCode = new Map(observation.items.map((item) => [item.itemCode, item]));
       return ok({
         query: input.query,
-        candidates: (matches.value ?? []).slice(0, input.maxCandidates).map((item) => ({
-          code: item.code,
-          itemId: item.itemId ?? item.code,
-          productCode: item.productCode ?? '',
-          name: item.name,
-          category: item.category,
-          description: item.description,
-          priceVnd: item.priceVnd,
-          originalPriceVnd: item.originalPriceVnd,
-          imageUrl: item.imageUrl,
-          available: item.available,
-          isCustomize: item.isCustomize,
-          isQuickCombo: item.isQuickCombo,
-          hasModifiers: item.hasModifiers,
-          verifiedForMutation: true,
-          verificationQuery: input.query,
-          queryMatchStrength: 'strong',
-          activeCartItem: input.activeItemCodes.includes(item.code) ? true : undefined,
-          activeCartQuantity: input.activeItemQuantities?.[item.code],
-          modifierGroups: (item.modifierGroups ?? []).map((group) => ({
-            groupId: group.groupId,
-            name: group.name,
-            min: group.min,
-            max: group.max,
-            requiredSelections: [],
-            options: group.options.map((option) => ({
-              modifierId: option.modifierId,
-              name: option.name,
-              priceDeltaVnd: option.priceDeltaVnd,
-              default: option.default,
-              quantity: option.quantity ?? undefined,
-              selectionBundle: [{ groupId: group.groupId, modifierId: option.modifierId, quantity: option.quantity ?? undefined }],
+        candidates: (matches.value?.items ?? []).slice(0, input.maxCandidates).flatMap((item) => {
+          const observed = observedByCode.get(item.code);
+          if (!observed) return [];
+          const detail = toMenuItem(observed);
+          return [{
+            code: item.code,
+            itemId: detail.itemId ?? item.code,
+            productCode: detail.productCode ?? '',
+            name: item.name,
+            category: item.category,
+            description: item.description,
+            priceVnd: item.priceVnd,
+            originalPriceVnd: item.originalPriceVnd,
+            imageUrl: item.imageUrl,
+            available: item.available,
+            isCustomize: item.isCustomize,
+            isQuickCombo: detail.isQuickCombo,
+            hasModifiers: item.hasModifiers,
+            verifiedForMutation: true,
+            verificationQuery: input.query,
+            queryMatchStrength: 'strong',
+            activeCartItem: input.activeItemCodes.includes(item.code) ? true : undefined,
+            activeCartQuantity: input.activeItemQuantities?.[item.code],
+            modifierGroups: (detail.modifierGroups ?? []).map((group) => ({
+              groupId: group.groupId,
+              name: group.name,
+              min: group.min,
+              max: group.max,
+              requiredSelections: [],
+              options: group.options.map((option) => ({
+                modifierId: option.modifierId,
+                name: option.name,
+                priceDeltaVnd: option.priceDeltaVnd,
+                default: option.default,
+                quantity: option.quantity ?? undefined,
+                selectionBundle: [{ groupId: group.groupId, modifierId: option.modifierId, quantity: option.quantity ?? undefined }],
+              })),
             })),
-          })),
-        })),
+          }];
+        }),
       });
     },
   };
