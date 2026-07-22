@@ -8,6 +8,7 @@ describe('KFC GenUI schema contract', () => {
   it('defines the complete supported widget-kind allowlist', () => {
     expect(KFC_GENUI_WIDGET_KINDS).toEqual([
       'smartMenuPicker',
+      'fullMenuBrowser',
       'productDetailCard',
       'modifierPicker',
       'promotionGallery',

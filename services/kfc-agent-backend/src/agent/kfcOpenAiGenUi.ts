@@ -28,6 +28,32 @@ function successfulResult(
     : undefined;
 }
 
+function completeFullMenuResult(
+  call: OpenAiToolCallTrace,
+): Extract<SuccessfulToolCallResult, { toolName: 'searchMenu' }> | undefined {
+  const result = successfulResult(call);
+  if (
+    result?.toolName !== 'searchMenu' ||
+    result.value.mode !== 'full' ||
+    result.value.items.length === 0 ||
+    result.value.items.length !== result.value.total
+  ) {
+    return undefined;
+  }
+  const { category, maxPriceVnd, partySize, modifierQueries, query } =
+    call.arguments;
+  if (
+    category !== undefined ||
+    maxPriceVnd !== undefined ||
+    partySize !== undefined ||
+    modifierQueries !== undefined ||
+    (typeof query === 'string' && query.trim().length > 0)
+  ) {
+    return undefined;
+  }
+  return result;
+}
+
 function presentationFor(
   command: CustomerCommand | undefined,
   toolNames: ToolName[],
@@ -60,7 +86,26 @@ export function selectKfcOpenAiGenUi(
   input: SelectKfcOpenAiGenUiInput,
 ): KfcGenUiAttachment | undefined {
   const { state, toolNames } = projectKfcOpenAiGenUiState(input);
-  return selectKfcGenUiAttachment({ state, turnToolNames: toolNames });
+  const attachment = selectKfcGenUiAttachment({
+    state,
+    turnToolNames: toolNames,
+  });
+  if (attachment?.widgetKind !== 'smartMenuPicker') return attachment;
+
+  const fullMenu = input.toolCalls.map(completeFullMenuResult).find(Boolean);
+  if (!fullMenu) return attachment;
+
+  return {
+    ...attachment,
+    widgetKind: 'fullMenuBrowser',
+    title: 'Toàn bộ thực đơn',
+    data: {
+      ...attachment.data,
+      total: fullMenu.value.total,
+      returned: fullMenu.value.items.length,
+      complete: true,
+    },
+  };
 }
 
 export function projectKfcOpenAiGenUiState(input: SelectKfcOpenAiGenUiInput): {

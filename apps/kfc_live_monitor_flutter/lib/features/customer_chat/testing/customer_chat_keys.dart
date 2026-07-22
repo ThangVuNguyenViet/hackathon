@@ -71,6 +71,12 @@ abstract final class CustomerChatKeys {
   static Key genUiMenuSelectionLimit(String attachmentId) =>
       Key('kfcGenUiMenuSelectionLimit_$attachmentId');
 
+  static Key genUiFullMenuCategoryTabs(String attachmentId) =>
+      Key('kfcGenUiFullMenuCategoryTabs_$attachmentId');
+
+  static Key genUiFullMenuItemList(String attachmentId) =>
+      Key('kfcGenUiFullMenuItemList_$attachmentId');
+
   static Key genUiModifierOption(
     String attachmentId,
     String optionOrGroupId, [

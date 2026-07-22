@@ -314,6 +314,48 @@ KfcGenUiAttachment kfcGenUiFixture(KfcGenUiWidgetKind kind) {
         ),
       ],
     ),
+    KfcGenUiWidgetKind.fullMenuBrowser => const KfcGenUiAttachment(
+      id: 'fixture_full_menu',
+      lifecycleStage: 'menu',
+      widgetKind: KfcGenUiWidgetKind.fullMenuBrowser,
+      status: KfcGenUiStatus.active,
+      title: 'Toàn bộ thực đơn',
+      data: {
+        'items': [
+          {
+            'code': 'combo-1',
+            'name': 'Combo Hợp Gu 99K',
+            'categoryId': 'combo',
+            'category': 'Combo',
+            'priceVnd': 99000,
+            'available': true,
+          },
+          {
+            'code': 'burger-1',
+            'name': 'Burger Phi-lê Gà Quay',
+            'categoryId': 'burger',
+            'category': 'Burger',
+            'priceVnd': 56000,
+            'available': true,
+          },
+        ],
+        'categories': [
+          {'categoryId': 'combo', 'label': 'Combo'},
+          {'categoryId': 'burger', 'label': 'Burger'},
+        ],
+        'selectionLimit': 5,
+        'total': 2,
+        'returned': 2,
+        'complete': true,
+      },
+      actions: [
+        KfcGenUiActionSpec(
+          id: 'add_items',
+          label: 'Xác nhận món',
+          intent: KfcGenUiActionIntent.primary,
+        ),
+      ],
+    ),
     KfcGenUiWidgetKind.productDetailCard => const KfcGenUiAttachment(
       id: 'fixture_detail',
       lifecycleStage: 'menu_detail',

@@ -4,6 +4,7 @@ import '../../domain/kfc_genui_models.dart';
 import 'widgets/address_fulfillment_check.dart';
 import 'widgets/allergen_evidence.dart';
 import 'widgets/cart_builder.dart';
+import 'widgets/full_menu_browser.dart';
 import 'widgets/modifier_picker.dart';
 import 'widgets/order_review_confirm.dart';
 import 'widgets/order_tracking_status.dart';
@@ -30,6 +31,10 @@ class KfcGenUiRenderer extends StatelessWidget {
   Widget build(BuildContext context) {
     return switch (attachment.widgetKind) {
       KfcGenUiWidgetKind.smartMenuPicker => SmartMenuPicker(
+        attachment: attachment,
+        onAction: onAction,
+      ),
+      KfcGenUiWidgetKind.fullMenuBrowser => FullMenuBrowser(
         attachment: attachment,
         onAction: onAction,
       ),

@@ -38,6 +38,7 @@ Future<void> runKfcGenUiComponentGolden(
 ) async {
   final frameSize = switch (kind) {
     KfcGenUiWidgetKind.smartMenuPicker => const Size(390, 844),
+    KfcGenUiWidgetKind.fullMenuBrowser => const Size(390, 844),
     KfcGenUiWidgetKind.productDetailCard => const Size(390, 700),
     KfcGenUiWidgetKind.modifierPicker => const Size(390, 700),
     KfcGenUiWidgetKind.promotionGallery => const Size(390, 844),

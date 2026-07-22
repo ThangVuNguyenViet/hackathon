@@ -9,6 +9,40 @@ const _paymentMethodCollectionAuthority = <String, Object?>{
 };
 
 void main() {
+  test('parses the direct Responses full-menu browser contract', () {
+    final attachment = KfcGenUiAttachment.fromJson({
+      'id': 'full_menu',
+      'lifecycleStage': 'menu',
+      'widgetKind': 'fullMenuBrowser',
+      'status': 'active',
+      'title': 'Toàn bộ thực đơn',
+      'data': {
+        'items': [
+          {
+            'code': 'combo_1',
+            'name': 'Combo 1',
+            'categoryId': 'combo',
+            'category': 'Combo',
+            'priceVnd': 99000,
+          },
+        ],
+        'categories': [
+          {'categoryId': 'combo', 'label': 'Combo'},
+        ],
+        'selectionLimit': 5,
+        'total': 1,
+        'returned': 1,
+        'complete': true,
+      },
+      'actions': [
+        {'id': 'add_items', 'label': 'Xác nhận món', 'intent': 'primary'},
+      ],
+    }, allowLegacyActionAuthority: true);
+
+    expect(attachment.widgetKind.wireName, 'fullMenuBrowser');
+    expect(attachment.canSubmitActions, isTrue);
+  });
+
   test('parses a backend GenUI attachment', () {
     final attachment = KfcGenUiAttachment.fromJson({
       'id': 'att_1',
