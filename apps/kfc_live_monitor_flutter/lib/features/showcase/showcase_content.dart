@@ -317,7 +317,8 @@ class _EvidenceStrip extends StatelessWidget {
           ),
           _EvidenceItem(
             icon: LucideIcons.brainCircuit,
-            label: '${result.plannerModel} / ${result.responseModel}',
+            label:
+                '${result.agent.provider} · ${result.agent.model} · ${result.agent.profile}',
           ),
           if (result.langsmithTraceUrl case final trace?)
             ShadButton.link(

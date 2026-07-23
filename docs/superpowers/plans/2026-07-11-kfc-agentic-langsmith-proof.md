@@ -1,5 +1,12 @@
 # KFC Agentic LangSmith Proof Implementation Plan
 
+> **Superseded orchestration plan (2026-07-20).** The tracing and evaluation
+> goals remain useful historical evidence, but the procedural
+> router/planner/composer implementation below is not the active target. The
+> production runtime is one explicitly authored `@langchain/langgraph`
+> `StateGraph`, with LangSmith observing that graph rather than defining a
+> second orchestration loop.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Trace the real KFC `runAgentTurn` decision path in LangSmith, replay a multi-turn agentic demo, evaluate the same checkout against all 14 golden context cases, and produce raw plus annotated Chrome proof artifacts.

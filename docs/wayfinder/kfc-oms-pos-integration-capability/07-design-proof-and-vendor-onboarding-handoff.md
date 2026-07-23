@@ -27,3 +27,11 @@ Separate unit, contract, component, and backend-backed UI evidence; define pass/
 ## Resolution
 
 [Simulated Proof Matrix And Vendor Onboarding Handoff](./assets/simulated-proof-matrix-and-vendor-onboarding-handoff.md) defines the release claim gate, evidence ownership across unit, contract, component, backend, UI, and LangSmith layers, eight scenario verdicts, artifact index, vendor documentation checklist, adapter mapping record, and evidence-based promotion from simulated to sandbox and production.
+
+## Current implementation amendment (2026-07-20)
+
+The mock runner and its generated manifest no longer gate a release claim. The
+retained code supports contract/component-test evidence only. The vendor input
+checklist and adapter-mapping guidance remain valid; promotion to sandbox or
+production still requires authoritative vendor contracts and evidence from the
+actual target environment.

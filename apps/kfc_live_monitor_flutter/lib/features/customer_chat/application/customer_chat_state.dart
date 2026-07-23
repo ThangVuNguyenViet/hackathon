@@ -1,6 +1,9 @@
+import '../domain/customer_confirmation_models.dart';
 import '../domain/kfc_genui_models.dart';
 import '../domain/customer_run_models.dart';
 import 'customer_chat_identity.dart';
+
+enum CustomerChatResponseMode { genui, text }
 
 class CustomerChatState {
   const CustomerChatState({
@@ -9,16 +12,24 @@ class CustomerChatState {
     this.messages = const <CustomerChatMessage>[],
     this.draftText = '',
     this.activeDraft,
+    this.pendingApproval,
+    this.isResumingApproval = false,
+    this.responseMode = CustomerChatResponseMode.genui,
     this.errorMessage,
     this.handoffStatus,
   });
 
-  factory CustomerChatState.initial({String? sessionId, String? customerId}) {
+  factory CustomerChatState.initial({
+    String? sessionId,
+    String? customerId,
+    CustomerChatResponseMode responseMode = CustomerChatResponseMode.genui,
+  }) {
     final identity = loadOrCreateKfcCustomerChatIdentity();
     final resolvedCustomerId = customerId ?? identity.customerId;
     return CustomerChatState(
-      sessionId: sessionId ?? 'kfc:$resolvedCustomerId',
+      sessionId: sessionId ?? 'kfc:$resolvedCustomerId:${responseMode.name}',
       customerId: resolvedCustomerId,
+      responseMode: responseMode,
       messages: const [
         CustomerChatMessage(
           id: 'welcome',
@@ -35,14 +46,29 @@ class CustomerChatState {
   final List<CustomerChatMessage> messages;
   final String draftText;
   final ActiveAssistantDraft? activeDraft;
-  bool get isSending => activeDraft != null && !activeDraft!.isTerminal;
+  final CustomerApprovalPause? pendingApproval;
+  final bool isResumingApproval;
+  final CustomerChatResponseMode responseMode;
+  bool get isSending =>
+      (activeDraft != null && !activeDraft!.isTerminal) ||
+      pendingApproval != null ||
+      isResumingApproval;
   final String? errorMessage;
   final String? handoffStatus;
 
   KfcGenUiAttachment? get activeGenUi {
     for (final message in messages.reversed) {
       final genUi = message.genUi;
-      if (genUi != null && genUi.status == KfcGenUiStatus.active) return genUi;
+      if (genUi?.canSubmitActions == true) return genUi;
+    }
+    return null;
+  }
+
+  KfcGenUiAttachment? actionAttachment(String attachmentId) {
+    final draftAttachment = activeDraft?.genUi;
+    if (draftAttachment?.id == attachmentId) return draftAttachment;
+    for (final message in messages.reversed) {
+      if (message.genUi?.id == attachmentId) return message.genUi;
     }
     return null;
   }
@@ -52,6 +78,10 @@ class CustomerChatState {
     String? draftText,
     ActiveAssistantDraft? activeDraft,
     bool clearActiveDraft = false,
+    CustomerApprovalPause? pendingApproval,
+    bool clearPendingApproval = false,
+    bool? isResumingApproval,
+    CustomerChatResponseMode? responseMode,
     String? errorMessage,
     bool clearError = false,
     String? handoffStatus,
@@ -63,6 +93,11 @@ class CustomerChatState {
       messages: messages ?? this.messages,
       draftText: draftText ?? this.draftText,
       activeDraft: clearActiveDraft ? null : (activeDraft ?? this.activeDraft),
+      pendingApproval: clearPendingApproval
+          ? null
+          : (pendingApproval ?? this.pendingApproval),
+      isResumingApproval: isResumingApproval ?? this.isResumingApproval,
+      responseMode: responseMode ?? this.responseMode,
       errorMessage: clearError ? null : (errorMessage ?? this.errorMessage),
       handoffStatus: clearHandoffStatus
           ? null

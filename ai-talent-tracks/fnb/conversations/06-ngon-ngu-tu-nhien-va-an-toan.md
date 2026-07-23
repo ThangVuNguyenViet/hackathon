@@ -13,8 +13,8 @@
 |---:|---|---|---|
 | 1 | User | Cho tui 2 gà kai vs 1 pesi nha. | UC-31 |
 | 2 | Bot | Dạ mình hiểu là bạn muốn đặt 2 miếng gà cay và 1 Pepsi đúng không ạ? | UC-31 |
-| 3 | User | Ừ. Món nào không cay với không có phô mai vậy? | UC-32 |
-| 4 | Bot | Dạ mình có thể gợi ý các món không cay và không có phô mai. Tuy nhiên, để đảm bảo an toàn về thành phần, mình khuyến nghị bạn kiểm tra lại thông tin dị ứng với nhân viên cửa hàng trước khi xác nhận đơn. | UC-32 |
+| 3 | User | Ừ. Mình thích món không cay và không thêm phô mai, gợi ý giúp mình với. | UC-32 |
+| 4 | Bot | Bạn có thể đổi sang 2 miếng Gà Giòn Không Cay. Nếu muốn burger, Burger Gà Yo (không cay) cũng phù hợp và mình sẽ không thêm phô mai. Bạn thích gà hay burger hơn? | UC-32 |
 | 5 | User | abcxyz haha | UC-33 |
 | 6 | Bot | Dạ mình là trợ lý đặt món KFC. Hiện mình có thể hỗ trợ bạn xem menu, gợi ý combo, đặt món, theo dõi đơn hàng hoặc kết nối nhân viên. Bạn muốn mình hỗ trợ phần nào ạ? | UC-33 |
 | 7 | User | Cho mình cái đó đi. | UC-34 |
@@ -27,7 +27,7 @@
 ## Kỳ vọng kiểm thử
 
 - Bot hiểu tiếng lóng/sai chính tả nhưng phải xác nhận lại.
-- Bot không cam kết tuyệt đối về dị ứng nếu dữ liệu chưa đủ.
+- Yêu cầu không cay và không thêm phô mai là sở thích thông thường; bot không suy diễn thành dị ứng hoặc cam kết an toàn y khoa.
 - Spam hoặc nội dung ngoài phạm vi không tạo đơn.
 - Câu mơ hồ phải dẫn tới clarification hoặc lịch sử đơn, không tự thêm món.
 - Bot từ chối yêu cầu thông tin cá nhân và đề xuất kênh hỗ trợ chính thức.

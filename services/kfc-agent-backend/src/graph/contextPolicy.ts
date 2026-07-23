@@ -111,11 +111,9 @@ export function buildContextPolicyState(state: AgentGraphState, options: Context
     promotionContext: preservePromotion ? state.promotionContext : undefined,
     menuSearchResults: preserveMenuSearchResults
       ? options.compactMenuSearchResults
-        ? (state.plannerMenuSearchResults ?? state.menuSearchResults?.slice(0, 24))
+        ? state.menuSearchResults?.slice(0, 24)
         : state.menuSearchResults
       : undefined,
-    plannerMenuSearchResults: undefined,
-    plannerMenuCatalogContext: preserveMenuSearchResults ? state.plannerMenuCatalogContext : undefined,
     menuModifierOptions: preserveCart ? state.menuModifierOptions : undefined,
     customerContext: preserveCustomerContext ? state.customerContext : undefined,
     paymentAttempt: preservePayment ? state.paymentAttempt : undefined,

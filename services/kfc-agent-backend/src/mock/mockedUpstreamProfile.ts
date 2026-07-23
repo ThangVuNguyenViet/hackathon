@@ -1,10 +1,14 @@
 import { z } from 'zod';
+import {
+  orderStatusDeliveryEstimateSchema,
+  orderWithoutDeliveryEstimate,
+} from '../domain/orderStatusEvidence.js';
 import type { GeneratedFixtures } from '../fixtures/schema.js';
 import {
   generatedMenuItemSchema,
   generatedMenuModifierSchema,
 } from '../fixtures/schema.js';
-import type { MockClientOptions } from './createMockClients.js';
+import type { MockClientOptions } from './mockClientOptions.js';
 
 const addressSchema = z.object({
   label: z.string(),
@@ -49,6 +53,7 @@ const orderSchema = z.object({
   paymentStatus: z.enum(['not_started', 'pending', 'paid', 'failed']),
   assignedStoreId: z.string(),
   createdAt: z.string(),
+  deliveryEstimate: orderStatusDeliveryEstimateSchema.optional(),
   posTicketId: z.string().optional(),
   posStatus: z.enum(['accepted', 'preparing', 'ready', 'cancelled', 'rejected']).optional(),
   commerceOrderId: z.string().optional(),
@@ -67,6 +72,7 @@ const menuItemSchema = z.object({
   itemId: z.string().optional(),
   productCode: z.string().optional(),
   category: z.string(),
+  categoryId: z.string().min(1),
   name: z.string(),
   description: z.string(),
   priceVnd: z.number().int().nonnegative(),
@@ -156,7 +162,11 @@ export function mockedUpstreamClientOptions(
       ? {
           recentOrderProvider: () => ({
             ok: true as const,
-            value: orderById.get(profile.recentOrderId!) ?? null,
+            value: orderById.has(profile.recentOrderId!)
+              ? orderWithoutDeliveryEstimate(
+                  orderById.get(profile.recentOrderId!)!,
+                )
+              : null,
             message: 'mocked_upstream_recent_order',
           }),
         }

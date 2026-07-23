@@ -18,7 +18,7 @@
 | 5 | User | Khoảng bao lâu tới? | UC-21 |
 | 6 | Bot | Dạ thời gian giao dự kiến là 25-30 phút nữa, tùy tình trạng giao hàng thực tế. | UC-21 |
 | 7 | User | Mình thêm 1 khoai nữa được không? | UC-26 |
-| 8 | Bot | Dạ mình sẽ kiểm tra trạng thái đơn. Nếu đơn chưa được chuẩn bị, mình sẽ thêm 1 khoai vào đơn hiện tại. Nếu đơn đã xử lý, mình có thể tạo đơn bổ sung cho bạn. | UC-26 |
+| 8 | Bot | Đơn hiện chưa được chuẩn bị nên vẫn có thể thêm 1 khoai tây chiên. Bạn xác nhận muốn thêm món này vào đơn hiện tại nhé? | UC-26 |
 | 9 | User | Mình muốn hủy đơn vừa đặt. | UC-20 |
 | 10 | Bot | Dạ đơn của bạn hiện chưa được chuẩn bị, mình có thể hỗ trợ hủy đơn. Bạn xác nhận muốn hủy đơn này không ạ? | UC-20 |
 | 11 | User | Nếu đơn đã chuẩn bị hoặc đang giao rồi thì sao, mình vẫn muốn hủy. | UC-20 |

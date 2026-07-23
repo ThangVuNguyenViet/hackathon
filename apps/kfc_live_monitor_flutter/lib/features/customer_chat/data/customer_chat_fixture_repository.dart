@@ -20,7 +20,7 @@ class FixtureCustomerChatRepository implements CustomerChatRepository {
     runId: action == null
         ? 'fixture_${_fixtureIntent(text!)}_run_$clientMessageId'
         : 'fixture_action_${action.actionId}_$clientMessageId',
-    status: 'accepted',
+    status: CustomerRunStatus.accepted,
     nextSequence: 1,
     replayed: false,
   );
@@ -109,13 +109,32 @@ class FixtureCustomerChatRepository implements CustomerChatRepository {
           11,
         ).add(Duration(milliseconds: index)).toIso8601String(),
         'payload': item.$2,
-      });
+      }, allowLegacyActionAuthority: true);
     }
   }
 
   @override
   Future<CustomerRunCancelResponse> cancelRun(String runId) async =>
-      CustomerRunCancelResponse(runId: runId, status: 'cancelling');
+      CustomerRunCancelResponse(
+        runId: runId,
+        status: CustomerRunStatus.cancelling,
+      );
+
+  @override
+  Future<CustomerConfirmationResumeResult> resumeConfirmation({
+    required String requestId,
+    required String approvalCapability,
+    required CustomerConfirmationDecision decision,
+  }) async => CustomerConfirmationResumeResult(
+    actionOutcome: decision == CustomerConfirmationDecision.approve
+        ? CustomerConfirmationActionOutcome.succeeded
+        : CustomerConfirmationActionOutcome.failed,
+    continuation: CustomerConfirmationContinuation.turnCompleted,
+    requestId: requestId,
+    responseText: decision == CustomerConfirmationDecision.approve
+        ? 'Mình đã tiếp tục thao tác bạn vừa xác nhận.'
+        : 'Mình đã dừng thao tác theo yêu cầu.',
+  );
 
   @override
   Future<CustomerChatResponse> sendMessage({
@@ -164,6 +183,8 @@ class FixtureCustomerChatRepository implements CustomerChatRepository {
   }) async {
     if (action.actionId == 'add_item' ||
         action.actionId == 'add_items' ||
+        action.actionId == 'update_cart' ||
+        action.actionId == 'apply_modifiers' ||
         action.actionId == 'edit_cart' ||
         action.actionId == 'remove_item') {
       return CustomerChatResponse(
@@ -295,6 +316,48 @@ KfcGenUiAttachment kfcGenUiFixture(KfcGenUiWidgetKind kind) {
         ),
       ],
     ),
+    KfcGenUiWidgetKind.fullMenuBrowser => const KfcGenUiAttachment(
+      id: 'fixture_full_menu',
+      lifecycleStage: 'menu',
+      widgetKind: KfcGenUiWidgetKind.fullMenuBrowser,
+      status: KfcGenUiStatus.active,
+      title: 'Toàn bộ thực đơn',
+      data: {
+        'items': [
+          {
+            'code': 'combo-1',
+            'name': 'Combo Hợp Gu 99K',
+            'categoryId': 'combo',
+            'category': 'Combo',
+            'priceVnd': 99000,
+            'available': true,
+          },
+          {
+            'code': 'burger-1',
+            'name': 'Burger Phi-lê Gà Quay',
+            'categoryId': 'burger',
+            'category': 'Burger',
+            'priceVnd': 56000,
+            'available': true,
+          },
+        ],
+        'categories': [
+          {'categoryId': 'combo', 'label': 'Combo'},
+          {'categoryId': 'burger', 'label': 'Burger'},
+        ],
+        'selectionLimit': 5,
+        'total': 2,
+        'returned': 2,
+        'complete': true,
+      },
+      actions: [
+        KfcGenUiActionSpec(
+          id: 'add_items',
+          label: 'Xác nhận món',
+          intent: KfcGenUiActionIntent.primary,
+        ),
+      ],
+    ),
     KfcGenUiWidgetKind.productDetailCard => const KfcGenUiAttachment(
       id: 'fixture_detail',
       lifecycleStage: 'menu_detail',
@@ -309,6 +372,15 @@ KfcGenUiAttachment kfcGenUiFixture(KfcGenUiWidgetKind kind) {
           'priceVnd': 56000,
           'media': _fixtureBurgerMedia,
         },
+        'items': [
+          {
+            'code': 'burger-flava',
+            'name': 'Burger Phi-lê Gà Quay',
+            'description': 'Burger với phi-lê gà quay',
+            'priceVnd': 56000,
+            'media': _fixtureBurgerMedia,
+          },
+        ],
       },
       actions: [
         KfcGenUiActionSpec(
@@ -345,24 +417,9 @@ KfcGenUiAttachment kfcGenUiFixture(KfcGenUiWidgetKind kind) {
       },
       actions: [
         KfcGenUiActionSpec(
-          id: 'customize_item:flavor:hot-spicy',
-          label: 'Gà Giòn Cay',
-          value: 'Gà Giòn Cay',
-          payload: {
-            'itemCode': 'three-chicken',
-            'groupId': 'flavor',
-            'modifierId': 'hot-spicy',
-          },
-        ),
-        KfcGenUiActionSpec(
-          id: 'customize_item:flavor:keep-current',
-          label: 'Giữ lựa chọn hiện tại',
-          value: 'Giữ lựa chọn hiện tại',
-          payload: {
-            'itemCode': 'three-chicken',
-            'groupId': 'flavor',
-            'modifierId': 'keep-current',
-          },
+          id: 'apply_modifiers',
+          label: 'Áp dụng',
+          intent: KfcGenUiActionIntent.primary,
         ),
       ],
     ),
@@ -394,13 +451,17 @@ KfcGenUiAttachment kfcGenUiFixture(KfcGenUiWidgetKind kind) {
       title: 'Thông tin dị ứng',
       data: {
         'item': {'code': 'burger-flava', 'name': 'Burger Phi-lê Gà Quay'},
-        'evidence':
-            'Thông tin dị ứng cần dựa trên bảng công bố chính thức của KFC.',
+        'evidence': {
+          'snippet':
+              'Thông tin dị ứng cần dựa trên bảng công bố chính thức của KFC.',
+          'sourceUrl': 'https://www.kfcvietnam.com.vn/allergen-chart',
+        },
       },
       actions: [
         KfcGenUiActionSpec(
           id: 'open_allergen_chart',
           label: 'Xem bảng dị ứng',
+          value: 'https://www.kfcvietnam.com.vn/allergen-chart',
           payload: {
             'sourceUrl': 'https://www.kfcvietnam.com.vn/allergen-chart',
           },
@@ -439,18 +500,11 @@ KfcGenUiAttachment kfcGenUiFixture(KfcGenUiWidgetKind kind) {
         },
       },
       actions: [
+        KfcGenUiActionSpec(id: 'update_cart', label: 'Cập nhật'),
         KfcGenUiActionSpec(
           id: 'continue_to_fulfillment',
-          label: 'Tiếp tục giao hàng',
+          label: 'Cập nhật & tiếp tục',
           intent: KfcGenUiActionIntent.primary,
-        ),
-        KfcGenUiActionSpec(id: 'edit_cart', label: 'Sửa giỏ hàng'),
-        KfcGenUiActionSpec(id: 'update_item_quantity', label: 'Đổi số lượng'),
-        KfcGenUiActionSpec(
-          id: 'remove_item',
-          label: 'Xóa Pepsi',
-          intent: KfcGenUiActionIntent.destructive,
-          value: 'Pepsi lớn',
         ),
       ],
     ),
@@ -611,24 +665,32 @@ KfcGenUiAttachment kfcGenUiFixture(KfcGenUiWidgetKind kind) {
       status: KfcGenUiStatus.active,
       title: 'Chọn phương thức thanh toán',
       data: {
+        'paymentMethodCollection': {
+          'collectionKey': 'fixture-payment-methods:all',
+          'collectionRevision': 'fixture-payment-collection-revision-1',
+          'providerRevision': 'fixture-payment-provider-revision-1',
+        },
         'methods': [
           {
-            'methodId': 'cod',
+            'methodId': 'cash_on_delivery',
             'displayName': 'Thanh toán khi nhận hàng',
             'category': 'cash_on_delivery',
             'supported': true,
+            'supportStatus': 'listed_supported',
           },
           {
-            'methodId': 'zalopay',
+            'methodId': 'zalopay_wallet',
             'displayName': 'Ví ZaloPay',
             'category': 'digital_wallet',
             'supported': true,
+            'supportStatus': 'listed_supported',
           },
           {
-            'methodId': 'momo',
+            'methodId': 'momo_wallet',
             'displayName': 'Ví MoMo',
             'category': 'digital_wallet',
             'supported': false,
+            'supportStatus': 'not_listed_in_policy',
           },
         ],
       },

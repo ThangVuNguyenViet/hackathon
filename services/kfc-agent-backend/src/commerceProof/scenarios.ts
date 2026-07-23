@@ -1,16 +1,5 @@
 import { z } from "zod";
 
-export const commerceProofScenarioIds = [
-  "successful-placement",
-  "duplicate-command",
-  "rejection-compensation-succeeds",
-  "rejection-compensation-fails",
-  "pos-timeout",
-  "successful-cancellation",
-  "partial-cancellation-failure",
-  "conflicting-status",
-] as const;
-
 export const mockOperationSchema = z.enum([
   "create_order",
   "get_order",

@@ -50,7 +50,7 @@ void main() {
     expect(actions.single.actionId, 'confirm_order');
   });
 
-  testWidgets('cart controls emit item-specific quantity and removal actions', (
+  testWidgets('cart controls stay local until one atomic update', (
     tester,
   ) async {
     tester.view.physicalSize = const Size(390, 620);
@@ -105,11 +105,269 @@ void main() {
     await tester.tap(
       find.byKey(CustomerChatKeys.genUiCartRemove(fixture.id, 'pepsi_large')),
     );
+    await tester.pump();
 
-    expect(actions[0].actionId, 'update_item_quantity');
-    expect(actions[0].payload, {'itemCode': 'combo_zinger', 'quantity': 2});
-    expect(actions[1].actionId, 'remove_item');
-    expect(actions[1].payload, {'itemCode': 'pepsi_large'});
+    expect(actions, isEmpty);
+    expect(find.text('178.000đ'), findsWidgets);
+    final update = find.byKey(
+      CustomerChatKeys.genUiAction(fixture.id, 'update_cart'),
+    );
+    expect(update, findsOneWidget);
+    await tester.tap(update);
+    await tester.pump();
+
+    expect(actions.single.actionId, 'update_cart');
+    expect(actions.single.payload, {
+      'items': [
+        {'itemCode': 'combo_zinger', 'quantity': 2},
+        {'itemCode': 'pepsi_large', 'quantity': 0},
+      ],
+    });
+  });
+
+  testWidgets('modifier choices stay local until Apply', (tester) async {
+    final actions = <KfcGenUiAction>[];
+    final fixture = kfcGenUiFixture(KfcGenUiWidgetKind.modifierPicker);
+    await tester.pumpWidget(
+      TestApp(
+        child: KfcGenUiRenderer(attachment: fixture, onAction: actions.add),
+      ),
+    );
+
+    await tester.tap(
+      find.byKey(
+        CustomerChatKeys.genUiModifierOption(fixture.id, 'flavor', 'hot-spicy'),
+      ),
+    );
+    await tester.pump();
+    expect(actions, isEmpty);
+
+    await tester.tap(
+      find.byKey(CustomerChatKeys.genUiAction(fixture.id, 'apply_modifiers')),
+    );
+    await tester.pump();
+
+    expect(actions.single.actionId, 'apply_modifiers');
+    expect(actions.single.payload, {
+      'itemCode': 'three-chicken',
+      'selections': [
+        {'groupId': 'flavor', 'modifierId': 'hot-spicy'},
+      ],
+    });
+  });
+
+  testWidgets(
+    'modifier apply preserves verified defaults for untouched groups',
+    (tester) async {
+      final actions = <KfcGenUiAction>[];
+      const fixture = KfcGenUiAttachment(
+        id: 'modifier-defaults',
+        lifecycleStage: 'modifier',
+        widgetKind: KfcGenUiWidgetKind.modifierPicker,
+        status: KfcGenUiStatus.active,
+        title: 'Tùy chỉnh',
+        data: {
+          'modifierTree': {
+            'itemCode': 'combo',
+            'modifierGroups': [
+              {
+                'groupId': 'main',
+                'min': 1,
+                'max': 1,
+                'options': [
+                  {'modifierId': 'burger', 'name': 'Burger', 'default': true},
+                ],
+              },
+              {
+                'groupId': 'drink',
+                'min': 1,
+                'max': 1,
+                'options': [
+                  {'modifierId': 'pepsi', 'name': 'Pepsi', 'default': true},
+                  {'modifierId': 'seven-up', 'name': '7Up', 'default': false},
+                ],
+              },
+            ],
+          },
+        },
+        actions: [
+          KfcGenUiActionSpec(
+            id: 'apply_modifiers',
+            label: 'Áp dụng',
+            intent: KfcGenUiActionIntent.primary,
+          ),
+        ],
+      );
+      await tester.pumpWidget(
+        TestApp(
+          child: KfcGenUiRenderer(attachment: fixture, onAction: actions.add),
+        ),
+      );
+
+      await tester.tap(
+        find.byKey(
+          CustomerChatKeys.genUiModifierOption(fixture.id, 'drink', 'seven-up'),
+        ),
+      );
+      await tester.tap(
+        find.byKey(CustomerChatKeys.genUiAction(fixture.id, 'apply_modifiers')),
+      );
+
+      expect(actions.single.payload, {
+        'itemCode': 'combo',
+        'selections': [
+          {'groupId': 'main', 'modifierId': 'burger'},
+          {'groupId': 'drink', 'modifierId': 'seven-up'},
+        ],
+      });
+    },
+  );
+
+  testWidgets(
+    'modifier apply waits for and submits an active required nested group',
+    (tester) async {
+      final actions = <KfcGenUiAction>[];
+      const fixture = KfcGenUiAttachment(
+        id: 'nested-modifiers',
+        lifecycleStage: 'modifier',
+        widgetKind: KfcGenUiWidgetKind.modifierPicker,
+        status: KfcGenUiStatus.active,
+        title: 'Tùy chỉnh',
+        data: {
+          'modifierTree': {
+            'itemCode': 'combo',
+            'modifierGroups': [
+              {
+                'groupId': 'main',
+                'name': 'Món chính',
+                'min': 1,
+                'max': 1,
+                'options': [
+                  {
+                    'modifierId': 'burger',
+                    'name': 'Burger',
+                    'default': true,
+                    'modifierGroups': [
+                      {
+                        'groupId': 'spice',
+                        'name': 'Độ cay',
+                        'min': 1,
+                        'max': 1,
+                        'options': [
+                          {'modifierId': 'spicy', 'name': 'Cay'},
+                          {'modifierId': 'mild', 'name': 'Không cay'},
+                        ],
+                      },
+                    ],
+                  },
+                ],
+              },
+            ],
+          },
+        },
+        actions: [
+          KfcGenUiActionSpec(
+            id: 'apply_modifiers',
+            label: 'Áp dụng',
+            intent: KfcGenUiActionIntent.primary,
+          ),
+        ],
+      );
+      await tester.pumpWidget(
+        TestApp(
+          child: KfcGenUiRenderer(attachment: fixture, onAction: actions.add),
+        ),
+      );
+
+      expect(find.text('Độ cay'), findsOneWidget);
+      final applyFinder = find.byKey(
+        CustomerChatKeys.genUiAction(fixture.id, 'apply_modifiers'),
+      );
+      expect(tester.widget<ShadButton>(applyFinder).onPressed, isNull);
+
+      await tester.tap(
+        find.byKey(
+          CustomerChatKeys.genUiModifierOption(fixture.id, 'spice', 'mild'),
+        ),
+      );
+      await tester.pump();
+      expect(tester.widget<ShadButton>(applyFinder).onPressed, isNotNull);
+      await tester.tap(applyFinder);
+
+      expect(actions.single.payload, {
+        'itemCode': 'combo',
+        'selections': [
+          {'groupId': 'main', 'modifierId': 'burger'},
+          {'groupId': 'spice', 'modifierId': 'mild'},
+        ],
+      });
+    },
+  );
+
+  testWidgets('answered cart collapses to a verified read-only summary', (
+    tester,
+  ) async {
+    final source = kfcGenUiFixture(KfcGenUiWidgetKind.cartBuilder);
+    final answered = KfcGenUiAttachment(
+      id: source.id,
+      lifecycleStage: source.lifecycleStage,
+      widgetKind: source.widgetKind,
+      status: KfcGenUiStatus.answered,
+      title: source.title,
+      data: {
+        ...source.data,
+        '_completedAction': {
+          'actionId': 'update_cart',
+          'payload': {
+            'items': [
+              {'itemCode': 'combo_zinger', 'quantity': 2},
+              {'itemCode': 'pepsi_large', 'quantity': 0},
+            ],
+          },
+        },
+      },
+      actions: source.actions,
+      selectedAction: 'update_cart',
+    );
+
+    await tester.pumpWidget(
+      TestApp(
+        child: KfcGenUiRenderer(attachment: answered, onAction: (_) {}),
+      ),
+    );
+
+    expect(find.text('Đã hoàn tất · Cập nhật'), findsOneWidget);
+    expect(find.text('2 × Combo Zinger'), findsOneWidget);
+    expect(
+      find.byKey(CustomerChatKeys.genUiAction(source.id, 'update_cart')),
+      findsNothing,
+    );
+    expect(
+      find.byKey(
+        CustomerChatKeys.genUiCartQuantityIncrease(source.id, 'combo_zinger'),
+      ),
+      findsNothing,
+    );
+  });
+
+  testWidgets('an older actionable widget renders read-only', (tester) async {
+    final fixture = kfcGenUiFixture(KfcGenUiWidgetKind.smartMenuPicker);
+
+    await tester.pumpWidget(
+      TestApp(
+        child: KfcGenUiRenderer(
+          attachment: fixture,
+          interactive: false,
+          onAction: (_) {},
+        ),
+      ),
+    );
+
+    expect(find.text('Nội dung trước đó · chỉ xem'), findsWidgets);
+    expect(
+      find.byKey(CustomerChatKeys.genUiAction(fixture.id, 'add_items')),
+      findsNothing,
+    );
   });
 
   testWidgets(
@@ -125,7 +383,7 @@ void main() {
 
       await tester.tap(find.text('Ví ZaloPay'));
       expect(actions.single.actionId, 'select_payment_method');
-      expect(actions.single.payload, {'methodId': 'zalopay'});
+      expect(actions.single.payload, {'methodId': 'zalopay_wallet'});
 
       final momoButton = tester.widget<ShadButton>(
         find.ancestor(
@@ -134,6 +392,54 @@ void main() {
         ),
       );
       expect(momoButton.onPressed, isNull);
+    },
+  );
+
+  testWidgets(
+    'payment picker preserves the provider display label without changing method authority',
+    (tester) async {
+      final actions = <KfcGenUiAction>[];
+      const displayName = '  Provider display label  ';
+      const fixture = KfcGenUiAttachment(
+        id: 'payment-display-authority',
+        lifecycleStage: 'payment_method',
+        widgetKind: KfcGenUiWidgetKind.paymentMethodPicker,
+        status: KfcGenUiStatus.active,
+        title: 'Payment',
+        data: {
+          'paymentMethodCollection': {
+            'collectionKey': 'payment:all',
+            'collectionRevision': 'collection-revision-1',
+            'providerRevision': 'provider-revision-1',
+          },
+          'methods': [
+            {
+              'methodId': 'opaque-method',
+              'displayName': displayName,
+              'supported': true,
+              'supportStatus': 'listed_supported',
+            },
+          ],
+        },
+        actions: [
+          KfcGenUiActionSpec(
+            id: 'select_payment_method',
+            label: 'Select payment method',
+          ),
+        ],
+      );
+      await tester.pumpWidget(
+        TestApp(
+          child: KfcGenUiRenderer(attachment: fixture, onAction: actions.add),
+        ),
+      );
+
+      await tester.tap(find.text(displayName));
+
+      expect(actions.single.actionId, 'select_payment_method');
+      expect(actions.single.value, displayName);
+      expect(actions.single.payload, {'methodId': 'opaque-method'});
+      expect(fixture.authorizesAction(actions.single), isTrue);
     },
   );
 
@@ -220,6 +526,67 @@ void main() {
     expect(find.text('-, -, -'), findsNothing);
   });
 
+  testWidgets('full menu browser navigates categories in a bounded list', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(800, 1400);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    final fixture = kfcGenUiFixture(KfcGenUiWidgetKind.fullMenuBrowser);
+    final actions = <KfcGenUiAction>[];
+
+    await tester.pumpWidget(
+      TestApp(
+        child: KfcGenUiRenderer(attachment: fixture, onAction: actions.add),
+      ),
+    );
+
+    expect(find.byType(ShadTabs<String>), findsOneWidget);
+    expect(
+      find.byKey(CustomerChatKeys.genUiFullMenuItemList(fixture.id)),
+      findsOneWidget,
+    );
+    expect(find.text('Đầy đủ 2 món'), findsOneWidget);
+    expect(find.text('Combo Hợp Gu 99K'), findsOneWidget);
+    expect(find.text('Burger Phi-lê Gà Quay'), findsNothing);
+
+    final increase = find.byKey(
+      CustomerChatKeys.genUiMenuQuantityIncrease(fixture.id, 'combo-1'),
+    );
+    final decrease = find.byKey(
+      CustomerChatKeys.genUiMenuQuantityDecrease(fixture.id, 'combo-1'),
+    );
+    await tester.tap(increase);
+    await tester.pump();
+    await tester.tap(increase);
+    await tester.pump();
+    await tester.tap(decrease);
+    await tester.pump();
+
+    expect(
+      find.byKey(CustomerChatKeys.genUiMenuQuantity(fixture.id, 'combo-1')),
+      findsOneWidget,
+    );
+    expect(find.text('1 món'), findsOneWidget);
+    await tester.tap(
+      find.byKey(CustomerChatKeys.genUiAction(fixture.id, 'add_items')),
+    );
+    await tester.pump();
+    expect(actions.single.payload, {
+      'items': [
+        {'itemCode': 'combo-1', 'quantity': 1},
+      ],
+    });
+
+    await tester.tap(
+      find.byKey(CustomerChatKeys.genUiMenuCategory(fixture.id, 'burger')),
+    );
+    await tester.pump();
+
+    expect(find.text('Combo Hợp Gu 99K'), findsNothing);
+    expect(find.text('Burger Phi-lê Gà Quay'), findsOneWidget);
+  });
+
   testWidgets('smart menu picker emits selected item quantity action', (
     tester,
   ) async {
@@ -240,26 +607,40 @@ void main() {
           {
             'code': '20751',
             'name': 'Combo Hợp Gu 99K',
+            'category': 'Combo',
             'description': '3 Miếng Gà Rán + 1 Burger Tôm',
             'priceVnd': 99000,
           },
-          {'code': '20748', 'name': 'Combo Đẫy Đà 129K', 'priceVnd': 129000},
+          {
+            'code': '20748',
+            'name': 'Combo Đẫy Đà 129K',
+            'category': 'Combo',
+            'priceVnd': 129000,
+          },
           {
             'code': 'combo_3',
             'name': 'Combo Tiêu Tung Chill 85K',
+            'category': 'Combo',
             'priceVnd': 85000,
           },
           {
             'code': 'combo_4',
             'name': 'Combo Chanh Sang Chảnh 140K',
+            'category': 'Combo',
             'priceVnd': 140000,
           },
           {
             'code': 'combo_5',
             'name': 'Combo Gà Rôm Rả 245K',
+            'category': 'Combo',
             'priceVnd': 245000,
           },
-          {'code': 'combo_6', 'name': 'Combo Cùng Vui', 'priceVnd': 199000},
+          {
+            'code': 'combo_6',
+            'name': 'Combo Cùng Vui',
+            'category': 'Combo',
+            'priceVnd': 199000,
+          },
         ],
       },
       actions: [
@@ -278,8 +659,9 @@ void main() {
     );
 
     expect(find.text('Combo Hợp Gu 99K'), findsOneWidget);
-    expect(find.text('Combo Cùng Vui'), findsNothing);
-    expect(find.text('Xem thêm 3 món'), findsOneWidget);
+    expect(find.text('Combo Cùng Vui'), findsOneWidget);
+    expect(find.textContaining('Xem thêm'), findsNothing);
+    expect(find.text('0/5 món khác nhau đã chọn'), findsOneWidget);
     expect(find.text('Xác nhận món'), findsOneWidget);
     expect(find.text('Thêm'), findsNothing);
 
@@ -323,6 +705,235 @@ void main() {
       ],
     });
   });
+
+  testWidgets(
+    'smart menu categories expose every item and cap five distinct selections',
+    (tester) async {
+      tester.view.physicalSize = const Size(800, 1400);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
+      final actions = <KfcGenUiAction>[];
+      const fixture = KfcGenUiAttachment(
+        id: 'categorized_menu',
+        lifecycleStage: 'menu',
+        widgetKind: KfcGenUiWidgetKind.smartMenuPicker,
+        status: KfcGenUiStatus.active,
+        title: 'Toàn bộ thực đơn',
+        data: {
+          'categories': [
+            {'categoryId': 'provider/combo', 'label': 'Combo'},
+            {'categoryId': 'provider/drinks', 'label': 'Nước Uống'},
+          ],
+          'items': [
+            {
+              'code': 'combo_1',
+              'name': 'Combo 1',
+              'categoryId': 'provider/combo',
+              'category': 'Combo',
+              'priceVnd': 100000,
+            },
+            {
+              'code': 'combo_2',
+              'name': 'Combo 2',
+              'categoryId': 'provider/combo',
+              'category': 'Combo',
+              'priceVnd': 110000,
+            },
+            {
+              'code': 'combo_3',
+              'name': 'Combo 3',
+              'categoryId': 'provider/combo',
+              'category': 'Combo',
+              'priceVnd': 120000,
+            },
+            {
+              'code': 'drink_1',
+              'name': 'Nước 1',
+              'categoryId': 'provider/drinks',
+              'category': 'Nước Uống',
+              'priceVnd': 20000,
+            },
+            {
+              'code': 'drink_2',
+              'name': 'Nước 2',
+              'categoryId': 'provider/drinks',
+              'category': 'Nước Uống',
+              'priceVnd': 22000,
+            },
+            {
+              'code': 'drink_3',
+              'name': 'Nước 3',
+              'categoryId': 'provider/drinks',
+              'category': 'Nước Uống',
+              'priceVnd': 24000,
+            },
+          ],
+          'selectionLimit': 5,
+        },
+        actions: [
+          KfcGenUiActionSpec(
+            id: 'add_items',
+            label: 'Xác nhận món',
+            intent: KfcGenUiActionIntent.primary,
+          ),
+        ],
+      );
+
+      await tester.pumpWidget(
+        TestApp(
+          child: KfcGenUiRenderer(attachment: fixture, onAction: actions.add),
+        ),
+      );
+
+      expect(find.text('Combo 1'), findsOneWidget);
+      expect(find.text('Combo 3'), findsOneWidget);
+      expect(find.text('Nước 1'), findsNothing);
+      for (final code in ['combo_1', 'combo_2', 'combo_3']) {
+        await tester.tap(
+          find.byKey(
+            CustomerChatKeys.genUiMenuQuantityIncrease(fixture.id, code),
+          ),
+        );
+        await tester.pump();
+      }
+
+      await tester.tap(
+        find.byKey(
+          CustomerChatKeys.genUiMenuCategory(fixture.id, 'provider/drinks'),
+        ),
+      );
+      await tester.pump();
+      expect(find.text('Combo 1'), findsNothing);
+      expect(find.text('Nước 1'), findsOneWidget);
+      expect(find.text('Nước 3'), findsOneWidget);
+      for (final code in ['drink_1', 'drink_2']) {
+        await tester.tap(
+          find.byKey(
+            CustomerChatKeys.genUiMenuQuantityIncrease(fixture.id, code),
+          ),
+        );
+        await tester.pump();
+      }
+
+      expect(find.text('5/5 món khác nhau đã chọn'), findsOneWidget);
+      final sixthIncrease = tester.widget<ShadIconButton>(
+        find.byKey(
+          CustomerChatKeys.genUiMenuQuantityIncrease(fixture.id, 'drink_3'),
+        ),
+      );
+      expect(sixthIncrease.onPressed, isNull);
+
+      await tester.tap(
+        find.byKey(CustomerChatKeys.genUiAction(fixture.id, 'add_items')),
+      );
+      await tester.pump();
+      expect(actions.single.payload, {
+        'items': [
+          {'itemCode': 'combo_1', 'quantity': 1},
+          {'itemCode': 'combo_2', 'quantity': 1},
+          {'itemCode': 'combo_3', 'quantity': 1},
+          {'itemCode': 'drink_1', 'quantity': 1},
+          {'itemCode': 'drink_2', 'quantity': 1},
+        ],
+      });
+    },
+  );
+
+  testWidgets(
+    'smart menu keeps duplicate labels distinct and selection stable on rename',
+    (tester) async {
+      tester.view.physicalSize = const Size(800, 1400);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
+
+      KfcGenUiAttachment fixture(String secondLabel) => KfcGenUiAttachment(
+        id: 'stable_category_identity',
+        lifecycleStage: 'menu',
+        widgetKind: KfcGenUiWidgetKind.smartMenuPicker,
+        status: KfcGenUiStatus.active,
+        title: 'Toàn bộ thực đơn',
+        data: {
+          'categories': [
+            {'categoryId': 'provider/category-a', 'label': 'Cùng nhãn'},
+            {'categoryId': 'provider/category-b', 'label': secondLabel},
+          ],
+          'items': const [
+            {
+              'code': 'item-a',
+              'name': 'Món A',
+              'categoryId': 'provider/category-a',
+              'category': 'Nhãn cũ A',
+              'priceVnd': 10000,
+            },
+            {
+              'code': 'item-b',
+              'name': 'Món B',
+              'categoryId': 'provider/category-b',
+              'category': 'Nhãn cũ B',
+              'priceVnd': 20000,
+            },
+          ],
+        },
+      );
+
+      await tester.pumpWidget(
+        TestApp(
+          child: KfcGenUiRenderer(
+            attachment: fixture('Cùng nhãn'),
+            onAction: (_) {},
+          ),
+        ),
+      );
+
+      expect(find.text('Cùng nhãn'), findsNWidgets(2));
+      expect(
+        find.byKey(
+          CustomerChatKeys.genUiMenuCategory(
+            'stable_category_identity',
+            'provider/category-a',
+          ),
+        ),
+        findsOneWidget,
+      );
+      expect(
+        find.byKey(
+          CustomerChatKeys.genUiMenuCategory(
+            'stable_category_identity',
+            'provider/category-b',
+          ),
+        ),
+        findsOneWidget,
+      );
+      expect(find.text('Món A'), findsOneWidget);
+      expect(find.text('Món B'), findsNothing);
+
+      await tester.tap(
+        find.byKey(
+          CustomerChatKeys.genUiMenuCategory(
+            'stable_category_identity',
+            'provider/category-b',
+          ),
+        ),
+      );
+      await tester.pump();
+      expect(find.text('Món A'), findsNothing);
+      expect(find.text('Món B'), findsOneWidget);
+
+      await tester.pumpWidget(
+        TestApp(
+          child: KfcGenUiRenderer(
+            attachment: fixture('Nhãn đã đổi'),
+            onAction: (_) {},
+          ),
+        ),
+      );
+      await tester.pump();
+
+      expect(find.text('Nhãn đã đổi'), findsOneWidget);
+      expect(find.text('Món A'), findsNothing);
+      expect(find.text('Món B'), findsOneWidget);
+    },
+  );
 
   testWidgets(
     'order tracking renders backend order id without optimistic fallbacks',
@@ -447,6 +1058,53 @@ void main() {
     expect(find.text('Đang chuẩn bị'), findsOneWidget);
     expect(find.text('Chờ thanh toán'), findsOneWidget);
   });
+
+  testWidgets(
+    'payment status keeps durable pending separate from a failed current check',
+    (tester) async {
+      const fixture = KfcGenUiAttachment(
+        id: 'backend_payment_check_failed',
+        lifecycleStage: 'post_order',
+        widgetKind: KfcGenUiWidgetKind.paymentOrderStatus,
+        status: KfcGenUiStatus.active,
+        title: 'Trạng thái đơn hàng',
+        data: {
+          'order': {
+            'id': 'KFC-LIVE-2002',
+            'status': 'created',
+            'paymentStatus': 'pending',
+            'amountVnd': 117000,
+          },
+          'paymentAttempt': {'status': 'pending'},
+          'paymentStatusEvidence': {
+            'resolution': 'current_tool',
+            'statuses': {'order': 'pending', 'paymentAttempt': 'pending'},
+            'currentCheck': {
+              'executionOutcome': 'error',
+              'errorCode': 'payment_failed',
+            },
+          },
+        },
+        actions: [],
+      );
+
+      await tester.pumpWidget(
+        TestApp(
+          child: KfcGenUiRenderer(attachment: fixture, onAction: (_) {}),
+        ),
+      );
+
+      expect(find.text('Chờ thanh toán'), findsOneWidget);
+      expect(find.text('117.000đ'), findsOneWidget);
+      expect(find.text('Lần kiểm tra gần nhất'), findsOneWidget);
+      expect(
+        find.text('Không xác minh được trạng thái thanh toán'),
+        findsOneWidget,
+      );
+      expect(find.text('payment_failed'), findsNothing);
+      expect(find.text('Thanh toán thất bại'), findsNothing);
+    },
+  );
 
   testWidgets('fulfillment renders a structured address as readable text', (
     tester,

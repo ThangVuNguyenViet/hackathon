@@ -5,8 +5,16 @@ export const CUSTOMER_RUN_SCHEMA_VERSION = 1 as const;
 const opaqueIdSchema = z.string().trim().min(1).max(200);
 const isoTimestampSchema = z.string().datetime({ offset: true });
 
-export function kfcSessionMatchesCustomer(input: { sessionId: string; customerId: string }): boolean {
-  return input.sessionId === `kfc:${input.customerId}`;
+export function kfcSessionMatchesCustomer(input: {
+  sessionId: string;
+  customerId: string;
+}): boolean {
+  const customerSession = `kfc:${input.customerId}`;
+  return (
+    input.sessionId === customerSession ||
+    input.sessionId === `${customerSession}:genui` ||
+    input.sessionId === `${customerSession}:text`
+  );
 }
 
 export const customerRunStatusSchema = z.enum([
@@ -108,6 +116,7 @@ export interface CustomerRun {
   clientMessageId: string;
   requestFingerprint: string;
   generation: number;
+  sessionAuthorityGeneration: number;
   status: CustomerRunStatus;
   phase: CustomerRunPhase | null;
   nextEventSequence: number;

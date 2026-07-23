@@ -87,33 +87,25 @@ void main() {
         status: KfcGenUiStatus.active,
         title: 'Chọn tùy chọn',
         data: {
-          'modifierGroups': [
-            {
-              'groupId': 'drink',
-              'options': [
-                {'modifierId': 'large', 'name': 'Nước lớn'},
-              ],
-            },
-            {
-              'groupId': 'fries',
-              'options': [
-                {'modifierId': 'large', 'name': 'Khoai lớn'},
-              ],
-            },
-          ],
+          'modifierTree': {
+            'itemCode': 'combo_collision',
+            'modifierGroups': [
+              {
+                'groupId': 'drink',
+                'options': [
+                  {'modifierId': 'large', 'name': 'Nước lớn'},
+                ],
+              },
+              {
+                'groupId': 'fries',
+                'options': [
+                  {'modifierId': 'large', 'name': 'Khoai lớn'},
+                ],
+              },
+            ],
+          },
         },
-        actions: [
-          KfcGenUiActionSpec(
-            id: 'customize_item:drink:large',
-            label: 'Nước lớn',
-            payload: {'groupId': 'drink', 'modifierId': 'large'},
-          ),
-          KfcGenUiActionSpec(
-            id: 'customize_item:fries:large',
-            label: 'Khoai lớn',
-            payload: {'groupId': 'fries', 'modifierId': 'large'},
-          ),
-        ],
+        actions: [KfcGenUiActionSpec(id: 'apply_modifiers', label: 'Áp dụng')],
       );
 
       await tester.pumpWidget(
@@ -135,12 +127,22 @@ void main() {
         'large',
       );
       expect(drink, isNot(fries));
+      await tester.tap(find.byKey(drink));
       await tester.tap(find.byKey(fries));
       await tester.pump();
-      expect(actions.single.actionId, 'customize_item:fries:large');
+      expect(actions, isEmpty);
+      await tester.tap(
+        find.byKey(
+          CustomerChatKeys.genUiAction(attachment.id, 'apply_modifiers'),
+        ),
+      );
+      expect(actions.single.actionId, 'apply_modifiers');
       expect(actions.single.payload, {
-        'groupId': 'fries',
-        'modifierId': 'large',
+        'itemCode': 'combo_collision',
+        'selections': [
+          {'groupId': 'drink', 'modifierId': 'large'},
+          {'groupId': 'fries', 'modifierId': 'large'},
+        ],
       });
     },
   );

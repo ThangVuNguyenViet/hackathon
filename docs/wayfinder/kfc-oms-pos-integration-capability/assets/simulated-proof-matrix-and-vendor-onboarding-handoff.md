@@ -1,5 +1,11 @@
 # Simulated Proof Matrix And Vendor Onboarding Handoff
 
+> **Current implementation amendment (2026-07-20):** The synthetic
+> runner/manifest and mock LangSmith evidence described below are retired and
+> are not a release gate. Retained gateway and Mock OMS/POS tests provide
+> contract/component evidence only. The vendor onboarding checklist and the
+> requirement for authoritative sandbox/production evidence remain active.
+
 ## Claim Gate
 
 The release may use this claim only after every required simulated gate below passes:

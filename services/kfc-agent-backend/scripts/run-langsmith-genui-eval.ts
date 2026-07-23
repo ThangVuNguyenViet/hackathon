@@ -9,6 +9,7 @@ import {
   type GenUiProofEvaluation,
   type GenUiScenarioExpectation,
 } from '../src/evaluation/genUiProofEvaluator.js';
+import { assertRuntimeBinding } from '../src/proof/kfcGenUiDeployedProof.js';
 
 interface CapturePlan {
   scenarios: Array<{
@@ -58,11 +59,12 @@ if (options.seedOnly) {
 
 const manifestPath = resolve(options.manifestPath ?? latestManifestPath());
 const manifest = readJson<GenUiProofManifest>(manifestPath);
+assertRuntimeBinding(manifest.runtime);
 const evaluation = evaluateGenUiProof(manifest, expectations);
 const evaluationPath = resolve(manifest.artifactRoot, 'genui-evaluation.json');
 writeFileSync(evaluationPath, `${JSON.stringify(evaluation, null, 2)}\n`, 'utf8');
 
-if (client) await emitLangSmithEvaluation(client, evaluation, manifestPath, evaluationPath);
+if (client) await emitLangSmithEvaluation(client, evaluation, manifest, manifestPath, evaluationPath);
 
 console.log(
   JSON.stringify(
@@ -169,6 +171,7 @@ async function seedDataset(
 async function emitLangSmithEvaluation(
   langsmith: Client,
   evaluation: GenUiProofEvaluation,
+  manifest: GenUiProofManifest,
   manifestPath: string,
   evaluationPath: string,
 ): Promise<void> {
@@ -190,8 +193,10 @@ async function emitLangSmithEvaluation(
       manifestPath,
       evaluationPath,
       artifactRoot: evaluation.artifactRoot,
-      plannerModel: process.env.OPENAI_TOOL_PLANNER_MODEL,
-      responseModel: process.env.OPENAI_RESPONSE_MODEL,
+      releaseSha: manifest.runtime.deployment.gitSha,
+      agentProvider: manifest.runtime.versions.agent.provider,
+      agentModel: manifest.runtime.versions.agent.model,
+      agentProfile: manifest.runtime.versions.agent.profile,
     },
     tags: ['kfc-genui-proof', `commit:${commit}`, `schema:${schemaVersion}`],
   });

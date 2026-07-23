@@ -1,32 +1,233 @@
-export type CustomerCommand =
-  | {
-      kind: 'cart_update';
-      itemCode: string;
-      quantity: number;
-    }
-  | {
-      kind: 'cart_batch_update';
-      items: Array<{ itemCode: string; quantity: number }>;
-    }
-  | {
-      kind: 'modifier_selection';
-      itemCode: string;
-      groupId: string;
-      modifierId: string;
-    }
-  | { kind: 'confirm_order' }
-  | { kind: 'start_fulfillment' }
-  | { kind: 'accept_fulfillment' }
-  | { kind: 'select_payment_method'; methodId: string }
-  | { kind: 'edit_cart' }
-  | { kind: 'submit_address'; value?: string }
-  | { kind: 'apply_voucher'; value?: string }
-  | { kind: 'change_payment_method' }
-  | { kind: 'continue_payment' }
-  | { kind: 'track_order' }
-  | { kind: 'request_support' }
-  | { kind: 'add_support_detail'; value?: string }
-  | { kind: 'open_allergen_evidence' };
+import { z } from 'zod';
+import { selectedPaymentMethodAuthoritySchema } from './opaqueProviderId.js';
+import { verifiedRefIdSchema } from './verifiedRef.js';
+
+const identifierSchema = z.string().trim().min(1).max(128);
+const quantitySchema = z.number().int().min(1).max(99);
+const addressValueSchema = z.string().trim().min(1).max(500);
+const voucherValueSchema = z.string().trim().min(1).max(64);
+const supportDetailSchema = z.string().trim().min(1).max(1_000);
+const sourceUrlSchema = z.string().trim().min(1).max(2_048).url();
+const digestSchema = z.string().regex(/^[0-9a-f]{64}$/u);
+const envelopeIdentifierSchema = z.string().trim().min(1).max(256);
+const emptyPayloadSchema = z.object({}).strict();
+const savedAddressRefSchema = z
+  .object({
+    id: verifiedRefIdSchema,
+    kind: z.literal('saved_address'),
+  })
+  .strict();
+
+const nullableAddressFieldSchema = z
+  .string()
+  .trim()
+  .min(1)
+  .max(500)
+  .nullable();
+
+export const deliveryAddressUpdateSchema = z
+  .object({
+    recipientName: nullableAddressFieldSchema,
+    phone: nullableAddressFieldSchema,
+    addressLine: nullableAddressFieldSchema,
+    provinceCode: nullableAddressFieldSchema,
+    provinceName: nullableAddressFieldSchema,
+    communeCode: nullableAddressFieldSchema,
+    communeName: nullableAddressFieldSchema,
+    deliveryInstructions: nullableAddressFieldSchema,
+    rawAddress: nullableAddressFieldSchema,
+    legacyDistrictText: nullableAddressFieldSchema,
+  })
+  .strict();
+
+const cartUpdateCommandSchema = z
+  .object({
+    kind: z.literal('cart_update'),
+    itemCode: identifierSchema,
+    quantity: z.number().int().min(0).max(99),
+  })
+  .strict();
+
+const cartBatchItemsSchema = z
+  .array(
+    z
+      .object({
+        itemCode: identifierSchema,
+        quantity: quantitySchema,
+      })
+      .strict(),
+  )
+  .min(1)
+  .max(5)
+  .superRefine((items, context) => {
+    const seen = new Set<string>();
+    items.forEach((item, index) => {
+      if (seen.has(item.itemCode)) {
+        context.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ['items', index, 'itemCode'],
+          message: 'Item codes must be unique',
+        });
+      }
+      seen.add(item.itemCode);
+    });
+  });
+
+const cartBatchUpdateCommandSchema = z
+  .object({
+    kind: z.literal('cart_batch_update'),
+    items: cartBatchItemsSchema,
+  })
+  .strict();
+
+const cartDraftItemsSchema = z
+  .array(
+    z
+      .object({
+        itemCode: identifierSchema,
+        quantity: z.number().int().min(0).max(99),
+      })
+      .strict(),
+  )
+  .min(1)
+  .max(100)
+  .superRefine((items, context) => {
+    const seen = new Set<string>();
+    items.forEach((item, index) => {
+      if (seen.has(item.itemCode)) {
+        context.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ['items', index, 'itemCode'],
+          message: 'Item codes must be unique',
+        });
+      }
+      seen.add(item.itemCode);
+    });
+  });
+
+const cartDraftCommitCommandSchema = z
+  .object({
+    kind: z.literal('cart_draft_commit'),
+    items: cartDraftItemsSchema,
+    continueToFulfillment: z.boolean(),
+  })
+  .strict();
+
+const modifierSelectionCommandSchema = z
+  .object({
+    kind: z.literal('modifier_selection'),
+    itemCode: identifierSchema,
+    groupId: identifierSchema,
+    modifierId: identifierSchema,
+  })
+  .strict();
+
+const modifierBatchSelectionCommandSchema = z
+  .object({
+    kind: z.literal('modifier_batch_selection'),
+    itemCode: identifierSchema,
+    selections: z
+      .array(
+        z
+          .object({
+            groupId: identifierSchema,
+            modifierId: identifierSchema,
+          })
+          .strict(),
+      )
+      .min(1)
+      .max(50)
+      .superRefine((selections, context) => {
+        const seen = new Set<string>();
+        selections.forEach((selection, index) => {
+          if (seen.has(selection.groupId)) {
+            context.addIssue({
+              code: z.ZodIssueCode.custom,
+              path: [index, 'groupId'],
+              message: 'Modifier groups must be unique',
+            });
+          }
+          seen.add(selection.groupId);
+        });
+      }),
+  })
+  .strict();
+
+const acceptFulfillmentCommandSchema = z
+  .object({
+    kind: z.literal('accept_fulfillment'),
+    savedAddressRef: savedAddressRefSchema.optional(),
+  })
+  .strict();
+
+const customerCommandSchema = z.discriminatedUnion('kind', [
+  cartUpdateCommandSchema,
+  cartBatchUpdateCommandSchema,
+  cartDraftCommitCommandSchema,
+  modifierSelectionCommandSchema,
+  modifierBatchSelectionCommandSchema,
+  z.object({ kind: z.literal('confirm_order') }).strict(),
+  z.object({ kind: z.literal('start_fulfillment') }).strict(),
+  acceptFulfillmentCommandSchema,
+  z
+    .object({
+      kind: z.literal('select_payment_method'),
+      selection: selectedPaymentMethodAuthoritySchema,
+    })
+    .strict(),
+  z.object({ kind: z.literal('edit_cart') }).strict(),
+  z
+    .object({
+      kind: z.literal('submit_address'),
+      value: addressValueSchema.optional(),
+      address: deliveryAddressUpdateSchema.optional(),
+    })
+    .strict(),
+  z
+    .object({
+      kind: z.literal('apply_voucher'),
+      value: voucherValueSchema.optional(),
+    })
+    .strict(),
+  z.object({ kind: z.literal('change_payment_method') }).strict(),
+  z.object({ kind: z.literal('continue_payment') }).strict(),
+  z.object({ kind: z.literal('track_order') }).strict(),
+  z.object({ kind: z.literal('request_support') }).strict(),
+  z
+    .object({
+      kind: z.literal('add_support_detail'),
+      value: supportDetailSchema.optional(),
+    })
+    .strict(),
+  z
+    .object({
+      kind: z.literal('open_allergen_evidence'),
+      sourceUrl: sourceUrlSchema,
+    })
+    .strict(),
+]);
+
+export type CustomerCommand = z.infer<typeof customerCommandSchema>;
+
+/**
+ * Internal authority passed separately from persisted conversation metadata.
+ * Request JSON and model output must never be parsed directly into this type.
+ */
+export const trustedCustomerActionEnvelopeSchema = z
+  .object({
+    source: z.literal('kfc_genui_action'),
+    assistantTurnId: envelopeIdentifierSchema,
+    attachmentId: envelopeIdentifierSchema,
+    actionDigest: digestSchema,
+    verifiedRevision: digestSchema,
+    lifecycle: z.enum(['one_shot', 'replayable']),
+    command: customerCommandSchema,
+  })
+  .strict();
+
+export type TrustedCustomerActionEnvelope = z.infer<
+  typeof trustedCustomerActionEnvelopeSchema
+>;
 
 export interface VerifiedStructuredAction {
   actionId: string;
@@ -38,84 +239,251 @@ export function customerCommandFromVerifiedAction(
   action: VerifiedStructuredAction,
 ): CustomerCommand | undefined {
   const payload = action.payload ?? {};
-  if (
-    action.actionId === 'add_item' ||
-    action.actionId === 'update_item_quantity' ||
-    action.actionId === 'remove_item'
-  ) {
-    const itemCode = stringValue(payload.itemCode);
-    const requestedQuantity = integerValue(payload.quantity);
-    if (!itemCode) return undefined;
-    return {
-      kind: 'cart_update',
-      itemCode,
-      quantity: action.actionId === 'remove_item' ? 0 : requestedQuantity ?? 1,
-    };
-  }
-  if (action.actionId === 'add_items') {
-    if (!Array.isArray(payload.items)) return undefined;
-    const items = payload.items.flatMap((item) => {
-      const record = recordValue(item);
-      const itemCode = stringValue(record?.itemCode);
-      const quantity = integerValue(record?.quantity);
-      return itemCode && quantity !== undefined ? [{ itemCode, quantity }] : [];
-    });
-    return items.length === payload.items.length && items.length > 0
-      ? { kind: 'cart_batch_update', items }
-      : undefined;
-  }
-  if (action.actionId.startsWith('customize_item:')) {
-    const itemCode = stringValue(payload.itemCode);
-    const groupId = stringValue(payload.groupId);
-    const modifierId = stringValue(payload.modifierId);
-    return itemCode && groupId && modifierId
-      ? { kind: 'modifier_selection', itemCode, groupId, modifierId }
-      : undefined;
-  }
   switch (action.actionId) {
+    case 'add_item': {
+      const parsed = z
+        .object({
+          itemCode: identifierSchema,
+          quantity: quantitySchema,
+        })
+        .strict()
+        .safeParse(payload);
+      return parsed.success
+        ? {
+            kind: 'cart_update',
+            itemCode: parsed.data.itemCode,
+            quantity: parsed.data.quantity,
+          }
+        : undefined;
+    }
+    case 'update_item_quantity': {
+      const parsed = z
+        .object({
+          itemCode: identifierSchema,
+          quantity: quantitySchema,
+        })
+        .strict()
+        .safeParse(payload);
+      return parsed.success
+        ? {
+            kind: 'cart_update',
+            itemCode: parsed.data.itemCode,
+            quantity: parsed.data.quantity,
+          }
+        : undefined;
+    }
+    case 'remove_item': {
+      const parsed = z
+        .object({
+          itemCode: identifierSchema,
+        })
+        .strict()
+        .safeParse(payload);
+      return parsed.success
+        ? {
+            kind: 'cart_update',
+            itemCode: parsed.data.itemCode,
+            quantity: 0,
+          }
+        : undefined;
+    }
+    case 'add_items': {
+      const parsed = z
+        .object({
+          items: cartBatchItemsSchema,
+        })
+        .strict()
+        .safeParse(payload);
+      return parsed.success
+        ? {
+            kind: 'cart_batch_update',
+            items: parsed.data.items,
+          }
+        : undefined;
+    }
+    case 'update_cart':
+    case 'continue_to_fulfillment': {
+      const parsed = z
+        .object({ items: cartDraftItemsSchema })
+        .strict()
+        .safeParse(payload);
+      if (!parsed.success) return undefined;
+      if (
+        action.actionId === 'continue_to_fulfillment' &&
+        !parsed.data.items.some(({ quantity }) => quantity > 0)
+      ) {
+        return undefined;
+      }
+      return {
+        kind: 'cart_draft_commit',
+        items: parsed.data.items,
+        continueToFulfillment: action.actionId === 'continue_to_fulfillment',
+      };
+    }
+    case 'apply_modifiers': {
+      const parsed = z
+        .object({
+          itemCode: identifierSchema,
+          selections: modifierBatchSelectionCommandSchema.shape.selections,
+        })
+        .strict()
+        .safeParse(payload);
+      return parsed.success
+        ? { kind: 'modifier_batch_selection', ...parsed.data }
+        : undefined;
+    }
     case 'confirm_order':
-      return { kind: 'confirm_order' };
-    case 'continue_to_fulfillment':
-      return { kind: 'start_fulfillment' };
-    case 'accept_fulfillment':
-      return { kind: 'accept_fulfillment' };
+      return commandWithoutPayload(payload, { kind: 'confirm_order' });
+    case 'accept_fulfillment': {
+      if (!emptyPayloadSchema.safeParse(payload).success) return undefined;
+      const refId = verifiedRefIdSchema.safeParse(action.value);
+      return refId.success
+        ? {
+            kind: 'accept_fulfillment',
+            savedAddressRef: {
+              id: refId.data,
+              kind: 'saved_address',
+            },
+          }
+        : { kind: 'accept_fulfillment' };
+    }
     case 'select_payment_method': {
-      const methodId = stringValue(payload.methodId);
-      return methodId ? { kind: 'select_payment_method', methodId } : undefined;
+      const parsed = z
+        .object({
+          selection: selectedPaymentMethodAuthoritySchema,
+        })
+        .strict()
+        .safeParse(payload);
+      return parsed.success
+        ? {
+            kind: 'select_payment_method',
+            selection: parsed.data.selection,
+          }
+        : undefined;
     }
     case 'edit_cart':
-      return { kind: 'edit_cart' };
-    case 'submit_address':
-      return { kind: 'submit_address', value: action.value };
+      return commandWithoutPayload(payload, { kind: 'edit_cart' });
+    case 'submit_address': {
+      const structured = deliveryAddressUpdateSchema.safeParse(payload);
+      if (structured.success) {
+        return {
+          kind: 'submit_address',
+          address: structured.data,
+        };
+      }
+      return commandWithOptionalValue(
+        payload,
+        action.value,
+        addressValueSchema,
+        'submit_address',
+      );
+    }
     case 'apply_voucher':
-      return { kind: 'apply_voucher', value: action.value };
+      return commandWithOptionalValue(
+        payload,
+        action.value,
+        voucherValueSchema,
+        'apply_voucher',
+      );
     case 'change_payment_method':
-      return { kind: 'change_payment_method' };
+      return commandWithoutPayload(payload, {
+        kind: 'change_payment_method',
+      });
     case 'open_payment':
-      return { kind: 'continue_payment' };
+      return commandWithoutPayload(payload, { kind: 'continue_payment' });
     case 'track_order':
-      return { kind: 'track_order' };
+      return commandWithoutPayload(payload, { kind: 'track_order' });
     case 'request_human':
-      return { kind: 'request_support' };
+      return commandWithoutPayload(payload, { kind: 'request_support' });
     case 'send_issue_summary':
-      return { kind: 'add_support_detail', value: action.value };
-    case 'open_allergen_chart':
-      return { kind: 'open_allergen_evidence' };
+      return commandWithOptionalValue(
+        payload,
+        action.value,
+        supportDetailSchema,
+        'add_support_detail',
+      );
+    case 'open_allergen_chart': {
+      const parsed = z
+        .object({
+          sourceUrl: sourceUrlSchema,
+        })
+        .strict()
+        .safeParse(payload);
+      return parsed.success
+        ? {
+            kind: 'open_allergen_evidence',
+            sourceUrl: parsed.data.sourceUrl,
+          }
+        : undefined;
+    }
     default:
-      return undefined;
+      return modifierCommand(action, payload);
   }
 }
 
-function recordValue(value: unknown): Record<string, unknown> | undefined {
-  return typeof value === 'object' && value !== null && !Array.isArray(value)
-    ? value as Record<string, unknown>
+export function createTrustedCustomerActionEnvelope(
+  input: z.input<typeof trustedCustomerActionEnvelopeSchema>,
+): TrustedCustomerActionEnvelope {
+  return trustedCustomerActionEnvelopeSchema.parse(input);
+}
+
+function modifierCommand(
+  action: VerifiedStructuredAction,
+  payload: Record<string, unknown>,
+): CustomerCommand | undefined {
+  if (!action.actionId.startsWith('customize_item:')) return undefined;
+  const parsed = z
+    .object({
+      itemCode: identifierSchema,
+      groupId: identifierSchema,
+      modifierId: identifierSchema,
+    })
+    .strict()
+    .safeParse(payload);
+  if (!parsed.success) return undefined;
+  const expectedActionId = `customize_item:${encodeURIComponent(parsed.data.groupId)}:${encodeURIComponent(parsed.data.modifierId)}`;
+  return action.actionId === expectedActionId
+    ? {
+        kind: 'modifier_selection',
+        itemCode: parsed.data.itemCode,
+        groupId: parsed.data.groupId,
+        modifierId: parsed.data.modifierId,
+      }
     : undefined;
 }
 
-function stringValue(value: unknown): string | undefined {
-  return typeof value === 'string' && value.trim().length > 0 ? value.trim() : undefined;
+function commandWithoutPayload<Command extends CustomerCommand>(
+  payload: Record<string, unknown>,
+  command: Command,
+): Command | undefined {
+  return emptyPayloadSchema.safeParse(payload).success ? command : undefined;
 }
 
-function integerValue(value: unknown): number | undefined {
-  return typeof value === 'number' && Number.isInteger(value) ? value : undefined;
+function commandWithOptionalValue(
+  payload: Record<string, unknown>,
+  value: string | undefined,
+  schema: z.ZodString,
+  kind: 'submit_address' | 'apply_voucher' | 'add_support_detail',
+): CustomerCommand | undefined {
+  if (!emptyPayloadSchema.safeParse(payload).success) return undefined;
+  if (value === undefined) {
+    switch (kind) {
+      case 'submit_address':
+        return { kind: 'submit_address' };
+      case 'apply_voucher':
+        return { kind: 'apply_voucher' };
+      case 'add_support_detail':
+        return { kind: 'add_support_detail' };
+    }
+  }
+  const parsed = schema.safeParse(value);
+  if (!parsed.success) return undefined;
+  switch (kind) {
+    case 'submit_address':
+      return { kind: 'submit_address', value: parsed.data };
+    case 'apply_voucher':
+      return { kind: 'apply_voucher', value: parsed.data };
+    case 'add_support_detail':
+      return { kind: 'add_support_detail', value: parsed.data };
+  }
 }

@@ -1,9 +1,15 @@
+import { fakeModel } from '@langchain/core/testing';
 import { describe, expect, it } from 'vitest';
+import { createRouteCommerceRuntime } from '../../src/api/routeCommerceRuntime.js';
 import { buildServer } from '../../src/api/server.js';
 import { LifecycleError, MemoryLifecycleRepository, SandboxLifecycleControls, lifecycleBinding } from '../../src/commerce/lifecycleProvider.js';
-import { StaticToolPlanner } from '../../src/llm/toolPlanner.js';
+import { DashboardEventBus } from '../../src/dashboard/eventBus.js';
+import { loadPriorVerifiedState } from '../../src/graph/verifiedState.js';
 import { MemoryStore } from '../../src/persistence/memoryStore.js';
-import { createTestResponseComposer } from '../fixtures/testResponseComposer.js';
+import {
+  groundedResponseModelReply,
+} from '../fixtures/groundedResponse.js';
+import { testAgent } from '../fixtures/testAgent.js';
 
 describe('sandbox lifecycle control routes', () => {
   it('is absent in production and enforces auth, revision, binding, and idempotency in sandbox', async () => {
@@ -33,17 +39,34 @@ describe('sandbox lifecycle control routes', () => {
     })).statusCode).toBe(404);
 
     const store = new MemoryStore();
+    const model = fakeModel();
+    for (const customerText of [
+      'How else can I help?',
+      'What would you like to do next?',
+      'Would you like anything else?',
+    ]) {
+      model
+        .respondWithTools([{
+          name: 'searchMenu',
+          args: { scope: 'filtered', query: 'Burger Gà Zinger' },
+        }])
+        .respondWithTools([{
+          name: 'updateCart',
+          args: {
+            changes: [{
+              itemCode: '41141',
+              quantity: 1,
+              modifiers: [],
+            }],
+          },
+        }])
+        .respond(groundedResponseModelReply({ customerText }));
+    }
     const server = buildServer({
       store,
       demoAdminToken: 'proof-token',
       lifecycle,
-      responseComposer: createTestResponseComposer('Lifecycle model response.'),
-      toolPlanner: new StaticToolPlanner([{
-        intent: 'ordering',
-        entities: { cartMutationRequested: true },
-        toolCalls: [{ toolName: 'updateCart', arguments: { itemCode: '41141', quantity: 1 } }],
-        responseClaims: [],
-      }]),
+      ...testAgent(model),
     });
     expect((await server.inject({
       method: 'POST',
@@ -81,6 +104,134 @@ describe('sandbox lifecycle control routes', () => {
     expect((await store.listEvents('kfc:customer')).find(({ sourceType }) => sourceType === 'proof:kfc_preconditions')?.payload).toMatchObject({
       providerProfile: { unavailableItemCodes: ['41141'] },
     });
+    const boundSession = 'kfc:bound';
+    const boundOrder = {
+      id: 'order-bound',
+      cart: {
+        id: 'cart-bound',
+        items: [],
+        subtotalVnd: 0,
+        discountVnd: 0,
+        deliveryFeeVnd: 0,
+        totalVnd: 0,
+        voucherCode: null,
+      },
+      status: 'created' as const,
+      paymentStatus: 'pending' as const,
+      assignedStoreId: 'store-1',
+      createdAt: '2026-07-15T00:00:00.000Z',
+    };
+    const bound = await server.inject({
+      method: 'POST',
+      url:
+        `/admin/proof/kfc/sessions/${encodeURIComponent(boundSession)}` +
+        '/preconditions',
+      headers: { authorization: 'Bearer proof-token' },
+      payload: {
+        customerId: 'bound',
+        authenticated: true,
+        orderId: boundOrder.id,
+        providerProfile: {
+          orders: [boundOrder],
+          paymentStatuses: { [boundOrder.id]: 'failed' },
+        },
+      },
+    });
+    expect(bound.statusCode).toBe(201);
+    expect(
+      (await store.listEvents(boundSession)).find(
+        ({ sourceType }) => sourceType === 'graph:verified_state',
+      )?.payload,
+    ).toMatchObject({
+      verifiedState: {
+        order: { id: boundOrder.id },
+        paymentAttempt: {
+          orderId: boundOrder.id,
+          status: 'failed',
+        },
+      },
+    });
+
+    const mismatchSession = 'kfc:authority-mismatch';
+    const mismatchStore = new MemoryStore();
+    const mismatchServer = buildServer({
+      store: mismatchStore,
+      demoAdminToken: 'proof-token',
+      lifecycle,
+      mockClientOptions: {
+        orderStatusProvider: () => ({
+          ok: true,
+          value: {
+            ...boundOrder,
+            id: 'different-canonical-order',
+          },
+          message: 'mismatched_order_authority',
+        }),
+        paymentStatusProvider: () => ({
+          ok: true,
+          value: { status: 'pending' },
+          message: 'payment_status_for_requested_order',
+        }),
+      },
+    });
+    const mismatch = await mismatchServer.inject({
+      method: 'POST',
+      url:
+        `/admin/proof/kfc/sessions/${encodeURIComponent(mismatchSession)}` +
+        '/preconditions',
+      headers: { authorization: 'Bearer proof-token' },
+      payload: {
+        customerId: 'authority-mismatch',
+        authenticated: true,
+        orderId: 'requested-order',
+      },
+    });
+    expect(mismatch.statusCode).toBe(409);
+    expect(mismatch.json()).toMatchObject({
+      errorCode: 'kfc_proof_provider_order_authority_mismatch',
+    });
+    expect(await mismatchStore.listEvents(mismatchSession)).toEqual([]);
+
+    const sandboxAccessContext = await createRouteCommerceRuntime({
+      options: { lifecycle },
+      store,
+      dashboard: new DashboardEventBus(),
+    }).kfcProofAccessContext('kfc:customer', 'customer');
+    expect(sandboxAccessContext?.authorizedScopes).toEqual([
+      'customer:read',
+      'membership:read',
+      'membership:write',
+      'order:read',
+      'order:write',
+      'payment:read',
+      'payment:write',
+      'handoff:write',
+    ]);
+
+    const productionStore = new MemoryStore();
+    await productionStore.appendEvent(
+      'kfc:production-customer',
+      'proof:kfc_preconditions',
+      {
+        customerId: 'production-customer',
+        authenticated: true,
+        expiresAt: new Date(Date.now() + 60_000).toISOString(),
+      },
+    );
+    const productionAccessContext = await createRouteCommerceRuntime({
+      options: {
+        lifecycle: {
+          ...lifecycle,
+          environment: 'production',
+        },
+      },
+      store: productionStore,
+      dashboard: new DashboardEventBus(),
+    }).kfcProofAccessContext(
+      'kfc:production-customer',
+      'production-customer',
+    );
+    expect(productionAccessContext).toBeUndefined();
 
     const ordinaryChat = await server.inject({
       method: 'POST',
@@ -93,7 +244,11 @@ describe('sandbox lifecycle control routes', () => {
       },
     });
     expect(ordinaryChat.statusCode).toBe(200);
-    expect(ordinaryChat.json().state.toolTrace).toEqual(expect.arrayContaining([
+    expect(ordinaryChat.json()).not.toHaveProperty('state');
+    expect((await loadPriorVerifiedState(
+      store,
+      'kfc:customer',
+    )).toolTrace).toEqual(expect.arrayContaining([
       expect.objectContaining({ toolName: 'updateCart', ok: false }),
     ]));
 
@@ -110,7 +265,11 @@ describe('sandbox lifecycle control routes', () => {
       method: 'POST', url: '/chat/kfc/message',
       payload: { sessionId: clearedSession, customerId: 'cleared', clientMessageId: 'cleared-1', text: 'Thêm Burger Gà Zinger' },
     });
-    expect(clearedChat.json().state.toolTrace).toEqual(expect.arrayContaining([
+    expect(clearedChat.json()).not.toHaveProperty('state');
+    expect((await loadPriorVerifiedState(
+      store,
+      clearedSession,
+    )).toolTrace).toEqual(expect.arrayContaining([
       expect.objectContaining({ toolName: 'updateCart', ok: true }),
     ]));
 
@@ -123,7 +282,11 @@ describe('sandbox lifecycle control routes', () => {
       method: 'POST', url: '/chat/kfc/message',
       payload: { sessionId: expiredSession, customerId: 'expired', clientMessageId: 'expired-1', text: 'Thêm Burger Gà Zinger' },
     });
-    expect(expiredChat.json().state.toolTrace).toEqual(expect.arrayContaining([
+    expect(expiredChat.json()).not.toHaveProperty('state');
+    expect((await loadPriorVerifiedState(
+      store,
+      expiredSession,
+    )).toolTrace).toEqual(expect.arrayContaining([
       expect.objectContaining({ toolName: 'updateCart', ok: true }),
     ]));
 

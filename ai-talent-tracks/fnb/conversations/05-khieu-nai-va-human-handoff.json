@@ -3,93 +3,68 @@
   "title": "05: Khiếu nại, feedback và chuyển nhân viên",
   "channel": "zalo_mock",
   "goal": "Nhận diện khiếu nại, sai món, thiếu món, feedback sau đơn, user tức giận và yêu cầu gặp nhân viên.",
-  "useCases": [
-    "UC-27",
-    "UC-28",
-    "UC-29",
-    "UC-30"
-  ],
+  "useCases": ["UC-27", "UC-28", "UC-29", "UC-30"],
   "finalState": "human_handoff_created",
   "turns": [
     {
       "index": 1,
       "speaker": "User",
       "text": "Mình nhận thiếu 1 phần khoai.",
-      "useCases": [
-        "UC-27"
-      ]
+      "useCases": ["UC-27"]
     },
     {
       "index": 2,
       "speaker": "Bot",
       "text": "Dạ KFC rất xin lỗi vì trải nghiệm chưa tốt. Mình sẽ ghi nhận phản hồi thiếu 1 phần khoai trong đơn hàng và kiểm tra phương án xử lý cho bạn.",
-      "useCases": [
-        "UC-27"
-      ]
+      "useCases": ["UC-27"]
     },
     {
       "index": 3,
       "speaker": "User",
       "text": "Với lại mình đặt gà cay mà giao gà thường.",
-      "useCases": [
-        "UC-27"
-      ]
+      "useCases": ["UC-27"]
     },
     {
       "index": 4,
       "speaker": "Bot",
       "text": "Dạ mình ghi nhận lỗi giao sai món: đặt gà cay nhưng nhận gà thường. Mình sẽ chuyển thông tin này đến nhân viên hỗ trợ để kiểm tra đổi món hoặc bồi hoàn.",
-      "useCases": [
-        "UC-27"
-      ]
+      "useCases": ["UC-27"]
     },
     {
       "index": 5,
       "speaker": "User",
       "text": "Đơn gì mà lâu quá vậy, bực mình thật.",
-      "useCases": [
-        "UC-29"
-      ]
+      "useCases": ["UC-29"]
     },
     {
       "index": 6,
       "speaker": "Bot",
       "text": "Dạ KFC rất xin lỗi vì bạn phải chờ lâu và nhận đơn chưa đúng. Mình sẽ ưu tiên chuyển trường hợp này cho nhân viên hỗ trợ.",
-      "useCases": [
-        "UC-29"
-      ]
+      "useCases": ["UC-29"]
     },
     {
       "index": 7,
       "speaker": "User",
       "text": "Cho mình gặp nhân viên.",
-      "useCases": [
-        "UC-30"
-      ]
+      "useCases": ["UC-30"]
     },
     {
       "index": 8,
       "speaker": "Bot",
       "text": "Dạ mình sẽ chuyển bạn đến nhân viên hỗ trợ ngay. Nhân viên sẽ thấy thông tin thiếu khoai, giao sai món và trạng thái đơn để xử lý nhanh hơn.",
-      "useCases": [
-        "UC-30"
-      ]
+      "useCases": ["UC-30"]
     },
     {
       "index": 9,
       "speaker": "User",
       "text": "Nhưng gà ngon, chỉ là giao hơi lâu và sai món.",
-      "useCases": [
-        "UC-28"
-      ]
+      "useCases": ["UC-28"]
     },
     {
       "index": 10,
       "speaker": "Bot",
-      "text": "Dạ cảm ơn bạn đã phản hồi. Mình ghi nhận món ăn tốt nhưng thời gian giao hàng và độ chính xác đơn cần cải thiện.",
-      "useCases": [
-        "UC-28"
-      ]
+      "text": "Dạ cảm ơn bạn đã chia sẻ. Mình rất vui vì bạn thấy gà ngon, và mình cũng đã ghi nhận việc giao chậm cùng món bị giao sai để nhân viên hỗ trợ xử lý.",
+      "useCases": ["UC-28"]
     }
   ],
   "expectations": [

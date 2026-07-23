@@ -1,4 +1,3 @@
-import { randomUUID } from 'node:crypto';
 import { Pool, type PoolClient } from 'pg';
 import type {
   AgentMode,
@@ -15,10 +14,17 @@ import type {
   AppendConversationTurnInput,
   ConversationStore,
   CreateAgentRunInput,
+  CreateCustomerRunInput,
   HistorySearchResult,
   IrreversibleOperationInput,
   IrreversibleOperationCompletion,
+  IrreversibleOperationOwner,
   IrreversibleOperationReservation,
+  MarkIrreversibleOperationOutcomeUnknownIfExpiredInput,
+  MarkIrreversibleOperationOutcomeUnknownIfExpiredResult,
+  CommitPausedCustomerRunIntakeInput,
+  CommitPausedCustomerRunIntakeResult,
+  IsRunCommitFenceCurrentInput,
   ImportedConversationTurn,
   ImportedConversationTurnResult,
   PendingCustomerTurnInput,
@@ -32,17 +38,29 @@ import type {
   WebhookDelivery,
   WebhookDeliveryChannel,
   AppendCustomerRunEventInput,
+  AppendCustomerRunEventsIfRunCurrentInput,
+  AppendCustomerRunEventsIfRunCurrentResult,
   CustomerRunPatch,
 } from './memoryStore.js';
-import { confirmationPauseFromEvent, type ConfirmationPauseRecord } from './memoryStore.js';
 import {
-  CustomerRunIdempotencyConflictError,
   CustomerRunSequenceConflictError,
   customerRunEventSchema,
   type CustomerRun,
   type CustomerRunEvent,
 } from '../customerRuns/contracts.js';
+import {
+  createPostgresCustomerRun,
+} from './postgresStoreCustomerRunCreation.js';
+import {
+  appendPostgresCustomerRunEventsIfRunCurrent,
+} from './postgresStoreCustomerRunEventCommit.js';
+import {
+  commitPostgresPausedCustomerRunIntake,
+} from './postgresStorePausedCustomerRunIntake.js';
 import { PostgresCheckpointSaver } from './postgresCheckpointSaver.js';
+import {
+  initializePostgresNonAgentTextDeliverySchema,
+} from './postgresStoreNonAgentTextDelivery.js';
 import {
   Queryable,
   ConversationTurnRow,
@@ -57,7 +75,6 @@ import {
   SessionAgentStateRow,
   CustomerRunRow,
   CustomerRunEventRow,
-  IrreversibleOperationRow,
   normalizeDate,
   turnFromRow,
   profileFromRow,
@@ -75,6 +92,15 @@ import {
   sessionAgentStateFromRow,
   defaultSessionAgentState
 } from './postgresStoreSupport.js';
+import {
+  completePostgresIrreversibleOperation,
+  failPostgresIrreversibleOperation,
+  getPostgresIrreversibleOperation,
+  markPostgresIrreversibleOperationOutcomeUnknownIfExpired,
+  reservePostgresIrreversibleOperation,
+} from './postgresStoreIrreversibleOperations.js';
+import { resetPostgresSession } from './postgresStoreSessionReset.js';
+import { isPostgresRunCommitFenceCurrent } from './postgresStoreRunCommit.js';
 
 export abstract class PostgresStoreCore {
   constructor(
@@ -82,49 +108,69 @@ export abstract class PostgresStoreCore {
     protected readonly sessionResetHook?: SessionResetHook,
   ) {}
 
+  async isRunCommitFenceCurrent(
+    input: IsRunCommitFenceCurrentInput,
+  ): Promise<boolean> {
+    return isPostgresRunCommitFenceCurrent({ db: this.db, guard: input });
+  }
+
   async resetSession(sessionId: string): Promise<SessionControl> {
-    await this.db.query(
-      `WITH session_customer_runs AS (
-         SELECT id FROM customer_runs WHERE session_id = $1
-       ), session_agent_runs AS (
-         SELECT id FROM agent_runs WHERE session_id = $1
-       ), deleted_customer_events AS (
-         DELETE FROM customer_run_events WHERE run_id IN (SELECT id FROM session_customer_runs)
-       ), deleted_agent_links AS (
-         DELETE FROM agent_run_turns WHERE run_id IN (SELECT id FROM session_agent_runs)
-       ), deleted_customer_runs AS (
-         DELETE FROM customer_runs WHERE session_id = $1
-       ), deleted_pending_turns AS (
-         DELETE FROM pending_customer_turns WHERE session_id = $1
-       ), deleted_agent_runs AS (
-         DELETE FROM agent_runs WHERE session_id = $1
-       ), deleted_agent_state AS (
-         DELETE FROM session_agent_state WHERE session_id = $1
-       ), deleted_deliveries AS (
-         DELETE FROM webhook_deliveries WHERE session_id = $1
-       ), deleted_turns AS (
-         DELETE FROM conversation_turns WHERE session_id = $1
-       ), deleted_events AS (
-         DELETE FROM conversation_events WHERE session_id = $1
-       ), deleted_irreversible_operations AS (
-         DELETE FROM irreversible_operations WHERE session_id = $1
-       ), deleted_dashboard_events AS (
-         DELETE FROM dashboard_events WHERE session_id = $1
-       )
-       DELETE FROM session_controls WHERE session_id = $1`,
-      [sessionId],
-    );
-    await this.sessionResetHook?.(sessionId);
-    return defaultSessionControl(sessionId);
+    return resetPostgresSession({
+      db: this.db,
+      sessionId,
+      sessionResetHook: this.sessionResetHook,
+    });
   }
 
   async initialize(): Promise<void> {
+    await this.db.query(`
+      CREATE TABLE IF NOT EXISTS confirmation_pause_sessions (
+        session_id text PRIMARY KEY,
+        generation integer NOT NULL CHECK (generation >= 0)
+      )
+    `);
+    await this.db.query(`
+      CREATE TABLE IF NOT EXISTS confirmation_pauses (
+        schema_version text NOT NULL,
+        request_id text PRIMARY KEY,
+        checkpoint_thread_id text NOT NULL,
+        checkpoint_namespace text NOT NULL,
+        checkpoint_id text NOT NULL,
+        session_id text NOT NULL,
+        session_generation integer NOT NULL CHECK (session_generation >= 0),
+        pause_identity_digest text NOT NULL,
+        customer_id text NOT NULL,
+        channel text NOT NULL,
+        action_json jsonb NOT NULL,
+        action_digest text NOT NULL,
+        approval_binding_json jsonb NOT NULL,
+        approval_binding_digest text NOT NULL,
+        principal_json jsonb NOT NULL,
+        authenticated_subject text NOT NULL,
+        authentication_evidence_ref text NOT NULL,
+        created_at timestamptz NOT NULL,
+        expires_at timestamptz NOT NULL,
+        status text NOT NULL CHECK (status IN ('pending', 'rejected', 'expired')),
+        rejection_receipt_id text,
+        rejection_receipt_json jsonb,
+        rejected_at timestamptz,
+        completion_status text NOT NULL CHECK (completion_status IN ('pending', 'completed', 'failed')),
+        result_json jsonb,
+        completion_error text,
+        completed_at timestamptz
+      )
+    `);
+    await this.db.query(`
+      CREATE INDEX IF NOT EXISTS confirmation_pauses_session_idx
+      ON confirmation_pauses (session_id, created_at)
+    `);
     await this.db.query(`
       CREATE TABLE IF NOT EXISTS irreversible_operations (
         request_id text PRIMARY KEY,
         session_id text NOT NULL,
         operation text NOT NULL,
         binding_fingerprint text NOT NULL,
+        session_authority_generation integer NOT NULL DEFAULT 0,
         result_json jsonb,
         status text NOT NULL,
         attempt_count integer NOT NULL,
@@ -230,9 +276,11 @@ export abstract class PostgresStoreCore {
         session_id text PRIMARY KEY,
         agent_mode text NOT NULL,
         assigned_agent_id text,
+        session_authority_generation integer NOT NULL DEFAULT 0,
         updated_at timestamptz NOT NULL
       )
     `);
+    await initializePostgresNonAgentTextDeliverySchema(this.db);
     await this.db.query(`
       CREATE TABLE IF NOT EXISTS pending_customer_turns (
         turn_id text PRIMARY KEY,
@@ -257,9 +305,20 @@ export abstract class PostgresStoreCore {
         id text PRIMARY KEY,
         session_id text NOT NULL,
         generation integer NOT NULL,
+        session_authority_generation integer NOT NULL DEFAULT 0,
         channel text NOT NULL,
         external_user_id text NOT NULL,
         status text NOT NULL,
+        execution_attempt integer NOT NULL DEFAULT 0,
+        execution_lease_token text,
+        execution_lease_expires_at timestamptz,
+        CONSTRAINT agent_runs_execution_attempt_nonnegative
+          CHECK (execution_attempt >= 0),
+        CONSTRAINT agent_runs_execution_lease_pair CHECK (
+          (execution_lease_token IS NULL AND execution_lease_expires_at IS NULL)
+          OR
+          (execution_lease_token IS NOT NULL AND execution_lease_expires_at IS NOT NULL)
+        ),
         coalesced_input_text text NOT NULL,
         superseded_by_run_id text,
         irreversible_side_effect_at timestamptz,
@@ -276,12 +335,232 @@ export abstract class PostgresStoreCore {
       )
     `);
     await this.db.query(`
+      ALTER TABLE agent_runs
+      ADD COLUMN IF NOT EXISTS execution_attempt integer NOT NULL DEFAULT 0
+    `);
+    await this.db.query(`
+      ALTER TABLE agent_runs
+      ADD COLUMN IF NOT EXISTS execution_lease_token text
+    `);
+    await this.db.query(`
+      ALTER TABLE agent_runs
+      ADD COLUMN IF NOT EXISTS execution_lease_expires_at timestamptz
+    `);
+    await this.db.query(`
+      DO $$
+      BEGIN
+        IF NOT EXISTS (
+          SELECT 1
+          FROM pg_constraint
+          WHERE conname = 'agent_runs_execution_attempt_nonnegative'
+            AND conrelid = 'agent_runs'::regclass
+        ) THEN
+          ALTER TABLE agent_runs
+          ADD CONSTRAINT agent_runs_execution_attempt_nonnegative
+          CHECK (execution_attempt >= 0);
+        END IF;
+        IF NOT EXISTS (
+          SELECT 1
+          FROM pg_constraint
+          WHERE conname = 'agent_runs_execution_lease_pair'
+            AND conrelid = 'agent_runs'::regclass
+        ) THEN
+          ALTER TABLE agent_runs
+          ADD CONSTRAINT agent_runs_execution_lease_pair
+          CHECK (
+            (
+              execution_lease_token IS NULL
+              AND execution_lease_expires_at IS NULL
+            )
+            OR
+            (
+              execution_lease_token IS NOT NULL
+              AND execution_lease_expires_at IS NOT NULL
+            )
+          );
+        END IF;
+      END
+      $$;
+    `);
+    await this.db.query(`
       CREATE INDEX IF NOT EXISTS agent_runs_session_generation_idx
       ON agent_runs (session_id, generation, id)
     `);
     await this.db.query(`
       CREATE UNIQUE INDEX IF NOT EXISTS agent_runs_session_generation_claim_idx
       ON agent_runs (session_id, generation)
+    `);
+    await this.db.query(`
+      CREATE INDEX IF NOT EXISTS agent_runs_execution_lease_recovery_idx
+      ON agent_runs (status, execution_lease_expires_at)
+    `);
+    await this.db.query(`
+      CREATE TABLE IF NOT EXISTS agent_run_text_deliveries (
+        schema_version text NOT NULL CHECK (
+          schema_version = 'kfc-agent-run-text-delivery-v1'
+        ),
+        run_id text PRIMARY KEY REFERENCES agent_runs(id) ON DELETE CASCADE
+          CHECK (
+            length(run_id) BETWEEN 1 AND 512
+            AND run_id = btrim(run_id)
+          ),
+        run_execution_attempt integer NOT NULL CHECK (
+          run_execution_attempt BETWEEN 1 AND 3
+        ),
+        run_execution_origin_attempt integer NOT NULL CHECK (
+          run_execution_origin_attempt BETWEEN 1 AND 3
+          AND run_execution_origin_attempt <=
+            run_execution_attempt
+        ),
+        run_execution_lease_token text NOT NULL CHECK (
+          length(run_execution_lease_token) BETWEEN 1 AND 512
+          AND run_execution_lease_token =
+            btrim(run_execution_lease_token)
+        ),
+        run_execution_lease_token_digest text NOT NULL CHECK (
+          run_execution_lease_token_digest ~ '^[a-f0-9]{64}$'
+        ),
+        prior_run_execution_lease_token_digests jsonb NOT NULL
+          DEFAULT '[]'::jsonb CHECK (
+            jsonb_typeof(prior_run_execution_lease_token_digests) =
+              'array'
+            AND jsonb_array_length(
+              prior_run_execution_lease_token_digests
+            ) = run_execution_attempt -
+              run_execution_origin_attempt
+          ),
+        channel text NOT NULL CHECK (
+          channel IN ('messenger', 'zalo')
+        ),
+        assistant_turn_id text NOT NULL UNIQUE
+          REFERENCES conversation_turns(id)
+          CHECK (
+            length(assistant_turn_id) BETWEEN 1 AND 512
+            AND assistant_turn_id = btrim(assistant_turn_id)
+          ),
+        recipient_binding_digest text NOT NULL CHECK (
+          recipient_binding_digest ~ '^[a-f0-9]{64}$'
+        ),
+        presentation_binding_digest text NOT NULL CHECK (
+          presentation_binding_digest ~ '^[a-f0-9]{64}$'
+        ),
+        delivery_binding_digest text NOT NULL CHECK (
+          delivery_binding_digest ~ '^[a-f0-9]{64}$'
+        ),
+        status text NOT NULL CHECK (
+          status IN (
+            'pending',
+            'sending',
+            'confirmed_not_sent',
+            'confirmed_sent',
+            'delivery_outcome_unknown'
+          )
+        ),
+        delivery_attempt integer NOT NULL CHECK (
+          delivery_attempt BETWEEN 0 AND 3
+        ),
+        last_delivery_run_execution_attempt integer CHECK (
+          last_delivery_run_execution_attempt IS NULL
+          OR last_delivery_run_execution_attempt BETWEEN 1 AND 3
+        ),
+        delivery_attempt_token text CHECK (
+          delivery_attempt_token IS NULL
+          OR (
+            length(delivery_attempt_token) BETWEEN 1 AND 512
+            AND delivery_attempt_token =
+              btrim(delivery_attempt_token)
+          )
+        ),
+        provider_message_id text CHECK (
+          provider_message_id IS NULL
+          OR (
+            length(provider_message_id) BETWEEN 1 AND 512
+            AND provider_message_id = btrim(provider_message_id)
+          )
+        ),
+        outcome_code text CHECK (
+          outcome_code IS NULL
+          OR (
+            length(outcome_code) BETWEEN 1 AND 256
+            AND outcome_code = btrim(outcome_code)
+          )
+        ),
+        created_at timestamptz NOT NULL,
+        updated_at timestamptz NOT NULL CHECK (
+          updated_at >= created_at
+        ),
+        CHECK (
+          (
+            status = 'pending'
+            AND delivery_attempt = 0
+            AND delivery_attempt_token IS NULL
+            AND last_delivery_run_execution_attempt IS NULL
+            AND provider_message_id IS NULL
+            AND outcome_code IS NULL
+          )
+          OR (
+            status = 'sending'
+            AND delivery_attempt BETWEEN 1 AND 3
+            AND delivery_attempt_token IS NOT NULL
+            AND last_delivery_run_execution_attempt IS NOT NULL
+            AND last_delivery_run_execution_attempt =
+              run_execution_attempt
+            AND provider_message_id IS NULL
+            AND outcome_code IS NULL
+          )
+          OR (
+            status = 'confirmed_not_sent'
+            AND delivery_attempt BETWEEN 1 AND 3
+            AND delivery_attempt_token IS NOT NULL
+            AND last_delivery_run_execution_attempt IS NOT NULL
+            AND run_execution_attempt BETWEEN
+              last_delivery_run_execution_attempt
+              AND last_delivery_run_execution_attempt + 1
+            AND provider_message_id IS NULL
+            AND outcome_code IS NOT NULL
+          )
+          OR (
+            status = 'confirmed_sent'
+            AND delivery_attempt BETWEEN 1 AND 3
+            AND delivery_attempt_token IS NOT NULL
+            AND last_delivery_run_execution_attempt IS NOT NULL
+            AND last_delivery_run_execution_attempt =
+              run_execution_attempt
+            AND provider_message_id IS NOT NULL
+            AND outcome_code IS NULL
+          )
+          OR (
+            status = 'delivery_outcome_unknown'
+            AND delivery_attempt BETWEEN 1 AND 3
+            AND delivery_attempt_token IS NOT NULL
+            AND last_delivery_run_execution_attempt IS NOT NULL
+            AND last_delivery_run_execution_attempt =
+              run_execution_attempt
+            AND provider_message_id IS NULL
+            AND outcome_code IS NOT NULL
+          )
+        )
+      )
+    `);
+    await this.db.query(`
+      CREATE INDEX IF NOT EXISTS agent_run_text_deliveries_recovery_idx
+      ON agent_run_text_deliveries (status, updated_at)
+    `);
+    await this.db.query(`
+      CREATE TABLE IF NOT EXISTS agent_run_text_delivery_attempts (
+        run_id text NOT NULL REFERENCES agent_run_text_deliveries(run_id)
+          ON DELETE CASCADE,
+        delivery_attempt integer NOT NULL CHECK (
+          delivery_attempt BETWEEN 1 AND 3
+        ),
+        delivery_attempt_token text NOT NULL CHECK (
+          length(delivery_attempt_token) BETWEEN 1 AND 512
+          AND delivery_attempt_token = btrim(delivery_attempt_token)
+        ),
+        created_at timestamptz NOT NULL,
+        PRIMARY KEY (run_id, delivery_attempt),
+        UNIQUE (delivery_attempt_token)
+      )
     `);
     await this.db.query(`
       CREATE TABLE IF NOT EXISTS agent_run_turns (
@@ -314,6 +593,7 @@ export abstract class PostgresStoreCore {
         client_message_id text NOT NULL,
         request_fingerprint text NOT NULL,
         generation integer NOT NULL,
+        session_authority_generation integer NOT NULL DEFAULT 0,
         status text NOT NULL,
         phase text,
         next_event_sequence integer NOT NULL,
@@ -345,161 +625,76 @@ export abstract class PostgresStoreCore {
       CREATE INDEX IF NOT EXISTS customer_run_events_replay_idx
       ON customer_run_events (run_id, sequence)
     `);
+    for (const table of [
+      'session_controls',
+      'customer_runs',
+      'agent_runs',
+      'irreversible_operations',
+    ]) {
+      await this.db.query(`
+        ALTER TABLE ${table}
+        ADD COLUMN IF NOT EXISTS session_authority_generation
+          integer NOT NULL DEFAULT 0
+      `);
+    }
   }
 
   async reserveIrreversibleOperation(input: IrreversibleOperationInput): Promise<IrreversibleOperationReservation> {
-    const now = new Date();
-    const leaseExpiresAt = new Date(now.getTime() + 30_000);
-    const leaseToken = randomUUID();
-    const inserted = await this.db.query<IrreversibleOperationRow>(
-      `INSERT INTO irreversible_operations (
-         request_id, session_id, operation, binding_fingerprint, result_json,
-         status, attempt_count, lease_expires_at, lease_token, last_error, created_at, completed_at
-       ) VALUES ($1, $2, $3, $4, NULL, 'attempting', 1, $5, $6, NULL, $7, NULL)
-       ON CONFLICT (request_id) DO NOTHING RETURNING *`,
-      [input.requestId, input.sessionId, input.operation, input.bindingFingerprint, leaseExpiresAt, leaseToken, now],
-    );
-    if (inserted.rows[0]) {
-      return { status: 'reserved', attempt: 1, leaseToken, reconciliation: false };
-    }
-    let current = await this.irreversibleOperationRow(input);
-    if (!current) throw new Error(`Irreversible operation reservation missing: ${input.requestId}`);
-    if (current.status === 'completed' && current.result_json) {
-      return { status: 'completed', result: current.result_json };
-    }
-    if (current.status === 'unknown' || (current.lease_expires_at && new Date(current.lease_expires_at) <= now)) {
-      const nextLeaseToken = randomUUID();
-      const claimed = await this.db.query<IrreversibleOperationRow>(
-        `UPDATE irreversible_operations
-         SET status = 'attempting', attempt_count = attempt_count + 1,
-             lease_expires_at = $1, lease_token = $2, last_error = NULL
-         WHERE request_id = $3 AND session_id = $4 AND operation = $5 AND binding_fingerprint = $6
-           AND status != 'completed' AND (status = 'unknown' OR lease_expires_at <= $7)
-         RETURNING *`,
-        [leaseExpiresAt, nextLeaseToken, input.requestId, input.sessionId, input.operation, input.bindingFingerprint, now],
-      );
-      if (claimed.rows[0]) {
-        return {
-          status: 'reserved',
-          attempt: claimed.rows[0].attempt_count,
-          leaseToken: nextLeaseToken,
-          reconciliation: true,
-        };
-      }
-      current = await this.irreversibleOperationRow(input) ?? current;
-    }
-    return current.status === 'unknown'
-      ? { status: 'unknown', lastError: current.last_error }
-      : { status: 'pending' };
+    return reservePostgresIrreversibleOperation({
+      db: this.db,
+      operation: input,
+    });
   }
 
   async getIrreversibleOperation(input: IrreversibleOperationInput): Promise<IrreversibleOperationReservation | undefined> {
-    const current = await this.irreversibleOperationRow(input);
-    if (!current) return undefined;
-    if (current.status === 'completed' && current.result_json) {
-      return { status: 'completed', result: current.result_json };
-    }
-    return current.status === 'unknown'
-      ? { status: 'unknown', lastError: current.last_error }
-      : { status: 'pending' };
+    return getPostgresIrreversibleOperation({
+      db: this.db,
+      operation: input,
+    });
+  }
+
+  async markIrreversibleOperationOutcomeUnknownIfExpired(
+    input: MarkIrreversibleOperationOutcomeUnknownIfExpiredInput,
+  ): Promise<MarkIrreversibleOperationOutcomeUnknownIfExpiredResult> {
+    return markPostgresIrreversibleOperationOutcomeUnknownIfExpired({
+      db: this.db,
+      operation: input,
+    });
   }
 
   async completeIrreversibleOperation(
     input: IrreversibleOperationInput,
-    owner: { attempt: number; leaseToken: string },
+    owner: IrreversibleOperationOwner,
     result: Record<string, unknown>,
   ): Promise<IrreversibleOperationCompletion> {
-    await this.db.query(
-      `UPDATE irreversible_operations
-       SET result_json = $1, status = 'completed', lease_expires_at = NULL,
-           last_error = NULL, completed_at = NOW()
-       WHERE request_id = $2 AND session_id = $3 AND operation = $4 AND binding_fingerprint = $5
-         AND status = 'attempting' AND attempt_count = $6 AND lease_token = $7`,
-      [result, input.requestId, input.sessionId, input.operation, input.bindingFingerprint, owner.attempt, owner.leaseToken],
-    );
-    const current = await this.irreversibleOperationRow(input);
-    if (!current) throw new Error(`Irreversible operation reservation not found: ${input.requestId}`);
-    return current.status === 'completed' && current.result_json
-      ? { status: 'completed', result: current.result_json }
-      : { status: 'lost' };
+    return completePostgresIrreversibleOperation({
+      db: this.db,
+      operation: input,
+      owner,
+      result,
+    });
   }
 
   async failIrreversibleOperation(
     input: IrreversibleOperationInput,
-    owner: { attempt: number; leaseToken: string },
+    owner: IrreversibleOperationOwner,
     error: string,
   ): Promise<void> {
-    await this.db.query(
-      `UPDATE irreversible_operations
-       SET status = 'unknown', lease_expires_at = NULL, last_error = $1
-       WHERE request_id = $2 AND session_id = $3 AND operation = $4 AND binding_fingerprint = $5
-         AND status = 'attempting' AND attempt_count = $6 AND lease_token = $7`,
-      [error, input.requestId, input.sessionId, input.operation, input.bindingFingerprint, owner.attempt, owner.leaseToken],
-    );
+    return failPostgresIrreversibleOperation({
+      db: this.db,
+      operation: input,
+      owner,
+      error,
+    });
   }
 
-  private async irreversibleOperationRow(input: IrreversibleOperationInput): Promise<IrreversibleOperationRow | undefined> {
-    const result = await this.db.query<IrreversibleOperationRow>(
-      'SELECT * FROM irreversible_operations WHERE request_id = $1',
-      [input.requestId],
-    );
-    const row = result.rows[0];
-    if (!row) return undefined;
-    if (
-      row.session_id !== input.sessionId ||
-      row.operation !== input.operation ||
-      row.binding_fingerprint !== input.bindingFingerprint
-    ) throw new Error(`Irreversible operation binding conflict: ${input.requestId}`);
-    return row;
-  }
-
-  async createCustomerRun(input: CustomerRun): Promise<CustomerRun> {
-    const result = await this.db.query<CustomerRunRow>(
-      `
-        WITH inserted AS (
-          INSERT INTO customer_runs (
-            id, schema_version, session_id, customer_id, client_message_id,
-            request_fingerprint, generation, status, phase, next_event_sequence,
-            client_schema_version, accepted_at, started_at, terminal_at, updated_at
-          ) VALUES (
-            $1, $2, $3, $4, $5, $6, $7, $8, $9,
-            $10, $11, $12, $13, $14, $15
-          )
-          ON CONFLICT (session_id, client_message_id) DO NOTHING
-          RETURNING *
-        )
-        SELECT * FROM inserted
-        UNION ALL
-        SELECT * FROM customer_runs
-        WHERE session_id = $3 AND client_message_id = $5
-        LIMIT 1
-      `,
-      [
-        input.id,
-        input.schemaVersion,
-        input.sessionId,
-        input.customerId,
-        input.clientMessageId,
-        input.requestFingerprint,
-        input.generation,
-        input.status,
-        input.phase,
-        input.nextEventSequence,
-        input.clientSchemaVersion,
-        input.acceptedAt,
-        input.startedAt,
-        input.terminalAt,
-        input.updatedAt,
-      ],
-    );
-    const stored = result.rows[0]
-      ? customerRunFromRow(result.rows[0])
-      : undefined;
-    if (!stored) throw new Error('Customer run was not persisted');
-    if (stored.requestFingerprint !== input.requestFingerprint) {
-      throw new CustomerRunIdempotencyConflictError(input.sessionId, input.clientMessageId);
-    }
-    return stored;
+  async createCustomerRun(
+    input: CreateCustomerRunInput,
+  ): Promise<CustomerRun> {
+    return createPostgresCustomerRun({
+      db: this.db,
+      operation: input,
+    });
   }
 
   async getCustomerRun(runId: string): Promise<CustomerRun | undefined> {
@@ -561,14 +756,17 @@ export abstract class PostgresStoreCore {
       events.length,
       events.at(-1)!.occurredAt,
     ];
+    const eventColumnTypes = [
+      'text',
+      'text',
+      'integer',
+      'integer',
+      'text',
+      'timestamptz',
+      'jsonb',
+    ] as const;
     const rows = events.map((event) => {
-      const placeholders = Array.from({ length: 7 }, () => {
-        values.push(undefined);
-        return `$${values.length}`;
-      });
-      values.splice(
-        values.length - 7,
-        7,
+      const rowValues = [
         event.eventId,
         event.runId,
         event.sequence,
@@ -576,7 +774,11 @@ export abstract class PostgresStoreCore {
         event.type,
         event.occurredAt,
         event.payload,
-      );
+      ];
+      const placeholders = rowValues.map((value, index) => {
+        values.push(value);
+        return `$${values.length}::${eventColumnTypes[index]}`;
+      });
       return `(${placeholders.join(', ')})`;
     });
     const result = await this.db.query<CustomerRunEventRow>(
@@ -654,6 +856,24 @@ export abstract class PostgresStoreCore {
       event.sequence,
       run.nextEventSequence,
     );
+  }
+
+  async appendCustomerRunEventsIfRunCurrent(
+    input: AppendCustomerRunEventsIfRunCurrentInput,
+  ): Promise<AppendCustomerRunEventsIfRunCurrentResult> {
+    return appendPostgresCustomerRunEventsIfRunCurrent({
+      db: this.db,
+      operation: input,
+    });
+  }
+
+  async commitPausedCustomerRunIntake(
+    input: CommitPausedCustomerRunIntakeInput,
+  ): Promise<CommitPausedCustomerRunIntakeResult> {
+    return commitPostgresPausedCustomerRunIntake({
+      db: this.db,
+      operation: input,
+    });
   }
 
   async listCustomerRunEvents(

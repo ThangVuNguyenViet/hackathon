@@ -18,6 +18,7 @@ export interface GenUiProofManifest {
   liveAi: boolean;
   passed: boolean;
   artifactRoot: string;
+  runtime: ProofRuntimeBinding;
   logs?: string[];
   screenshots: Array<{
     scenario: string;
@@ -189,3 +190,4 @@ function normalizeText(text: string): string {
 function score(value: boolean): 0 | 1 {
   return value ? 1 : 0;
 }
+import type { ProofRuntimeBinding } from '../proof/kfcGenUiDeployedProof.js';

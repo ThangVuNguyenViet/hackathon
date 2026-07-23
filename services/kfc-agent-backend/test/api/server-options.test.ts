@@ -2,39 +2,65 @@ import { describe, expect, it } from 'vitest';
 import { buildServerOptionsFromEnv } from '../../src/api/serverOptions.js';
 import { loadEnv } from '../../src/config/env.js';
 import { buildServer } from '../../src/api/server.js';
+import { ModelMonitorJudge } from '../../src/llm/monitorJudge.js';
+import { OpenAiKfcAgent } from '../../src/agent/openAiKfcAgent.js';
 
 describe('buildServerOptionsFromEnv', () => {
   it('exposes release, runtime, graph, and version bindings only in deep readiness proof metadata', async () => {
     const options = buildServerOptionsFromEnv(loadEnv({ PORT: '18090', KFC_COMMERCE_MODE: 'fixture', RELEASE_GIT_SHA: 'release-1', RELEASE_DEPLOYMENT_ID: 'deployment-1', RELEASE_BUILT_AT: '2026-07-15T00:00:00Z', RELEASE_DIRTY: 'false' } as NodeJS.ProcessEnv));
     const server = buildServer(options);
-    expect((await server.inject({ method: 'GET', url: '/ready' })).json()).not.toHaveProperty('proof');
+    const shallow = await server.inject({ method: 'GET', url: '/ready' });
+    expect(shallow.statusCode).toBe(503);
+    expect(shallow.json()).toMatchObject({
+      checks: {
+        monitor: {
+          ok: true,
+          required: false,
+          configured: false,
+          provider: 'google',
+          model: 'gemini-3.1-flash-lite',
+        },
+      },
+    });
+    expect(shallow.json()).not.toHaveProperty('proof');
     expect((await server.inject({ method: 'GET', url: '/ready?deep=1' })).json()).toMatchObject({
       release: { gitSha: 'release-1', deploymentId: 'deployment-1', builtAt: '2026-07-15T00:00:00Z', dirty: false },
-      proof: { deployment: { gitSha: 'release-1', deploymentId: 'deployment-1' }, graph: { runtime: 'langgraph-stategraph-v1' }, versions: { plannerProvider: 'vertex', plannerModel: 'google/gemini-3.1-flash-lite', ledger: 'kfc-scenario-ledger-v1' } },
+      proof: {
+        deployment: { gitSha: 'release-1', deploymentId: 'deployment-1' },
+        graph: { runtime: 'langgraph-create-agent-workflow-v1' },
+        versions: {
+          agent: {
+            provider: 'google',
+            model: 'gemini-3.1-flash-lite',
+            profile: 'google-gemini-3.1-flash-lite-thinking-low',
+          },
+          monitor: {
+            provider: 'google',
+            model: 'gemini-3.1-flash-lite',
+            profile:
+              'google-gemini-3.1-flash-lite-thinking-low-monitor',
+          },
+          ledger: 'kfc-scenario-ledger-v1',
+        },
+      },
     });
   });
-  it('uses the fast response and monitor models by default', () => {
+  it('uses affordable provider-aligned agent and monitor profiles by default', () => {
     const env = loadEnv({ PORT: '18090' } as NodeJS.ProcessEnv);
 
-    expect(env.OPENAI_TOOL_PLANNER_MODEL).toBe('gpt-4.1-mini');
-    expect(env.TOOL_PLANNER_PROVIDER).toBe('vertex');
-    expect(env.TOOL_PLANNER_MODEL).toBe('google/gemini-3.1-flash-lite');
-    expect(env.OPENAI_RESPONSE_MODEL).toBe('gpt-4.1-nano');
-    expect(env.OPENAI_MONITOR_JUDGE_MODEL).toBe('gpt-4.1-nano');
-    expect(env.OPENAI_SMALL_TALK_ROUTER_MODEL).toBe('gpt-4.1-mini');
-    expect(env.OPENAI_SMALL_TALK_ROUTER_TIMEOUT_MS).toBe(2500);
+    expect(env.KFC_AGENT_PROFILE_MODE).toBe('production');
+    expect(env.KFC_AGENT_PROVIDER).toBe('google');
+    expect(env.KFC_AGENT_MODEL).toBe('');
+    expect(env.KFC_MONITOR_PROVIDER).toBeUndefined();
+    expect(env.KFC_MONITOR_MODEL).toBe('');
   });
 
   it('maps channel environment variables into route options', () => {
     const env = loadEnv({
       PORT: '18090',
       OPENAI_API_KEY: 'openai_key_local',
-      TOOL_PLANNER_PROVIDER: 'openai',
-      OPENAI_MODEL: 'gpt-4.1',
-      OPENAI_TOOL_PLANNER_MODEL: 'gpt-4.1-mini',
-      OPENAI_RESPONSE_MODEL: 'gpt-4.1-mini',
-      OPENAI_SMALL_TALK_ROUTER_MODEL: 'gpt-4.1-mini',
-      OPENAI_SMALL_TALK_ROUTER_TIMEOUT_MS: '1500',
+      KFC_AGENT_PROVIDER: 'openai',
+      KFC_AGENT_MODEL: 'gpt-5-mini-2025-08-07',
       OPENAI_BASE_URL: 'https://openai.local/v1',
       LANGSMITH_API_KEY: 'langsmith_key_local',
       LANGSMITH_PROJECT: 'kfc-agent-backend-local',
@@ -54,7 +80,9 @@ describe('buildServerOptionsFromEnv', () => {
       KFC_COMMERCE_MODE: 'fixture',
     } as NodeJS.ProcessEnv);
 
-    expect(buildServerOptionsFromEnv(env)).toMatchObject({
+    const options = buildServerOptionsFromEnv(env);
+
+    expect(options).toMatchObject({
       messengerVerifyToken: 'verify_local',
       metaAppSecret: 'meta_app_secret_local',
       metaPageId: '118976205445198',
@@ -68,60 +96,208 @@ describe('buildServerOptionsFromEnv', () => {
         'https://oa.zalo.me/chatv2?oaid={pageId}&uid={externalUserId}',
       zaloApiBaseUrl: 'https://zalo.local',
       demoAdminToken: 'demo_admin_local',
-      responseComposer: expect.any(Object),
-      toolPlanner: expect.any(Object),
-      smallTalkRouter: expect.any(Object),
-      mockClientOptions: {
-        contentSemanticRanker: expect.any(Object),
+      agent: {
+        identity: {
+          provider: 'openai',
+          model: 'gpt-5-mini-2025-08-07',
+          profile: 'openai-gpt-5-mini-2025-08-07-reasoning-low-verbosity-low',
+        },
+        model: expect.any(Object),
       },
+      monitorJudge: expect.any(Object),
       agentTracer: expect.any(Object),
+      readiness: {
+        monitorConfigured: true,
+        runtime: {
+          monitor: {
+            provider: 'openai',
+            model: 'gpt-5-mini-2025-08-07',
+            profile: 'openai-gpt-5-mini-2025-08-07-reasoning-low-verbosity-low',
+          },
+        },
+      },
     });
-
-    expect(env.OPENAI_SMALL_TALK_ROUTER_MODEL).toBe('gpt-4.1-mini');
-    expect(env.OPENAI_SMALL_TALK_ROUTER_TIMEOUT_MS).toBe(1500);
+    expect(options).not.toHaveProperty('responseComposer');
+    expect(options).not.toHaveProperty('toolPlanner');
+    expect(options).not.toHaveProperty('smallTalkRouter');
+    expect(options.mockClientOptions).toBeUndefined();
+    expect(options.monitorJudge).toBeInstanceOf(ModelMonitorJudge);
+    expect((options.monitorJudge as ModelMonitorJudge).identity).toEqual({
+      provider: 'openai',
+      model: 'gpt-5-mini-2025-08-07',
+      profile: 'openai-gpt-5-mini-2025-08-07-reasoning-low-verbosity-low',
+    });
   });
 
-  it('does not create OpenAI-backed components without an OpenAI key', () => {
+  it('does not silently fall back when the selected agent credential is absent', () => {
     const env = loadEnv({
       PORT: '18090',
       KFC_COMMERCE_MODE: 'fixture',
+      OPENAI_API_KEY: 'unrelated_openai_key',
     } as NodeJS.ProcessEnv);
 
-    expect(buildServerOptionsFromEnv(env).responseComposer).toBeUndefined();
-    expect(buildServerOptionsFromEnv(env).toolPlanner).toBeUndefined();
-    expect(buildServerOptionsFromEnv(env).smallTalkRouter).toBeUndefined();
+    expect(buildServerOptionsFromEnv(env).agent).toBeUndefined();
+    expect(buildServerOptionsFromEnv(env).monitorJudge).toBeUndefined();
+    expect(
+      buildServerOptionsFromEnv(env).readiness?.monitorConfigured,
+    ).toBe(false);
     expect(buildServerOptionsFromEnv(env).mockClientOptions).toBeUndefined();
     expect(buildServerOptionsFromEnv(env).agentTracer).toBeUndefined();
   });
 
-  it('creates only the planner from model-neutral Vertex configuration', () => {
+  it('configures only the direct agent for the Responses runtime', () => {
+    const options = buildServerOptionsFromEnv(loadEnv({
+      PORT: '18090',
+      KFC_COMMERCE_MODE: 'fixture',
+      KFC_AGENT_RUNTIME: 'openai-responses',
+      KFC_AGENT_PROVIDER: 'openai',
+      KFC_AGENT_MODEL: 'gpt-4.1-mini',
+      OPENAI_API_KEY: 'openai_key_local',
+    } as NodeJS.ProcessEnv));
+
+    expect(options.agent).toBeUndefined();
+    expect(options.openAiAgent).toBeInstanceOf(OpenAiKfcAgent);
+    expect(options.readiness?.agentConfigured).toBe(true);
+  });
+
+  it('uses affordable deep thinking by default in explicit qualification mode', () => {
     const env = loadEnv({
       PORT: '18090',
       KFC_COMMERCE_MODE: 'fixture',
-      TOOL_PLANNER_PROVIDER: 'vertex',
-      TOOL_PLANNER_MODEL: 'google/gemini-3.1-flash-lite',
-      TOOL_PLANNER_FAST_MODEL: 'google/gemini-3.1-flash-lite',
-      TOOL_PLANNER_STATUS_MODEL: 'google/gemini-3.1-flash-lite',
-      VERTEX_SERVICE_ACCOUNT_JSON: JSON.stringify({
-        client_email: 'planner@example-project.iam.gserviceaccount.com',
-        private_key: 'unused-until-request',
-        project_id: 'example-project',
-        token_uri: 'https://oauth.example/token',
-      }),
+      KFC_AGENT_PROFILE_MODE: 'qualification',
+      KFC_AGENT_PROVIDER: 'google',
+      GOOGLE_API_KEY: 'google_key_local',
+      OPENAI_API_KEY: 'openai_key_local',
     } as NodeJS.ProcessEnv);
 
     expect(buildServerOptionsFromEnv(env)).toMatchObject({
-      responseComposer: undefined,
-      toolPlanner: expect.any(Object),
+      agent: {
+        identity: {
+          provider: 'google',
+          model: 'gemini-3.1-flash-lite',
+          profile:
+            'google-gemini-3.1-flash-lite-thinking-high-qualification',
+        },
+      },
       readiness: {
-        plannerConfigured: true,
-        plannerProvider: 'vertex',
+        agentConfigured: true,
         runtime: {
-          plannerProvider: 'vertex',
-          plannerModel: 'google/gemini-3.1-flash-lite',
+          agentProfileMode: 'qualification',
         },
       },
     });
+  });
+
+  it('rejects expensive Gemini overrides in qualification and production', () => {
+    const qualificationEnv = {
+      PORT: '18090',
+      KFC_COMMERCE_MODE: 'fixture',
+      KFC_AGENT_PROFILE_MODE: 'qualification',
+      KFC_AGENT_PROVIDER: 'google',
+      KFC_AGENT_MODEL: 'gemini-3.5-flash',
+      GOOGLE_API_KEY: 'google_key_local',
+      OPENAI_API_KEY: 'openai_key_local',
+    } as NodeJS.ProcessEnv;
+
+    expect(() => buildServerOptionsFromEnv(
+      loadEnv(qualificationEnv),
+    )).toThrow('KFC qualification agent model drift');
+    expect(() => buildServerOptionsFromEnv(loadEnv({
+      ...qualificationEnv,
+      KFC_AGENT_PROFILE_MODE: 'production',
+    }))).toThrow('KFC production agent model drift');
+  });
+
+  it('creates the official Edge Google adapter from the pinned Google profile', () => {
+    const env = loadEnv({
+      PORT: '18090',
+      KFC_COMMERCE_MODE: 'fixture',
+      KFC_AGENT_PROVIDER: 'google',
+      KFC_AGENT_MODEL: 'gemini-3.1-flash-lite',
+      GOOGLE_API_KEY: 'google_key_local',
+    } as NodeJS.ProcessEnv);
+
+    const options = buildServerOptionsFromEnv(env);
+    expect(options).toMatchObject({
+      agent: {
+        identity: {
+          provider: 'google',
+          model: 'gemini-3.1-flash-lite',
+          profile: 'google-gemini-3.1-flash-lite-thinking-low',
+        },
+        model: expect.any(Object),
+      },
+      readiness: {
+        agentConfigured: true,
+        runtime: {
+          agent: {
+            provider: 'google',
+            model: 'gemini-3.1-flash-lite',
+          },
+        },
+      },
+    });
+    expect(options.monitorJudge).toBeInstanceOf(ModelMonitorJudge);
+    expect((options.monitorJudge as ModelMonitorJudge).identity).toMatchObject({
+      provider: 'google',
+      model: 'gemini-3.1-flash-lite',
+      profile: 'google-gemini-3.1-flash-lite-thinking-low-monitor',
+    });
+  });
+
+  it('allows a cross-provider monitor only through explicit pinned configuration', () => {
+    const env = loadEnv({
+      PORT: '18090',
+      KFC_COMMERCE_MODE: 'fixture',
+      KFC_AGENT_PROVIDER: 'google',
+      GOOGLE_API_KEY: 'google_key_local',
+      KFC_MONITOR_PROVIDER: 'openai',
+      KFC_MONITOR_MODEL: 'gpt-5-mini-2025-08-07',
+      OPENAI_API_KEY: 'openai_key_local',
+    } as NodeJS.ProcessEnv);
+
+    const options = buildServerOptionsFromEnv(env);
+    expect((options.monitorJudge as ModelMonitorJudge).identity).toEqual({
+      provider: 'openai',
+      model: 'gpt-5-mini-2025-08-07',
+      profile: 'openai-gpt-5-mini-2025-08-07-reasoning-low-verbosity-low',
+    });
+  });
+
+  it('fails explicit monitor configuration closed on model drift or missing credentials', () => {
+    const base = {
+      PORT: '18090',
+      KFC_COMMERCE_MODE: 'fixture',
+      KFC_AGENT_PROVIDER: 'google',
+      GOOGLE_API_KEY: 'google_key_local',
+      KFC_MONITOR_PROVIDER: 'openai',
+    } as NodeJS.ProcessEnv;
+
+    expect(() => buildServerOptionsFromEnv(loadEnv({
+      ...base,
+      KFC_MONITOR_MODEL: 'gpt-4.1',
+      OPENAI_API_KEY: 'openai_key_local',
+    }))).toThrow('KFC monitor model drift');
+    expect(() => buildServerOptionsFromEnv(loadEnv({
+      ...base,
+      KFC_MONITOR_MODEL: 'gpt-5-mini-2025-08-07',
+    }))).toThrow(
+      'OPENAI_API_KEY is required for the explicitly configured KFC monitor provider',
+    );
+  });
+
+  it('fails closed when a configured model drifts from its profile', () => {
+    const env = loadEnv({
+      PORT: '18090',
+      KFC_COMMERCE_MODE: 'fixture',
+      KFC_AGENT_PROVIDER: 'openai',
+      KFC_AGENT_MODEL: 'gpt-4.1',
+      OPENAI_API_KEY: 'openai_key_local',
+    } as NodeJS.ProcessEnv);
+
+    expect(() => buildServerOptionsFromEnv(env)).toThrow(
+      'KFC production agent model drift',
+    );
   });
 
   it('parses LangSmith endpoint and sampling configuration', () => {
@@ -144,6 +320,21 @@ describe('buildServerOptionsFromEnv', () => {
 
     expect(env.META_PAGE_ID).toBe('');
     expect(buildServerOptionsFromEnv(env).metaPageId).toBeUndefined();
+  });
+
+  it('normalizes optional credentials and drops whitespace-only secrets', () => {
+    const env = loadEnv({
+      PORT: '18090',
+      KFC_COMMERCE_MODE: 'fixture',
+      META_PAGE_ACCESS_TOKEN: '   ',
+      ZALO_ACCESS_TOKEN: '\t  ',
+      KFC_DEMO_ADMIN_TOKEN: '  demo-admin-token  ',
+    } as NodeJS.ProcessEnv);
+
+    const options = buildServerOptionsFromEnv(env);
+    expect(options.messengerPageAccessToken).toBeUndefined();
+    expect(options.zaloAccessToken).toBeUndefined();
+    expect(options.demoAdminToken).toBe('demo-admin-token');
   });
 
   it('keeps deployed GenUI proof preconditions out of runtime environment options', () => {
@@ -176,7 +367,15 @@ describe('buildServerOptionsFromEnv', () => {
     } as NodeJS.ProcessEnv));
 
     expect(options.catalog?.fallbackTtlSeconds).toBe(600);
-    expect(options.readiness?.commerce?.requiredCapabilities).toEqual(['orders', 'payment']);
+    expect(options.readiness?.commerce?.requiredCapabilities).toEqual([
+      'orders',
+      'payment',
+      'handoff_resolution',
+    ]);
+    expect(options.readiness?.commerce?.implementedCapabilities).toEqual([
+      'orders',
+      'payment',
+    ]);
     expect(() => loadEnv({ CATALOG_TTL_SECONDS: '3601' } as NodeJS.ProcessEnv)).toThrow();
   });
 });

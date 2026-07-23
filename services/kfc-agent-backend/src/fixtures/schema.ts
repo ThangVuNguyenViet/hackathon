@@ -1,4 +1,10 @@
 import { z } from 'zod';
+import {
+  isOfficialSourceAuthorityFor,
+  officialSourceAuthoritySchema,
+} from '../domain/officialSourceAuthority.js';
+import { opaqueProviderIdSchema } from '../domain/opaqueProviderId.js';
+import { paymentSurfaceSchema } from '../domain/paymentSurface.js';
 import type { MenuItem } from '../domain/types.js';
 
 export interface GeneratedModifierOption {
@@ -22,30 +28,32 @@ export interface GeneratedModifierGroup {
   options: GeneratedModifierOption[];
 }
 
-export const generatedModifierOptionSchema: z.ZodType<GeneratedModifierOption> = z.lazy(() =>
-  z.object({
-    modifierId: z.string(),
-    name: z.string(),
-    priceDeltaVnd: z.number(),
-    default: z.boolean(),
-    quantity: z.number().or(z.literal('')),
-    posItemId: z.string(),
-    imageName: z.string(),
-    searchAliases: z.array(z.string().min(1)).optional(),
-    modifierGroups: z.array(generatedModifierGroupSchema),
-  }),
-);
+export const generatedModifierOptionSchema: z.ZodType<GeneratedModifierOption> =
+  z.lazy(() =>
+    z.object({
+      modifierId: z.string(),
+      name: z.string(),
+      priceDeltaVnd: z.number(),
+      default: z.boolean(),
+      quantity: z.number().or(z.literal('')),
+      posItemId: z.string(),
+      imageName: z.string(),
+      searchAliases: z.array(z.string().min(1)).optional(),
+      modifierGroups: z.array(generatedModifierGroupSchema),
+    }),
+  );
 
-export const generatedModifierGroupSchema: z.ZodType<GeneratedModifierGroup> = z.lazy(() =>
-  z.object({
-    groupId: z.string(),
-    name: z.string(),
-    min: z.number().or(z.literal('')),
-    max: z.number().or(z.literal('')),
-    depth: z.number().int().nonnegative(),
-    options: z.array(generatedModifierOptionSchema),
-  }),
-);
+export const generatedModifierGroupSchema: z.ZodType<GeneratedModifierGroup> =
+  z.lazy(() =>
+    z.object({
+      groupId: z.string(),
+      name: z.string(),
+      min: z.number().or(z.literal('')),
+      max: z.number().or(z.literal('')),
+      depth: z.number().int().nonnegative(),
+      options: z.array(generatedModifierOptionSchema),
+    }),
+  );
 
 export const generatedMenuItemSchema = z.object({
   code: z.string(),
@@ -53,7 +61,7 @@ export const generatedMenuItemSchema = z.object({
   posItemId: z.string(),
   productCode: z.string(),
   category: z.string(),
-  categoryId: z.string(),
+  categoryId: z.string().min(1),
   categoryUrl: z.string(),
   name: z.string(),
   description: z.string(),
@@ -65,21 +73,27 @@ export const generatedMenuItemSchema = z.object({
   builderUrl: z.string().url().or(z.literal('')),
   isCustomize: z.boolean(),
   isQuickCombo: z.boolean(),
-  orderingMetadata: z.object({
-    searchAliases: z.array(z.string().min(1)).default([]),
-    unitComposition: z.object({
-      friedChickenPieces: z.number().int().nonnegative().optional(),
-      standardPepsi: z.number().int().nonnegative().optional(),
-    }).optional(),
-    componentSearchAliases: z.object({
-      friedChickenPieces: z.array(z.string().min(1)).optional(),
-      standardPepsi: z.array(z.string().min(1)).optional(),
-    }).optional(),
-    provenance: z.object({
-      sourceFile: z.string(),
-      fixtureMode: z.literal('demo_mock_seed'),
-    }),
-  }).optional(),
+  orderingMetadata: z
+    .object({
+      searchAliases: z.array(z.string().min(1)).default([]),
+      unitComposition: z
+        .object({
+          friedChickenPieces: z.number().int().nonnegative().optional(),
+          standardPepsi: z.number().int().nonnegative().optional(),
+        })
+        .optional(),
+      componentSearchAliases: z
+        .object({
+          friedChickenPieces: z.array(z.string().min(1)).optional(),
+          standardPepsi: z.array(z.string().min(1)).optional(),
+        })
+        .optional(),
+      provenance: z.object({
+        sourceFile: z.string(),
+        fixtureMode: z.literal('demo_mock_seed'),
+      }),
+    })
+    .optional(),
   provenance: z.object({
     sourceFile: z.string(),
     sourceApi: z.string().url(),
@@ -159,6 +173,10 @@ export const generatedFulfillmentServiceAreaSchema = z.object({
   canonicalCity: z.string().min(1),
   districts: z.array(z.string()).min(1),
   cities: z.array(z.string()).min(1),
+  canonicalCommune: z.string().min(1).optional(),
+  canonicalProvince: z.string().min(1).optional(),
+  communes: z.array(z.string().min(1)).min(1).optional(),
+  provinces: z.array(z.string().min(1)).min(1).optional(),
   provenance: z.object({
     sourceFile: z.string(),
     sourceApi: z.string(),
@@ -166,25 +184,110 @@ export const generatedFulfillmentServiceAreaSchema = z.object({
   }),
 });
 
-export const generatedContentPageSchema = z.object({
-  id: z.string(),
-  kind: z.enum(['promotion', 'news', 'allergen', 'policy']),
-  title: z.string(),
-  sourceUrl: z.string(),
-  statusCode: z.number().int().nullable(),
-  markdown: z.string(),
-  links: z.array(z.string()),
-  tags: z.array(z.string()).optional(),
-  retrievedAt: z.string().optional(),
-  approvedAt: z.string().optional(),
-  approvalStatus: z.literal('approved').optional(),
-  audience: z.literal('customer_public').optional(),
-  contentHash: z.string().regex(/^[a-f0-9]{64}$/).optional(),
-  provenance: z.object({
-    sourceFile: z.string(),
-    fixtureMode: z.literal('public_crawl_seed'),
+const administrativeAuthoritySchema = z.object({
+  documentId: z.string().min(1),
+  decisionUrl: z.string().url(),
+  provinceCatalogUrl: z.string().url(),
+  communeCatalogUrl: z.string().url(),
+});
+
+export const generatedAdministrativeDivisionsSchema = z.object({
+  effectiveFrom: z.string().date(),
+  authority: administrativeAuthoritySchema,
+  extraction: z.object({
+    sourceUrl: z.string().url(),
+    revision: z.string().min(1),
+    license: z.string().min(1),
+    copyright: z.string().min(1),
+  }),
+  provinces: z.array(
+    z.object({
+      code: z.string().regex(/^\d{2}$/),
+      name: z.string().min(1),
+      fullName: z.string().min(1),
+      type: z.enum(['province', 'municipality']),
+    }),
+  ),
+  communes: z.array(
+    z.object({
+      code: z.string().regex(/^\d{5}$/),
+      name: z.string().min(1),
+      fullName: z.string().min(1),
+      type: z.enum(['ward', 'commune', 'special_administrative_region']),
+      provinceCode: z.string().regex(/^\d{2}$/),
+    }),
+  ),
+});
+
+export const generatedAdministrativeLegacyMappingSchema = z.object({
+  legacyProvince: z.string().min(1),
+  legacyProvinceAliases: z.array(z.string().min(1)).default([]),
+  legacyDistrict: z.string().min(1).optional(),
+  legacyDistrictAliases: z.array(z.string().min(1)).default([]),
+  legacyCommune: z.string().min(1),
+  legacyCommuneAliases: z.array(z.string().min(1)).default([]),
+  canonicalProvinceCode: z.string().regex(/^\d{2}$/),
+  canonicalCommuneCode: z.string().regex(/^\d{5}$/),
+  authority: z.object({
+    documentId: z.string().min(1),
+    sourceUrl: z.string().url(),
   }),
 });
+
+export const generatedContentPageSchema = z
+  .object({
+    id: z.string(),
+    kind: z.enum(['promotion', 'news', 'allergen', 'policy']),
+    title: z.string(),
+    sourceUrl: z.string(),
+    statusCode: z.number().int().nullable(),
+    markdown: z.string(),
+    links: z.array(z.string()),
+    tags: z.array(z.string()).optional(),
+    retrievedAt: z.string().optional(),
+    approvedAt: z.string().optional(),
+    approvalStatus: z.literal('approved').optional(),
+    audience: z.literal('customer_public').optional(),
+    contentHash: z
+      .string()
+      .regex(/^[a-f0-9]{64}$/)
+      .optional(),
+    officialAuthority: officialSourceAuthoritySchema.optional(),
+    provenance: z.object({
+      sourceFile: z.string(),
+      fixtureMode: z.literal('public_crawl_seed'),
+    }),
+  })
+  .superRefine((page, context) => {
+    if (page.kind !== 'policy' && page.kind !== 'allergen') return;
+    if (
+      page.approvalStatus !== 'approved' ||
+      page.audience !== 'customer_public' ||
+      !page.contentHash ||
+      !page.approvedAt ||
+      !isOfficialSourceAuthorityFor(page.officialAuthority, {
+        id: page.id,
+        kind: page.kind,
+        title: page.title,
+        snippet: page.markdown,
+        sourceUrl: page.sourceUrl,
+        sourceFile: page.provenance.sourceFile,
+        tags: page.tags,
+        retrievedAt: page.retrievedAt,
+        approvedAt: page.approvedAt,
+        approvalStatus: page.approvalStatus,
+        audience: page.audience,
+      }) ||
+      page.officialAuthority.revision !== page.contentHash
+    ) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['officialAuthority'],
+        message:
+          'governed content requires an exact ingestion-issued official authority',
+      });
+    }
+  });
 
 export const generatedPromotionVoucherOfferSchema = z.object({
   offerId: z.string(),
@@ -216,12 +319,16 @@ export const generatedPromotionVoucherOfferSchema = z.object({
 });
 
 export const generatedPaymentMethodSchema = z.object({
-  methodId: z.string(),
+  methodId: opaqueProviderIdSchema,
   displayName: z.string(),
   category: z.enum(['cash_on_delivery', 'bank_atm', 'card', 'digital_wallet']),
   supported: z.boolean(),
-  supportStatus: z.enum(['listed_supported', 'not_listed_in_policy', 'separate_channel_only']),
-  paymentSurface: z.string(),
+  supportStatus: z.enum([
+    'listed_supported',
+    'not_listed_in_policy',
+    'separate_channel_only',
+  ]),
+  paymentSurface: paymentSurfaceSchema,
   evidenceText: z.string(),
   sourceUrl: z.string().url(),
   sourceFile: z.string(),
@@ -242,7 +349,16 @@ export const generatedMembershipProvenanceSchema = z.object({
 
 export const generatedMembershipPageSchema = z.object({
   id: z.string(),
-  kind: z.enum(['home', 'wallet', 'voucher_detail', 'benefits', 'point_history', 'profile', 'usage_guide', 'program_policy']),
+  kind: z.enum([
+    'home',
+    'wallet',
+    'voucher_detail',
+    'benefits',
+    'point_history',
+    'profile',
+    'usage_guide',
+    'program_policy',
+  ]),
   title: z.string(),
   sourceUrl: z.string().url(),
   statusCode: z.number().int().nullable(),
@@ -336,8 +452,20 @@ export const generatedMembershipToolDefinitionSchema = z.object({
   httpMethod: z.enum(['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'UNKNOWN']),
   host: z.string().url(),
   endpointPath: z.string(),
-  category: z.enum(['auth', 'profile', 'wallet', 'reward', 'points', 'content']),
-  sideEffect: z.enum(['read', 'account_mutation', 'voucher_acquisition', 'reward_redemption']),
+  category: z.enum([
+    'auth',
+    'profile',
+    'wallet',
+    'reward',
+    'points',
+    'content',
+  ]),
+  sideEffect: z.enum([
+    'read',
+    'account_mutation',
+    'voucher_acquisition',
+    'reward_redemption',
+  ]),
   requiresAuthenticatedMembership: z.boolean(),
   requiresUserConfirmation: z.boolean(),
   fixtureBacked: z.boolean(),
@@ -352,6 +480,10 @@ export const generatedFixturesSchema = z.object({
   menuModifiers: z.array(generatedMenuModifierSchema),
   stores: z.array(generatedStoreSchema),
   storeAvailability: z.array(generatedStoreAvailabilitySchema),
+  administrativeDivisions: generatedAdministrativeDivisionsSchema,
+  administrativeLegacyMappings: z.array(
+    generatedAdministrativeLegacyMappingSchema,
+  ),
   fulfillmentServiceAreas: z.array(generatedFulfillmentServiceAreaSchema),
   fulfillmentQuotes: z.array(generatedFulfillmentQuoteSchema),
   promotions: z.array(generatedContentPageSchema),
@@ -362,23 +494,54 @@ export const generatedFixturesSchema = z.object({
   membershipRewardOffers: z.array(generatedMembershipRewardOfferSchema),
   membershipWalletVouchers: z.array(generatedMembershipWalletVoucherSchema),
   membershipProfileSnapshots: z.array(generatedMembershipProfileSnapshotSchema),
-  membershipPointHistorySnapshots: z.array(generatedMembershipPointHistorySnapshotSchema),
+  membershipPointHistorySnapshots: z.array(
+    generatedMembershipPointHistorySnapshotSchema,
+  ),
   membershipToolDefinitions: z.array(generatedMembershipToolDefinitionSchema),
 });
 
-export type GeneratedMenuItem = z.infer<typeof generatedMenuItemSchema> & MenuItem;
+export type GeneratedMenuItem = z.infer<typeof generatedMenuItemSchema> &
+  MenuItem;
 export type GeneratedMenuModifier = z.infer<typeof generatedMenuModifierSchema>;
 export type GeneratedStore = z.infer<typeof generatedStoreSchema>;
-export type GeneratedStoreAvailability = z.infer<typeof generatedStoreAvailabilitySchema>;
-export type GeneratedFulfillmentServiceArea = z.infer<typeof generatedFulfillmentServiceAreaSchema>;
-export type GeneratedFulfillmentQuote = z.infer<typeof generatedFulfillmentQuoteSchema>;
+export type GeneratedStoreAvailability = z.infer<
+  typeof generatedStoreAvailabilitySchema
+>;
+export type GeneratedFulfillmentServiceArea = z.infer<
+  typeof generatedFulfillmentServiceAreaSchema
+>;
+export type GeneratedAdministrativeDivisions = z.infer<
+  typeof generatedAdministrativeDivisionsSchema
+>;
+export type GeneratedAdministrativeLegacyMapping = z.infer<
+  typeof generatedAdministrativeLegacyMappingSchema
+>;
+export type GeneratedFulfillmentQuote = z.infer<
+  typeof generatedFulfillmentQuoteSchema
+>;
 export type GeneratedContentPage = z.infer<typeof generatedContentPageSchema>;
-export type GeneratedPromotionVoucherOffer = z.infer<typeof generatedPromotionVoucherOfferSchema>;
-export type GeneratedPaymentMethod = z.infer<typeof generatedPaymentMethodSchema>;
-export type GeneratedMembershipPage = z.infer<typeof generatedMembershipPageSchema>;
-export type GeneratedMembershipRewardOffer = z.infer<typeof generatedMembershipRewardOfferSchema>;
-export type GeneratedMembershipWalletVoucher = z.infer<typeof generatedMembershipWalletVoucherSchema>;
-export type GeneratedMembershipProfileSnapshot = z.infer<typeof generatedMembershipProfileSnapshotSchema>;
-export type GeneratedMembershipPointHistorySnapshot = z.infer<typeof generatedMembershipPointHistorySnapshotSchema>;
-export type GeneratedMembershipToolDefinition = z.infer<typeof generatedMembershipToolDefinitionSchema>;
+export type GeneratedPromotionVoucherOffer = z.infer<
+  typeof generatedPromotionVoucherOfferSchema
+>;
+export type GeneratedPaymentMethod = z.infer<
+  typeof generatedPaymentMethodSchema
+>;
+export type GeneratedMembershipPage = z.infer<
+  typeof generatedMembershipPageSchema
+>;
+export type GeneratedMembershipRewardOffer = z.infer<
+  typeof generatedMembershipRewardOfferSchema
+>;
+export type GeneratedMembershipWalletVoucher = z.infer<
+  typeof generatedMembershipWalletVoucherSchema
+>;
+export type GeneratedMembershipProfileSnapshot = z.infer<
+  typeof generatedMembershipProfileSnapshotSchema
+>;
+export type GeneratedMembershipPointHistorySnapshot = z.infer<
+  typeof generatedMembershipPointHistorySnapshotSchema
+>;
+export type GeneratedMembershipToolDefinition = z.infer<
+  typeof generatedMembershipToolDefinitionSchema
+>;
 export type GeneratedFixtures = z.infer<typeof generatedFixturesSchema>;

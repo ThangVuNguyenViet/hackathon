@@ -39,7 +39,6 @@ import type {
   AppendCustomerRunEventInput,
   CustomerRunPatch,
 } from "./memoryStore.js";
-import { confirmationPauseFromEvent, type ConfirmationPauseRecord } from "./memoryStore.js";
 import {
   CustomerRunIdempotencyConflictError,
   CustomerRunSequenceConflictError,
@@ -47,7 +46,12 @@ import {
   type CustomerRun,
   type CustomerRunEvent,
 } from "../customerRuns/contracts.js";
-import { D1StoreAgentOperations } from './d1StoreAgentOperations.js';
+import {
+  D1StoreAgentRunTextDeliveryOperations,
+} from './d1StoreAgentRunTextDeliveryOperations.js';
 export { D1DatabaseLike, DashboardSessionSummary } from './d1StoreSupport.js';
 
-export class D1Store extends D1StoreAgentOperations implements ConversationStore {}
+export class D1Store
+  extends D1StoreAgentRunTextDeliveryOperations
+  implements ConversationStore
+{}

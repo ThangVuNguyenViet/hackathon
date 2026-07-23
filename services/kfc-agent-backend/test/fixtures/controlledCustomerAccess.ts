@@ -31,6 +31,14 @@ export function controlledCustomerAccess(input: {
       expiresAt: '2099-01-01T00:00:00.000Z',
       evidenceRef: `controlled-test:${input.customerId}`,
     },
-    authorizedScopes: ['customer:read', 'membership:read', 'membership:write', 'order:read', 'payment:read'],
+    authorizedScopes: [
+      'customer:read',
+      'membership:read',
+      'membership:write',
+      'order:read',
+      'order:write',
+      'payment:read',
+      'payment:write',
+    ],
   };
 }

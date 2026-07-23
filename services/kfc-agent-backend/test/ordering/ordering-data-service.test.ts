@@ -11,7 +11,9 @@ import { createTestFixtures } from '../fixtures/testFixtures.js';
 
 const FIXED_CURRENT_DATE = '2026-07-08';
 
-function createOffer(overrides: Partial<GeneratedPromotionVoucherOffer> = {}): GeneratedPromotionVoucherOffer {
+function createOffer(
+  overrides: Partial<GeneratedPromotionVoucherOffer> = {},
+): GeneratedPromotionVoucherOffer {
   return {
     offerId: 'offer-default',
     campaign: 'Lunch campaign',
@@ -43,14 +45,20 @@ function createOffer(overrides: Partial<GeneratedPromotionVoucherOffer> = {}): G
 }
 
 function createService(overrides: Partial<GeneratedFixtures> = {}) {
-  return new OrderingDataService(createTestFixtures(overrides), { currentDate: FIXED_CURRENT_DATE });
+  return new OrderingDataService(createTestFixtures(overrides), {
+    currentDate: FIXED_CURRENT_DATE,
+  });
 }
 
 async function createGeneratedFixtureService() {
-  return new OrderingDataService(await loadGeneratedFixtures(process.cwd()), { currentDate: FIXED_CURRENT_DATE });
+  return new OrderingDataService(await loadGeneratedFixtures(process.cwd()), {
+    currentDate: FIXED_CURRENT_DATE,
+  });
 }
 
-function expectedModifierGroups(groups: GeneratedMenuModifier['modifierGroups']): unknown[] {
+function expectedModifierGroups(
+  groups: GeneratedMenuModifier['modifierGroups'],
+): unknown[] {
   return groups.map((group) => ({
     groupId: group.groupId,
     name: group.name,
@@ -69,6 +77,17 @@ function expectedModifierGroups(groups: GeneratedMenuModifier['modifierGroups'])
 }
 
 describe('OrderingDataService', () => {
+  it('rejects unknown payment surfaces instead of returning authoritative emptiness', async () => {
+    const data = await createGeneratedFixtureService();
+
+    expect(
+      data.listPaymentMethods({ paymentSurface: 'kfc_website_checkout' }),
+    ).toHaveLength(5);
+    expect(() =>
+      data.listPaymentMethods({ paymentSurface: 'web_app' }),
+    ).toThrow('payment_surface_invalid');
+  });
+
   it('searches menu and returns provenance-backed Vietnamese items', async () => {
     const data = await createGeneratedFixtureService();
     const results = data.searchMenu('Combo Hợp Gu 99K');
@@ -79,13 +98,72 @@ describe('OrderingDataService', () => {
     });
   });
 
+  it('finds menu items by canonical catalog identifiers', async () => {
+    const data = await createGeneratedFixtureService();
+
+    expect(data.searchMenu('20698')).toEqual([
+      expect.objectContaining({
+        code: '20698',
+        itemId: '20698',
+        posItemId: '20698',
+      }),
+    ]);
+    expect(data.searchMenu('20709')).toEqual([
+      expect.objectContaining({
+        code: '20709',
+        itemId: '20709',
+        posItemId: '20709',
+      }),
+    ]);
+  });
+
+  it('returns the union of disjunctive menu searches', async () => {
+    const data = await createGeneratedFixtureService();
+
+    expect(
+      data
+        .searchMenu('20698 OR 20709')
+        .map(({ code }) => code)
+        .sort(),
+    ).toEqual(['20698', '20709']);
+  });
+
+  it('keeps disjunctive named-product searches free of incidental description matches', async () => {
+    const data = await createGeneratedFixtureService();
+    const results = data.searchMenu(
+      'Combo Burger Gà Yo OR Burger Gà Zinger OR Pepsi',
+    );
+    const normalizedNames = results.map(({ name }) => name.toLowerCase());
+
+    expect(results.map(({ code }) => code)).toEqual(
+      expect.arrayContaining(['20702', '41141', '41074']),
+    );
+    expect(
+      normalizedNames.every(
+        (name) =>
+          name.includes('combo burger gà yo') ||
+          name.includes('burger gà zinger') ||
+          name.includes('pepsi'),
+      ),
+    ).toBe(true);
+  });
+
   it('ranks direct product-name matches above combos that only mention the product', async () => {
     const data = await createGeneratedFixtureService();
     const results = data.searchMenu('pepsi');
 
-    expect(results.slice(0, 3).every((item) => item.name.toLowerCase().startsWith('pepsi'))).toBe(true);
-    expect(results[0]).toMatchObject({ code: '41074', name: 'Pepsi (Tiêu Chuẩn)' });
-    expect(results.some((item) => item.description.toLowerCase().includes('pepsi'))).toBe(true);
+    expect(
+      results
+        .slice(0, 3)
+        .every((item) => item.name.toLowerCase().startsWith('pepsi')),
+    ).toBe(true);
+    expect(results[0]).toMatchObject({
+      code: '41074',
+      name: 'Pepsi (Tiêu Chuẩn)',
+    });
+    expect(
+      results.some((item) => item.description.toLowerCase().includes('pepsi')),
+    ).toBe(true);
   });
 
   it('does not truncate broad menu search results', async () => {
@@ -97,14 +175,22 @@ describe('OrderingDataService', () => {
 
   it('indexes fixture modifier text and returns the complete structured modifier contract', async () => {
     const fixtures = await loadGeneratedFixtures(process.cwd());
-    const tree = fixtures.menuModifiers.find((candidate) => candidate.modifierGroups[0]?.options[0]);
+    const tree = fixtures.menuModifiers.find(
+      (candidate) => candidate.modifierGroups[0]?.options[0],
+    );
     expect(tree).toBeDefined();
-    const item = fixtures.menuItems.find((candidate) => candidate.itemId === tree!.itemId);
+    const item = fixtures.menuItems.find(
+      (candidate) => candidate.itemId === tree!.itemId,
+    );
     expect(item).toBeDefined();
     const option = tree!.modifierGroups[0]!.options[0]!;
-    const data = new OrderingDataService(fixtures, { currentDate: FIXED_CURRENT_DATE });
+    const data = new OrderingDataService(fixtures, {
+      currentDate: FIXED_CURRENT_DATE,
+    });
 
-    const result = data.searchMenu(`${item!.name} ${option.name}`).find((candidate) => candidate.code === item!.code);
+    const result = data
+      .searchMenu(`${item!.name} ${option.name}`)
+      .find((candidate) => candidate.code === item!.code);
 
     expect(result).toMatchObject({
       code: item!.code,
@@ -114,260 +200,9 @@ describe('OrderingDataService', () => {
       isQuickCombo: item!.isQuickCombo,
       hasModifiers: true,
     });
-    expect(result?.modifierGroups).toEqual(expectedModifierGroups(tree!.modifierGroups));
-  });
-
-  it('builds bounded menu and nested-modifier planning evidence from fixture API data', async () => {
-    const data = await createGeneratedFixtureService();
-    const context = data.getMenuPlanningContext({
-      query: 'Cho mình 1 combo gà cay, 1 burger Zinger và 2 Pepsi, giao về Quận 7.',
-      activeItemCodes: [],
-      maxCandidates: 6,
-      fulfillment: { storeId: 'KFCVN0318', disposition: 'delivery' },
-    });
-
-    expect(context.candidates).toHaveLength(6);
-    expect(context.candidates.map((candidate) => candidate.code)).toEqual(
-      expect.arrayContaining(['41074', '41141']),
+    expect(result?.modifierGroups).toEqual(
+      expectedModifierGroups(tree!.modifierGroups),
     );
-    expect(context.candidates.every((candidate) => candidate.verifiedForMutation)).toBe(true);
-    expect(context.candidates.every((candidate) => candidate.verificationQuery === candidate.name)).toBe(true);
-    const spicyCandidate = context.candidates.find((candidate) =>
-      candidate.modifierGroups.some((group) =>
-        group.options.some((option) => option.name.toLowerCase().includes('cay')),
-      ),
-    );
-    expect(spicyCandidate).toBeDefined();
-    expect(context.candidates.some((candidate) =>
-      candidate.name.toLowerCase().includes('combo') &&
-      candidate.modifierGroups.some((group) =>
-        group.options.some((option) => option.name.toLowerCase().includes('cay')),
-      ),
-    )).toBe(true);
-    const nestedGroup = context.candidates
-      .flatMap((candidate) => candidate.modifierGroups)
-      .find((group) =>
-        group.requiredSelections.length > 0 &&
-        group.options.some((option) => option.name.toLowerCase().includes('cay')),
-      );
-    expect(nestedGroup?.requiredSelections[0]).toEqual(
-      expect.objectContaining({ groupId: expect.any(String), modifierId: expect.any(String) }),
-    );
-    expect(nestedGroup?.options[0]?.selectionBundle).toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({ groupId: expect.any(String), modifierId: expect.any(String) }),
-      ]),
-    );
-    expect(JSON.stringify(context).length).toBeLessThan(10_000);
-  });
-
-  it('uses mocked catalog aliases and unit composition for short typo-heavy orders', async () => {
-    const data = await createGeneratedFixtureService();
-    const context = data.getMenuPlanningContext({
-      query: 'Cho tui 2 gà kai vs 1 pesi nha.',
-      activeItemCodes: [],
-      maxCandidates: 12,
-    });
-
-    expect(context.candidates).toEqual(expect.arrayContaining([
-      expect.objectContaining({
-        code: '41036',
-        unitComposition: { friedChickenPieces: 2 },
-        matchedSearchAliases: ['gà kai'],
-        modifierGroups: expect.arrayContaining([
-          expect.objectContaining({
-            options: expect.arrayContaining([
-              expect.objectContaining({ name: 'Gà Giòn Cay' }),
-            ]),
-          }),
-        ]),
-      }),
-      expect.objectContaining({
-        code: '41074',
-        unitComposition: { standardPepsi: 1 },
-        matchedSearchAliases: ['pesi'],
-      }),
-    ]));
-  });
-
-  it('returns provider-calculated lowest-price exact pack plans for component quantities', async () => {
-    const data = await createGeneratedFixtureService();
-    const context = data.getMenuPlanningContext({
-      query: '10 miếng gà rán và 4 Pepsi tiêu chuẩn',
-      activeItemCodes: [],
-      maxCandidates: 8,
-    });
-    const chickenPlan = context.exactQuantityPlans?.find(
-      (plan) => plan.targetQuantity === 10 && plan.component === 'friedChickenPieces',
-    );
-    const pepsiPlan = context.exactQuantityPlans?.find(
-      (plan) => plan.targetQuantity === 4 && plan.component === 'standardPepsi',
-    );
-
-    expect(chickenPlan).toBeDefined();
-    expect(pepsiPlan).toBeDefined();
-    expect(context.requestedQuantityPlans).toEqual(expect.arrayContaining([
-      expect.objectContaining({ targetQuantity: 10, component: 'friedChickenPieces' }),
-      expect.objectContaining({ targetQuantity: 4, component: 'standardPepsi' }),
-    ]));
-    const candidates = new Map(context.candidates.map((candidate) => [candidate.code, candidate]));
-    expect(chickenPlan!.selections.reduce(
-      (total, selection) => total + (candidates.get(selection.itemCode)?.unitComposition?.friedChickenPieces ?? 0) * selection.quantity,
-      0,
-    )).toBe(10);
-    expect(pepsiPlan!.selections.reduce(
-      (total, selection) => total + (candidates.get(selection.itemCode)?.unitComposition?.standardPepsi ?? 0) * selection.quantity,
-      0,
-    )).toBe(4);
-  });
-
-  it('prioritizes an exact named item even when the mocked API appends it after similar products', async () => {
-    const fixtures = await loadGeneratedFixtures(process.cwd());
-    const source = fixtures.menuItems[0]!;
-    const exactItem = {
-      ...source,
-      code: 'MOCK-EXACT-TEA',
-      itemId: 'MOCK-EXACT-TEA',
-      posItemId: 'MOCK-EXACT-TEA',
-      productCode: 'MOCK-EXACT-TEA',
-      name: 'Trà Đào',
-      description: 'Mocked upstream exact tea item',
-    };
-    const data = new OrderingDataService({
-      ...fixtures,
-      menuItems: [...fixtures.menuItems, exactItem],
-    }, { currentDate: FIXED_CURRENT_DATE });
-
-    const context = data.getMenuPlanningContext({
-      query: 'Bỏ nước cũ ra, đổi thành trà đào được không?',
-      activeItemCodes: [],
-      maxCandidates: 6,
-    });
-
-    expect(context.candidates[0]).toMatchObject({ code: 'MOCK-EXACT-TEA', name: 'Trà Đào' });
-  });
-
-  it('exposes explicit customer menu evidence without requiring the customer to repeat its product name', async () => {
-    const data = await createGeneratedFixtureService();
-    const context = data.getMenuPlanningContext({
-      query: 'Lấy món mình hay ăn đi.',
-      activeItemCodes: [],
-      customerEvidenceItems: [{ itemCode: '20698', source: 'favorite' }],
-      maxCandidates: 4,
-    });
-
-    expect(context.candidates[0]).toMatchObject({
-      code: '20698',
-      name: 'Combo Burger Zinger',
-      verifiedForMutation: true,
-      customerEvidenceSources: ['favorite'],
-    });
-  });
-
-  it('annotates menu candidates with fixture-backed availability for the resolved service-area store', async () => {
-    const data = await createGeneratedFixtureService();
-    const unavailableContext = data.getMenuPlanningContext({
-      query: 'Combo Burger Gà Yo',
-      activeItemCodes: [],
-      maxCandidates: 4,
-      fulfillment: { storeId: 'KFCVN0318', disposition: 'delivery' },
-    });
-    const context = data.getMenuPlanningContext({
-      query: 'Cho mình 1 combo gà cay, 1 burger Zinger và 2 Pepsi, giao về Quận 7.',
-      activeItemCodes: [],
-      maxCandidates: 8,
-      fulfillment: { storeId: 'KFCVN0318', disposition: 'delivery' },
-    });
-
-    expect(unavailableContext.candidates.find((candidate) => candidate.code === '20701')?.fulfillmentAvailability).toMatchObject({
-      storeId: 'KFCVN0318',
-      available: false,
-      reason: 'timeslot_excluded',
-    });
-    expect(context.candidates.find((candidate) => candidate.code === '20702')?.fulfillmentAvailability).toMatchObject({
-      storeId: 'KFCVN0318',
-      available: true,
-      reason: 'available',
-    });
-  });
-
-  it('keeps explicit active cart items in planning evidence without inventing a replacement', async () => {
-    const data = await createGeneratedFixtureService();
-    const context = data.getMenuPlanningContext({
-      query: 'Pepsi lớn',
-      activeItemCodes: ['20752'],
-      maxCandidates: 4,
-    });
-
-    expect(context.candidates[0]).toMatchObject({ code: '20752', name: 'Combo Đẫy Đà 129K' });
-    expect(context.candidates[0]?.activeCartItem).toBe(true);
-    expect(context.candidates[0]?.verifiedForMutation).toBe(true);
-    expect(context.candidates[0]?.modifierGroups.length).toBeGreaterThan(0);
-    expect(context.candidates.map((candidate) => candidate.code)).not.toContain('unknown-default-item');
-  });
-
-  it('does not inject menu defaults into unrelated checkout text', async () => {
-    const data = await createGeneratedFixtureService();
-    const context = data.getMenuPlanningContext({
-      query: 'Thanh toán bằng ZaloPay được không?',
-      activeItemCodes: ['20703', '41141', '41074'],
-      maxCandidates: 8,
-    });
-
-    expect(context.candidates).toEqual([]);
-  });
-
-  it('resolves a typed district to explicit canonical location fields from the fulfillment fixture API', async () => {
-    const data = await createGeneratedFixtureService();
-    const context = data.getFulfillmentPlanningContext({
-      query: 'Chung cư Sunrise City, 23 Nguyễn Hữu Thọ, phường Tân Hưng, Quận 7.',
-      method: 'delivery',
-      maxCandidates: 4,
-    });
-
-    expect(context.candidates).toEqual([expect.objectContaining({
-      serviceAreaId: 'quan-7-delivery',
-      storeId: 'KFCVN0318',
-      district: 'Quận 7',
-      city: 'Hồ Chí Minh',
-      matchedDistrictAlias: 'Quận 7',
-      verifiedForQuote: true,
-      source: expect.objectContaining({
-        fixtureMode: 'demo_mock_seed',
-        sourceApi: 'mock://kfc-fulfillment/service-areas/quan-7-delivery',
-      }),
-    })]);
-  });
-
-  it('returns no fulfillment location candidate when only an unrelated address fragment is present', async () => {
-    const data = await createGeneratedFixtureService();
-    const context = data.getFulfillmentPlanningContext({
-      query: '54/2 Nguyễn Hồng Đào',
-      method: 'delivery',
-      maxCandidates: 4,
-    });
-
-    expect(context.candidates).toEqual([]);
-  });
-
-  it('uses only the active address draft when the current turn supplies the remaining street details', async () => {
-    const data = await createGeneratedFixtureService();
-    const context = data.getFulfillmentPlanningContext({
-      query: 'Chung cư Sunrise City, 23 Nguyễn Hữu Thọ, phường Tân Hưng. Phí ship bao nhiêu?',
-      knownDistrict: 'Quận 7',
-      knownCity: 'Hồ Chí Minh',
-      method: 'delivery',
-      maxCandidates: 4,
-    });
-
-    expect(context.candidates).toEqual([
-      expect.objectContaining({
-        district: 'Quận 7',
-        city: 'Hồ Chí Minh',
-        matchSource: 'address_draft',
-        verifiedForQuote: true,
-      }),
-    ]);
   });
 
   it('returns fixture-backed menu data for AI-normalized broad menu discovery', async () => {
@@ -386,7 +221,9 @@ describe('OrderingDataService', () => {
     const fixtures = await loadGeneratedFixtures(process.cwd());
     const data = await createGeneratedFixtureService();
     const results = data.recommendAddOns();
-    expect(results.length).toBe(fixtures.menuItems.filter((item) => item.available).length);
+    expect(results.length).toBe(
+      fixtures.menuItems.filter((item) => item.available).length,
+    );
   });
 
   it('derives add-on recommendations from fixture menu data instead of hardcoded categories', () => {
@@ -407,7 +244,9 @@ describe('OrderingDataService', () => {
         : [],
     });
 
-    expect(data.recommendAddOns().map((item) => item.code)).toEqual(['DYNAMIC-ADDON']);
+    expect(data.recommendAddOns().map((item) => item.code)).toEqual([
+      'DYNAMIC-ADDON',
+    ]);
   });
 
   it('does not truncate store search results', async () => {
@@ -428,38 +267,6 @@ describe('OrderingDataService', () => {
     const tree = data.getModifierTree('20751');
     expect(tree?.modifierGroups.length).toBeGreaterThan(0);
     expect(JSON.stringify(tree)).toContain('Burger Tôm');
-  });
-
-  it('finds an equivalent lower-cost combo from normalized menu composition', async () => {
-    const data = await createGeneratedFixtureService();
-    const proposal = (data as any).recommendEquivalentCombo([
-      { itemCode: '41037', quantity: 3 },
-      { itemCode: '41035', quantity: 1 },
-      { itemCode: '41074', quantity: 4 },
-    ]);
-
-    expect(proposal).toEqual({
-      comboItemCode: '20752',
-      comboQuantity: 2,
-      sourceTotalVnd: 404000,
-      comboTotalVnd: 258000,
-      savingsVnd: 146000,
-      composition: { friedChickenPieces: 10, standardPepsi: 4 },
-    });
-  });
-
-  it('does not infer combo composition from product prose when mocked API metadata is absent', async () => {
-    const fixtures = await loadGeneratedFixtures(process.cwd());
-    const data = new OrderingDataService({
-      ...fixtures,
-      menuItems: fixtures.menuItems.map((item) => ({ ...item, orderingMetadata: undefined })),
-    }, { currentDate: FIXED_CURRENT_DATE });
-
-    expect(data.recommendEquivalentCombo([
-      { itemCode: '41037', quantity: 3 },
-      { itemCode: '41035', quantity: 1 },
-      { itemCode: '41074', quantity: 4 },
-    ])).toBeUndefined();
   });
 
   it('searches stores and checks store availability by disposition', async () => {
@@ -521,33 +328,60 @@ describe('OrderingDataService', () => {
 
   it('returns no stores for a no-match search instead of falling back to arbitrary stores', () => {
     const data = createService();
-    expect(data.searchStores({ query: 'completely unknown district 12345' })).toEqual([]);
+    expect(
+      data.searchStores({ query: 'completely unknown district 12345' }),
+    ).toEqual([]);
   });
 
   it('filters promotion search by active date, channel, and subtotal', () => {
     const data = createService({
       promotionVoucherOffers: [
-        createOffer({ offerId: 'active-delivery', channel: 'Website / app', minimumOrderVnd: 120000, offerName: 'Lunch delivery 42K' }),
-        createOffer({ offerId: 'pickup-only', channel: 'Nhà hàng', minimumOrderVnd: '', offerName: 'Lunch in-store 42K' }),
-        createOffer({ offerId: 'expired-delivery', channel: 'Website / app', endDate: '2026-07-01', offerName: 'Lunch expired 42K' }),
+        createOffer({
+          offerId: 'active-delivery',
+          channel: 'Website / app',
+          minimumOrderVnd: 120000,
+          offerName: 'Lunch delivery 42K',
+        }),
+        createOffer({
+          offerId: 'pickup-only',
+          channel: 'Nhà hàng',
+          minimumOrderVnd: '',
+          offerName: 'Lunch in-store 42K',
+        }),
+        createOffer({
+          offerId: 'expired-delivery',
+          channel: 'Website / app',
+          endDate: '2026-07-01',
+          offerName: 'Lunch expired 42K',
+        }),
       ],
     });
 
     expect(
+      data
+        .searchPromotionOffers({
+          query: 'lunch 42k',
+          channel: 'website',
+          subtotalVnd: 150000,
+        })
+        .map((offer) => offer.offerId),
+    ).toEqual(['active-delivery']);
+    expect(data.searchPromotionOffers({ query: 'expired 42k' })).toEqual([]);
+    expect(
       data.searchPromotionOffers({
         query: 'lunch 42k',
         channel: 'website',
-        subtotalVnd: 150000,
-      }).map((offer) => offer.offerId),
-    ).toEqual(['active-delivery']);
-    expect(data.searchPromotionOffers({ query: 'expired 42k' })).toEqual([]);
-    expect(data.searchPromotionOffers({ query: 'lunch 42k', channel: 'website', subtotalVnd: 50000 })).toEqual([]);
+        subtotalVnd: 50000,
+      }),
+    ).toEqual([]);
   });
 
   it('returns active fixture-backed promotions for AI-normalized broad promotion discovery', async () => {
     const data = await createGeneratedFixtureService();
 
-    expect(data.searchPromotionOffers({ query: '' }).map((offer) => offer.offerId)).toEqual([
+    expect(
+      data.searchPromotionOffers({ query: '' }).map((offer) => offer.offerId),
+    ).toEqual([
       'lunch-2026-combo-42k',
       'lunch-2026-combo-44k',
       'lunch-2026-combo-49k',
@@ -585,7 +419,12 @@ describe('OrderingDataService', () => {
 
   it('returns public_code_not_exposed for a matched active public offer without a reusable code', () => {
     const data = createService({
-      promotionVoucherOffers: [createOffer({ offerName: 'Big order lunch 42K', evidenceText: 'Big order lunch 42K without exposed code.' })],
+      promotionVoucherOffers: [
+        createOffer({
+          offerName: 'Big order lunch 42K',
+          evidenceText: 'Big order lunch 42K without exposed code.',
+        }),
+      ],
     });
 
     expect(
@@ -658,7 +497,9 @@ describe('OrderingDataService', () => {
 
   it('does not surface expired real-fixture promotions as active search results', async () => {
     const data = await createGeneratedFixtureService();
-    expect(data.searchPromotionOffers({ query: 'voucher KFC giảm 30.000' })).toEqual([]);
+    expect(
+      data.searchPromotionOffers({ query: 'voucher KFC giảm 30.000' }),
+    ).toEqual([]);
   });
 
   it('loads authenticated membership rewards, wallet, profile, and tool definitions', async () => {
@@ -673,10 +514,9 @@ describe('OrderingDataService', () => {
       rewardId: 'reward-free-pepsi-m',
       minimumOrderVnd: 129000,
     });
-    expect(data.listMembershipWallet('active').map((voucher) => voucher.voucherId)).toEqual([
-      'wallet-500k-any-bill',
-      'wallet-new-member-25k',
-    ]);
+    expect(
+      data.listMembershipWallet('active').map((voucher) => voucher.voucherId),
+    ).toEqual(['wallet-500k-any-bill', 'wallet-new-member-25k']);
     expect(data.getMembershipPointHistory(30)?.transactions).toEqual([]);
     expect(data.listMembershipTools('voucher_acquisition')[0]).toMatchObject({
       toolName: 'acquireVoucher',
@@ -688,7 +528,9 @@ describe('OrderingDataService', () => {
   it('returns fixture-backed membership rewards for AI-normalized broad reward discovery', async () => {
     const data = await createGeneratedFixtureService();
 
-    expect(data.listMembershipRewards('').map((reward) => reward.rewardId)).toEqual([
+    expect(
+      data.listMembershipRewards('').map((reward) => reward.rewardId),
+    ).toEqual([
       'reward-discount-10k',
       'reward-free-pepsi-m',
       'reward-free-chocolate-cone',
@@ -747,7 +589,9 @@ describe('OrderingDataService', () => {
       ],
     });
 
-    expect(data.getAllergenEvidence('a paraphrase with no shared keywords')).toHaveLength(1);
+    expect(
+      data.getAllergenEvidence('a paraphrase with no shared keywords'),
+    ).toHaveLength(1);
   });
 
   it('returns fixture-backed content pages for AI-normalized broad all-content discovery', async () => {
@@ -763,7 +607,9 @@ describe('OrderingDataService', () => {
   it('returns fixture-backed allergen evidence for AI-normalized broad allergen discovery', async () => {
     const data = await createGeneratedFixtureService();
 
-    expect(data.getAllergenEvidence('').map((entry) => entry.kind)).toEqual(['allergen']);
+    expect(data.getAllergenEvidence('').map((entry) => entry.kind)).toEqual([
+      'allergen',
+    ]);
   });
 
   it('returns the captured official campaign image URL with promotion evidence', async () => {

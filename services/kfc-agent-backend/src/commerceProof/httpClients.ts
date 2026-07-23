@@ -1,4 +1,6 @@
 import { z } from "zod";
+import type { ProviderMutationIdentity } from "../clients/interfaces.js";
+import { opaqueProviderIdSchema } from "../domain/opaqueProviderId.js";
 import { commerceContractVersion, omsStatusSchema, posStatusSchema } from "./contracts.js";
 
 const omsResponseSchema = z.object({
@@ -27,12 +29,44 @@ const posResponseSchema = z.object({
 const failureSchema = z.object({
   errorCode: z.string(),
   message: z.string(),
+  traceId: z.string().optional(),
+  scenarioId: z.string().optional(),
+  commerceOrderId: z.string().optional(),
+  omsOrderId: z.string().optional(),
+  posTicketId: z.string().optional(),
   omsStatus: omsStatusSchema.optional(),
   posStatus: posStatusSchema.optional(),
 });
 
+const providerMutationIdentitySchema = z.object({
+  idempotencyKey: opaqueProviderIdSchema.refine(
+    (value) => value.length <= 512,
+    { message: "Provider mutation key exceeds the protocol limit" },
+  ),
+  bindingFingerprint: z.string().regex(/^[a-f0-9]{64}$/u),
+}).strict();
+const providerRuntimeIdentityBase = {
+  ok: z.literal(true),
+  status: z.literal("ready"),
+  configured: z.literal(true),
+  reachable: z.literal(true),
+  authenticated: z.literal(true),
+  commerceEnvironment: z.literal("sandbox"),
+  providerImplementation: z.literal("http-adapter"),
+  instanceId: opaqueProviderIdSchema,
+};
+const omsRuntimeIdentitySchema = z.object({
+  ...providerRuntimeIdentityBase,
+  service: z.literal("mock-oms"),
+}).strict();
+const posRuntimeIdentitySchema = z.object({
+  ...providerRuntimeIdentityBase,
+  service: z.literal("mock-pos"),
+}).strict();
+
 export type OmsResponse = z.infer<typeof omsResponseSchema>;
 export type PosResponse = z.infer<typeof posResponseSchema>;
+type ProviderFailure = z.infer<typeof failureSchema>;
 
 export type HttpClientResult<T> =
   | { ok: true; value: T; status: number }
@@ -53,14 +87,35 @@ interface ClientOptions {
   fetchImpl?: typeof fetch;
 }
 
+interface OmsCancellationContext {
+  traceId: string;
+  scenarioId: string;
+  commerceOrderId: string;
+}
+
+interface PosCancellationContext extends OmsCancellationContext {
+  omsOrderId: string;
+}
+
 export function createCommerceProofOmsClient(options: ClientOptions) {
   const request = createRequest(options);
   return {
-    createOrder: (input: Record<string, unknown>, idempotencyKey: string) =>
-      request("/v1/orders", omsResponseSchema, {
+    getRuntimeIdentity: () =>
+      request("/ready", omsRuntimeIdentitySchema),
+    createOrder: (
+      input: Record<string, unknown>,
+      identity: ProviderMutationIdentity,
+    ) =>
+      mutationRequest(request, identity, "/v1/orders", omsResponseSchema, () => ({
         method: "POST",
-        headers: downstreamHeaders(input, idempotencyKey),
+        headers: downstreamHeaders(input, identity),
         body: JSON.stringify(input),
+      }), {
+        success: (response) =>
+          response.traceId === input.traceId &&
+          response.scenarioId === input.scenarioId &&
+          response.commerceOrderId === input.commerceOrderId &&
+          response.omsStatus === "created",
       }),
     getOrder: (omsOrderId: string, traceId: string) =>
       request(`/v1/orders/${encodeURIComponent(omsOrderId)}`, omsResponseSchema, {
@@ -68,24 +123,59 @@ export function createCommerceProofOmsClient(options: ClientOptions) {
       }),
     cancelOrder: (
       omsOrderId: string,
-      input: { traceId: string; scenarioId: string },
+      input: OmsCancellationContext,
+      identity: ProviderMutationIdentity,
     ) =>
-      request(`/v1/orders/${encodeURIComponent(omsOrderId)}/cancel`, omsResponseSchema, {
-        method: "POST",
-        headers: { "x-trace-id": input.traceId },
-        body: JSON.stringify(input),
-      }),
+      mutationRequest(
+        request,
+        identity,
+        `/v1/orders/${encodeURIComponent(omsOrderId)}/cancel`,
+        omsResponseSchema,
+        () => ({
+          method: "POST",
+          headers: downstreamHeaders(input, identity),
+          body: JSON.stringify(input),
+        }),
+        {
+          success: (response) =>
+            response.traceId === input.traceId &&
+            response.scenarioId === input.scenarioId &&
+            response.commerceOrderId === input.commerceOrderId &&
+            response.omsOrderId === omsOrderId &&
+            response.omsStatus === "cancelled",
+          failure: (failure) =>
+            correlatedOmsCancellationFailure(
+              failure,
+              input,
+              omsOrderId,
+            ),
+        },
+      ),
   };
 }
 
 export function createCommerceProofPosClient(options: ClientOptions) {
   const request = createRequest(options);
   return {
-    submitTicket: (input: Record<string, unknown>, idempotencyKey: string) =>
-      request("/v1/tickets", posResponseSchema, {
+    getRuntimeIdentity: () =>
+      request("/ready", posRuntimeIdentitySchema),
+    submitTicket: (
+      input: Record<string, unknown>,
+      identity: ProviderMutationIdentity,
+    ) =>
+      mutationRequest(request, identity, "/v1/tickets", posResponseSchema, () => ({
         method: "POST",
-        headers: downstreamHeaders(input, idempotencyKey),
+        headers: downstreamHeaders(input, identity),
         body: JSON.stringify(input),
+      }), {
+        success: (response) =>
+          response.traceId === input.traceId &&
+          response.scenarioId === input.scenarioId &&
+          response.commerceOrderId === input.commerceOrderId &&
+          response.omsOrderId === input.omsOrderId &&
+          response.posStatus === "accepted",
+        failure: (failure) =>
+          correlatedPosSubmissionFailure(failure, input),
       }),
     getTicket: (posTicketId: string, traceId: string) =>
       request(`/v1/tickets/${encodeURIComponent(posTicketId)}`, posResponseSchema, {
@@ -93,14 +183,63 @@ export function createCommerceProofPosClient(options: ClientOptions) {
       }),
     cancelTicket: (
       posTicketId: string,
-      input: { traceId: string; scenarioId: string },
+      input: PosCancellationContext,
+      identity: ProviderMutationIdentity,
     ) =>
-      request(`/v1/tickets/${encodeURIComponent(posTicketId)}/cancel`, posResponseSchema, {
-        method: "POST",
-        headers: { "x-trace-id": input.traceId },
-        body: JSON.stringify(input),
-      }),
+      mutationRequest(
+        request,
+        identity,
+        `/v1/tickets/${encodeURIComponent(posTicketId)}/cancel`,
+        posResponseSchema,
+        () => ({
+          method: "POST",
+          headers: downstreamHeaders(input, identity),
+          body: JSON.stringify(input),
+        }),
+        {
+          success: (response) =>
+            response.traceId === input.traceId &&
+            response.scenarioId === input.scenarioId &&
+            response.commerceOrderId === input.commerceOrderId &&
+            response.omsOrderId === input.omsOrderId &&
+            response.posTicketId === posTicketId &&
+            response.posStatus === "cancelled",
+          failure: (failure) =>
+            correlatedPosCancellationFailure(
+              failure,
+              input,
+              posTicketId,
+            ),
+        },
+      ),
   };
+}
+
+interface ResponseBinding<T> {
+  success(value: T): boolean;
+  failure?(failure: ProviderFailure): boolean;
+}
+
+type Request = ReturnType<typeof createRequest>;
+
+function mutationRequest<T>(
+  request: Request,
+  identity: ProviderMutationIdentity,
+  path: string,
+  schema: z.ZodType<T>,
+  createInit: () => RequestInit,
+  binding: ResponseBinding<T>,
+): Promise<HttpClientResult<T>> {
+  if (!providerMutationIdentitySchema.safeParse(identity).success) {
+    return Promise.resolve({
+      ok: false,
+      status: 400,
+      errorCode: "provider_mutation_identity_required",
+      message: "An exact provider mutation identity is required",
+      timedOut: false,
+    });
+  }
+  return request(path, schema, createInit(), binding);
 }
 
 function createRequest(options: ClientOptions) {
@@ -111,6 +250,7 @@ function createRequest(options: ClientOptions) {
     path: string,
     schema: z.ZodType<T>,
     init: RequestInit = {},
+    binding?: ResponseBinding<T>,
   ): Promise<HttpClientResult<T>> {
     try {
       const response = await fetchImpl(`${baseUrl}${path}`, {
@@ -124,8 +264,30 @@ function createRequest(options: ClientOptions) {
         },
       });
       const payload: unknown = await response.json();
+      if (response.status === 408) {
+        const failure = failureSchema.safeParse(payload);
+        return {
+          ok: false,
+          status: 504,
+          errorCode: "downstream_timeout",
+          message: failure.success
+            ? failure.data.message
+            : "Downstream mutation timed out",
+          timedOut: true,
+        };
+      }
       if (!response.ok) {
         const failure = failureSchema.safeParse(payload);
+        if (
+          response.status < 500 &&
+          binding &&
+          (
+            !failure.success ||
+            (binding.failure && !binding.failure(failure.data))
+          )
+        ) {
+          return responseBindingMismatch();
+        }
         return {
           ok: false,
           status: response.status,
@@ -145,6 +307,9 @@ function createRequest(options: ClientOptions) {
           timedOut: false,
         };
       }
+      if (binding && !binding.success(parsed.data)) {
+        return responseBindingMismatch();
+      }
       return { ok: true, value: parsed.data, status: response.status };
     } catch (error) {
       const timedOut =
@@ -161,9 +326,101 @@ function createRequest(options: ClientOptions) {
   };
 }
 
-function downstreamHeaders(input: Record<string, unknown>, idempotencyKey: string) {
+function downstreamHeaders(
+  input: { traceId?: unknown },
+  identity: ProviderMutationIdentity,
+) {
   return {
-    "idempotency-key": idempotencyKey,
+    "idempotency-key": identity.idempotencyKey,
+    "x-provider-binding-fingerprint": identity.bindingFingerprint,
     "x-trace-id": String(input.traceId ?? ""),
   };
+}
+
+function responseBindingMismatch<T>(): HttpClientResult<T> {
+  return {
+    ok: false,
+    status: 502,
+    errorCode: "downstream_response_binding_mismatch",
+    message: "Downstream response did not match the exact requested mutation",
+    timedOut: false,
+  };
+}
+
+function correlatedOmsFailure(
+  failure: ProviderFailure,
+  expected: OmsCancellationContext,
+  omsOrderId: string,
+): boolean {
+  return (
+    failure.traceId === expected.traceId &&
+    failure.scenarioId === expected.scenarioId &&
+    failure.commerceOrderId === expected.commerceOrderId &&
+    failure.omsOrderId === omsOrderId
+  );
+}
+
+function correlatedOmsCancellationFailure(
+  failure: ProviderFailure,
+  expected: OmsCancellationContext,
+  omsOrderId: string,
+): boolean {
+  if (failure.errorCode === "oms_cancellation_failed") {
+    return (
+      failure.omsStatus === "cancellation_failed" &&
+      correlatedOmsFailure(failure, expected, omsOrderId)
+    );
+  }
+  return failure.omsStatus === undefined;
+}
+
+function correlatedPosFailure(
+  failure: ProviderFailure,
+  expected: {
+    traceId?: unknown;
+    scenarioId?: unknown;
+    commerceOrderId?: unknown;
+    omsOrderId?: unknown;
+  },
+  posTicketId?: string,
+): boolean {
+  return (
+    failure.traceId === expected.traceId &&
+    failure.scenarioId === expected.scenarioId &&
+    failure.commerceOrderId === expected.commerceOrderId &&
+    failure.omsOrderId === expected.omsOrderId &&
+    (posTicketId === undefined || failure.posTicketId === posTicketId)
+  );
+}
+
+function correlatedPosSubmissionFailure(
+  failure: ProviderFailure,
+  expected: {
+    traceId?: unknown;
+    scenarioId?: unknown;
+    commerceOrderId?: unknown;
+    omsOrderId?: unknown;
+  },
+): boolean {
+  if (failure.errorCode === "pos_order_rejected") {
+    return (
+      failure.posStatus === "rejected" &&
+      correlatedPosFailure(failure, expected)
+    );
+  }
+  return failure.posStatus === undefined;
+}
+
+function correlatedPosCancellationFailure(
+  failure: ProviderFailure,
+  expected: PosCancellationContext,
+  posTicketId: string,
+): boolean {
+  if (failure.errorCode === "pos_cancellation_failed") {
+    return (
+      failure.posStatus === "cancellation_failed" &&
+      correlatedPosFailure(failure, expected, posTicketId)
+    );
+  }
+  return failure.posStatus === undefined;
 }

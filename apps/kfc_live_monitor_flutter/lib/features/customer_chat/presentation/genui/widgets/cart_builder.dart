@@ -8,7 +8,7 @@ import 'genui_widget_chrome.dart';
 import 'quantity_stepper.dart';
 import 'verified_remote_media.dart';
 
-class CartBuilder extends StatelessWidget {
+class CartBuilder extends StatefulWidget {
   const CartBuilder({
     super.key,
     required this.attachment,
@@ -19,51 +19,124 @@ class CartBuilder extends StatelessWidget {
   final ValueChanged<KfcGenUiAction> onAction;
 
   @override
+  State<CartBuilder> createState() => _CartBuilderState();
+}
+
+class _CartBuilderState extends State<CartBuilder> {
+  late Map<String, int> _quantities;
+  late Set<String> _validInitialQuantities;
+
+  @override
+  void initState() {
+    super.initState();
+    _quantities = _initialQuantities();
+    _validInitialQuantities = _initialValidQuantityCodes();
+  }
+
+  @override
+  void didUpdateWidget(CartBuilder oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.attachment.id != widget.attachment.id ||
+        oldWidget.attachment.data != widget.attachment.data) {
+      _quantities = _initialQuantities();
+      _validInitialQuantities = _initialValidQuantityCodes();
+    }
+  }
+
+  Map<String, int> _initialQuantities() {
+    final cart = genUiMap(widget.attachment.data['cart']);
+    return {
+      for (final item in genUiList(cart['items']))
+        if (_itemCode(item).isNotEmpty)
+          _itemCode(item): ((item['quantity'] as num?) ?? 0).toInt(),
+    };
+  }
+
+  Set<String> _initialValidQuantityCodes() {
+    final cart = genUiMap(widget.attachment.data['cart']);
+    return {
+      for (final item in genUiList(cart['items']))
+        if (item['quantity'] case final num quantity
+            when quantity.isFinite &&
+                quantity == quantity.toInt() &&
+                quantity >= 1 &&
+                quantity <= 99)
+          _itemCode(item),
+    };
+  }
+
+  @override
   Widget build(BuildContext context) {
-    final cart = genUiMap(attachment.data['cart']);
+    final cart = genUiMap(widget.attachment.data['cart']);
     final items = genUiList(cart['items']);
+    final itemCodeCounts = <String, int>{};
+    for (final item in items) {
+      final itemCode = _itemCode(item);
+      if (itemCode.isNotEmpty) {
+        itemCodeCounts.update(
+          itemCode,
+          (count) => count + 1,
+          ifAbsent: () => 1,
+        );
+      }
+    }
+    final visibleItems = items
+        .where((item) => (_quantities[_itemCode(item)] ?? 0) > 0)
+        .toList(growable: false);
+    final canEditDraft = _commands.isNotEmpty;
+    final subtotalVnd = items.fold<int>(0, (total, item) {
+      final unitPrice = (item['unitPriceVnd'] as num?)?.toInt() ?? 0;
+      return total + unitPrice * (_quantities[_itemCode(item)] ?? 0);
+    });
+
     return GenUiWidgetChrome(
-      attachment: attachment,
-      onAction: onAction,
+      attachment: widget.attachment,
+      onAction: widget.onAction,
       showActions: false,
       accentColor: KfcOpsTokens.info,
       children: [
-        for (final (index, item) in items.indexed) ...[
-          _CartItemRow(attachment: attachment, item: item, onAction: onAction),
-          if (index < items.length - 1)
+        for (final (index, item) in visibleItems.indexed) ...[
+          _CartItemRow(
+            attachment: widget.attachment,
+            item: item,
+            quantity: _quantities[_itemCode(item)] ?? 0,
+            hasUniqueItemCode: itemCodeCounts[_itemCode(item)] == 1,
+            hasValidInitialQuantity: _validInitialQuantities.contains(
+              _itemCode(item),
+            ),
+            canEditDraft: canEditDraft,
+            onQuantityChanged: (quantity) =>
+                setState(() => _quantities[_itemCode(item)] = quantity),
+          ),
+          if (index < visibleItems.length - 1)
             const SizedBox(
               height: 1,
               child: ColoredBox(color: KfcOpsTokens.secondaryContainer),
             ),
         ],
+        if (visibleItems.isEmpty)
+          const Text(
+            'Giỏ hàng đang trống.',
+            style: TextStyle(color: KfcOpsTokens.secondary),
+          ),
         const SizedBox(height: KfcOpsTokens.spacingSm),
-        GenUiMetricRow(label: 'Tạm tính', value: moneyVnd(cart['subtotalVnd'])),
+        GenUiMetricRow(label: 'Tạm tính dự kiến', value: moneyVnd(subtotalVnd)),
         GenUiMetricRow(
           label: 'Phí giao hàng',
           value: moneyVnd(cart['deliveryFeeVnd']),
         ),
-        GenUiMetricRow(
-          label: 'Tổng',
-          value: moneyVnd(cart['totalVnd']),
-          valueColor: KfcOpsTokens.primary,
-        ),
-        if (_cartCommands.isNotEmpty) ...[
+        if (_commands.isNotEmpty) ...[
           const SizedBox(height: KfcOpsTokens.spacingMd),
           Wrap(
             spacing: KfcOpsTokens.spacingSm,
             runSpacing: KfcOpsTokens.spacingSm,
             children: [
-              for (final action in _cartCommands)
+              for (final action in _commands)
                 GenUiActionButton(
-                  attachment: attachment,
+                  attachment: widget.attachment,
                   action: action,
                   height: 40,
-                  onPressed: () => onAction(
-                    KfcGenUiAction.fromSpec(
-                      attachment: attachment,
-                      spec: action,
-                    ),
-                  ),
+                  onPressed: () => _submit(action),
                 ),
             ],
           ),
@@ -72,29 +145,58 @@ class CartBuilder extends StatelessWidget {
     );
   }
 
-  List<KfcGenUiActionSpec> get _cartCommands => attachment.actions
+  List<KfcGenUiActionSpec> get _commands => widget.attachment.actionableActions
       .where(
         (action) =>
-            action.id == 'continue_to_fulfillment' || action.id == 'edit_cart',
+            action.id == 'update_cart' ||
+            action.id == 'continue_to_fulfillment',
       )
       .toList(growable: false);
+
+  void _submit(KfcGenUiActionSpec action) {
+    final payload = <String, Object?>{
+      'items': [
+        for (final entry in _quantities.entries)
+          {'itemCode': entry.key, 'quantity': entry.value},
+      ],
+    };
+    final bound = widget.attachment.bindAction(
+      actionId: action.id,
+      payload: payload,
+    );
+    if (bound != null) widget.onAction(bound);
+  }
 }
 
 class _CartItemRow extends StatelessWidget {
   const _CartItemRow({
     required this.attachment,
     required this.item,
-    required this.onAction,
+    required this.quantity,
+    required this.hasUniqueItemCode,
+    required this.hasValidInitialQuantity,
+    required this.canEditDraft,
+    required this.onQuantityChanged,
   });
 
   final KfcGenUiAttachment attachment;
   final Map<String, Object?> item;
-  final ValueChanged<KfcGenUiAction> onAction;
+  final int quantity;
+  final bool hasUniqueItemCode;
+  final bool hasValidInitialQuantity;
+  final bool canEditDraft;
+  final ValueChanged<int> onQuantityChanged;
 
   @override
   Widget build(BuildContext context) {
-    final quantity = (item['quantity'] as num? ?? 1).toInt();
-    final itemCode = genUiText(item['itemCode']);
+    final itemCode = _itemCode(item);
+    final canEdit =
+        hasUniqueItemCode &&
+        hasValidInitialQuantity &&
+        canEditDraft &&
+        itemCode.isNotEmpty &&
+        quantity >= 1 &&
+        quantity <= 99;
     final imageUrl = genUiText(item['imageUrl'], fallback: '');
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 10),
@@ -135,8 +237,12 @@ class _CartItemRow extends StatelessWidget {
                   attachment.id,
                   itemCode,
                 ),
-                onDecrease: quantity <= 1 ? null : () => _update(quantity - 1),
-                onIncrease: () => _update(quantity + 1),
+                onDecrease: canEdit
+                    ? () => onQuantityChanged(quantity - 1)
+                    : null,
+                onIncrease: canEdit && quantity < 99
+                    ? () => onQuantityChanged(quantity + 1)
+                    : null,
               ),
               const SizedBox(width: KfcOpsTokens.spacingSm),
               SizedBox(
@@ -152,7 +258,7 @@ class _CartItemRow extends StatelessWidget {
                   iconSize: 15,
                   padding: EdgeInsets.zero,
                   foregroundColor: KfcOpsTokens.critical,
-                  onPressed: _remove,
+                  onPressed: canEdit ? () => onQuantityChanged(0) : null,
                   icon: const Icon(LucideIcons.trash2),
                 ),
               ),
@@ -180,24 +286,6 @@ class _CartItemRow extends StatelessWidget {
       ),
     );
   }
-
-  void _update(int quantity) => onAction(
-    KfcGenUiAction(
-      attachmentId: attachment.id,
-      actionId: 'update_item_quantity',
-      value: genUiText(item['name']),
-      payload: {'itemCode': genUiText(item['itemCode']), 'quantity': quantity},
-    ),
-  );
-
-  void _remove() => onAction(
-    KfcGenUiAction(
-      attachmentId: attachment.id,
-      actionId: 'remove_item',
-      value: genUiText(item['name']),
-      payload: {'itemCode': genUiText(item['itemCode'])},
-    ),
-  );
 }
 
 class _CartItemDetails extends StatelessWidget {
@@ -235,3 +323,6 @@ class _CartItemDetails extends StatelessWidget {
     );
   }
 }
+
+String _itemCode(Map<String, Object?> item) =>
+    genUiText(item['itemCode'], fallback: '').trim();

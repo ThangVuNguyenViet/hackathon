@@ -1,12 +1,15 @@
 import { readFile, rename, unlink, writeFile } from "node:fs/promises";
 import { randomUUID } from "node:crypto";
+import type { BaseChatModel } from "@langchain/core/language_models/chat_models";
 import { z } from "zod";
 import { loadSupportedOutcomeJudgeEnvFile } from "../src/config/outcomeJudgeEnv.js";
 import {
+  createOutcomeJudgeChatModel,
+  resolveOutcomeJudgeModelProfile,
+} from "../src/config/outcomeJudgeModelProfile.js";
+import {
   judgeOutcome,
-  OpenAIOutcomeJudgeClient,
   type OutcomeEvidenceBundle,
-  type OutcomeJudgeClient,
 } from "../src/evaluation/outcomeJudge.js";
 import {
   EXPECTED_OUTCOME_SCENARIO_IDS,
@@ -33,9 +36,11 @@ export interface RunOutcomeJudgmentsOptions {
   evidencePath: string;
   outputPath: string;
   releaseMetadataPath: string;
+  provider?: string;
   model?: string;
-  client?: OutcomeJudgeClient;
+  judgeModel?: BaseChatModel;
   judgedAt?: string;
+  timeoutMs?: number;
 }
 
 function parseJson(raw: string, label: string): unknown {
@@ -78,26 +83,42 @@ async function writeArtifactAtomically(path: string, artifact: OutcomeJudgmentAr
 export async function runOutcomeJudgments(options: RunOutcomeJudgmentsOptions): Promise<OutcomeJudgmentArtifact> {
   const evidence = await loadEvidence(options.evidencePath);
   const release = releaseMetadataSchema.parse(parseJson(await readFile(options.releaseMetadataPath, "utf8"), "Release metadata"));
-  const model = options.model?.trim() || process.env.OUTCOME_JUDGE_MODEL?.trim() || "gpt-4.1-mini";
-  const client = options.client ?? new OpenAIOutcomeJudgeClient({ apiKey: requireApiKey(), baseUrl: process.env.OPENAI_BASE_URL });
+  let model: BaseChatModel;
+  let modelName: string;
+  if (options.judgeModel) {
+    model = options.judgeModel;
+    modelName = options.model?.trim() || "injected-outcome-judge";
+  } else {
+    const profile = resolveOutcomeJudgeModelProfile({
+      provider: options.provider ?? process.env.OUTCOME_JUDGE_PROVIDER,
+      model: options.model ?? process.env.OUTCOME_JUDGE_MODEL,
+    });
+    model = createOutcomeJudgeChatModel({
+      profile,
+      openAiApiKey: process.env.OPENAI_API_KEY,
+      openAiBaseUrl: process.env.OPENAI_BASE_URL,
+      googleApiKey: process.env.GOOGLE_API_KEY,
+    });
+    modelName = profile.model;
+  }
   const scenarios: OutcomeJudgmentArtifact["scenarios"] = [];
   for (const bundle of evidence) {
-    scenarios.push({ scenarioId: bundle.scenarioId, judgment: await judgeOutcome(bundle, { client, model }) });
+    scenarios.push({
+      scenarioId: bundle.scenarioId,
+      judgment: await judgeOutcome(bundle, {
+        model,
+        timeoutMs: options.timeoutMs,
+      }),
+    });
   }
   const artifact: OutcomeJudgmentArtifact = {
     ...release,
-    model,
+    model: modelName,
     judgedAt: options.judgedAt ?? new Date().toISOString(),
     scenarios,
   };
   await writeArtifactAtomically(options.outputPath, artifact);
   return artifact;
-}
-
-function requireApiKey(): string {
-  const apiKey = process.env.OPENAI_API_KEY?.trim();
-  if (!apiKey) throw new Error("OPENAI_API_KEY is required");
-  return apiKey;
 }
 
 function arg(name: string): string {
@@ -109,10 +130,11 @@ function arg(name: string): string {
 
 function printHelp(): void {
   console.log([
-    "Usage: tsx scripts/run-outcome-judgments.ts --evidence <path> --output <path> --release-metadata <path> [--model <model>] [--env-file <path>]",
+    "Usage: tsx scripts/run-outcome-judgments.ts --evidence <path> --output <path> --release-metadata <path> [--provider <openai|google>] [--model <model>] [--env-file <path>]",
     "",
     "Judges exactly the nine canonical ai-talent-tracks/fnb/conversations scenarios.",
-    "Default model: OUTCOME_JUDGE_MODEL, or gpt-4.1-mini when the environment variable is unset.",
+    "Default provider: OUTCOME_JUDGE_PROVIDER, or openai when the environment variable is unset.",
+    "Pinned models: gpt-5-mini-2025-08-07 for OpenAI; gemini-3.1-flash-lite for Google.",
     "Request timeout: OUTCOME_JUDGE_TIMEOUT_MS, or 60000ms when the environment variable is unset.",
   ].join("\n"));
 }
@@ -132,6 +154,7 @@ if (process.argv[1]?.endsWith("run-outcome-judgments.ts")) {
       evidencePath: arg("--evidence"),
       outputPath: arg("--output"),
       releaseMetadataPath: arg("--release-metadata"),
+      provider: process.argv.includes("--provider") ? arg("--provider") : undefined,
       model: process.argv.includes("--model") ? arg("--model") : undefined,
     });
   };

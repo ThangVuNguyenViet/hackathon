@@ -12,6 +12,7 @@ required_files=(
   "$ROOT_DIR/scripts/lib/kfc-acceptance-artifacts.sh"
   "$ROOT_DIR/scripts/lib/kfc-qualification-integrity.mjs"
   "$ROOT_DIR/services/kfc-agent-backend/scripts/validate-outcome-judgments.ts"
+  "$ROOT_DIR/tests/deployment/openai_agent_target.test.sh"
   "$ROOT_DIR/docs/deployment/hackathon-free-deploy.md"
   "$ROOT_DIR/docs/deployment/two-pages-provenance-runbook.md"
   "$ROOT_DIR/services/kfc-agent-backend/wrangler.toml"
@@ -28,12 +29,16 @@ bash -n "$ROOT_DIR/scripts/deploy-backend-cloud-run.sh"
 bash -n "$ROOT_DIR/scripts/deploy-dashboard-cloudflare-pages.sh"
 bash -n "$ROOT_DIR/scripts/generate-pages-deployment-assets.sh"
 bash -n "$ROOT_DIR/scripts/run-kfc-deployed-acceptance.sh"
+bash -n "$ROOT_DIR/tests/deployment/openai_agent_target.test.sh"
 
 test -x "$ROOT_DIR/scripts/deploy-backend-cloudflare-worker.sh"
 test -x "$ROOT_DIR/scripts/deploy-backend-cloud-run.sh"
 test -x "$ROOT_DIR/scripts/deploy-dashboard-cloudflare-pages.sh"
 test -x "$ROOT_DIR/scripts/generate-pages-deployment-assets.sh"
 test -x "$ROOT_DIR/scripts/run-kfc-deployed-acceptance.sh"
+test -x "$ROOT_DIR/tests/deployment/openai_agent_target.test.sh"
+
+bash "$ROOT_DIR/tests/deployment/openai_agent_target.test.sh"
 
 grep -q "Cloudflare Worker" "$ROOT_DIR/docs/deployment/hackathon-free-deploy.md"
 grep -q "Cloudflare D1" "$ROOT_DIR/docs/deployment/hackathon-free-deploy.md"
@@ -60,21 +65,25 @@ grep -q "LANGSMITH_PROJECT" "$ROOT_DIR/scripts/deploy-backend-cloudflare-worker.
 grep -q "LANGSMITH_ENDPOINT" "$ROOT_DIR/scripts/deploy-backend-cloudflare-worker.sh"
 grep -q "LANGSMITH_TRACING_SAMPLING_RATE" "$ROOT_DIR/scripts/deploy-backend-cloudflare-worker.sh"
 grep -q "META_APP_SECRET" "$ROOT_DIR/scripts/deploy-backend-cloudflare-worker.sh"
-grep -Fq 'OPENAI_TOOL_PLANNER_MODEL="${OPENAI_TOOL_PLANNER_MODEL:-gpt-4.1-mini}"' "$ROOT_DIR/scripts/deploy-backend-cloudflare-worker.sh"
-grep -Fq -- '--var "OPENAI_TOOL_PLANNER_MODEL:$OPENAI_TOOL_PLANNER_MODEL"' "$ROOT_DIR/scripts/deploy-backend-cloudflare-worker.sh"
-grep -Fq 'TOOL_PLANNER_PROVIDER="${TOOL_PLANNER_PROVIDER:-vertex}"' "$ROOT_DIR/scripts/deploy-backend-cloudflare-worker.sh"
-grep -Fq 'TOOL_PLANNER_MODEL="${TOOL_PLANNER_MODEL:-google/gemini-3.1-flash-lite}"' "$ROOT_DIR/scripts/deploy-backend-cloudflare-worker.sh"
-grep -Fq 'TOOL_PLANNER_FAST_MODEL="${TOOL_PLANNER_FAST_MODEL:-google/gemini-3.1-flash-lite}"' "$ROOT_DIR/scripts/deploy-backend-cloudflare-worker.sh"
-grep -Fq 'TOOL_PLANNER_STATUS_MODEL="${TOOL_PLANNER_STATUS_MODEL:-google/gemini-3.1-flash-lite}"' "$ROOT_DIR/scripts/deploy-backend-cloudflare-worker.sh"
-grep -Fq 'VERTEX_LOCATION="${VERTEX_LOCATION:-global}"' "$ROOT_DIR/scripts/deploy-backend-cloudflare-worker.sh"
-grep -Fq -- '--var "TOOL_PLANNER_PROVIDER:$TOOL_PLANNER_PROVIDER"' "$ROOT_DIR/scripts/deploy-backend-cloudflare-worker.sh"
-grep -Fq -- '--var "TOOL_PLANNER_MODEL:$TOOL_PLANNER_MODEL"' "$ROOT_DIR/scripts/deploy-backend-cloudflare-worker.sh"
-grep -Fq -- '--var "TOOL_PLANNER_FAST_MODEL:$TOOL_PLANNER_FAST_MODEL"' "$ROOT_DIR/scripts/deploy-backend-cloudflare-worker.sh"
-grep -Fq -- '--var "TOOL_PLANNER_STATUS_MODEL:$TOOL_PLANNER_STATUS_MODEL"' "$ROOT_DIR/scripts/deploy-backend-cloudflare-worker.sh"
-grep -Fq -- '--var "VERTEX_LOCATION:$VERTEX_LOCATION"' "$ROOT_DIR/scripts/deploy-backend-cloudflare-worker.sh"
-grep -Fq 'OPENAI_SMALL_TALK_ROUTER_MODEL="${OPENAI_SMALL_TALK_ROUTER_MODEL:-gpt-4.1-mini}"' "$ROOT_DIR/scripts/deploy-backend-cloudflare-worker.sh"
-grep -q "OPENAI_SMALL_TALK_ROUTER_MODEL" "$ROOT_DIR/scripts/deploy-backend-cloudflare-worker.sh"
-grep -q "OPENAI_SMALL_TALK_ROUTER_TIMEOUT_MS" "$ROOT_DIR/scripts/deploy-backend-cloudflare-worker.sh"
+grep -Fq 'KFC_AGENT_PROFILE_MODE="${KFC_AGENT_PROFILE_MODE:-production}"' "$ROOT_DIR/scripts/deploy-backend-cloudflare-worker.sh"
+grep -Fq 'KFC_AGENT_PROVIDER="${KFC_AGENT_PROVIDER:-}"' "$ROOT_DIR/scripts/deploy-backend-cloudflare-worker.sh"
+grep -Fq 'KFC_AGENT_MODEL="${KFC_AGENT_MODEL:-}"' "$ROOT_DIR/scripts/deploy-backend-cloudflare-worker.sh"
+grep -Fq -- '--var "KFC_AGENT_PROVIDER:$KFC_AGENT_PROVIDER"' "$ROOT_DIR/scripts/deploy-backend-cloudflare-worker.sh"
+grep -Fq -- '--var "KFC_AGENT_MODEL:$KFC_AGENT_MODEL"' "$ROOT_DIR/scripts/deploy-backend-cloudflare-worker.sh"
+grep -Fq -- '--var "KFC_AGENT_PROFILE_MODE:$KFC_AGENT_PROFILE_MODE"' "$ROOT_DIR/scripts/deploy-backend-cloudflare-worker.sh"
+grep -Fq 'KFC_MONITOR_PROVIDER="${KFC_MONITOR_PROVIDER:-$KFC_AGENT_PROVIDER}"' "$ROOT_DIR/scripts/deploy-backend-cloudflare-worker.sh"
+grep -Fq 'KFC_MONITOR_MODEL="${KFC_MONITOR_MODEL:-}"' "$ROOT_DIR/scripts/deploy-backend-cloudflare-worker.sh"
+grep -Fq -- '--var "KFC_MONITOR_PROVIDER:$KFC_MONITOR_PROVIDER"' "$ROOT_DIR/scripts/deploy-backend-cloudflare-worker.sh"
+grep -Fq -- '--var "KFC_MONITOR_MODEL:$KFC_MONITOR_MODEL"' "$ROOT_DIR/scripts/deploy-backend-cloudflare-worker.sh"
+grep -q "KFC_MONITOR_PROVIDER must be google or openai" "$ROOT_DIR/scripts/deploy-backend-cloudflare-worker.sh"
+grep -q "KFC_MONITOR_MODEL must be" "$ROOT_DIR/scripts/deploy-backend-cloudflare-worker.sh"
+grep -q "KFC_AGENT_PROVIDER must be google or openai" "$ROOT_DIR/scripts/deploy-backend-cloudflare-worker.sh"
+grep -q "KFC_AGENT_MODEL must be" "$ROOT_DIR/scripts/deploy-backend-cloudflare-worker.sh"
+grep -q "selected provider API keys" "$ROOT_DIR/scripts/deploy-backend-cloudflare-worker.sh"
+grep -q "KFC_DEPLOY_PREFLIGHT_ONLY" "$ROOT_DIR/scripts/deploy-backend-cloudflare-worker.sh"
+! grep -q "OPENAI_TOOL_PLANNER_MODEL" "$ROOT_DIR/scripts/deploy-backend-cloudflare-worker.sh"
+! grep -q "TOOL_PLANNER_PROVIDER" "$ROOT_DIR/scripts/deploy-backend-cloudflare-worker.sh"
+! grep -q "OPENAI_SMALL_TALK_ROUTER_MODEL" "$ROOT_DIR/scripts/deploy-backend-cloudflare-worker.sh"
 grep -Fq 'KFC_COMMERCE_MODE="${KFC_COMMERCE_MODE:-}"' "$ROOT_DIR/scripts/deploy-backend-cloudflare-worker.sh"
 grep -q 'KFC_COMMERCE_MODE.*gateway' "$ROOT_DIR/scripts/deploy-backend-cloudflare-worker.sh"
 grep -q 'KFC_COMMERCE_MODE.*fixture' "$ROOT_DIR/scripts/deploy-backend-cloudflare-worker.sh"
@@ -87,34 +96,70 @@ grep -q 'KFC_MENU_API_URL' "$ROOT_DIR/scripts/deploy-backend-cloudflare-worker.s
 ! grep -q 'KFC_COMMERCE_MODE="${KFC_COMMERCE_MODE:-fixture}"' "$ROOT_DIR/scripts/deploy-backend-cloudflare-worker.sh"
 grep -q "wrangler versions secret put LANGSMITH_API_KEY" "$ROOT_DIR/scripts/deploy-backend-cloudflare-worker.sh"
 grep -q "wrangler versions secret put META_APP_SECRET" "$ROOT_DIR/scripts/deploy-backend-cloudflare-worker.sh"
-grep -q "wrangler versions secret put VERTEX_SERVICE_ACCOUNT_JSON" "$ROOT_DIR/scripts/deploy-backend-cloudflare-worker.sh"
+grep -q "wrangler versions secret put META_PAGE_ACCESS_TOKEN" "$ROOT_DIR/scripts/deploy-backend-cloudflare-worker.sh"
+grep -q "wrangler versions secret put GOOGLE_API_KEY" "$ROOT_DIR/scripts/deploy-backend-cloudflare-worker.sh"
+grep -q "wrangler versions secret put OPENAI_API_KEY" "$ROOT_DIR/scripts/deploy-backend-cloudflare-worker.sh"
 grep -q "wrangler versions secret put KFC_COMMERCE_GATEWAY_TOKEN" "$ROOT_DIR/scripts/deploy-backend-cloudflare-worker.sh"
+grep -q "wrangler versions secret put KFC_CONFIRMATION_SIGNING_SECRET" "$ROOT_DIR/scripts/deploy-backend-cloudflare-worker.sh"
+grep -q "wrangler versions secret put KFC_CONFIRMATION_PREVIOUS_SIGNING_KEYS" "$ROOT_DIR/scripts/deploy-backend-cloudflare-worker.sh"
+grep -Fq -- '--var "KFC_CONFIRMATION_SIGNING_KEY_ID:$KFC_CONFIRMATION_SIGNING_KEY_ID"' "$ROOT_DIR/scripts/deploy-backend-cloudflare-worker.sh"
+! grep -Fq -- '--var "KFC_CONFIRMATION_SIGNING_SECRET:' "$ROOT_DIR/scripts/deploy-backend-cloudflare-worker.sh"
+! grep -Fq -- '--var "KFC_CONFIRMATION_PREVIOUS_SIGNING_KEYS:' "$ROOT_DIR/scripts/deploy-backend-cloudflare-worker.sh"
 grep -q "ALLOW_NON_MAIN_DEPLOY" "$ROOT_DIR/scripts/deploy-backend-cloudflare-worker.sh"
 grep -q "refs/remotes/origin/main" "$ROOT_DIR/scripts/deploy-backend-cloudflare-worker.sh"
 main_guard_line="$(grep -n "ALLOW_NON_MAIN_DEPLOY" "$ROOT_DIR/scripts/deploy-backend-cloudflare-worker.sh" | head -1 | cut -d: -f1)"
 worker_deploy_line="$(grep -n "npx wrangler deploy" "$ROOT_DIR/scripts/deploy-backend-cloudflare-worker.sh" | cut -d: -f1)"
 langsmith_secret_line="$(grep -n "wrangler versions secret put LANGSMITH_API_KEY" "$ROOT_DIR/scripts/deploy-backend-cloudflare-worker.sh" | cut -d: -f1)"
 meta_secret_line="$(grep -n "wrangler versions secret put META_APP_SECRET" "$ROOT_DIR/scripts/deploy-backend-cloudflare-worker.sh" | cut -d: -f1)"
+meta_page_secret_line="$(grep -n "wrangler versions secret put META_PAGE_ACCESS_TOKEN" "$ROOT_DIR/scripts/deploy-backend-cloudflare-worker.sh" | cut -d: -f1)"
+openai_secret_line="$(grep -n "wrangler versions secret put OPENAI_API_KEY" "$ROOT_DIR/scripts/deploy-backend-cloudflare-worker.sh" | cut -d: -f1)"
+google_secret_line="$(grep -n "wrangler versions secret put GOOGLE_API_KEY" "$ROOT_DIR/scripts/deploy-backend-cloudflare-worker.sh" | cut -d: -f1)"
 gateway_secret_line="$(grep -n "wrangler versions secret put KFC_COMMERCE_GATEWAY_TOKEN" "$ROOT_DIR/scripts/deploy-backend-cloudflare-worker.sh" | cut -d: -f1)"
+confirmation_secret_line="$(grep -n "wrangler versions secret put KFC_CONFIRMATION_SIGNING_SECRET" "$ROOT_DIR/scripts/deploy-backend-cloudflare-worker.sh" | cut -d: -f1)"
+confirmation_previous_line="$(grep -n "wrangler versions secret put KFC_CONFIRMATION_PREVIOUS_SIGNING_KEYS" "$ROOT_DIR/scripts/deploy-backend-cloudflare-worker.sh" | cut -d: -f1)"
 test "$main_guard_line" -lt "$langsmith_secret_line"
 test "$main_guard_line" -lt "$meta_secret_line"
-test "$meta_secret_line" -lt "$langsmith_secret_line"
-test "$langsmith_secret_line" -lt "$gateway_secret_line"
+test "$meta_secret_line" -lt "$meta_page_secret_line"
+test "$meta_page_secret_line" -lt "$langsmith_secret_line"
+test "$langsmith_secret_line" -lt "$confirmation_secret_line"
+test "$confirmation_secret_line" -lt "$confirmation_previous_line"
+test "$confirmation_previous_line" -lt "$openai_secret_line"
+test "$langsmith_secret_line" -lt "$openai_secret_line"
+test "$openai_secret_line" -lt "$google_secret_line"
+test "$google_secret_line" -lt "$gateway_secret_line"
 test "$gateway_secret_line" -lt "$worker_deploy_line"
 grep -q "LANGSMITH_ENDPOINT" "$ROOT_DIR/services/kfc-agent-backend/.env.example"
 grep -q "LANGSMITH_TRACING_SAMPLING_RATE" "$ROOT_DIR/services/kfc-agent-backend/.env.example"
-grep -q '^OPENAI_TOOL_PLANNER_MODEL=gpt-4.1-mini$' "$ROOT_DIR/services/kfc-agent-backend/.env.example"
-grep -q '^TOOL_PLANNER_PROVIDER=vertex$' "$ROOT_DIR/services/kfc-agent-backend/.env.example"
-grep -q '^TOOL_PLANNER_MODEL=google/gemini-3.1-flash-lite$' "$ROOT_DIR/services/kfc-agent-backend/.env.example"
-grep -q '^TOOL_PLANNER_FAST_MODEL=google/gemini-3.1-flash-lite$' "$ROOT_DIR/services/kfc-agent-backend/.env.example"
-grep -q '^TOOL_PLANNER_STATUS_MODEL=google/gemini-3.1-flash-lite$' "$ROOT_DIR/services/kfc-agent-backend/.env.example"
-grep -q "OPENAI_SMALL_TALK_ROUTER_MODEL" "$ROOT_DIR/services/kfc-agent-backend/.env.example"
-grep -q "OPENAI_SMALL_TALK_ROUTER_TIMEOUT_MS" "$ROOT_DIR/services/kfc-agent-backend/.env.example"
+grep -q '^KFC_AGENT_PROVIDER=google$' "$ROOT_DIR/services/kfc-agent-backend/.env.example"
+grep -q '^KFC_AGENT_MODEL=gemini-3.1-flash-lite$' "$ROOT_DIR/services/kfc-agent-backend/.env.example"
+! grep -q '^KFC_MONITOR_PROVIDER=' "$ROOT_DIR/services/kfc-agent-backend/.env.example"
+! grep -q '^KFC_MONITOR_MODEL=' "$ROOT_DIR/services/kfc-agent-backend/.env.example"
+grep -q '^# KFC_MONITOR_PROVIDER=google$' "$ROOT_DIR/services/kfc-agent-backend/.env.example"
+grep -q '^# KFC_MONITOR_MODEL=gemini-3.1-flash-lite$' "$ROOT_DIR/services/kfc-agent-backend/.env.example"
+grep -q '^GOOGLE_API_KEY=$' "$ROOT_DIR/services/kfc-agent-backend/.env.example"
+! grep -q 'TOOL_PLANNER_PROVIDER' "$ROOT_DIR/services/kfc-agent-backend/.env.example"
 grep -q "OPENAI_API_KEY" "$ROOT_DIR/scripts/deploy-backend-cloud-run.sh"
+grep -q "GOOGLE_API_KEY" "$ROOT_DIR/scripts/deploy-backend-cloud-run.sh"
+grep -q "KFC_AGENT_PROVIDER" "$ROOT_DIR/scripts/deploy-backend-cloud-run.sh"
+grep -q "KFC_AGENT_PROFILE_MODE" "$ROOT_DIR/scripts/deploy-backend-cloud-run.sh"
+grep -q "KFC_AGENT_MODEL" "$ROOT_DIR/scripts/deploy-backend-cloud-run.sh"
+grep -q "KFC_AGENT_MODEL must be" "$ROOT_DIR/scripts/deploy-backend-cloud-run.sh"
+grep -Fq 'KFC_MONITOR_PROVIDER="${KFC_MONITOR_PROVIDER:-$KFC_AGENT_PROVIDER}"' "$ROOT_DIR/scripts/deploy-backend-cloud-run.sh"
+grep -Fq 'KFC_MONITOR_MODEL="${KFC_MONITOR_MODEL:-}"' "$ROOT_DIR/scripts/deploy-backend-cloud-run.sh"
+grep -Fq '"KFC_MONITOR_PROVIDER=$KFC_MONITOR_PROVIDER"' "$ROOT_DIR/scripts/deploy-backend-cloud-run.sh"
+grep -Fq '"KFC_MONITOR_MODEL=$KFC_MONITOR_MODEL"' "$ROOT_DIR/scripts/deploy-backend-cloud-run.sh"
+grep -q "KFC_MONITOR_PROVIDER must be google or openai" "$ROOT_DIR/scripts/deploy-backend-cloud-run.sh"
+grep -q "KFC_MONITOR_MODEL must be" "$ROOT_DIR/scripts/deploy-backend-cloud-run.sh"
+grep -Fq 'OPENAI_API_KEY=OPENAI_API_KEY:latest' "$ROOT_DIR/scripts/deploy-backend-cloud-run.sh"
+grep -Fq 'GOOGLE_API_KEY=GOOGLE_API_KEY:latest' "$ROOT_DIR/scripts/deploy-backend-cloud-run.sh"
+grep -Fq 'KFC_CONFIRMATION_SIGNING_SECRET=$KFC_CONFIRMATION_SIGNING_SECRET_NAME:latest' "$ROOT_DIR/scripts/deploy-backend-cloud-run.sh"
+grep -Fq 'KFC_CONFIRMATION_PREVIOUS_SIGNING_KEYS=$KFC_CONFIRMATION_PREVIOUS_SIGNING_KEYS_SECRET_NAME:latest' "$ROOT_DIR/scripts/deploy-backend-cloud-run.sh"
+grep -Fq '"KFC_CONFIRMATION_SIGNING_KEY_ID=$KFC_CONFIRMATION_SIGNING_KEY_ID"' "$ROOT_DIR/scripts/deploy-backend-cloud-run.sh"
 grep -q "CLOUD_RUN_MIN_INSTANCES" "$ROOT_DIR/scripts/deploy-backend-cloud-run.sh"
 grep -q "/ready" "$ROOT_DIR/scripts/deploy-backend-cloud-run.sh"
 grep -q "META_PAGE_ID" "$ROOT_DIR/scripts/deploy-backend-cloud-run.sh"
 grep -q "Set META_PAGE_ID" "$ROOT_DIR/scripts/deploy-backend-cloud-run.sh"
+grep -q "KFC_DEPLOY_PREFLIGHT_ONLY" "$ROOT_DIR/scripts/deploy-backend-cloud-run.sh"
 ! grep -q "META_PAGE_ID=118976205445198" "$ROOT_DIR/scripts/deploy-backend-cloud-run.sh"
 grep -q "KFC_AGENT_BACKEND_URL" "$ROOT_DIR/scripts/deploy-dashboard-cloudflare-pages.sh"
 grep -q "generate-pages-deployment-assets.sh" "$ROOT_DIR/scripts/deploy-dashboard-cloudflare-pages.sh"
@@ -125,15 +170,26 @@ grep -q -- "--pwa-strategy=none" "$ROOT_DIR/scripts/deploy-dashboard-cloudflare-
 grep -q "kfc-ai-chatbot" "$ROOT_DIR/scripts/deploy-dashboard-cloudflare-pages.sh"
 grep -q "kfc-ai-live-monitor" "$ROOT_DIR/scripts/deploy-dashboard-cloudflare-pages.sh"
 grep -q -- "--outdir" "$ROOT_DIR/scripts/deploy-backend-cloudflare-worker.sh"
+grep -q 'KFC_AGENT_PROVIDER=openai KFC_AGENT_MODEL=gpt-4.1-mini RUN_LIVE_AI_INTERRUPTION=1' "$ROOT_DIR/services/kfc-agent-backend/package.json"
 ! grep -q "run-deployed-browser-proof.ts" "$ROOT_DIR/scripts/run-kfc-deployed-acceptance.sh"
 ! grep -q "run-outcome-judgments.ts" "$ROOT_DIR/scripts/run-kfc-deployed-acceptance.sh"
-grep -q 'npm run test:live:scenarios' "$ROOT_DIR/scripts/run-kfc-deployed-acceptance.sh"
-grep -q 'npm run test:live:small-talk-router' "$ROOT_DIR/scripts/run-kfc-deployed-acceptance.sh"
-grep -q 'npm run test:live:direct-catalog' "$ROOT_DIR/scripts/run-kfc-deployed-acceptance.sh"
+grep -q 'npm run test:live:qualification:text' "$ROOT_DIR/scripts/run-kfc-deployed-acceptance.sh"
+test "$(grep -c 'npm run test:live:qualification:text' "$ROOT_DIR/scripts/run-kfc-deployed-acceptance.sh")" -eq 1
+canonical_matrix_line="$(grep -n 'npm run test:live:qualification:text' "$ROOT_DIR/scripts/run-kfc-deployed-acceptance.sh" | cut -d: -f1)"
+matrix_cycle_line="$(grep -n 'for cycle in 1 2 3' "$ROOT_DIR/scripts/run-kfc-deployed-acceptance.sh" | cut -d: -f1)"
+test "$canonical_matrix_line" -lt "$matrix_cycle_line"
+! grep -q 'npm run test:live:small-talk-router' "$ROOT_DIR/scripts/run-kfc-deployed-acceptance.sh"
+! grep -q 'npm run test:live:direct-catalog' "$ROOT_DIR/scripts/run-kfc-deployed-acceptance.sh"
 grep -q 'npm run test:live:interruption' "$ROOT_DIR/scripts/run-kfc-deployed-acceptance.sh"
+test "$(grep -c 'npm run test:live:interruption' "$ROOT_DIR/scripts/run-kfc-deployed-acceptance.sh")" -eq 1
 grep -q 'npm run test:live:genui:integration' "$ROOT_DIR/scripts/run-kfc-deployed-acceptance.sh"
 grep -q 'npm run proof:live:messenger' "$ROOT_DIR/scripts/run-kfc-deployed-acceptance.sh"
 grep -q 'npm run proof:production:latency' "$ROOT_DIR/scripts/run-kfc-deployed-acceptance.sh"
+grep -q 'PRODUCTION_LATENCY_ITERATIONS=20' "$ROOT_DIR/scripts/run-kfc-deployed-acceptance.sh"
+grep -q 'PRODUCTION_GREETING_TARGET_MS=10000' "$ROOT_DIR/scripts/run-kfc-deployed-acceptance.sh"
+grep -q 'PRODUCTION_MENU_TARGET_MS=10000' "$ROOT_DIR/scripts/run-kfc-deployed-acceptance.sh"
+grep -q 'PRODUCTION_OVERALL_TARGET_MS=10000' "$ROOT_DIR/scripts/run-kfc-deployed-acceptance.sh"
+! grep -Eq 'PRODUCTION_(GREETING|MENU|OVERALL)_TARGET_MS=(6000|8000)' "$ROOT_DIR/scripts/run-kfc-deployed-acceptance.sh"
 grep -q 'goldenStreak !== 5 || matrixStreak !== 3' "$ROOT_DIR/scripts/lib/kfc-acceptance-checks.mjs"
 grep -q 'goldenAffected' "$ROOT_DIR/scripts/lib/kfc-acceptance-checks.mjs"
 grep -q 'matrixAffected' "$ROOT_DIR/scripts/lib/kfc-acceptance-checks.mjs"
@@ -166,11 +222,15 @@ grep -q 'publication_identity_revalidation' "$ROOT_DIR/scripts/run-kfc-deployed-
 grep -q 'Qualified Worker identity changed before publication' "$ROOT_DIR/scripts/run-kfc-deployed-acceptance.sh"
 grep -q 'Qualified Pages identity changed before publication' "$ROOT_DIR/scripts/run-kfc-deployed-acceptance.sh"
 grep -q "latency/report.json" "$ROOT_DIR/scripts/run-kfc-deployed-acceptance.sh"
-test "$(grep -o -- '--maxConcurrency=1' "$ROOT_DIR/services/kfc-agent-backend/package.json" | wc -l | tr -d ' ')" -eq 1
+! grep -q -- '--maxConcurrency' "$ROOT_DIR/services/kfc-agent-backend/package.json"
 grep -q 'rehearsalNumber !== 1' "$ROOT_DIR/scripts/lib/kfc-acceptance-checks.mjs"
 grep -q 'final-run.json' "$ROOT_DIR/scripts/run-kfc-deployed-acceptance.sh"
 test "$(grep -c 'KFC_GENUI_BRANCH_SESSIONS=' "$ROOT_DIR/scripts/run-kfc-deployed-acceptance.sh")" -eq 1
-grep -q 'KFC_LIVE_SCENARIO_BRANCH_OUTPUT=' "$ROOT_DIR/scripts/run-kfc-deployed-acceptance.sh"
+grep -q 'KFC_GENUI_BRANCH_SESSIONS_FILE' "$ROOT_DIR/scripts/run-kfc-deployed-acceptance.sh"
+grep -q 'No maintained canonical producer currently emits the deployed branch-session artifact' "$ROOT_DIR/scripts/run-kfc-deployed-acceptance.sh"
+grep -Fq '[[ ! -f "$GENUI_BRANCH_SESSIONS_FILE" ]]' "$ROOT_DIR/scripts/run-kfc-deployed-acceptance.sh"
+! grep -q 'KFC_LIVE_SCENARIO_BRANCH_OUTPUT=' "$ROOT_DIR/scripts/run-kfc-deployed-acceptance.sh"
+grep -q 'needs: \[backend, flutter\]' "$ROOT_DIR/.github/workflows/kfc-genui.yml"
 grep -q 'durability_post' "$ROOT_DIR/scripts/run-kfc-deployed-acceptance.sh"
 grep -q 'historical_reviewed_destructive_migrations' "$ROOT_DIR/scripts/run-kfc-deployed-acceptance.sh"
 grep -q '0006_remove_customer_streaming_rollout.sql' "$ROOT_DIR/scripts/run-kfc-deployed-acceptance.sh"
@@ -183,6 +243,8 @@ grep -q 'scan_acceptance_artifacts_for_secrets' "$ROOT_DIR/scripts/run-kfc-deplo
 ! grep -q '\. "$ROOT_DIR/.env"' "$ROOT_DIR/scripts/run-kfc-deployed-acceptance.sh"
 grep -q 'worker-ready-replacement.json' "$ROOT_DIR/scripts/run-kfc-deployed-acceptance.sh"
 grep -q 'Replacement Worker release identity mismatch' "$ROOT_DIR/scripts/lib/kfc-acceptance-checks.mjs"
+grep -q 'sameAgentRuntimeIdentity(runtime, actual.proof)' "$ROOT_DIR/scripts/lib/kfc-acceptance-checks.mjs"
+grep -q 'runtime-binding.json.*worker-ready-replacement.json' "$ROOT_DIR/scripts/run-kfc-deployed-acceptance.sh"
 replacement_ready_line="$(grep -n 'worker-ready-replacement.json' "$ROOT_DIR/scripts/run-kfc-deployed-acceptance.sh" | head -1 | cut -d: -f1)"
 replacement_check_line="$(grep -n 'kfc-acceptance-checks.mjs" check-8' "$ROOT_DIR/scripts/run-kfc-deployed-acceptance.sh" | cut -d: -f1)"
 test "$replacement_ready_line" -lt "$replacement_check_line"
@@ -204,6 +266,400 @@ tmp_dir="$(mktemp -d)"
 reused_run_id="deployment-test-reused-$$"
 reused_run_dir="$ROOT_DIR/artifacts/kfc-deployed-proof/$reused_run_id"
 trap 'rm -rf "$tmp_dir" "$reused_run_dir"' EXIT
+
+deploy_env="$tmp_dir/agent-deploy.env"
+printf '%s\n' \
+  'LANGSMITH_API_KEY=test-langsmith-key' \
+  'LANGSMITH_PROJECT=test-project' \
+  'LANGSMITH_ENDPOINT=https://example.test/langsmith' \
+  'META_APP_SECRET=test-meta-secret' \
+  'META_PAGE_ACCESS_TOKEN=test-page-access-token' \
+  'KFC_CONFIRMATION_SIGNING_KEY_ID=test-active' \
+  'KFC_CONFIRMATION_SIGNING_SECRET=test-confirmation-signing-secret-32-bytes-minimum' \
+  'KFC_CONFIRMATION_PREVIOUS_SIGNING_KEYS=[]' \
+  'KFC_AGENT_PROVIDER=google' \
+  'KFC_AGENT_MODEL=gemini-3.1-flash-lite' \
+  'OPENAI_API_KEY=test-openai-key' \
+  'GOOGLE_API_KEY=test-google-key' \
+  'KFC_COMMERCE_MODE=fixture' \
+  'KFC_COMMERCE_ENVIRONMENT=sandbox' \
+  > "$deploy_env"
+
+agent_drift_env="$tmp_dir/agent-drift-deploy.env"
+printf '%s\n' \
+  'LANGSMITH_API_KEY=test-langsmith-key' \
+  'LANGSMITH_PROJECT=test-project' \
+  'LANGSMITH_ENDPOINT=https://example.test/langsmith' \
+  'META_APP_SECRET=test-meta-secret' \
+  'META_PAGE_ACCESS_TOKEN=test-page-access-token' \
+  'KFC_CONFIRMATION_SIGNING_KEY_ID=test-active' \
+  'KFC_CONFIRMATION_SIGNING_SECRET=test-confirmation-signing-secret-32-bytes-minimum' \
+  'KFC_CONFIRMATION_PREVIOUS_SIGNING_KEYS=[]' \
+  'KFC_AGENT_PROVIDER=google' \
+  'KFC_AGENT_MODEL=gpt-5-mini-2025-08-07' \
+  'OPENAI_API_KEY=test-openai-key' \
+  'GOOGLE_API_KEY=test-google-key' \
+  'KFC_COMMERCE_MODE=fixture' \
+  'KFC_COMMERCE_ENVIRONMENT=sandbox' \
+  > "$agent_drift_env"
+
+if ALLOW_NON_MAIN_DEPLOY=true \
+  ENV_FILE="$agent_drift_env" \
+  "$ROOT_DIR/scripts/deploy-backend-cloudflare-worker.sh" \
+  >"$tmp_dir/worker-agent-drift.log" 2>&1; then
+  echo "Expected Worker deploy to reject agent-model drift." >&2
+  exit 1
+else
+  test "$?" -eq 64
+fi
+grep -q "KFC_AGENT_MODEL must be gemini-3.1-flash-lite" \
+  "$tmp_dir/worker-agent-drift.log"
+
+KFC_DEPLOY_PREFLIGHT_ONLY=true \
+  GCP_PROJECT_ID=test-project \
+  META_PAGE_ID=test-page \
+  KFC_AGENT_PROFILE_MODE=production \
+  KFC_AGENT_PROVIDER=google \
+  KFC_AGENT_MODEL=gemini-3.1-flash-lite \
+  KFC_MONITOR_PROVIDER=openai \
+  KFC_MONITOR_MODEL=gpt-5-mini-2025-08-07 \
+  "$ROOT_DIR/scripts/deploy-backend-cloud-run.sh" \
+  >"$tmp_dir/cloud-run-explicit-monitor.log" 2>&1
+grep -q "Cloud Run deployment profile preflight passed" \
+  "$tmp_dir/cloud-run-explicit-monitor.log"
+
+if KFC_DEPLOY_PREFLIGHT_ONLY=true \
+  GCP_PROJECT_ID=test-project \
+  META_PAGE_ID=test-page \
+  KFC_AGENT_PROFILE_MODE=production \
+  KFC_AGENT_PROVIDER=google \
+  KFC_AGENT_MODEL=gemini-3.1-flash-lite \
+  KFC_MONITOR_PROVIDER=openai \
+  KFC_MONITOR_MODEL=gpt-4.1 \
+  "$ROOT_DIR/scripts/deploy-backend-cloud-run.sh" \
+  >"$tmp_dir/cloud-run-monitor-drift.log" 2>&1; then
+  echo "Expected Cloud Run preflight to reject monitor-model drift." >&2
+  exit 1
+else
+  test "$?" -eq 64
+fi
+grep -q "KFC_MONITOR_MODEL must be gpt-5-mini-2025-08-07" \
+  "$tmp_dir/cloud-run-monitor-drift.log"
+
+if KFC_DEPLOY_PREFLIGHT_ONLY=true \
+  GCP_PROJECT_ID=test-project \
+  META_PAGE_ID=test-page \
+  KFC_AGENT_PROFILE_MODE=qualification \
+  KFC_AGENT_PROVIDER=google \
+  KFC_AGENT_MODEL=gemini-3.5-flash \
+  "$ROOT_DIR/scripts/deploy-backend-cloud-run.sh" \
+  >"$tmp_dir/cloud-run-qualification-stronger-google.log" 2>&1; then
+  echo "Expected Cloud Run qualification preflight to reject Gemini 3.5 Flash." >&2
+  exit 1
+else
+  test "$?" -eq 64
+fi
+grep -q "KFC_AGENT_MODEL must be gemini-3.1-flash-lite" \
+  "$tmp_dir/cloud-run-qualification-stronger-google.log"
+
+if KFC_DEPLOY_PREFLIGHT_ONLY=true \
+  GCP_PROJECT_ID=test-project \
+  META_PAGE_ID=test-page \
+  KFC_AGENT_PROFILE_MODE=production \
+  KFC_AGENT_PROVIDER=google \
+  KFC_AGENT_MODEL=gemini-3.5-flash \
+  "$ROOT_DIR/scripts/deploy-backend-cloud-run.sh" \
+  >"$tmp_dir/cloud-run-production-expensive-google.log" 2>&1; then
+  echo "Expected Cloud Run production preflight to reject Gemini 3.5 Flash." >&2
+  exit 1
+else
+  test "$?" -eq 64
+fi
+grep -q "KFC_AGENT_MODEL must be gemini-3.1-flash-lite" \
+  "$tmp_dir/cloud-run-production-expensive-google.log"
+
+if GCP_PROJECT_ID=test-project \
+  META_PAGE_ID=test-page \
+  KFC_AGENT_PROVIDER=google \
+  KFC_AGENT_MODEL=gpt-5-mini-2025-08-07 \
+  "$ROOT_DIR/scripts/deploy-backend-cloud-run.sh" \
+  >"$tmp_dir/cloud-run-agent-drift.log" 2>&1; then
+  echo "Expected Cloud Run deploy to reject agent-model drift." >&2
+  exit 1
+else
+  test "$?" -eq 64
+fi
+grep -q "KFC_AGENT_MODEL must be gemini-3.1-flash-lite" \
+  "$tmp_dir/cloud-run-agent-drift.log"
+
+identity_dir="$tmp_dir/runtime-identity"
+mkdir -p "$identity_dir"
+printf '{"gitSha":"qualified","deploymentId":"worker-qualified","releaseBuiltAt":"2026-07-15T00:00:00.000Z","dirty":false}\n' > "$identity_dir/release.json"
+printf '{"deployment":{"gitSha":"qualified","deploymentId":"worker-qualified","builtAt":"2026-07-15T00:00:00.000Z","dirty":false},"versions":{"agent":{"provider":"google","model":"gemini-3.1-flash-lite","profile":"google-gemini-3.1-flash-lite-thinking-low"},"toolCatalog":"tools-v1","ranker":"ranker-v1","ledger":"ledger-v1"}}\n' > "$identity_dir/runtime.json"
+printf '{"ok":true,"release":{"gitSha":"qualified","deploymentId":"worker-qualified","releaseBuiltAt":"2026-07-15T00:00:00.000Z","dirty":false},"proof":{"deployment":{"gitSha":"qualified","deploymentId":"worker-qualified","builtAt":"2026-07-15T00:00:00.000Z","dirty":false},"versions":{"agent":{"provider":"google","model":"gemini-3.1-flash-lite","profile":"google-gemini-3.1-flash-lite-thinking-low"},"toolCatalog":"tools-v1","ranker":"ranker-v1","ledger":"ledger-v1"}}}\n' > "$identity_dir/matching.json"
+printf '{"ok":true,"release":{"gitSha":"qualified","deploymentId":"worker-qualified","releaseBuiltAt":"2026-07-15T00:00:00.000Z","dirty":false},"proof":{"deployment":{"gitSha":"qualified","deploymentId":"worker-qualified","builtAt":"2026-07-15T00:00:00.000Z","dirty":false},"versions":{"agent":{"provider":"openai","model":"gpt-5-mini-2025-08-07","profile":"openai-gpt-5-mini-2025-08-07-reasoning-low-verbosity-low"},"toolCatalog":"tools-v1","ranker":"ranker-v1","ledger":"ledger-v1"}}}\n' > "$identity_dir/drifted.json"
+node "$ROOT_DIR/scripts/lib/kfc-acceptance-checks.mjs" check-8 "$identity_dir/release.json" "$identity_dir/runtime.json" "$identity_dir/matching.json"
+! node "$ROOT_DIR/scripts/lib/kfc-acceptance-checks.mjs" check-8 "$identity_dir/release.json" "$identity_dir/runtime.json" "$identity_dir/drifted.json" >/dev/null 2>&1
+
+latency_validator="$ROOT_DIR/scripts/lib/kfc-production-latency-report.mjs"
+test "$(grep -c 'assertCurrentProductionLatencyReport' "$ROOT_DIR/scripts/lib/kfc-acceptance-checks.mjs")" -eq 3
+node --input-type=module - "$latency_validator" <<'NODE'
+import { pathToFileURL } from 'node:url';
+
+const validatorPath = process.argv[2];
+const { assertCurrentProductionLatencyReport } =
+  await import(pathToFileURL(validatorPath));
+const greetingIds = Array.from(
+  { length: 20 },
+  (_, index) => `message-latency-test-greeting-${index + 1}`,
+);
+const menuIds = Array.from(
+  { length: 20 },
+  (_, index) => `message-latency-test-menu-${index + 1}`,
+);
+const expectedIds = [...greetingIds, ...menuIds].sort();
+const greetingId = greetingIds[0];
+const menuId = menuIds[0];
+const agentTraceId = (clientMessageId) => `agent-${clientMessageId}`;
+const monitorTraceId = (clientMessageId) => `monitor-${clientMessageId}`;
+const agentRoots = Object.fromEntries(
+  expectedIds.map((clientMessageId) => [
+    clientMessageId,
+    [agentTraceId(clientMessageId)],
+  ]),
+);
+const monitorRoots = Object.fromEntries(
+  expectedIds.map((clientMessageId) => [
+    clientMessageId,
+    [monitorTraceId(clientMessageId)],
+  ]),
+);
+const greetingAgentTraces = greetingIds.map(agentTraceId);
+const menuAgentTraces = menuIds.map(agentTraceId);
+const gitSha = 'release-sha';
+const releaseBuiltAt = '2026-07-20T00:00:00.000Z';
+const workerDeploymentId = 'worker-release';
+const openAiIdentity = {
+  provider: 'openai',
+  model: 'gpt-5-mini-2025-08-07',
+  profile: 'openai-gpt-5-mini-2025-08-07-reasoning-low-verbosity-low',
+};
+const valid = {
+  schemaVersion: 4,
+  release: {
+    gitSha,
+    releaseBuiltAt,
+    dirty: false,
+    deploymentId: 'pages-release',
+  },
+  readiness: {
+    ok: true,
+    release: {
+      gitSha,
+      deploymentId: workerDeploymentId,
+      releaseBuiltAt,
+      dirty: false,
+    },
+    checks: {
+      agent: { ok: true, configured: true, ...openAiIdentity },
+    },
+    proof: {
+      deployment: {
+        gitSha,
+        deploymentId: workerDeploymentId,
+        builtAt: releaseBuiltAt,
+        dirty: false,
+      },
+      versions: {
+        agent: { ...openAiIdentity },
+      },
+    },
+  },
+  targets: {
+    greetingP95Ms: 10000,
+    menuP95Ms: 10000,
+    overallP95Ms: 10000,
+  },
+  latency: {
+    ok: true,
+    successRate: 1,
+    failures: [],
+    overall: { count: 40, p95Ms: 2000 },
+    byKind: {
+      greeting: { count: 20, p95Ms: 1000 },
+      menu: { count: 20, p95Ms: 2000 },
+    },
+  },
+  samples: [
+    ...greetingIds.map((clientMessageId) => ({
+      kind: 'greeting',
+      ok: true,
+      status: 200,
+      responseText: 'Xin chào',
+      durationMs: 1000,
+      clientMessageId,
+      sessionId: `kfc:${clientMessageId}`,
+    })),
+    ...menuIds.map((clientMessageId) => ({
+      kind: 'menu',
+      ok: true,
+      status: 200,
+      responseText: 'Đây là thực đơn',
+      durationMs: 2000,
+      clientMessageId,
+      sessionId: `kfc:${clientMessageId}`,
+    })),
+  ],
+  traces: {
+    runtime: 'langgraph-create-agent-workflow-v1',
+    ok: true,
+    failures: [],
+    rootQueryOverflowed: false,
+    settle: { completed: true },
+    agentTurns: 40,
+    monitorTurns: 40,
+    rootRuns: 80,
+    rootCoverage: {
+      expectedClientMessageIds: expectedIds,
+      agent: {
+        byClientMessageId: agentRoots,
+        missingClientMessageIds: [],
+        duplicateClientMessageIds: [],
+      },
+      monitor: {
+        byClientMessageId: monitorRoots,
+        missingClientMessageIds: [],
+        duplicateClientMessageIds: [],
+      },
+      uncorrelatableRoots: [],
+    },
+    agentTraceIdsByKind: { greeting: 20, menu: 20 },
+    graphNodes: {
+      callModel: {
+        name: 'model_request',
+        runCount: 60,
+        traceIds: [
+          ...greetingAgentTraces,
+          ...menuAgentTraces.flatMap((traceId) => [traceId, traceId]),
+        ],
+        uncorrelatableSpans: [],
+        overflowed: false,
+      },
+      executeTools: {
+        name: 'tools',
+        runCount: 20,
+        traceIds: menuAgentTraces,
+        uncorrelatableSpans: [],
+        overflowed: false,
+      },
+      executeTrustedAction: {
+        name: 'execute_trusted_action',
+        runCount: 0,
+        traceIds: [],
+        uncorrelatableSpans: [],
+        overflowed: false,
+      },
+    },
+    byKind: {
+      greeting: {
+        modelSpans: 20,
+        toolExecutionSpans: 0,
+        trustedActionSpans: 0,
+      },
+      menu: {
+        modelSpans: 40,
+        toolExecutionSpans: 20,
+        trustedActionSpans: 0,
+      },
+    },
+    expected: {
+      agentRoots: 40,
+      monitorRoots: 40,
+      greetingModelNodesPerTrace: 1,
+      menuModelNodesPerTrace: 2,
+      lowRiskTrustedActionNodes: 0,
+      greetingToolExecutionNodes: 0,
+      menuToolExecutionTraceCoverage: 20,
+    },
+  },
+};
+assertCurrentProductionLatencyReport(valid);
+
+const expectRejected = (mutate, label) => {
+  const candidate = structuredClone(valid);
+  mutate(candidate);
+  let rejected = false;
+  try {
+    assertCurrentProductionLatencyReport(candidate);
+  } catch {
+    rejected = true;
+  }
+  if (!rejected) throw new Error(`Expected ${label} report to be rejected`);
+};
+
+expectRejected((report) => {
+  report.schemaVersion = 1;
+  report.traces.graphNodes = {
+    router: { name: 'small_talk_router' },
+    planner: { name: 'planner_iteration' },
+    composer: { name: 'response_compose' },
+  };
+}, 'legacy v1');
+expectRejected((report) => {
+  report.traces.runtime = 'retired-planner-runtime';
+}, 'forged runtime');
+expectRejected((report) => {
+  report.traces.rootCoverage.agent.byClientMessageId[greetingId] = [
+    'agent-greeting-1',
+    'agent-greeting-2',
+  ];
+  report.traces.rootCoverage.agent.byClientMessageId[menuId] = [];
+  report.traces.rootCoverage.agent.missingClientMessageIds = [];
+  report.traces.rootCoverage.agent.duplicateClientMessageIds = [];
+}, 'forged request/root coverage');
+expectRejected((report) => {
+  report.traces.rootCoverage.monitor.byClientMessageId[greetingId] = [
+    agentTraceId(greetingId),
+  ];
+}, 'shared agent and monitor trace');
+expectRejected((report) => {
+  report.samples[1].status = 500;
+  report.samples[1].responseText = '';
+  report.samples[1].durationMs = 9000;
+}, 'forged green sample summary');
+expectRejected((report) => {
+  report.samples.pop();
+}, 'reduced sample coverage');
+expectRejected((report) => {
+  report.targets.greetingP95Ms = 999999;
+  report.targets.menuP95Ms = 999999;
+  report.targets.overallP95Ms = 999999;
+}, 'weakened release targets');
+expectRejected((report) => {
+  report.targets.greetingP95Ms = 6000;
+  report.targets.menuP95Ms = 8000;
+  report.targets.overallP95Ms = 8000;
+}, 'retired asymmetric release targets');
+expectRejected((report) => {
+  report.traces.settle.completed = false;
+}, 'unsettled');
+expectRejected((report) => {
+  report.traces.graphNodes.callModel.runCount -= 1;
+  report.traces.graphNodes.callModel.traceIds.shift();
+}, 'missing greeting author span');
+expectRejected((report) => {
+  report.traces.graphNodes.callModel.runCount += 1;
+  report.traces.graphNodes.callModel.traceIds.push(
+    report.traces.graphNodes.callModel.traceIds.at(-1),
+  );
+}, 'extra menu author span');
+expectRejected((report) => {
+  report.readiness.checks.agent.apiKey = 'must-not-be-reported';
+}, 'secret-bearing author readiness');
+expectRejected((report) => {
+  report.traces.failures = ['call_model_trace_coverage'];
+}, 'trace failure');
+NODE
 
 integrity_dir="$tmp_dir/qualification-integrity"
 proof_dir="$integrity_dir/proof"

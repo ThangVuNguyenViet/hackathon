@@ -28,7 +28,7 @@ class SupportHandoff extends StatelessWidget {
         .where((label) => label.isNotEmpty)
         .toList(growable: false);
     final status = handoffStatus ?? attachment.data['handoffStatus'];
-    final visibleActions = attachment.actions
+    final visibleActions = attachment.actionableActions
         .where((action) {
           if (status == 'queued' || status == 'joined') {
             return action.id == 'send_issue_summary';

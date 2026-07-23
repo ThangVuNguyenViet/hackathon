@@ -7,6 +7,8 @@ const GENERATED_FIXTURE_FILES = [
   'menu-modifiers.json',
   'stores.json',
   'store-availability.json',
+  'administrative-divisions.json',
+  'administrative-legacy-mappings.json',
   'fulfillment-service-areas.json',
   'fulfillment-quotes.json',
   'promotions.json',

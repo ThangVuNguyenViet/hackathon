@@ -4,20 +4,24 @@ import type {
   DashboardEvent,
   ConversationTurn,
   MonitorSessionIntelligence,
-} from "../domain/types.js";
+} from '../domain/types.js';
 import {
   parseMonitorSessionIntelligencePayload,
   preserveMonitorContext,
-} from "../monitor/sessionIntelligence.js";
+} from '../monitor/sessionIntelligence.js';
 import type {
   AgentRun,
   AgentRunTurn,
   PendingCustomerTurn,
   SessionAgentState,
-} from "../domain/types.js";
+} from '../domain/types.js';
 import type {
   AgentRunPatch,
   AppendConversationTurnInput,
+  CommitAssistantTurnIfRunCurrentInput,
+  CommitAssistantTurnIfRunCurrentResult,
+  CommitConfirmationPauseIfRunCurrentInput,
+  CommitConfirmationPauseIfRunCurrentResult,
   ConversationStore,
   CreateAgentRunInput,
   HistorySearchResult,
@@ -30,6 +34,8 @@ import type {
   ReserveWebhookDeliveryInput,
   ReserveWebhookDeliveryResult,
   SessionControl,
+  TransitionSessionAuthorityInput,
+  TransitionSessionAuthorityResult,
   SessionResetHook,
   SessionAgentStateInput,
   StoredEvent,
@@ -38,15 +44,27 @@ import type {
   WebhookDeliveryChannel,
   AppendCustomerRunEventInput,
   CustomerRunPatch,
-} from "./memoryStore.js";
-import { confirmationPauseFromEvent, type ConfirmationPauseRecord } from "./memoryStore.js";
+} from './memoryStore.js';
+import type {
+  BeginNonAgentTextDeliveryAttemptInput,
+  BeginNonAgentTextDeliveryAttemptResult,
+  CompleteNonAgentTextDeliveryAttemptInput,
+  CompleteNonAgentTextDeliveryAttemptResult,
+  NonAgentTextDeliveryRecord,
+  PrepareNonAgentTextDeliveryTurnInput,
+  PrepareNonAgentTextDeliveryTurnResult,
+  ReconcileNonAgentTextDeliveryInput,
+  ReconcileNonAgentTextDeliveryResult,
+  ReserveNonAgentTextDeliveryInput,
+  ReserveNonAgentTextDeliveryResult,
+} from './contracts.js';
 import {
   CustomerRunIdempotencyConflictError,
   CustomerRunSequenceConflictError,
   customerRunEventSchema,
   type CustomerRun,
   type CustomerRunEvent,
-} from "../customerRuns/contracts.js";
+} from '../customerRuns/contracts.js';
 import {
   D1Result,
   D1PreparedStatement,
@@ -82,13 +100,46 @@ import {
   agentRunFromRow,
   agentRunTurnFromRow,
   sessionAgentStateFromRow,
-  defaultSessionAgentState
+  defaultSessionAgentState,
 } from './d1StoreSupport.js';
 
 import { D1StoreCore } from './d1StoreCore.js';
+import { transitionD1SessionAuthority } from './d1StoreSessionAuthority.js';
+import { commitD1AssistantTurnIfRunCurrent } from './d1StoreTurnCommit.js';
+import { commitD1ConfirmationPauseIfRunCurrent } from './d1StorePauseCommit.js';
+import {
+  beginD1NonAgentTextDeliveryAttempt,
+  completeD1NonAgentTextDeliveryAttempt,
+  getD1NonAgentTextDelivery,
+  prepareD1NonAgentTextDeliveryTurn,
+  reconcileD1NonAgentTextDelivery,
+  reserveD1NonAgentTextDelivery,
+} from './d1StoreNonAgentTextDelivery.js';
+import { resetD1Session } from './d1StoreSessionReset.js';
 
 export abstract class D1StoreConversationOperations extends D1StoreCore {
-  abstract appendEvent(sessionId: string, sourceType: string, payload: Record<string, unknown>): Promise<StoredEvent>;
+  abstract appendEvent(
+    sessionId: string,
+    sourceType: string,
+    payload: Record<string, unknown>,
+  ): Promise<StoredEvent>;
+  async commitAssistantTurnIfRunCurrent(
+    input: CommitAssistantTurnIfRunCurrentInput,
+  ): Promise<CommitAssistantTurnIfRunCurrentResult> {
+    return commitD1AssistantTurnIfRunCurrent({
+      db: this.db,
+      operation: input,
+    });
+  }
+  async commitConfirmationPauseIfRunCurrent(
+    input: CommitConfirmationPauseIfRunCurrentInput,
+  ): Promise<CommitConfirmationPauseIfRunCurrentResult> {
+    return commitD1ConfirmationPauseIfRunCurrent({
+      db: this.db,
+      operation: input,
+    });
+  }
+
   async upsertProfile(
     input: ConversationProfile,
   ): Promise<ConversationProfile> {
@@ -116,7 +167,7 @@ export abstract class D1StoreConversationOperations extends D1StoreCore {
   }
 
   async getProfile(
-    channel: ConversationProfile["channel"],
+    channel: ConversationProfile['channel'],
     externalUserId: string,
   ): Promise<ConversationProfile | undefined> {
     const row = await this.db
@@ -141,6 +192,13 @@ export abstract class D1StoreConversationOperations extends D1StoreCore {
   async appendTurn(
     input: AppendConversationTurnInput,
   ): Promise<ConversationTurn> {
+    if (input.id) {
+      const row = await this.db
+        .prepare(`SELECT * FROM conversation_turns WHERE id = ? LIMIT 1`)
+        .bind(input.id)
+        .first<ConversationTurnRow>();
+      if (row) return turnFromRow(row);
+    }
     const existing =
       input.externalMessageId === null
         ? undefined
@@ -153,7 +211,7 @@ export abstract class D1StoreConversationOperations extends D1StoreCore {
     const turn: ConversationTurn = {
       ...input,
       metadata: input.metadata ?? null,
-      id: `turn_${crypto.randomUUID()}`,
+      id: input.id ?? `turn_${crypto.randomUUID()}`,
       createdAt: input.createdAt ?? new Date().toISOString(),
     };
     await this.db
@@ -290,9 +348,9 @@ export abstract class D1StoreConversationOperations extends D1StoreCore {
     if (existing) return { delivery: existing, reserved: false };
 
     const now = new Date().toISOString();
-    await this.db
+    const result = await this.db
       .prepare(
-        `INSERT INTO webhook_deliveries (
+        `INSERT OR IGNORE INTO webhook_deliveries (
           channel, external_event_id, external_thread_id, external_user_id, session_id, status, payload,
           received_at, processed_at, failed_at, last_error, created_at, updated_at
         ) VALUES (?, ?, ?, ?, ?, 'received', ?, ?, NULL, NULL, NULL, ?, ?)`,
@@ -317,7 +375,61 @@ export abstract class D1StoreConversationOperations extends D1StoreCore {
       throw new Error(
         `Failed to reserve webhook delivery: ${input.channel}:${input.externalEventId}`,
       );
-    return { delivery, reserved: true };
+    return {
+      delivery,
+      reserved: Number(result.meta.changes ?? 0) > 0,
+    };
+  }
+
+  async reserveNonAgentTextDelivery(
+    input: ReserveNonAgentTextDeliveryInput,
+  ): Promise<ReserveNonAgentTextDeliveryResult> {
+    return reserveD1NonAgentTextDelivery({
+      db: this.db,
+      reservation: input,
+    });
+  }
+
+  async getNonAgentTextDelivery(
+    requestKey: string,
+  ): Promise<NonAgentTextDeliveryRecord | undefined> {
+    return getD1NonAgentTextDelivery({ db: this.db, requestKey });
+  }
+
+  async prepareNonAgentTextDeliveryTurn(
+    input: PrepareNonAgentTextDeliveryTurnInput,
+  ): Promise<PrepareNonAgentTextDeliveryTurnResult> {
+    return prepareD1NonAgentTextDeliveryTurn({
+      db: this.db,
+      preparation: input,
+    });
+  }
+
+  async beginNonAgentTextDeliveryAttempt(
+    input: BeginNonAgentTextDeliveryAttemptInput,
+  ): Promise<BeginNonAgentTextDeliveryAttemptResult> {
+    return beginD1NonAgentTextDeliveryAttempt({
+      db: this.db,
+      attempt: input,
+    });
+  }
+
+  async completeNonAgentTextDeliveryAttempt(
+    input: CompleteNonAgentTextDeliveryAttemptInput,
+  ): Promise<CompleteNonAgentTextDeliveryAttemptResult> {
+    return completeD1NonAgentTextDeliveryAttempt({
+      db: this.db,
+      completion: input,
+    });
+  }
+
+  async reconcileNonAgentTextDelivery(
+    input: ReconcileNonAgentTextDeliveryInput,
+  ): Promise<ReconcileNonAgentTextDeliveryResult> {
+    return reconcileD1NonAgentTextDelivery({
+      db: this.db,
+      reconciliation: input,
+    });
   }
 
   async markWebhookDeliveryProcessed(
@@ -327,7 +439,7 @@ export abstract class D1StoreConversationOperations extends D1StoreCore {
     return this.updateWebhookDelivery(
       channel,
       externalEventId,
-      "processed",
+      'processed',
       null,
     );
   }
@@ -340,7 +452,7 @@ export abstract class D1StoreConversationOperations extends D1StoreCore {
     return this.updateWebhookDelivery(
       channel,
       externalEventId,
-      "failed",
+      'failed',
       lastError,
     );
   }
@@ -359,9 +471,12 @@ export abstract class D1StoreConversationOperations extends D1StoreCore {
   }
 
   async listWebhookDeliveries(sessionId: string): Promise<WebhookDelivery[]> {
-    const rows = await this.db.prepare(
-      `SELECT * FROM webhook_deliveries WHERE session_id = ? ORDER BY received_at ASC, external_event_id ASC`,
-    ).bind(sessionId).all<WebhookDeliveryRow>();
+    const rows = await this.db
+      .prepare(
+        `SELECT * FROM webhook_deliveries WHERE session_id = ? ORDER BY received_at ASC, external_event_id ASC`,
+      )
+      .bind(sessionId)
+      .all<WebhookDeliveryRow>();
     return (rows.results ?? []).map(webhookDeliveryFromRow);
   }
 
@@ -384,7 +499,7 @@ export abstract class D1StoreConversationOperations extends D1StoreCore {
 
   async updateTurnDeliveryStatus(
     turnId: string,
-    deliveryStatus: ConversationTurn["deliveryStatus"],
+    deliveryStatus: ConversationTurn['deliveryStatus'],
     externalMessageId: string | null,
   ): Promise<ConversationTurn> {
     await this.db
@@ -414,10 +529,11 @@ export abstract class D1StoreConversationOperations extends D1StoreCore {
     sessionIds: string[],
   ): Promise<Map<string, SessionControl>> {
     if (sessionIds.length === 0) return new Map();
-    const placeholders = sessionIds.map(() => "?").join(", ");
+    const placeholders = sessionIds.map(() => '?').join(', ');
     const rows = await this.db
       .prepare(
-        `SELECT session_id, agent_mode, assigned_agent_id, updated_at
+        `SELECT session_id, agent_mode, assigned_agent_id,
+                session_authority_generation, updated_at
          FROM session_controls
          WHERE session_id IN (${placeholders})`,
       )
@@ -436,86 +552,34 @@ export abstract class D1StoreConversationOperations extends D1StoreCore {
     patch: { agentMode: AgentMode; assignedAgentId?: string | null },
   ): Promise<SessionControl> {
     const current = await this.getSessionControl(sessionId);
-    const updated: SessionControl = {
+    const result = await this.transitionSessionAuthority({
       sessionId,
+      expectedGeneration: current.sessionAuthorityGeneration,
       agentMode: patch.agentMode,
       assignedAgentId:
         patch.assignedAgentId === undefined
           ? current.assignedAgentId
           : patch.assignedAgentId,
-      updatedAt: new Date().toISOString(),
-    };
-    await this.db
-      .prepare(
-        `INSERT INTO session_controls (session_id, agent_mode, assigned_agent_id, updated_at)
-         VALUES (?, ?, ?, ?)
-         ON CONFLICT(session_id) DO UPDATE SET
-           agent_mode = excluded.agent_mode,
-           assigned_agent_id = excluded.assigned_agent_id,
-           updated_at = excluded.updated_at`,
-      )
-      .bind(
-        updated.sessionId,
-        updated.agentMode,
-        updated.assignedAgentId,
-        updated.updatedAt,
-      )
-      .run();
-    return updated;
+    });
+    return result.control;
+  }
+
+  async transitionSessionAuthority(
+    input: TransitionSessionAuthorityInput,
+  ): Promise<TransitionSessionAuthorityResult> {
+    return transitionD1SessionAuthority({
+      db: this.db,
+      operation: input,
+    });
   }
 
   async resetSession(sessionId: string): Promise<SessionControl> {
-    const statements = [
-      this.db
-        .prepare(`DELETE FROM customer_run_events WHERE run_id IN (SELECT id FROM customer_runs WHERE session_id = ?)`)
-        .bind(sessionId),
-      this.db
-        .prepare(`DELETE FROM agent_run_turns WHERE run_id IN (SELECT id FROM agent_runs WHERE session_id = ?)`)
-        .bind(sessionId),
-      this.db
-        .prepare(`DELETE FROM customer_runs WHERE session_id = ?`)
-        .bind(sessionId),
-      this.db
-        .prepare(`DELETE FROM pending_customer_turns WHERE session_id = ?`)
-        .bind(sessionId),
-      this.db
-        .prepare(`DELETE FROM agent_runs WHERE session_id = ?`)
-        .bind(sessionId),
-      this.db
-        .prepare(`DELETE FROM session_agent_state WHERE session_id = ?`)
-        .bind(sessionId),
-      this.db
-        .prepare(`DELETE FROM webhook_deliveries WHERE session_id = ?`)
-        .bind(sessionId),
-      this.db
-        .prepare(`DELETE FROM langgraph_checkpoint_writes WHERE thread_id = ?`)
-        .bind(sessionId),
-      this.db
-        .prepare(`DELETE FROM langgraph_checkpoints WHERE thread_id = ?`)
-        .bind(sessionId),
-      this.db
-        .prepare(`DELETE FROM irreversible_operations WHERE session_id = ?`)
-        .bind(sessionId),
-      this.db
-        .prepare(`DELETE FROM conversation_turns WHERE session_id = ?`)
-        .bind(sessionId),
-      this.db
-        .prepare(`DELETE FROM conversation_events WHERE session_id = ?`)
-        .bind(sessionId),
-      this.db
-        .prepare(`DELETE FROM dashboard_events WHERE session_id = ?`)
-        .bind(sessionId),
-      this.db
-        .prepare(`DELETE FROM session_controls WHERE session_id = ?`)
-        .bind(sessionId),
-    ];
-    if (this.db.batch) {
-      await this.db.batch(statements);
-    } else {
-      for (const statement of statements) await statement.run();
-    }
-    await this.sessionResetHook?.(sessionId);
-    return defaultSessionControl(sessionId);
+    await resetD1Session({
+      db: this.db,
+      sessionId,
+      ...(this.sessionResetHook ? { resetHook: this.sessionResetHook } : {}),
+    });
+    return this.getSessionControl(sessionId);
   }
 
   async upsertPendingCustomerTurn(
@@ -581,14 +645,58 @@ export abstract class D1StoreConversationOperations extends D1StoreCore {
     turnId: string,
     runId: string,
   ): Promise<PendingCustomerTurn> {
+    return this.markPendingCustomerTurnTerminal(turnId, runId, 'claimed');
+  }
+
+  async markPendingCustomerTurnIgnored(
+    turnId: string,
+    runId: string,
+  ): Promise<PendingCustomerTurn> {
+    const now = new Date().toISOString();
+    await this.db
+      .prepare(
+        `UPDATE pending_customer_turns AS pending_turn
+         SET status = 'ignored', claimed_run_id = ?, updated_at = ?
+         WHERE pending_turn.turn_id = ?
+           AND pending_turn.status = 'pending'
+           AND pending_turn.claimed_run_id IS NULL
+           AND EXISTS (
+             SELECT 1
+             FROM agent_run_turns AS run_turn
+             INNER JOIN agent_runs AS run ON run.id = run_turn.run_id
+             INNER JOIN session_agent_state AS state
+               ON state.session_id = run.session_id
+             WHERE run_turn.turn_id = pending_turn.turn_id
+               AND run_turn.run_id = ?
+               AND run.session_id = pending_turn.session_id
+               AND run.status = 'failed'
+               AND state.current_run_id = run.id
+               AND state.generation = run.generation
+           )`,
+      )
+      .bind(runId, now, turnId, runId)
+      .run();
+    const row = await this.db
+      .prepare(`SELECT * FROM pending_customer_turns WHERE turn_id = ? LIMIT 1`)
+      .bind(turnId)
+      .first<PendingCustomerTurnRow>();
+    if (!row) throw new Error(`Pending customer turn not found: ${turnId}`);
+    return pendingCustomerTurnFromRow(row);
+  }
+
+  private async markPendingCustomerTurnTerminal(
+    turnId: string,
+    runId: string,
+    status: Extract<PendingCustomerTurn['status'], 'claimed' | 'ignored'>,
+  ): Promise<PendingCustomerTurn> {
     const now = new Date().toISOString();
     await this.db
       .prepare(
         `UPDATE pending_customer_turns
-         SET status = 'claimed', claimed_run_id = ?, updated_at = ?
+         SET status = ?, claimed_run_id = ?, updated_at = ?
          WHERE turn_id = ?`,
       )
-      .bind(runId, now, turnId)
+      .bind(status, runId, now, turnId)
       .run();
     const row = await this.db
       .prepare(`SELECT * FROM pending_customer_turns WHERE turn_id = ? LIMIT 1`)
@@ -601,7 +709,7 @@ export abstract class D1StoreConversationOperations extends D1StoreCore {
   private async updateWebhookDelivery(
     channel: WebhookDeliveryChannel,
     externalEventId: string,
-    status: WebhookDelivery["status"],
+    status: WebhookDelivery['status'],
     lastError: string | null,
   ): Promise<WebhookDelivery> {
     const now = new Date().toISOString();
@@ -634,5 +742,4 @@ export abstract class D1StoreConversationOperations extends D1StoreCore {
       );
     return delivery;
   }
-
 }

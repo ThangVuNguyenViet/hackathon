@@ -1,0 +1,440 @@
+{
+  "description": "Warning counts measured before the strict non-regression gate. Counts may decrease but cannot increase; new file/rule warnings fail.",
+  "warnings": {
+    "scripts/consolidate-genui-proof.ts": {
+      "@typescript-eslint/no-unsafe-type-assertion": 1
+    },
+    "scripts/deployed-browser-proof-response.ts": {
+      "@typescript-eslint/no-unsafe-type-assertion": 1
+    },
+    "scripts/deployed-browser-proof-route-capture.ts": {
+      "@typescript-eslint/no-unsafe-type-assertion": 1
+    },
+    "scripts/run-deployed-browser-proof.ts": {
+      "@typescript-eslint/no-unsafe-type-assertion": 10
+    },
+    "scripts/run-langsmith-genui-eval.ts": {
+      "@typescript-eslint/no-unsafe-type-assertion": 1
+    },
+    "scripts/run-live-genui-integration-proof.ts": {
+      "@typescript-eslint/no-unsafe-type-assertion": 6
+    },
+    "scripts/run-live-messenger-proof.ts": {
+      "@typescript-eslint/no-unsafe-type-assertion": 7
+    },
+    "scripts/run-live-monitor-ui-proof.ts": {
+      "@typescript-eslint/no-unsafe-type-assertion": 2
+    },
+    "scripts/run-openai-geo-canary.ts": {
+      "@typescript-eslint/no-unsafe-type-assertion": 2
+    },
+    "scripts/run-outcome-judgments.ts": {
+      "@typescript-eslint/no-unsafe-type-assertion": 1
+    },
+    "scripts/run-production-human-loop-video-proof.ts": {
+      "@typescript-eslint/no-unsafe-type-assertion": 7
+    },
+    "scripts/run-production-latency-probe.ts": {
+      "@typescript-eslint/no-unsafe-type-assertion": 6
+    },
+    "scripts/seed-showcase.ts": {
+      "@typescript-eslint/no-unsafe-type-assertion": 2
+    },
+    "scripts/sync-langsmith-live-quality-dataset.ts": {
+      "@typescript-eslint/no-unsafe-type-assertion": 1
+    },
+    "scripts/verify-kfc-staging.ts": {
+      "@typescript-eslint/no-unsafe-type-assertion": 1
+    },
+    "src/agent/agentGraphObservability.ts": {
+      "@typescript-eslint/no-unsafe-type-assertion": 2
+    },
+    "src/agent/modelPublicationAuthority.ts": {
+      "@typescript-eslint/no-unsafe-type-assertion": 1
+    },
+    "src/agent/modelPublicationProjection.ts": {
+      "@typescript-eslint/no-unsafe-type-assertion": 4
+    },
+    "src/agent/modelPublicationStateProjection.ts": {
+      "@typescript-eslint/no-unsafe-type-assertion": 13
+    },
+    "src/agent/parallelReadBatch.ts": {
+      "@typescript-eslint/no-unsafe-type-assertion": 2
+    },
+    "src/agent/singleAgentRuntime.ts": {
+      "@typescript-eslint/no-unsafe-type-assertion": 2
+    },
+    "src/api/routeAgentRuntime.ts": {
+      "@typescript-eslint/no-unsafe-type-assertion": 1
+    },
+    "src/api/routeCommerceRuntime.ts": {
+      "@typescript-eslint/no-unsafe-type-assertion": 1
+    },
+    "src/api/routeHandlerSupport.ts": {
+      "@typescript-eslint/no-unsafe-type-assertion": 2
+    },
+    "src/api/routes.ts": {
+      "@typescript-eslint/no-unsafe-type-assertion": 1
+    },
+    "src/channels/messenger.ts": {
+      "@typescript-eslint/no-unsafe-type-assertion": 4
+    },
+    "src/channels/messengerHistory.ts": {
+      "@typescript-eslint/no-unsafe-type-assertion": 2
+    },
+    "src/channels/zalo.ts": {
+      "@typescript-eslint/no-unsafe-type-assertion": 4
+    },
+    "src/clients/providerMutationReplay.ts": {
+      "@typescript-eslint/no-unsafe-type-assertion": 1
+    },
+    "src/commerce/lifecycleProvider.ts": {
+      "@typescript-eslint/no-unsafe-type-assertion": 5
+    },
+    "src/commerce/mockPosServer.ts": {
+      "@typescript-eslint/no-unsafe-type-assertion": 4
+    },
+    "src/config/outcomeJudgeEnv.ts": {
+      "@typescript-eslint/no-unsafe-type-assertion": 2
+    },
+    "src/config/outcomeJudgeEnvResolution.ts": {
+      "@typescript-eslint/no-unsafe-type-assertion": 3
+    },
+    "src/evaluation/genUiProofEvaluator.ts": {
+      "@typescript-eslint/no-unsafe-type-assertion": 1
+    },
+    "src/evaluation/liveQualityArgumentConstraints.ts": {
+      "@typescript-eslint/no-unsafe-type-assertion": 2
+    },
+    "src/evaluation/liveQualityDataset.ts": {
+      "@typescript-eslint/no-unsafe-type-assertion": 1
+    },
+    "src/evaluation/liveQualityDatasetSync.ts": {
+      "@typescript-eslint/no-unsafe-type-assertion": 3
+    },
+    "src/evaluation/liveQualityEvaluators.ts": {
+      "@typescript-eslint/no-unsafe-type-assertion": 2
+    },
+    "src/evaluation/liveQualityPresentationContracts.ts": {
+      "@typescript-eslint/no-unsafe-type-assertion": 2
+    },
+    "src/evaluation/outcomeJudge.ts": {
+      "@typescript-eslint/no-unsafe-type-assertion": 8
+    },
+    "src/evaluation/productionLatency.ts": {
+      "@typescript-eslint/no-unsafe-type-assertion": 1
+    },
+    "src/evaluation/semanticResponseJudge.ts": {
+      "@typescript-eslint/no-unsafe-type-assertion": 2
+    },
+    "src/genui/flutterScenarioData.ts": {
+      "@typescript-eslint/no-unsafe-type-assertion": 1
+    },
+    "src/genui/kfcGenUi.ts": {
+      "@typescript-eslint/no-unsafe-type-assertion": 11
+    },
+    "src/genui/kfcGenUiSelector.ts": {
+      "@typescript-eslint/no-unsafe-type-assertion": 1
+    },
+    "src/graph/contextPolicy.ts": {
+      "@typescript-eslint/no-unsafe-type-assertion": 1
+    },
+    "src/graph/verifiedState.ts": {
+      "@typescript-eslint/no-unsafe-type-assertion": 2
+    },
+    "src/llm/openAiDiagnostics.ts": {
+      "@typescript-eslint/no-unsafe-type-assertion": 3
+    },
+    "src/monitor/sessionIntelligence.ts": {
+      "@typescript-eslint/no-unsafe-type-assertion": 12
+    },
+    "src/ordering/agentMembershipApprovalAuthority.ts": {
+      "@typescript-eslint/no-unsafe-type-assertion": 1
+    },
+    "src/ordering/agentToolExecutor.ts": {
+      "@typescript-eslint/no-unsafe-type-assertion": 1
+    },
+    "src/ordering/agentToolResultAdapter.ts": {
+      "@typescript-eslint/no-unsafe-type-assertion": 2
+    },
+    "src/ordering/approvalExecutionFence.ts": {
+      "@typescript-eslint/no-unsafe-type-assertion": 3
+    },
+    "src/ordering/approvalReceipt.ts": {
+      "@typescript-eslint/no-unsafe-type-assertion": 3
+    },
+    "src/ordering/toolCatalog.ts": {
+      "@typescript-eslint/no-unsafe-type-assertion": 1
+    },
+    "src/ordering/toolExecutionResult.ts": {
+      "@typescript-eslint/no-unsafe-type-assertion": 1
+    },
+    "src/ordering/toolExecutor.ts": {
+      "@typescript-eslint/no-unsafe-type-assertion": 3
+    },
+    "src/ordering/verifiedCollections.ts": {
+      "@typescript-eslint/no-unsafe-type-assertion": 1
+    },
+    "src/persistence/confirmationPause.ts": {
+      "@typescript-eslint/no-unsafe-type-assertion": 2
+    },
+    "src/persistence/d1CheckpointSaver.ts": {
+      "@typescript-eslint/no-unsafe-type-assertion": 1
+    },
+    "src/persistence/d1StoreAgentOperations.ts": {
+      "@typescript-eslint/no-unsafe-type-assertion": 1
+    },
+    "src/persistence/d1StoreAgentRunOwnership.ts": {
+      "@typescript-eslint/no-unsafe-type-assertion": 1
+    },
+    "src/persistence/d1StoreAgentRunTextDeliverySql.ts": {
+      "@typescript-eslint/no-unsafe-type-assertion": 1
+    },
+    "src/persistence/d1StoreConfirmationResumeOperations.ts": {
+      "@typescript-eslint/no-unsafe-type-assertion": 1
+    },
+    "src/persistence/d1StoreCore.ts": {
+      "@typescript-eslint/no-unsafe-type-assertion": 7
+    },
+    "src/persistence/d1StoreNonAgentTextDelivery.ts": {
+      "@typescript-eslint/no-unsafe-type-assertion": 2
+    },
+    "src/persistence/d1StoreSupport.ts": {
+      "@typescript-eslint/no-unsafe-type-assertion": 3
+    },
+    "src/persistence/postgresStoreConfirmationResumeOperations.ts": {
+      "@typescript-eslint/no-unsafe-type-assertion": 1
+    },
+    "src/persistence/postgresStoreRunOwner.ts": {
+      "@typescript-eslint/no-unsafe-type-assertion": 1
+    },
+    "src/persistence/postgresStoreSessionAuthority.ts": {
+      "@typescript-eslint/no-unsafe-type-assertion": 1
+    },
+    "src/persistence/postgresStoreSupport.ts": {
+      "@typescript-eslint/no-unsafe-type-assertion": 1
+    },
+    "src/presentation/channelPresentation.ts": {
+      "@typescript-eslint/no-unsafe-type-assertion": 1
+    },
+    "src/proof/kfcGenUiDeployedProof.ts": {
+      "@typescript-eslint/no-unsafe-type-assertion": 5
+    },
+    "src/scenarios/scenarioScript.ts": {
+      "@typescript-eslint/no-unsafe-type-assertion": 1
+    },
+    "src/security/guestCheckoutAuthority.ts": {
+      "@typescript-eslint/no-unsafe-type-assertion": 1
+    },
+    "src/showcase/showcase.ts": {
+      "@typescript-eslint/no-unsafe-type-assertion": 5
+    },
+    "src/workerReadiness.ts": {
+      "@typescript-eslint/no-unsafe-type-assertion": 2
+    },
+    "test/agent/agent-graph-observability.test.ts": {
+      "@typescript-eslint/no-unsafe-type-assertion": 5
+    },
+    "test/agent/agent-model-invocation-tracing.test.ts": {
+      "@typescript-eslint/no-unsafe-type-assertion": 3
+    },
+    "test/agent/agent-state-graph-runner.test.ts": {
+      "@typescript-eslint/no-unsafe-type-assertion": 1
+    },
+    "test/agent/model-publication-projection.test.ts": {
+      "@typescript-eslint/no-unsafe-type-assertion": 5
+    },
+    "test/agent/order-status-evidence-freshness.test.ts": {
+      "@typescript-eslint/no-unsafe-type-assertion": 2
+    },
+    "test/agent/parallel-read-batch.test.ts": {
+      "@typescript-eslint/no-unsafe-type-assertion": 2
+    },
+    "test/agent/parallel-read-customer-context.test.ts": {
+      "@typescript-eslint/no-unsafe-type-assertion": 1
+    },
+    "test/agent/payment-selection-authority-e2e.test.ts": {
+      "@typescript-eslint/no-unsafe-type-assertion": 2
+    },
+    "test/agent/provider-resolved-address.test.ts": {
+      "@typescript-eslint/no-unsafe-type-assertion": 3
+    },
+    "test/agent/selected-action-state-graph.test.ts": {
+      "@typescript-eslint/no-unsafe-type-assertion": 1
+    },
+    "test/agent/stategraph-catalog-fulfillment-invariants.test.ts": {
+      "@typescript-eslint/no-unsafe-type-assertion": 1
+    },
+    "test/agent/structured-customer-action.test.ts": {
+      "@typescript-eslint/no-unsafe-type-assertion": 1
+    },
+    "test/api/channel-presentation-delivery.test.ts": {
+      "@typescript-eslint/no-unsafe-type-assertion": 5
+    },
+    "test/api/customer-run-streaming.test.ts": {
+      "@typescript-eslint/no-unsafe-type-assertion": 6
+    },
+    "test/api/human-loop-channels.test.ts": {
+      "@typescript-eslint/no-unsafe-type-assertion": 4
+    },
+    "test/api/human-takeover.test.ts": {
+      "@typescript-eslint/no-unsafe-type-assertion": 10
+    },
+    "test/api/lifecycle-control.test.ts": {
+      "@typescript-eslint/no-unsafe-type-assertion": 1
+    },
+    "test/api/messenger-proof-envelope.test.ts": {
+      "@typescript-eslint/no-unsafe-type-assertion": 1
+    },
+    "test/api/run-authority-publication.test.ts": {
+      "@typescript-eslint/no-unsafe-type-assertion": 1
+    },
+    "test/api/server-options.test.ts": {
+      "@typescript-eslint/no-unsafe-type-assertion": 3
+    },
+    "test/api/trace-correlation-authority.test.ts": {
+      "@typescript-eslint/no-unsafe-type-assertion": 1
+    },
+    "test/api/trusted-genui-action-envelope.test.ts": {
+      "@typescript-eslint/no-unsafe-type-assertion": 1
+    },
+    "test/catalog/catalog-foundation.test.ts": {
+      "@typescript-eslint/no-unsafe-type-assertion": 3
+    },
+    "test/channels/messenger-webhook.test.ts": {
+      "@typescript-eslint/no-unsafe-type-assertion": 5
+    },
+    "test/channels/zalo-webhook.test.ts": {
+      "@typescript-eslint/no-unsafe-type-assertion": 1
+    },
+    "test/commerce/lifecycle-provider-d1.test.ts": {
+      "@typescript-eslint/no-unsafe-type-assertion": 1
+    },
+    "test/customerRuns/runtime.test.ts": {
+      "@typescript-eslint/no-unsafe-type-assertion": 9
+    },
+    "test/domain/order-status-evidence.test.ts": {
+      "@typescript-eslint/no-unsafe-type-assertion": 1
+    },
+    "test/evaluation/live-quality-dataset.test.ts": {
+      "@typescript-eslint/no-unsafe-type-assertion": 31
+    },
+    "test/evaluation/live-quality-tool-trace.test.ts": {
+      "@typescript-eslint/no-unsafe-type-assertion": 2
+    },
+    "test/evaluation/messenger-outcome-evaluation.test.ts": {
+      "@typescript-eslint/no-unsafe-type-assertion": 2
+    },
+    "test/evaluation/messenger-projection-parity.test.ts": {
+      "@typescript-eslint/no-unsafe-type-assertion": 1
+    },
+    "test/evaluation/outcome-judge.test.ts": {
+      "@typescript-eslint/no-unsafe-type-assertion": 3
+    },
+    "test/evaluation/production-latency.test.ts": {
+      "@typescript-eslint/no-unsafe-type-assertion": 1
+    },
+    "test/evaluation/semantic-response-judge.test.ts": {
+      "@typescript-eslint/no-unsafe-type-assertion": 5
+    },
+    "test/fixtures/build-fixtures.test.ts": {
+      "@typescript-eslint/no-unsafe-type-assertion": 1
+    },
+    "test/fixtures/demoAdminServer.ts": {
+      "@typescript-eslint/no-unsafe-type-assertion": 1
+    },
+    "test/genui/kfc-genui-selector.test.ts": {
+      "@typescript-eslint/no-unsafe-type-assertion": 6
+    },
+    "test/graph/studio-agent-runtime.test.ts": {
+      "@typescript-eslint/no-unsafe-type-assertion": 1
+    },
+    "test/graph/verified-state-private-tool-tracing.test.ts": {
+      "@typescript-eslint/no-unsafe-type-assertion": 1
+    },
+    "test/graph/verified-state.test.ts": {
+      "@typescript-eslint/no-unsafe-type-assertion": 14
+    },
+    "test/llm/monitor-judge.test.ts": {
+      "@typescript-eslint/no-unsafe-type-assertion": 5
+    },
+    "test/observability/agent-tracing.test.ts": {
+      "@typescript-eslint/no-unsafe-type-assertion": 2
+    },
+    "test/ordering/customer-context-read-tools.test.ts": {
+      "@typescript-eslint/no-unsafe-type-assertion": 3
+    },
+    "test/ordering/exact-cart-availability-authority.test.ts": {
+      "@typescript-eslint/no-unsafe-type-assertion": 4
+    },
+    "test/ordering/ordering-data-service.test.ts": {
+      "@typescript-eslint/no-unsafe-type-assertion": 1
+    },
+    "test/ordering/tool-executor.test.ts": {
+      "@typescript-eslint/no-unsafe-type-assertion": 2
+    },
+    "test/persistence/agent-run-execution-lease-durable-stores.test.ts": {
+      "@typescript-eslint/no-unsafe-type-assertion": 3
+    },
+    "test/persistence/agent-run-ownership-store.test.ts": {
+      "@typescript-eslint/no-unsafe-type-assertion": 8
+    },
+    "test/persistence/confirmation-pause-store.test.ts": {
+      "@typescript-eslint/no-unsafe-type-assertion": 5
+    },
+    "test/persistence/d1-agent-run-text-delivery-store.test.ts": {
+      "@typescript-eslint/no-unsafe-type-assertion": 3
+    },
+    "test/persistence/d1-non-agent-text-delivery-store.test.ts": {
+      "@typescript-eslint/no-unsafe-type-assertion": 2
+    },
+    "test/persistence/postgres-agent-run-text-delivery-store.test.ts": {
+      "@typescript-eslint/no-unsafe-type-assertion": 14
+    },
+    "test/persistence/postgres-checkpoint-saver.test.ts": {
+      "@typescript-eslint/no-unsafe-type-assertion": 2
+    },
+    "test/persistence/postgres-non-agent-text-delivery-store.test.ts": {
+      "@typescript-eslint/no-unsafe-type-assertion": 2
+    },
+    "test/persistence/postgres-proof-envelope-queries.test.ts": {
+      "@typescript-eslint/no-unsafe-type-assertion": 1
+    },
+    "test/persistence/postgres-session-reset.test.ts": {
+      "@typescript-eslint/no-unsafe-type-assertion": 4
+    },
+    "test/persistence/run-commit-fence-store.test.ts": {
+      "@typescript-eslint/no-unsafe-type-assertion": 7
+    },
+    "test/persistence/verified-ref-store.test.ts": {
+      "@typescript-eslint/no-unsafe-type-assertion": 4
+    },
+    "test/scenarios/scenario-confirmation-resume.test.ts": {
+      "@typescript-eslint/no-unsafe-type-assertion": 1
+    },
+    "test/scenarios/scenarioCoverageLedger.ts": {
+      "@typescript-eslint/no-unsafe-type-assertion": 3
+    },
+    "test/scenarios/stategraph-scenario-replay.test.ts": {
+      "@typescript-eslint/no-unsafe-type-assertion": 1
+    },
+    "test/scripts/run-live-genui-integration-proof.test.ts": {
+      "@typescript-eslint/no-unsafe-type-assertion": 3
+    },
+    "test/scripts/run-outcome-judgments.test.ts": {
+      "@typescript-eslint/no-unsafe-type-assertion": 3
+    },
+    "test/support/fakeD1Database.ts": {
+      "@typescript-eslint/no-unsafe-type-assertion": 54
+    },
+    "test/support/fakeVerifiedRefPersistence.ts": {
+      "@typescript-eslint/no-unsafe-type-assertion": 5
+    },
+    "test/worker/live-ai-interruption.test.ts": {
+      "@typescript-eslint/no-unsafe-type-assertion": 1
+    },
+    "test/worker/worker.test.ts": {
+      "@typescript-eslint/no-unsafe-type-assertion": 13
+    }
+  }
+}

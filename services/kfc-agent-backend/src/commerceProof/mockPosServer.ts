@@ -1,11 +1,13 @@
 import Fastify, { type FastifyInstance } from "fastify";
 import { z } from "zod";
+import { opaqueProviderIdSchema } from "../domain/opaqueProviderId.js";
 import { commerceContractVersion, posStatusSchema } from "./contracts.js";
 import { mockBehaviorSchema, type MockBehavior } from "./scenarios.js";
 
 export interface CommerceProofMockPosServerOptions {
   token: string;
   adminToken: string;
+  instanceId?: string;
 }
 
 const ticketInputSchema = z.object({
@@ -16,17 +18,33 @@ const ticketInputSchema = z.object({
   omsOrderId: z.string().min(1),
   storeId: z.string().min(1),
   items: z.array(
-    z.object({
-      itemCode: z.string().min(1),
-      quantity: z.number().int().positive(),
-    }),
-  ),
-  totalVnd: z.number().int().nonnegative(),
-});
+      z.object({
+        itemCode: z.string().min(1),
+        quantity: z.number().int().positive().safe(),
+      }).strict(),
+    ),
+  totalVnd: z.number().int().nonnegative().safe(),
+}).strict();
 
 const cancellationInputSchema = z.object({
   traceId: z.string().min(1),
   scenarioId: z.string().min(1),
+  commerceOrderId: z.string().min(1),
+  omsOrderId: z.string().min(1),
+}).strict();
+
+const providerMutationIdentitySchema = z.object({
+  idempotencyKey: opaqueProviderIdSchema.refine(
+    (value) => value.length <= 512,
+    { message: "Provider mutation key exceeds the protocol limit" },
+  ),
+  bindingFingerprint: z.string().regex(/^[a-f0-9]{64}$/u),
+}).strict();
+const scenarioParamsSchema = z.object({
+  scenarioId: z.string().min(1),
+});
+const posTicketParamsSchema = z.object({
+  posTicketId: z.string().min(1),
 });
 
 interface MockPosTicket {
@@ -43,12 +61,31 @@ interface MockPosTicket {
   originalTraceId?: string;
 }
 
+interface StoredProviderMutation {
+  operation: "submit_pos_ticket" | "cancel_pos_ticket";
+  bindingFingerprint: string;
+  canonicalPayload: string;
+  response?: {
+    statusCode: number;
+    payload: unknown;
+  };
+}
+
+type ProviderMutationClaim =
+  | { kind: "start"; stored: StoredProviderMutation }
+  | { kind: "replay"; response: StoredProviderMutation["response"] }
+  | { kind: "pending" }
+  | { kind: "conflict" };
+
 export function buildCommerceProofMockPosServer(
   options: CommerceProofMockPosServerOptions,
 ): FastifyInstance {
   const server = Fastify({ logger: false });
+  const instanceId = opaqueProviderIdSchema.parse(
+    options.instanceId ?? crypto.randomUUID(),
+  );
   const tickets = new Map<string, MockPosTicket>();
-  const ticketByIdempotencyKey = new Map<string, string>();
+  const mutationByIdempotencyKey = new Map<string, StoredProviderMutation>();
   const behaviorByScenario = new Map<string, Map<string, MockBehavior>>();
   let ticketSequence = 0;
 
@@ -73,6 +110,7 @@ export function buildCommerceProofMockPosServer(
     contractVersion: commerceContractVersion,
     commerceEnvironment: "sandbox",
     providerImplementation: "http-adapter",
+    instanceId,
     timestamp: new Date().toISOString(),
   }));
 
@@ -85,6 +123,7 @@ export function buildCommerceProofMockPosServer(
     authenticated: true,
     commerceEnvironment: "sandbox",
     providerImplementation: "http-adapter",
+    instanceId,
   }));
 
   server.put("/__admin/scenarios/:scenarioId", async (request, reply) => {
@@ -96,7 +135,7 @@ export function buildCommerceProofMockPosServer(
         message: "Invalid Mock POS behavior",
       });
     }
-    const { scenarioId } = request.params as { scenarioId: string };
+    const { scenarioId } = scenarioParamsSchema.parse(request.params);
     const scenario = behaviorByScenario.get(scenarioId) ?? new Map();
     scenario.set(parsed.data.operation, parsed.data);
     behaviorByScenario.set(scenarioId, scenario);
@@ -106,23 +145,20 @@ export function buildCommerceProofMockPosServer(
   server.post("/v1/tickets", async (request, reply) => {
     const parsed = ticketInputSchema.safeParse(request.body);
     if (!parsed.success) return invalidTicket(reply);
-    const idempotencyKey = request.headers["idempotency-key"];
-    if (typeof idempotencyKey !== "string" || idempotencyKey.length === 0) {
-      return reply.code(400).send({
-        ok: false,
-        errorCode: "idempotency_key_required",
-        message: "Idempotency-Key is required",
-      });
-    }
-    const existingId = ticketByIdempotencyKey.get(idempotencyKey);
-    if (existingId) {
-      const existing = tickets.get(existingId)!;
-      return {
-        ...existing,
-        traceId: parsed.data.traceId,
-        deduplicated: true,
-        originalTraceId: existing.traceId,
-      };
+    const identity = parseProviderMutationIdentity(request.headers);
+    if (!identity) return invalidProviderMutationIdentity(reply);
+    const claim = claimProviderMutation(
+      mutationByIdempotencyKey,
+      identity,
+      "submit_pos_ticket",
+      canonicalProviderMutationPayload(
+        "submit_pos_ticket",
+        undefined,
+        parsed.data,
+      ),
+    );
+    if (claim.kind !== "start") {
+      return sendProviderMutationClaim(reply, claim);
     }
 
     const behavior = behaviorByScenario
@@ -132,7 +168,7 @@ export function buildCommerceProofMockPosServer(
       await delay(behavior.delayMs ?? 5000);
     }
     if (behavior?.behavior === "reject") {
-      return reply.code(409).send({
+      return completeProviderMutation(reply, claim.stored, 409, {
         ok: false,
         errorCode: "pos_order_rejected",
         message: "Mock POS rejected the ticket",
@@ -160,12 +196,11 @@ export function buildCommerceProofMockPosServer(
       deduplicated: false,
     };
     tickets.set(posTicketId, ticket);
-    ticketByIdempotencyKey.set(idempotencyKey, posTicketId);
-    return reply.code(201).send(ticket);
+    return completeProviderMutation(reply, claim.stored, 201, ticket);
   });
 
   server.get("/v1/tickets/:posTicketId", async (request, reply) => {
-    const { posTicketId } = request.params as { posTicketId: string };
+    const { posTicketId } = posTicketParamsSchema.parse(request.params);
     const ticket = tickets.get(posTicketId);
     if (!ticket) {
       return reply.code(404).send({
@@ -185,20 +220,48 @@ export function buildCommerceProofMockPosServer(
   server.post("/v1/tickets/:posTicketId/cancel", async (request, reply) => {
     const parsed = cancellationInputSchema.safeParse(request.body);
     if (!parsed.success) return invalidTicket(reply);
-    const { posTicketId } = request.params as { posTicketId: string };
+    const { posTicketId } = posTicketParamsSchema.parse(request.params);
+    const identity = parseProviderMutationIdentity(request.headers);
+    if (!identity) return invalidProviderMutationIdentity(reply);
+    const claim = claimProviderMutation(
+      mutationByIdempotencyKey,
+      identity,
+      "cancel_pos_ticket",
+      canonicalProviderMutationPayload(
+        "cancel_pos_ticket",
+        posTicketId,
+        parsed.data,
+      ),
+    );
+    if (claim.kind !== "start") {
+      return sendProviderMutationClaim(reply, claim);
+    }
     const ticket = tickets.get(posTicketId);
     if (!ticket) {
-      return reply.code(404).send({
+      return completeProviderMutation(reply, claim.stored, 404, {
         ok: false,
         errorCode: "pos_ticket_not_found",
         message: "POS ticket was not found",
       });
     }
+    if (
+      ticket.commerceOrderId !== parsed.data.commerceOrderId ||
+      ticket.omsOrderId !== parsed.data.omsOrderId
+    ) {
+      return completeProviderMutation(reply, claim.stored, 409, {
+        ok: false,
+        errorCode: "provider_order_binding_conflict",
+        message: "POS ticket does not match the bound commerce order",
+      });
+    }
     const behavior = behaviorByScenario
       .get(parsed.data.scenarioId)
       ?.get("cancel_pos_ticket");
+    if (behavior?.behavior === "delay") {
+      await delay(behavior.delayMs ?? 5000);
+    }
     if (behavior?.behavior === "fail") {
-      return reply.code(409).send({
+      return completeProviderMutation(reply, claim.stored, 409, {
         ok: false,
         errorCode: "pos_cancellation_failed",
         message: "Mock POS cancellation failed",
@@ -219,10 +282,110 @@ export function buildCommerceProofMockPosServer(
       posStatus: "cancelled",
     };
     tickets.set(posTicketId, cancelled);
-    return cancelled;
+    return completeProviderMutation(reply, claim.stored, 200, cancelled);
   });
 
   return server;
+}
+
+function parseProviderMutationIdentity(headers: {
+  [key: string]: string | string[] | undefined;
+}): z.infer<typeof providerMutationIdentitySchema> | undefined {
+  const parsed = providerMutationIdentitySchema.safeParse({
+    idempotencyKey: headers["idempotency-key"],
+    bindingFingerprint: headers["x-provider-binding-fingerprint"],
+  });
+  return parsed.success ? parsed.data : undefined;
+}
+
+function canonicalProviderMutationPayload(
+  operation: StoredProviderMutation["operation"],
+  targetId: string | undefined,
+  body: unknown,
+): string {
+  return JSON.stringify({
+    operation,
+    ...(targetId === undefined ? {} : { targetId }),
+    body,
+  });
+}
+
+function claimProviderMutation(
+  mutations: Map<string, StoredProviderMutation>,
+  identity: z.infer<typeof providerMutationIdentitySchema>,
+  operation: StoredProviderMutation["operation"],
+  canonicalPayload: string,
+): ProviderMutationClaim {
+  const existing = mutations.get(identity.idempotencyKey);
+  if (existing) {
+    if (
+      existing.operation !== operation ||
+      existing.bindingFingerprint !== identity.bindingFingerprint ||
+      existing.canonicalPayload !== canonicalPayload
+    ) {
+      return { kind: "conflict" };
+    }
+    return existing.response
+      ? { kind: "replay", response: existing.response }
+      : { kind: "pending" };
+  }
+  const stored: StoredProviderMutation = {
+    operation,
+    bindingFingerprint: identity.bindingFingerprint,
+    canonicalPayload,
+  };
+  mutations.set(identity.idempotencyKey, stored);
+  return { kind: "start", stored };
+}
+
+function sendProviderMutationClaim(
+  reply: {
+    code(statusCode: number): { send(payload: unknown): unknown };
+  },
+  claim: Exclude<ProviderMutationClaim, { kind: "start" }>,
+): unknown {
+  if (claim.kind === "replay" && claim.response) {
+    return reply
+      .code(claim.response.statusCode)
+      .send(structuredClone(claim.response.payload));
+  }
+  if (claim.kind === "pending") {
+    return reply.code(503).send({
+      ok: false,
+      errorCode: "provider_idempotency_outcome_unknown",
+      message: "The exact provider mutation is still in progress",
+    });
+  }
+  return reply.code(409).send({
+    ok: false,
+    errorCode: "provider_idempotency_conflict",
+    message: "Provider idempotency key conflicts with another bound action",
+  });
+}
+
+function completeProviderMutation(
+  reply: {
+    code(statusCode: number): { send(payload: unknown): unknown };
+  },
+  stored: StoredProviderMutation,
+  statusCode: number,
+  payload: unknown,
+): unknown {
+  stored.response = {
+    statusCode,
+    payload: structuredClone(payload),
+  };
+  return reply.code(statusCode).send(payload);
+}
+
+function invalidProviderMutationIdentity(reply: {
+  code(statusCode: number): { send(payload: unknown): unknown };
+}): unknown {
+  return reply.code(400).send({
+    ok: false,
+    errorCode: "provider_mutation_identity_required",
+    message: "An exact provider mutation identity is required",
+  });
 }
 
 function invalidTicket(reply: { code(statusCode: number): { send(payload: unknown): unknown } }) {

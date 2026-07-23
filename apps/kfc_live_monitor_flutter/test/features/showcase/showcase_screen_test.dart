@@ -41,6 +41,12 @@ void main() {
     expect(find.text('First real answer'), findsOneWidget);
     expect(find.text('ACCEPTANCE CARD'), findsOneWidget);
     expect(find.text('Replay with real AI'), findsOneWidget);
+    expect(
+      find.text(
+        'google · gemini-3.1-flash-lite · google-gemini-3.1-flash-lite-thinking-low',
+      ),
+      findsOneWidget,
+    );
     expect(tester.takeException(), isNull);
   });
 }
@@ -67,8 +73,11 @@ const _catalogWithResult = {
           'sessionId': 'kfc:showcase_saved',
           'generatedAt': '2026-07-15T04:00:00.000Z',
           'releaseSha': '1234567890abcdef',
-          'plannerModel': 'planner-model',
-          'responseModel': 'response-model',
+          'agent': {
+            'provider': 'google',
+            'model': 'gemini-3.1-flash-lite',
+            'profile': 'google-gemini-3.1-flash-lite-thinking-low',
+          },
           'langsmithTraceUrl': null,
           'transcript': [
             {'role': 'user', 'text': 'Show me a meal'},

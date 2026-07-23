@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:state_beacon/state_beacon.dart';
 
 import '../data/customer_chat_repository.dart';
+import '../domain/customer_confirmation_models.dart';
 import '../domain/customer_run_models.dart';
 import '../domain/kfc_genui_models.dart';
 import 'customer_chat_state.dart';
@@ -22,7 +23,9 @@ class CustomerChatController extends BeaconController {
   }) : _repository = repository,
        _handoffPollInterval = handoffPollInterval,
        _reconnectDelays = reconnectDelays {
-    state.value = initialState ?? CustomerChatState.initial();
+    final resolvedState = initialState ?? CustomerChatState.initial();
+    state.value = resolvedState;
+    _modeStates[resolvedState.responseMode] = resolvedState;
   }
 
   final CustomerChatRepository _repository;
@@ -31,8 +34,10 @@ class CustomerChatController extends BeaconController {
   StreamSubscription<CustomerRunEventEnvelope>? _runSubscription;
   Future<void>? _activeRunCompletion;
   Timer? _handoffTimer;
-  final Set<String> _seenRemoteTurns = {};
-  String? _lastRemoteTurnId;
+  final Map<CustomerChatResponseMode, CustomerChatState> _modeStates = {};
+  final Map<String, Set<String>> _seenRemoteTurnsBySession = {};
+  final Map<String, String> _lastRemoteTurnIdBySession = {};
+  final Set<String> _pendingOneShotAttachmentIds = {};
   var _disposed = false;
   var _messageSequence = 0;
 
@@ -50,6 +55,22 @@ class CustomerChatController extends BeaconController {
     state.value = state.value.copyWith(draftText: value, clearError: true);
   }
 
+  void setResponseMode(CustomerChatResponseMode mode) {
+    if (state.value.isSending || state.value.responseMode == mode) return;
+    final current = state.value;
+    _modeStates[current.responseMode] = current;
+    _handoffTimer?.cancel();
+    _handoffTimer = null;
+    state.value = _modeStates.putIfAbsent(
+      mode,
+      () => CustomerChatState.initial(
+        customerId: current.customerId,
+        responseMode: mode,
+      ),
+    );
+    if (state.value.handoffStatus != null) _startHandoffPolling();
+  }
+
   Future<void> sendDraft() {
     final text = state.value.draftText.trim();
     if (text.isEmpty || !_canSubmit) return Future.value();
@@ -61,9 +82,71 @@ class CustomerChatController extends BeaconController {
     return _runSubmission(_CustomerChatSubmission.text(text));
   }
 
-  Future<void> submitAction(KfcGenUiAction action) {
-    if (!_canSubmit) return Future.value();
-    return _runSubmission(_CustomerChatSubmission.action(action));
+  Future<void> submitAction(KfcGenUiAction action) async {
+    final attachment = state.value.actionAttachment(action.attachmentId);
+    if (!_canSubmit ||
+        _pendingOneShotAttachmentIds.contains(action.attachmentId) ||
+        attachment?.authorityMatches(
+              sessionId: state.value.sessionId,
+              customerId: state.value.customerId,
+            ) !=
+            true ||
+        attachment?.authorizesAction(action) != true) {
+      return Future.value();
+    }
+    final isOneShot = attachment!.authority?.actionLifecycle == 'one_shot';
+    if (isOneShot) _pendingOneShotAttachmentIds.add(attachment.id);
+    try {
+      await _runSubmission(_CustomerChatSubmission.action(action));
+      if (isOneShot &&
+          state.value.activeDraft?.terminal == CustomerRunTerminal.completed) {
+        _markAttachmentAnswered(attachment.id, action);
+      }
+    } finally {
+      if (isOneShot) _pendingOneShotAttachmentIds.remove(attachment.id);
+    }
+  }
+
+  void _markAttachmentAnswered(
+    String attachmentId,
+    KfcGenUiAction completedAction,
+  ) {
+    state.value = state.value.copyWith(
+      messages: [
+        for (final message in state.value.messages)
+          if (message.genUi case final attachment?
+              when attachment.id == attachmentId)
+            CustomerChatMessage(
+              id: message.id,
+              role: message.role,
+              text: message.text,
+              genUi: KfcGenUiAttachment(
+                id: attachment.id,
+                lifecycleStage: attachment.lifecycleStage,
+                widgetKind: attachment.widgetKind,
+                status: KfcGenUiStatus.answered,
+                title: attachment.title,
+                summary: attachment.summary,
+                data: {
+                  ...attachment.data,
+                  '_completedAction': {
+                    'actionId': completedAction.actionId,
+                    'payload': completedAction.payload,
+                  },
+                },
+                actions: attachment.actions,
+                selectedAction: completedAction.actionId,
+                expiresAt: attachment.expiresAt,
+                authority: attachment.authority,
+                hasValidAuthorityEncoding: attachment.hasValidAuthorityEncoding,
+                hasValidActionEncoding: attachment.hasValidActionEncoding,
+                interactionFinality: attachment.interactionFinality,
+              ),
+            )
+          else
+            message,
+      ],
+    );
   }
 
   Future<void> stopActiveRun() {
@@ -71,8 +154,72 @@ class CustomerChatController extends BeaconController {
     return _stopMutation.run(null);
   }
 
+  Future<void> approvePendingConfirmation() =>
+      _resumePendingConfirmation(CustomerConfirmationDecision.approve);
+
+  Future<void> rejectPendingConfirmation() =>
+      _resumePendingConfirmation(CustomerConfirmationDecision.reject);
+
   bool get _canSubmit =>
-      !state.value.isSending && !_submissionMutation.isLoading;
+      !state.value.isSending &&
+      state.value.pendingApproval == null &&
+      !_submissionMutation.isLoading;
+
+  Future<void> _resumePendingConfirmation(
+    CustomerConfirmationDecision decision,
+  ) async {
+    final pause = state.value.pendingApproval;
+    if (pause == null || state.value.isResumingApproval) return;
+    if (!pause.expiresAt.isAfter(DateTime.now().toUtc())) {
+      state.value = state.value.copyWith(
+        clearPendingApproval: true,
+        errorMessage: 'Xác nhận đã hết hạn. Vui lòng yêu cầu KFC kiểm tra lại.',
+      );
+      return;
+    }
+    state.value = state.value.copyWith(
+      isResumingApproval: true,
+      clearError: true,
+    );
+    try {
+      final result = await _repository.resumeConfirmation(
+        requestId: pause.requestId,
+        approvalCapability: pause.approvalCapability,
+        decision: decision,
+      );
+      if (_disposed ||
+          state.value.pendingApproval?.requestId != pause.requestId ||
+          state.value.pendingApproval?.approvalCapability !=
+              pause.approvalCapability) {
+        return;
+      }
+      final messages = result.responseText.isEmpty
+          ? state.value.messages
+          : [
+              ...state.value.messages,
+              _message(CustomerChatRole.assistant, result.responseText),
+            ];
+      state.value = state.value.copyWith(
+        messages: messages,
+        pendingApproval: result.nextApproval,
+        clearPendingApproval: result.nextApproval == null,
+        isResumingApproval: false,
+        clearError: true,
+      );
+    } catch (error) {
+      if (_disposed) return;
+      final invalidates =
+          error is CustomerConfirmationResumeException &&
+          error.invalidatesCapability;
+      state.value = state.value.copyWith(
+        clearPendingApproval: invalidates,
+        isResumingApproval: false,
+        errorMessage: invalidates
+            ? 'Xác nhận không còn hiệu lực. Vui lòng yêu cầu KFC kiểm tra lại.'
+            : 'Chưa thể gửi xác nhận lúc này. Vui lòng thử lại.',
+      );
+    }
+  }
 
   Future<void> _runSubmission(_CustomerChatSubmission submission) async {
     await _submissionMutation.run(submission);
@@ -109,6 +256,7 @@ class CustomerChatController extends BeaconController {
       messages: [...state.value.messages, customerMessage],
       draftText: '',
       clearActiveDraft: true,
+      clearPendingApproval: true,
       clearError: true,
     );
     try {
@@ -118,6 +266,9 @@ class CustomerChatController extends BeaconController {
         clientMessageId: customerMessage.id,
         text: text,
         action: action,
+        metadata: text == null
+            ? null
+            : {'showcaseResponseMode': state.value.responseMode.name},
       );
       if (_disposed) return;
       state.value = state.value.copyWith(
@@ -216,7 +367,12 @@ class CustomerChatController extends BeaconController {
   }
 
   void _materializeTerminal(ActiveAssistantDraft draft) {
-    final hasVisibleResponse = draft.text.isNotEmpty || draft.genUi != null;
+    final isHumanOwnedSupersession =
+        draft.terminal == CustomerRunTerminal.superseded &&
+        draft.agentMode == CustomerRunAgentMode.humanPaused;
+    final hasVisibleResponse =
+        !isHumanOwnedSupersession &&
+        (draft.text.isNotEmpty || draft.genUi != null);
     final messages = hasVisibleResponse
         ? [
             ...state.value.messages,
@@ -230,6 +386,8 @@ class CustomerChatController extends BeaconController {
     state.value = state.value.copyWith(
       messages: messages,
       activeDraft: draft.copyWith(materialized: true),
+      clearPendingApproval: true,
+      isResumingApproval: false,
       errorMessage: switch (draft.terminal) {
         CustomerRunTerminal.cancelled =>
           draft.terminalMessage ?? 'Đã dừng theo yêu cầu.',
@@ -237,8 +395,12 @@ class CustomerChatController extends BeaconController {
           draft.terminalMessage ?? 'Không thể hoàn tất yêu cầu lúc này.',
         _ => null,
       },
-      clearError: draft.terminal == CustomerRunTerminal.completed,
+      clearError:
+          draft.terminal == CustomerRunTerminal.completed ||
+          isHumanOwnedSupersession,
+      handoffStatus: isHumanOwnedSupersession ? 'joined' : null,
     );
+    if (isHumanOwnedSupersession) _startHandoffPolling();
     if (draft.genUi?.widgetKind == KfcGenUiWidgetKind.supportHandoff) {
       state.value = state.value.copyWith(
         handoffStatus:
@@ -265,19 +427,26 @@ class CustomerChatController extends BeaconController {
   }
 
   Future<void> _pollHandoff() async {
+    final sessionId = state.value.sessionId;
     try {
       final updates = await _repository.getSessionUpdates(
-        sessionId: state.value.sessionId,
-        afterTurnId: _lastRemoteTurnId,
+        sessionId: sessionId,
+        afterTurnId: _lastRemoteTurnIdBySession[sessionId],
       );
-      if (_disposed) return;
-      if (updates.turns.isNotEmpty) _lastRemoteTurnId = updates.turns.last.id;
+      if (_disposed || state.value.sessionId != sessionId) return;
+      if (updates.turns.isNotEmpty) {
+        _lastRemoteTurnIdBySession[sessionId] = updates.turns.last.id;
+      }
+      final seenRemoteTurns = _seenRemoteTurnsBySession.putIfAbsent(
+        sessionId,
+        () => <String>{},
+      );
       final newMessages = updates.turns
           .where(
             (turn) =>
                 turn.isHumanAgent &&
                 turn.role == 'assistant' &&
-                _seenRemoteTurns.add(turn.id),
+                seenRemoteTurns.add(turn.id),
           )
           .map(
             (turn) => CustomerChatMessage(
@@ -287,14 +456,17 @@ class CustomerChatController extends BeaconController {
             ),
           )
           .toList(growable: false);
+      final effectiveHandoffStatus =
+          updates.handoffStatus ??
+          (updates.agentMode == 'human_paused' ? 'joined' : null);
       state.value = state.value.copyWith(
         messages: newMessages.isEmpty
             ? null
             : [...state.value.messages, ...newMessages],
-        handoffStatus: updates.handoffStatus,
-        clearHandoffStatus: updates.handoffStatus == null,
+        handoffStatus: effectiveHandoffStatus,
+        clearHandoffStatus: effectiveHandoffStatus == null,
       );
-      if (updates.handoffStatus == null) {
+      if (effectiveHandoffStatus == null) {
         _handoffTimer?.cancel();
         _handoffTimer = null;
       }
@@ -332,18 +504,24 @@ class CustomerChatController extends BeaconController {
         : '';
     return switch (action.actionId) {
       'add_item' => 'Thêm $quantityPrefix${action.value ?? 'món này'} vào giỏ',
-      'add_items' => 'Xác nhận các món đã chọn',
+      'add_items' => _addItemsCustomerText(action),
+      'update_cart' => _cartDraftCustomerText(action),
+      'apply_modifiers' => _modifierDraftCustomerText(action),
       'customize_item' => 'Tùy chỉnh ${action.value ?? 'combo'}',
-      'continue_to_fulfillment' => 'Tiếp tục giao hàng',
+      'continue_to_fulfillment' =>
+        '${_cartDraftCustomerText(action)} và tiếp tục giao hàng',
       'edit_cart' => 'Sửa giỏ hàng',
       'remove_item' => 'Xóa ${action.value ?? 'món này'}',
       'update_item_quantity' =>
         'Đổi số lượng ${action.value ?? 'món này'} thành ${quantity ?? 1}',
       'accept_fulfillment' => 'Giao đến địa chỉ này',
-      'submit_address' => 'Tôi muốn đổi địa chỉ',
+      'submit_address' => _addressDraftCustomerText(action),
       'confirm_order' => 'Tôi đặt đơn này',
       'apply_voucher' => 'Áp mã giảm giá',
-      'open_payment' => 'Thanh toán bằng ${action.value ?? 'MoMo'}',
+      'open_payment' =>
+        _paymentMethodDisplayName(action.value) == null
+            ? 'Tiếp tục thanh toán'
+            : 'Tiếp tục thanh toán bằng ${_paymentMethodDisplayName(action.value)}',
       'change_payment_method' => 'Đổi phương thức thanh toán',
       'select_payment_method' =>
         'Chọn ${action.value ?? 'phương thức thanh toán'}',
@@ -352,6 +530,186 @@ class CustomerChatController extends BeaconController {
       'send_issue_summary' => 'Gửi tóm tắt lỗi cho nhân viên',
       _ => action.value ?? action.actionId,
     };
+  }
+
+  String _addressDraftCustomerText(KfcGenUiAction action) {
+    final payload = action.payload;
+    final addressParts =
+        [
+              payload['addressLine'],
+              payload['communeName'],
+              payload['provinceName'],
+            ]
+            .whereType<String>()
+            .map((value) => value.trim())
+            .where((value) => value.isNotEmpty)
+            .toList(growable: false);
+    if (addressParts.length != 3) return 'Xác nhận địa chỉ giao hàng';
+    final recipientName = payload['recipientName'] is String
+        ? (payload['recipientName']! as String).trim()
+        : '';
+    final phone = payload['phone'] is String
+        ? (payload['phone']! as String).trim()
+        : '';
+    final deliveryInstructions = payload['deliveryInstructions'] is String
+        ? (payload['deliveryInstructions']! as String).trim()
+        : '';
+    final recipient = recipientName.isEmpty || phone.isEmpty
+        ? ''
+        : ' cho $recipientName ($phone)';
+    final instructions = deliveryInstructions.isEmpty
+        ? ''
+        : '. Ghi chú: $deliveryInstructions';
+    return 'Xác nhận giao hàng đến ${addressParts.join(', ')}'
+        '$recipient$instructions';
+  }
+
+  String? _paymentMethodDisplayName(String? methodId) {
+    if (methodId == null || methodId.isEmpty) return null;
+    for (final message in state.value.messages.reversed) {
+      final methods = message.genUi?.data['methods'];
+      if (methods is! List) continue;
+      for (final method in methods) {
+        if (method is! Map || method['methodId'] != methodId) continue;
+        final displayName = method['displayName'];
+        if (displayName is String && displayName.trim().isNotEmpty) {
+          return displayName.trim();
+        }
+      }
+    }
+    return null;
+  }
+
+  String _addItemsCustomerText(KfcGenUiAction action) {
+    const fallback = 'Xác nhận các món đã chọn';
+    final catalogItems = state.value
+        .actionAttachment(action.attachmentId)
+        ?.data['items'];
+    final selectedItems = action.payload['items'];
+    if (catalogItems is! List ||
+        selectedItems is! List ||
+        selectedItems.isEmpty) {
+      return fallback;
+    }
+
+    final namesByCode = <String, String>{};
+    final duplicateCodes = <String>{};
+    for (final rawItem in catalogItems) {
+      if (rawItem is! Map) continue;
+      final code = rawItem['code'];
+      final name = rawItem['name'];
+      if (code is! String ||
+          code.isEmpty ||
+          name is! String ||
+          name.trim().isEmpty) {
+        continue;
+      }
+      if (namesByCode.containsKey(code)) duplicateCodes.add(code);
+      namesByCode[code] = name.trim();
+    }
+    for (final code in duplicateCodes) {
+      namesByCode.remove(code);
+    }
+
+    final selections = <String>[];
+    for (final rawSelection in selectedItems) {
+      if (rawSelection is! Map) return fallback;
+      final itemCode = rawSelection['itemCode'];
+      final rawQuantity = rawSelection['quantity'];
+      final quantity = rawQuantity is num && rawQuantity.isFinite
+          ? rawQuantity.toInt()
+          : null;
+      final name = itemCode is String ? namesByCode[itemCode] : null;
+      if (name == null ||
+          quantity == null ||
+          quantity < 1 ||
+          quantity > 99 ||
+          rawQuantity != quantity) {
+        return fallback;
+      }
+      selections.add('$quantity × $name');
+    }
+    return selections.isEmpty
+        ? fallback
+        : 'Thêm vào giỏ: ${selections.join(', ')}';
+  }
+
+  String _cartDraftCustomerText(KfcGenUiAction action) {
+    const fallback = 'Cập nhật giỏ hàng';
+    final cart = state.value
+        .actionAttachment(action.attachmentId)
+        ?.data['cart'];
+    final cartItems = cart is Map ? cart['items'] : null;
+    final draftItems = action.payload['items'];
+    if (cartItems is! List || draftItems is! List) return fallback;
+    final namesByCode = <String, String>{};
+    for (final item in cartItems) {
+      if (item is! Map) continue;
+      final itemCode = item['itemCode'];
+      final name = item['name'];
+      if (itemCode is String &&
+          itemCode.isNotEmpty &&
+          name is String &&
+          name.trim().isNotEmpty) {
+        namesByCode[itemCode] = name.trim();
+      }
+    }
+    final selections = <String>[];
+    for (final item in draftItems) {
+      if (item is! Map) return fallback;
+      final itemCode = item['itemCode'];
+      final quantity = item['quantity'];
+      final name = itemCode is String ? namesByCode[itemCode] : null;
+      if (name == null || quantity is! int || quantity < 0 || quantity > 99) {
+        return fallback;
+      }
+      if (quantity > 0) selections.add('$quantity × $name');
+    }
+    return selections.isEmpty
+        ? '$fallback: giỏ hàng trống'
+        : '$fallback: ${selections.join(', ')}';
+  }
+
+  String _modifierDraftCustomerText(KfcGenUiAction action) {
+    const fallback = 'Áp dụng tùy chọn';
+    final tree = state.value
+        .actionAttachment(action.attachmentId)
+        ?.data['modifierTree'];
+    final groups = tree is Map ? tree['modifierGroups'] : null;
+    final selections = action.payload['selections'];
+    if (groups is! List || selections is! List) return fallback;
+    final namesByIdentity = <String, String>{};
+    void visitGroups(List<dynamic> nestedGroups) {
+      for (final group in nestedGroups) {
+        if (group is! Map || group['groupId'] is! String) continue;
+        final groupId = group['groupId']! as String;
+        final options = group['options'];
+        if (options is! List) continue;
+        for (final option in options) {
+          if (option is! Map ||
+              option['modifierId'] is! String ||
+              option['name'] is! String) {
+            continue;
+          }
+          namesByIdentity['$groupId\u0000${option['modifierId']}'] =
+              (option['name']! as String).trim();
+          final childGroups = option['modifierGroups'];
+          if (childGroups is List) visitGroups(childGroups);
+        }
+      }
+    }
+
+    visitGroups(groups);
+    final names = <String>[];
+    for (final selection in selections) {
+      if (selection is! Map) return fallback;
+      final groupId = selection['groupId'];
+      final modifierId = selection['modifierId'];
+      final name = namesByIdentity['$groupId\u0000$modifierId'];
+      if (name == null || name.isEmpty) return fallback;
+      names.add(name);
+    }
+    return names.isEmpty ? fallback : '$fallback: ${names.join(', ')}';
   }
 }
 

@@ -16,6 +16,24 @@ export function responseProfileForChannel(channel: Channel): ResponseProfile {
   }
 }
 
+export function resolveResponseProfile(input: {
+  channel: Channel;
+  responseProfile?: ResponseProfile;
+}): ResponseProfile {
+  const channelProfile = responseProfileForChannel(input.channel);
+  const profile = input.responseProfile ?? channelProfile;
+  if (
+    input.channel !== 'kfc' &&
+    input.channel !== 'messenger_mock' &&
+    profile !== channelProfile
+  ) {
+    throw new Error(
+      `response_profile_channel_mismatch:${input.channel}:${profile}`,
+    );
+  }
+  return profile;
+}
+
 function assertNever(value: never): never {
   throw new Error(`Unhandled response-profile channel: ${String(value)}`);
 }

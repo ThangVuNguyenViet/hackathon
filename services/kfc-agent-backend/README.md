@@ -10,24 +10,79 @@ npm run fixtures:build
 docker compose up -d postgres
 npm test
 npm run build
-npm run dev
+KFC_COMMERCE_MODE=fixture npm run dev
 ```
 
-The backend uses mock business adapters by default. Unit and scenario tests do not require real KFC, Zalo, Messenger, payment, OpenAI, or LangSmith credentials.
+Unit tests and offline scenario tests inject mock business adapters and do not
+require real KFC, Zalo, Messenger, payment, model-provider, or LangSmith
+credentials. The server defaults to `KFC_COMMERCE_MODE=gateway` and fails
+closed when its gateway configuration is absent; local fixture-backed
+development must opt in with `KFC_COMMERCE_MODE=fixture`.
 
-Set `OPENAI_API_KEY` to make runtime replies use the live OpenAI Responses API. `OPENAI_MODEL` defaults to `gpt-4.1-mini`, and `OPENAI_BASE_URL` defaults to `https://api.openai.com/v1`.
+Choose the runtime with `KFC_AGENT_PROVIDER=openai` or
+`KFC_AGENT_PROVIDER=google`. `KFC_AGENT_PROFILE_MODE=production` is the
+fail-closed default: it pins GPT-4.1-mini for OpenAI and Gemini 3.1 Flash-Lite
+with LOW thinking for Google. `KFC_AGENT_MODEL` may only repeat the selected
+pinned model and fails closed on drift.
+
+An explicit `KFC_AGENT_PROFILE_MODE=qualification` keeps GPT-4.1-mini pinned
+for OpenAI and defaults Google to the affordable Gemini 3.1 Flash-Lite with
+HIGH thinking. Other model IDs fail closed in both modes. Deployment scripts
+default to production and carry the mode into both Cloud Run and Worker
+configuration. The selected agent provider is the only synchronous model
+dependency in the customer-facing request path.
+
+The post-turn operations monitor is asynchronous and non-authoritative. By
+default it follows `KFC_AGENT_PROVIDER`, using GPT-5 mini with low reasoning
+and low verbosity for OpenAI or Gemini 3.1 Flash-Lite with LOW thinking for
+Google, so a Google agent does not
+silently incur an OpenAI dependency. `KFC_MONITOR_PROVIDER` and
+`KFC_MONITOR_MODEL` may make a different pinned provider explicit; an
+unsupported model or missing explicitly selected credential fails
+configuration instead of falling back to another provider.
+
+The pinned IDs and capabilities are checked against the official
+[GPT-5 mini model reference](https://developers.openai.com/api/docs/models/gpt-5-mini),
+[Gemini 3.1 Flash-Lite reference](https://ai.google.dev/gemini-api/docs/models/gemini-3.1-flash-lite).
+Google’s [Gemini 3 guidance](https://ai.google.dev/gemini-api/docs/gemini-3#temperature)
+also recommends leaving temperature at its default, so the Google adapter does
+not force a lower value.
+
+The same authoring model submits customer prose with a typed publication
+declaration in its terminal response. Deterministic publication boundaries
+validate the response schema, verified evidence references, authorization, and
+approval state before persistence. They do not invoke a third model or police
+customer prose with keyword matching. The asynchronous monitor remains
+non-authoritative and does not block publication.
+`OPENAI_BASE_URL` is optional for the OpenAI adapter.
 
 ## LangSmith Studio
 
-The authoritative turn runtime is a compiled LangGraph `StateGraph` with the visible topology `load_context -> classify_turn -> route_turn -> social_response | structured_action | plan_tools -> execute_tools -> enforce_invariants -> compose_response -> persist_turn -> monitor`. Trusted GenUI actions use the structured branch without an LLM call; natural-language commerce turns use the bounded planner branch. Both branches converge on response, persistence, and monitor guarantees.
+PR #52 targets one explicitly authored LangGraph `StateGraph` (using the graph
+API, not a prebuilt agent loop): `load_context -> call_model`. Commerce tool
+calls continue through `validate_tool_calls -> request_approval` when required
+`-> revalidate_approval -> execute_tools -> call_model`. A typed terminal
+response is structurally checked against typed evidence before
+`finalize_response -> persist_and_project`. A no-tool response uses one model
+call; a normal read-tool response uses one call to choose tools and one call to
+author the grounded response.
+Invalid model tool calls get one explicit semantic-correction edge. Retryable provider failures get an
+explicit budgeted retry edge; all other failures go to `fail_closed`. Provider
+adapters use `maxRetries: 0` and no hedging so each outbound attempt is
+graph-counted and trace-visible. Authenticated structured actions are carried
+separately from customer text and the migration draft contains their explicit
+`prepare_structured_action` branch. That branch is still integration-pending
+and fails the acceptance boundary closed until its focused and full offline
+gates pass. The top-level `langchain` agent package, prebuilt agent loops, and
+a parallel legacy runtime are outside the accepted architecture.
 
 Start the local Agent Server from this directory:
 
 ```bash
-npm run dev:studio -- --no-browser
+KFC_COMMERCE_MODE=fixture npm run dev:studio -- --no-browser
 ```
 
-Open the Studio URL printed by the command. The default local API is `http://localhost:2024`, and the graph ID is `kfc-agent`. The command uses the fixture-backed commerce clients; when `OPENAI_API_KEY` is present in `../../.env`, it also uses the configured OpenAI social router, tool planner, and response composer.
+Open the Studio URL printed by the command. The default local API is `http://localhost:2024`, and the graph ID is `kfc-agent`. Production and Studio now use the same explicit `StateGraph`; remaining legacy router/planner/composer modules are migration cleanup and are not qualification evidence.
 
 Use this Studio input for a first run:
 
@@ -36,7 +91,8 @@ Use this Studio input for a first run:
   "sessionId": "studio:demo-customer",
   "customerId": "demo-customer",
   "channel": "kfc",
-  "text": "Cho mình 1 Combo 99K"
+  "text": "Cho mình 1 Combo 99K",
+  "externalMessageId": "studio-demo-message-1"
 }
 ```
 
@@ -70,7 +126,11 @@ LangGraph checkpoints in its environment-owned D1 database. The Node entrypoint 
 runtime state and checkpoints durably in PostgreSQL. Generated KFC fixtures are local deterministic
 provider responses for tests; they are not database seed content.
 
-Messenger POST webhooks are acknowledged by the Worker after D1 idempotency reservation and Cloudflare Queue enqueue. The queued consumer performs the OpenAI turn, Messenger Graph API calls, reply delivery, and dashboard persistence. This keeps Meta callback responses short and avoids spending Worker request CPU on the full agent turn.
+Messenger POST webhooks are acknowledged by the Worker after D1 idempotency
+reservation and Cloudflare Queue enqueue. The queued consumer performs the
+selected provider’s agent turn, Messenger Graph API calls, reply delivery, and
+dashboard persistence. This keeps Meta callback responses short and avoids
+spending Worker request CPU on the full agent turn.
 
 Create the queue resources once per Cloudflare account/environment:
 
@@ -85,8 +145,14 @@ wrangler secret put MESSENGER_VERIFY_TOKEN
 wrangler secret put META_APP_SECRET
 wrangler secret put META_PAGE_ACCESS_TOKEN
 wrangler secret put OPENAI_API_KEY
+wrangler secret put GOOGLE_API_KEY
 wrangler secret put KFC_DEMO_ADMIN_TOKEN
 ```
+
+Customer-facing operation requires credentials for the selected agent
+provider. The mandatory qualification matrix runs OpenAI and Google as
+separate agent executions, so the complete matrix requires both
+`OPENAI_API_KEY` and `GOOGLE_API_KEY`.
 
 Meta access-token expiry cannot be extended in place after a token expires. Generate a new long-lived Page access token for Page ID `118976205445198`, confirm it in Meta's Access Token Debugger, then update `META_PAGE_ACCESS_TOKEN`.
 
@@ -121,10 +187,12 @@ Messenger Page history sync runs in the background on startup when `META_PAGE_AC
 
 ```bash
 curl -s -X POST http://localhost:18090/admin/messenger/sync-history \
+  -H "Authorization: Bearer $KFC_DEMO_ADMIN_TOKEN" \
   -H 'Content-Type: application/json' \
   -d '{"limitConversations":10}'
 
-curl http://localhost:18090/admin/messenger/sync-history/status
+curl http://localhost:18090/admin/messenger/sync-history/status \
+  -H "Authorization: Bearer $KFC_DEMO_ADMIN_TOKEN"
 ```
 
 History sync imports transcript records only. It does not invoke the AI agent and does not send Messenger replies.
@@ -135,7 +203,7 @@ History sync imports transcript records only. It does not invoke the AI agent an
 npm run fixtures:build
 npm test
 npm run build
-npm run dev
+KFC_COMMERCE_MODE=fixture npm run dev
 ```
 
 ## Health Check
@@ -147,7 +215,7 @@ curl http://localhost:18090/health
 Expected response:
 
 ```json
-{"ok":true,"service":"kfc-agent-backend"}
+{ "ok": true, "service": "kfc-agent-backend" }
 ```
 
 ## KFC Chat Turn
@@ -166,25 +234,62 @@ curl http://localhost:18090/dashboard/sessions/kfc%3Ademo_customer/turns
 curl http://localhost:18090/dashboard/events/kfc%3Ademo_customer
 ```
 
-The backend is the transcript source of truth. The dashboard should read these APIs rather than scraping Messenger.
+The backend is the transcript source of truth. Dashboard session and turn
+reads return only the durable state already stored by the backend; they never
+perform a hidden Messenger network sync. This keeps polling bounded and means
+the response is fresh through the latest completed webhook or explicit sync.
+
+To hydrate older Messenger history before polling, call the authenticated
+admin endpoint explicitly:
+
+```bash
+curl -X POST http://localhost:18090/admin/messenger/sync-history \
+  -H "Authorization: Bearer $KFC_DEMO_ADMIN_TOKEN" \
+  -H 'Content-Type: application/json' \
+  -d '{}'
+```
+
+The dashboard should read the durable APIs rather than scraping Messenger.
 
 ## Scenario Contract
 
-The reviewed integration scripts live in `../../ai-talent-tracks/fnb/conversations/`. The scenario parser treats those Markdown files as the source contract, with one integration replay test per script. Scenario 01 is the selected live Messenger/dashboard demo script, and scenario replay requires the reviewed generated fixture set.
+The reviewed customer scripts live in
+`../../ai-talent-tracks/fnb/conversations/*.json`; their adjacent Markdown,
+GenUI capture plan, and Flutter capture data are maintained presentation and
+capture artifacts. The executable behavior oracle is the static
+`test/scenarios/scenarioCoverageLedger.ts` ledger. The current corpus contains
+11 scenarios and 50 customer turns in the UC-01 through UC-39 taxonomy. The
+dataset builder derives one Text and one GenUI case per turn, currently 100
+cases. These counts and the inventory digest are computed report metadata, not
+hard-coded behavioral gates; structural sync instead proves every active turn
+has exactly one case per mode with no missing, duplicate, or unexpected turns.
+Every turn has a 10-second soft-quality target; the runtime fails closed at the
+separate 30-second hard deadline.
 
-Default scenario replay is deterministic: it uses `StaticToolPlanner` with the generated KFC fixture set so `npm test` does not depend on OpenAI availability. The live suite replays scenarios 01–08 once each and checks both planner/tool behavior and GenUI output over their 44 customer turns; scenario 09 remains planner-only. Run:
+The shared evaluator grades verified state, effects and receipts, exact
+structured facts and collections, provenance, persistence, latency, and
+Text/GenUI outcomes. It does not prescribe planner routes or fixed wording.
+Per-turn safety, authority, arithmetic, availability, persistence, and deadline
+checks remain blocking. Scenario-wide advisory judgments use metadata-defined
+phase boundaries: core scenarios 02, 03, 10, and 11 report nonblocking warnings
+until calibration approval; supporting scenarios 06 and 07 are evidence-only;
+provider or judge exhaustion is inconclusive rather than a product verdict.
+
+The mandatory live-text matrix currently executes all derived turns for OpenAI
+and Google across three repetitions. The OpenAI advisory canary reuses Text
+repetition 1 and is judged by OpenAI; Gemini advisory judgment is deferred. The
+24-example OpenAI advisory calibration fixture is draft/human-review-required
+and is rejected at qualification intake. Generated menu items, modifiers, and
+governed content remain the unified source of catalog facts; no separate
+advisory catalog fixture exists. Offline tests do not invoke a model or mutate
+LangSmith.
+
+Worker interruption remains a separate boundary check. Small talk, catalog
+browsing, full-menu display, recommendation, and cart behavior are part of the
+same provider-neutral scenario matrix:
 
 ```bash
-OPENAI_API_KEY=... npm run test:live:scenarios
-```
-
-That live suite uses `it.concurrent.each` with `maxConcurrency=1`, records the real `OpenAIToolPlanner` calls, and fails on missing tool groups, required GenUI widgets, or action/widget contradictions. The single-scenario concurrency keeps provider contention from exhausting the per-turn runtime deadline and turning valid plans into recovery responses. The command defaults to `gpt-4.1-mini`; set `OPENAI_TOOL_PLANNER_MODEL=...` to override it. Business data comes from the configured provider clients; local and deterministic runs seed those providers from the bundled KFC fixture set.
-
-Small-talk routing, direct-catalog streaming, and Worker interruption remain separate boundary checks:
-
-```bash
-npm run test:live:small-talk-router
-npm run test:live:direct-catalog
+npm run test:live:scenarios
 npm run test:live:interruption
 ```
 
@@ -218,33 +323,56 @@ on the tester's behalf or substitutes local credentials or fixtures.
 
 The root `scripts/run-kfc-deployed-acceptance.sh` composes the deployed GenUI and Messenger child
 manifests, current readiness/catalog/graph/checkpoint bindings, production latency JSON, and
-independent five-golden/three-matrix streaks into one release-candidate manifest.
+independent five-golden/three-matrix streaks into one release-candidate manifest. Full GenUI
+qualification currently also requires `KFC_GENUI_BRANCH_SESSIONS_FILE`, a reviewed plan that binds
+the eight legacy persisted proof scenarios to clean durable deployed sessions. No maintained
+canonical producer emits that artifact yet, so the acceptance runner fails closed when it is
+missing. This dependency remains bound to the legacy v3 8-scenario/44-turn
+proof contract and must not be relabelled as nine-scenario proof.
 
-For final proof, assistant messages must come from live OpenAI API calls. Static deterministic LLM output is only for automated tests and scenario replay. The deterministic graph still owns business state, cart/payment decisions, and dashboard events; OpenAI only composes the final customer-facing wording from that verified outcome. If response composition fails, the backend records `llm:response_composer_failed` and sends the deterministic fallback so live channels do not drop the conversation.
+For final proof, assistant behavior must come from the pinned live OpenAI and
+Gemini profiles. Deterministic fake-model output is only test infrastructure.
+The selected model authors semantic commerce tool calls and the typed terminal
+response; deterministic code validates schemas, verified state, authorization,
+policy, approvals, tool execution, grounding, and persistence. A no-tool turn
+is expected to use one authoring call, while a turn with one tool round trip
+uses two authoring calls. A future complete live-quality qualification
+must run the shared evaluator through its LangSmith adapter for every turn and
+compare both modes and providers; the maintained selected replay does not yet
+establish that matrix. Malformed publication declarations, unavailable evidence
+references, stale authority, and unauthorized disclosures fail closed. Semantic
+contradictions between customer prose and cited evidence are release-blocking
+post-turn judge failures; there is no deterministic customer-prose fallback.
 
-## Sandbox OMS And POS Proof
+## Sandbox OMS And POS Component Tests
 
-Run the credential-free local proof:
+Run the credential-free contract and component suite:
 
 ```bash
-npm run proof:commerce:mock
+npm test -- \
+  test/commerceProof/contracts.test.ts \
+  test/commerceProof/mock-oms-server.test.ts \
+  test/commerceProof/mock-pos-server.test.ts \
+  test/commerceProof/gateway-server.test.ts
 ```
 
-Run the reviewer-facing LangSmith gate:
+These tests exercise the versioned project contracts and real loopback HTTP
+boundaries between the Demo Commerce Gateway and the in-memory Mock OMS/POS
+servers. They cover authentication, readiness, correlation, duplicate
+suppression, rejection compensation, timeouts, POS-first cancellation, partial
+cancellation, and conflicting source status.
 
-```bash
-npm run proof:commerce:mock -- --require-langsmith
-```
+This is component-test evidence only. It does not prove that a live model chose
+the correct tool, that an agent response was grounded, that a deployed system
+completed the flow, or that LangSmith contains an end-to-end trace. It also does
+not establish compatibility with KFC or any named OMS/POS vendor, durability,
+or production readiness. Provider-facing evidence must come from an
+authoritative sandbox or production integration, while model behavior remains
+owned by the canonical live scenario matrix.
 
-The command starts four loopback HTTP services on ephemeral ports: KFC agent backend, Commerce Gateway, OMS provider, and POS provider. It executes eight deterministic scenarios, validates readiness and correlation, writes local traces and evaluator results, and shuts every service down. The LangSmith gate additionally fails unless every scenario exports a run URL with ordered hop children and deterministic scores.
-
-Artifacts are written under `../../artifacts/mock-commerce-proof/<timestamp>/` by default. `manifest.json` is the index; each scenario contains `local-trace.json`, `evaluator-results.json`, `api-summary.json`, `assistant-genui.json`, and `langsmith.json`. Generated proof artifacts are ignored by Git and exclude tokens and customer PII.
-
-The accepted claim is: **Demonstrated OMS/POS orchestration in the qualified sandbox environment through replaceable adapter contracts.** This does not prove compatibility with KFC or any named vendor, production-environment validation, durability, or production readiness.
-
-Placement, rejection, compensation, and timeout scenarios enter through the normal KFC backend and agent tool executor. Duplicate, cancellation, partial cancellation, and conflict checks currently enter through the gateway API; their manifests state that limitation because `cancelOrder` is not yet exposed in the agent tool catalog.
-
-No Patrol suite or mock-backed Flutter `integration_test` is used. Mock coverage remains in Vitest and Flutter widget/golden tests; existing Flutter integration tests remain backend-backed.
+No generated mock-commerce proof manifest, synthetic trace, Patrol suite, or
+mock-backed Flutter `integration_test` is part of this boundary. Existing
+Flutter integration tests remain backend-backed.
 
 ## Final Proof Videos
 

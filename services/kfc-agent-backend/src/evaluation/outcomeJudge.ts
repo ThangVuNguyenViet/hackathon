@@ -1,3 +1,8 @@
+import type { BaseChatModel } from "@langchain/core/language_models/chat_models";
+import {
+  HumanMessage,
+  SystemMessage,
+} from "@langchain/core/messages";
 import { z } from "zod";
 
 export interface OutcomeJudgment {
@@ -42,33 +47,11 @@ export interface OutcomeEvidenceBundle {
   monitorEvents: OutcomeEvidenceMonitorEvent[];
 }
 
-export interface OutcomeJudgeClient {
-  complete(input: {
-    model: string;
-    system: string;
-    user: string;
-  }): Promise<string>;
-}
-
 export interface JudgeOutcomeOptions {
-  client: OutcomeJudgeClient;
-  model: string;
-}
-
-export interface OpenAIOutcomeJudgeClientOptions {
-  apiKey: string;
-  baseUrl?: string;
-  fetchImpl?: typeof fetch;
+  model: BaseChatModel;
   timeoutMs?: number;
 }
 
-interface OpenAIResponsesBody {
-  output_text?: unknown;
-  output?: unknown;
-  error?: { message?: unknown };
-}
-
-const OPENAI_RESPONSES_API_BASE_URL = "https://api.openai.com/v1";
 const DEFAULT_OUTCOME_JUDGE_TIMEOUT_MS = 60_000;
 
 function resolveTimeoutMs(timeoutMs: number | undefined): number {
@@ -79,73 +62,6 @@ function resolveTimeoutMs(timeoutMs: number | undefined): number {
     throw new Error("OUTCOME_JUDGE_TIMEOUT_MS must be a positive integer number of milliseconds");
   }
   return parsed;
-}
-
-function trimTrailingSlash(value: string): string {
-  return value.endsWith("/") ? value.slice(0, -1) : value;
-}
-
-function extractResponseText(body: OpenAIResponsesBody): string | undefined {
-  if (typeof body.output_text === "string" && body.output_text.trim()) return body.output_text.trim();
-  if (!Array.isArray(body.output)) return undefined;
-  for (const output of body.output) {
-    if (!output || typeof output !== "object" || Array.isArray(output)) continue;
-    const contents = (output as { content?: unknown }).content;
-    if (!Array.isArray(contents)) continue;
-    for (const content of contents) {
-      if (!content || typeof content !== "object" || Array.isArray(content)) continue;
-      const text = (content as { text?: unknown }).text;
-      if (typeof text === "string" && text.trim()) return text.trim();
-    }
-  }
-  return undefined;
-}
-
-export class OpenAIOutcomeJudgeClient implements OutcomeJudgeClient {
-  private readonly apiKey: string;
-  private readonly baseUrl: string;
-  private readonly fetchImpl: typeof fetch;
-  private readonly timeoutMs: number;
-
-  constructor(options: OpenAIOutcomeJudgeClientOptions) {
-    this.apiKey = options.apiKey;
-    this.baseUrl = trimTrailingSlash(options.baseUrl ?? OPENAI_RESPONSES_API_BASE_URL);
-    this.fetchImpl = options.fetchImpl ?? ((input, init) => fetch(input, init));
-    this.timeoutMs = resolveTimeoutMs(options.timeoutMs);
-  }
-
-  async complete(input: { model: string; system: string; user: string }): Promise<string> {
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), this.timeoutMs);
-    try {
-      const response = await this.fetchImpl(`${this.baseUrl}/responses`, {
-        method: "POST",
-        headers: { Authorization: `Bearer ${this.apiKey}`, "Content-Type": "application/json" },
-        body: JSON.stringify({
-          model: input.model,
-          instructions: input.system,
-          input: input.user,
-          text: { format: { type: "json_object" } },
-        }),
-        signal: controller.signal,
-      });
-      const body = (await response.json().catch(() => ({}))) as OpenAIResponsesBody;
-      if (!response.ok) {
-        const message = typeof body.error?.message === "string" ? body.error.message : response.statusText;
-        throw new Error(`OpenAI outcome judgment failed: ${message}`);
-      }
-      const text = extractResponseText(body);
-      if (!text) throw new Error("OpenAI outcome judgment returned no text");
-      return text;
-    } catch (error) {
-      if (controller.signal.aborted) {
-        throw new Error(`OpenAI outcome judgment request timed out after ${this.timeoutMs}ms`, { cause: error });
-      }
-      throw error;
-    } finally {
-      clearTimeout(timeout);
-    }
-  }
 }
 
 const nonEmptyString = z.string().trim().refine((value) => value.length > 0);
@@ -193,7 +109,7 @@ export function parseOutcomeJudgment(raw: string): OutcomeJudgment {
   return outcomeJudgmentSchema.parse(decoded);
 }
 
-const outcomeJudgePromptVersion = "outcome-judge-v1";
+export const outcomeJudgePromptVersion = "outcome-judge-v1";
 
 const outcomeJudgeSystemMessage = [
   "You are a KFC Vietnam customer-outcome judge.",
@@ -281,11 +197,40 @@ export async function judgeOutcome(
   evidence: OutcomeEvidenceBundle,
   options: JudgeOutcomeOptions,
 ): Promise<OutcomeJudgment> {
-  const raw = await options.client.complete({
-    model: options.model,
-    system: outcomeJudgeSystemMessage,
-    user: buildOutcomeJudgePrompt(evidence),
+  const timeoutMs = resolveTimeoutMs(options.timeoutMs);
+  const judge = options.model.withStructuredOutput(outcomeJudgmentSchema, {
+    name: "judgeKfcCustomerOutcome",
   });
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), timeoutMs);
+  let raw: unknown;
+  try {
+    raw = await judge.invoke(
+      [
+        new SystemMessage(outcomeJudgeSystemMessage),
+        new HumanMessage(buildOutcomeJudgePrompt(evidence)),
+      ],
+      {
+        runName: "kfc_outcome_judge",
+        signal: controller.signal,
+      },
+    );
+  } catch (error) {
+    if (controller.signal.aborted) {
+      throw new Error(
+        `Outcome judgment timed out after ${timeoutMs}ms`,
+        { cause: error },
+      );
+    }
+    throw error;
+  } finally {
+    clearTimeout(timeout);
+  }
 
-  return parseOutcomeJudgment(raw);
+  if (raw === undefined || raw === null) {
+    throw new Error("Outcome judgment returned no structured output");
+  }
+  return typeof raw === "string"
+    ? parseOutcomeJudgment(raw)
+    : outcomeJudgmentSchema.parse(raw);
 }

@@ -1,19 +1,37 @@
-import type { Address, Cart, Channel, ConversationTurn, Intent, MenuItem, Order } from '../domain/types.js';
+import type {
+  Address,
+  Cart,
+  Channel,
+  ConversationTurn,
+  DeliveryAddressDraft,
+  DeliveryAddressRequiredField,
+  DeliveryAdministrativeOptions,
+  MenuItem,
+  Order,
+} from '../domain/types.js';
+import type {
+  SelectedPaymentMethodAuthority,
+} from '../domain/opaqueProviderId.js';
+import type { VerifiedRef } from '../domain/verifiedRef.js';
 import type { GeneratedMenuModifier, GeneratedPaymentMethod, GeneratedPromotionVoucherOffer } from '../fixtures/schema.js';
 import type {
-  AgentEntities,
   ContentEvidence,
   CustomerContext,
   FulfillmentState,
   HandoffState,
   InvoiceRequest,
   PaymentAttempt,
-  PaymentLinkMethod,
   PromotionContext,
-  MenuPlanningContext,
   SelectedModifier,
+  CommerceApprovalReceipt,
+  CollectionToolName,
   ToolTraceEntry,
+  VerifiedCollectionSnapshot,
+  VerifiedCollectionStore,
 } from '../ordering/types.js';
+import type {
+  ExactCartAvailabilityObservationV2,
+} from '../ordering/exactCartAvailabilityAuthority.js';
 
 export interface RetrievedEvidence {
   eventId: string;
@@ -23,53 +41,62 @@ export interface RetrievedEvidence {
   payload: Record<string, unknown>;
 }
 
+export interface TrustedPresentationDirective {
+  preferredSurface?: 'cart' | 'fulfillment';
+  fulfillmentAccepted?: boolean;
+}
+
 export interface AgentGraphState {
   sessionId: string;
   customerId: string;
   channel: Channel;
   latestUserMessage: string;
   recentTurns?: ConversationTurn[];
-  intent: Intent;
   cart?: Cart;
   address?: Address;
   /** Customer-provided partial fields plus canonical location fields verified by the fulfillment API. */
   addressDraft?: Partial<Address>;
+  /** Structured draft owned by the direct OpenAI Responses checkout flow. */
+  deliveryAddressDraft?: DeliveryAddressDraft;
+  deliveryAddressStatus?: 'incomplete' | 'unsupported' | 'quoted';
+  deliveryAddressMissingFields?: DeliveryAddressRequiredField[];
+  deliveryAdministrativeOptions?: DeliveryAdministrativeOptions;
   orderPreview?: Order;
   order?: Order;
-  /** Verified previous-order cart awaiting explicit reorder confirmation. */
-  pendingReorder?: {
-    orderId: string;
-    cart: Cart;
-  };
-  /** Verified provider-derived cart replacement proposal awaiting explicit customer acceptance. */
-  comboConversionProposal?: NonNullable<AgentEntities['comboConversionProposal']>;
-  /** Verified customer-evidence item that the assistant presented and is awaiting explicit acceptance. */
-  pendingCatalogSuggestion?: {
-    itemCode: string;
-    name: string;
-    source: 'favorite' | 'recent_order';
-  };
   /** Durable proof that submitted-order status was checked for a cancellation request. */
   cancellationStatusChecked?: boolean;
   userConfirmedOrder: boolean;
   escalationReasons: string[];
   retrievedEvidence: RetrievedEvidence[];
-  entities?: AgentEntities;
+  /** Turn-local UI navigation issued by a verified structured customer action. */
+  trustedPresentation?: TrustedPresentationDirective;
   selectedModifiers?: Record<string, SelectedModifier[]>;
   fulfillment?: FulfillmentState;
+  /** Exact cart/store/disposition inventory observation for protected checkout. */
+  exactCartAvailabilityObservation?: ExactCartAvailabilityObservationV2;
   promotionContext?: PromotionContext;
   contentEvidence?: ContentEvidence[];
   menuSearchResults?: MenuItem[];
-  /** Turn-local bounded menu evidence used only as model context. Never persisted. */
-  plannerMenuSearchResults?: MenuItem[];
-  /** Turn-local fixture API evidence. Safety gates and the cart API both verify it; never persisted. */
-  plannerMenuCatalogContext?: MenuPlanningContext;
+  /** Complete, scope-keyed provider snapshots. A new result replaces only its exact key. */
+  verifiedCollections?: VerifiedCollectionStore;
+  /** Current authoritative result key per collection tool. Historical scopes are never mutation authority. */
+  activeCollectionKeys?: Partial<Record<CollectionToolName, string>>;
+  /** Current menu result selected by the agent tool call; presentation must not truncate it. */
+  activeMenuCollection?: VerifiedCollectionSnapshot<MenuItem>;
+  /** Successfully consumed receipts retained as irreversible-action evidence. */
+  commerceApprovalReceipts?: CommerceApprovalReceipt[];
   menuItemDetail?: MenuItem;
   menuModifierOptions?: GeneratedMenuModifier;
   promotionOffers?: GeneratedPromotionVoucherOffer[];
   customerContext?: CustomerContext;
+  /**
+   * Opaque one-shot candidate selected from an authenticated saved-address
+   * read. The raw address remains only in the server verified-ref store.
+   */
+  pendingSavedAddressRef?: VerifiedRef;
   paymentAttempt?: PaymentAttempt;
-  selectedPaymentMethod?: PaymentLinkMethod;
+  /** Exact method and collection/provider revision selected by the customer. */
+  selectedPaymentMethod?: SelectedPaymentMethodAuthority;
   paymentMethodEvidence?: GeneratedPaymentMethod[];
   invoiceRequest?: InvoiceRequest;
   handoff?: HandoffState;

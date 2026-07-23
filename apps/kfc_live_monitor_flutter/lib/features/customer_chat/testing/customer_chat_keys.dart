@@ -11,6 +11,12 @@ abstract final class CustomerChatKeys {
   static const responseBlock = Key('customerChatResponseBlock');
   static const progressLabel = Key('customerChatProgressLabel');
   static const errorBanner = Key('customerChatErrorBanner');
+  static const approvalCard = Key('customerChatApprovalCard');
+  static const approvalApproveButton = Key('customerChatApprovalApproveButton');
+  static const approvalRejectButton = Key('customerChatApprovalRejectButton');
+  static const responseModeControl = Key('customerChatResponseModeControl');
+  static const responseModeGenUi = Key('customerChatResponseModeGenUi');
+  static const responseModeText = Key('customerChatResponseModeText');
 
   static Key quickPrompt(String id) => Key('customerChatQuickPrompt_$id');
 
@@ -56,11 +62,31 @@ abstract final class CustomerChatKeys {
     return Key('kfcGenUiCartImage_${attachmentId}_$itemCode');
   }
 
+  static Key genUiAddressField(String attachmentId, String field) {
+    return Key('kfcGenUiAddressField_${attachmentId}_$field');
+  }
+
+  static Key genUiAddressMissingField(String attachmentId, String field) {
+    return Key('kfcGenUiAddressMissingField_${attachmentId}_$field');
+  }
+
   static Key genUiMenuImage(String attachmentId, String itemCode) =>
       Key('kfcGenUiMenuImage_${attachmentId}_$itemCode');
 
   static Key genUiMenuItem(String attachmentId, String itemCode) =>
       Key('kfcGenUiMenuItem_${attachmentId}_$itemCode');
+
+  static Key genUiMenuCategory(String attachmentId, String category) =>
+      Key('kfcGenUiMenuCategory_${attachmentId}_$category');
+
+  static Key genUiMenuSelectionLimit(String attachmentId) =>
+      Key('kfcGenUiMenuSelectionLimit_$attachmentId');
+
+  static Key genUiFullMenuCategoryTabs(String attachmentId) =>
+      Key('kfcGenUiFullMenuCategoryTabs_$attachmentId');
+
+  static Key genUiFullMenuItemList(String attachmentId) =>
+      Key('kfcGenUiFullMenuItemList_$attachmentId');
 
   static Key genUiModifierOption(
     String attachmentId,

@@ -6,6 +6,8 @@ import 'package:state_beacon/state_beacon.dart';
 
 import '../../../app/theme/kfc_ops_tokens.dart';
 import '../application/customer_chat_controller.dart';
+import '../application/customer_chat_state.dart';
+import '../domain/customer_confirmation_models.dart';
 import '../domain/customer_run_models.dart';
 import '../domain/kfc_genui_models.dart';
 import '../testing/customer_chat_keys.dart';
@@ -53,8 +55,9 @@ class _CustomerChatScreenState extends State<CustomerChatScreen> {
     }
     _scheduleFollowLatest(
       '${state.messages.length}:${state.activeDraft?.runId}:'
-      '${state.activeDraft?.lastSequence}',
+      '${state.activeDraft?.lastSequence}:${state.pendingApproval?.requestId}',
     );
+    final activeGenUiId = state.activeGenUi?.id;
 
     return DefaultTextStyle(
       style: const TextStyle(
@@ -71,7 +74,11 @@ class _CustomerChatScreenState extends State<CustomerChatScreen> {
               constraints: const BoxConstraints(maxWidth: 1040),
               child: Column(
                 children: [
-                  const _CustomerChatHeader(),
+                  _CustomerChatHeader(
+                    mode: state.responseMode,
+                    enabled: !state.isSending,
+                    onSelect: widget.controller.setResponseMode,
+                  ),
                   Expanded(
                     child: Scrollbar(
                       controller: _scrollController,
@@ -101,11 +108,16 @@ class _CustomerChatScreenState extends State<CustomerChatScreen> {
                               message: message,
                               onAction: widget.controller.submitAction,
                               handoffStatus: state.handoffStatus,
+                              interactive:
+                                  message.genUi == null ||
+                                  message.genUi!.id == activeGenUiId,
                             ),
                           if (state.activeDraft case final draft?
                               when !(draft.materialized &&
-                                  draft.terminal ==
-                                      CustomerRunTerminal.completed))
+                                  (draft.terminal ==
+                                          CustomerRunTerminal.completed ||
+                                      draft.terminal ==
+                                          CustomerRunTerminal.superseded)))
                             Padding(
                               padding: EdgeInsets.only(
                                 top: KfcOpsTokens.spacingSm,
@@ -115,6 +127,21 @@ class _CustomerChatScreenState extends State<CustomerChatScreen> {
                                 draft: draft,
                                 onAction: widget.controller.submitAction,
                                 handoffStatus: state.handoffStatus,
+                              ),
+                            ),
+                          if (state.pendingApproval case final approval?)
+                            Padding(
+                              padding: const EdgeInsets.only(
+                                top: KfcOpsTokens.spacingSm,
+                              ),
+                              child: _ApprovalCard(
+                                approval: approval,
+                                isSubmitting: state.isResumingApproval,
+                                onApprove: widget
+                                    .controller
+                                    .approvePendingConfirmation,
+                                onReject:
+                                    widget.controller.rejectPendingConfirmation,
                               ),
                             ),
                           if (state.errorMessage case final error?)
@@ -167,8 +194,103 @@ class _CustomerChatScreenState extends State<CustomerChatScreen> {
   }
 }
 
+class _ApprovalCard extends StatelessWidget {
+  const _ApprovalCard({
+    required this.approval,
+    required this.isSubmitting,
+    required this.onApprove,
+    required this.onReject,
+  });
+
+  final CustomerApprovalPause approval;
+  final bool isSubmitting;
+  final VoidCallback onApprove;
+  final VoidCallback onReject;
+
+  @override
+  Widget build(BuildContext context) {
+    return Align(
+      alignment: Alignment.centerLeft,
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 700),
+        child: DecoratedBox(
+          key: CustomerChatKeys.approvalCard,
+          decoration: BoxDecoration(
+            color: KfcOpsTokens.surfaceContainerLowest,
+            border: Border.all(color: KfcOpsTokens.secondaryContainer),
+            borderRadius: const BorderRadius.all(KfcOpsTokens.radiusMd),
+          ),
+          child: Padding(
+            padding: const EdgeInsets.all(KfcOpsTokens.spacingMd),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  'Cần bạn xác nhận',
+                  style: TextStyle(
+                    color: KfcOpsTokens.onSurface,
+                    fontSize: 14,
+                    fontWeight: FontWeight.w800,
+                    height: 20 / 14,
+                  ),
+                ),
+                const SizedBox(height: KfcOpsTokens.spacingXs),
+                Text(
+                  _approvalDescription(approval.capability),
+                  style: const TextStyle(
+                    color: KfcOpsTokens.secondary,
+                    fontSize: 12,
+                    height: 16 / 12,
+                  ),
+                ),
+                const SizedBox(height: KfcOpsTokens.spacingMd),
+                Wrap(
+                  spacing: KfcOpsTokens.spacingSm,
+                  runSpacing: KfcOpsTokens.spacingSm,
+                  children: [
+                    ShadButton(
+                      key: CustomerChatKeys.approvalApproveButton,
+                      size: ShadButtonSize.sm,
+                      onPressed: isSubmitting ? null : onApprove,
+                      child: Text(isSubmitting ? 'Đang xác nhận…' : 'Xác nhận'),
+                    ),
+                    ShadButton.outline(
+                      key: CustomerChatKeys.approvalRejectButton,
+                      size: ShadButtonSize.sm,
+                      onPressed: isSubmitting ? null : onReject,
+                      child: const Text('Không đồng ý'),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+String _approvalDescription(String capability) => switch (capability) {
+  'placeOrder' => 'Cho phép KFC tạo đơn từ thông tin đã kiểm tra.',
+  'createPaymentLink' =>
+    'Cho phép KFC tạo liên kết thanh toán cho đơn đã kiểm tra.',
+  'acquireVoucher' => 'Cho phép KFC đổi điểm lấy ưu đãi đã chọn.',
+  'redeemReward' => 'Cho phép KFC sử dụng ưu đãi đã chọn.',
+  'handoff' => 'Cho phép KFC chuyển cuộc trò chuyện cho nhân viên.',
+  _ => 'Cho phép KFC tiếp tục thao tác đã hiển thị.',
+};
+
 class _CustomerChatHeader extends StatelessWidget {
-  const _CustomerChatHeader();
+  const _CustomerChatHeader({
+    required this.mode,
+    required this.enabled,
+    required this.onSelect,
+  });
+
+  final CustomerChatResponseMode mode;
+  final bool enabled;
+  final ValueChanged<CustomerChatResponseMode> onSelect;
 
   @override
   Widget build(BuildContext context) {
@@ -184,64 +306,170 @@ class _CustomerChatHeader extends StatelessWidget {
           horizontal: KfcOpsTokens.marginDesktop,
           vertical: KfcOpsTokens.spacingMd,
         ),
-        child: Row(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            DecoratedBox(
-              decoration: const BoxDecoration(
-                color: KfcOpsTokens.primary,
-                borderRadius: BorderRadius.all(KfcOpsTokens.radiusMd),
-              ),
-              child: const SizedBox(
-                width: 42,
-                height: 42,
-                child: Center(
-                  child: Text(
-                    'KFC',
-                    style: TextStyle(
-                      color: KfcOpsTokens.onPrimary,
-                      fontSize: 13,
-                      fontWeight: FontWeight.w900,
-                      letterSpacing: 0,
+            Row(
+              children: [
+                DecoratedBox(
+                  decoration: const BoxDecoration(
+                    color: KfcOpsTokens.primary,
+                    borderRadius: BorderRadius.all(KfcOpsTokens.radiusMd),
+                  ),
+                  child: const SizedBox(
+                    width: 42,
+                    height: 42,
+                    child: Center(
+                      child: Text(
+                        'KFC',
+                        style: TextStyle(
+                          color: KfcOpsTokens.onPrimary,
+                          fontSize: 13,
+                          fontWeight: FontWeight.w900,
+                          letterSpacing: 0,
+                        ),
+                      ),
                     ),
                   ),
                 ),
-              ),
-            ),
-            const SizedBox(width: KfcOpsTokens.spacingMd),
-            const Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    'KFC Ordering Chat',
-                    style: TextStyle(
-                      color: KfcOpsTokens.primary,
-                      fontSize: 22,
-                      fontWeight: FontWeight.w900,
-                      height: 28 / 22,
-                      letterSpacing: 0,
-                    ),
+                const SizedBox(width: KfcOpsTokens.spacingMd),
+                const Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'KFC Ordering Chat',
+                        style: TextStyle(
+                          color: KfcOpsTokens.primary,
+                          fontSize: 22,
+                          fontWeight: FontWeight.w900,
+                          height: 28 / 22,
+                          letterSpacing: 0,
+                        ),
+                      ),
+                      Text(
+                        'Đặt món nhanh với trợ lý KFC',
+                        style: TextStyle(
+                          color: KfcOpsTokens.secondary,
+                          fontSize: 13,
+                          height: 18 / 13,
+                          letterSpacing: 0,
+                        ),
+                      ),
+                    ],
                   ),
-                  Text(
-                    'Đặt món nhanh với trợ lý KFC',
-                    style: TextStyle(
-                      color: KfcOpsTokens.secondary,
-                      fontSize: 13,
-                      height: 18 / 13,
-                      letterSpacing: 0,
-                    ),
-                  ),
-                ],
-              ),
+                ),
+                const Icon(
+                  LucideIcons.messageCircle,
+                  color: KfcOpsTokens.secondary,
+                  size: 22,
+                ),
+              ],
             ),
-            const Icon(
-              LucideIcons.messageCircle,
-              color: KfcOpsTokens.secondary,
-              size: 22,
+            const SizedBox(height: KfcOpsTokens.spacingSm),
+            Align(
+              alignment: Alignment.centerRight,
+              child: _ResponseModeControl(
+                mode: mode,
+                enabled: enabled,
+                onSelect: onSelect,
+              ),
             ),
           ],
         ),
       ),
+    );
+  }
+}
+
+class _ResponseModeControl extends StatelessWidget {
+  const _ResponseModeControl({
+    required this.mode,
+    required this.enabled,
+    required this.onSelect,
+  });
+
+  final CustomerChatResponseMode mode;
+  final bool enabled;
+  final ValueChanged<CustomerChatResponseMode> onSelect;
+
+  @override
+  Widget build(BuildContext context) {
+    return DecoratedBox(
+      key: CustomerChatKeys.responseModeControl,
+      decoration: const BoxDecoration(
+        color: KfcOpsTokens.surfaceContainerLow,
+        borderRadius: BorderRadius.all(KfcOpsTokens.radiusSm),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(3),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            _ResponseModeOption(
+              controlKey: CustomerChatKeys.responseModeGenUi,
+              label: 'Generative UI',
+              selected: mode == CustomerChatResponseMode.genui,
+              enabled: enabled,
+              onTap: () => onSelect(CustomerChatResponseMode.genui),
+            ),
+            _ResponseModeOption(
+              controlKey: CustomerChatKeys.responseModeText,
+              label: 'Text only',
+              selected: mode == CustomerChatResponseMode.text,
+              enabled: enabled,
+              onTap: () => onSelect(CustomerChatResponseMode.text),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _ResponseModeOption extends StatelessWidget {
+  const _ResponseModeOption({
+    required this.controlKey,
+    required this.label,
+    required this.selected,
+    required this.enabled,
+    required this.onTap,
+  });
+
+  final Key controlKey;
+  final String label;
+  final bool selected;
+  final bool enabled;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final onPressed = enabled ? onTap : null;
+    if (selected) {
+      return ShadButton(
+        key: controlKey,
+        size: ShadButtonSize.sm,
+        height: 32,
+        padding: const EdgeInsets.symmetric(
+          horizontal: KfcOpsTokens.spacingMd,
+          vertical: KfcOpsTokens.spacingSm,
+        ),
+        enabled: enabled,
+        onPressed: onPressed,
+        child: Text(label),
+      );
+    }
+    return ShadButton.ghost(
+      key: controlKey,
+      size: ShadButtonSize.sm,
+      height: 32,
+      padding: const EdgeInsets.symmetric(
+        horizontal: KfcOpsTokens.spacingMd,
+        vertical: KfcOpsTokens.spacingSm,
+      ),
+      enabled: enabled,
+      onPressed: onPressed,
+      child: Text(label),
     );
   }
 }
@@ -295,11 +523,13 @@ class _MessageBlock extends StatelessWidget {
   const _MessageBlock({
     required this.message,
     required this.onAction,
+    required this.interactive,
     this.handoffStatus,
   });
 
   final CustomerChatMessage message;
   final ValueChanged<KfcGenUiAction> onAction;
+  final bool interactive;
   final String? handoffStatus;
 
   @override
@@ -357,6 +587,7 @@ class _MessageBlock extends StatelessWidget {
                   attachment: genUi,
                   onAction: onAction,
                   handoffStatus: handoffStatus,
+                  interactive: interactive,
                 ),
               ],
             ],

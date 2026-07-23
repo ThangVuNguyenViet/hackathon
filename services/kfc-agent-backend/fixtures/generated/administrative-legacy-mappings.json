@@ -1,0 +1,30 @@
+[
+  {
+    "legacyProvince": "Thành phố Hồ Chí Minh",
+    "legacyProvinceAliases": ["TP HCM", "TP.HCM", "TPHCM", "HCM"],
+    "legacyDistrict": "Quận Tân Bình",
+    "legacyDistrictAliases": ["Q Tân Bình", "Q.Tân Bình"],
+    "legacyCommune": "Phường 14",
+    "legacyCommuneAliases": ["P14", "P 14", "P.14"],
+    "canonicalProvinceCode": "79",
+    "canonicalCommuneCode": "27004",
+    "authority": {
+      "documentId": "1685/NQ-UBTVQH15",
+      "sourceUrl": "https://xaydungchinhsach.chinhphu.vn/toan-van-nghi-quyet-so-1685-nq-ubtvqh15-sap-xep-cac-dvhc-cap-xa-cua-thanh-pho-ho-chi-minh-nam-2025-119250616211341304.htm"
+    }
+  },
+  {
+    "legacyProvince": "Thành phố Hồ Chí Minh",
+    "legacyProvinceAliases": ["TP HCM", "TP.HCM", "TPHCM", "HCM"],
+    "legacyDistrict": "Quận 7",
+    "legacyDistrictAliases": ["Q7", "Q 7", "Q.7"],
+    "legacyCommune": "Phường Tân Hưng",
+    "legacyCommuneAliases": ["P Tân Hưng", "P.Tân Hưng"],
+    "canonicalProvinceCode": "79",
+    "canonicalCommuneCode": "27475",
+    "authority": {
+      "documentId": "1685/NQ-UBTVQH15",
+      "sourceUrl": "https://xaydungchinhsach.chinhphu.vn/toan-van-nghi-quyet-so-1685-nq-ubtvqh15-sap-xep-cac-dvhc-cap-xa-cua-thanh-pho-ho-chi-minh-nam-2025-119250616211341304.htm"
+    }
+  }
+]

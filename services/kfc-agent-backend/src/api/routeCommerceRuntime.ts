@@ -5,6 +5,7 @@ import { z } from "zod";
 import type { BaseCheckpointSaver } from "@langchain/langgraph";
 import type {
   ChannelMediaDeliveryResult,
+  ExternalCallContext,
   ExternalClients,
   MessengerClient,
   MessengerSenderAction,
@@ -50,7 +51,6 @@ import type {
 import { customerCommandFromVerifiedAction } from "../domain/customerCommand.js";
 import {
   isKfcGenUiAttachment,
-  normalizeGenUiActionToText,
 } from "../genui/kfcGenUi.js";
 import { runAgentTurn } from "../graph/buildGraph.js";
 import type { AgentGraphState } from "../graph/state.js";
@@ -62,9 +62,6 @@ import {
   resolveMonitorSessionIntelligence,
   type MonitorSessionIntelligenceJudge,
 } from "../monitor/sessionIntelligence.js";
-import type { ResponseComposer } from "../llm/responseComposer.js";
-import type { SmallTalkRouter } from "../llm/smallTalkRouter.js";
-import type { ToolPlanner } from "../llm/toolPlanner.js";
 import type { AgentTracer } from "../observability/agentTracing.js";
 import {
   createMockClients,
@@ -123,10 +120,48 @@ export function createRouteCommerceRuntime(input: { options: RouteOptions; store
     if (!options.catalog || !options.kfcCommerceGateway) {
       throw new Error("Gateway commerce requires catalog, order, and payment clients");
     }
-    const fetchCurrent = () => fetchCatalogObservation({
+    const fetchCurrent = (
+      externalCallContext: ExternalCallContext,
+    ) => fetchCatalogObservation({
       ...options.catalog!,
       fetchImpl: options.catalog!.fetchImpl,
+      externalCallContext,
     });
+    const loadInitialCatalogPin = async (): Promise<CatalogObservation> => {
+      const configuredTimeoutMs =
+        options.readiness?.commerce?.timeoutMs ?? 3_000;
+      const timeoutMs =
+        Number.isFinite(configuredTimeoutMs) && configuredTimeoutMs > 0
+          ? configuredTimeoutMs
+          : 3_000;
+      const controller = new AbortController();
+      const deadlineAt = Date.now() + timeoutMs;
+      const timeout = setTimeout(() => {
+        controller.abort(new DOMException(
+          "Initial catalog pin timed out",
+          "TimeoutError",
+        ));
+      }, timeoutMs);
+      try {
+        const observation = await fetchCurrent({
+          signal: controller.signal,
+          deadlineAt,
+        });
+        if (controller.signal.aborted) throw controller.signal.reason;
+        return observation;
+      } catch (error) {
+        if (
+          controller.signal.aborted &&
+          controller.signal.reason instanceof Error &&
+          controller.signal.reason.name === "TimeoutError"
+        ) {
+          throw controller.signal.reason;
+        }
+        throw error;
+      } finally {
+        clearTimeout(timeout);
+      }
+    };
     const events = await store.listEvents(sessionId);
     const storedPin = [...events].reverse().find((event) =>
       event.sourceType === "catalog_observation_pinned" &&
@@ -138,7 +173,7 @@ export function createRouteCommerceRuntime(input: { options: RouteOptions; store
     )?.payload.observation as CatalogObservation | undefined;
     let pinned = storedPin ? Promise.resolve(storedPin) : catalogPinLoads.get(sessionId);
     if (!pinned) {
-      pinned = fetchCurrent().then(async (observation) => {
+      pinned = loadInitialCatalogPin().then(async (observation) => {
         await store.appendEvent(sessionId, "catalog_observation_pinned", { observation });
         return observation;
       }).finally(() => catalogPinLoads.delete(sessionId));
@@ -167,6 +202,9 @@ export function createRouteCommerceRuntime(input: { options: RouteOptions; store
       oms: gateway.oms,
     });
     return {
+      providerCapabilities: {
+        handoffResolution: false,
+      },
       confirmationAuthority: catalogClients.confirmationAuthority,
       menu: catalogClients.menu,
       cart: catalogClients.cart,
@@ -194,7 +232,6 @@ export function createRouteCommerceRuntime(input: { options: RouteOptions; store
         findStores: () => unavailable("store locator"),
       },
       fulfillment: options.kfcCommerceProvider?.fulfillment ?? {
-        getPlanningContext: () => unavailable("fulfillment"),
         quoteFulfillment: () => unavailable("fulfillment"),
       },
       content: clients.content,
@@ -202,13 +239,16 @@ export function createRouteCommerceRuntime(input: { options: RouteOptions; store
       oms: catalogClients.oms,
       payment: gateway.payment,
       delivery: { quoteDelivery: () => unavailable("delivery") },
-      customer: {
+      customer: options.kfcCommerceProvider?.customer ?? {
         getSavedAddresses: () => unavailable("customer profile"),
         getRecentOrder: () => unavailable("customer profile"),
         getFavoriteItems: () => unavailable("customer profile"),
       },
       loyalty: { lookupLoyalty: () => unavailable("loyalty") },
-      handoff: { escalateToHuman: () => unavailable("handoff") },
+      handoff: {
+        escalateToHuman: () => unavailable("handoff"),
+        resolveEscalation: () => unavailable("handoff resolution"),
+      },
       feedback: { recordFeedback: () => unavailable("feedback") },
       messenger: clients.messenger,
       zalo: clients.zalo,
@@ -360,6 +400,42 @@ export function createRouteCommerceRuntime(input: { options: RouteOptions; store
 
   async function kfcProofAccessContext(sessionId: string, customerId: string): Promise<CustomerAccessContext | undefined> {
     const event = await latestKfcProofPreconditions(sessionId);
+    if (
+      !event &&
+      options.readiness?.commerce?.mode === "fixture"
+    ) {
+      const issuedAt = new Date();
+      return {
+        tenantScope: "kfc-vietnam",
+        customerSurface: "kfc-app-chat",
+        sessionRef: sessionId,
+        surfaceSubjectRef: "not-applicable",
+        kfcSubjectRef: customerId,
+        authenticationState: "authenticated",
+        membershipState: "member",
+        channelAccountLinkState: "not-applicable",
+        subjectBindingState: "verified",
+        authenticationEvidence: {
+          state: "verified",
+          method: "sandbox-fixture-session",
+          issuer: "kfc-agent-backend",
+          audience: "kfc-agent-backend",
+          authenticatedAt: issuedAt.toISOString(),
+          expiresAt: new Date(issuedAt.getTime() + 60 * 60 * 1000).toISOString(),
+          evidenceRef: sessionId,
+        },
+        authorizedScopes: [
+          "customer:read",
+          "membership:read",
+          "membership:write",
+          "order:read",
+          "order:write",
+          "payment:read",
+          "payment:write",
+          "handoff:write",
+        ],
+      };
+    }
     if (event?.payload.authenticated !== true || event.payload.customerId !== customerId || typeof event.payload.expiresAt !== "string") return undefined;
     return {
       tenantScope: "kfc-vietnam",
@@ -380,7 +456,16 @@ export function createRouteCommerceRuntime(input: { options: RouteOptions; store
         expiresAt: event.payload.expiresAt,
         evidenceRef: event.id,
       },
-      authorizedScopes: ["customer:read", "membership:read", "membership:write", "order:read", "payment:read"],
+      authorizedScopes: [
+        "customer:read",
+        "membership:read",
+        "membership:write",
+        "order:read",
+        "order:write",
+        "payment:read",
+        "payment:write",
+        "handoff:write",
+      ],
     };
   }
 

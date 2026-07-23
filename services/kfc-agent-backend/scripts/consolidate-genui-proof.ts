@@ -2,6 +2,10 @@ import { cpSync, existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync
 import { basename, dirname, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { selectLatestPassingRuns, type ProofRunSummary } from '../src/evaluation/genUiProofCatalog.js';
+import {
+  assertRuntimeBinding,
+  type ProofRuntimeBinding,
+} from '../src/proof/kfcGenUiDeployedProof.js';
 
 interface CapturePlan {
   scenarios: Array<{ fileName: string }>;
@@ -11,6 +15,7 @@ interface ProofManifest {
   runId: string;
   generatedAt: string;
   passed: boolean;
+  runtime: ProofRuntimeBinding;
   screenshots: ProofRunSummary['screenshots'];
 }
 
@@ -53,6 +58,7 @@ const consolidated = {
   passed: scenarios.length === requiredScenarioIds.length,
   scenarioCount: scenarios.length,
   screenshotCount,
+  runtime: selected[0]?.runtime,
   scenarios,
 };
 writeFileSync(resolve(outputRoot, 'manifest.json'), `${JSON.stringify(consolidated, null, 2)}\n`);
@@ -66,6 +72,7 @@ function loadPassingRuns(integrationRoot: string): ProofRunSummary[] {
   const manifest = readJson<ProofManifest>(manifestPath);
   const evaluation = readJson<ProofEvaluation>(evaluationPath);
   if (!manifest.passed || !evaluation.passed) return [];
+  assertRuntimeBinding(manifest.runtime);
   return evaluation.scenarios
     .filter((scenario) => scenario.failures.length === 0)
     .map((scenario) => ({
@@ -74,6 +81,7 @@ function loadPassingRuns(integrationRoot: string): ProofRunSummary[] {
       scenarioId: scenario.scenarioId,
       manifestPath,
       evaluationPath,
+      runtime: manifest.runtime,
       screenshots: manifest.screenshots.filter((screenshot) => screenshot.path.includes(scenario.scenarioId)),
     }));
 }

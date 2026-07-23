@@ -1,6 +1,30 @@
-import type { GeneratedFixtures } from '../../src/fixtures/schema.js';
+import generatedContentPages from '../../fixtures/generated/content-pages.json' with { type: 'json' };
+import generatedAdministrativeDivisions from '../../fixtures/generated/administrative-divisions.json' with { type: 'json' };
+import generatedAdministrativeLegacyMappings from '../../fixtures/generated/administrative-legacy-mappings.json' with { type: 'json' };
+import {
+  generatedAdministrativeDivisionsSchema,
+  generatedAdministrativeLegacyMappingSchema,
+  generatedContentPageSchema,
+  type GeneratedFixtures,
+} from '../../src/fixtures/schema.js';
 
-export function createTestFixtures(overrides: Partial<GeneratedFixtures> = {}): GeneratedFixtures {
+const testAdministrativeDivisions =
+  generatedAdministrativeDivisionsSchema.parse(
+    generatedAdministrativeDivisions,
+  );
+const testAdministrativeLegacyMappings =
+  generatedAdministrativeLegacyMappingSchema
+    .array()
+    .parse(generatedAdministrativeLegacyMappings);
+const testAllergenContent = generatedContentPageSchema.parse(
+  generatedContentPages.find(
+    (page) => page.id === 'policy/allergens/cach-tra-cuu-bang-di-ung',
+  ),
+);
+
+export function createTestFixtures(
+  overrides: Partial<GeneratedFixtures> = {},
+): GeneratedFixtures {
   const fixtures: GeneratedFixtures = {
     menuItems: [
       {
@@ -15,14 +39,17 @@ export function createTestFixtures(overrides: Partial<GeneratedFixtures> = {}): 
         description: '3 Miếng Gà Rán + 1 Burger Tôm',
         priceVnd: 99000,
         originalPriceVnd: null,
-        imageUrl: 'https://static.kfcvietnam.com.vn/images/items/lg/HOPGU.jpg?v=LNN7PL',
+        imageUrl:
+          'https://static.kfcvietnam.com.vn/images/items/lg/HOPGU.jpg?v=LNN7PL',
         available: true,
         productUrlSlug: 'hd_3c_1bu',
-        builderUrl: 'https://www.kfcvietnam.com.vn/order/delivery/hot-deal/hd_3c_1bu/builder',
+        builderUrl:
+          'https://www.kfcvietnam.com.vn/order/delivery/hot-deal/hd_3c_1bu/builder',
         isCustomize: true,
         isQuickCombo: true,
         provenance: {
-          sourceFile: 'ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/exhaustive/kfcvietnam-api-modifier-tree.json',
+          sourceFile:
+            'ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/exhaustive/kfcvietnam-api-modifier-tree.json',
           sourceApi: 'https://api.kfcvietnam.com.vn/menu/kfcvn-generic-menu',
           fixtureMode: 'public_crawl_seed',
         },
@@ -41,7 +68,8 @@ export function createTestFixtures(overrides: Partial<GeneratedFixtures> = {}): 
         geoHash: 'w3gyp3mc241u',
         activeAggregators: ['GRAB', 'SHOPEE', 'LOSHIP', 'GOJEK'],
         provenance: {
-          sourceFile: 'ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/exhaustive/kfcvietnam-api-stores.csv',
+          sourceFile:
+            'ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/exhaustive/kfcvietnam-api-stores.csv',
           fixtureMode: 'public_crawl_seed',
         },
       },
@@ -61,6 +89,23 @@ export function createTestFixtures(overrides: Partial<GeneratedFixtures> = {}): 
           fixtureMode: 'public_crawl_seed',
         },
       },
+      {
+        storeId: 'KFCVN0005',
+        storeKey: 'w3gv',
+        name: 'KFC MAXIMARK CỘNG HÒA',
+        address: 'Số 15/17 đường Cộng Hòa, P.4, Q.Tân Bình, TPHCM',
+        city: 'HỒ CHÍ MINH',
+        postalCode: '72106',
+        latitude: 10.80018,
+        longitude: 106.65897,
+        geoHash: 'w3gv7n4ew5kr',
+        activeAggregators: ['GRAB', 'SHOPEE', 'LOSHIP', 'GOJEK'],
+        provenance: {
+          sourceFile:
+            'ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/exhaustive/kfcvietnam-api-stores.csv',
+          fixtureMode: 'public_crawl_seed',
+        },
+      },
     ],
     storeAvailability: [
       {
@@ -69,7 +114,8 @@ export function createTestFixtures(overrides: Partial<GeneratedFixtures> = {}): 
         pickup: { excludedItemIds: [], timeslotExclusions: [] },
         delivery: { excludedItemIds: [], timeslotExclusions: [] },
         provenance: {
-          sourceFile: 'ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/exhaustive/kfcvietnam-api-store-availability-by-store-vi.raw.json',
+          sourceFile:
+            'ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/exhaustive/kfcvietnam-api-store-availability-by-store-vi.raw.json',
           sourceApi: 'https://api.kfcvietnam.com.vn/stores',
           fixtureMode: 'public_crawl_seed',
         },
@@ -85,7 +131,20 @@ export function createTestFixtures(overrides: Partial<GeneratedFixtures> = {}): 
           fixtureMode: 'public_crawl_seed',
         },
       },
+      {
+        storeId: 'KFCVN0005',
+        storeName: 'KFC MAXIMARK CỘNG HÒA',
+        pickup: { excludedItemIds: [], timeslotExclusions: [] },
+        delivery: { excludedItemIds: [], timeslotExclusions: [] },
+        provenance: {
+          sourceFile: 'test/fixtures/testFixtures.ts',
+          sourceApi: 'mock://stores/KFCVN0005/availability',
+          fixtureMode: 'public_crawl_seed',
+        },
+      },
     ],
+    administrativeDivisions: testAdministrativeDivisions,
+    administrativeLegacyMappings: testAdministrativeLegacyMappings,
     fulfillmentServiceAreas: [
       {
         serviceAreaId: 'bien-hoa-delivery',
@@ -115,6 +174,31 @@ export function createTestFixtures(overrides: Partial<GeneratedFixtures> = {}): 
           fixtureMode: 'demo_mock_seed',
         },
       },
+      {
+        serviceAreaId: 'tan-binh-ward-delivery',
+        storeId: 'KFCVN0005',
+        method: 'delivery',
+        canonicalDistrict: 'Quận Tân Bình',
+        canonicalCity: 'Hồ Chí Minh',
+        districts: ['Quận Tân Bình', 'Q.Tân Bình', 'Tân Bình'],
+        cities: ['Hồ Chí Minh', 'TP.HCM', 'TPHCM', 'HCM'],
+        canonicalCommune: 'Phường Tân Bình',
+        canonicalProvince: 'Thành phố Hồ Chí Minh',
+        communes: ['Phường Tân Bình', 'Tân Bình', 'Phường 14'],
+        provinces: [
+          'Thành phố Hồ Chí Minh',
+          'Hồ Chí Minh',
+          'TP.HCM',
+          'TPHCM',
+          'HCM',
+        ],
+        provenance: {
+          sourceFile: 'test/fixtures/testFixtures.ts',
+          sourceApi:
+            'mock://kfc-fulfillment/service-areas/tan-binh-ward-delivery',
+          fixtureMode: 'demo_mock_seed',
+        },
+      },
     ],
     fulfillmentQuotes: [
       {
@@ -136,6 +220,17 @@ export function createTestFixtures(overrides: Partial<GeneratedFixtures> = {}): 
         provenance: {
           sourceFile: 'test/fixtures/testFixtures.ts',
           sourceApi: 'mock://fulfillment/quote/KFCVN0318/delivery',
+          fixtureMode: 'demo_mock_seed',
+        },
+      },
+      {
+        storeId: 'KFCVN0005',
+        method: 'delivery',
+        feeVnd: 18000,
+        etaMinutes: 35,
+        provenance: {
+          sourceFile: 'test/fixtures/testFixtures.ts',
+          sourceApi: 'mock://kfc-fulfillment/quote/KFCVN0005/delivery',
           fixtureMode: 'demo_mock_seed',
         },
       },
@@ -168,7 +263,8 @@ export function createTestFixtures(overrides: Partial<GeneratedFixtures> = {}): 
           },
         ],
         provenance: {
-          sourceFile: 'ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/exhaustive/kfcvietnam-api-modifier-tree.json',
+          sourceFile:
+            'ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/exhaustive/kfcvietnam-api-modifier-tree.json',
           fixtureMode: 'public_crawl_seed',
         },
       },
@@ -197,9 +293,11 @@ export function createTestFixtures(overrides: Partial<GeneratedFixtures> = {}): 
         requiresLogin: false,
         requiresPartnerApi: false,
         redemptionSurface: 'public_site',
-        evidenceText: 'Demo stable voucher KFC50 applies 50K off for scenario fixture orders from 195.000đ.',
+        evidenceText:
+          'Demo stable voucher KFC50 applies 50K off for scenario fixture orders from 195.000đ.',
         sourceUrl: 'https://www.kfcvietnam.com.vn/khuyen-mai',
-        sourceFile: 'ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/exhaustive/kfcvietnam-promotion-vouchers.json',
+        sourceFile:
+          'ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/exhaustive/kfcvietnam-promotion-vouchers.json',
         notes: 'Demo-stable fixture entry for Messenger scenario 01.',
       },
     ],
@@ -214,8 +312,10 @@ export function createTestFixtures(overrides: Partial<GeneratedFixtures> = {}): 
         evidenceText:
           'Tại mục "Phương thức thanh toán" Khách Hàng có thể chọn "Thanh toán khi nhận hàng" hoặc "Thanh toán bằng ATM/Visa/Master và Ví ZaloPay".',
         sourceUrl: 'https://kfcvietnam.com.vn/privacy-policy',
-        sourceFile: 'ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/payment-methods/kfcvietnam-payment-methods-policy-2026-07-10.json',
-        notes: 'Official public KFC Vietnam policy lists cash on delivery as a website/app checkout payment method.',
+        sourceFile:
+          'ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/payment-methods/kfcvietnam-payment-methods-policy-2026-07-10.json',
+        notes:
+          'Official public KFC Vietnam policy lists cash on delivery as a website/app checkout payment method.',
         provenance: {
           sourceFile:
             'ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/payment-methods/kfcvietnam-payment-methods-policy-2026-07-10.json',
@@ -230,10 +330,13 @@ export function createTestFixtures(overrides: Partial<GeneratedFixtures> = {}): 
         supported: true,
         supportStatus: 'listed_supported',
         paymentSurface: 'kfc_website_checkout',
-        evidenceText: 'Tại mục "Phương thức thanh toán" Khách Hàng có thể chọn "Thanh toán bằng ATM/Visa/Master và Ví ZaloPay".',
+        evidenceText:
+          'Tại mục "Phương thức thanh toán" Khách Hàng có thể chọn "Thanh toán bằng ATM/Visa/Master và Ví ZaloPay".',
         sourceUrl: 'https://kfcvietnam.com.vn/privacy-policy',
-        sourceFile: 'ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/payment-methods/kfcvietnam-payment-methods-policy-2026-07-10.json',
-        notes: 'Official public KFC Vietnam policy lists ZaloPay as the website/app checkout e-wallet.',
+        sourceFile:
+          'ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/payment-methods/kfcvietnam-payment-methods-policy-2026-07-10.json',
+        notes:
+          'Official public KFC Vietnam policy lists ZaloPay as the website/app checkout e-wallet.',
         provenance: {
           sourceFile:
             'ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/payment-methods/kfcvietnam-payment-methods-policy-2026-07-10.json',
@@ -251,7 +354,8 @@ export function createTestFixtures(overrides: Partial<GeneratedFixtures> = {}): 
         evidenceText:
           'MoMo is not listed in the official KFC Vietnam website checkout payment-method policy; the policy lists cash on delivery, ATM/Visa/Master, and ZaloPay.',
         sourceUrl: 'https://kfcvietnam.com.vn/privacy-policy',
-        sourceFile: 'ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/payment-methods/kfcvietnam-payment-methods-policy-2026-07-10.json',
+        sourceFile:
+          'ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/payment-methods/kfcvietnam-payment-methods-policy-2026-07-10.json',
         notes:
           'A separate official KFC recruitment page mentions managing a KFC MoMo Mini App, but that is separate-channel evidence and not website-checkout support.',
         provenance: {
@@ -264,18 +368,12 @@ export function createTestFixtures(overrides: Partial<GeneratedFixtures> = {}): 
     ],
     contentPages: [
       {
-        id: 'allergen_cheese_policy',
-        kind: 'allergen',
-        title: 'Thong tin di ung pho mai',
-        sourceUrl: 'https://www.kfcvietnam.com.vn/chinh-sach-di-ung',
-        statusCode: 200,
-        markdown: 'Pho mai va cac san pham sua co the xuat hien trong mot so mon an va sot kem pho mai.',
-        links: ['https://www.kfcvietnam.com.vn/chinh-sach-di-ung'],
-        approvalStatus: 'approved',
-        provenance: {
-          sourceFile: 'ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/exhaustive/kfcvietnam-allergen-pages.json',
-          fixtureMode: 'public_crawl_seed',
-        },
+        ...testAllergenContent,
+        links: [...testAllergenContent.links],
+        tags: testAllergenContent.tags
+          ? [...testAllergenContent.tags]
+          : undefined,
+        provenance: { ...testAllergenContent.provenance },
       },
     ],
     membershipPages: [
@@ -340,9 +438,11 @@ export function createTestFixtures(overrides: Partial<GeneratedFixtures> = {}): 
         evidenceText: 'Mã giảm giá đặc biệt 50% dành riêng cho thành viên mới.',
         imageUrl: '',
         sourceUrl: 'https://membership.kfcvietnam.com.vn/voucher',
-        sourceFile: '.firecrawl/kfc-membership-auth-2026-07-08/voucher-wallet.json',
+        sourceFile:
+          '.firecrawl/kfc-membership-auth-2026-07-08/voucher-wallet.json',
         provenance: {
-          sourceFile: '.firecrawl/kfc-membership-auth-2026-07-08/voucher-wallet.json',
+          sourceFile:
+            '.firecrawl/kfc-membership-auth-2026-07-08/voucher-wallet.json',
           sourceUrl: 'https://membership.kfcvietnam.com.vn/voucher',
           capturedAt: '2026-07-08T00:00:00.000Z',
           fixtureMode: 'authenticated_chrome_seed',
@@ -359,9 +459,11 @@ export function createTestFixtures(overrides: Partial<GeneratedFixtures> = {}): 
         redactedFields: ['name', 'phone', 'dob'],
         evidenceText: 'Thông tin thành viên: Điểm 0, Hạng MEMBER.',
         sourceUrl: 'https://membership.kfcvietnam.com.vn/profile/info',
-        sourceFile: '.firecrawl/kfc-membership-auth-2026-07-08/profile-info.json',
+        sourceFile:
+          '.firecrawl/kfc-membership-auth-2026-07-08/profile-info.json',
         provenance: {
-          sourceFile: '.firecrawl/kfc-membership-auth-2026-07-08/profile-info.json',
+          sourceFile:
+            '.firecrawl/kfc-membership-auth-2026-07-08/profile-info.json',
           sourceUrl: 'https://membership.kfcvietnam.com.vn/profile/info',
           capturedAt: '2026-07-08T00:00:00.000Z',
           fixtureMode: 'authenticated_chrome_seed',
@@ -374,11 +476,14 @@ export function createTestFixtures(overrides: Partial<GeneratedFixtures> = {}): 
         filterWindowDays: 30,
         filterTabs: ['Tất cả', 'Cộng điểm', 'Trừ điểm'],
         transactions: [],
-        emptyStateText: 'Bạn chưa có lịch sử giao dịch nào. Hãy tích điểm và nhận ưu đãi từ KFC ngay hôm nay!',
+        emptyStateText:
+          'Bạn chưa có lịch sử giao dịch nào. Hãy tích điểm và nhận ưu đãi từ KFC ngay hôm nay!',
         sourceUrl: 'https://membership.kfcvietnam.com.vn/point-history',
-        sourceFile: '.firecrawl/kfc-membership-auth-2026-07-08/point-history.json',
+        sourceFile:
+          '.firecrawl/kfc-membership-auth-2026-07-08/point-history.json',
         provenance: {
-          sourceFile: '.firecrawl/kfc-membership-auth-2026-07-08/point-history.json',
+          sourceFile:
+            '.firecrawl/kfc-membership-auth-2026-07-08/point-history.json',
           sourceUrl: 'https://membership.kfcvietnam.com.vn/point-history',
           capturedAt: '2026-07-08T00:00:00.000Z',
           fixtureMode: 'authenticated_chrome_seed',
@@ -400,7 +505,8 @@ export function createTestFixtures(overrides: Partial<GeneratedFixtures> = {}): 
         evidenceText: 'Membership bundle exposes /users/acquire-voucher.',
         notes: 'Account-mutating action; mock requires confirmed=true.',
         provenance: {
-          sourceFile: '.firecrawl/kfc-membership-auth-2026-07-08/discovered-api-and-host-strings.txt',
+          sourceFile:
+            '.firecrawl/kfc-membership-auth-2026-07-08/discovered-api-and-host-strings.txt',
           sourceUrl: 'https://membership.kfcvietnam.com.vn/home',
           capturedAt: '2026-07-08T00:00:00.000Z',
           fixtureMode: 'authenticated_chrome_seed',
@@ -420,7 +526,8 @@ export function createTestFixtures(overrides: Partial<GeneratedFixtures> = {}): 
         evidenceText: 'Membership bundle exposes /voucherify/redeem-reward.',
         notes: 'Account-mutating action; mock requires confirmed=true.',
         provenance: {
-          sourceFile: '.firecrawl/kfc-membership-auth-2026-07-08/discovered-api-and-host-strings.txt',
+          sourceFile:
+            '.firecrawl/kfc-membership-auth-2026-07-08/discovered-api-and-host-strings.txt',
           sourceUrl: 'https://membership.kfcvietnam.com.vn/home',
           capturedAt: '2026-07-08T00:00:00.000Z',
           fixtureMode: 'authenticated_chrome_seed',

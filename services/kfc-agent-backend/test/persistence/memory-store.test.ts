@@ -411,6 +411,7 @@ function customerRun(): CustomerRun {
     clientMessageId: 'customer_chat_msg_1',
     requestFingerprint: 'sha256:text:one-combo',
     generation: 1,
+    sessionAuthorityGeneration: 0,
     status: 'accepted',
     phase: 'queued',
     nextEventSequence: 1,

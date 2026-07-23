@@ -1,55 +1,210 @@
-import type { AgentGraphState } from "../graph/state.js";
-import type { ToolName } from "../ordering/types.js";
-import type { KfcGenUiAttachment } from "./kfcGenUi.js";
-import { customerSupportReason } from "../presentation/customerLanguage.js";
+import type { Address, MenuItem, Order } from '../domain/types.js';
+import type { VerifiedRef } from '../domain/verifiedRef.js';
+import type { AgentGraphState } from '../graph/state.js';
+import { activeCartSupersedesSubmittedOrder } from '../graph/activeCheckout.js';
+import type { PaymentAttempt, ToolName } from '../ordering/types.js';
+import {
+  KFC_GENUI_SCHEMA_VERSION,
+  kfcGenUiVerifiedStateRevision,
+  type KfcGenUiAttachment,
+} from './kfcGenUi.js';
+import { customerSupportReason } from '../presentation/customerLanguage.js';
+import {
+  activePaymentMethodCollectionAuthority,
+  selectedPaymentMethodAuthorityMatchesActiveCollection,
+} from '../ordering/paymentMethodAuthority.js';
+import {
+  paymentAttemptForVerifiedOrder,
+  paymentAttemptMatchesOrder,
+} from '../ordering/paymentOrderAuthority.js';
+import {
+  projectFulfillment,
+  projectPaymentMethod,
+} from '../agent/modelPublicationStateProjection.js';
 
-const maxMenuChoices = 5;
 const smartMenuActions: KfcGenUiAttachment['actions'] = [
-  { id: "add_items", label: "Xác nhận món", intent: "primary" },
+  { id: 'add_items', label: 'Xác nhận món', intent: 'primary' },
 ];
 
-function groupRequestContext(state: AgentGraphState) {
-  const partySize = typeof state.entities?.partySize === 'number' ? state.entities.partySize : undefined;
-  const budgetVnd = typeof state.entities?.budgetVnd === 'number' ? state.entities.budgetVnd : undefined;
-  return { partySize, budgetVnd };
+function verifiedMenuItems(state: AgentGraphState) {
+  return (
+    state.activeMenuCollection?.result.items ?? state.menuSearchResults ?? []
+  );
 }
 
-function menuItemsWithContext(state: AgentGraphState) {
-  const context = groupRequestContext(state);
-  const choiceLimit = context.partySize || context.budgetVnd ? 3 : maxMenuChoices;
-  const verifiedItems = state.menuSearchResults ?? state.plannerMenuCatalogContext?.candidates ?? [];
-  return verifiedItems.slice(0, choiceLimit).map((item) => {
-    const recommendedQuantity = context.budgetVnd
-      ? Math.max(1, Math.floor(context.budgetVnd / item.priceVnd))
-      : 1;
-    const composedTotalVnd = item.priceVnd * recommendedQuantity;
-    return {
-      ...item,
-      recommendedQuantity,
-      composedTotalVnd,
-      budgetDeltaVnd: context.budgetVnd === undefined ? undefined : context.budgetVnd - composedTotalVnd,
-      servingCoverageVerified: false,
-    };
+function verifiedMenuCategories(
+  items: MenuItem[],
+): Array<{ categoryId: string; label: string }> {
+  const seen = new Set<string>();
+  return items.flatMap(({ categoryId, category }) => {
+    if (seen.has(categoryId)) return [];
+    seen.add(categoryId);
+    return [{ categoryId, label: category }];
   });
 }
 
+function menuCollectionData(
+  state: AgentGraphState,
+  includeCurrentPromotionEvidence: boolean,
+): Record<string, unknown> {
+  const items = verifiedMenuItems(state);
+  const collection = state.activeMenuCollection;
+  return {
+    latestUserMessage: state.latestUserMessage,
+    items,
+    categories: verifiedMenuCategories(items),
+    selectionLimit: 5,
+    ...(includeCurrentPromotionEvidence
+      ? { promotions: state.promotionOffers ?? [] }
+      : {}),
+    ...(collection
+      ? {
+          total: collection.result.total,
+          returned: collection.result.returned,
+          complete: collection.result.complete,
+          collection: {
+            key: collection.key,
+            revision: collection.revision,
+            total: collection.result.total,
+            returned: collection.result.returned,
+            complete: collection.result.complete,
+            scope: collection.result.scope,
+            ...(collection.result.cursor
+              ? { cursor: collection.result.cursor }
+              : {}),
+          },
+        }
+      : {}),
+  };
+}
+
+function compactModifierTree(
+  modifier: NonNullable<AgentGraphState['menuModifierOptions']>,
+): Record<string, unknown> {
+  const customerGroupName = (min: number | '', max: number | ''): string => {
+    const minimum = typeof min === 'number' ? min : null;
+    const maximum = typeof max === 'number' ? max : null;
+    if (
+      minimum !== null &&
+      minimum > 0 &&
+      maximum !== null &&
+      maximum > minimum
+    ) {
+      return `Chọn từ ${minimum} đến ${maximum} tùy chọn`;
+    }
+    if (minimum !== null && minimum > 0 && maximum === minimum) {
+      return `Chọn ${minimum} tùy chọn`;
+    }
+    if (maximum !== null && maximum > 0) {
+      return `Chọn tối đa ${maximum} tùy chọn`;
+    }
+    if (minimum !== null && minimum > 0) {
+      return `Chọn ít nhất ${minimum} tùy chọn`;
+    }
+    return 'Tùy chọn';
+  };
+  const compactGroups = (
+    groups: NonNullable<
+      AgentGraphState['menuModifierOptions']
+    >['modifierGroups'],
+  ): Array<Record<string, unknown>> =>
+    groups.map((group) => ({
+      groupId: group.groupId,
+      name: customerGroupName(group.min, group.max),
+      min: group.min,
+      max: group.max,
+      depth: group.depth,
+      options: group.options.map((option) => ({
+        modifierId: option.modifierId,
+        name: option.name,
+        priceDeltaVnd: option.priceDeltaVnd,
+        default: option.default,
+        quantity: option.quantity,
+        modifierGroups: compactGroups(option.modifierGroups),
+      })),
+    }));
+
+  return {
+    itemCode: modifier.itemCode,
+    name: modifier.name,
+    modifierGroups: compactGroups(modifier.modifierGroups),
+  };
+}
+
+type PaymentStatusPresentation =
+  | {
+      executionOutcome: 'success';
+      status: PaymentAttempt['status'];
+    }
+  | {
+      executionOutcome: 'error';
+      errorCode: 'payment_failed' | 'payment_status_check_failed';
+    };
+
 export interface SelectKfcGenUiInput {
   state: AgentGraphState;
+  /** Full state persisted with this turn; presentation policy may hide fields but cannot change authority. */
+  authorityState?: AgentGraphState;
   turnToolNames: ToolName[];
   reuseVerifiedMenuResults?: boolean;
+  /**
+   * Turn-local authenticated private evidence. The address may be rendered in
+   * this response, while only its opaque ref is carried by the action.
+   */
+  savedAddressPresentation?: {
+    address: Address;
+    ref: VerifiedRef;
+  };
+  /**
+   * Turn-local authenticated recent-order evidence. It may populate the
+   * current payment-status presentation but must not be persisted as durable
+   * customer state or conversation metadata.
+   */
+  recentOrderPresentation?: Order;
+  /**
+   * Turn-local issued result of checkPaymentStatus. This can differ from the
+   * durable payment attempt when the provider check itself reports failure.
+   */
+  paymentStatusPresentation?: PaymentStatusPresentation;
+  issuedAt?: Date;
 }
 
 interface PaymentStatusEvidence {
   resolution: 'current_tool' | 'consistent' | 'single_source' | 'conflict';
   selectedStatus?: string;
-  selectedSource?: 'order' | 'paymentAttempt' | 'matching_sources';
+  selectedSource?:
+    'order' | 'paymentAttempt' | 'matching_sources' | 'payment_status_check';
   statuses: {
     order?: string;
     paymentAttempt?: string;
   };
+  currentCheck?: PaymentStatusPresentation;
 }
 
-function paymentStatusEvidence(state: AgentGraphState, turnToolNames: ToolName[]): PaymentStatusEvidence | undefined {
+interface PaymentOrderPresentation {
+  id: string;
+  status: Order['status'];
+  paymentStatus: Order['paymentStatus'];
+  amountVnd: number;
+}
+
+function paymentOrderPresentation(
+  order: Order | undefined,
+): PaymentOrderPresentation | undefined {
+  if (!order) return undefined;
+  return {
+    id: order.id,
+    status: order.status,
+    paymentStatus: order.paymentStatus,
+    amountVnd: order.cart.totalVnd,
+  };
+}
+
+function paymentStatusEvidence(
+  state: AgentGraphState,
+  turnToolNames: ToolName[],
+  currentCheck?: SelectKfcGenUiInput['paymentStatusPresentation'],
+): PaymentStatusEvidence | undefined {
   const orderStatus = state.order?.paymentStatus;
   const paymentAttemptStatus = state.paymentAttempt?.status;
   const statuses = {
@@ -57,6 +212,19 @@ function paymentStatusEvidence(state: AgentGraphState, turnToolNames: ToolName[]
     ...(paymentAttemptStatus ? { paymentAttempt: paymentAttemptStatus } : {}),
   };
 
+  if (currentCheck) {
+    return {
+      resolution: 'current_tool',
+      ...(currentCheck.executionOutcome === 'success'
+        ? {
+            selectedStatus: currentCheck.status,
+            selectedSource: 'payment_status_check' as const,
+          }
+        : {}),
+      statuses,
+      currentCheck,
+    };
+  }
   const latestStatusTool = [...turnToolNames]
     .reverse()
     .find((name) => name === 'checkPaymentStatus' || name === 'getOrderStatus');
@@ -106,116 +274,179 @@ function paymentStatusEvidence(state: AgentGraphState, turnToolNames: ToolName[]
 }
 
 function moneyVnd(value: unknown): string {
-  if (typeof value !== "number" || !Number.isFinite(value)) return "";
-  return `${new Intl.NumberFormat("vi-VN").format(value)}đ`;
+  if (typeof value !== 'number' || !Number.isFinite(value)) return '';
+  return `${new Intl.NumberFormat('vi-VN').format(value)}đ`;
 }
 
-function paymentActionLabel(method: string | undefined): string {
-  switch (method) {
-    case "zalopay":
-      return "Thanh toán ZaloPay";
-    case "card":
-      return "Thanh toán thẻ";
-    case "cod":
-      return "Thanh toán khi nhận hàng";
-    case "momo":
-      return "Thanh toán MoMo";
-    default:
-      return "Mở thanh toán";
-  }
+function paymentActionLabel(
+  state: AgentGraphState,
+  methodId: string | undefined,
+): string {
+  return (
+    state.paymentMethodEvidence?.find((method) => method.methodId === methodId)
+      ?.displayName ?? 'Mở thanh toán'
+  );
 }
 
-export function selectKfcGenUiAttachment(
+function selectKfcGenUiAttachmentUnbound(
   input: SelectKfcGenUiInput,
 ): KfcGenUiAttachment | undefined {
   const { state, turnToolNames } = input;
-  const statusEvidence = paymentStatusEvidence(state, turnToolNames);
+  const currentPaymentOrder =
+    input.paymentStatusPresentation && !state.order
+      ? input.recentOrderPresentation
+      : undefined;
+  const presentationState = currentPaymentOrder
+    ? { ...state, order: currentPaymentOrder }
+    : state;
+  const refreshedSubmittedStatus =
+    turnToolNames.some(
+      (name) => name === 'checkPaymentStatus' || name === 'getOrderStatus',
+    ) || input.paymentStatusPresentation !== undefined;
+  const hideSubmittedHistory =
+    activeCartSupersedesSubmittedOrder(presentationState) &&
+    !refreshedSubmittedStatus;
+  const postOrderState: AgentGraphState = hideSubmittedHistory
+    ? {
+        ...presentationState,
+        order: undefined,
+        paymentAttempt: undefined,
+      }
+    : presentationState;
+  const authorizedPostOrderState: AgentGraphState = {
+    ...postOrderState,
+    paymentAttempt: paymentAttemptForVerifiedOrder(
+      postOrderState.paymentAttempt,
+      postOrderState.order,
+    ),
+  };
+  const statusEvidence = paymentStatusEvidence(
+    authorizedPostOrderState,
+    turnToolNames,
+    input.paymentStatusPresentation,
+  );
+  const presentedOrder = paymentOrderPresentation(
+    authorizedPostOrderState.order,
+  );
   const idBase = `${state.sessionId}_${Date.now()}`;
-  if (
-    typeof state.entities === "object" &&
-    state.entities !== null &&
-    state.entities.suppressGenUi === true &&
-    !state.handoff
-  ) {
-    return undefined;
-  }
   const usesConfirmedSavedAddress =
-    typeof state.entities === "object" &&
-    state.entities !== null &&
-    (state.entities.useSavedAddress === true ||
-      state.entities.fulfillmentAccepted === true);
-  const keepsMenuSurface =
-    typeof state.entities === "object" &&
-    state.entities !== null &&
-    state.entities.keepMenuSurface === true;
+    state.trustedPresentation?.fulfillmentAccepted === true;
   const prefersFulfillmentSurface =
-    typeof state.entities === "object" &&
-    state.entities !== null &&
-    state.entities.preferFulfillmentSurface === true;
+    state.trustedPresentation?.preferredSurface === 'fulfillment';
   const hasCurrentMenuEvidence = turnToolNames.some(
-    (name) => name === "searchMenu" || name === "recommendAddOns" || name === "getItemDetails",
+    (name) =>
+      name === 'searchMenu' ||
+      name === 'recommendAddOns' ||
+      name === 'getItemDetails',
+  );
+  const currentModifierItemCode = state.menuModifierOptions?.itemCode;
+  const keepsModifierSurface = Boolean(
+    currentModifierItemCode &&
+    (turnToolNames.includes('getModifierOptions') ||
+      (turnToolNames.includes('updateCart') &&
+        ((state.selectedModifiers?.[currentModifierItemCode]?.length ?? 0) >
+          0 ||
+          (state.cart?.items.find(
+            (item) => item.itemCode === currentModifierItemCode,
+          )?.modifiers?.length ?? 0) > 0))),
+  );
+  const hasCurrentPromotionEvidence = turnToolNames.some(
+    (name) => name === 'searchPromotions' || name === 'explainPromotion',
   );
   const isPromotionOnlyTurn =
-    (state.intent === "voucher" ||
-      turnToolNames.some((name) => name === "searchPromotions" || name === "explainPromotion")) &&
-    !hasCurrentMenuEvidence;
+    hasCurrentPromotionEvidence && !hasCurrentMenuEvidence;
+  const hasCartItems = (state.cart?.items.length ?? 0) > 0;
 
   const supportReasons = (
     state.handoff?.reasons ?? state.escalationReasons
   ).filter(
     (reason) =>
-      reason !== "menu_item_verification_required" &&
-      reason !== "unverified_item_code" &&
-      reason !== "handoff_not_justified" &&
-      reason !== "previous_order_confirmation_required",
+      reason !== 'menu_item_verification_required' &&
+      reason !== 'unverified_item_code' &&
+      reason !== 'handoff_not_justified' &&
+      reason !== 'previous_order_confirmation_required',
   );
   if (state.handoff) {
     return {
       id: `genui_${idBase}_support`,
-      lifecycleStage: "support",
-      widgetKind: "supportHandoff",
-      status: "active",
-      title: "Cần nhân viên hỗ trợ",
+      lifecycleStage: 'support',
+      widgetKind: 'supportHandoff',
+      status: 'active',
+      title: 'Cần nhân viên hỗ trợ',
       summary: state.handoff.reasons
         .map(customerSupportReason)
         .filter((reason): reason is string => Boolean(reason))
-        .join(", "),
-      data: { handoff: state.handoff, reasons: supportReasons, handoffStatus: "queued" },
-      actions: [{ id: "send_issue_summary", label: "Bổ sung thông tin", intent: "primary" }],
+        .join(', '),
+      data: {
+        handoff: state.handoff,
+        reasons: supportReasons,
+        handoffStatus: 'queued',
+      },
+      actions: [
+        {
+          id: 'send_issue_summary',
+          label: 'Bổ sung thông tin',
+          intent: 'primary',
+        },
+      ],
     };
   }
 
   if (
     state.paymentMethodEvidence?.length &&
-    turnToolNames.includes("listPaymentMethods") &&
-    !state.order &&
-    !state.paymentAttempt
+    turnToolNames.includes('listPaymentMethods')
   ) {
+    const paymentMethodCollection =
+      activePaymentMethodCollectionAuthority(state);
+    if (!paymentMethodCollection) return undefined;
     return {
       id: `genui_${idBase}_payment_methods`,
-      lifecycleStage: "payment_method",
-      widgetKind: "paymentMethodPicker",
-      status: "active",
-      title: "Chọn phương thức thanh toán",
-      data: { methods: state.paymentMethodEvidence },
-      actions: [{ id: "select_payment_method", label: "Chọn phương thức", intent: "primary" }],
+      lifecycleStage: 'payment_method',
+      widgetKind: 'paymentMethodPicker',
+      status: 'active',
+      title: 'Chọn phương thức thanh toán',
+      data: {
+        methods: state.paymentMethodEvidence.map((method) =>
+          projectPaymentMethod(method as unknown as Record<string, unknown>),
+        ),
+        paymentMethodCollection,
+      },
+      actions: [
+        {
+          id: 'select_payment_method',
+          label: 'Chọn phương thức',
+          intent: 'primary',
+        },
+      ],
     };
   }
 
-  if ((state.contentEvidence?.length ?? 0) > 0 && turnToolNames.includes("answerAllergenQuestion")) {
+  if (
+    (state.contentEvidence?.length ?? 0) > 0 &&
+    turnToolNames.includes('answerAllergenQuestion')
+  ) {
     const evidence = state.contentEvidence![0]!;
     return {
-      id: `genui_${idBase}_allergen`, lifecycleStage: "content", widgetKind: "allergenEvidence",
-      status: "active", title: "Thông tin dị ứng", data: { evidence, item: null },
-      actions: [{
-        id: "open_allergen_chart", label: "Xem bảng dị ứng", value: evidence.sourceUrl,
-        payload: { sourceUrl: evidence.sourceUrl },
-      }],
+      id: `genui_${idBase}_allergen`,
+      lifecycleStage: 'content',
+      widgetKind: 'allergenEvidence',
+      status: 'active',
+      title: 'Thông tin dị ứng',
+      data: { evidence, item: null },
+      actions: [
+        {
+          id: 'open_allergen_chart',
+          label: 'Xem bảng dị ứng',
+          value: evidence.sourceUrl,
+          payload: { sourceUrl: evidence.sourceUrl },
+        },
+      ],
     };
   }
 
   if (
     hasCurrentMenuEvidence &&
+    !keepsModifierSurface &&
     !turnToolNames.includes('updateCart') &&
     (state.menuSearchResults?.length ?? 0) > 0 &&
     !isPromotionOnlyTurn &&
@@ -223,68 +454,104 @@ export function selectKfcGenUiAttachment(
   ) {
     return {
       id: `genui_${idBase}_menu`,
-      lifecycleStage: "menu",
-      widgetKind: "smartMenuPicker",
-      status: "active",
-      title: "Gợi ý món phù hợp",
-      data: {
-        latestUserMessage: state.latestUserMessage,
-        items: menuItemsWithContext(state),
-        ...groupRequestContext(state),
-      },
+      lifecycleStage: 'menu',
+      widgetKind: 'smartMenuPicker',
+      status: 'active',
+      title: 'Gợi ý món phù hợp',
+      data: menuCollectionData(state, hasCurrentPromotionEvidence),
       actions: smartMenuActions,
     };
   }
 
-  const hasPaidPaymentEvidence = statusEvidence?.selectedStatus === 'paid' || (
-    statusEvidence?.resolution === 'conflict' &&
-    (statusEvidence.statuses.order === 'paid' || statusEvidence.statuses.paymentAttempt === 'paid')
+  const hasPaidPaymentEvidence =
+    statusEvidence?.selectedStatus === 'paid' ||
+    (statusEvidence?.resolution === 'conflict' &&
+      (statusEvidence.statuses.order === 'paid' ||
+        statusEvidence.statuses.paymentAttempt === 'paid'));
+  const durablePaymentAttemptMatchesOrder = paymentAttemptMatchesOrder(
+    state.paymentAttempt,
+    state.order,
   );
+  const canContinuePayment =
+    !currentPaymentOrder &&
+    input.paymentStatusPresentation?.executionOutcome !== 'error' &&
+    ((durablePaymentAttemptMatchesOrder &&
+      state.paymentAttempt?.status === 'pending' &&
+      Boolean(state.paymentAttempt.paymentUrl)) ||
+      Boolean(
+        state.order &&
+        state.selectedPaymentMethod &&
+        selectedPaymentMethodAuthorityMatchesActiveCollection(
+          state,
+          state.selectedPaymentMethod,
+        ),
+      ));
+  const continuePaymentMethodId =
+    (durablePaymentAttemptMatchesOrder
+      ? state.paymentAttempt?.method
+      : undefined) ?? state.selectedPaymentMethod?.methodId;
+  const presentedPaymentAttempt =
+    currentPaymentOrder &&
+    input.paymentStatusPresentation?.executionOutcome === 'success'
+      ? { status: input.paymentStatusPresentation.status }
+      : authorizedPostOrderState.paymentAttempt;
   if (hasPaidPaymentEvidence) {
     return {
       id: `genui_${idBase}_tracking`,
-      lifecycleStage: "post_order",
-      widgetKind: "orderTrackingStatus",
-      status: "active",
-      title: "Theo dõi đơn hàng",
+      lifecycleStage: 'post_order',
+      widgetKind: 'orderTrackingStatus',
+      status: 'active',
+      title: 'Theo dõi đơn hàng',
       data: {
-        order: state.order ?? null,
-        paymentAttempt: state.paymentAttempt ?? null,
-        fulfillment: state.fulfillment ?? null,
+        order: presentedOrder ?? null,
+        paymentAttempt: presentedPaymentAttempt ?? null,
+        fulfillment: state.fulfillment
+          ? projectFulfillment(state.fulfillment)
+          : null,
         ...(statusEvidence ? { paymentStatusEvidence: statusEvidence } : {}),
       },
-      actions: [
-        { id: "track_order", label: "Theo dõi đơn", intent: "primary" },
-      ],
+      actions: state.order
+        ? [
+            {
+              id: 'track_order',
+              label: 'Theo dõi đơn',
+              intent: 'primary',
+            },
+          ]
+        : [],
     };
   }
 
   if (
-    state.order ||
-    state.paymentAttempt ||
+    authorizedPostOrderState.order ||
+    authorizedPostOrderState.paymentAttempt ||
     turnToolNames.some(
-      (name) => name === "checkPaymentStatus" || name === "getOrderStatus",
+      (name) => name === 'checkPaymentStatus' || name === 'getOrderStatus',
     )
   ) {
     return {
       id: `genui_${idBase}_payment`,
-      lifecycleStage: "post_order",
-      widgetKind: "paymentOrderStatus",
-      status: "active",
-      title: "Trạng thái đơn hàng",
+      lifecycleStage: 'post_order',
+      widgetKind: 'paymentOrderStatus',
+      status: 'active',
+      title: 'Trạng thái đơn hàng',
       data: {
-        order: state.order ?? null,
-        paymentAttempt: state.paymentAttempt ?? null,
+        order: presentedOrder ?? null,
+        paymentAttempt: presentedPaymentAttempt ?? null,
         ...(statusEvidence ? { paymentStatusEvidence: statusEvidence } : {}),
       },
       actions: [
-        {
-          id: "open_payment",
-          label: paymentActionLabel(state.paymentAttempt?.method),
-          intent: "primary",
-          value: state.paymentAttempt?.method,
-        },
-        { id: "change_payment_method", label: "Đổi phương thức" },
+        ...(canContinuePayment
+          ? [
+              {
+                id: 'open_payment',
+                label: paymentActionLabel(state, continuePaymentMethodId),
+                intent: 'primary' as const,
+                value: continuePaymentMethodId,
+              },
+            ]
+          : []),
+        { id: 'change_payment_method', label: 'Đổi phương thức' },
       ],
     };
   }
@@ -292,218 +559,229 @@ export function selectKfcGenUiAttachment(
   if (supportReasons.length > 0 && !state.cart) {
     return {
       id: `genui_${idBase}_support`,
-      lifecycleStage: "support",
-      widgetKind: "supportHandoff",
-      status: "active",
-      title: "Cần nhân viên hỗ trợ",
+      lifecycleStage: 'support',
+      widgetKind: 'supportHandoff',
+      status: 'active',
+      title: 'Cần nhân viên hỗ trợ',
       summary: supportReasons
         .map(customerSupportReason)
         .filter((reason): reason is string => Boolean(reason))
-        .join(", "),
-      data: { handoff: null, reasons: supportReasons, handoffStatus: "requested" },
-      actions: [{ id: "request_human", label: "Gặp nhân viên ngay", intent: "primary" }],
-    };
-  }
-
-  if (
-    state.cart &&
-    typeof state.entities === "object" &&
-    state.entities !== null &&
-    state.entities.preferCartSurface === true
-  ) {
-    return {
-      id: `genui_${idBase}_cart`,
-      lifecycleStage: "cart",
-      widgetKind: "cartBuilder",
-      status: "active",
-      title: "Giỏ hàng của bạn",
-      data: { cart: state.cart },
+        .join(', '),
+      data: {
+        handoff: null,
+        reasons: supportReasons,
+        handoffStatus: 'requested',
+      },
       actions: [
-        {
-          id: "continue_to_fulfillment",
-          label: "Tiếp tục giao hàng",
-          intent: "primary",
-        },
-        { id: "edit_cart", label: "Sửa giỏ hàng" },
-        { id: "update_item_quantity", label: "Đổi số lượng" },
-        { id: "remove_item", label: "Xóa món", intent: "destructive" },
+        { id: 'request_human', label: 'Gặp nhân viên ngay', intent: 'primary' },
       ],
     };
   }
 
-  const verifiedMenuResults = state.menuSearchResults ?? state.plannerMenuCatalogContext?.candidates ?? [];
+  if (state.cart && state.trustedPresentation?.preferredSurface === 'cart') {
+    return {
+      id: `genui_${idBase}_cart`,
+      lifecycleStage: 'cart',
+      widgetKind: 'cartBuilder',
+      status: 'active',
+      title: 'Giỏ hàng của bạn',
+      data: { cart: state.cart },
+      actions: [
+        { id: 'update_cart', label: 'Cập nhật' },
+        {
+          id: 'continue_to_fulfillment',
+          label: 'Cập nhật & tiếp tục',
+          intent: 'primary',
+        },
+      ],
+    };
+  }
+
+  const verifiedMenuResults = verifiedMenuItems(state);
   const hasMenuResults = verifiedMenuResults.length > 0;
-  const hasUnavailableMenuResults = verifiedMenuResults.some((item) => item.available === false);
-  if ((keepsMenuSurface || hasUnavailableMenuResults) && hasMenuResults && !isPromotionOnlyTurn) {
+  if (
+    input.reuseVerifiedMenuResults === true &&
+    hasMenuResults &&
+    !isPromotionOnlyTurn
+  ) {
     return {
       id: `genui_${idBase}_menu`,
-      lifecycleStage: "menu",
-      widgetKind: "smartMenuPicker",
-      status: "active",
-      title: "Gợi ý món phù hợp",
-      data: {
-        latestUserMessage: state.latestUserMessage,
-        items: menuItemsWithContext(state),
-        ...groupRequestContext(state),
-      },
+      lifecycleStage: 'menu',
+      widgetKind: 'smartMenuPicker',
+      status: 'active',
+      title: 'Gợi ý món phù hợp',
+      data: menuCollectionData(state, hasCurrentPromotionEvidence),
       actions: smartMenuActions,
     };
   }
 
   if (
+    hasCartItems &&
     ((prefersFulfillmentSurface && !state.fulfillment) ||
-      turnToolNames.includes("quoteFulfillment") ||
-      turnToolNames.includes("findStores") ||
-      turnToolNames.includes("checkStoreAvailability")) &&
-    !(usesConfirmedSavedAddress && state.cart && state.fulfillment)
+      input.savedAddressPresentation !== undefined ||
+      turnToolNames.includes('getSavedAddresses') ||
+      turnToolNames.includes('quoteFulfillment') ||
+      turnToolNames.includes('findStores') ||
+      turnToolNames.includes('checkStoreAvailability')) &&
+    (input.savedAddressPresentation !== undefined ||
+      !(usesConfirmedSavedAddress && state.cart && state.fulfillment))
   ) {
-    const suppressesSavedAddressCandidate =
-      typeof state.entities === 'object' &&
-      state.entities !== null &&
-      state.entities.suppressSavedAddressCandidate === true;
-    const savedAddressDecision =
-      typeof state.entities === 'object' &&
-      state.entities !== null &&
-      typeof state.entities.savedAddressDecision === 'object' &&
-      state.entities.savedAddressDecision !== null
-        ? state.entities.savedAddressDecision
-        : undefined;
-    const savedAddresses = state.customerContext?.savedAddresses ?? [];
-    const selectedSavedAddress =
-      savedAddressDecision &&
-      Number.isInteger(savedAddressDecision.addressIndex) &&
-      savedAddressDecision.addressIndex >= 0
-        ? savedAddresses[savedAddressDecision.addressIndex]
-        : undefined;
-    const savedAddressCandidate = suppressesSavedAddressCandidate
-      ? undefined
-      : selectedSavedAddress ?? (savedAddresses.length === 1 ? savedAddresses[0] : undefined);
-    const displayedAddress = state.address ?? savedAddressCandidate ?? null;
-    const addressStatus = state.address
-      ? 'confirmed'
-      : savedAddressCandidate
-        ? 'candidate'
-        : 'missing';
-    const canAcceptFulfillment = Boolean(displayedAddress);
+    const savedAddressCandidate = input.savedAddressPresentation?.address;
+    const displayedAddress = savedAddressCandidate ?? state.address ?? null;
+    const deliveryAddressDraft = state.deliveryAddressDraft ?? null;
+    const addressStatus = savedAddressCandidate
+      ? 'candidate'
+      : (state.deliveryAddressStatus ??
+        (state.address
+          ? 'confirmed'
+          : deliveryAddressDraft
+            ? 'incomplete'
+            : 'missing'));
+    const canAcceptFulfillment =
+      Boolean(displayedAddress) &&
+      (savedAddressCandidate !== undefined ||
+        state.deliveryAddressStatus === 'quoted' ||
+        state.fulfillment !== undefined);
     return {
       id: `genui_${idBase}_fulfillment`,
-      lifecycleStage: "fulfillment",
-      widgetKind: "addressFulfillmentCheck",
-      status: "active",
-      title: "Kiểm tra giao hàng",
+      lifecycleStage: 'fulfillment',
+      widgetKind: 'addressFulfillmentCheck',
+      status: 'active',
+      title: 'Kiểm tra giao hàng',
       data: {
+        cart: state.cart ?? null,
         address: displayedAddress,
+        addressDraft: deliveryAddressDraft,
         addressStatus,
-        fulfillment: state.fulfillment ?? null,
+        missingFields: state.deliveryAddressMissingFields ?? [],
+        administrativeOptions: state.deliveryAdministrativeOptions ?? null,
+        fulfillment:
+          !savedAddressCandidate && state.fulfillment
+            ? projectFulfillment(state.fulfillment)
+            : null,
       },
       actions: canAcceptFulfillment
         ? [
             {
-              id: "accept_fulfillment",
-              label: "Giao đến địa chỉ này",
-              intent: "primary",
+              id: 'accept_fulfillment',
+              label: 'Giao đến địa chỉ này',
+              intent: 'primary',
+              ...(savedAddressCandidate
+                ? { value: input.savedAddressPresentation?.ref.id }
+                : {}),
             },
-            { id: "submit_address", label: "Đổi địa chỉ" },
+            { id: 'submit_address', label: 'Đổi địa chỉ' },
           ]
-        : [
-            {
-              id: "submit_address",
-              label: "Nhập địa chỉ giao hàng",
-              intent: "primary",
-            },
-          ],
+        : deliveryAddressDraft
+          ? [
+              {
+                id: 'submit_address',
+                label: 'Cập nhật địa chỉ',
+                intent: 'primary',
+              },
+            ]
+          : [
+              {
+                id: 'submit_address',
+                label: 'Nhập địa chỉ giao hàng',
+                intent: 'primary',
+              },
+            ],
     };
   }
 
-  if (state.menuModifierOptions && turnToolNames.includes("getModifierOptions")) {
-    const actions = state.menuModifierOptions.modifierGroups
-      .flatMap((group) => group.options.map((option) => ({
-        id: `customize_item:${encodeURIComponent(group.groupId)}:${encodeURIComponent(option.modifierId)}`,
-        label: option.name,
-        value: option.name,
-        payload: {
-          itemCode: state.menuModifierOptions!.itemCode,
-          groupId: group.groupId,
-          modifierId: option.modifierId,
-        },
-      })));
+  if (state.menuModifierOptions && keepsModifierSurface) {
     return {
-      id: `genui_${idBase}_modifier`, lifecycleStage: "menu", widgetKind: "modifierPicker",
-      status: "active", title: `Tùy chỉnh ${state.menuModifierOptions.name}`,
+      id: `genui_${idBase}_modifier`,
+      lifecycleStage: 'menu',
+      widgetKind: 'modifierPicker',
+      status: 'active',
+      title: `Tùy chỉnh ${state.menuModifierOptions.name}`,
       data: {
-        modifierTree: state.menuModifierOptions,
+        modifierTree: compactModifierTree(state.menuModifierOptions),
         ...(state.cart ? { cart: state.cart } : {}),
-      }, actions,
+      },
+      actions: [{ id: 'apply_modifiers', label: 'Áp dụng', intent: 'primary' }],
     };
   }
 
-  if (state.menuItemDetail && turnToolNames.includes("getItemDetails")) {
+  if (state.menuItemDetail && turnToolNames.includes('getItemDetails')) {
     return {
-      id: `genui_${idBase}_menu_detail`, lifecycleStage: "menu", widgetKind: "productDetailCard",
-      status: "active", title: state.menuItemDetail.name,
+      id: `genui_${idBase}_menu_detail`,
+      lifecycleStage: 'menu',
+      widgetKind: 'productDetailCard',
+      status: 'active',
+      title: state.menuItemDetail.name,
       data: { item: state.menuItemDetail, items: [state.menuItemDetail] },
-      actions: [{
-        id: "add_item", label: "Thêm vào giỏ", intent: "primary", value: state.menuItemDetail.name,
-        payload: { itemCode: state.menuItemDetail.code, quantity: 1 },
-      }],
+      actions: [
+        {
+          id: 'add_item',
+          label: 'Thêm vào giỏ',
+          intent: 'primary',
+          value: state.menuItemDetail.name,
+          payload: { itemCode: state.menuItemDetail.code, quantity: 1 },
+        },
+      ],
     };
   }
 
-  if ((state.promotionOffers?.length ?? 0) > 0 && turnToolNames.some((name) => name === "searchPromotions" || name === "explainPromotion")) {
+  if (
+    (state.promotionOffers?.length ?? 0) > 0 &&
+    turnToolNames.some(
+      (name) => name === 'searchPromotions' || name === 'explainPromotion',
+    )
+  ) {
     return {
-      id: `genui_${idBase}_promotions`, lifecycleStage: "promotion", widgetKind: "promotionGallery",
-      status: "active", title: "Khuyến mãi đang áp dụng",
-      data: { offers: state.promotionOffers!.slice(0, maxMenuChoices) }, actions: [],
+      id: `genui_${idBase}_promotions`,
+      lifecycleStage: 'promotion',
+      widgetKind: 'promotionGallery',
+      status: 'active',
+      title: 'Khuyến mãi đang áp dụng',
+      data: { offers: state.promotionOffers },
+      actions: [],
     };
   }
 
   if (state.cart && state.fulfillment && !state.order) {
     return {
       id: `genui_${idBase}_review`,
-      lifecycleStage: "checkout",
-      widgetKind: "orderReviewConfirm",
-      status: "active",
-      title: "Kiểm tra đơn trước khi đặt",
+      lifecycleStage: 'checkout',
+      widgetKind: 'orderReviewConfirm',
+      status: 'active',
+      title: 'Kiểm tra đơn trước khi đặt',
       data: {
         cart: state.cart,
-        fulfillment: state.fulfillment,
+        fulfillment: projectFulfillment(state.fulfillment),
         promotionContext: state.promotionContext ?? null,
         invoiceRequest: state.invoiceRequest ?? null,
-        invoiceRequested:
-          typeof state.entities === "object" &&
-          state.entities !== null &&
-          "invoiceRequested" in state.entities &&
-          state.entities.invoiceRequested === true,
+        invoiceRequested: state.invoiceRequest !== undefined,
       },
       actions: [
         {
-          id: "confirm_order",
-          label: `Đặt đơn ${moneyVnd(state.cart.totalVnd) || "ngay"}`,
-          intent: "primary",
-          value: "confirmed",
+          id: 'confirm_order',
+          label: `Đặt đơn ${moneyVnd(state.cart.totalVnd) || 'ngay'}`,
+          intent: 'primary',
+          value: 'confirmed',
         },
-        { id: "apply_voucher", label: "Áp mã giảm giá" },
       ],
     };
   }
 
-  if (state.cart) {
+  if (state.cart && state.cart.items.length > 0) {
     return {
       id: `genui_${idBase}_cart`,
-      lifecycleStage: "cart",
-      widgetKind: "cartBuilder",
-      status: "active",
-      title: "Giỏ hàng của bạn",
+      lifecycleStage: 'cart',
+      widgetKind: 'cartBuilder',
+      status: 'active',
+      title: 'Giỏ hàng của bạn',
       data: { cart: state.cart },
       actions: [
+        { id: 'update_cart', label: 'Cập nhật' },
         {
-          id: "continue_to_fulfillment",
-          label: "Tiếp tục giao hàng",
-          intent: "primary",
+          id: 'continue_to_fulfillment',
+          label: 'Cập nhật & tiếp tục',
+          intent: 'primary',
         },
-        { id: "edit_cart", label: "Sửa giỏ hàng" },
-        { id: "update_item_quantity", label: "Đổi số lượng" },
-        { id: "remove_item", label: "Xóa món", intent: "destructive" },
       ],
     };
   }
@@ -511,24 +789,57 @@ export function selectKfcGenUiAttachment(
   if (
     hasMenuResults &&
     !isPromotionOnlyTurn &&
-    (keepsMenuSurface ||
-      input.reuseVerifiedMenuResults ||
-      hasCurrentMenuEvidence)
+    (input.reuseVerifiedMenuResults || hasCurrentMenuEvidence)
   ) {
     return {
       id: `genui_${idBase}_menu`,
-      lifecycleStage: "menu",
-      widgetKind: "smartMenuPicker",
-      status: "active",
-      title: "Gợi ý món phù hợp",
-      data: {
-        latestUserMessage: state.latestUserMessage,
-        items: menuItemsWithContext(state),
-        ...groupRequestContext(state),
-      },
+      lifecycleStage: 'menu',
+      widgetKind: 'smartMenuPicker',
+      status: 'active',
+      title: 'Gợi ý món phù hợp',
+      data: menuCollectionData(state, hasCurrentPromotionEvidence),
       actions: smartMenuActions,
     };
   }
 
   return undefined;
+}
+
+function actionLifecycleForWidget(
+  widgetKind: KfcGenUiAttachment['widgetKind'],
+): NonNullable<KfcGenUiAttachment['authority']>['actionLifecycle'] {
+  switch (widgetKind) {
+    case 'promotionGallery':
+    case 'allergenEvidence':
+    case 'orderTrackingStatus':
+      return 'replayable';
+    default:
+      return 'one_shot';
+  }
+}
+
+export function selectKfcGenUiAttachment(
+  input: SelectKfcGenUiInput,
+): KfcGenUiAttachment | undefined {
+  const attachment = selectKfcGenUiAttachmentUnbound(input);
+  if (!attachment) return undefined;
+  const issuedAt = input.issuedAt ?? new Date();
+  const expiresAt =
+    attachment.expiresAt ??
+    new Date(issuedAt.getTime() + 60 * 60_000).toISOString();
+  return {
+    ...attachment,
+    expiresAt,
+    authority: {
+      schemaVersion: KFC_GENUI_SCHEMA_VERSION,
+      sessionId: input.state.sessionId,
+      customerId: input.state.customerId,
+      verifiedRevision: kfcGenUiVerifiedStateRevision(
+        input.authorityState ?? input.state,
+      ),
+      actionLifecycle: actionLifecycleForWidget(attachment.widgetKind),
+      issuedAt: issuedAt.toISOString(),
+      expiresAt,
+    },
+  };
 }

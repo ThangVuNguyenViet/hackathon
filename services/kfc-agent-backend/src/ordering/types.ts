@@ -2,6 +2,7 @@ import type {
   Address,
   Cart,
   CartItemModifier,
+  Channel,
   MenuItem,
   Order,
   ToolResult,
@@ -16,6 +17,10 @@ import type {
   GeneratedPaymentMethod,
   GeneratedPromotionVoucherOffer,
 } from '../fixtures/schema.js';
+import type { OfficialSourceAuthority } from '../domain/officialSourceAuthority.js';
+import type {
+  ExactCartAvailabilityObservationV2,
+} from './exactCartAvailabilityAuthority.js';
 
 export type FixtureMode =
   | "public_crawl_seed"
@@ -28,14 +33,94 @@ export type Disposition = "pickup" | "delivery";
 export type FulfillmentMethod = "pickup" | "delivery";
 export type ContentKind = "promotion" | "news" | "allergen" | "policy";
 
+export type MenuSearchMode = 'search' | 'full';
+
+export interface MenuSearchInput {
+  query?: string;
+  mode?: MenuSearchMode;
+  category?: string;
+  maxPriceVnd?: number;
+  partySize?: number;
+  modifierQueries?: string[];
+}
+
+export interface CompactModifierMatch {
+  query: string;
+  groupId: string;
+  groupName: string;
+  groupMin: number | null;
+  groupMax: number | null;
+  modifierId: string;
+  name: string;
+  priceDeltaVnd: number;
+  default: boolean;
+  quantity: number | null;
+}
+
+export interface CompactMenuItem {
+  code: string;
+  name: string;
+  category: string;
+  description: string;
+  priceVnd: number;
+  originalPriceVnd?: number;
+  imageUrl: string;
+  available: boolean;
+  isCustomize: boolean;
+  hasModifiers: boolean;
+  matchedModifiers?: CompactModifierMatch[];
+  matchesAllModifierQueries?: boolean;
+}
+
+export interface MenuSearchResult {
+  mode: MenuSearchMode;
+  query: string;
+  total: number;
+  items: CompactMenuItem[];
+}
+
 export interface SourceProvenance {
   fixtureMode: FixtureMode;
   sourceFile: string;
   sourceUrl?: string;
   sourceApi?: string;
+  /**
+   * Identifies a deterministic server policy as the source of a local
+   * decision. Its presence means no upstream provider call produced the
+   * result.
+   */
+  serverPolicy?: {
+    policyId: string;
+    revision: string;
+  };
+  /**
+   * Explicit authority issued by the reviewed content-ingestion boundary.
+   * URLs, provider names, and fixture modes never imply this authority.
+   */
+  officialAuthority?: OfficialSourceAuthority;
 }
 
 export type SelectedModifier = CartItemModifier;
+
+export type CollectionScope =
+  | { scope: 'all' }
+  | { scope: 'filtered'; query: string };
+
+export interface VerifiedCollectionResult<Item> {
+  items: Item[];
+  total: number;
+  returned: number;
+  complete: boolean;
+  scope: CollectionScope;
+  cursor?: string;
+}
+
+export interface VerifiedCollectionSnapshot<Item> {
+  key: string;
+  revision: string;
+  providerRevision: string;
+  result: VerifiedCollectionResult<Item>;
+}
 
 export interface ModifierSelectionInput {
   groupId: string;
@@ -44,141 +129,6 @@ export interface ModifierSelectionInput {
   groupName?: string;
   modifierName?: string;
   priceDeltaVnd?: number;
-}
-
-export interface MenuPlanningModifierRequirement {
-  groupId: string;
-  modifierId: string;
-  quantity?: number;
-}
-
-export interface MenuPlanningModifierOption {
-  modifierId: string;
-  name: string;
-  searchAliases?: string[];
-  priceDeltaVnd: number;
-  default: boolean;
-  quantity?: number;
-  selectionBundle: MenuPlanningModifierRequirement[];
-}
-
-export interface MenuPlanningModifierGroup {
-  groupId: string;
-  name: string;
-  min: number | null;
-  max: number | null;
-  requiredSelections: MenuPlanningModifierRequirement[];
-  options: MenuPlanningModifierOption[];
-}
-
-export interface MenuPlanningCandidate {
-  code: string;
-  itemId: string;
-  productCode: string;
-  name: string;
-  category: string;
-  description: string;
-  priceVnd: number;
-  originalPriceVnd?: number | null;
-  imageUrl?: string;
-  available: boolean;
-  isCustomize?: boolean;
-  isQuickCombo?: boolean;
-  hasModifiers?: boolean;
-  verifiedForMutation: true;
-  verificationQuery: string;
-  activeCartItem?: true;
-  activeCartQuantity?: number;
-  unitComposition?: {
-    friedChickenPieces?: number;
-    standardPepsi?: number;
-  };
-  /** Provider-resolved catalog or modifier aliases that occur in the current query. */
-  matchedSearchAliases?: string[];
-  /** Distinguishes a meaningful current-query match from weak lexical fallback candidates. */
-  queryMatchStrength?: 'weak' | 'strong';
-  customerEvidenceSources?: Array<'favorite' | 'recent_order'>;
-  modifierGroups: MenuPlanningModifierGroup[];
-  fulfillmentAvailability?: {
-    storeId: string;
-    disposition: Disposition;
-    available: boolean;
-    reason: 'available' | 'excluded' | 'timeslot_excluded' | 'fixture_missing';
-    source: SourceProvenance;
-  };
-}
-
-export interface MenuPlanningContext {
-  query: string;
-  candidates: MenuPlanningCandidate[];
-  exactQuantityPlans?: Array<{
-    targetQuantity: number;
-    component: keyof MenuComposition;
-    selections: Array<{ itemCode: string; quantity: number }>;
-    totalPriceVnd: number;
-  }>;
-  requestedQuantityPlans?: Array<{
-    targetQuantity: number;
-    component: keyof MenuComposition;
-    selections: Array<{ itemCode: string; quantity: number }>;
-    totalPriceVnd: number;
-  }>;
-}
-
-export interface MenuComposition {
-  friedChickenPieces: number;
-  standardPepsi: number;
-}
-
-export interface ComboConversionProposal {
-  comboItemCode: string;
-  comboQuantity: number;
-  sourceTotalVnd: number;
-  comboTotalVnd: number;
-  savingsVnd: number;
-  composition: MenuComposition;
-}
-
-export interface MenuPlanningContextInput {
-  query: string;
-  activeItemCodes: string[];
-  activeItemQuantities?: Record<string, number>;
-  /** Verified customer-specific menu evidence. It is context, never implicit consent to mutate. */
-  customerEvidenceItems?: Array<{
-    itemCode: string;
-    source: 'favorite' | 'recent_order';
-  }>;
-  maxCandidates: number;
-  fulfillment?: {
-    storeId: string;
-    disposition: Disposition;
-  };
-}
-
-export interface FulfillmentLocationCandidate {
-  serviceAreaId: string;
-  storeId: string;
-  method: FulfillmentMethod;
-  district: string;
-  city: string;
-  matchedDistrictAlias: string;
-  matchedCityAlias?: string;
-  matchSource: 'current_query' | 'address_draft';
-  verifiedForQuote: true;
-  source: SourceProvenance;
-}
-
-export interface FulfillmentPlanningContext {
-  query: string;
-  candidates: FulfillmentLocationCandidate[];
-}
-
-export interface FulfillmentPlanningContextInput {
-  query: string;
-  knownDistrict?: string;
-  knownCity?: string;
-  method: FulfillmentMethod;
-  maxCandidates: number;
 }
 
 export interface CartMutationInput {
@@ -200,6 +150,12 @@ export interface FulfillmentState {
   disposition: Disposition;
   storeId: string;
   storeName: string;
+  /**
+   * Present on every successful provider quote. It remains optional in the
+   * durable state interface so pre-migration snapshots can be parsed; the
+   * execution boundary rejects a new quote when it is absent or invalid.
+   */
+  resolvedAddress?: Address;
   feeVnd: number;
   etaMinutes: number;
   availability: ItemAvailabilityResult;
@@ -247,6 +203,11 @@ export interface ContentEvidence {
   approvalStatus?: "approved";
   audience?: "customer_public";
   contentHash?: string;
+  /**
+   * Explicit authority issued by the reviewed content-ingestion boundary.
+   * Legacy evidence without this attestation remains untrusted.
+   */
+  officialAuthority?: OfficialSourceAuthority;
 }
 
 export interface CustomerContext {
@@ -257,12 +218,17 @@ export interface CustomerContext {
 }
 
 export interface PaymentAttempt {
-  method?: PaymentLinkMethod;
+  /**
+   * Server-authored binding to the exact verified order used for the payment
+   * provider call. Legacy inputs may omit it for migration compatibility, but
+   * unbound attempts are discarded at verified-state and presentation seams.
+   */
+  orderId?: string;
+  /** Exact opaque method identifier returned by the active payment provider. */
+  method?: string;
   status: "pending" | "paid" | "failed";
   paymentUrl?: string;
 }
-
-export type PaymentLinkMethod = "momo" | "zalopay" | "card" | "cod";
 
 export interface InvoiceRequest {
   companyName: string;
@@ -294,6 +260,9 @@ export const TOOL_NAMES = [
   "getMembershipPointHistory",
   "listMembershipTools",
   "listPaymentMethods",
+  "getSavedAddresses",
+  "getRecentOrder",
+  "getFavoriteItems",
   "acquireVoucher",
   "redeemReward",
   "searchContentPolicy",
@@ -305,9 +274,22 @@ export const TOOL_NAMES = [
   "checkPaymentStatus",
   "collectInvoice",
   "handoff",
+  "resolveHandoff",
 ] as const;
 
 export type ToolName = (typeof TOOL_NAMES)[number];
+
+export type CollectionToolName =
+  | 'searchMenu'
+  | 'recommendAddOns'
+  | 'findStores'
+  | 'searchPromotions'
+  | 'listMembershipRewards'
+  | 'listMembershipWallet'
+  | 'listMembershipTools'
+  | 'listPaymentMethods'
+  | 'searchContentPolicy'
+  | 'answerAllergenQuestion';
 
 export interface ToolCallRequest {
   toolName: ToolName;
@@ -315,7 +297,7 @@ export interface ToolCallRequest {
 }
 
 export interface ToolResultByName {
-  searchMenu: MenuItem[];
+  searchMenu: MenuSearchResult;
   getItemDetails: MenuItem;
   getModifierOptions: GeneratedMenuModifier;
   updateCart: Cart;
@@ -333,6 +315,9 @@ export interface ToolResultByName {
   getMembershipPointHistory: GeneratedMembershipPointHistorySnapshot;
   listMembershipTools: GeneratedMembershipToolDefinition[];
   listPaymentMethods: GeneratedPaymentMethod[];
+  getSavedAddresses: Address[];
+  getRecentOrder: Order | null;
+  getFavoriteItems: MenuItem[];
   acquireVoucher: MembershipActionResult;
   redeemReward: MembershipActionResult;
   searchContentPolicy: ContentEvidence[];
@@ -340,11 +325,191 @@ export interface ToolResultByName {
   previewOrder: Order;
   placeOrder: Order;
   getOrderStatus: Order;
-  createPaymentLink: { url: string; status: 'pending' };
-  checkPaymentStatus: { status: 'pending' | 'paid' | 'failed' };
+  createPaymentLink: {
+    orderId: string;
+    url: string;
+    status: 'pending';
+  };
+  checkPaymentStatus: {
+    orderId: string;
+    status: 'pending' | 'paid' | 'failed';
+  };
   collectInvoice: InvoiceRequest;
   handoff: { escalationId: string };
+  resolveHandoff: {
+    escalationId: string;
+    status: 'resolved';
+  };
 }
+
+export type AgentToolResultByName = Omit<ToolResultByName, CollectionToolName> & {
+  searchMenu: VerifiedCollectionResult<MenuItem>;
+  recommendAddOns: VerifiedCollectionResult<MenuItem>;
+  findStores: VerifiedCollectionResult<{ storeId: string; name: string; address: string; city: string }>;
+  searchPromotions: VerifiedCollectionResult<GeneratedPromotionVoucherOffer>;
+  listMembershipRewards: VerifiedCollectionResult<GeneratedMembershipRewardOffer>;
+  listMembershipWallet: VerifiedCollectionResult<GeneratedMembershipWalletVoucher>;
+  listMembershipTools: VerifiedCollectionResult<GeneratedMembershipToolDefinition>;
+  listPaymentMethods: VerifiedCollectionResult<GeneratedPaymentMethod>;
+  searchContentPolicy: VerifiedCollectionResult<ContentEvidence>;
+  answerAllergenQuestion: VerifiedCollectionResult<ContentEvidence>;
+};
+
+export interface VerifiedCollectionStore {
+  searchMenu?: Record<string, VerifiedCollectionSnapshot<MenuItem>>;
+  recommendAddOns?: Record<string, VerifiedCollectionSnapshot<MenuItem>>;
+  findStores?: Record<string, VerifiedCollectionSnapshot<ToolResultByName['findStores'][number]>>;
+  searchPromotions?: Record<string, VerifiedCollectionSnapshot<GeneratedPromotionVoucherOffer>>;
+  listMembershipRewards?: Record<string, VerifiedCollectionSnapshot<GeneratedMembershipRewardOffer>>;
+  listMembershipWallet?: Record<string, VerifiedCollectionSnapshot<GeneratedMembershipWalletVoucher>>;
+  listMembershipTools?: Record<string, VerifiedCollectionSnapshot<GeneratedMembershipToolDefinition>>;
+  listPaymentMethods?: Record<string, VerifiedCollectionSnapshot<GeneratedPaymentMethod>>;
+  searchContentPolicy?: Record<string, VerifiedCollectionSnapshot<ContentEvidence>>;
+  answerAllergenQuestion?: Record<string, VerifiedCollectionSnapshot<ContentEvidence>>;
+}
+
+export type CommerceApprovalCapability =
+  | 'placeOrder'
+  | 'createPaymentLink'
+  | 'acquireVoucher'
+  | 'redeemReward'
+  | 'handoff'
+  | 'resolveHandoff';
+
+export interface AuthenticatedCommerceApprovalPrincipal {
+  /**
+   * Optional only for backward-compatible decoding of already-persisted v1
+   * authenticated pauses. New runtime-issued principals always set it.
+   */
+  principalKind?: 'authenticated_customer';
+  sessionId: string;
+  customerId: string;
+  channel: Channel;
+  authenticatedSubject: string;
+  authenticationEvidenceRef: string;
+}
+
+export interface GuestCheckoutCommerceApprovalPrincipal {
+  principalKind: 'guest_checkout';
+  sessionId: string;
+  customerId: string;
+  channel: Extract<Channel, 'messenger' | 'messenger_mock'>;
+  tenantScope: 'kfc-vietnam';
+  surfaceSubjectRef: string;
+  externalThreadRef: string;
+  externalMessageId: string;
+  ingressEvidenceRef: string;
+  ingressEvidenceDigest: string;
+  sourceRunKind: 'agent_run' | 'customer_run' | 'operation_lease';
+  sourceRunRef: string;
+  sourceRunGeneration: number;
+  sourceRunFenceDigest: string;
+  sessionAuthorityGeneration: number;
+  issuedAt: string;
+  expiresAt: string;
+  guestAuthorityDigest: string;
+}
+
+export type CommerceApprovalPrincipal =
+  | AuthenticatedCommerceApprovalPrincipal
+  | GuestCheckoutCommerceApprovalPrincipal;
+
+/**
+ * Server-only projection of a successfully verified public guest approval
+ * capability. It never grants authenticated customer scopes; it only lets the
+ * exact durable guest resume rebuild and verify its commerce binding.
+ */
+export interface VerifiedGuestApprovalResumeAuthority {
+  readonly requestId: string;
+  readonly principalDigest: string;
+  readonly principal: GuestCheckoutCommerceApprovalPrincipal;
+  readonly guestAuthorityDigest: string;
+  readonly tenantScope: 'kfc-vietnam';
+  readonly surfaceSubjectRef: string;
+  readonly externalThreadRef: string;
+  readonly externalMessageId: string;
+  readonly ingressEvidenceRef: string;
+  readonly ingressEvidenceDigest: string;
+  readonly sourceRunFenceDigest: string;
+  readonly sessionId: string;
+  readonly customerId: string;
+  readonly channel: Extract<Channel, 'messenger' | 'messenger_mock'>;
+  readonly sessionGeneration: number;
+  readonly checkpointThreadId: string;
+  readonly checkpointNamespace: string;
+  readonly checkpointId: string;
+  readonly toolName: CommerceApprovalCapability;
+  readonly actionDigest: string;
+  readonly approvalBindingDigest: string;
+  readonly pauseIdentityDigest: string;
+  readonly expiresAt: string;
+}
+
+export interface CommerceAuthorityRevisions {
+  cartRevision: string;
+  fulfillmentRevision: string;
+  paymentRevision: string;
+  collectionRevision: string;
+  providerRevision: string;
+}
+
+export interface GuestCheckoutApprovalRevisions {
+  guestAuthorityDigest: string;
+  orderPreviewRevision: string;
+  invoiceRevision: string;
+}
+
+export interface CommerceApprovalBinding {
+  schemaVersion: 'kfc-commerce-approval-v1';
+  capability: CommerceApprovalCapability;
+  principal: CommerceApprovalPrincipal;
+  actionDigest: string;
+  revisions: CommerceAuthorityRevisions;
+  /** Required only for a guest checkout principal. */
+  guestCheckout?: GuestCheckoutApprovalRevisions;
+}
+
+export interface CommerceApprovalReceipt {
+  receiptId: string;
+  binding: CommerceApprovalBinding;
+  decision: 'approve' | 'reject';
+  issuedAt: string;
+  expiresAt: string;
+  signature: string;
+}
+
+export interface InventoryAvailabilityAuthority {
+  providerRevision: string;
+  observedAt: string;
+  expiresAt: string;
+}
+
+export interface AgentToolCallSuccessFor<Name extends ToolName> {
+  toolName: Name;
+  ok: true;
+  value: AgentToolResultByName[Name];
+  message: string;
+  provenance: SourceProvenance[];
+  verifiedCollection?: VerifiedCollectionSnapshot<unknown>;
+  /** Atomic provider authority attached to an availability read. */
+  inventoryAvailabilityAuthority?: InventoryAvailabilityAuthority;
+  /** Server-only authority evidence; stripped from model-facing tool results. */
+  verifiedAvailabilityObservation?: ExactCartAvailabilityObservationV2;
+}
+
+export interface AgentToolCallFailure {
+  toolName: ToolName;
+  ok: false;
+  value?: undefined;
+  errorCode?: string;
+  message: string;
+  provenance: SourceProvenance[];
+  approvalBinding?: CommerceApprovalBinding;
+}
+
+export type AgentToolCallResult =
+  | AgentToolCallFailure
+  | { [Name in ToolName]: AgentToolCallSuccessFor<Name> }[ToolName];
 
 export interface ToolCallSuccessFor<Name extends ToolName> {
   toolName: Name;
@@ -353,6 +518,10 @@ export interface ToolCallSuccessFor<Name extends ToolName> {
   errorCode?: undefined;
   message: string;
   provenance: SourceProvenance[];
+  /** Atomic provider authority attached to an availability read. */
+  inventoryAvailabilityAuthority?: InventoryAvailabilityAuthority;
+  /** Server-only authority evidence; never supplied by a legacy provider. */
+  verifiedAvailabilityObservation?: ExactCartAvailabilityObservationV2;
 }
 
 export interface ToolCallFailure {
@@ -368,59 +537,57 @@ export type ToolCallResult =
   | ToolCallFailure
   | { [Name in ToolName]: ToolCallSuccessFor<Name> }[ToolName];
 
+export type ToolTraceProvenance =
+  Pick<SourceProvenance, 'fixtureMode'> &
+  Partial<Omit<SourceProvenance, 'fixtureMode'>>;
+
+interface ToolTracePublicationAuditBase {
+  currentTurnId: string;
+  traceIndex: number;
+  traceDigest: string;
+  argumentsDigest: string;
+  toolCallId: string;
+  toolName: ToolName;
+  executionOutcome: 'success' | 'error';
+  evidenceId: string;
+  evidenceDigest: string;
+  membershipActionOutcome?: Pick<
+    MembershipActionResult,
+    | 'actionId'
+    | 'status'
+    | 'requiresUserConfirmation'
+    | 'targetId'
+  >;
+}
+
+export interface ToolTracePublicationAuditV1
+  extends ToolTracePublicationAuditBase {
+  schemaVersion: 'kfc-tool-trace-publication-audit-v1';
+}
+
+export interface ToolTracePublicationAuditV2
+  extends ToolTracePublicationAuditBase {
+  schemaVersion: 'kfc-tool-trace-publication-audit-v2';
+  authorityDigest: string;
+  currentTurnRevision: string;
+}
+
+export type ToolTracePublicationAudit =
+  | ToolTracePublicationAuditV1
+  | ToolTracePublicationAuditV2;
+
 export interface ToolTraceEntry {
   toolName: ToolName;
   arguments: Record<string, unknown>;
   ok: boolean;
   resultSummary: string;
-  provenance: SourceProvenance[];
-}
-
-export interface AgentEntities {
-  partySize?: number;
-  budgetVnd?: number;
-  itemText?: string;
-  itemCodes?: string[];
-  quantities?: Record<string, number>;
-  addressDraft?: Partial<Address>;
-  fulfillmentMethod?: FulfillmentMethod;
-  voucherText?: string;
-  paymentMethod?: PaymentLinkMethod;
-  orderId?: string;
-  asksClarification?: boolean;
-  orderConfirmed?: boolean;
-  reorderConfirmed?: boolean;
-  cancellationStatusChecked?: boolean;
-  cartMutationConfirmed?: boolean;
-  cartMutationRequested?: boolean;
-  addressChangeRequested?: boolean;
-  useSavedAddress?: boolean;
-  fulfillmentAccepted?: boolean;
-  savedAddressDecision?: {
-    addressIndex: number;
-    decision: 'suggest' | 'accept';
-  };
-  abnormalLargeOrder?: boolean;
-  smallTalk?: boolean;
-  suppressGenUi?: boolean;
-  keepMenuSurface?: boolean;
-  preferCartSurface?: boolean;
-  preferFulfillmentSurface?: boolean;
-  freshShoppingJourney?: boolean;
-  suppressSavedAddressCandidate?: boolean;
-  fulfillmentRisk?: 'item_unavailable_before_confirmation';
-  unavailableItemCodes?: string[];
-  paymentStatusClaimed?: 'paid';
-  comboConversionProposal?: {
-    itemCode: string;
-    name: string;
-    quantity: number;
-    sourceItemCodes: string[];
-    sourceTotalVnd: number;
-    comboTotalVnd: number;
-    savingsVnd: number;
-  };
-  invoice?: Partial<InvoiceRequest>;
+  provenance: ToolTraceProvenance[];
+  /**
+   * Privacy-safe durable binding for a checkpointed publication receipt.
+   * This contains hashes and identities only; raw provider results remain
+   * outside checkpoint state.
+   */
+  publicationEvidenceAudit?: ToolTracePublicationAudit;
 }
 
 export interface CartWithModifiers extends Cart {

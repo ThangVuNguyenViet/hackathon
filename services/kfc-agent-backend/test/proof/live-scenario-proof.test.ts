@@ -18,6 +18,7 @@ describe('live scenario proof evaluation', () => {
         sessionId: 'messenger:psid_1',
         agentMode: 'ai_active',
         assignedAgentId: null,
+        sessionAuthorityGeneration: 0,
         updatedAt: '2026-07-09T00:00:00.000Z',
       },
       turns: [
@@ -46,6 +47,7 @@ describe('live scenario proof evaluation', () => {
         sessionId: 'messenger:psid_1',
         agentMode: 'human_paused',
         assignedAgentId: 'agent_1',
+        sessionAuthorityGeneration: 0,
         updatedAt: '2026-07-09T00:00:00.000Z',
       },
       turns: [],
@@ -66,6 +68,7 @@ describe('live scenario proof evaluation', () => {
         sessionId: 'messenger:psid_1',
         agentMode: 'ai_active',
         assignedAgentId: null,
+        sessionAuthorityGeneration: 0,
         updatedAt: '2026-07-09T00:00:00.000Z',
       },
       turns: [

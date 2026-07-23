@@ -1,11 +1,24 @@
 import type { BuildServerOptions } from "./server.js";
+import { z } from 'zod';
 import type { AppEnv } from "../config/env.js";
-import { OpenAIMonitorJudge } from "../llm/monitorJudge.js";
-import { OpenAIContentSemanticRanker } from "../llm/contentSemanticRanker.js";
-import { OpenAIResponseComposer } from "../llm/responseComposer.js";
-import { OpenAISmallTalkRouter } from "../llm/smallTalkRouter.js";
-import { OpenAIToolPlanner } from "../llm/toolPlanner.js";
-import { createVertexPlannerFetch } from "../llm/vertexPlannerTransport.js";
+import OpenAI from 'openai';
+import {
+  OpenAiKfcAgent,
+  type ResponsesClientLike,
+} from '../agent/openAiKfcAgent.js';
+import {
+  createConfirmationApprovalKeyRing,
+} from './confirmationApprovalCapability.js';
+import {
+  createAgentChatModel,
+  resolveAgentModelProfile,
+  resolveRuntimeAgentIdentity,
+} from "../config/agentModelProfile.js";
+import {
+  createMonitorChatModel,
+  resolveMonitorModelProfile,
+} from "../config/monitorModelProfile.js";
+import { ModelMonitorJudge } from "../llm/monitorJudge.js";
 import { createKfcCommerceGatewayClients } from "../clients/kfcCommerceGateway.js";
 import { createHttpPosClient } from "../commerce/httpPosClient.js";
 import { createOmsWithPos } from "../commerce/omsWithPos.js";
@@ -13,23 +26,127 @@ import { LangSmithAgentTracer } from "../observability/langsmithAgentTracer.js";
 import { LangSmithShowcaseScenarioSource } from "../showcase/showcase.js";
 
 function optionalValue(value: string | undefined): string | undefined {
-  return value && value.length > 0 ? value : undefined;
+  const normalized = value?.trim();
+  return normalized ? normalized : undefined;
 }
 
-export function buildServerOptionsFromEnv(env: AppEnv): BuildServerOptions {
+const previousConfirmationSigningKeysSchema = z.array(z.object({
+  keyId: z.string().regex(/^[A-Za-z0-9._-]{1,64}$/u),
+  secret: z.string().min(32),
+}).strict()).max(4);
+
+function confirmationApprovalKeyRing(
+  env: ServerOptionsEnv,
+) {
+  const secret = optionalValue(env.KFC_CONFIRMATION_SIGNING_SECRET);
+  const rawPrevious = optionalValue(
+    env.KFC_CONFIRMATION_PREVIOUS_SIGNING_KEYS,
+  );
+  if (!secret) {
+    if (rawPrevious) {
+      throw new Error(
+        'KFC_CONFIRMATION_SIGNING_SECRET is required when previous confirmation keys are configured',
+      );
+    }
+    return undefined;
+  }
+  let previous: z.infer<
+    typeof previousConfirmationSigningKeysSchema
+  > = [];
+  if (rawPrevious) {
+    let raw: unknown;
+    try {
+      raw = JSON.parse(rawPrevious) as unknown;
+    } catch {
+      throw new Error(
+        'KFC_CONFIRMATION_PREVIOUS_SIGNING_KEYS must be valid JSON',
+      );
+    }
+    const parsed = previousConfirmationSigningKeysSchema.safeParse(raw);
+    if (!parsed.success) {
+      throw new Error(
+        'KFC_CONFIRMATION_PREVIOUS_SIGNING_KEYS is invalid',
+      );
+    }
+    previous = parsed.data;
+  }
+  return createConfirmationApprovalKeyRing({
+    active: {
+      keyId: env.KFC_CONFIRMATION_SIGNING_KEY_ID,
+      secret,
+    },
+    previous,
+  });
+}
+
+// Older callers may omit the switch; an absent mode always takes the
+// resolver's production-only default.
+type ServerOptionsEnv = Omit<AppEnv, "KFC_AGENT_PROFILE_MODE"> &
+  Partial<Pick<AppEnv, "KFC_AGENT_PROFILE_MODE">>;
+
+export function buildServerOptionsFromEnv(
+  env: ServerOptionsEnv,
+): BuildServerOptions {
   const openAiApiKey = optionalValue(env.OPENAI_API_KEY);
   const openAiBaseUrl = optionalValue(env.OPENAI_BASE_URL);
-  const plannerProvider = env.TOOL_PLANNER_PROVIDER;
-  const plannerModel = optionalValue(env.TOOL_PLANNER_MODEL) ?? env.OPENAI_TOOL_PLANNER_MODEL;
-  const plannerFastModel = optionalValue(env.TOOL_PLANNER_FAST_MODEL) ?? env.OPENAI_TOOL_PLANNER_FAST_MODEL;
-  const plannerStatusModel = optionalValue(env.TOOL_PLANNER_STATUS_MODEL) ?? env.OPENAI_TOOL_PLANNER_STATUS_MODEL;
-  const vertexServiceAccount = optionalValue(env.VERTEX_SERVICE_ACCOUNT_JSON);
-  const plannerConfigured = plannerProvider === "vertex" ? Boolean(vertexServiceAccount) : Boolean(openAiApiKey);
-  const plannerFetch = plannerProvider === "vertex" && vertexServiceAccount
-    ? createVertexPlannerFetch({
-        serviceAccountJson: vertexServiceAccount,
-        model: plannerModel,
-        location: env.VERTEX_LOCATION,
+  const directOpenAiClient =
+    env.KFC_AGENT_RUNTIME === 'openai-responses' && openAiApiKey
+    ? new OpenAI({ apiKey: openAiApiKey, baseURL: openAiBaseUrl })
+    : undefined;
+  const googleApiKey = optionalValue(env.GOOGLE_API_KEY);
+  const agentIdentity = resolveRuntimeAgentIdentity({
+    runtime: env.KFC_AGENT_RUNTIME,
+    provider: env.KFC_AGENT_PROVIDER,
+    model: optionalValue(env.KFC_AGENT_MODEL),
+    mode: env.KFC_AGENT_PROFILE_MODE,
+  });
+  const stateGraphProfile = resolveAgentModelProfile({
+    provider: env.KFC_AGENT_PROVIDER,
+    model:
+      env.KFC_AGENT_RUNTIME === 'stategraph'
+        ? optionalValue(env.KFC_AGENT_MODEL)
+        : undefined,
+    mode: env.KFC_AGENT_PROFILE_MODE,
+  });
+  const monitorIdentity = resolveMonitorModelProfile({
+    agentProvider: agentIdentity.provider,
+    provider: env.KFC_MONITOR_PROVIDER,
+    model: optionalValue(env.KFC_MONITOR_MODEL),
+  });
+  const agentConfigured = agentIdentity.provider === "openai"
+    ? Boolean(openAiApiKey)
+    : Boolean(googleApiKey);
+  const agent = agentConfigured && env.KFC_AGENT_RUNTIME === 'stategraph'
+    ? {
+        identity: agentIdentity,
+        model: createAgentChatModel({
+          profile: stateGraphProfile,
+          openAiApiKey,
+          openAiBaseUrl,
+          googleApiKey,
+        }),
+      }
+    : undefined;
+  const monitorConfigured = monitorIdentity.provider === "openai"
+    ? Boolean(openAiApiKey)
+    : Boolean(googleApiKey);
+  const monitorExplicitlyConfigured =
+    env.KFC_MONITOR_PROVIDER !== undefined ||
+    optionalValue(env.KFC_MONITOR_MODEL) !== undefined;
+  if (monitorExplicitlyConfigured && !monitorConfigured) {
+    throw new Error(
+      `${monitorIdentity.provider === "openai" ? "OPENAI_API_KEY" : "GOOGLE_API_KEY"} is required for the explicitly configured KFC monitor provider`,
+    );
+  }
+  const monitorJudge = monitorConfigured
+    ? new ModelMonitorJudge({
+        identity: monitorIdentity,
+        model: createMonitorChatModel({
+          profile: monitorIdentity,
+          openAiApiKey,
+          openAiBaseUrl,
+          googleApiKey,
+        }),
       })
     : undefined;
   const langsmithApiKey = optionalValue(env.LANGSMITH_API_KEY);
@@ -38,12 +155,6 @@ export function buildServerOptionsFromEnv(env: AppEnv): BuildServerOptions {
   const menuApiUrl = optionalValue(env.KFC_MENU_API_URL);
   const posBaseUrl = optionalValue(env.KFC_POS_BASE_URL);
   const posToken = optionalValue(env.KFC_POS_TOKEN);
-  const openAiDiagnosticContext = {
-    workerRelease: optionalValue(env.OPENAI_DIAGNOSTIC_WORKER_RELEASE),
-    executionColo: optionalValue(env.OPENAI_DIAGNOSTIC_EXECUTION_COLO),
-    edgeColo: optionalValue(env.OPENAI_DIAGNOSTIC_EDGE_COLO),
-    placement: optionalValue(env.OPENAI_DIAGNOSTIC_PLACEMENT),
-  };
   if (
     env.KFC_COMMERCE_MODE === "gateway" &&
     (!commerceBaseUrl || !commerceToken || !menuApiUrl || !env.KFC_COMMERCE_ENVIRONMENT)
@@ -75,52 +186,18 @@ export function buildServerOptionsFromEnv(env: AppEnv): BuildServerOptions {
     zaloAccessToken: optionalValue(env.ZALO_ACCESS_TOKEN),
     zaloInboxUrlTemplate: optionalValue(env.ZALO_INBOX_URL_TEMPLATE),
     zaloApiBaseUrl: optionalValue(env.ZALO_API_BASE_URL),
-    responseComposer: openAiApiKey
-      ? new OpenAIResponseComposer({
-          apiKey: openAiApiKey,
-          model: env.OPENAI_RESPONSE_MODEL,
-          baseUrl: openAiBaseUrl,
-          diagnosticContext: openAiDiagnosticContext,
+    confirmationApprovalKeyRing: confirmationApprovalKeyRing(env),
+    openAiAgent: directOpenAiClient
+      ? new OpenAiKfcAgent({
+          client: directOpenAiClient as unknown as ResponsesClientLike,
+          model:
+            agentIdentity.provider === 'openai'
+              ? agentIdentity.model
+              : 'gpt-4.1-mini',
         })
       : undefined,
-    toolPlanner: plannerConfigured
-      ? new OpenAIToolPlanner({
-          apiKey: openAiApiKey ?? "",
-          model: plannerModel,
-          fastModel: plannerFastModel,
-          statusModel: plannerStatusModel,
-          baseUrl: plannerProvider === "vertex" ? "https://vertex-planner.invalid/v1" : openAiBaseUrl,
-          fetchImpl: plannerFetch,
-          timeoutMs: env.OPENAI_TOOL_PLANNER_TIMEOUT_MS,
-          diagnosticContext: { ...openAiDiagnosticContext, provider: plannerProvider },
-        })
-      : undefined,
-    smallTalkRouter: openAiApiKey
-      ? new OpenAISmallTalkRouter({
-          apiKey: openAiApiKey,
-          model: env.OPENAI_SMALL_TALK_ROUTER_MODEL,
-          baseUrl: openAiBaseUrl,
-          timeoutMs: env.OPENAI_SMALL_TALK_ROUTER_TIMEOUT_MS,
-          diagnosticContext: openAiDiagnosticContext,
-        })
-      : undefined,
-    monitorJudge: openAiApiKey
-      ? new OpenAIMonitorJudge({
-          apiKey: openAiApiKey,
-          model: env.OPENAI_MONITOR_JUDGE_MODEL,
-          baseUrl: openAiBaseUrl,
-          diagnosticContext: openAiDiagnosticContext,
-        })
-      : undefined,
-    mockClientOptions: openAiApiKey
-      ? {
-          contentSemanticRanker: new OpenAIContentSemanticRanker({
-            apiKey: openAiApiKey,
-            baseUrl: openAiBaseUrl,
-            diagnosticContext: openAiDiagnosticContext,
-          }),
-        }
-      : undefined,
+    agent,
+    monitorJudge,
     agentTracer: langsmithApiKey
       ? new LangSmithAgentTracer({
           projectName: env.LANGSMITH_PROJECT,
@@ -138,8 +215,7 @@ export function buildServerOptionsFromEnv(env: AppEnv): BuildServerOptions {
             projectName: env.LANGSMITH_PROJECT,
           }),
           releaseSha: env.RELEASE_GIT_SHA.trim() || "unknown",
-          plannerModel,
-          responseModel: env.OPENAI_RESPONSE_MODEL,
+          agent: agentIdentity,
         }
       : undefined,
     kfcCommerceGateway: commerceGateway
@@ -158,8 +234,8 @@ export function buildServerOptionsFromEnv(env: AppEnv): BuildServerOptions {
         }
       : undefined,
     readiness: {
-      plannerConfigured,
-      plannerProvider,
+      agentConfigured,
+      monitorConfigured: monitorJudge !== undefined,
       release: {
         gitSha: env.RELEASE_GIT_SHA.trim() || "unknown",
         deploymentId: env.RELEASE_DEPLOYMENT_ID.trim() || "unknown",
@@ -167,10 +243,10 @@ export function buildServerOptionsFromEnv(env: AppEnv): BuildServerOptions {
         dirty: env.RELEASE_DIRTY !== "false",
       },
       runtime: {
+        agentProfileMode: env.KFC_AGENT_PROFILE_MODE ?? 'production',
         commerceEnvironment: env.KFC_COMMERCE_ENVIRONMENT,
-        plannerProvider,
-        plannerModel,
-        responseModel: env.OPENAI_RESPONSE_MODEL,
+        agent: agentIdentity,
+        monitor: monitorIdentity,
       },
       langsmith: {
         configured: Boolean(langsmithApiKey),
@@ -182,7 +258,15 @@ export function buildServerOptionsFromEnv(env: AppEnv): BuildServerOptions {
         mode: env.KFC_COMMERCE_MODE,
         baseUrl: commerceBaseUrl,
         token: commerceToken,
-        requiredCapabilities: ["orders", "payment"],
+        requiredCapabilities: [
+          "orders",
+          "payment",
+          "handoff_resolution",
+        ],
+        implementedCapabilities: [
+          "orders",
+          "payment",
+        ],
       },
       pos: {
         mode: env.KFC_POS_MODE,

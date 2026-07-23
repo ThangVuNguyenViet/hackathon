@@ -1,10 +1,40 @@
 #!/usr/bin/env node
 
 import { createRequire } from 'node:module';
+import { assertCurrentProductionLatencyReport } from './kfc-production-latency-report.mjs';
+import {
+  assertLiveTextQualificationManifestFile,
+} from '../../services/kfc-agent-backend/scripts/lib/kfc-live-text-qualification.mjs';
 
 const require = createRequire(import.meta.url);
+const { isDeepStrictEqual } = require('node:util');
 const command = process.argv[2];
-process.argv = [process.argv[0], ...process.argv.slice(3)];
+process.argv = [process.argv[0], process.argv[1], ...process.argv.slice(3)];
+
+function assertAgentRuntimeIdentity(proof) {
+  const versions = proof?.versions;
+  const agent = versions?.agent;
+  const versionKeys = versions && typeof versions === 'object'
+    ? Object.keys(versions).sort()
+    : [];
+  const agentKeys = agent && typeof agent === 'object'
+    ? Object.keys(agent).sort()
+    : [];
+  if (JSON.stringify(versionKeys) !== JSON.stringify(['agent', 'ledger', 'ranker', 'toolCatalog'])
+      || JSON.stringify(agentKeys) !== JSON.stringify(['model', 'profile', 'provider'])
+      || !['openai', 'google'].includes(agent.provider)
+      || typeof agent.model !== 'string' || !agent.model
+      || typeof agent.profile !== 'string' || !agent.profile) {
+    throw new Error('Deep readiness does not contain one valid agent runtime identity');
+  }
+}
+
+function sameAgentRuntimeIdentity(expected, actual) {
+  assertAgentRuntimeIdentity(expected);
+  assertAgentRuntimeIdentity(actual);
+  return isDeepStrictEqual(actual.deployment, expected.deployment)
+    && isDeepStrictEqual(actual.versions, expected.versions);
+}
 
 switch (command) {
   case 'check-1': {
@@ -36,6 +66,7 @@ switch (command) {
     const [readinessPath, outputPath] = process.argv.slice(2);
     const readiness = JSON.parse(fs.readFileSync(readinessPath));
     if (!readiness.proof) throw new Error('Deep readiness is missing proof bindings');
+    assertAgentRuntimeIdentity(readiness.proof);
     fs.writeFileSync(outputPath, `${JSON.stringify(readiness.proof, null, 2)}\n`);
     break;
   }
@@ -53,7 +84,7 @@ switch (command) {
     const [expectedPath, actualPath] = process.argv.slice(2);
     const expected = JSON.parse(fs.readFileSync(expectedPath));
     const actual = JSON.parse(fs.readFileSync(actualPath)).proof;
-    if (!actual?.catalogObservation || JSON.stringify(actual.deployment) !== JSON.stringify(expected.deployment)) {
+    if (!actual?.catalogObservation || !sameAgentRuntimeIdentity(expected, actual)) {
       throw new Error('Catalog observation is not bound to the qualified deployment');
     }
     break;
@@ -82,10 +113,12 @@ switch (command) {
   }
   case 'check-8': {
     const fs = require('node:fs');
-    const [expectedPath, actualPath] = process.argv.slice(2);
+    const [expectedPath, runtimePath, actualPath] = process.argv.slice(2);
     const expected = JSON.parse(fs.readFileSync(expectedPath));
+    const runtime = JSON.parse(fs.readFileSync(runtimePath));
     const actual = JSON.parse(fs.readFileSync(actualPath));
-    if (!actual.ok || JSON.stringify(actual.release) !== JSON.stringify(expected)) {
+    if (!actual.ok || JSON.stringify(actual.release) !== JSON.stringify(expected)
+        || !sameAgentRuntimeIdentity(runtime, actual.proof)) {
       throw new Error('Replacement Worker release identity mismatch');
     }
     break;
@@ -94,8 +127,13 @@ switch (command) {
     const crypto = require('node:crypto');
     const fs = require('node:fs');
     const path = require('node:path');
-    const [gatePath, proofDir, gitSha, deploymentId, workerUrl, chatbotUrl, monitorUrl, latencyReport, digestPath, chatbotReleasePath] = process.argv.slice(2);
+    const [gatePath, proofDir, gitSha, deploymentId, workerUrl, chatbotUrl, monitorUrl, latencyReport, digestPath, chatbotReleasePath, liveTextQualificationPath] = process.argv.slice(2);
     const read = (file) => JSON.parse(fs.readFileSync(file, 'utf8'));
+    const liveTextQualification =
+      assertLiveTextQualificationManifestFile(
+        liveTextQualificationPath,
+        gitSha,
+      );
     let goldenStreak = 0;
     let matrixStreak = 0;
     for (let pass = 1; pass <= 5; pass += 1) {
@@ -123,7 +161,7 @@ switch (command) {
       }
     }
     if (goldenStreak !== 5 || matrixStreak !== 3) throw new Error(`Qualification streaks incomplete: golden=${goldenStreak} matrix=${matrixStreak}`);
-    const latency = read(latencyReport);
+    const latency = assertCurrentProductionLatencyReport(read(latencyReport));
     const chatbotRelease = read(chatbotReleasePath);
     const latencyStarted = Date.parse(latency.startedAt);
     const latencyCompleted = Date.parse(latency.completedAt);
@@ -139,6 +177,7 @@ switch (command) {
       throw new Error('Production latency report is not bound to the qualified endpoint, release, and probe chronology');
     }
     const completionFiles = [
+      liveTextQualificationPath,
       ...[1, 2, 3].flatMap((pass) => [
         path.join(proofDir, 'kfc', `cycle-${pass}`, 'manifest.json'),
         path.join(proofDir, 'messenger', `cycle-${pass}`, 'manifest.json'),
@@ -168,6 +207,14 @@ switch (command) {
       chatbotUrl,
       monitorUrl,
       latencyReport: 'latency/report.json',
+      liveTextQualification: {
+        manifest: path.relative(proofDir, liveTextQualificationPath),
+        manifestSha256: liveTextQualification.manifestSha256,
+        scenarioRuns:
+          liveTextQualification.manifest.matrix.totalScenarioRuns,
+        turnEvaluations:
+          liveTextQualification.manifest.matrix.totalTurnEvaluations,
+      },
       qualificationDigestSha256: digestSha256,
       qualificationCompletedAt: new Date(qualificationCompleted).toISOString(),
       issuedAt: new Date(issuedAt).toISOString(),
@@ -177,10 +224,12 @@ switch (command) {
   }
   case 'check-10': {
     const fs = require('node:fs');
-    const [expectedPath, actualPath] = process.argv.slice(2);
+    const [expectedPath, runtimePath, actualPath] = process.argv.slice(2);
     const expected = JSON.parse(fs.readFileSync(expectedPath, 'utf8'));
+    const runtime = JSON.parse(fs.readFileSync(runtimePath, 'utf8'));
     const actual = JSON.parse(fs.readFileSync(actualPath, 'utf8'));
-    if (!actual.ok || JSON.stringify(actual.release) !== JSON.stringify(expected)) process.exit(1);
+    if (!actual.ok || JSON.stringify(actual.release) !== JSON.stringify(expected)
+        || !sameAgentRuntimeIdentity(runtime, actual.proof)) process.exit(1);
     break;
   }
   case 'check-11': {
@@ -294,8 +343,7 @@ switch (command) {
       attempts.push(attempt);
     }
     if (goldenStreak !== 5 || matrixStreak !== 3) throw new Error(`Qualification streaks incomplete: golden=${goldenStreak} matrix=${matrixStreak}`);
-    const latency = read(latencyReport);
-    if (latency.latency?.ok !== true || latency.traces?.ok !== true) throw new Error('Production latency report is not accepted');
+    const latency = assertCurrentProductionLatencyReport(read(latencyReport));
     process.stdout.write(JSON.stringify({ schemaVersion: 1, artifactKind: 'kfc-deployed-release-candidate', runId, passed: true, acceptanceStatus: 'accepted', gitSha, releaseBuiltAt, dirty: false, workerUrl, chatbotUrl, monitorUrl, bindings: { runtime: 'runtime-binding.json', flutter: 'flutter-release.json' }, qualification: { goldenStreak, matrixStreak, attempts, gate: 'qualification-gate.json', digests: 'qualification-digests.json' }, latency: { path: 'latency/report.json', probeRunId: latency.probeRunId, startedAt: latency.startedAt, completedAt: latency.completedAt }, durability: { before: 'durability-turns-before.json', after: 'durability-turns-after.json' }, stage: { recording: 'stage/recording-manifest.json', rehearsals: ['stage/rehearsal-1.json', 'stage/rehearsal-2.json'], finalRun: 'stage/final-run.json', preflight: 'stage/stage-preflight.json' }, finalizedAt: new Date().toISOString() }, null, 2) + '\n');
     break;
   }

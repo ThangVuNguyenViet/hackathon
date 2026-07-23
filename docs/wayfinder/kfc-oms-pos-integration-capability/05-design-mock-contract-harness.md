@@ -39,3 +39,12 @@ Use one proof runner to start four separate HTTP services on ephemeral ports, co
 Default mode passes without LangSmith credentials using local JSON evidence. Presentation mode uses `--require-langsmith` and fails unless every scenario has LangSmith trace URLs and evaluator evidence. Mock-backed Flutter integration tests remain prohibited.
 
 Full design: [Mock OMS And POS Contract Harness Design](./assets/mock-oms-pos-contract-harness-design.md).
+
+## Current implementation amendment (2026-07-20)
+
+The runner, trace collector/event vocabulary, deterministic proof evaluators,
+generated artifacts, and mock LangSmith gate described above are retired. The
+retained harness boundary is the gateway plus Mock OMS/POS HTTP component suite.
+It verifies project contracts and failure semantics, but it is not evidence of
+live model selection, a grounded agent response, deployment, or vendor
+compatibility.

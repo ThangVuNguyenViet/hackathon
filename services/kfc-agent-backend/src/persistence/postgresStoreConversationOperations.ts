@@ -13,6 +13,10 @@ import type {
 import type {
   AgentRunPatch,
   AppendConversationTurnInput,
+  CommitAssistantTurnIfRunCurrentInput,
+  CommitAssistantTurnIfRunCurrentResult,
+  CommitConfirmationPauseIfRunCurrentInput,
+  CommitConfirmationPauseIfRunCurrentResult,
   ConversationStore,
   CreateAgentRunInput,
   HistorySearchResult,
@@ -25,6 +29,8 @@ import type {
   ReserveWebhookDeliveryInput,
   ReserveWebhookDeliveryResult,
   SessionControl,
+  TransitionSessionAuthorityInput,
+  TransitionSessionAuthorityResult,
   SessionResetHook,
   SessionAgentStateInput,
   StoredEvent,
@@ -34,7 +40,19 @@ import type {
   AppendCustomerRunEventInput,
   CustomerRunPatch,
 } from './memoryStore.js';
-import { confirmationPauseFromEvent, type ConfirmationPauseRecord } from './memoryStore.js';
+import type {
+  BeginNonAgentTextDeliveryAttemptInput,
+  BeginNonAgentTextDeliveryAttemptResult,
+  CompleteNonAgentTextDeliveryAttemptInput,
+  CompleteNonAgentTextDeliveryAttemptResult,
+  NonAgentTextDeliveryRecord,
+  PrepareNonAgentTextDeliveryTurnInput,
+  PrepareNonAgentTextDeliveryTurnResult,
+  ReconcileNonAgentTextDeliveryInput,
+  ReconcileNonAgentTextDeliveryResult,
+  ReserveNonAgentTextDeliveryInput,
+  ReserveNonAgentTextDeliveryResult,
+} from './nonAgentTextDelivery.js';
 import {
   CustomerRunIdempotencyConflictError,
   CustomerRunSequenceConflictError,
@@ -73,17 +91,61 @@ import {
   agentRunFromRow,
   agentRunTurnFromRow,
   sessionAgentStateFromRow,
-  defaultSessionAgentState
+  defaultSessionAgentState,
 } from './postgresStoreSupport.js';
 
 import { PostgresStoreCore } from './postgresStoreCore.js';
+import {
+  lockPostgresSessionAuthority,
+  transitionPostgresSessionAuthority,
+} from './postgresStoreSessionAuthority.js';
+import { commitPostgresAssistantTurnIfRunCurrent } from './postgresStoreTurnCommit.js';
+import { commitPostgresConfirmationPauseIfRunCurrent } from './postgresStorePauseCommit.js';
+import {
+  beginPostgresNonAgentTextDeliveryAttempt,
+  completePostgresNonAgentTextDeliveryAttempt,
+  getPostgresNonAgentTextDelivery,
+  preparePostgresNonAgentTextDeliveryTurn,
+  reconcilePostgresNonAgentTextDelivery,
+  reservePostgresNonAgentTextDelivery,
+} from './postgresStoreNonAgentTextDelivery.js';
 
 export abstract class PostgresStoreConversationOperations extends PostgresStoreCore {
-  abstract appendEvent(sessionId: string, sourceType: string, payload: Record<string, unknown>): Promise<StoredEvent>;
-  async appendTurn(input: AppendConversationTurnInput): Promise<ConversationTurn> {
+  abstract appendEvent(
+    sessionId: string,
+    sourceType: string,
+    payload: Record<string, unknown>,
+  ): Promise<StoredEvent>;
+  async commitAssistantTurnIfRunCurrent(
+    input: CommitAssistantTurnIfRunCurrentInput,
+  ): Promise<CommitAssistantTurnIfRunCurrentResult> {
+    return commitPostgresAssistantTurnIfRunCurrent({
+      db: this.db,
+      operation: input,
+    });
+  }
+  async commitConfirmationPauseIfRunCurrent(
+    input: CommitConfirmationPauseIfRunCurrentInput,
+  ): Promise<CommitConfirmationPauseIfRunCurrentResult> {
+    return commitPostgresConfirmationPauseIfRunCurrent({
+      db: this.db,
+      operation: input,
+    });
+  }
+
+  async appendTurn(
+    input: AppendConversationTurnInput,
+  ): Promise<ConversationTurn> {
+    if (input.id) {
+      const existing = await this.db.query<ConversationTurnRow>(
+        `SELECT * FROM conversation_turns WHERE id = $1 LIMIT 1`,
+        [input.id],
+      );
+      if (existing.rows[0]) return turnFromRow(existing.rows[0]);
+    }
     const turn: ConversationTurn = {
       ...input,
-      id: `turn_${randomUUID()}`,
+      id: input.id ?? `turn_${randomUUID()}`,
       createdAt: input.createdAt ?? new Date().toISOString(),
     };
     await this.db.query(
@@ -117,12 +179,16 @@ export abstract class PostgresStoreConversationOperations extends PostgresStoreC
     return turn;
   }
 
-  async upsertImportedTurn(input: ImportedConversationTurn): Promise<ImportedConversationTurnResult> {
+  async upsertImportedTurn(
+    input: ImportedConversationTurn,
+  ): Promise<ImportedConversationTurnResult> {
     const turn: ConversationTurn = {
       ...input,
       id: input.id ?? `turn_${randomUUID()}`,
     };
-    const result = await this.db.query<ConversationTurnRow & { inserted: boolean }>(
+    const result = await this.db.query<
+      ConversationTurnRow & { inserted: boolean }
+    >(
       `
         INSERT INTO conversation_turns (
           id, session_id, channel, role, text, external_message_id, external_user_id, delivery_status, metadata, created_at
@@ -153,21 +219,30 @@ export abstract class PostgresStoreConversationOperations extends PostgresStoreC
       ],
     );
     const row = result.rows[0];
-    if (!row) throw new Error(`Failed to upsert imported conversation turn: ${turn.externalMessageId ?? turn.id}`);
+    if (!row)
+      throw new Error(
+        `Failed to upsert imported conversation turn: ${turn.externalMessageId ?? turn.id}`,
+      );
     if (row.inserted) {
-      await this.appendEvent(input.sessionId, `conversation_turn:${input.role}`, {
-        text: input.text,
-        channel: input.channel,
-        deliveryStatus: input.deliveryStatus,
-        externalMessageId: input.externalMessageId,
-        externalUserId: input.externalUserId,
-        metadata: input.metadata,
-      });
+      await this.appendEvent(
+        input.sessionId,
+        `conversation_turn:${input.role}`,
+        {
+          text: input.text,
+          channel: input.channel,
+          deliveryStatus: input.deliveryStatus,
+          externalMessageId: input.externalMessageId,
+          externalUserId: input.externalUserId,
+          metadata: input.metadata,
+        },
+      );
     }
     return { turn: turnFromRow(row), inserted: row.inserted };
   }
 
-  async upsertProfile(input: ConversationProfile): Promise<ConversationProfile> {
+  async upsertProfile(
+    input: ConversationProfile,
+  ): Promise<ConversationProfile> {
     await this.db.query(
       `
         INSERT INTO conversation_profiles (
@@ -208,7 +283,10 @@ export abstract class PostgresStoreConversationOperations extends PostgresStoreC
     return result.rows[0] ? profileFromRow(result.rows[0]) : undefined;
   }
 
-  async findTurnByExternalMessage(sessionId: string, externalMessageId: string): Promise<ConversationTurn | undefined> {
+  async findTurnByExternalMessage(
+    sessionId: string,
+    externalMessageId: string,
+  ): Promise<ConversationTurn | undefined> {
     const result = await this.db.query<ConversationTurnRow>(
       `
         SELECT *
@@ -222,7 +300,9 @@ export abstract class PostgresStoreConversationOperations extends PostgresStoreC
     return result.rows[0] ? turnFromRow(result.rows[0]) : undefined;
   }
 
-  async reserveWebhookDelivery(input: ReserveWebhookDeliveryInput): Promise<ReserveWebhookDeliveryResult> {
+  async reserveWebhookDelivery(
+    input: ReserveWebhookDeliveryInput,
+  ): Promise<ReserveWebhookDeliveryResult> {
     const now = new Date().toISOString();
     const inserted = await this.db.query<WebhookDeliveryRow>(
       `
@@ -245,15 +325,87 @@ export abstract class PostgresStoreConversationOperations extends PostgresStoreC
         now,
       ],
     );
-    if (inserted.rows[0]) return { delivery: webhookDeliveryFromRow(inserted.rows[0]), reserved: true };
+    if (inserted.rows[0])
+      return {
+        delivery: webhookDeliveryFromRow(inserted.rows[0]),
+        reserved: true,
+      };
 
-    const existing = await this.getWebhookDelivery(input.channel, input.externalEventId);
-    if (!existing) throw new Error(`Webhook delivery reservation missing after conflict: ${input.channel}:${input.externalEventId}`);
+    const existing = await this.getWebhookDelivery(
+      input.channel,
+      input.externalEventId,
+    );
+    if (!existing)
+      throw new Error(
+        `Webhook delivery reservation missing after conflict: ${input.channel}:${input.externalEventId}`,
+      );
     return { delivery: existing, reserved: false };
   }
 
-  async markWebhookDeliveryProcessed(channel: WebhookDeliveryChannel, externalEventId: string): Promise<WebhookDelivery> {
-    return this.updateWebhookDelivery(channel, externalEventId, 'processed', null);
+  async reserveNonAgentTextDelivery(
+    input: ReserveNonAgentTextDeliveryInput,
+  ): Promise<ReserveNonAgentTextDeliveryResult> {
+    return reservePostgresNonAgentTextDelivery({
+      db: this.db,
+      reservation: input,
+    });
+  }
+
+  async getNonAgentTextDelivery(
+    requestKey: string,
+  ): Promise<NonAgentTextDeliveryRecord | undefined> {
+    return getPostgresNonAgentTextDelivery({
+      db: this.db,
+      requestKey,
+    });
+  }
+
+  async prepareNonAgentTextDeliveryTurn(
+    input: PrepareNonAgentTextDeliveryTurnInput,
+  ): Promise<PrepareNonAgentTextDeliveryTurnResult> {
+    return preparePostgresNonAgentTextDeliveryTurn({
+      db: this.db,
+      preparation: input,
+    });
+  }
+
+  async beginNonAgentTextDeliveryAttempt(
+    input: BeginNonAgentTextDeliveryAttemptInput,
+  ): Promise<BeginNonAgentTextDeliveryAttemptResult> {
+    return beginPostgresNonAgentTextDeliveryAttempt({
+      db: this.db,
+      attempt: input,
+    });
+  }
+
+  async completeNonAgentTextDeliveryAttempt(
+    input: CompleteNonAgentTextDeliveryAttemptInput,
+  ): Promise<CompleteNonAgentTextDeliveryAttemptResult> {
+    return completePostgresNonAgentTextDeliveryAttempt({
+      db: this.db,
+      completion: input,
+    });
+  }
+
+  async reconcileNonAgentTextDelivery(
+    input: ReconcileNonAgentTextDeliveryInput,
+  ): Promise<ReconcileNonAgentTextDeliveryResult> {
+    return reconcilePostgresNonAgentTextDelivery({
+      db: this.db,
+      reconciliation: input,
+    });
+  }
+
+  async markWebhookDeliveryProcessed(
+    channel: WebhookDeliveryChannel,
+    externalEventId: string,
+  ): Promise<WebhookDelivery> {
+    return this.updateWebhookDelivery(
+      channel,
+      externalEventId,
+      'processed',
+      null,
+    );
   }
 
   async markWebhookDeliveryFailed(
@@ -261,10 +413,18 @@ export abstract class PostgresStoreConversationOperations extends PostgresStoreC
     externalEventId: string,
     lastError: string,
   ): Promise<WebhookDelivery> {
-    return this.updateWebhookDelivery(channel, externalEventId, 'failed', lastError);
+    return this.updateWebhookDelivery(
+      channel,
+      externalEventId,
+      'failed',
+      lastError,
+    );
   }
 
-  async getWebhookDelivery(channel: WebhookDeliveryChannel, externalEventId: string): Promise<WebhookDelivery | undefined> {
+  async getWebhookDelivery(
+    channel: WebhookDeliveryChannel,
+    externalEventId: string,
+  ): Promise<WebhookDelivery | undefined> {
     const result = await this.db.query<WebhookDeliveryRow>(
       `
         SELECT *
@@ -326,7 +486,10 @@ export abstract class PostgresStoreConversationOperations extends PostgresStoreC
       [channel, externalEventId, status, lastError],
     );
     const row = result.rows[0];
-    if (!row) throw new Error(`Webhook delivery not found: ${channel}:${externalEventId}`);
+    if (!row)
+      throw new Error(
+        `Webhook delivery not found: ${channel}:${externalEventId}`,
+      );
     return webhookDeliveryFromRow(row);
   }
 
@@ -359,7 +522,9 @@ export abstract class PostgresStoreConversationOperations extends PostgresStoreC
       `,
       [sessionId],
     );
-    return result.rows[0] ? sessionControlFromRow(result.rows[0]) : defaultSessionControl(sessionId);
+    return result.rows[0]
+      ? sessionControlFromRow(result.rows[0])
+      : defaultSessionControl(sessionId);
   }
 
   async setSessionControl(
@@ -367,27 +532,34 @@ export abstract class PostgresStoreConversationOperations extends PostgresStoreC
     patch: { agentMode: AgentMode; assignedAgentId?: string | null },
   ): Promise<SessionControl> {
     const current = await this.getSessionControl(sessionId);
-    const assignedAgentId = patch.assignedAgentId === undefined ? current.assignedAgentId : patch.assignedAgentId;
-    const result = await this.db.query<SessionControlRow>(
-      `
-        INSERT INTO session_controls (session_id, agent_mode, assigned_agent_id, updated_at)
-        VALUES ($1, $2, $3, NOW())
-        ON CONFLICT (session_id) DO UPDATE SET
-          agent_mode = EXCLUDED.agent_mode,
-          assigned_agent_id = EXCLUDED.assigned_agent_id,
-          updated_at = EXCLUDED.updated_at
-        RETURNING *
-      `,
-      [sessionId, patch.agentMode, assignedAgentId],
-    );
-    const row = result.rows[0];
-    if (!row) throw new Error(`Failed to update session control: ${sessionId}`);
-    return sessionControlFromRow(row);
+    const result = await this.transitionSessionAuthority({
+      sessionId,
+      expectedGeneration: current.sessionAuthorityGeneration,
+      agentMode: patch.agentMode,
+      assignedAgentId:
+        patch.assignedAgentId === undefined
+          ? current.assignedAgentId
+          : patch.assignedAgentId,
+    });
+    return result.control;
   }
 
-  async upsertPendingCustomerTurn(input: PendingCustomerTurnInput): Promise<UpsertPendingCustomerTurnResult> {
+  async transitionSessionAuthority(
+    input: TransitionSessionAuthorityInput,
+  ): Promise<TransitionSessionAuthorityResult> {
+    return transitionPostgresSessionAuthority({
+      db: this.db,
+      operation: input,
+    });
+  }
+
+  async upsertPendingCustomerTurn(
+    input: PendingCustomerTurnInput,
+  ): Promise<UpsertPendingCustomerTurnResult> {
     const now = input.updatedAt ?? new Date().toISOString();
-    const result = await this.db.query<PendingCustomerTurnRow & { inserted: boolean }>(
+    const result = await this.db.query<
+      PendingCustomerTurnRow & { inserted: boolean }
+    >(
       `
         INSERT INTO pending_customer_turns (
           turn_id, session_id, channel, external_message_id, external_user_id, text, steer_mode,
@@ -413,11 +585,16 @@ export abstract class PostgresStoreConversationOperations extends PostgresStoreC
       ],
     );
     const row = result.rows[0];
-    if (!row) throw new Error(`Failed to upsert pending customer turn: ${input.externalMessageId}`);
+    if (!row)
+      throw new Error(
+        `Failed to upsert pending customer turn: ${input.externalMessageId}`,
+      );
     return { turn: pendingCustomerTurnFromRow(row), inserted: row.inserted };
   }
 
-  async listPendingCustomerTurns(sessionId: string): Promise<PendingCustomerTurn[]> {
+  async listPendingCustomerTurns(
+    sessionId: string,
+  ): Promise<PendingCustomerTurn[]> {
     const result = await this.db.query<PendingCustomerTurnRow>(
       `
         SELECT *
@@ -430,19 +607,67 @@ export abstract class PostgresStoreConversationOperations extends PostgresStoreC
     return result.rows.map(pendingCustomerTurnFromRow);
   }
 
-  async markPendingCustomerTurnClaimed(turnId: string, runId: string): Promise<PendingCustomerTurn> {
-    const result = await this.db.query<PendingCustomerTurnRow>(
+  async markPendingCustomerTurnClaimed(
+    turnId: string,
+    runId: string,
+  ): Promise<PendingCustomerTurn> {
+    return this.markPendingCustomerTurnTerminal(turnId, runId, 'claimed');
+  }
+
+  async markPendingCustomerTurnIgnored(
+    turnId: string,
+    runId: string,
+  ): Promise<PendingCustomerTurn> {
+    const updated = await this.db.query<PendingCustomerTurnRow>(
       `
-        UPDATE pending_customer_turns
-        SET status = 'claimed', claimed_run_id = $2, updated_at = NOW()
-        WHERE turn_id = $1
+        UPDATE pending_customer_turns AS pending_turn
+        SET status = 'ignored', claimed_run_id = $2, updated_at = NOW()
+        WHERE pending_turn.turn_id = $1
+          AND pending_turn.status = 'pending'
+          AND pending_turn.claimed_run_id IS NULL
+          AND EXISTS (
+            SELECT 1
+            FROM agent_run_turns AS run_turn
+            INNER JOIN agent_runs AS run ON run.id = run_turn.run_id
+            INNER JOIN session_agent_state AS state
+              ON state.session_id = run.session_id
+            WHERE run_turn.turn_id = pending_turn.turn_id
+              AND run_turn.run_id = $2
+              AND run.session_id = pending_turn.session_id
+              AND run.status = 'failed'
+              AND state.current_run_id = run.id
+              AND state.generation = run.generation
+          )
         RETURNING *
       `,
       [turnId, runId],
+    );
+    const row = updated.rows[0] ?? (
+      await this.db.query<PendingCustomerTurnRow>(
+        `SELECT * FROM pending_customer_turns WHERE turn_id = $1 LIMIT 1`,
+        [turnId],
+      )
+    ).rows[0];
+    if (!row) throw new Error(`Pending customer turn not found: ${turnId}`);
+    return pendingCustomerTurnFromRow(row);
+  }
+
+  private async markPendingCustomerTurnTerminal(
+    turnId: string,
+    runId: string,
+    status: Extract<PendingCustomerTurn['status'], 'claimed' | 'ignored'>,
+  ): Promise<PendingCustomerTurn> {
+    const result = await this.db.query<PendingCustomerTurnRow>(
+      `
+        UPDATE pending_customer_turns
+        SET status = $3, claimed_run_id = $2, updated_at = NOW()
+        WHERE turn_id = $1
+        RETURNING *
+      `,
+      [turnId, runId, status],
     );
     const row = result.rows[0];
     if (!row) throw new Error(`Pending customer turn not found: ${turnId}`);
     return pendingCustomerTurnFromRow(row);
   }
-
 }

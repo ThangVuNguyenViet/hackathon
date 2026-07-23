@@ -31,5 +31,16 @@
       "sourceApi": "mock://kfc-fulfillment/quote/KFCVN0202/delivery",
       "fixtureMode": "demo_mock_seed"
     }
+  },
+  {
+    "storeId": "KFCVN0005",
+    "method": "delivery",
+    "feeVnd": 18000,
+    "etaMinutes": 35,
+    "provenance": {
+      "sourceFile": "fixtures/generated/fulfillment-quotes.json",
+      "sourceApi": "mock://kfc-fulfillment/quote/KFCVN0005/delivery",
+      "fixtureMode": "demo_mock_seed"
+    }
   }
 ]

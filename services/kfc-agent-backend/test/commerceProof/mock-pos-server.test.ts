@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it } from "vitest";
 import type { FastifyInstance } from "fastify";
+import { z } from "zod";
 import { buildCommerceProofMockPosServer } from "../../src/commerceProof/mockPosServer.js";
 import { commerceContractVersion } from "../../src/commerceProof/contracts.js";
 
@@ -28,6 +29,14 @@ const ticketInput = {
   items: [{ itemCode: "20751", quantity: 1 }],
   totalVnd: 117000,
 };
+
+function providerHeaders(idempotencyKey: string, marker: string) {
+  return {
+    authorization: "Bearer pos-token",
+    "idempotency-key": idempotencyKey,
+    "x-provider-binding-fingerprint": marker.repeat(64),
+  };
+}
 
 describe("commerce proof Mock POS", () => {
   it("reports sandbox provider provenance and authenticated readiness", async () => {
@@ -59,35 +68,39 @@ describe("commerce proof Mock POS", () => {
 
   it("creates, reuses, reads, and cancels a correlated POS ticket", async () => {
     const server = buildServer();
-    const headers = {
-      authorization: "Bearer pos-token",
-      "idempotency-key": "session:message:placeOrder",
-    };
+    const submitHeaders = providerHeaders(
+      "session:message:pos-submit-ticket",
+      "a",
+    );
     const first = await server.inject({
       method: "POST",
       url: "/v1/tickets",
-      headers,
+      headers: submitHeaders,
       payload: ticketInput,
     });
     const duplicate = await server.inject({
       method: "POST",
       url: "/v1/tickets",
-      headers,
-      payload: { ...ticketInput, traceId: "trace-pos-duplicate" },
+      headers: submitHeaders,
+      payload: ticketInput,
     });
-    const posTicketId = first.json().posTicketId as string;
+    const { posTicketId } = z.object({
+      posTicketId: z.string(),
+    }).parse(first.json());
     const found = await server.inject({
       method: "GET",
       url: `/v1/tickets/${posTicketId}`,
-      headers,
+      headers: { authorization: "Bearer pos-token" },
     });
     const cancelled = await server.inject({
       method: "POST",
       url: `/v1/tickets/${posTicketId}/cancel`,
-      headers,
+      headers: providerHeaders("session:message:pos-cancel-ticket", "b"),
       payload: {
         traceId: ticketInput.traceId,
         scenarioId: ticketInput.scenarioId,
+        commerceOrderId: ticketInput.commerceOrderId,
+        omsOrderId: ticketInput.omsOrderId,
       },
     });
 
@@ -101,11 +114,8 @@ describe("commerce proof Mock POS", () => {
       providerImplementation: "http-adapter",
       deduplicated: false,
     });
-    expect(duplicate.json()).toMatchObject({
-      posTicketId,
-      deduplicated: true,
-      originalTraceId: "trace-pos-1",
-    });
+    expect(duplicate.statusCode).toBe(201);
+    expect(duplicate.json()).toEqual(first.json());
     expect(found.json()).toMatchObject({ posTicketId, posStatus: "accepted" });
     expect(cancelled.json()).toMatchObject({
       posTicketId,
@@ -137,8 +147,7 @@ describe("commerce proof Mock POS", () => {
       method: "POST",
       url: "/v1/tickets",
       headers: {
-        authorization: "Bearer pos-token",
-        "idempotency-key": "rejected-ticket",
+        ...providerHeaders("rejected-ticket", "c"),
       },
       payload: {
         ...ticketInput,
@@ -150,8 +159,7 @@ describe("commerce proof Mock POS", () => {
       method: "POST",
       url: "/v1/tickets",
       headers: {
-        authorization: "Bearer pos-token",
-        "idempotency-key": "delayed-ticket",
+        ...providerHeaders("delayed-ticket", "d"),
       },
       payload: { ...ticketInput, scenarioId: "pos-timeout" },
     });
@@ -159,8 +167,7 @@ describe("commerce proof Mock POS", () => {
       method: "POST",
       url: "/v1/tickets",
       headers: {
-        authorization: "Bearer pos-token",
-        "idempotency-key": "normal-ticket",
+        ...providerHeaders("normal-ticket", "e"),
       },
       payload: ticketInput,
     });
@@ -193,18 +200,19 @@ describe("commerce proof Mock POS", () => {
       method: "POST",
       url: "/v1/tickets",
       headers: {
-        authorization: "Bearer pos-token",
-        "idempotency-key": "partial-cancellation",
+        ...providerHeaders("partial-cancellation:create", "f"),
       },
       payload: { ...ticketInput, scenarioId: "partial-cancellation-failure" },
     });
     const cancellation = await server.inject({
       method: "POST",
       url: `/v1/tickets/${placed.json().posTicketId}/cancel`,
-      headers: { authorization: "Bearer pos-token" },
+      headers: providerHeaders("partial-cancellation:cancel", "1"),
       payload: {
         traceId: ticketInput.traceId,
         scenarioId: "partial-cancellation-failure",
+        commerceOrderId: ticketInput.commerceOrderId,
+        omsOrderId: ticketInput.omsOrderId,
       },
     });
 
@@ -214,5 +222,132 @@ describe("commerce proof Mock POS", () => {
       errorCode: "pos_cancellation_failed",
       posStatus: "cancellation_failed",
     });
+  });
+
+  it("binds one key to the exact POS operation, payload, and fingerprint", async () => {
+    const server = buildServer();
+    const exactHeaders = providerHeaders("provider-fence:pos", "2");
+    const first = await server.inject({
+      method: "POST",
+      url: "/v1/tickets",
+      headers: exactHeaders,
+      payload: ticketInput,
+    });
+    const replay = await server.inject({
+      method: "POST",
+      url: "/v1/tickets",
+      headers: exactHeaders,
+      payload: ticketInput,
+    });
+    const rebound = await server.inject({
+      method: "POST",
+      url: "/v1/tickets",
+      headers: {
+        ...exactHeaders,
+        "x-provider-binding-fingerprint": "3".repeat(64),
+      },
+      payload: ticketInput,
+    });
+    const changedPayload = await server.inject({
+      method: "POST",
+      url: "/v1/tickets",
+      headers: exactHeaders,
+      payload: { ...ticketInput, totalVnd: ticketInput.totalVnd + 1 },
+    });
+    const changedOperation = await server.inject({
+      method: "POST",
+      url: `/v1/tickets/${first.json().posTicketId}/cancel`,
+      headers: exactHeaders,
+      payload: {
+        traceId: ticketInput.traceId,
+        scenarioId: ticketInput.scenarioId,
+        commerceOrderId: ticketInput.commerceOrderId,
+        omsOrderId: ticketInput.omsOrderId,
+      },
+    });
+
+    expect(first.statusCode).toBe(201);
+    expect(replay.statusCode).toBe(201);
+    expect(replay.json()).toEqual(first.json());
+    for (const conflict of [rebound, changedPayload, changedOperation]) {
+      expect(conflict.statusCode).toBe(409);
+      expect(conflict.json().errorCode).toBe(
+        "provider_idempotency_conflict",
+      );
+    }
+  });
+
+  it("rejects invalid identity without retroactively binding the key", async () => {
+    const server = buildServer();
+    const invalid = await server.inject({
+      method: "POST",
+      url: "/v1/tickets",
+      headers: {
+        authorization: "Bearer pos-token",
+        "idempotency-key": "provider-fence:unbound ",
+        "x-provider-binding-fingerprint": "4".repeat(64),
+      },
+      payload: ticketInput,
+    });
+    const valid = await server.inject({
+      method: "POST",
+      url: "/v1/tickets",
+      headers: providerHeaders("provider-fence:unbound", "4"),
+      payload: ticketInput,
+    });
+
+    expect(invalid.statusCode).toBe(400);
+    expect(invalid.json().errorCode).toBe(
+      "provider_mutation_identity_required",
+    );
+    expect(valid.statusCode).toBe(201);
+    expect(valid.json().posTicketId).toBe("POS-0001");
+  });
+
+  it("returns unknown for an exact in-flight retry and later replays once", async () => {
+    const server = buildServer();
+    await server.inject({
+      method: "PUT",
+      url: "/__admin/scenarios/delayed-pos-submit",
+      headers: { authorization: "Bearer pos-admin-token" },
+      payload: {
+        operation: "submit_pos_ticket",
+        behavior: "delay",
+        delayMs: 40,
+      },
+    });
+    const payload = {
+      ...ticketInput,
+      scenarioId: "delayed-pos-submit",
+    };
+    const headers = providerHeaders("provider-fence:delayed-pos", "5");
+    const firstPromise = server.inject({
+      method: "POST",
+      url: "/v1/tickets",
+      headers,
+      payload,
+    });
+    await new Promise((resolve) => setTimeout(resolve, 5));
+    const pending = await server.inject({
+      method: "POST",
+      url: "/v1/tickets",
+      headers,
+      payload,
+    });
+    const first = await firstPromise;
+    const replay = await server.inject({
+      method: "POST",
+      url: "/v1/tickets",
+      headers,
+      payload,
+    });
+
+    expect(pending.statusCode).toBe(503);
+    expect(pending.json().errorCode).toBe(
+      "provider_idempotency_outcome_unknown",
+    );
+    expect(first.statusCode).toBe(201);
+    expect(replay.statusCode).toBe(201);
+    expect(replay.json()).toEqual(first.json());
   });
 });

@@ -1,15 +1,48 @@
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import type { FastifyInstance } from "fastify";
 import { createKfcCommerceGatewayClients } from "../../src/clients/kfcCommerceGateway.js";
 import { buildCommerceProofGatewayServer } from "../../src/commerceProof/gatewayServer.js";
 import { buildCommerceProofMockOmsServer } from "../../src/commerceProof/mockOmsServer.js";
 import { buildCommerceProofMockPosServer } from "../../src/commerceProof/mockPosServer.js";
-import { commerceContractVersion, sandboxCommerceProofProviderProvenance } from "../../src/commerceProof/contracts.js";
+import {
+  commerceContractVersion,
+  sandboxCommerceProofProviderProvenance,
+} from "../../src/commerceProof/contracts.js";
+import {
+  createCommerceProofGatewayMutationState,
+  type CommerceProofGatewayMutationState,
+} from "../../src/commerceProof/gatewayMutationContracts.js";
+import type { Order } from "../../src/domain/types.js";
+import { OrderingDataService } from "../../src/ordering/orderingDataService.js";
+import { createTestFixtures } from "../fixtures/testFixtures.js";
 
 const servers: FastifyInstance[] = [];
 
+function must<Value>(
+  value: Value | null | undefined,
+  message: string,
+): Value {
+  if (value === null || value === undefined) throw new Error(message);
+  return value;
+}
+
+function deferred() {
+  let resolver: (() => void) | undefined;
+  const promise = new Promise<void>((resolve) => {
+    resolver = resolve;
+  });
+  return {
+    promise,
+    resolve() {
+      if (!resolver) throw new Error("deferred_resolver_missing");
+      resolver();
+    },
+  };
+}
+
 afterEach(async () => {
   await Promise.all(servers.splice(0).reverse().map((server) => server.close()));
+  vi.restoreAllMocks();
 });
 
 async function listen(server: FastifyInstance): Promise<string> {
@@ -17,7 +50,19 @@ async function listen(server: FastifyInstance): Promise<string> {
   return server.listen({ host: "127.0.0.1", port: 0 });
 }
 
-async function harness(timeoutMs = 3000) {
+interface HarnessObservers {
+  onPosTicketResponse?: () => void;
+  onPosCancellationResponse?: () => void;
+  onOmsCancellationResponse?: () => void;
+}
+
+async function harness(
+  timeoutMs = 3000,
+  mutationState: CommerceProofGatewayMutationState =
+    createCommerceProofGatewayMutationState(),
+  observers: HarnessObservers = {},
+) {
+  const downstreamCalls: string[] = [];
   const oms = buildCommerceProofMockOmsServer({
     token: "oms-token",
     adminToken: "oms-admin-token",
@@ -26,6 +71,46 @@ async function harness(timeoutMs = 3000) {
     token: "pos-token",
     adminToken: "pos-admin-token",
   });
+  oms.addHook("onRequest", async (request) => {
+    if (request.method !== "POST") return;
+    if (request.url === "/v1/orders") downstreamCalls.push("oms:create");
+    if (request.url.endsWith("/cancel")) downstreamCalls.push("oms:cancel");
+  });
+  oms.addHook("onSend", async (request, reply, payload) => {
+    if (
+      observers.onOmsCancellationResponse &&
+      request.method === "POST" &&
+      request.url.endsWith("/cancel") &&
+      reply.statusCode === 200
+    ) {
+      observers.onOmsCancellationResponse();
+    }
+    return payload;
+  });
+  pos.addHook("onRequest", async (request) => {
+    if (request.method !== "POST") return;
+    if (request.url === "/v1/tickets") downstreamCalls.push("pos:create");
+    if (request.url.endsWith("/cancel")) downstreamCalls.push("pos:cancel");
+  });
+  pos.addHook("onSend", async (request, reply, payload) => {
+    if (
+      observers.onPosTicketResponse &&
+      request.method === "POST" &&
+      request.url === "/v1/tickets" &&
+      reply.statusCode === 201
+    ) {
+      observers.onPosTicketResponse();
+    }
+    if (
+      observers.onPosCancellationResponse &&
+      request.method === "POST" &&
+      request.url.endsWith("/cancel") &&
+      reply.statusCode === 200
+    ) {
+      observers.onPosCancellationResponse();
+    }
+    return payload;
+  });
   const [omsBaseUrl, posBaseUrl] = await Promise.all([listen(oms), listen(pos)]);
   const gateway = buildCommerceProofGatewayServer({
     token: "gateway-token",
@@ -33,9 +118,11 @@ async function harness(timeoutMs = 3000) {
     pos: { baseUrl: posBaseUrl, token: "pos-token" },
     timeoutMs,
     readinessTimeoutMs: 3000,
+    mutationState,
+    persistMutationSnapshot: async () => {},
   });
   servers.push(gateway);
-  return { gateway, oms, pos };
+  return { downstreamCalls, gateway, mutationState, oms, pos };
 }
 
 function command(scenarioId = "successful-placement", traceId = "trace-gateway-1") {
@@ -46,6 +133,7 @@ function command(scenarioId = "successful-placement", traceId = "trace-gateway-1
     sessionId: "kfc:anon_customer_123",
     clientMessageId: "message-12",
     idempotencyKey: "kfc:anon_customer_123:message-12:placeOrder",
+    bindingFingerprint: "a".repeat(64),
     toolName: "placeOrder",
     order: {
       previewId: "preview-1",
@@ -55,6 +143,32 @@ function command(scenarioId = "successful-placement", traceId = "trace-gateway-1
       paymentMethod: "cash",
       userConfirmed: true,
     },
+  };
+}
+
+function mutationIdentity(idempotencyKey: string, marker = "a") {
+  return {
+    idempotencyKey,
+    bindingFingerprint: marker.repeat(64),
+  };
+}
+
+function paymentOrder(id: string): Order {
+  return {
+    id,
+    cart: {
+      id: "cart-payment",
+      items: [],
+      subtotalVnd: 0,
+      discountVnd: 0,
+      deliveryFeeVnd: 0,
+      totalVnd: 0,
+      voucherCode: null,
+    },
+    status: "created",
+    paymentStatus: "not_started",
+    assignedStoreId: "KFCVN0001",
+    createdAt: "2026-07-20T00:00:00.000Z",
   };
 }
 
@@ -126,6 +240,8 @@ describe("Demo Commerce Gateway", () => {
       pos: { baseUrl: posBaseUrl, token: "wrong-pos-token" },
       timeoutMs: 3000,
       readinessTimeoutMs: 3000,
+      mutationState: createCommerceProofGatewayMutationState(),
+      persistMutationSnapshot: async () => {},
     });
     servers.push(gateway);
 
@@ -199,6 +315,10 @@ describe("Demo Commerce Gateway", () => {
       baseUrl,
       token: "gateway-token",
     });
+    const externalCallContext = {
+      signal: new AbortController().signal,
+      deadlineAt: Date.now() + 10_000,
+    };
     const preview = await clients.oms.previewOrder({
       cart: {
         id: "cart-sandbox",
@@ -216,11 +336,12 @@ describe("Demo Commerce Gateway", () => {
         city: "Hồ Chí Minh",
       },
       storeId: "KFCVN0001",
-    });
+    }, externalCallContext);
     expect(preview.ok).toBe(true);
+    const previewValue = must(preview.value, "preview result missing");
 
     const placed = await clients.oms.placeOrder({
-      preview: preview.value!,
+      preview: previewValue,
       userConfirmed: true,
       context: {
         sessionId: "kfc:sandbox-client-contract",
@@ -228,30 +349,233 @@ describe("Demo Commerce Gateway", () => {
         traceId: "trace-sandbox-client-contract",
         scenarioId: "sandbox-client-contract",
       },
-    });
+    }, externalCallContext, mutationIdentity("client-contract:placeOrder"));
     expect(placed).toMatchObject({ ok: true, value: { status: "created" } });
+    const placedValue = must(placed.value, "placed order result missing");
 
-    const methods = await clients.payment.listMethods({ query: "ZaloPay" });
+    const methods = await clients.payment.listMethods(
+      { query: "ZaloPay" },
+      externalCallContext,
+    );
     expect(methods.ok).toBe(true);
     expect(methods.value).toContainEqual(expect.objectContaining({
       methodId: "zalopay_wallet",
       supported: true,
     }));
-    await expect(clients.payment.createPaymentLink(placed.value!, "zalopay")).resolves.toMatchObject({
+    await expect(clients.payment.createPaymentLink(
+      placedValue,
+      "zalopay_wallet",
+      externalCallContext,
+      mutationIdentity("client-contract:createPaymentLink", "b"),
+    )).resolves.toMatchObject({
       ok: true,
       value: { status: "pending" },
     });
-    await expect(clients.payment.checkPaymentStatus(placed.value!.id)).resolves.toMatchObject({
+    await expect(clients.payment.checkPaymentStatus(
+      placedValue.id,
+      externalCallContext,
+    )).resolves.toMatchObject({
       ok: true,
       value: { status: "pending" },
     });
-    await expect(clients.oms.getOrderStatus(placed.value!.id)).resolves.toMatchObject({
+    await expect(clients.oms.getOrderStatus(
+      placedValue.id,
+      externalCallContext,
+    )).resolves.toMatchObject({
       ok: true,
-      value: { id: placed.value!.id, status: "created" },
+      value: { id: placedValue.id, status: "created" },
     });
-    await expect(clients.oms.cancelOrder(placed.value!.id)).resolves.toMatchObject({
+    await expect(clients.oms.cancelOrder(
+      placedValue.id,
+      externalCallContext,
+      mutationIdentity("client-contract:cancelOrder", "c"),
+    )).resolves.toMatchObject({
       ok: true,
-      value: { id: placed.value!.id, status: "cancelled" },
+      value: { id: placedValue.id, status: "cancelled" },
+    });
+  });
+
+  it("preserves an opaque payment method ID across sandbox HTTP dispatch and encodes it in the returned URL", async () => {
+    const methodId =
+      "sandbox/支付?method=ví điện tử#%" + "🧾".repeat(300);
+    const listed = createTestFixtures().paymentMethods.find(
+      (method) => method.methodId === "zalopay_wallet",
+    );
+    if (!listed) throw new Error("listed payment fixture missing");
+    const lookup = vi
+      .spyOn(OrderingDataService.prototype, "getPaymentMethodForLink")
+      .mockImplementation((receivedMethodId) =>
+        receivedMethodId === methodId
+          ? { ...listed, methodId: receivedMethodId }
+          : undefined,
+      );
+    const { gateway } = await harness();
+    const placed = await gateway.inject({
+      method: "POST",
+      url: "/v1/orders",
+      headers: { authorization: "Bearer gateway-token" },
+      payload: command("opaque-payment-dispatch"),
+    });
+    expect(placed.statusCode).toBe(201);
+    const commerceOrderId =
+      placed.json<{ commerceOrderId: string }>().commerceOrderId;
+    const baseUrl = await gateway.listen({ host: "127.0.0.1", port: 0 });
+    const clients = createKfcCommerceGatewayClients({
+      baseUrl,
+      token: "gateway-token",
+    });
+
+    const result = await clients.payment.createPaymentLink(
+      paymentOrder(commerceOrderId),
+      methodId,
+      {
+        signal: new AbortController().signal,
+        deadlineAt: Date.now() + 10_000,
+      },
+      mutationIdentity("opaque-payment:createPaymentLink", "d"),
+    );
+
+    expect(lookup).toHaveBeenCalledOnce();
+    expect(lookup).toHaveBeenCalledWith(methodId);
+    expect(result).toMatchObject({
+      ok: true,
+      value: {
+        url:
+          `https://pay.sandbox.invalid/method-${encodeURIComponent(methodId)}/` +
+          `order-${encodeURIComponent(commerceOrderId)}`,
+        status: "pending",
+      },
+    });
+  });
+
+  it.each([".", ".."])(
+    "keeps the exact %s opaque ID as a distinct sandbox payment URL segment",
+    async (methodId) => {
+      const listed = createTestFixtures().paymentMethods.find(
+        (method) => method.methodId === "zalopay_wallet",
+      );
+      if (!listed) throw new Error("listed payment fixture missing");
+      const lookup = vi
+        .spyOn(OrderingDataService.prototype, "getPaymentMethodForLink")
+        .mockImplementation((receivedMethodId) =>
+          receivedMethodId === methodId
+            ? { ...listed, methodId: receivedMethodId }
+            : undefined,
+        );
+      const { gateway } = await harness();
+      const placed = await gateway.inject({
+        method: "POST",
+        url: "/v1/orders",
+        headers: { authorization: "Bearer gateway-token" },
+        payload: command(`dot-payment-dispatch-${methodId.length}`),
+      });
+      expect(placed.statusCode).toBe(201);
+      const commerceOrderId =
+        placed.json<{ commerceOrderId: string }>().commerceOrderId;
+      const baseUrl = await gateway.listen({ host: "127.0.0.1", port: 0 });
+      const clients = createKfcCommerceGatewayClients({
+        baseUrl,
+        token: "gateway-token",
+      });
+
+      const result = await clients.payment.createPaymentLink(
+        paymentOrder(commerceOrderId),
+        methodId,
+        {
+          signal: new AbortController().signal,
+          deadlineAt: Date.now() + 10_000,
+        },
+        mutationIdentity(
+          `dot-payment-${methodId.length}:createPaymentLink`,
+          "e",
+        ),
+      );
+
+      expect(lookup).toHaveBeenCalledOnce();
+      expect(lookup).toHaveBeenCalledWith(methodId);
+      expect(result.value?.url).toBe(
+        `https://pay.sandbox.invalid/method-${methodId}/order-${encodeURIComponent(commerceOrderId)}`,
+      );
+      expect(
+        new URL(must(result.value, "payment link result missing").url).pathname,
+      ).toBe(`/method-${methodId}/order-${encodeURIComponent(commerceOrderId)}`);
+    },
+  );
+
+  it("rejects a lone-surrogate payment ID from a direct Fastify JSON body before provider lookup", async () => {
+    const lookup = vi.spyOn(
+      OrderingDataService.prototype,
+      "getPaymentMethodForLink",
+    );
+    const { gateway } = await harness();
+
+    const response = await gateway.inject({
+      method: "POST",
+      url: "/v1/orders/not-created/payment-links",
+      headers: { authorization: "Bearer gateway-token" },
+      payload: {
+        methodId: "\ud800",
+        ...mutationIdentity("surrogate-payment:createPaymentLink", "f"),
+      },
+    });
+
+    expect(response.statusCode).toBe(400);
+    expect(response.json()).toMatchObject({
+      ok: false,
+      errorCode: "invalid_payment_link_request",
+    });
+    expect(lookup).not.toHaveBeenCalled();
+  });
+
+  it("rejects sandbox payment methods that are flagged supported without listed support authority", async () => {
+    const methodId = "sandbox-supported-but-not-listed";
+    const listed = createTestFixtures().paymentMethods.find(
+      (method) => method.methodId === "zalopay_wallet",
+    );
+    if (!listed) throw new Error("listed payment fixture missing");
+    const lookup = vi
+      .spyOn(OrderingDataService.prototype, "getPaymentMethodForLink")
+      .mockImplementation((receivedMethodId) =>
+        receivedMethodId === methodId
+          ? {
+              ...listed,
+              methodId: receivedMethodId,
+              supported: true,
+              supportStatus: "not_listed_in_policy",
+            }
+          : undefined,
+      );
+    const { gateway } = await harness();
+    const placed = await gateway.inject({
+      method: "POST",
+      url: "/v1/orders",
+      headers: { authorization: "Bearer gateway-token" },
+      payload: command("unlisted-payment-dispatch"),
+    });
+    expect(placed.statusCode).toBe(201);
+    const commerceOrderId =
+      placed.json<{ commerceOrderId: string }>().commerceOrderId;
+    const baseUrl = await gateway.listen({ host: "127.0.0.1", port: 0 });
+    const clients = createKfcCommerceGatewayClients({
+      baseUrl,
+      token: "gateway-token",
+    });
+
+    const result = await clients.payment.createPaymentLink(
+      paymentOrder(commerceOrderId),
+      methodId,
+      {
+        signal: new AbortController().signal,
+        deadlineAt: Date.now() + 10_000,
+      },
+      mutationIdentity("unsupported-payment:createPaymentLink", "1"),
+    );
+
+    expect(lookup).toHaveBeenCalledOnce();
+    expect(lookup).toHaveBeenCalledWith(methodId);
+    expect(result).toMatchObject({
+      ok: false,
+      errorCode: "payment_method_unsupported",
     });
   });
 
@@ -281,8 +605,8 @@ describe("Demo Commerce Gateway", () => {
     });
   });
 
-  it("deduplicates at the gateway without another OMS or POS submission", async () => {
-    const { gateway } = await harness();
+  it("replays the exact gateway result without another OMS or POS submission", async () => {
+    const { downstreamCalls, gateway } = await harness();
     const first = await gateway.inject({
       method: "POST",
       url: "/v1/orders",
@@ -293,20 +617,110 @@ describe("Demo Commerce Gateway", () => {
       method: "POST",
       url: "/v1/orders",
       headers: { authorization: "Bearer gateway-token" },
-      payload: command("duplicate-command", "trace-gateway-duplicate"),
+      payload: command("successful-placement", "trace-gateway-duplicate"),
     });
 
     expect(first.statusCode).toBe(201);
-    expect(duplicate.statusCode).toBe(200);
-    expect(duplicate.json()).toMatchObject({
-      outcome: "deduplicated",
-      commerceOrderId: "COM-0001",
-      omsOrderId: "OMS-0001",
-      posTicketId: "POS-0001",
-      traceId: "trace-gateway-duplicate",
-      originalTraceId: "trace-gateway-1",
-      deduplicated: true,
+    expect(duplicate.statusCode).toBe(201);
+    expect(duplicate.json()).toEqual(first.json());
+    expect(downstreamCalls).toEqual(["oms:create", "pos:create"]);
+  });
+
+  it("shares one in-flight order mutation across exact concurrent retries", async () => {
+    const { downstreamCalls, gateway, pos } = await harness();
+    await configure(pos, "pos-admin-token", "concurrent-idempotency", {
+      operation: "submit_pos_ticket",
+      behavior: "delay",
+      delayMs: 40,
     });
+    const request = {
+      method: "POST" as const,
+      url: "/v1/orders",
+      headers: { authorization: "Bearer gateway-token" },
+      payload: command("concurrent-idempotency"),
+    };
+
+    const [left, right] = await Promise.all([
+      gateway.inject(request),
+      gateway.inject(request),
+    ]);
+
+    expect([left.statusCode, right.statusCode]).toEqual([201, 201]);
+    expect(right.json()).toEqual(left.json());
+    expect(downstreamCalls).toEqual(["oms:create", "pos:create"]);
+  });
+
+  it("rejects reuse of an order idempotency key for a different binding", async () => {
+    const { downstreamCalls, gateway } = await harness();
+    const first = await gateway.inject({
+      method: "POST",
+      url: "/v1/orders",
+      headers: { authorization: "Bearer gateway-token" },
+      payload: command(),
+    });
+    const conflict = await gateway.inject({
+      method: "POST",
+      url: "/v1/orders",
+      headers: { authorization: "Bearer gateway-token" },
+      payload: {
+        ...command(),
+        bindingFingerprint: "b".repeat(64),
+      },
+    });
+
+    expect(first.statusCode).toBe(201);
+    expect(conflict.statusCode).toBe(409);
+    expect(conflict.json()).toMatchObject({
+      ok: false,
+      errorCode: "provider_idempotency_conflict",
+    });
+    expect(downstreamCalls).toEqual(["oms:create", "pos:create"]);
+  });
+
+  it("replays one exact payment mutation and conflicts on rebinding", async () => {
+    const lookup = vi.spyOn(
+      OrderingDataService.prototype,
+      "getPaymentMethodForLink",
+    );
+    const { gateway } = await harness();
+    const placed = await gateway.inject({
+      method: "POST",
+      url: "/v1/orders",
+      headers: { authorization: "Bearer gateway-token" },
+      payload: command("payment-idempotency"),
+    });
+    const commerceOrderId =
+      placed.json<{ commerceOrderId: string }>().commerceOrderId;
+    const request = {
+      method: "POST" as const,
+      url: `/v1/orders/${commerceOrderId}/payment-links`,
+      headers: { authorization: "Bearer gateway-token" },
+      payload: {
+        methodId: "zalopay_wallet",
+        idempotencyKey: "confirmation:request-2:createPaymentLink:digest",
+        bindingFingerprint: "c".repeat(64),
+      },
+    };
+
+    const first = await gateway.inject(request);
+    const replay = await gateway.inject(request);
+    const conflict = await gateway.inject({
+      ...request,
+      payload: {
+        ...request.payload,
+        bindingFingerprint: "d".repeat(64),
+      },
+    });
+
+    expect(first.statusCode).toBe(200);
+    expect(replay.statusCode).toBe(200);
+    expect(replay.json()).toEqual(first.json());
+    expect(conflict.statusCode).toBe(409);
+    expect(conflict.json()).toMatchObject({
+      ok: false,
+      errorCode: "provider_idempotency_conflict",
+    });
+    expect(lookup).toHaveBeenCalledOnce();
   });
 
   it("reports POS rejection and only claims compensation after OMS confirms", async () => {
@@ -357,12 +771,17 @@ describe("Demo Commerce Gateway", () => {
     });
   });
 
-  it("classifies a POS timeout after OMS creation as ambiguous", async () => {
-    const { gateway, pos } = await harness(20);
+  it("retains a POS timeout as unknown and resumes the exact POS phase", async () => {
+    const providerCompleted = deferred();
+    const { downstreamCalls, gateway, mutationState, pos } = await harness(
+      100,
+      createCommerceProofGatewayMutationState(),
+      { onPosTicketResponse: providerCompleted.resolve },
+    );
     await configure(pos, "pos-admin-token", "pos-timeout", {
       operation: "submit_pos_ticket",
       behavior: "delay",
-      delayMs: 60,
+      delayMs: 300,
     });
     const response = await gateway.inject({
       method: "POST",
@@ -371,26 +790,53 @@ describe("Demo Commerce Gateway", () => {
       payload: command("pos-timeout"),
     });
 
-    expect(response.statusCode).toBe(504);
+    expect(response.statusCode).toBe(503);
     expect(response.json()).toMatchObject({
-      outcome: "ambiguous_pos_submission",
       commerceOrderId: "COM-0001",
-      omsOrderId: "OMS-0001",
-      omsStatus: "created",
-      customerStatus: "failed",
-      compensationStatus: "not_required",
+      errorCode: "provider_idempotency_outcome_unknown",
     });
     expect(response.json()).not.toHaveProperty("posTicketId");
+    expect(
+      mutationState.ordersByIdempotencyKey.get(
+        command("pos-timeout").idempotencyKey,
+      ),
+    ).toMatchObject({
+      state: "pos_submit_unknown",
+      commerceOrderId: "COM-0001",
+      omsOrderId: "OMS-0001",
+    });
+
+    await providerCompleted.promise;
+    const resumed = await gateway.inject({
+      method: "POST",
+      url: "/v1/orders",
+      headers: { authorization: "Bearer gateway-token" },
+      payload: command("pos-timeout"),
+    });
+
+    expect(resumed.statusCode).toBe(201);
+    expect(resumed.json()).toMatchObject({
+      outcome: "accepted",
+      commerceOrderId: "COM-0001",
+      omsOrderId: "OMS-0001",
+      posTicketId: "POS-0001",
+    });
+    expect(downstreamCalls).toEqual([
+      "oms:create",
+      "pos:create",
+      "pos:create",
+    ]);
   });
 
   it("cancels POS before OMS and reports partial cancellation truthfully", async () => {
-    const { gateway, pos } = await harness();
+    const { downstreamCalls, gateway, pos } = await harness();
     const placed = await gateway.inject({
       method: "POST",
       url: "/v1/orders",
       headers: { authorization: "Bearer gateway-token" },
       payload: command("partial-cancellation-failure"),
     });
+    downstreamCalls.length = 0;
     await configure(pos, "pos-admin-token", "partial-cancellation-failure", {
       operation: "cancel_pos_ticket",
       behavior: "fail",
@@ -400,8 +846,7 @@ describe("Demo Commerce Gateway", () => {
       url: `/v1/orders/${placed.json().commerceOrderId}/cancel`,
       headers: { authorization: "Bearer gateway-token" },
       payload: {
-        traceId: "trace-cancel-partial",
-        scenarioId: "partial-cancellation-failure",
+        ...mutationIdentity("partial-cancellation:cancelOrder", "2"),
       },
     });
 
@@ -413,23 +858,24 @@ describe("Demo Commerce Gateway", () => {
       customerStatus: "failed",
       conflictType: "pos_cancellation_failed",
     });
+    expect(downstreamCalls).toEqual(["pos:cancel"]);
   });
 
   it("reports cancellation only after both POS and OMS confirm", async () => {
-    const { gateway } = await harness();
+    const { downstreamCalls, gateway } = await harness();
     const placed = await gateway.inject({
       method: "POST",
       url: "/v1/orders",
       headers: { authorization: "Bearer gateway-token" },
       payload: command("successful-cancellation"),
     });
+    downstreamCalls.length = 0;
     const cancelled = await gateway.inject({
       method: "POST",
       url: `/v1/orders/${placed.json().commerceOrderId}/cancel`,
       headers: { authorization: "Bearer gateway-token" },
       payload: {
-        traceId: "trace-cancel-success",
-        scenarioId: "successful-cancellation",
+        ...mutationIdentity("successful-cancellation:cancelOrder", "3"),
       },
     });
 
@@ -440,6 +886,134 @@ describe("Demo Commerce Gateway", () => {
       posStatus: "cancelled",
       customerStatus: "cancelled",
     });
+    expect(downstreamCalls).toEqual(["pos:cancel", "oms:cancel"]);
+  });
+
+  it("resumes an unknown POS cancellation with the same phase identity", async () => {
+    const providerCompleted = deferred();
+    const { downstreamCalls, gateway, mutationState, pos } =
+      await harness(
+        100,
+        createCommerceProofGatewayMutationState(),
+        { onPosCancellationResponse: providerCompleted.resolve },
+      );
+    const placed = await gateway.inject({
+      method: "POST",
+      url: "/v1/orders",
+      headers: { authorization: "Bearer gateway-token" },
+      payload: command("pos-cancellation-timeout"),
+    });
+    downstreamCalls.length = 0;
+    await configure(pos, "pos-admin-token", "pos-cancellation-timeout", {
+      operation: "cancel_pos_ticket",
+      behavior: "delay",
+      delayMs: 300,
+    });
+    const payload = mutationIdentity(
+      "pos-cancellation-timeout:cancelOrder",
+      "4",
+    );
+    const url = `/v1/orders/${placed.json().commerceOrderId}/cancel`;
+    const first = await gateway.inject({
+      method: "POST",
+      url,
+      headers: { authorization: "Bearer gateway-token" },
+      payload,
+    });
+    const pending = must(
+      mutationState.cancellationsByIdempotencyKey.get(
+        payload.idempotencyKey,
+      ),
+      "pending POS cancellation missing",
+    );
+    const originalContext = structuredClone(pending.context);
+    const originalIdentity = structuredClone(pending.posCancelIdentity);
+
+    expect(first.statusCode).toBe(503);
+    expect(first.json().errorCode).toBe(
+      "provider_idempotency_outcome_unknown",
+    );
+    expect(pending.state).toBe("pos_cancel_unknown");
+
+    await providerCompleted.promise;
+    const resumed = await gateway.inject({
+      method: "POST",
+      url,
+      headers: { authorization: "Bearer gateway-token" },
+      payload,
+    });
+
+    expect(resumed.statusCode).toBe(200);
+    expect(pending.state).toBe("completed");
+    expect(pending.context).toEqual(originalContext);
+    expect(pending.posCancelIdentity).toEqual(originalIdentity);
+    expect(downstreamCalls).toEqual([
+      "pos:cancel",
+      "pos:cancel",
+      "oms:cancel",
+    ]);
+  });
+
+  it("resumes an unknown OMS cancellation without repeating POS", async () => {
+    const providerCompleted = deferred();
+    const { downstreamCalls, gateway, mutationState, oms } =
+      await harness(
+        100,
+        createCommerceProofGatewayMutationState(),
+        { onOmsCancellationResponse: providerCompleted.resolve },
+      );
+    const placed = await gateway.inject({
+      method: "POST",
+      url: "/v1/orders",
+      headers: { authorization: "Bearer gateway-token" },
+      payload: command("oms-cancellation-timeout"),
+    });
+    downstreamCalls.length = 0;
+    await configure(oms, "oms-admin-token", "oms-cancellation-timeout", {
+      operation: "cancel_order",
+      behavior: "delay",
+      delayMs: 300,
+    });
+    const payload = mutationIdentity(
+      "oms-cancellation-timeout:cancelOrder",
+      "5",
+    );
+    const url = `/v1/orders/${placed.json().commerceOrderId}/cancel`;
+    const first = await gateway.inject({
+      method: "POST",
+      url,
+      headers: { authorization: "Bearer gateway-token" },
+      payload,
+    });
+    const pending = must(
+      mutationState.cancellationsByIdempotencyKey.get(
+        payload.idempotencyKey,
+      ),
+      "pending OMS cancellation missing",
+    );
+    const originalContext = structuredClone(pending.context);
+    const originalOmsIdentity = structuredClone(pending.omsCancelIdentity);
+
+    expect(first.statusCode).toBe(503);
+    expect(pending.state).toBe("oms_cancel_unknown");
+
+    await providerCompleted.promise;
+    const resumed = await gateway.inject({
+      method: "POST",
+      url,
+      headers: { authorization: "Bearer gateway-token" },
+      payload,
+    });
+
+    expect(resumed.statusCode).toBe(200);
+    expect(pending.state).toBe("completed");
+    expect(pending.context).toEqual(originalContext);
+    expect(pending.omsCancelIdentity).toEqual(originalOmsIdentity);
+    expect(downstreamCalls).toEqual([
+      "pos:cancel",
+      "oms:cancel",
+      "oms:cancel",
+    ]);
   });
 
   it("preserves conflicting raw OMS and POS status", async () => {

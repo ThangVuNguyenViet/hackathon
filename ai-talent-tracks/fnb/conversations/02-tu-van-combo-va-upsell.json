@@ -47,7 +47,7 @@
     {
       "index": 2,
       "speaker": "Bot",
-      "text": "Dạ mình sẽ tìm các lựa chọn cho 4 người trong khoảng 300.000đ. Bạn thích gà rán, burger hay món cơm? Nếu muốn mình cũng có thể gợi ý thêm món tráng miệng.",
+      "text": "Với nhóm 4 người và khoảng 300.000đ, 2 Combo Đẫy Đà 129K là một lựa chọn vừa ngân sách. Bạn thích ưu tiên gà rán, burger hay món cơm để mình gợi ý sát hơn?",
       "useCases": ["UC-02", "UC-03", "UC-11", "UC-13"]
     },
     {
@@ -59,7 +59,7 @@
     {
       "index": 4,
       "speaker": "Bot",
-      "text": "Dạ mình sẽ lấy menu theo danh mục để bạn xem và kiểm tra các ưu đãi đang áp dụng cho đơn nhóm dưới 300.000đ. Mình chỉ đề xuất những ưu đãi phù hợp với nhu cầu của bạn.",
+      "text": "Menu có các nhóm gà rán, burger, cơm, combo, món ăn nhẹ và nước. Với nhóm 4 người khoảng 300.000đ, 2 Combo Đẫy Đà 129K có tổng 258.000đ và là lựa chọn phù hợp ngân sách.",
       "useCases": ["UC-04", "UC-09"]
     },
     {
@@ -71,7 +71,7 @@
     {
       "index": 6,
       "speaker": "Bot",
-      "text": "Dạ 10 miếng gà rán và 4 Pepsi tiêu chuẩn gọi lẻ tạm tính 404.000đ. Mình thấy 2 Combo Đẫy Đà 129K có đúng 10 miếng gà rán và 4 Pepsi tiêu chuẩn, tổng 258.000đ, tiết kiệm 146.000đ và phù hợp ngân sách hơn. Mình chưa đổi giỏ; bạn có muốn đổi sang 2 combo này không?",
+      "text": "Dạ, gọi lẻ 10 miếng gà rán và 4 Pepsi tiêu chuẩn sẽ là 404.000đ. Nếu chọn 2 Combo Đẫy Đà 129K, bạn vẫn có đủ 10 miếng gà và 4 Pepsi nhưng tổng chỉ 258.000đ, tiết kiệm 146.000đ. Bạn có muốn mình đổi sang 2 combo này không?",
       "useCases": ["UC-12"]
     },
     {
@@ -101,10 +101,10 @@
   ],
   "expectations": [
     "Khi user hỏi toàn bộ menu, bot phải tra menu và trình bày lựa chọn có cấu trúc thay vì chỉ trả lời phần ưu đãi.",
-    "Bot dựa trên thành phần và giá đã xác minh để gợi ý combo tương đương, tiết kiệm 146.000đ.",
-    "Bot không tự đổi món lẻ sang combo trước khi khách đồng ý.",
+    "Bot dựa trên thành phần và giá đã xác minh để gợi ý combo tương đương, tính rõ 404.000đ - 258.000đ = 146.000đ tiền tiết kiệm.",
+    "Bot không tự đổi món lẻ sang combo trước khi khách đồng ý rõ ràng ở user turn 4.",
     "Khi đổi sang 2 Combo Đẫy Đà 129K, giỏ cuối không còn các mã món lẻ 41037, 41035 và 41074.",
-    "Bot không tự tăng size nước trước khi khách chấp nhận upsell.",
-    "Giỏ cuối có 2 combo 20752, 4 Pepsi size đại và tổng tạm tính 286.000đ."
+    "Bot không tự nâng size nước trước khi khách đồng ý rõ ràng với upsell ở user turn 5.",
+    "Giỏ cuối có 2 combo 20752, 4 Pepsi size đại và tính đúng 258.000đ + 28.000đ = 286.000đ."
   ]
 }

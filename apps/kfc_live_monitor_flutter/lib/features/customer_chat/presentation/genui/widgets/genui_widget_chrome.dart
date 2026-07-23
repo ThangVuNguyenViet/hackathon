@@ -88,13 +88,13 @@ class GenUiWidgetChrome extends StatelessWidget {
               ),
             if (showHeader) const SizedBox(height: KfcOpsTokens.spacingMd),
             ...children,
-            if (showActions && attachment.actions.isNotEmpty) ...[
+            if (showActions && attachment.actionableActions.isNotEmpty) ...[
               const SizedBox(height: KfcOpsTokens.spacingMd),
               Wrap(
                 spacing: KfcOpsTokens.spacingSm,
                 runSpacing: KfcOpsTokens.spacingSm,
                 children: [
-                  for (final action in attachment.actions)
+                  for (final action in attachment.actionableActions)
                     GenUiActionButton(
                       attachment: attachment,
                       action: action,
@@ -122,12 +122,14 @@ class GenUiActionButton extends StatelessWidget {
     required this.action,
     required this.onPressed,
     this.height = 40,
+    this.enabled = true,
   });
 
   final KfcGenUiAttachment attachment;
   final KfcGenUiActionSpec action;
   final VoidCallback onPressed;
   final double height;
+  final bool enabled;
 
   @override
   Widget build(BuildContext context) {
@@ -164,7 +166,7 @@ class GenUiActionButton extends StatelessWidget {
           : KfcOpsTokens.surfaceContainerLow,
       foregroundColor: foreground,
       hoverForegroundColor: foreground,
-      onPressed: onPressed,
+      onPressed: enabled ? onPressed : null,
       child: Text(
         action.label,
         style: TextStyle(

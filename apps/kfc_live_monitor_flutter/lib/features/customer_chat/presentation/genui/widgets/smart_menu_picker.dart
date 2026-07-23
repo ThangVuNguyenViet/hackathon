@@ -5,10 +5,7 @@ import '../../../../../app/theme/kfc_ops_tokens.dart';
 import '../../../domain/kfc_genui_models.dart';
 import '../../../testing/customer_chat_keys.dart';
 import 'genui_widget_chrome.dart';
-import 'quantity_stepper.dart';
-import 'verified_remote_media.dart';
-
-const _initialVisibleMenuItems = 3;
+import 'menu_choice_primitives.dart';
 
 class SmartMenuPicker extends StatefulWidget {
   const SmartMenuPicker({
@@ -25,26 +22,56 @@ class SmartMenuPicker extends StatefulWidget {
 }
 
 class _SmartMenuPickerState extends State<SmartMenuPicker> {
-  final Map<String, int> _quantities = {};
-  var _showAll = false;
+  final MenuSelection _selection = MenuSelection();
+  String? _selectedCategoryId;
+
+  @override
+  void didUpdateWidget(covariant SmartMenuPicker oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.attachment.id != widget.attachment.id) {
+      _selection.clear();
+      _selectedCategoryId = null;
+      return;
+    }
+    final categories = menuCategories(widget.attachment.data['categories']);
+    if (_selectedCategoryId != null &&
+        !categories.any(
+          (category) => category.categoryId == _selectedCategoryId,
+        )) {
+      _selectedCategoryId = null;
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
     final allItems = genUiList(widget.attachment.data['items']);
-    final items =
-        (_showAll ? allItems : allItems.take(_initialVisibleMenuItems)).toList(
-          growable: false,
-        );
-    final hiddenCount = allItems.length - items.length;
-    final selectedItems = _selectedItems(allItems);
-    final selectedUnits = selectedItems.fold<int>(
-      0,
-      (total, item) => total + (item['quantity'] as int),
+    final itemCodeCounts = menuItemCodeCounts(allItems);
+    final hasAddItemsAuthority = widget.attachment.actionableActions.any(
+      (action) => action.id == 'add_items',
     );
-    final subtotalVnd = allItems.fold<int>(
-      0,
-      (total, item) => total + _quantityFor(item) * _priceVnd(item['priceVnd']),
+    final categories = menuCategories(widget.attachment.data['categories']);
+    final activeCategoryId = categories.isEmpty
+        ? null
+        : categories.any(
+            (category) => category.categoryId == _selectedCategoryId,
+          )
+        ? _selectedCategoryId
+        : categories.first.categoryId;
+    final items = activeCategoryId == null
+        ? allItems
+        : allItems
+              .where((item) => item['categoryId'] == activeCategoryId)
+              .toList(growable: false);
+    final selectedItems = _selection.selectedItems(
+      allItems,
+      requireExplicitAvailability: widget.attachment.authority != null,
     );
+    final addItemsAction = selectedItems.isEmpty
+        ? null
+        : widget.attachment.bindAction(
+            actionId: 'add_items',
+            payload: {'items': selectedItems},
+          );
 
     return GenUiWidgetChrome(
       attachment: widget.attachment,
@@ -52,6 +79,31 @@ class _SmartMenuPickerState extends State<SmartMenuPicker> {
       showActions: false,
       accentColor: KfcOpsTokens.primary,
       children: [
+        if (categories.length > 1)
+          Padding(
+            padding: const EdgeInsets.only(bottom: KfcOpsTokens.spacingSm),
+            child: Wrap(
+              spacing: KfcOpsTokens.spacingSm,
+              runSpacing: KfcOpsTokens.spacingSm,
+              children: [
+                for (final category in categories)
+                  ShadButton.raw(
+                    key: CustomerChatKeys.genUiMenuCategory(
+                      widget.attachment.id,
+                      category.categoryId,
+                    ),
+                    variant: category.categoryId == activeCategoryId
+                        ? ShadButtonVariant.primary
+                        : ShadButtonVariant.outline,
+                    height: 36,
+                    onPressed: () => setState(
+                      () => _selectedCategoryId = category.categoryId,
+                    ),
+                    child: Text(category.label),
+                  ),
+              ],
+            ),
+          ),
         if (items.isEmpty)
           const Text(
             'Chưa có món phù hợp để hiển thị.',
@@ -64,12 +116,11 @@ class _SmartMenuPickerState extends State<SmartMenuPicker> {
           )
         else
           for (final (index, item) in items.indexed) ...[
-            _MenuChoiceRow(
-              attachment: widget.attachment,
-              item: item,
-              quantity: _quantityFor(item),
-              onDecrease: () => _changeQuantity(item, -1),
-              onIncrease: () => _changeQuantity(item, 1),
+            _choiceRow(
+              item,
+              itemCodeCounts,
+              hasAddItemsAuthority: hasAddItemsAuthority,
+              selectedDistinct: selectedItems.length,
             ),
             if (index < items.length - 1)
               const SizedBox(
@@ -77,226 +128,48 @@ class _SmartMenuPickerState extends State<SmartMenuPicker> {
                 child: ColoredBox(color: KfcOpsTokens.secondaryContainer),
               ),
           ],
-        if (hiddenCount > 0)
-          ShadButton.outline(
-            height: 44,
-            onPressed: () => setState(() => _showAll = true),
-            child: Text('Xem thêm $hiddenCount món'),
-          ),
         if (items.isNotEmpty)
-          Padding(
-            padding: const EdgeInsets.only(top: KfcOpsTokens.spacingMd),
-            child: Row(
-              children: [
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        '$selectedUnits món',
-                        style: const TextStyle(
-                          color: KfcOpsTokens.onSurface,
-                          fontSize: 13,
-                          fontWeight: FontWeight.w800,
-                          height: 18 / 13,
-                        ),
-                      ),
-                      Text(
-                        'Tạm tính ${moneyVnd(subtotalVnd)}',
-                        style: const TextStyle(
-                          color: KfcOpsTokens.secondary,
-                          fontSize: 11,
-                          height: 15 / 11,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                const SizedBox(width: KfcOpsTokens.spacingSm),
-                SizedBox(
-                  width: 144,
-                  height: 40,
-                  child: ShadButton.raw(
-                    key: CustomerChatKeys.genUiAction(
-                      widget.attachment.id,
-                      'add_items',
-                    ),
-                    variant: ShadButtonVariant.primary,
-                    height: 40,
-                    padding: const EdgeInsets.symmetric(horizontal: 12),
-                    backgroundColor: KfcOpsTokens.primary,
-                    foregroundColor: KfcOpsTokens.onPrimary,
-                    onPressed: selectedItems.isEmpty
-                        ? null
-                        : () => widget.onAction(
-                            KfcGenUiAction(
-                              attachmentId: widget.attachment.id,
-                              actionId: 'add_items',
-                              payload: {'items': selectedItems},
-                            ),
-                          ),
-                    child: const Text('Xác nhận món'),
-                  ),
-                ),
-              ],
-            ),
+          MenuSelectionFooter(
+            attachment: widget.attachment,
+            selectedDistinct: selectedItems.length,
+            selectedUnits: _selection.selectedUnits(allItems),
+            subtotalVnd: _selection.subtotalVnd(allItems),
+            action: addItemsAction,
+            onAction: widget.onAction,
           ),
       ],
     );
   }
 
-  int _quantityFor(Map<String, Object?> item) {
-    return _quantities[_itemCode(item)] ?? 0;
-  }
-
-  void _changeQuantity(Map<String, Object?> item, int delta) {
-    final code = _itemCode(item);
-    final next = (_quantities[code] ?? 0) + delta;
-    setState(() {
-      _quantities[code] = next.clamp(0, 99);
-    });
-  }
-
-  List<Map<String, Object?>> _selectedItems(List<Map<String, Object?>> items) {
-    return [
-      for (final item in items)
-        if (_quantityFor(item) > 0)
-          {'itemCode': _itemCode(item), 'quantity': _quantityFor(item)},
-    ];
-  }
-}
-
-class _MenuChoiceRow extends StatelessWidget {
-  const _MenuChoiceRow({
-    required this.attachment,
-    required this.item,
-    required this.quantity,
-    required this.onDecrease,
-    required this.onIncrease,
-  });
-
-  final KfcGenUiAttachment attachment;
-  final Map<String, Object?> item;
-  final int quantity;
-  final VoidCallback onDecrease;
-  final VoidCallback onIncrease;
-
-  @override
-  Widget build(BuildContext context) {
-    final code = _itemCode(item);
-    return Padding(
-      key: CustomerChatKeys.genUiMenuItem(attachment.id, code),
-      padding: const EdgeInsets.symmetric(vertical: 10),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.center,
-        children: [
-          VerifiedRemoteMedia(
-            imageKey: CustomerChatKeys.genUiMenuImage(attachment.id, code),
-            imageUrl: genUiText(item['imageUrl'], fallback: ''),
-            semanticLabel:
-                'Hình món ${genUiText(item['name'], fallback: 'KFC')}',
-            width: 72,
-            height: 72,
-          ),
-          if (genUiText(item['imageUrl'], fallback: '').isNotEmpty)
-            const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  genUiText(item['name']),
-                  style: const TextStyle(
-                    color: KfcOpsTokens.onSurface,
-                    fontSize: 13,
-                    fontWeight: FontWeight.w700,
-                    height: 18 / 13,
-                    letterSpacing: 0,
-                  ),
-                ),
-                if (genUiText(item['description'], fallback: '')
-                    case final description when description.isNotEmpty)
-                  Padding(
-                    padding: const EdgeInsets.only(top: 2),
-                    child: Text(
-                      description,
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
-                        color: KfcOpsTokens.secondary,
-                        fontSize: 11,
-                        height: 15 / 11,
-                        letterSpacing: 0,
-                      ),
-                    ),
-                  ),
-                if (item['recommendedQuantity'] is num) ...[
-                  const SizedBox(height: 4),
-                  Text(
-                    _compositionText(item),
-                    style: const TextStyle(
-                      color: KfcOpsTokens.info,
-                      fontSize: 11,
-                      fontWeight: FontWeight.w700,
-                      height: 15 / 11,
-                    ),
-                  ),
-                ],
-                const SizedBox(height: 3),
-                Text(
-                  moneyVnd(item['priceVnd']),
-                  style: const TextStyle(
-                    color: KfcOpsTokens.onSurface,
-                    fontSize: 12,
-                    fontWeight: FontWeight.w800,
-                    height: 16 / 12,
-                    letterSpacing: 0,
-                  ),
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(width: KfcOpsTokens.spacingSm),
-          GenUiQuantityStepper(
-            quantity: quantity,
-            decreaseKey: CustomerChatKeys.genUiMenuQuantityDecrease(
-              attachment.id,
-              code,
-            ),
-            valueKey: CustomerChatKeys.genUiMenuQuantity(attachment.id, code),
-            increaseKey: CustomerChatKeys.genUiMenuQuantityIncrease(
-              attachment.id,
-              code,
-            ),
-            onDecrease: quantity <= 0 ? null : onDecrease,
-            onIncrease: onIncrease,
-          ),
-        ],
-      ),
+  Widget _choiceRow(
+    Map<String, Object?> item,
+    Map<String, int> itemCodeCounts, {
+    required bool hasAddItemsAuthority,
+    required int selectedDistinct,
+  }) {
+    final quantity = _selection.quantityFor(item);
+    final selectable = isSelectableMenuItem(
+      item,
+      requireExplicitAvailability: widget.attachment.authority != null,
+    );
+    final unique = itemCodeCounts[menuItemCode(item)] == 1;
+    return MenuChoiceRow(
+      attachment: widget.attachment,
+      item: item,
+      quantity: quantity,
+      onDecrease: () => _changeQuantity(item, -1),
+      onIncrease: () => _changeQuantity(item, 1),
+      canDecrease: hasAddItemsAuthority && selectable && unique && quantity > 0,
+      canIncrease:
+          hasAddItemsAuthority &&
+          selectable &&
+          unique &&
+          quantity < 99 &&
+          (quantity > 0 || selectedDistinct < maxDistinctMenuSelections),
     );
   }
 
-  String _compositionText(Map<String, Object?> item) {
-    final quantity = (item['recommendedQuantity'] as num).toInt();
-    final total = moneyVnd(item['composedTotalVnd']);
-    final delta = item['budgetDeltaVnd'];
-    final budgetText = delta is num
-        ? delta >= 0
-              ? 'còn ${moneyVnd(delta)}'
-              : 'vượt ${moneyVnd(delta.abs())}'
-        : null;
-    return 'Gợi ý $quantity phần · Tổng $total${budgetText == null ? '' : ' · $budgetText'}';
+  void _changeQuantity(Map<String, Object?> item, int delta) {
+    if (_selection.changeQuantity(item, delta)) setState(() {});
   }
-}
-
-int _priceVnd(Object? value) => switch (value) {
-  int amount => amount,
-  num amount => amount.toInt(),
-  _ => int.tryParse('$value') ?? 0,
-};
-
-String _itemCode(Map<String, Object?> item) {
-  final code = genUiText(item['code'], fallback: '');
-  if (code.isNotEmpty) return code;
-  return genUiText(item['name'], fallback: 'item');
 }

@@ -34,7 +34,6 @@ import type {
   AppendCustomerRunEventInput,
   CustomerRunPatch,
 } from './memoryStore.js';
-import { confirmationPauseFromEvent, type ConfirmationPauseRecord } from './memoryStore.js';
 import {
   CustomerRunIdempotencyConflictError,
   CustomerRunSequenceConflictError,
@@ -43,9 +42,12 @@ import {
   type CustomerRunEvent,
 } from '../customerRuns/contracts.js';
 import { PostgresCheckpointSaver } from './postgresCheckpointSaver.js';
-import { PostgresStoreAgentOperations } from './postgresStoreAgentOperations.js';
+import { PostgresStoreAgentRunTextDeliveryOperations } from './postgresStoreAgentRunTextDeliveryOperations.js';
 
-export class PostgresStore extends PostgresStoreAgentOperations implements ConversationStore {}
+export class PostgresStore
+  extends PostgresStoreAgentRunTextDeliveryOperations
+  implements ConversationStore
+{}
 
 export async function createPostgresPersistence(input: { databaseUrl: string }): Promise<{
   pool: Pool;
