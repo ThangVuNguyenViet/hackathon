@@ -31,7 +31,7 @@ class _KitchenHeader extends StatelessWidget {
                   ),
                   SizedBox(height: 3),
                   Text(
-                    'Accepted scenarios · replayed against the deployed sandbox',
+                    'Narrative prompts · retained evidence for independent review',
                     style: TextStyle(color: _mutedInk, fontSize: 12),
                   ),
                 ],
@@ -73,7 +73,7 @@ class _LiveAiBadge extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Semantics(
-    label: 'Real AI replay available',
+    label: 'Retained AI evidence available for review',
     child: DecoratedBox(
       decoration: BoxDecoration(
         color: const Color(0xFFFFF1F2),
@@ -91,7 +91,7 @@ class _LiveAiBadge extends StatelessWidget {
             ),
             SizedBox(width: 7),
             Text(
-              'REAL AI',
+              'REVIEW',
               style: TextStyle(
                 color: _kfcRed,
                 fontSize: 11,
@@ -111,25 +111,15 @@ class _ShowcaseWorkspace extends StatelessWidget {
     required this.catalog,
     required this.scenario,
     required this.mode,
-    required this.attempt,
-    required this.showLastComplete,
-    required this.replaying,
     required this.onSelectScenario,
     required this.onSelectMode,
-    required this.onToggleLastComplete,
-    required this.onReplay,
   });
 
   final ShowcaseCatalog catalog;
   final ShowcaseScenario scenario;
   final ShowcaseMode mode;
-  final ShowcaseAttempt? attempt;
-  final bool showLastComplete;
-  final bool replaying;
   final ValueChanged<String> onSelectScenario;
   final ValueChanged<ShowcaseMode> onSelectMode;
-  final VoidCallback onToggleLastComplete;
-  final VoidCallback onReplay;
 
   @override
   Widget build(BuildContext context) {
@@ -145,12 +135,7 @@ class _ShowcaseWorkspace extends StatelessWidget {
         final content = _ScenarioContent(
           scenario: scenario,
           mode: mode,
-          attempt: attempt,
-          showLastComplete: showLastComplete,
-          replaying: replaying,
           onSelectMode: onSelectMode,
-          onToggleLastComplete: onToggleLastComplete,
-          onReplay: onReplay,
         );
         if (!desktop) {
           return Column(
@@ -312,7 +297,7 @@ class _ScenarioTicket extends StatelessWidget {
                     ),
                     const SizedBox(height: 5),
                     Text(
-                      '${scenario.turns.length} fixed turns',
+                      '${scenario.turns.length} narrative turns',
                       style: const TextStyle(color: _mutedInk, fontSize: 11),
                     ),
                   ],
@@ -330,35 +315,17 @@ class _ScenarioContent extends StatelessWidget {
   const _ScenarioContent({
     required this.scenario,
     required this.mode,
-    required this.attempt,
-    required this.showLastComplete,
-    required this.replaying,
     required this.onSelectMode,
-    required this.onToggleLastComplete,
-    required this.onReplay,
   });
 
   final ShowcaseScenario scenario;
   final ShowcaseMode mode;
-  final ShowcaseAttempt? attempt;
-  final bool showLastComplete;
-  final bool replaying;
   final ValueChanged<ShowcaseMode> onSelectMode;
-  final VoidCallback onToggleLastComplete;
-  final VoidCallback onReplay;
 
   @override
   Widget build(BuildContext context) {
     final retained = scenario.results[mode];
-    final ShowcaseAttempt? matchingAttempt =
-        attempt?.scenarioId == scenario.id && attempt?.mode == mode
-        ? attempt
-        : null;
-    final showingAttempt = matchingAttempt != null && !showLastComplete;
-    final replayError = showingAttempt ? matchingAttempt.error : null;
-    final transcript = showingAttempt
-        ? matchingAttempt.messages
-        : retained?.transcript ?? const [];
+    final transcript = retained?.transcript ?? const [];
 
     return SingleChildScrollView(
       padding: const EdgeInsets.all(24),
@@ -398,34 +365,16 @@ class _ScenarioContent extends StatelessWidget {
                       ],
                     ),
                   ),
-                  _ReplayControls(
-                    mode: mode,
-                    replaying: replaying,
-                    onSelectMode: onSelectMode,
-                    onReplay: onReplay,
-                  ),
+                  _ReviewControls(mode: mode, onSelectMode: onSelectMode),
                 ],
               ),
               const SizedBox(height: 22),
-              if (matchingAttempt != null && retained != null) ...[
-                _ViewSwitch(
-                  showingLastComplete: showLastComplete,
-                  onToggle: onToggleLastComplete,
-                ),
-                const SizedBox(height: 12),
-              ],
-              if (replayError case final error?) ...[
-                _ReplayError(error: error),
-                const SizedBox(height: 12),
-              ],
               LayoutBuilder(
                 builder: (context, constraints) {
                   final wide = constraints.maxWidth >= 850;
                   final chat = _TranscriptCard(
                     entries: transcript,
-                    activeDraft: showingAttempt ? matchingAttempt.draft : null,
                     mode: mode,
-                    isLiveAttempt: showingAttempt,
                     hasRetainedResult: retained != null,
                   );
                   final criteria = _CriteriaCard(scenario: scenario);
@@ -444,7 +393,7 @@ class _ScenarioContent extends StatelessWidget {
                   );
                 },
               ),
-              if (!showingAttempt && retained != null) ...[
+              if (retained != null) ...[
                 const SizedBox(height: 14),
                 _EvidenceStrip(result: retained),
               ],
@@ -456,17 +405,10 @@ class _ScenarioContent extends StatelessWidget {
   }
 }
 
-class _ReplayControls extends StatelessWidget {
-  const _ReplayControls({
-    required this.mode,
-    required this.replaying,
-    required this.onSelectMode,
-    required this.onReplay,
-  });
+class _ReviewControls extends StatelessWidget {
+  const _ReviewControls({required this.mode, required this.onSelectMode});
   final ShowcaseMode mode;
-  final bool replaying;
   final ValueChanged<ShowcaseMode> onSelectMode;
-  final VoidCallback onReplay;
 
   @override
   Widget build(BuildContext context) => Column(
@@ -493,26 +435,9 @@ class _ReplayControls extends StatelessWidget {
         ),
       ),
       const SizedBox(height: 9),
-      Semantics(
-        button: true,
-        label: replaying
-            ? 'Replay in progress'
-            : 'Replay scenario with real AI',
-        child: ShadButton(
-          onPressed: replaying ? null : onReplay,
-          leading: replaying
-              ? const SizedBox.square(
-                  dimension: 15,
-                  child: CircularProgressIndicator(
-                    strokeWidth: 2,
-                    color: Color(0xFFFFFFFF),
-                  ),
-                )
-              : const Icon(LucideIcons.refreshCw, size: 16),
-          child: Text(
-            replaying ? 'Replaying fixed turns…' : 'Replay with real AI',
-          ),
-        ),
+      const Text(
+        'Read-only evidence',
+        style: TextStyle(color: _mutedInk, fontSize: 12),
       ),
     ],
   );
@@ -556,40 +481,5 @@ class _ModeTab extends StatelessWidget {
         ),
       ),
     ),
-  );
-}
-
-class _ViewSwitch extends StatelessWidget {
-  const _ViewSwitch({
-    required this.showingLastComplete,
-    required this.onToggle,
-  });
-  final bool showingLastComplete;
-  final VoidCallback onToggle;
-
-  @override
-  Widget build(BuildContext context) => Row(
-    children: [
-      Icon(
-        showingLastComplete ? LucideIcons.archive : LucideIcons.radio,
-        size: 14,
-        color: _kfcRed,
-      ),
-      const SizedBox(width: 7),
-      Text(
-        showingLastComplete
-            ? 'Showing last complete result'
-            : 'Showing live replay',
-        style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700),
-      ),
-      const Spacer(),
-      ShadButton.outline(
-        size: ShadButtonSize.sm,
-        onPressed: onToggle,
-        child: Text(
-          showingLastComplete ? 'Return to live replay' : 'View last complete',
-        ),
-      ),
-    ],
   );
 }

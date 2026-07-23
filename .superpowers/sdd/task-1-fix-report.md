@@ -70,3 +70,22 @@ warning already emitted by the controller test; neither failed the run.
   isolation.
 - Task 3: compact normalized Messenger ingress claim, durable context/storage
   boundaries, and LangSmith callback correlation.
+
+## Rereview closure
+
+- Reserved 8,000 bytes of explicit Queue metadata headroom under Cloudflare's
+  documented 128,000-byte ceiling. Tests exercise both the exact accepted
+  120,000-byte JSON boundary and the first rejected byte through the real send
+  helper.
+- Replaced the live scenario command with a read-only validated inventory
+  exporter. LangSmith showcase seeding stores narrative content only and no
+  longer sends scripted turns to the chatbot.
+- Removed the showcase result-mutation endpoint and converted the Flutter
+  showcase into a GET-only narrative/evidence review surface.
+- Made the scenario and turn schemas strict. Deterministic acceptance,
+  expectation, exact-word/phrase, required-tool-sequence, and tool-assertion
+  fields are rejected, while narrative preconditions and risks remain valid.
+
+Rereview verification passed with 7 backend test files / 21 tests, formatting,
+lint, typecheck, build, a validated one-scenario inventory export, Flutter
+analysis, and both focused Flutter showcase tests.

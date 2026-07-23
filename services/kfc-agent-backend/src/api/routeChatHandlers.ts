@@ -104,7 +104,6 @@ import {
 } from '../presentation/channelPresentation.js';
 import {
   ShowcaseService,
-  ShowcaseValidationError,
   type ShowcaseScenarioSource,
 } from '../showcase/showcase.js';
 import {
@@ -301,33 +300,6 @@ export function createChatRouteHandlers(context: RouteHandlerContext) {
             message: error instanceof Error ? error.message : String(error),
           },
         };
-      }
-    },
-    async showcaseComplete(body: unknown) {
-      if (!showcase)
-        return { status: 503, body: { errorCode: 'showcase_not_configured' } };
-      try {
-        return { status: 200, body: await showcase.complete(body) };
-      } catch (error) {
-        if (
-          error instanceof ShowcaseValidationError ||
-          error instanceof z.ZodError
-        ) {
-          return {
-            status:
-              error instanceof ShowcaseValidationError &&
-              error.code === 'showcase_scenario_not_found'
-                ? 404
-                : 422,
-            body: {
-              errorCode:
-                error instanceof ShowcaseValidationError
-                  ? error.code
-                  : 'invalid_showcase_result',
-            },
-          };
-        }
-        throw error;
       }
     },
     async chatKfcGenUiAction(body: unknown) {

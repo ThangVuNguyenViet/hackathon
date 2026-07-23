@@ -7,8 +7,6 @@ import 'package:state_beacon/state_beacon.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../app/theme/kfc_ops_tokens.dart';
-import '../customer_chat/application/mutation_beacon.dart';
-import '../customer_chat/domain/customer_run_models.dart';
 import '../customer_chat/presentation/genui/kfc_genui_renderer.dart';
 import 'showcase_controller.dart';
 import 'showcase_models.dart';
@@ -34,9 +32,6 @@ class ShowcaseScreen extends StatelessWidget {
     final catalog = catalogState.lastData;
     final selectedScenario = controller.selectedScenario.watch(context);
     final selectedMode = controller.selectedMode.watch(context);
-    final attempt = controller.activeAttempt.watch(context);
-    final showLastComplete = controller.showLastComplete.watch(context);
-    final replayState = controller.replay.watch(context);
 
     return DefaultTextStyle(
       style: const TextStyle(
@@ -69,17 +64,8 @@ class ShowcaseScreen extends StatelessWidget {
                       catalog: value,
                       scenario: scenario,
                       mode: selectedMode,
-                      attempt: attempt,
-                      showLastComplete: showLastComplete,
-                      replaying: replayState.isLoading,
                       onSelectScenario: controller.selectScenario,
                       onSelectMode: controller.selectMode,
-                      onToggleLastComplete: controller.toggleLastComplete,
-                      onReplay: () => unawaited(
-                        controller.replay.run(
-                          ShowcaseReplayRequest(scenario, selectedMode),
-                        ),
-                      ),
                     ),
                   _ => const _EmptyState(),
                 },

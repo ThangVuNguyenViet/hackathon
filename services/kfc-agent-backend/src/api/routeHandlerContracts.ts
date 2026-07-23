@@ -481,7 +481,6 @@ export interface RouteHandlers {
   chatKfcStartRun(body: unknown): Promise<HandlerResponse>;
   chatKfcCancelRun(runId: string): Promise<HandlerResponse>;
   showcaseCatalog(): Promise<HandlerResponse>;
-  showcaseComplete(body: unknown): Promise<HandlerResponse>;
   chatKfcSessionUpdates(
     sessionId: string,
     afterTurnId?: string,

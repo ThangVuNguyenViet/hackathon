@@ -40,20 +40,21 @@ KFC_AGENT_PROVIDER=google
 Credentials come from `OPENAI_API_KEY` or `GOOGLE_API_KEY`.
 `OPENAI_BASE_URL` remains optional.
 
-## Run a real conversational scenario
+## Export the narrative scenario inventory
 
-This command sends the scenario's user turns through the live model and prints
-the assistant replies, selected tools, GenUI kind, and elapsed time. It has no
-assertions or outcome judge.
+This command validates and exports the retained narrative prompts. It never
+sends scripted turns to a model. A Codex role-player uses the goals,
+preconditions, and turns as improvisational context in fresh live sessions;
+an independent reviewer judges the resulting evidence.
 
 ```bash
-npm run live:scenario
+npm run scenario:inventory
 ```
 
-Pass another reviewed conversation file to run it:
+Pass one reviewed conversation file to export only that narrative:
 
 ```bash
-npm run live:scenario -- \
+npm run scenario:inventory -- \
   ../../ai-talent-tracks/fnb/conversations/02-tu-van-combo-va-upsell.json
 ```
 

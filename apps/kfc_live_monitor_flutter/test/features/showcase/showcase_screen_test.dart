@@ -40,7 +40,7 @@ void main() {
     expect(find.text('Build a meal'), findsWidgets);
     expect(find.text('First real answer'), findsOneWidget);
     expect(find.text('SCENARIO RISKS'), findsOneWidget);
-    expect(find.text('Replay with real AI'), findsOneWidget);
+    expect(find.text('Read-only evidence'), findsOneWidget);
     expect(
       find.text(
         'google · gemini-3.1-flash-lite · google-gemini-3.1-flash-lite-thinking-low',

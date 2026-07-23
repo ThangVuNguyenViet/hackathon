@@ -513,11 +513,6 @@ export default {
     if (request.method === 'GET' && url.pathname === '/showcase/scenarios') {
       return toResponse(await handlers.showcaseCatalog());
     }
-    if (request.method === 'POST' && url.pathname === '/showcase/results') {
-      return toResponse(
-        await handlers.showcaseComplete(await readJson(request)),
-      );
-    }
     if (request.method === 'POST' && url.pathname === '/chat/kfc/message') {
       const body = await readJson(request);
       return respondWithAgentBackground(await handlers.chatKfcMessage(body));

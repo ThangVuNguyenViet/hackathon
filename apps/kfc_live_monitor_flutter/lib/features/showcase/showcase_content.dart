@@ -3,15 +3,11 @@ part of 'showcase_screen.dart';
 class _TranscriptCard extends StatelessWidget {
   const _TranscriptCard({
     required this.entries,
-    required this.activeDraft,
     required this.mode,
-    required this.isLiveAttempt,
     required this.hasRetainedResult,
   });
   final List<ShowcaseTranscriptEntry> entries;
-  final ActiveAssistantDraft? activeDraft;
   final ShowcaseMode mode;
-  final bool isLiveAttempt;
   final bool hasRetainedResult;
 
   @override
@@ -53,7 +49,7 @@ class _TranscriptCard extends StatelessWidget {
             ),
           ),
         ),
-        if (entries.isEmpty && activeDraft == null)
+        if (entries.isEmpty)
           Padding(
             padding: const EdgeInsets.all(28),
             child: Column(
@@ -62,8 +58,8 @@ class _TranscriptCard extends StatelessWidget {
                 const SizedBox(height: 10),
                 Text(
                   hasRetainedResult
-                      ? 'Select the saved result or start a new replay.'
-                      : 'No complete result yet. Replay this recipe to create one.',
+                      ? 'Select a retained result to review its evidence.'
+                      : 'No retained evidence has been attached to this narrative yet.',
                   textAlign: TextAlign.center,
                   style: const TextStyle(color: _mutedInk),
                 ),
@@ -72,25 +68,13 @@ class _TranscriptCard extends StatelessWidget {
           )
         else
           Semantics(
-            liveRegion: isLiveAttempt,
-            label: isLiveAttempt
-                ? 'Live replay transcript'
-                : 'Saved replay transcript',
+            label: 'Retained evidence transcript',
             child: Padding(
               padding: const EdgeInsets.all(16),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
                   for (final entry in entries) _TranscriptMessage(entry: entry),
-                  if (activeDraft != null)
-                    _TranscriptMessage(
-                      entry: ShowcaseTranscriptEntry(
-                        role: 'assistant',
-                        text: activeDraft!.text,
-                        genUi: activeDraft!.genUi,
-                      ),
-                      streaming: true,
-                    ),
                 ],
               ),
             ),
@@ -101,9 +85,8 @@ class _TranscriptCard extends StatelessWidget {
 }
 
 class _TranscriptMessage extends StatelessWidget {
-  const _TranscriptMessage({required this.entry, this.streaming = false});
+  const _TranscriptMessage({required this.entry});
   final ShowcaseTranscriptEntry entry;
-  final bool streaming;
 
   @override
   Widget build(BuildContext context) {
@@ -120,11 +103,7 @@ class _TranscriptMessage extends StatelessWidget {
                 : CrossAxisAlignment.start,
             children: [
               Text(
-                user
-                    ? 'FIXED USER TURN'
-                    : streaming
-                    ? 'AI · RESPONDING'
-                    : 'AI RESPONSE',
+                user ? 'RECORDED USER' : 'RECORDED ASSISTANT',
                 style: TextStyle(
                   color: user ? _kfcRed : _mutedInk,
                   fontSize: 9,
@@ -159,13 +138,6 @@ class _TranscriptMessage extends StatelessWidget {
                     attachment: attachment,
                     onAction: (_) {},
                   ),
-                ),
-              ],
-              if (streaming) ...[
-                const SizedBox(height: 6),
-                const Text(
-                  'Waiting for this turn to complete…',
-                  style: TextStyle(color: _mutedInk, fontSize: 11),
                 ),
               ],
             ],
@@ -362,35 +334,6 @@ class _EvidenceItem extends StatelessWidget {
         ),
       ),
     ],
-  );
-}
-
-class _ReplayError extends StatelessWidget {
-  const _ReplayError({required this.error});
-  final String error;
-
-  @override
-  Widget build(BuildContext context) => DecoratedBox(
-    decoration: BoxDecoration(
-      color: const Color(0xFFFFE7E8),
-      border: Border.all(color: const Color(0xFFDC8D99)),
-    ),
-    child: Padding(
-      padding: const EdgeInsets.all(12),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Icon(LucideIcons.triangleAlert, size: 17, color: _kfcRed),
-          const SizedBox(width: 9),
-          Expanded(
-            child: Text(
-              'Live replay stopped: $error\nThe last complete result is still preserved.',
-              style: const TextStyle(fontSize: 12),
-            ),
-          ),
-        ],
-      ),
-    ),
   );
 }
 

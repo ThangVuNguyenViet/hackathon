@@ -47,4 +47,26 @@ describe('migration architecture inventory', () => {
       'Task 2 must replace this baseline assertion with pack-isolation contract tests',
     ).toBe(false);
   });
+
+  it('keeps scenario surfaces read-only instead of replaying scripted turns', async () => {
+    const backendRoot = process.cwd();
+    const repositoryRoot = resolve(backendRoot, '../..');
+    const [inventoryCli, flutterController, workerRoutes] = await Promise.all([
+      readFile(resolve(backendRoot, 'scripts/export-scenario-inventory.ts'), 'utf8'),
+      readFile(
+        resolve(
+          repositoryRoot,
+          'apps/kfc_live_monitor_flutter/lib/features/showcase/showcase_controller.dart',
+        ),
+        'utf8',
+      ),
+      readFile(resolve(backendRoot, 'src/worker.ts'), 'utf8'),
+    ]);
+
+    expect(inventoryCli).not.toMatch(/runScenario|createAgentChatModel/u);
+    expect(flutterController).not.toMatch(
+      /scenario\.turns|startTurn|watchTurn|showcase\/results/u,
+    );
+    expect(workerRoutes).not.toContain('/showcase/results');
+  });
 });

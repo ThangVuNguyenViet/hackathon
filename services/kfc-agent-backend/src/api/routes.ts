@@ -117,9 +117,6 @@ export function registerRoutes(
   server.get('/showcase/scenarios', async (_request, reply) =>
     send(reply, await handlers.showcaseCatalog()),
   );
-  server.post('/showcase/results', async (request, reply) =>
-    send(reply, await handlers.showcaseComplete(request.body)),
-  );
   server.post('/chat/kfc/message', async (request, reply) => {
     return send(reply, await handlers.chatKfcMessage(request.body));
   });

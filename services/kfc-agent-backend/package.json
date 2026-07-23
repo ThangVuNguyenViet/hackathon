@@ -15,7 +15,7 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "start": "node dist/src/index.js",
-    "live:scenario": "set -a; kfc_primary_env=\"$(dirname \"$(git rev-parse --git-common-dir)\")/.env\"; [ ! -f ../../.env ] || . ../../.env; [ -n \"$OPENAI_API_KEY$GOOGLE_API_KEY\" ] || [ ! -f \"$kfc_primary_env\" ] || . \"$kfc_primary_env\"; set +a; tsx scripts/run-live-scenario.ts",
+    "scenario:inventory": "tsx scripts/export-scenario-inventory.ts",
     "sandbox:commerce:serve": "tsx scripts/serve-sandbox-commerce-gateway.ts",
     "proof:openai:geo-canary": "tsx scripts/run-openai-geo-canary.ts",
     "showcase:seed": "set -a; [ ! -f ../../.env ] || . ../../.env; set +a; tsx scripts/seed-showcase.ts",

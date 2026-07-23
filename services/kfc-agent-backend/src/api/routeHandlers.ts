@@ -112,7 +112,6 @@ import {
 } from '../presentation/channelPresentation.js';
 import {
   ShowcaseService,
-  ShowcaseValidationError,
   type ShowcaseScenarioSource,
 } from '../showcase/showcase.js';
 
@@ -123,7 +122,6 @@ export function createRouteHandlers(options: RouteOptions = {}): RouteHandlers {
     ? new ShowcaseService({
         ...options.showcase,
         store,
-        tracer: options.agentTracer,
       })
     : undefined;
   const streamingRunObservers = new Map<

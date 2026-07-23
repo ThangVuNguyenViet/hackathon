@@ -1,5 +1,4 @@
 import '../customer_chat/domain/kfc_genui_models.dart';
-import '../customer_chat/domain/customer_run_models.dart';
 
 enum ShowcaseMode { genui, text }
 
@@ -162,38 +161,4 @@ class ShowcaseTranscriptEntry {
   final String role;
   final String text;
   final KfcGenUiAttachment? genUi;
-}
-
-class ShowcaseReplayRequest {
-  const ShowcaseReplayRequest(this.scenario, this.mode);
-  final ShowcaseScenario scenario;
-  final ShowcaseMode mode;
-}
-
-class ShowcaseAttempt {
-  const ShowcaseAttempt({
-    required this.scenarioId,
-    required this.mode,
-    required this.messages,
-    this.draft,
-    this.error,
-  });
-  final String scenarioId;
-  final ShowcaseMode mode;
-  final List<ShowcaseTranscriptEntry> messages;
-  final ActiveAssistantDraft? draft;
-  final String? error;
-
-  ShowcaseAttempt copyWith({
-    List<ShowcaseTranscriptEntry>? messages,
-    ActiveAssistantDraft? draft,
-    bool clearDraft = false,
-    String? error,
-  }) => ShowcaseAttempt(
-    scenarioId: scenarioId,
-    mode: mode,
-    messages: messages ?? this.messages,
-    draft: clearDraft ? null : draft ?? this.draft,
-    error: error,
-  );
 }

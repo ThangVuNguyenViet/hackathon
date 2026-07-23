@@ -2,10 +2,6 @@ import { Client } from 'langsmith';
 import type { Example, Run } from 'langsmith/schemas';
 import { z } from 'zod';
 import type { ConversationStore } from '../persistence/memoryStore.js';
-import {
-  createSafeAgentTracer,
-  type AgentTracer,
-} from '../observability/agentTracing.js';
 import type { AgentModelIdentity } from '../config/agentModelProfile.js';
 
 export const showcaseModeSchema = z.enum(['genui', 'text']);
@@ -88,8 +84,6 @@ export class LangSmithShowcaseScenarioSource implements ShowcaseScenarioSource {
         limit: 10,
       })) {
         fallback ??= run;
-        if (run.name === 'showcase_replay')
-          return this.client.getRunUrl({ run });
       }
       if (attempt < 4) await new Promise((resolve) => setTimeout(resolve, 250));
     }
@@ -147,7 +141,6 @@ export class ShowcaseService {
       store: ConversationStore;
       releaseSha: string;
       agent: AgentModelIdentity;
-      tracer?: AgentTracer;
     },
   ) {}
 
@@ -170,148 +163,6 @@ export class ShowcaseService {
         })),
       ),
     };
-  }
-
-  async complete(input: unknown): Promise<ShowcaseResult> {
-    const parsed = z
-      .object({
-        scenarioId: z.string().min(1),
-        mode: showcaseModeSchema,
-        sessionId: z.string().startsWith('kfc:showcase_'),
-      })
-      .strict()
-      .parse(input);
-    const scenario = (await this.loadScenarios()).find(
-      (candidate) => candidate.id === parsed.scenarioId,
-    );
-    if (!scenario)
-      throw new ShowcaseValidationError('showcase_scenario_not_found');
-    const turns = (await this.options.store.listTurns(parsed.sessionId)).filter(
-      (turn) => turn.role === 'user' || turn.role === 'assistant',
-    );
-    if (turns.length !== scenario.turns.length * 2) {
-      throw new ShowcaseValidationError('showcase_replay_incomplete');
-    }
-    for (const [index, expected] of scenario.turns.entries()) {
-      const user = turns[index * 2];
-      const assistant = turns[index * 2 + 1];
-      if (
-        user?.role !== 'user' ||
-        user.text !== expected.text ||
-        assistant?.role !== 'assistant'
-      ) {
-        throw new ShowcaseValidationError('showcase_replay_mismatch');
-      }
-      const actualProfile =
-        assistant.metadata?.responseProfile ??
-        (assistant.metadata?.genUi ? 'genui' : 'social');
-      if (actualProfile !== (parsed.mode === 'genui' ? 'genui' : 'social')) {
-        throw new ShowcaseValidationError('showcase_replay_mode_mismatch');
-      }
-    }
-    await this.recordReplayTrace(
-      scenario,
-      parsed.mode,
-      parsed.sessionId,
-      turns,
-    );
-    const result: ShowcaseResult = {
-      scenarioId: scenario.id,
-      mode: parsed.mode,
-      sessionId: parsed.sessionId,
-      generatedAt: new Date().toISOString(),
-      releaseSha: this.options.releaseSha,
-      agent: {
-        provider: this.options.agent.provider,
-        model: this.options.agent.model,
-        profile: this.options.agent.profile,
-      },
-      langsmithTraceUrl: await this.options.source
-        .traceUrlForSession(parsed.sessionId)
-        .catch(() => null),
-      transcript: turns.map((turn) => ({
-        role: turn.role as 'user' | 'assistant',
-        text: turn.text,
-        ...(turn.metadata?.genUi
-          ? { genUi: turn.metadata.genUi as unknown as Record<string, unknown> }
-          : {}),
-      })),
-    };
-    await this.options.store.appendEvent(
-      resultSessionId(scenario.id, parsed.mode),
-      resultEventType,
-      result as unknown as Record<string, unknown>,
-    );
-    return result;
-  }
-
-  private async recordReplayTrace(
-    scenario: ShowcaseScenario,
-    mode: ShowcaseMode,
-    sessionId: string,
-    turns: Awaited<ReturnType<ConversationStore['listTurns']>>,
-  ): Promise<void> {
-    if (!this.options.tracer) return;
-    const tracer = createSafeAgentTracer(this.options.tracer, (code, error) => {
-      void this.options.store
-        .appendEvent(sessionId, code, {
-          message: error instanceof Error ? error.message : String(error),
-        })
-        .catch(() => undefined);
-    });
-    const replay = await tracer.startTurn({
-      name: 'showcase_replay',
-      inputs: {
-        scenarioId: scenario.id,
-        mode,
-        sessionId,
-        fixedTurns: scenario.turns,
-        preconditions: scenario.preconditions,
-        risks: scenario.risks,
-      },
-      metadata: {
-        session_id: sessionId,
-        scenarioId: scenario.id,
-        showcaseMode: mode,
-        releaseSha: this.options.releaseSha,
-        agentProvider: this.options.agent.provider,
-        agentModel: this.options.agent.model,
-        agentProfile: this.options.agent.profile,
-      },
-      tags: [
-        'kfc-showcase-replay',
-        `scenario:${scenario.id}`,
-        `mode:${mode}`,
-        `session:${sessionId}`,
-      ],
-    });
-    for (const [index, expected] of scenario.turns.entries()) {
-      const assistant = turns[index * 2 + 1]!;
-      const turn = await replay.startSpan({
-        name: 'showcase_turn',
-        runType: 'chain',
-        inputs: {
-          index: expected.index,
-          text: expected.text,
-          useCases: expected.useCases,
-        },
-        metadata: { turn_index: expected.index },
-      });
-      await turn.end({
-        text: assistant.text,
-        genUi: assistant.metadata?.genUi ?? null,
-      });
-    }
-    await replay.end({
-      status: 'completed',
-      turnCount: scenario.turns.length,
-      transcript: turns.map((turn) => ({
-        role: turn.role,
-        text: turn.text,
-        genUi: turn.metadata?.genUi ?? null,
-      })),
-    });
-    await tracer.flush();
   }
 
   private async loadScenarios(): Promise<ShowcaseScenario[]> {
@@ -353,6 +204,8 @@ export class ShowcaseService {
   }
 }
 
+// Retained as a compatibility export for route modules that share generated
+// error-handling imports. The showcase no longer accepts result mutations.
 export class ShowcaseValidationError extends Error {
   constructor(readonly code: string) {
     super(code);
