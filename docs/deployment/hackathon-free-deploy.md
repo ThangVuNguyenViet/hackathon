@@ -22,7 +22,6 @@ Cloudflare Worker is the canonical webhook target for the demo. Do not submit an
 - Database: Cloudflare D1 binding `DB`, database name `kfc-agent-demo`.
 - Dashboard: Cloudflare Pages serving `apps/kfc_live_monitor_flutter/build/web`.
 - Messenger: Meta webhook callback at `<WORKER_URL>/webhooks/messenger`.
-- Historical fallback: Google Cloud Run script remains available, but it is not the primary demo path.
 
 ## Runtime Persistence Boundary
 
@@ -211,7 +210,7 @@ curl -s http://localhost:8787/ready
 curl -s 'http://localhost:8787/webhooks/messenger?hub.mode=subscribe&hub.verify_token=<verify-token>&hub.challenge=demo'
 ```
 
-## Optional Cloud Run Fallback
+## Backend Deployment Boundary
 
 The KFC backend production path is Cloudflare Workers with D1. There is no
 secondary Node/Postgres deployment path.

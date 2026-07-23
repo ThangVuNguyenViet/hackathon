@@ -9,6 +9,10 @@ const workerScript = resolve(
   rootDir,
   'scripts/deploy-backend-cloudflare-worker.sh',
 );
+const deploymentRunbook = resolve(
+  rootDir,
+  'docs/deployment/hackathon-free-deploy.md',
+);
 const candidateIds = [
   'openai-gpt-4.1-mini',
   'deepseek-v4-flash',
@@ -56,6 +60,16 @@ function runWorkerPreflight(lines: readonly string[]) {
 }
 
 describe('deployment model candidate configuration', () => {
+  it('documents Worker-only backend deployment without stale Cloud Run references', () => {
+    const source = readFileSync(deploymentRunbook, 'utf8');
+
+    expect(source).toContain(
+      './scripts/deploy-backend-cloudflare-worker.sh',
+    );
+    expect(source).not.toContain('deploy-backend-cloud-run.sh');
+    expect(source).not.toContain('Google Cloud Run');
+  });
+
   it('keeps the Worker deployment aligned to the fixed candidate roster', () => {
     const source = readFileSync(workerScript, 'utf8');
     for (const candidateId of candidateIds) {
