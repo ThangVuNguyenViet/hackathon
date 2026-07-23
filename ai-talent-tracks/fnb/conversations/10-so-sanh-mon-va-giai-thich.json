@@ -1,0 +1,52 @@
+{
+  "id": "10-so-sanh-mon-va-giai-thich",
+  "title": "10: So sánh món và giải thích lựa chọn",
+  "channel": "kfc",
+  "goal": "So sánh hai combo bằng dữ liệu thành phần và giá đã xác minh, sau đó tư vấn lựa chọn không cay trong giới hạn dữ liệu mà không thay đổi giỏ hàng.",
+  "useCases": [
+    "UC-02",
+    "UC-03",
+    "UC-32"
+  ],
+  "finalState": "advisory_complete",
+  "turns": [
+    {
+      "index": 1,
+      "speaker": "User",
+      "text": "So sánh giúp mình combo 20698 giá 79.000đ và combo 20709 giá 85.000đ: mỗi combo có gì và chênh nhau bao nhiêu?",
+      "useCases": [
+        "UC-02",
+        "UC-03"
+      ]
+    },
+    {
+      "index": 2,
+      "speaker": "Bot",
+      "text": "Dạ, combo 20698 giá 79.000đ gồm 1 Burger Zinger, 1 Khoai tây chiên cỡ vừa và 1 Pepsi tiêu chuẩn. Combo 20709 giá 85.000đ gồm 1 Miếng Gà Rán, 1 Miếng Gà Lắc Tiêu Chanh và 1 Pepsi Không Đường cỡ đại. Như vậy combo 20709 đắt hơn 6.000đ.",
+      "useCases": [
+        "UC-02",
+        "UC-03"
+      ]
+    },
+    {
+      "index": 3,
+      "speaker": "User",
+      "text": "Mình muốn ăn không cay thì nên chọn combo nào?",
+      "useCases": [
+        "UC-32"
+      ]
+    },
+    {
+      "index": 4,
+      "speaker": "Bot",
+      "text": "Dạ, nếu ưu tiên món không cay thì mình khuyên bạn chọn combo 20709 và chọn Gà Giòn Không Cay hoặc Gà Truyền Thống cho miếng gà rán. Tuy nhiên, combo này còn có Gà Lắc Tiêu Chanh và mình chưa có thông tin rõ phần đó có cay hay không. Combo 20698 dùng Burger Zinger, nhưng menu cũng không nói rõ mức cay.",
+      "useCases": [
+        "UC-32"
+      ]
+    }
+  ],
+  "risks": [
+    "Product comparisons must stay grounded in verified product information.",
+    "Advisory conversation must not mutate a cart or make unsupported health claims."
+  ]
+}

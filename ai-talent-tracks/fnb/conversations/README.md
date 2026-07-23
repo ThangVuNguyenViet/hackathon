@@ -2,20 +2,20 @@
 
 Nguồn use case: Google Doc `For AI Buiild Week Only | Framework - usecase AI Chat Ordering Assistant - KFC`.
 
-Mục tiêu của thư mục này là biến 39 use case hiện tại trong tài liệu thành các kịch bản hội thoại dài hơn, tự nhiên hơn, dùng được cho demo và integration test. Mỗi use case trong doc thường chỉ là một tình huống 1-2 lượt; các file bên dưới gom nhiều tình huống liên quan vào cùng một hành trình khách hàng.
+Mục tiêu của thư mục này là biến 39 use case hiện tại trong tài liệu thành các kịch bản hội thoại dài hơn, tự nhiên hơn, dùng được cho demo và đánh giá live độc lập. Mỗi use case trong doc thường chỉ là một tình huống 1-2 lượt; các file bên dưới gom nhiều tình huống liên quan vào cùng một hành trình khách hàng.
 
 Tất cả kịch bản đều dùng mock API. Không cần API thật của KFC, Messenger hoặc Zalo.
 
-## Cách dùng cho demo và integration test
+## Cách dùng cho demo và đánh giá live
 
 - Dùng phần `Hội thoại demo` làm script demo tiếng Việt.
 - Dùng `Use case bao phủ` để kiểm tra coverage.
 - Mỗi dòng trong bảng hội thoại phải có cột `Use case`.
 - Nếu một lượt không trực tiếp kiểm thử use case nào mà chỉ giúp hội thoại tự nhiên hơn, đánh dấu là `Filler`.
 - Một lượt có thể bao phủ nhiều use case, ví dụ `UC-17, UC-24`.
-- Dùng `Kỳ vọng kiểm thử` để viết integration test assertions.
-- Bot không được tự tạo đơn khi thiếu xác nhận cuối cùng.
-- Các phản hồi có thể chỉnh câu chữ, nhưng không nên đổi ý định kiểm thử của từng UC.
+- Mỗi JSON chỉ giữ mục tiêu, lượt hội thoại, rủi ro và trạng thái kết quả; không dùng câu chữ, chuỗi công cụ, hoặc số liệu cố định làm assertion.
+- Dùng các kịch bản để tạo bằng chứng hội thoại và đánh giá bởi reviewer độc lập, không dùng làm scenario replay test.
+- Không chỉnh kịch bản để phù hợp với đầu ra của model đã quan sát; mọi thay đổi phải được review như một thay đổi corpus.
 
 ## Danh sách use case từ tài liệu hiện tại
 
@@ -74,6 +74,8 @@ Tất cả kịch bản đều dùng mock API. Không cần API thật của KFC
 | [07-ca-nhan-hoa-va-loyalty.md](./07-ca-nhan-hoa-va-loyalty.md) | Cá nhân hóa, món yêu thích, loyalty và chỉnh giỏ hàng | UC-05, UC-14, UC-15, UC-22 |
 | [08-thanh-toan-loi-va-don-bat-thuong.md](./08-thanh-toan-loi-va-don-bat-thuong.md) | Lỗi thanh toán và đơn bất thường | UC-18, UC-39 |
 | [09-phuong-thuc-thanh-toan.md](./09-phuong-thuc-thanh-toan.md) | Phương thức thanh toán website/app | UC-16 |
+| 10-so-sanh-mon-va-giai-thich.json | So sánh món và giải thích lựa chọn | UC-02, UC-03, UC-32 |
+| 11-khau-vi-va-di-ung.json | Khẩu vị thông thường và dị ứng | UC-02, UC-32 |
 
 ## Coverage check
 

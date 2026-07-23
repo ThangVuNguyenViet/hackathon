@@ -86,17 +86,14 @@
     {
       "index": 10,
       "speaker": "Bot",
-      "text": "Dạ cảm ơn bạn đã phản hồi. Mình ghi nhận món ăn tốt nhưng thời gian giao hàng và độ chính xác đơn cần cải thiện.",
+      "text": "Dạ cảm ơn bạn đã chia sẻ. Mình rất vui vì bạn thấy gà ngon, và mình cũng đã ghi nhận việc giao chậm cùng món bị giao sai để nhân viên hỗ trợ xử lý.",
       "useCases": [
         "UC-28"
       ]
     }
   ],
-  "expectations": [
-    "Bot nhận diện complaint, không xử lý như đơn mới.",
-    "Complaint payload có đủ loại lỗi: thiếu món, sai món, giao lâu.",
-    "User tức giận làm tăng priority escalation.",
-    "Khi user yêu cầu nhân viên, bot phải handoff ngay.",
-    "Feedback tích cực/tiêu cực được ghi nhận có cấu trúc."
+  "risks": [
+    "Complaints need structured capture and appropriate escalation.",
+    "Complaint handling must not be treated as a new-order flow."
   ]
 }

@@ -2,7 +2,7 @@
   "id": "06-ngon-ngu-tu-nhien-va-an-toan",
   "title": "06: Ngôn ngữ tự nhiên, mơ hồ và an toàn hội thoại",
   "channel": "messenger_mock",
-  "goal": "Hiểu sai chính tả/tiếng lóng, xử lý yêu cầu dị ứng, spam, câu mơ hồ và yêu cầu ngoài phạm vi.",
+  "goal": "Hiểu sai chính tả/tiếng lóng, xử lý sở thích ăn uống thông thường, spam, câu mơ hồ và yêu cầu ngoài phạm vi.",
   "useCases": [
     "UC-31",
     "UC-32",
@@ -32,7 +32,7 @@
     {
       "index": 3,
       "speaker": "User",
-      "text": "Ừ. Món nào không cay với không có phô mai vậy?",
+      "text": "Ừ. Mình thích món không cay và không thêm phô mai, gợi ý giúp mình với.",
       "useCases": [
         "UC-32"
       ]
@@ -40,7 +40,7 @@
     {
       "index": 4,
       "speaker": "Bot",
-      "text": "Dạ mình có thể gợi ý các món không cay và không có phô mai. Tuy nhiên, để đảm bảo an toàn về thành phần, mình khuyến nghị bạn kiểm tra lại thông tin dị ứng với nhân viên cửa hàng trước khi xác nhận đơn.",
+      "text": "Bạn có thể đổi sang 2 miếng Gà Giòn Không Cay. Nếu muốn burger, Burger Gà Yo (không cay) cũng phù hợp và mình sẽ không thêm phô mai. Bạn thích gà hay burger hơn?",
       "useCases": [
         "UC-32"
       ]
@@ -110,11 +110,8 @@
       ]
     }
   ],
-  "expectations": [
-    "Bot hiểu tiếng lóng/sai chính tả nhưng phải xác nhận lại.",
-    "Bot không cam kết tuyệt đối về dị ứng nếu dữ liệu chưa đủ.",
-    "Spam hoặc nội dung ngoài phạm vi không tạo đơn.",
-    "Câu mơ hồ phải dẫn tới clarification hoặc lịch sử đơn, không tự thêm món.",
-    "Bot từ chối yêu cầu thông tin cá nhân và đề xuất kênh hỗ trợ chính thức."
+  "risks": [
+    "Ambiguous language, dietary preferences, safety concerns, spam, and out-of-scope requests require careful clarification or safe handling.",
+    "No order should result from an unclear or inappropriate request."
   ]
 }

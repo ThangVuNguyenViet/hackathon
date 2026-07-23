@@ -36,7 +36,7 @@
     {
       "index": 4,
       "speaker": "Bot",
-      "text": "Dạ mình sẽ không xác nhận đơn là đã thanh toán khi giao dịch online chưa hoàn tất. Bạn có thể thử lại liên kết thanh toán hoặc đổi sang thanh toán khi nhận hàng.",
+      "text": "Dạ giao dịch vẫn chưa thành công nên đơn chưa được ghi nhận là đã thanh toán. Bạn muốn thử lại liên kết thanh toán hay chuyển sang thanh toán khi nhận hàng ạ?",
       "useCases": [
         "UC-18"
       ]
@@ -68,17 +68,14 @@
     {
       "index": 8,
       "speaker": "Bot",
-      "text": "Vì đơn có số lượng bất thường, hệ thống cần tránh sai thông tin, đơn ảo hoặc cam kết thời gian không khả thi. Nhân viên sẽ xác nhận lại số lượng, thời gian và phương thức thanh toán với bạn.",
+      "text": "Vì bạn đặt tới 200 combo và muốn giao trong 30 phút, nhân viên cần kiểm tra lượng món cửa hàng có thể chuẩn bị và thời gian giao thực tế trước. Nhân viên sẽ liên hệ để xác nhận số lượng, thời gian và cách thanh toán với bạn nhé.",
       "useCases": [
         "Filler"
       ]
     }
   ],
-  "expectations": [
-    "Bot không đánh dấu thanh toán thành công khi mock payment trả lỗi.",
-    "Bot đề xuất retry hoặc COD.",
-    "Lỗi thanh toán không được tạo order paid.",
-    "Đơn số lượng rất lớn kích hoạt `human_review_required`.",
-    "Dashboard escalation reason gồm `payment_failed` và `abnormal_large_order`."
+  "risks": [
+    "A failed payment must not be represented as successful.",
+    "An unusually large order needs human review before commitments are made."
   ]
 }

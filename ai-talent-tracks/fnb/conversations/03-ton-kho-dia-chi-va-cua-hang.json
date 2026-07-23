@@ -24,7 +24,7 @@
     {
       "index": 2,
       "speaker": "Bot",
-      "text": "Dạ hiện Burger Tôm đang tạm hết tại cửa hàng gần bạn. Ngoài ra khu vực Nhà Bè có thể nằm ngoài phạm vi giao hàng của cửa hàng gần nhất. Bạn có muốn mình kiểm tra cửa hàng KFC gần nhất để đặt mang đi hoặc gợi ý Zinger Burger thay thế không ạ?",
+      "text": "Dạ Burger Tôm hiện đang tạm hết. Với khu vực Nhà Bè, mình cần địa chỉ cụ thể mới kiểm tra được cửa hàng nào có thể giao tới. Bạn muốn gửi địa chỉ để mình kiểm tra, tìm cửa hàng khác để mang đi, hay xem Burger Gà Zinger thay thế ạ?",
       "useCases": [
         "UC-06",
         "UC-08"
@@ -89,18 +89,14 @@
     {
       "index": 10,
       "speaker": "Bot",
-      "text": "Dạ mình sẽ kiểm tra trạng thái đơn. Vì đơn chưa được tạo, mình có thể đổi địa chỉ. Bạn cho mình xin địa chỉ mới cụ thể ở Quận 3 nhé.",
+      "text": "Dạ được, đơn của bạn vẫn chưa được đặt nên mình có thể đổi địa chỉ giao. Bạn gửi giúp mình địa chỉ cụ thể ở Quận 3 nhé.",
       "useCases": [
         "UC-23"
       ]
     }
   ],
-  "expectations": [
-    "Bot không nhận đơn món đã hết hàng.",
-    "Bot không hứa giao hàng khi địa chỉ ngoài vùng hoặc chưa chắc chắn.",
-    "Bot dùng lịch sử địa chỉ nhưng vẫn xác nhận lại với user.",
-    "Bot báo ETA tăng khi cửa hàng quá tải.",
-    "Nếu tồn kho thay đổi trước xác nhận, bot phải hỏi user chọn món thay thế hoặc cửa hàng khác.",
-    "Đổi địa chỉ chỉ cập nhật khi đơn chưa được xử lý."
+  "risks": [
+    "Inventory, serviceability, and fulfillment capacity can change while an order is being considered.",
+    "Uncertain availability needs a customer decision rather than an unsupported delivery commitment."
   ]
 }

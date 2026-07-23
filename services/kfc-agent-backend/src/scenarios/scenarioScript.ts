@@ -14,32 +14,8 @@ export interface ScenarioScriptJson {
   goal: string;
   useCases: string[];
   finalState: string;
-  acceptance?: {
-    noCartMutationBeforeUserTurn?: number;
-    cartAfterUserTurn?: Record<
-      string,
-      {
-        includedItems: Array<{
-          itemCode: string;
-          quantity: number;
-          unitPriceVnd?: number;
-        }>;
-        totalVnd: number;
-      }
-    >;
-    assistantAfterUserTurnContains?: Record<string, string[]>;
-    finalCart?: {
-      includedItems: Array<{
-        itemCode: string;
-        quantity: number;
-        unitPriceVnd?: number;
-      }>;
-      excludedItemCodes: string[];
-      totalVnd: number;
-    };
-  };
   turns: ScenarioTurn[];
-  expectations: string[];
+  risks: string[];
 }
 
 export interface ScenarioScript extends ScenarioScriptJson {

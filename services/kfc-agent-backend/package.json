@@ -12,6 +12,8 @@
     "format:check": "node scripts/run-format-gate.mjs --check",
     "lint": "eslint . --max-warnings 0",
     "check": "npm run format:check && npm run lint && npm run typecheck",
+    "test": "vitest run",
+    "test:watch": "vitest",
     "start": "node dist/src/index.js",
     "live:scenario": "set -a; kfc_primary_env=\"$(dirname \"$(git rev-parse --git-common-dir)\")/.env\"; [ ! -f ../../.env ] || . ../../.env; [ -n \"$OPENAI_API_KEY$GOOGLE_API_KEY\" ] || [ ! -f \"$kfc_primary_env\" ] || . \"$kfc_primary_env\"; set +a; tsx scripts/run-live-scenario.ts",
     "sandbox:commerce:serve": "tsx scripts/serve-sandbox-commerce-gateway.ts",
@@ -48,6 +50,7 @@
     "prettier": "3.9.6",
     "typescript": "^5.8.3",
     "typescript-eslint": "^8.64.0",
+    "vitest": "^3.2.7",
     "wrangler": "^4.108.0"
   },
   "engines": {

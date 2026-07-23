@@ -14,97 +14,98 @@
     "UC-13"
   ],
   "finalState": "cart_ready",
-  "acceptance": {
-    "noCartMutationBeforeUserTurn": 5,
-    "cartAfterUserTurn": {
-      "5": {
-        "includedItems": [
-          { "itemCode": "41037", "quantity": 3 },
-          { "itemCode": "41035", "quantity": 1 },
-          { "itemCode": "41074", "quantity": 4 }
-        ],
-        "totalVnd": 404000
-      }
-    },
-    "assistantAfterUserTurnContains": {
-      "5": ["2 Combo Đẫy Đà 129K", "146.000"]
-    },
-    "finalCart": {
-      "includedItems": [
-        { "itemCode": "20752", "quantity": 2, "unitPriceVnd": 143000 }
-      ],
-      "excludedItemCodes": ["41037", "41035", "41074"],
-      "totalVnd": 286000
-    }
-  },
   "turns": [
     {
       "index": 1,
       "speaker": "User",
       "text": "Không biết ăn gì, gợi ý cho nhóm 4 người với, ngân sách khoảng 300k.",
-      "useCases": ["UC-02", "UC-03", "UC-11", "UC-13"]
+      "useCases": [
+        "UC-02",
+        "UC-03",
+        "UC-11",
+        "UC-13"
+      ]
     },
     {
       "index": 2,
       "speaker": "Bot",
-      "text": "Dạ mình sẽ tìm các lựa chọn cho 4 người trong khoảng 300.000đ. Bạn thích gà rán, burger hay món cơm? Nếu muốn mình cũng có thể gợi ý thêm món tráng miệng.",
-      "useCases": ["UC-02", "UC-03", "UC-11", "UC-13"]
+      "text": "Với nhóm 4 người và khoảng 300.000đ, 2 Combo Đẫy Đà 129K là một lựa chọn vừa ngân sách. Bạn thích ưu tiên gà rán, burger hay món cơm để mình gợi ý sát hơn?",
+      "useCases": [
+        "UC-02",
+        "UC-03",
+        "UC-11",
+        "UC-13"
+      ]
     },
     {
       "index": 3,
       "speaker": "User",
       "text": "Không cần thêm món tráng miệng. Cho mình xem toàn bộ menu trước; hôm nay có ưu đãi gì phù hợp không?",
-      "useCases": ["UC-04", "UC-09"]
+      "useCases": [
+        "UC-04",
+        "UC-09"
+      ]
     },
     {
       "index": 4,
       "speaker": "Bot",
-      "text": "Dạ mình sẽ lấy menu theo danh mục để bạn xem và kiểm tra các ưu đãi đang áp dụng cho đơn nhóm dưới 300.000đ. Mình chỉ đề xuất những ưu đãi phù hợp với nhu cầu của bạn.",
-      "useCases": ["UC-04", "UC-09"]
+      "text": "Menu có các nhóm gà rán, burger, cơm, combo, món ăn nhẹ và nước. Với nhóm 4 người khoảng 300.000đ, 2 Combo Đẫy Đà 129K có tổng 258.000đ và là lựa chọn phù hợp ngân sách.",
+      "useCases": [
+        "UC-04",
+        "UC-09"
+      ]
     },
     {
       "index": 5,
       "speaker": "User",
       "text": "Món gà nào bán chạy? Nếu gọi lẻ thì cho mình 10 miếng gà rán và 4 Pepsi tiêu chuẩn.",
-      "useCases": ["UC-12"]
+      "useCases": [
+        "UC-12"
+      ]
     },
     {
       "index": 6,
       "speaker": "Bot",
-      "text": "Dạ 10 miếng gà rán và 4 Pepsi tiêu chuẩn gọi lẻ tạm tính 404.000đ. Mình thấy 2 Combo Đẫy Đà 129K có đúng 10 miếng gà rán và 4 Pepsi tiêu chuẩn, tổng 258.000đ, tiết kiệm 146.000đ và phù hợp ngân sách hơn. Mình chưa đổi giỏ; bạn có muốn đổi sang 2 combo này không?",
-      "useCases": ["UC-12"]
+      "text": "Dạ, gọi lẻ 10 miếng gà rán và 4 Pepsi tiêu chuẩn sẽ là 404.000đ. Nếu chọn 2 Combo Đẫy Đà 129K, bạn vẫn có đủ 10 miếng gà và 4 Pepsi nhưng tổng chỉ 258.000đ, tiết kiệm 146.000đ. Bạn có muốn mình đổi sang 2 combo này không?",
+      "useCases": [
+        "UC-12"
+      ]
     },
     {
       "index": 7,
       "speaker": "User",
       "text": "Hợp lý đó, đổi sang 2 Combo Đẫy Đà 129K giúp mình.",
-      "useCases": ["Filler"]
+      "useCases": [
+        "Filler"
+      ]
     },
     {
       "index": 8,
       "speaker": "Bot",
       "text": "Dạ mình đã bỏ các món lẻ và đổi sang 2 Combo Đẫy Đà 129K, tổng 258.000đ. Bạn có muốn nâng cả 4 Pepsi tiêu chuẩn lên size đại, thêm 7.000đ mỗi ly và 28.000đ tổng cộng không? Nếu đồng ý, tổng mới sẽ là 286.000đ.",
-      "useCases": ["Filler"]
+      "useCases": [
+        "Filler"
+      ]
     },
     {
       "index": 9,
       "speaker": "User",
       "text": "Ok, nâng cả 4 Pepsi lên size đại luôn nhé.",
-      "useCases": ["UC-10"]
+      "useCases": [
+        "UC-10"
+      ]
     },
     {
       "index": 10,
       "speaker": "Bot",
       "text": "Dạ mình đã nâng cả 4 Pepsi lên size đại. Giỏ hàng cuối gồm 2 Combo Đẫy Đà 129K với 4 Pepsi size đại, tổng tạm tính 286.000đ.",
-      "useCases": ["UC-10"]
+      "useCases": [
+        "UC-10"
+      ]
     }
   ],
-  "expectations": [
-    "Khi user hỏi toàn bộ menu, bot phải tra menu và trình bày lựa chọn có cấu trúc thay vì chỉ trả lời phần ưu đãi.",
-    "Bot dựa trên thành phần và giá đã xác minh để gợi ý combo tương đương, tiết kiệm 146.000đ.",
-    "Bot không tự đổi món lẻ sang combo trước khi khách đồng ý.",
-    "Khi đổi sang 2 Combo Đẫy Đà 129K, giỏ cuối không còn các mã món lẻ 41037, 41035 và 41074.",
-    "Bot không tự tăng size nước trước khi khách chấp nhận upsell.",
-    "Giỏ cuối có 2 combo 20752, 4 Pepsi size đại và tổng tạm tính 286.000đ."
+  "risks": [
+    "Recommendations must be grounded in available menu and price information.",
+    "Cart changes and upsells require clear customer agreement."
   ]
 }

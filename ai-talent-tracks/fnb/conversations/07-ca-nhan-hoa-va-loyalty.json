@@ -54,7 +54,7 @@
     {
       "index": 6,
       "speaker": "Bot",
-      "text": "Dạ tài khoản của bạn hiện có 120 điểm. Mình đã kiểm tra các phần thưởng, voucher trong ví và những thao tác thành viên có thể dùng; mọi thao tác đổi hoặc dùng voucher đều cần bạn xác nhận.",
+      "text": "Dạ bạn hiện có 3.200 điểm. Trong 30 ngày gần đây, tài khoản chưa có giao dịch cộng hoặc trừ điểm. Mã Giảm 10k cần 3.000 điểm, dùng cho đơn từ 50.000đ và có thể đổi tại quầy, kiosk hoặc Zalo Miniapp. Trong ví của bạn cũng có Ưu Đãi Chào Bạn Mới. Mình sẽ hỏi lại trước khi đổi điểm hoặc dùng ưu đãi nhé.",
       "useCases": [
         "UC-15"
       ]
@@ -70,7 +70,7 @@
     {
       "index": 8,
       "speaker": "Bot",
-      "text": "Dạ mình đã bỏ Pepsi và thay bằng trà đào. Mã Giảm 10k cần 3.000 điểm; mình chưa đổi vì bạn chưa xác nhận.",
+      "text": "Dạ mình đã bỏ Pepsi và thay bằng trà đào. Bạn đủ điểm đổi Mã Giảm 10k, nhưng mình chưa đổi vì bạn chưa xác nhận.",
       "useCases": [
         "UC-05"
       ]
@@ -86,19 +86,14 @@
     {
       "index": 10,
       "speaker": "Bot",
-      "text": "Dạ hệ thống đã ghi nhận đổi Mã Giảm 10k và dùng Ưu Đãi Chào Bạn Mới trên Zalo Miniapp. Giỏ vẫn chưa được đặt; mình sẽ tóm tắt lại để bạn xác nhận trước khi tạo đơn.",
+      "text": "Dạ mình đã đổi Mã Giảm 10k và dùng Ưu Đãi Chào Bạn Mới trên Zalo Miniapp theo xác nhận của bạn. Mình chưa đặt món; mình sẽ tóm tắt giỏ hàng để bạn kiểm tra trước nhé.",
       "useCases": [
         "Filler"
       ]
     }
   ],
-  "expectations": [
-    "Reorder từ đơn cũ phải hiển thị lại và hỏi xác nhận.",
-    "Món yêu thích dựa trên lịch sử nhưng không tự thêm nếu chưa được đồng ý.",
-    "Loyalty lookup trả về điểm, phần thưởng, ví voucher và thao tác thành viên đang hỗ trợ.",
-    "Đổi và dùng voucher đều phải giữ ở trạng thái xem trước khi chưa có xác nhận rõ ràng.",
-    "Sau xác nhận, gọi đúng acquireVoucher cho Mã Giảm 10k và redeemReward cho Ưu Đãi Chào Bạn Mới.",
-    "Chỉnh giỏ hàng cập nhật đúng món và tính lại tổng tiền.",
-    "Không tạo đơn chỉ vì user xác nhận thao tác thành viên."
+  "risks": [
+    "Personalized history and loyalty information need authoritative customer state.",
+    "Membership benefits and cart changes require clear customer consent before they take effect."
   ]
 }

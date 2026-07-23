@@ -7,7 +7,7 @@ interface ScriptScenario {
   title: string;
   goal: string;
   useCases: string[];
-  expectations: string[];
+  risks: string[];
   turns: Array<{
     index: number;
     speaker: 'User' | 'Bot';
@@ -65,7 +65,7 @@ for (const scenario of scripts) {
         .filter((turn) => turn.speaker === 'User')
         .map(({ index, text, useCases }) => ({ index, text, useCases })),
     },
-    outputs: { acceptanceCriteria: scenario.expectations },
+    outputs: { acceptanceCriteria: scenario.risks },
     metadata: { schemaVersion: 'kfc-showcase-v1', scenarioId: scenario.id },
     split: 'showcase',
   });

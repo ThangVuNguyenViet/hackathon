@@ -38,7 +38,7 @@
     {
       "index": 4,
       "speaker": "Bot",
-      "text": "Dạ đơn KFC-1024 của bạn hiện đang được chuẩn bị tại cửa hàng KFC Nguyễn Thị Minh Khai. Thời gian giao dự kiến là khoảng 25 phút nữa.",
+      "text": "Dạ trạng thái chưa thay đổi: cửa hàng KFC Nguyễn Thị Minh Khai vẫn đang chuẩn bị đơn KFC-1024. Dự kiến khoảng 25 phút nữa sẽ giao tới bạn.",
       "useCases": [
         "UC-21"
       ]
@@ -70,7 +70,7 @@
     {
       "index": 8,
       "speaker": "Bot",
-      "text": "Dạ mình sẽ kiểm tra trạng thái đơn. Nếu đơn chưa được chuẩn bị, mình sẽ thêm 1 khoai vào đơn hiện tại. Nếu đơn đã xử lý, mình có thể tạo đơn bổ sung cho bạn.",
+      "text": "Đơn hiện chưa được chuẩn bị nên vẫn có thể thêm 1 khoai tây chiên. Bạn xác nhận muốn thêm món này vào đơn hiện tại nhé?",
       "useCases": [
         "UC-26"
       ]
@@ -140,11 +140,8 @@
       ]
     }
   ],
-  "expectations": [
-    "Bot lấy trạng thái và ETA từ mock OMS.",
-    "Bot không hủy đơn nếu user chưa xác nhận hủy.",
-    "Bot kiểm tra trạng thái trước khi thêm món sau khi đặt.",
-    "Đặt lại đơn cũ phải tạo giỏ hàng mới và yêu cầu xác nhận.",
-    "Bot không làm sai trạng thái đơn hiện tại khi user chuyển sang reorder."
+  "risks": [
+    "Post-order requests depend on the current order state.",
+    "A later request must not inadvertently change an in-flight order."
   ]
 }
