@@ -54,6 +54,8 @@ import {
   type IsRunCommitFenceCurrentInput,
   type CommitAssistantTurnIfRunCurrentInput,
   type CommitAssistantTurnIfRunCurrentResult,
+  type CommitAssistantTurnInput,
+  type CommitAssistantTurnResult,
   type CommitPausedCustomerRunIntakeInput,
   type CommitPausedCustomerRunIntakeResult,
   type ConversationStore,
@@ -89,6 +91,7 @@ import { reserveMemoryWebhookDelivery } from './memoryStoreNonAgentTextDelivery.
 import { appendMemoryConversationTurn } from './memoryStoreTurnOperations.js';
 import {
   appendMemoryEventIfRunCurrent,
+  commitMemoryAssistantTurn,
   commitMemoryAssistantTurnIfRunCurrent,
   memoryRunCommitFenceIsCurrent,
   memoryVerifiedRefFenceIsCurrent,
@@ -819,6 +822,20 @@ export class MemoryStore
           irreversibleOperations: this.irreversibleOperations,
           sessionControls: this.sessionControls,
         },
+        sessionGenerations: this.sessionGenerations,
+        verifiedRefs: this.verifiedRefs,
+        turns: this.turns,
+        events: this.events,
+        packStates: this.packStates,
+      }),
+    );
+  }
+  async commitAssistantTurn(
+    input: CommitAssistantTurnInput,
+  ): Promise<CommitAssistantTurnResult> {
+    return this.withStoreLock(async () =>
+      commitMemoryAssistantTurn({
+        operation: input,
         sessionGenerations: this.sessionGenerations,
         verifiedRefs: this.verifiedRefs,
         turns: this.turns,

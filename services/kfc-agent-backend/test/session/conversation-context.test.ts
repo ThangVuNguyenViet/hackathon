@@ -100,6 +100,33 @@ describe('conversation context', () => {
     expect(context.oversizedNewestExchange).toBe(true);
   });
 
+  it('falls back to canonical exchanges when a persisted summary does not fit', async () => {
+    const exchanges = completeConversationExchanges([
+      turn(1, 'user', 'old-q'),
+      turn(2, 'assistant', 'old-a'),
+      turn(3, 'user', 'new-q'),
+      turn(4, 'assistant', 'new-a'),
+    ]);
+    const context = await assembleConversationContext({
+      summary: {
+        schemaVersion: 1,
+        text: 'oversized persisted summary',
+        throughOrdinal: 4,
+        revision: 1,
+        updatedAt: '2026-07-01T00:00:00.000Z',
+      },
+      exchanges,
+      tokenBudget: 5,
+      countTokens: async (text) =>
+        text === 'oversized persisted summary' ? 6 : 3,
+    });
+
+    expect(context.summary).toBeUndefined();
+    expect(context.exchanges.map((exchange) => exchange.throughOrdinal)).toEqual([
+      4,
+    ]);
+  });
+
   it('advances the summary only through complete exchanges and preserves it on failure', async () => {
     const store = new MemoryStore();
     const turns = [

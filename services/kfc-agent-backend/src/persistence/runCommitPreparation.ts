@@ -5,6 +5,7 @@ import {
 import type { ConversationTurn } from '../domain/types.js';
 import type {
   CommitAssistantTurnIfRunCurrentInput,
+  CommitAssistantTurnInput,
   StoredEvent,
 } from './contracts.js';
 
@@ -16,7 +17,7 @@ export interface PreparedAssistantTurnCommit {
 }
 
 export function prepareAssistantTurnCommit(
-  input: CommitAssistantTurnIfRunCurrentInput,
+  input: CommitAssistantTurnIfRunCurrentInput | CommitAssistantTurnInput,
   now = new Date(),
   ordinal = 0,
 ): PreparedAssistantTurnCommit {

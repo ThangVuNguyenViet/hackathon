@@ -90,3 +90,47 @@ made.
   Postgres migration/removal; those remain Task 3B.
 - No `StateGraph`, checkpointer, direct provider SDK, deployment, or live
   qualification.
+
+## Important-review fixes
+
+- Added `ConversationStore.commitAssistantTurn` for the no-run-guard path.
+  Memory publishes the compatibility event, typed pack projection, assistant
+  turn, turn audit event, and optional verified references inside one store
+  lock after complete validation. D1 sends the same writes in one atomic batch.
+  The KFC completion path no longer performs three sequential writes.
+- Added a real SQLite-backed D1 adapter for tests. A database trigger injects
+  assistant-turn insertion failure after earlier batch statements; the test
+  proves the compatibility event and pack projection roll back with the turn.
+  A concurrent 20-append contract test proves D1 ordinals remain unique and
+  monotonic.
+- Rebuilt `conversation_turns` in migration 0021 so upgraded databases have the
+  same exact column order and `INTEGER NOT NULL` ordinal definition as fresh
+  runtime schema. Existing turns receive deterministic per-session
+  `ROW_NUMBER()` values ordered by `created_at, id`; external-message,
+  dashboard-read, and ordinal indexes are recreated. The upgrade test preserves
+  and checks an incoming foreign key and runs `foreign_key_check`.
+- When a persisted summary itself exceeds the token budget, the assembler now
+  disregards that omitted summary's watermark and selects newest complete
+  exchanges directly from the canonical transcript.
+
+Review-fix RED evidence:
+
+```text
+npm test -- test/session/conversation-context.test.ts \
+  test/persistence/memory-store-contract.test.ts \
+  test/persistence/d1-context-state.test.ts \
+  test/persistence/d1-migration-0021.test.ts
+```
+
+The initial run had six expected failures: omitted-summary watermark filtering,
+the absent unguarded atomic method, nullable upgrade ordinal schema, and the
+not-yet-complete SQLite D1 harness. Final focused result: 4 files and 16 tests
+passed.
+
+Final review-fix verification passed formatting, lint, typecheck, build,
+`git diff --check`, and the full 18-file / 80-test Vitest suite.
+
+A clean temporary Wrangler persistence directory was then used to apply all 19
+local migrations from 0001 through 0021. The resulting
+`conversation_turns.ordinal` is `INTEGER NOT NULL` with no default, and
+`PRAGMA foreign_key_check` returned no rows. No remote database was touched.

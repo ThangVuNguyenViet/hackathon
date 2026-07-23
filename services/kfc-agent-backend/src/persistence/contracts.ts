@@ -152,6 +152,16 @@ export type CommitAssistantTurnIfRunCurrentResult =
     }
   | { status: 'stale' };
 
+export type CommitAssistantTurnInput = Omit<
+  CommitAssistantTurnIfRunCurrentInput,
+  'fence' | 'notAfter'
+>;
+
+export type CommitAssistantTurnResult = Extract<
+  CommitAssistantTurnIfRunCurrentResult,
+  { status: 'committed' }
+>;
+
 export type IssueVerifiedRefResult =
   | { status: 'created'; record: VerifiedRefRecord }
   | { status: 'generation_conflict' };
@@ -753,6 +763,13 @@ export interface ConversationStore {
   commitAssistantTurnIfRunCurrent(
     input: CommitAssistantTurnIfRunCurrentInput,
   ): Promise<CommitAssistantTurnIfRunCurrentResult>;
+  /**
+   * Atomically publishes compatibility state, typed pack state, references,
+   * and the assistant transcript turn when no run-owner fence is present.
+   */
+  commitAssistantTurn(
+    input: CommitAssistantTurnInput,
+  ): Promise<CommitAssistantTurnResult>;
   listEvents(sessionId: string): Promise<StoredEvent[]>;
   issueVerifiedRef(
     input: IssueVerifiedRefInput,

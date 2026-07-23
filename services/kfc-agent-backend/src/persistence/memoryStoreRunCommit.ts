@@ -9,6 +9,8 @@ import type {
   AppendEventIfRunCurrentResult,
   CommitAssistantTurnIfRunCurrentInput,
   CommitAssistantTurnIfRunCurrentResult,
+  CommitAssistantTurnInput,
+  CommitAssistantTurnResult,
   IrreversibleOperationInput,
   IsRunCommitFenceCurrentInput,
   SessionControl,
@@ -152,6 +154,75 @@ export function commitMemoryAssistantTurnIfRunCurrent(input: {
     status: 'committed',
     ...structuredClone(prepared),
   };
+}
+
+export function commitMemoryAssistantTurn(input: {
+  operation: CommitAssistantTurnInput;
+  sessionGenerations: ReadonlyMap<string, number>;
+  verifiedRefs: Map<string, MemoryVerifiedRefStorageSnapshot>;
+  turns: ConversationTurn[];
+  events: StoredEvent[];
+  packStates: Map<string, PackStateEnvelope>;
+  now?: () => number;
+}): CommitAssistantTurnResult {
+  const now = input.now?.() ?? Date.now();
+  const ordinal =
+    input.turns
+      .filter(
+        (turn) => turn.sessionId === input.operation.assistantTurn.sessionId,
+      )
+      .reduce((maximum, turn) => Math.max(maximum, turn.ordinal), 0) + 1;
+  const prepared = prepareAssistantTurnCommit(
+    input.operation,
+    new Date(now),
+    ordinal,
+  );
+  assertPackStateSession(input.operation, prepared.turn.sessionId);
+  const sessionGeneration =
+    input.sessionGenerations.get(prepared.turn.sessionId) ?? 0;
+  for (const record of prepared.verifiedRefs) {
+    if (input.verifiedRefs.has(record.ref.id)) {
+      throw new Error('verified_ref_id_collision');
+    }
+  }
+
+  for (const record of prepared.verifiedRefs) {
+    input.verifiedRefs.set(
+      record.ref.id,
+      memoryVerifiedRefStorageSnapshot(record, sessionGeneration),
+    );
+  }
+  input.events.push(prepared.stateEvent);
+  writeMemoryPackState(
+    input.packStates,
+    prepared.turn.sessionId,
+    input.operation.packState,
+  );
+  input.turns.push(prepared.turn);
+  input.events.push(prepared.turnEvent);
+  return { status: 'committed', ...structuredClone(prepared) };
+}
+
+function assertPackStateSession(
+  operation: CommitAssistantTurnInput | CommitAssistantTurnIfRunCurrentInput,
+  turnSessionId: string,
+): void {
+  if (operation.packState && operation.packState.sessionId !== turnSessionId) {
+    throw new Error('agent_turn_commit_pack_state_session_mismatch');
+  }
+}
+
+function writeMemoryPackState(
+  packStates: Map<string, PackStateEnvelope>,
+  sessionId: string,
+  packState: CommitAssistantTurnInput['packState'],
+): void {
+  if (!packState) return;
+  const { envelope } = packState;
+  packStates.set(
+    `${sessionId}\u0000${envelope.packRef.packId}\u0000${envelope.packRef.version}`,
+    structuredClone(envelope),
+  );
 }
 
 export function memoryRunCommitFenceIsCurrent(

@@ -15,6 +15,8 @@ import type {
   AppendConversationTurnInput,
   CommitAssistantTurnIfRunCurrentInput,
   CommitAssistantTurnIfRunCurrentResult,
+  CommitAssistantTurnInput,
+  CommitAssistantTurnResult,
   ConversationStore,
   CreateAgentRunInput,
   HistorySearchResult,
@@ -123,6 +125,11 @@ export abstract class PostgresStoreConversationOperations extends PostgresStoreC
       db: this.db,
       operation: input,
     });
+  }
+  async commitAssistantTurn(
+    _input: CommitAssistantTurnInput,
+  ): Promise<CommitAssistantTurnResult> {
+    throw new Error('postgres_context_state_not_supported');
   }
   async appendTurn(
     input: AppendConversationTurnInput,

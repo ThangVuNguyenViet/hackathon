@@ -1,6 +1,8 @@
 import type {
   CommitAssistantTurnIfRunCurrentInput,
   CommitAssistantTurnIfRunCurrentResult,
+  CommitAssistantTurnInput,
+  CommitAssistantTurnResult,
   RunCommitFence,
 } from './contracts.js';
 import {
@@ -141,6 +143,118 @@ export async function commitD1AssistantTurnIfRunCurrent(input: {
     ...structuredClone(prepared),
     turn: turnFromRow(turnRow),
   };
+}
+
+export async function commitD1AssistantTurn(input: {
+  db: D1DatabaseLike;
+  operation: CommitAssistantTurnInput;
+}): Promise<CommitAssistantTurnResult> {
+  if (!input.db.batch) {
+    throw new Error('d1_atomic_agent_turn_commit_unavailable');
+  }
+  const prepared = prepareAssistantTurnCommit(input.operation);
+  if (
+    input.operation.packState &&
+    input.operation.packState.sessionId !== prepared.turn.sessionId
+  ) {
+    throw new Error('agent_turn_commit_pack_state_session_mismatch');
+  }
+  const statements: D1PreparedStatement[] = [];
+  const requiredResultIndexes: number[] = [];
+  if (prepared.verifiedRefs.length > 0) {
+    statements.push(
+      input.db
+        .prepare(
+          `INSERT OR IGNORE INTO session_generations
+           (session_id, generation) VALUES (?, 0)`,
+        )
+        .bind(prepared.turn.sessionId),
+    );
+    for (const record of prepared.verifiedRefs) {
+      const values = verifiedRefStorageValues(record, 0);
+      const withoutGeneration = [...values.slice(0, 4), ...values.slice(5)];
+      requiredResultIndexes.push(statements.length);
+      statements.push(
+        input.db
+          .prepare(
+            `INSERT INTO verified_refs (
+               schema_version, ref_id, kind, session_id,
+               session_generation, customer_id, channel,
+               authenticated_subject, authentication_evidence_ref,
+               verified_revision, lifecycle, payload_json, created_at,
+               expires_at, claimed_use_id, claimed_at
+             )
+             SELECT ?, ?, ?, ?, generation, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
+             FROM session_generations WHERE session_id = ?`,
+          )
+          .bind(...withoutGeneration, prepared.turn.sessionId),
+      );
+    }
+  }
+  const unconditional = { sql: '1', bindings: [] };
+  requiredResultIndexes.push(statements.length);
+  statements.push(eventStatement(input.db, prepared.stateEvent, unconditional));
+  if (input.operation.packState) {
+    requiredResultIndexes.push(statements.length);
+    statements.push(
+      packStateStatement(
+        input.db,
+        input.operation.packState,
+        prepared.turn.createdAt,
+        unconditional,
+      ),
+    );
+  }
+  requiredResultIndexes.push(statements.length);
+  statements.push(turnStatement(input.db, prepared.turn, unconditional));
+  requiredResultIndexes.push(statements.length);
+  statements.push(eventStatement(input.db, prepared.turnEvent, unconditional));
+
+  const results = await input.db.batch(statements);
+  if (
+    !requiredResultIndexes.every(
+      (index) => Number(results[index]?.meta.changes ?? 0) === 1,
+    )
+  ) {
+    throw new Error('d1_atomic_agent_turn_commit_inconsistent');
+  }
+  const turnRow = await input.db
+    .prepare(`SELECT * FROM conversation_turns WHERE id = ? LIMIT 1`)
+    .bind(prepared.turn.id)
+    .first<ConversationTurnRow>();
+  if (!turnRow) throw new Error('d1_atomic_agent_turn_commit_missing_turn');
+  return {
+    status: 'committed',
+    ...structuredClone(prepared),
+    turn: turnFromRow(turnRow),
+  };
+}
+
+function packStateStatement(
+  db: D1DatabaseLike,
+  packState: NonNullable<CommitAssistantTurnInput['packState']>,
+  updatedAt: string,
+  eligible: D1RunCommitPredicate,
+): D1PreparedStatement {
+  return db
+    .prepare(
+      `INSERT INTO pack_state_projections (
+         session_id, pack_id, pack_version, envelope_json, updated_at
+       )
+       SELECT ?, ?, ?, ?, ?
+       WHERE ${eligible.sql}
+       ON CONFLICT(session_id, pack_id, pack_version) DO UPDATE SET
+         envelope_json = excluded.envelope_json,
+         updated_at = excluded.updated_at`,
+    )
+    .bind(
+      packState.sessionId,
+      packState.envelope.packRef.packId,
+      packState.envelope.packRef.version,
+      JSON.stringify(packState.envelope),
+      updatedAt,
+      ...eligible.bindings,
+    );
 }
 
 function eventStatement(

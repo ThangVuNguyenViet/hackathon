@@ -20,6 +20,8 @@ import type {
   AppendConversationTurnInput,
   CommitAssistantTurnIfRunCurrentInput,
   CommitAssistantTurnIfRunCurrentResult,
+  CommitAssistantTurnInput,
+  CommitAssistantTurnResult,
   ConversationStore,
   CreateAgentRunInput,
   HistorySearchResult,
@@ -109,7 +111,10 @@ import {
 
 import { D1StoreCore } from './d1StoreCore.js';
 import { transitionD1SessionAuthority } from './d1StoreSessionAuthority.js';
-import { commitD1AssistantTurnIfRunCurrent } from './d1StoreTurnCommit.js';
+import {
+  commitD1AssistantTurn,
+  commitD1AssistantTurnIfRunCurrent,
+} from './d1StoreTurnCommit.js';
 import {
   beginD1NonAgentTextDeliveryAttempt,
   completeD1NonAgentTextDeliveryAttempt,
@@ -133,6 +138,11 @@ export abstract class D1StoreConversationOperations extends D1StoreCore {
       db: this.db,
       operation: input,
     });
+  }
+  async commitAssistantTurn(
+    input: CommitAssistantTurnInput,
+  ): Promise<CommitAssistantTurnResult> {
+    return commitD1AssistantTurn({ db: this.db, operation: input });
   }
   async upsertProfile(
     input: ConversationProfile,

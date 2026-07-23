@@ -80,8 +80,7 @@ export async function assembleConversationContext<TState = never>(input: {
   }
 
   const eligible = input.exchanges.filter(
-    (exchange) =>
-      exchange.throughOrdinal > (input.summary?.throughOrdinal ?? 0),
+    (exchange) => exchange.throughOrdinal > (summary?.throughOrdinal ?? 0),
   );
   const selected: ConversationExchange[] = [];
   let oversizedNewestExchange = false;

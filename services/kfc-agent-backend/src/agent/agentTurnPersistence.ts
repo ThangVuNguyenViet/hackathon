@@ -8,10 +8,7 @@ import {
   emitDashboardEvent,
   verifiedStateSnapshotSourceType,
 } from './turnSupport.js';
-import {
-  buildVerifiedStateSnapshot,
-  persistVerifiedStateSnapshot,
-} from './verifiedState.js';
+import { buildVerifiedStateSnapshot } from './verifiedState.js';
 import { kfcGenUiAttachmentForPersistence } from '../genui/kfcGenUi.js';
 import { selectKfcGenUiAttachment } from '../genui/kfcGenUiSelector.js';
 import type { AgentTraceSpan } from '../observability/agentTracing.js';
@@ -118,14 +115,20 @@ export async function persistCompletedTurn(input: {
             throw new Error('customer_run_cancelled');
           return result.turn;
         })
-    : await persistVerifiedStateSnapshot(input.turnInput.store, input.state)
-        .then(() =>
-          input.turnInput.store.putPackState(
-            input.turnInput.sessionId,
-            packStateEnvelope,
-          ),
-        )
-        .then(() => input.turnInput.store.appendTurn(assistantTurn));
+    : await input.turnInput.store
+        .commitAssistantTurn({
+          stateEvent: {
+            sessionId: input.turnInput.sessionId,
+            sourceType: verifiedStateSnapshotSourceType,
+            payload: { verifiedState },
+          },
+          packState: {
+            sessionId: input.turnInput.sessionId,
+            envelope: packStateEnvelope,
+          },
+          assistantTurn,
+        })
+        .then((result) => result.turn);
 
   emitDashboardEvent(input.turnInput, 'conversation_turn_created', {
     turnId: turn.id,

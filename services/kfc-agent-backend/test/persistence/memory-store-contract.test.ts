@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { MemoryStore } from '../../src/persistence/memoryStore.js';
+import { createPackStateEnvelope } from '../../src/runtime/businessPack.js';
 
 describe('MemoryStore conversation contract', () => {
   it('keeps sessions isolated and records a product turn with its audit event', async () => {
@@ -104,5 +105,76 @@ describe('MemoryStore conversation contract', () => {
       revision: 1,
       throughOrdinal: 2,
     });
+  });
+
+  it('atomically publishes an unguarded assistant turn with typed state', async () => {
+    const store = new MemoryStore();
+    const envelope = await createPackStateEnvelope({
+      packRef: { packId: 'kfc-vietnam', version: '1.0.0' },
+      schemaVersion: '1',
+      state: { cartId: 'cart-a' },
+    });
+
+    const result = await store.commitAssistantTurn({
+      stateEvent: {
+        sessionId: 'session-a',
+        sourceType: 'agent:verified_state',
+        payload: { verifiedState: { cartId: 'cart-a' } },
+      },
+      packState: { sessionId: 'session-a', envelope },
+      assistantTurn: {
+        sessionId: 'session-a',
+        channel: 'kfc',
+        role: 'assistant',
+        text: 'Ready',
+        externalMessageId: null,
+        externalUserId: 'customer-a',
+        deliveryStatus: 'pending',
+        metadata: null,
+      },
+    });
+
+    expect(result.turn.ordinal).toBe(1);
+    expect(await store.listTurns('session-a')).toEqual([result.turn]);
+    expect(
+      await store.getPackState('session-a', envelope.packRef),
+    ).toEqual(envelope);
+    expect(await store.listEvents('session-a')).toHaveLength(2);
+  });
+
+  it('does not advance compatibility or pack state when assistant publication fails', async () => {
+    const store = new MemoryStore();
+    const envelope = await createPackStateEnvelope({
+      packRef: { packId: 'kfc-vietnam', version: '1.0.0' },
+      schemaVersion: '1',
+      state: { cartId: 'cart-a' },
+    });
+
+    await expect(
+      store.commitAssistantTurn({
+        stateEvent: {
+          sessionId: 'session-a',
+          sourceType: 'agent:verified_state',
+          payload: { verifiedState: { cartId: 'cart-a' } },
+        },
+        packState: { sessionId: 'session-a', envelope },
+        assistantTurn: {
+          sessionId: 'session-a',
+          channel: 'kfc',
+          role: 'user',
+          text: 'injected invalid assistant publication',
+          externalMessageId: null,
+          externalUserId: 'customer-a',
+          deliveryStatus: 'pending',
+          metadata: null,
+        },
+      }),
+    ).rejects.toThrow('agent_turn_commit_shape_invalid');
+
+    expect(await store.listTurns('session-a')).toEqual([]);
+    expect(await store.listEvents('session-a')).toEqual([]);
+    expect(
+      await store.getPackState('session-a', envelope.packRef),
+    ).toBeUndefined();
   });
 });
