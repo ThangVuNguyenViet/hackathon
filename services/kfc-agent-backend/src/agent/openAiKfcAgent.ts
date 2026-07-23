@@ -126,6 +126,7 @@ const defaultInstructions = [
   'If a request is materially ambiguous and acting could change the wrong item, quantity, option, address, payment, or order, ask one natural clarification.',
   'When a tool result requires recovery, follow its recovery instruction in the same turn with materially corrected arguments. Stop when recovery is exhausted. Never repeat an uncertain mutation.',
   'If an option is unavailable inside the current item, continue with an appropriate standalone menu item when that satisfies the same clear request. When the customer delegates a recommendation, choose one complete verified option and explain it briefly.',
+  'When the customer delegates a reversible menu or cart decision and provides sufficient constraints, choose and execute a complete verified plan in the same turn. Treat a stated budget as a maximum unless the customer asks to spend close to it. Satisfy every explicit component constraint, then report the final verified cart. Ask for clarification only when missing information would materially change the choice.',
   '',
   '# Customer response',
   'Reply in natural Vietnamese unless the customer requests another language. Be concise, direct, and customer-facing.',

@@ -12,6 +12,7 @@ import {
   type CurrentTurnResponseEvidence,
   type ModelPublicationAuthority,
 } from '../../src/agent/modelPublicationProjection.js';
+import { projectCart } from '../../src/agent/modelPublicationStateProjection.js';
 import { traceReceiptIsRecoverable } from '../../src/agent/agentPublicationRuntime.js';
 import type { GraphExecutedToolResult } from '../../src/agent/graphExecutedToolResult.js';
 import type {
@@ -35,6 +36,7 @@ function cart(id = 'cart-current'): Cart {
       {
         itemCode: 'item-1',
         name: 'Chicken',
+        description: 'Two chicken pieces and one Pepsi',
         quantity: 1,
         unitPriceVnd: 50_000,
       },
@@ -46,6 +48,14 @@ function cart(id = 'cart-current'): Cart {
     voucherCode: null,
   };
 }
+
+it('preserves verified menu descriptions in projected cart state', () => {
+  const projected = projectCart(cart());
+
+  expect(projected.items[0]?.description).toBe(
+    'Two chicken pieces and one Pepsi',
+  );
+});
 
 function menuItem(name = 'Current menu item'): MenuItem {
   return {

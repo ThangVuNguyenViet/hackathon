@@ -246,6 +246,13 @@ const descriptions: Record<ToolName, string> = {
   resolveHandoff: 'Resolve an existing human-support escalation.',
 };
 
+const planningGuidance: Partial<Record<ToolName, string>> = {
+  searchMenu:
+    ' A multi-item plan may use multiple targeted or category searches in the same user turn. If a requested component is not included in a suitable combo, search for a standalone requested component instead of treating the combo result as the whole menu.',
+  updateCart:
+    ' For a delegated complete cart plan, apply all additions, quantity changes, and removals in one multi-change call; use quantity 0 for unwanted existing lines when rebalancing the cart. Treat the returned cart as the authoritative current cart. If it does not satisfy the customer’s explicit constraints, make a corrected update in the same user turn.',
+};
+
 const retryableEmptyReadTools = new Set<ToolName>([
   'searchMenu',
   'findStores',
@@ -329,7 +336,7 @@ const directUpdateCartJsonSchema = {
               'How many times the customer is buying this named menu item. This is not the pieces inside it. Example: one portion of an item whose name says it has two pieces means orderedMenuItemQuantity 1; use 0 to remove the menu item.',
           },
           modifiers: {
-            type: 'array',
+            type: ['array', 'null'],
             items: {
               type: 'object',
               properties: {
@@ -346,18 +353,18 @@ const directUpdateCartJsonSchema = {
                     'Exact verified modifier option identifier from getModifierOptions.',
                 },
                 quantityPerPortion: {
-                  type: 'integer',
+                  type: ['integer', 'null'],
                   minimum: 1,
                   description:
                     'Selected modifier quantity per menu portion, not the cart line quantity.',
                 },
               },
-              required: ['groupId', 'modifierId'],
+              required: ['groupId', 'modifierId', 'quantityPerPortion'],
               additionalProperties: false,
             },
           },
         },
-        required: ['itemCode', 'orderedMenuItemQuantity'],
+        required: ['itemCode', 'orderedMenuItemQuantity', 'modifiers'],
         additionalProperties: false,
       },
     },
@@ -411,7 +418,8 @@ function canonicalUpdateCartArguments(
                 return {
                   groupId: modifier.groupId,
                   modifierId: modifier.modifierId,
-                  ...(modifier.quantityPerPortion === undefined
+                  ...(modifier.quantityPerPortion === undefined ||
+                  modifier.quantityPerPortion === null
                     ? {}
                     : { quantity: modifier.quantityPerPortion }),
                 };
@@ -1053,9 +1061,9 @@ export function createKfcOpenAiTools(
     definition: {
       type: 'function',
       name: toolName,
-      description: `${descriptions[toolName]}${retryGuidance(toolName)}`,
+      description: `${descriptions[toolName]}${planningGuidance[toolName] ?? ''}${retryGuidance(toolName)}`,
       parameters: jsonSchemaFor(toolName),
-      strict: toolName === 'quoteFulfillment',
+      strict: toolName === 'quoteFulfillment' || toolName === 'updateCart',
     },
     async execute(arguments_: Record<string, unknown>) {
       if (toolName === 'quoteFulfillment') {

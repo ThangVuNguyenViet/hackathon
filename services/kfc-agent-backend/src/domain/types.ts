@@ -84,6 +84,7 @@ export interface MenuModifierGroup {
 export interface CartItem {
   itemCode: string;
   name: string;
+  description?: string;
   quantity: number;
   unitPriceVnd: number;
   modifiers?: CartItemModifier[];

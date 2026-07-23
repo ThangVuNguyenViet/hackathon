@@ -154,6 +154,12 @@ describe('KFC OpenAI tools', () => {
     expect(searchMenu?.definition.description).toContain(
       'total recommendation budget',
     );
+    expect(searchMenu?.definition.description).toContain(
+      'multiple targeted or category searches',
+    );
+    expect(searchMenu?.definition.description).toContain(
+      'standalone requested component',
+    );
     expect(propertyDescription('query')).toContain('composition');
     expect(propertyDescription('query')).toContain(
       'Leave empty for category-wide browsing',
@@ -237,11 +243,24 @@ describe('KFC OpenAI tools', () => {
     expect(updateCart?.definition.description).toContain(
       'without another confirmation',
     );
+    expect(updateCart?.definition.description).toContain(
+      'one multi-change call',
+    );
+    expect(updateCart?.definition.description).toContain(
+      'quantity 0',
+    );
+    expect(updateCart?.definition.description).toContain(
+      'authoritative current cart',
+    );
     expect(quantityDescription).toContain('named menu item');
     expect(quantityDescription).toContain('not the pieces inside');
     expect(modifierQuantityDescription).toContain('per menu portion');
     expect(updateCart?.definition.parameters).not.toHaveProperty(
       'properties.quantity',
+    );
+    expect(updateCart?.definition.strict).toBe(true);
+    expect(JSON.stringify(updateCart?.definition.parameters)).toContain(
+      '"required":["itemCode","orderedMenuItemQuantity","modifiers"]',
     );
   });
 
@@ -269,9 +288,18 @@ describe('KFC OpenAI tools', () => {
       ok: true,
       toolName: 'updateCart',
       value: {
-        items: [{ itemCode: '20751', quantity: 1 }],
+        items: [
+          {
+            itemCode: '20751',
+            description: '3 Miếng Gà Rán + 1 Burger Tôm',
+            quantity: 1,
+          },
+        ],
       },
     });
+    expect(session.cart.items[0]?.description).toBe(
+      '3 Miếng Gà Rán + 1 Burger Tôm',
+    );
   });
 
   it('scopes every returned modifier fact to its exact option and branch', async () => {

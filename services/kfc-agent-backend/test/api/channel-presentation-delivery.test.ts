@@ -20,6 +20,64 @@ function directAgent(responseText: string): OpenAiKfcAgent {
   });
 }
 
+async function seedMessengerRun(input: {
+  store: MemoryStore;
+  sessionId: string;
+  externalUserId: string;
+  runId: string;
+  externalMessageId: string;
+  text: string;
+  generation: number;
+}) {
+  const pending = await input.store.upsertPendingCustomerTurn({
+    turnId: `pending_${input.runId}`,
+    sessionId: input.sessionId,
+    channel: 'messenger',
+    externalMessageId: input.externalMessageId,
+    externalUserId: input.externalUserId,
+    text: input.text,
+    steerMode: 'steering',
+    status: 'pending',
+    claimedRunId: null,
+    receivedAt: `2026-07-22T00:00:0${input.generation}.000Z`,
+  });
+  await input.store.reserveWebhookDelivery({
+    channel: 'messenger',
+    externalEventId: input.externalMessageId,
+    externalThreadId: input.externalUserId,
+    externalUserId: input.externalUserId,
+    sessionId: input.sessionId,
+    receivedAt: pending.turn.receivedAt,
+    payload: {
+      eventType: 'message',
+      text: input.text,
+      receivedAt: pending.turn.receivedAt,
+    },
+  });
+  await input.store.createAgentRun({
+    id: input.runId,
+    sessionId: input.sessionId,
+    generation: input.generation,
+    channel: 'messenger',
+    externalUserId: input.externalUserId,
+    status: 'scheduled',
+    coalescedInputText: input.text,
+    deliveryStatus: 'pending',
+    scheduledAt: `2026-07-22T00:00:1${input.generation}.000Z`,
+  });
+  await input.store.linkAgentRunTurn({
+    runId: input.runId,
+    turnId: pending.turn.turnId,
+    sequence: 0,
+  });
+  await input.store.setSessionAgentState({
+    sessionId: input.sessionId,
+    currentRunId: input.runId,
+    generation: input.generation,
+    debounceDeadlineAt: null,
+  });
+}
+
 describe('channel presentation delivery compatibility', () => {
   afterEach(() => {
     vi.useRealTimers();
@@ -146,6 +204,228 @@ describe('channel presentation delivery compatibility', () => {
         deliveryStatus: 'sent',
       },
     ]);
+  });
+
+  it('hydrates the durable direct Responses cart after the Messenger runtime is recreated', async () => {
+    const store = new MemoryStore();
+    const fixtures = createTestFixtures();
+    const sessionId = 'messenger:durable_cart_user';
+    const externalUserId = 'durable_cart_user';
+    const item = fixtures.menuItems[0]!;
+    const requests: Array<Record<string, unknown>> = [];
+    let responseIndex = 0;
+    const openAiAgent = new OpenAiKfcAgent({
+      client: {
+        responses: {
+          create: async (request) => {
+            requests.push(structuredClone(request));
+            responseIndex += 1;
+            if (responseIndex === 1) {
+              return {
+                output: [
+                  {
+                    type: 'function_call',
+                    call_id: 'call_add_cart',
+                    name: 'updateCart',
+                    arguments: JSON.stringify({
+                      changes: [
+                        {
+                          itemCode: item.code,
+                          quantity: 2,
+                          modifiers: [],
+                        },
+                      ],
+                    }),
+                  },
+                ],
+                output_text: '',
+              };
+            }
+            return {
+              output: [],
+              output_text:
+                responseIndex === 2
+                  ? 'Đã thêm món vào giỏ.'
+                  : 'Giỏ hàng vẫn còn món bạn đã chọn.',
+            };
+          },
+        },
+      },
+      model: 'gpt-4.1-mini',
+    });
+    const messengerFetchImpl = vi.fn(
+      async (_input: RequestInfo | URL, init?: RequestInit) => {
+        if (!init?.body) {
+          return Response.json({ first_name: 'Durable', last_name: 'Cart' });
+        }
+        const body = JSON.parse(String(init.body)) as {
+          message?: { text?: string };
+        };
+        return Response.json(
+          body.message
+            ? { message_id: `reply_${responseIndex}` }
+            : { recipient_id: externalUserId },
+        );
+      },
+    );
+
+    await seedMessengerRun({
+      store,
+      sessionId,
+      externalUserId,
+      runId: 'run_durable_cart_1',
+      externalMessageId: 'mid_durable_cart_1',
+      text: 'Thêm hai phần vào giỏ.',
+      generation: 1,
+    });
+    const firstHandlers = createRouteHandlers({
+      store,
+      fixtures,
+      openAiAgent,
+      messengerPageAccessToken: 'page_token',
+      messengerGraphApiBaseUrl: 'https://graph.local',
+      messengerFetchImpl,
+    });
+    await expect(
+      firstHandlers.processMessengerAgentRun('run_durable_cart_1'),
+    ).resolves.toEqual({ status: 'processed' });
+
+    await seedMessengerRun({
+      store,
+      sessionId,
+      externalUserId,
+      runId: 'run_durable_cart_2',
+      externalMessageId: 'mid_durable_cart_2',
+      text: 'Trong giỏ còn món gì?',
+      generation: 2,
+    });
+    const recreatedHandlers = createRouteHandlers({
+      store,
+      fixtures,
+      openAiAgent,
+      messengerPageAccessToken: 'page_token',
+      messengerGraphApiBaseUrl: 'https://graph.local',
+      messengerFetchImpl,
+    });
+    await expect(
+      recreatedHandlers.processMessengerAgentRun('run_durable_cart_2'),
+    ).resolves.toEqual({ status: 'processed' });
+
+    expect(requests.at(-1)?.input).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          role: 'developer',
+          content: expect.stringContaining(`"itemCode":"${item.code}"`),
+        }),
+      ]),
+    );
+    const verifiedStates = (await store.listEvents(sessionId))
+      .filter(({ sourceType }) => sourceType === 'graph:verified_state')
+      .map(({ payload }) => payload.verifiedState);
+    expect(verifiedStates).toHaveLength(2);
+    expect(verifiedStates.at(-1)).toMatchObject({
+      cart: {
+        items: [
+          expect.objectContaining({
+            itemCode: item.code,
+            quantity: 2,
+          }),
+        ],
+      },
+    });
+  });
+
+  it('persists a redacted direct Responses tool trace for Messenger', async () => {
+    const store = new MemoryStore();
+    const sessionId = 'messenger:redacted_tool_trace_user';
+    const externalUserId = 'redacted_tool_trace_user';
+    const privateQuery = 'private.person@example.com 0901234567';
+    let responseIndex = 0;
+    const openAiAgent = new OpenAiKfcAgent({
+      client: {
+        responses: {
+          create: async () => {
+            responseIndex += 1;
+            return responseIndex === 1
+              ? {
+                  output: [
+                    {
+                      type: 'function_call',
+                      call_id: 'call_private_search',
+                      name: 'searchMenu',
+                      arguments: JSON.stringify({ query: privateQuery }),
+                    },
+                  ],
+                  output_text: '',
+                }
+              : {
+                  output: [],
+                  output_text: 'Mình chưa tìm thấy món phù hợp.',
+                };
+          },
+        },
+      },
+      model: 'gpt-4.1-mini',
+    });
+    const messengerFetchImpl = vi.fn(
+      async (_input: RequestInfo | URL, init?: RequestInit) => {
+        if (!init?.body) {
+          return Response.json({ first_name: 'Trace', last_name: 'User' });
+        }
+        const body = JSON.parse(String(init.body)) as {
+          message?: { text?: string };
+        };
+        return Response.json(
+          body.message
+            ? { message_id: 'reply_redacted_trace' }
+            : { recipient_id: externalUserId },
+        );
+      },
+    );
+    await seedMessengerRun({
+      store,
+      sessionId,
+      externalUserId,
+      runId: 'run_redacted_tool_trace',
+      externalMessageId: 'mid_redacted_tool_trace',
+      text: 'Tìm món giúp mình.',
+      generation: 1,
+    });
+    const handlers = createRouteHandlers({
+      store,
+      fixtures: createTestFixtures(),
+      openAiAgent,
+      messengerPageAccessToken: 'page_token',
+      messengerGraphApiBaseUrl: 'https://graph.local',
+      messengerFetchImpl,
+    });
+
+    await expect(
+      handlers.processMessengerAgentRun('run_redacted_tool_trace'),
+    ).resolves.toEqual({ status: 'processed' });
+
+    const traceEvent = (await store.listEvents(sessionId)).find(
+      ({ sourceType }) => sourceType === 'openai:tool_trace',
+    );
+    expect(traceEvent?.payload).toMatchObject({
+      schemaVersion: 'openai-redacted-tool-trace-v1',
+      calls: [
+        {
+          index: 0,
+          name: 'searchMenu',
+          arguments: {
+            redacted: true,
+            keys: ['query'],
+            digest: expect.stringMatching(/^[a-f0-9]{64}$/),
+          },
+        },
+      ],
+    });
+    expect(JSON.stringify(traceEvent)).not.toContain(privateQuery);
+    expect(JSON.stringify(traceEvent)).not.toContain('0901234567');
+    expect(JSON.stringify(traceEvent)).not.toContain(
+      'private.person@example.com',
+    );
   });
 
   it('suppresses a stale agent run before its presentation is delivered', async () => {

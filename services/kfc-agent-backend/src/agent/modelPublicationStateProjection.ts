@@ -156,6 +156,9 @@ function projectCartItem(item: CartItem): CartItem {
   return {
     itemCode: item.itemCode,
     name: item.name,
+    ...(item.description !== undefined
+      ? { description: item.description }
+      : {}),
     quantity: item.quantity,
     unitPriceVnd: item.unitPriceVnd,
     ...(item.modifiers

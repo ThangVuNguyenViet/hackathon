@@ -6,14 +6,14 @@ import type { BaseCheckpointSaver } from '@langchain/langgraph';
 import {
   createKfcOpenAiTools,
   createKfcToolSession,
-  hydrateKfcToolSession,
   verifiedKfcToolSessionContext,
   type KfcToolSession,
 } from '../agent/kfcOpenAiTools.js';
 import {
-  projectKfcOpenAiGenUiState,
-  selectKfcOpenAiGenUi,
-} from '../agent/kfcOpenAiGenUi.js';
+  hydrateKfcOpenAiToolSession,
+  persistKfcOpenAiToolSession,
+} from '../agent/kfcOpenAiToolSessionLifecycle.js';
+import { selectKfcOpenAiGenUi } from '../agent/kfcOpenAiGenUi.js';
 import { createAgentTurnExternalCallScope } from '../agent/agentExternalCallScope.js';
 import { prepareStructuredCustomerAction } from '../agent/structuredCustomerAction.js';
 import type {
@@ -66,7 +66,6 @@ import {
 import { runAgentTurn } from '../graph/buildGraph.js';
 import type { AgentTurnOutput } from '../graph/agentTurnState.js';
 import type { AgentGraphState } from '../graph/state.js';
-import { loadPriorVerifiedState } from '../graph/verifiedState.js';
 import type { AgentTracer } from '../observability/agentTracing.js';
 import {
   createMockClients,
@@ -489,10 +488,11 @@ export function createRouteAgentRuntime(
             );
             toolRuntime = {
               clients,
-              session: hydrateKfcToolSession(
+              session: await hydrateKfcOpenAiToolSession({
+                store,
+                sessionId: input.sessionId,
                 freshSession,
-                await loadPriorVerifiedState(store, input.sessionId),
-              ),
+              }),
             };
             openAiToolSessions.set(input.sessionId, toolRuntime);
           } else {
@@ -600,14 +600,15 @@ export function createRouteAgentRuntime(
                   },
                 }),
           });
-          const directVerifiedState = projectKfcOpenAiGenUiState({
+          await persistKfcOpenAiToolSession({
+            store,
+            sessionId: input.sessionId,
             session: toolRuntime.session,
             latestUserMessage: input.text,
             toolCalls: directOutput.toolCalls,
+            assistantTurnId: directOutput.assistantTurnId,
             customerCommand: directMetadata.customerCommand,
-          }).state;
-          await store.appendEvent(input.sessionId, 'graph:verified_state', {
-            verifiedState: directVerifiedState,
+            fence: runGuard.commitFence,
           });
           const presentation = buildChannelPresentation({
             channel: 'kfc',

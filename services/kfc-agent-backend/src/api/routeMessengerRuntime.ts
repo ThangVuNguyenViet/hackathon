@@ -11,6 +11,10 @@ import {
   verifiedKfcToolSessionContext,
   type KfcToolSession,
 } from '../agent/kfcOpenAiTools.js';
+import {
+  hydrateKfcOpenAiToolSession,
+  persistKfcOpenAiToolSession,
+} from '../agent/kfcOpenAiToolSessionLifecycle.js';
 import type {
   ChannelMediaDeliveryResult,
   ExternalClients,
@@ -681,15 +685,20 @@ export function createRouteMessengerRuntime(
         try {
           let toolRuntime = openAiToolSessions.get(run.sessionId);
           if (!toolRuntime) {
+            const freshSession = await createKfcToolSession(
+              clients,
+              run.sessionId,
+              run.externalUserId,
+              run.channel,
+              externalCalls.context,
+            );
             toolRuntime = {
               clients,
-              session: await createKfcToolSession(
-                clients,
-                run.sessionId,
-                run.externalUserId,
-                run.channel,
-                externalCalls.context,
-              ),
+              session: await hydrateKfcOpenAiToolSession({
+                store,
+                sessionId: run.sessionId,
+                freshSession,
+              }),
             };
             openAiToolSessions.set(run.sessionId, toolRuntime);
           } else {
@@ -718,6 +727,19 @@ export function createRouteMessengerRuntime(
           });
           if (!(await isCurrentRun())) {
             await suppressRun('run_not_current_before_delivery');
+            return { status: 'skipped', errorCode: 'stale_agent_run' };
+          }
+          const stateCommit = await persistKfcOpenAiToolSession({
+            store,
+            sessionId: run.sessionId,
+            session: toolRuntime.session,
+            latestUserMessage: run.coalescedInputText,
+            toolCalls: directOutput.toolCalls,
+            assistantTurnId: directOutput.assistantTurnId,
+            fence: commitFence,
+          });
+          if (stateCommit === 'stale') {
+            await suppressRun('run_not_current_before_state_commit');
             return { status: 'skipped', errorCode: 'stale_agent_run' };
           }
           presentation = textOnlyPresentation(

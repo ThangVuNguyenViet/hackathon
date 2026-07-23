@@ -309,6 +309,7 @@ export function createMockClients(fixtures: GeneratedFixtures, options: MockClie
         nextItems.push({
           itemCode: change.itemCode,
           name: item.name,
+          description: item.description,
           quantity: change.quantity,
           unitPriceVnd: priceItem(item.priceVnd, modifiers),
           ...(modifiers.length ? { modifiers } : {}),

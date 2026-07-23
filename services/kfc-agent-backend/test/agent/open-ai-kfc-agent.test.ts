@@ -708,6 +708,16 @@ describe('OpenAiKfcAgent', () => {
     expect(instructions).toContain('ask one natural clarification');
   });
 
+  it('finishes delegated reversible plans within the supplied constraints', async () => {
+    const instructions = await captureDefaultInstructions();
+
+    expect(instructions).toContain('delegates a reversible menu or cart decision');
+    expect(instructions).toContain('complete verified plan in the same turn');
+    expect(instructions).toContain('stated budget as a maximum');
+    expect(instructions).toContain('every explicit component constraint');
+    expect(instructions).toContain('final verified cart');
+  });
+
   it('leaves tool-specific mechanics in tool descriptions', async () => {
     const instructions = await captureDefaultInstructions();
 
