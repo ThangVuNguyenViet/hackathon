@@ -19,6 +19,7 @@ import {
 } from '../catalog/catalogObservation.js';
 import { createVerifiedCommerceProjection } from '../commerce/verifiedCommerceProjection.js';
 import { rankEligibleRecommendations } from '../ordering/recommendationRanking.js';
+import type { MenuSearchProviderItem } from '../ordering/types.js';
 
 function ok<T>(value: T): ToolResult<T> {
   return { ok: true, value, message: 'verified_catalog_observation' };
@@ -102,6 +103,18 @@ function toMenuItem(item: CatalogItemFact): MenuItem {
   };
 }
 
+function toMenuSearchProviderItem(
+  item: CatalogItemFact,
+): MenuSearchProviderItem {
+  return {
+    ...toMenuItem(item),
+    searchMetadata: {
+      identifiers: [item.itemCode, item.posItemId, item.productCode],
+      aliases: [],
+    },
+  };
+}
+
 export interface CatalogObservationClientOptions {
   sessionId: string;
   pinned: CatalogObservation;
@@ -147,17 +160,24 @@ export function createCatalogObservationClients(
     async searchMenu(query, externalCallContext) {
       const observation = await discoveryObservation(externalCallContext);
       const words = normalized(query).split(/\s+/).filter(Boolean);
-      return ok(
-        observation.items
-          .filter((item) =>
-            words.every((word) =>
-              normalized(
-                `${item.name} ${item.category} ${item.itemCode}`,
-              ).includes(word),
-            ),
-          )
-          .map(toMenuItem),
-      );
+      const items = observation.items
+        .filter((item) =>
+          words.every((word) =>
+            normalized(
+              `${item.name} ${item.category} ${item.itemCode} ${item.productCode}`,
+            ).includes(word),
+          ),
+        )
+        .map(toMenuSearchProviderItem);
+      return ok({
+        items,
+        total: observation.itemCount,
+        returned: items.length,
+        // CatalogObservation has no provider pagination/completion authority.
+        // Preserve that uncertainty instead of certifying the visible snapshot.
+        complete: false,
+        scope: query.trim() ? { scope: 'filtered', query } : { scope: 'all' },
+      });
     },
     async getItemDetails(code, externalCallContext) {
       const item = (await discoveryObservation(externalCallContext)).items.find(

@@ -42,6 +42,15 @@ export interface MenuSearchInput {
   modifierQueries?: string[];
 }
 
+export interface MenuSearchMetadata {
+  identifiers: string[];
+  aliases: string[];
+}
+
+export interface MenuSearchProviderItem extends MenuItem {
+  searchMetadata: MenuSearchMetadata;
+}
+
 export interface CompactModifierMatch {
   query: string;
   groupId: string;
@@ -64,6 +73,10 @@ export interface MenuSearchResult {
   mode: MenuSearchMode;
   queries: string[];
   total: number;
+  returned: number;
+  complete: boolean;
+  scope: CollectionScope;
+  cursor?: string;
   items: MenuSearchItem[];
 }
 

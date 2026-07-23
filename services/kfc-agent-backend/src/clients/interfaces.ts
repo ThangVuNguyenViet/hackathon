@@ -12,9 +12,11 @@ import type {
   FulfillmentMethod,
   FulfillmentState,
   InvoiceRequest,
+  MenuSearchProviderItem,
   MembershipActionResult,
   ModifierSelectionInput,
   PromotionValidationResult,
+  VerifiedCollectionResult,
 } from '../ordering/types.js';
 import type {
   GeneratedMembershipPointHistorySnapshot,
@@ -55,7 +57,7 @@ export interface MenuClient {
   searchMenu(
     query: string,
     externalCallContext: ExternalCallContext,
-  ): Promise<ToolResult<MenuItem[]>>;
+  ): Promise<ToolResult<VerifiedCollectionResult<MenuSearchProviderItem>>>;
   getItemDetails(
     code: string,
     externalCallContext: ExternalCallContext,

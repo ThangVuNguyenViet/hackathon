@@ -70,12 +70,38 @@ git diff --check
 
 Results:
 
-- focused Vitest: 5 files, 19 tests passed;
-- full Vitest: 13 files, 58 tests passed;
+- focused Vitest: 5 files, 22 tests passed;
+- full Vitest: 13 files, 61 tests passed;
 - ESLint: passed with zero warnings;
 - TypeScript typecheck: passed;
 - clean build: passed;
 - format and diff checks: passed.
+
+## Important review fixes
+
+Two production-path review findings were closed with additional RED/GREEN
+cycles:
+
+1. The real `createMockClients -> executeToolCall -> searchMenuCollection` path
+   initially returned no result for fixture `posItemId` `150078` or the
+   fixture-backed alias `pesi`. Menu providers now attach a minimal trusted
+   `searchMetadata` projection containing exact identifiers and aliases.
+   Retrieval uses it, while compact model-facing items do not expose it.
+2. `MenuClient.searchMenu` previously returned a bare array, so the executor
+   manufactured `complete=true` from the locally visible length. It now returns
+   a provider collection envelope with `items`, `total`, `returned`,
+   `complete`, `scope`, and optional `cursor`. Completeness survives into KFC
+   verified state only when the upstream explicitly reports an internally
+   consistent, cursor-free all-scope collection. A capped collection preserves
+   its total/cursor and remains incomplete. The external catalog-observation
+   adapter reports incomplete because its source contract has no provider
+   pagination/completion authority; the fixture adapter is the only current
+   implementation that explicitly proves completeness.
+
+The new production-path RED results were an empty exact-identifier result and a
+failure when the capped-envelope test attempted to use metadata absent from the
+old array contract. Both are now covered through actual tool execution; the
+incomplete-state case is additionally covered through the KFC pack lifecycle.
 
 ## Explicit exclusions
 

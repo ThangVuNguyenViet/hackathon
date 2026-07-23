@@ -1,8 +1,113 @@
 import { describe, expect, it } from 'vitest';
 import { loadGeneratedFixtures } from '../../src/fixtures/loadFixtures.js';
+import { createMockClients } from '../../src/mock/createMockClients.js';
 import { OrderingDataService } from '../../src/ordering/orderingDataService.js';
+import { executeToolCall } from '../../src/ordering/toolExecutor.js';
+
+const externalCallContext = {
+  signal: new AbortController().signal,
+  deadlineAt: Date.now() + 60_000,
+};
 
 describe('OrderingDataService menu search', () => {
+  it('preserves exact provider identifiers and fixture aliases through client tool execution', async () => {
+    const fixtures = await loadGeneratedFixtures(process.cwd());
+    const clients = createMockClients(fixtures);
+
+    const byPosItemId = await executeToolCall(
+      clients,
+      {
+        toolName: 'searchMenu',
+        arguments: {
+          mode: 'search',
+          queries: ['150078'],
+          modifierQueries: [],
+        },
+      },
+      { externalCallContext },
+    );
+    const byAlias = await executeToolCall(
+      clients,
+      {
+        toolName: 'searchMenu',
+        arguments: {
+          mode: 'search',
+          queries: ['pesi'],
+          modifierQueries: [],
+        },
+      },
+      { externalCallContext },
+    );
+
+    expect(byPosItemId).toMatchObject({
+      ok: true,
+      value: {
+        items: [expect.objectContaining({ code: '41172' })],
+      },
+    });
+    expect(byAlias).toMatchObject({
+      ok: true,
+      value: {
+        items: expect.arrayContaining([
+          expect.objectContaining({ name: expect.stringContaining('Pepsi') }),
+        ]),
+      },
+    });
+  });
+
+  it('does not certify a capped upstream menu collection as complete', async () => {
+    const fixtures = await loadGeneratedFixtures(process.cwd());
+    const baseClients = createMockClients(fixtures);
+    const upstream = await baseClients.menu.searchMenu('', externalCallContext);
+    if (!upstream.ok || !upstream.value) {
+      throw new Error('Expected fixture menu');
+    }
+    const upstreamCollection = upstream.value;
+    const partialClients = {
+      ...baseClients,
+      menu: {
+        ...baseClients.menu,
+        async searchMenu() {
+          return {
+            ok: true as const,
+            value: {
+              items: upstreamCollection.items.slice(0, 2),
+              total: upstreamCollection.total,
+              returned: 2,
+              complete: false,
+              scope: { scope: 'all' as const },
+              cursor: 'menu-page-2',
+            },
+            message: 'partial_menu',
+          };
+        },
+      },
+    };
+
+    const result = await executeToolCall(
+      partialClients,
+      {
+        toolName: 'searchMenu',
+        arguments: {
+          mode: 'full',
+          queries: [],
+          modifierQueries: [],
+        },
+      },
+      { externalCallContext },
+    );
+
+    expect(result).toMatchObject({
+      ok: true,
+      value: {
+        total: upstreamCollection.total,
+        returned: 2,
+        complete: false,
+        cursor: 'menu-page-2',
+      },
+    });
+  });
+
   it('returns the complete available menu without truncation for full scope', async () => {
     const fixtures = await loadGeneratedFixtures(process.cwd());
     const service = new OrderingDataService(fixtures);

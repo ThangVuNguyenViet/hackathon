@@ -20,6 +20,7 @@ import type {
   Disposition,
   ItemAvailabilityResult,
   MenuSearchInput,
+  MenuSearchProviderItem,
   MenuSearchResult,
   MembershipActionResult,
   PromotionValidationResult,
@@ -74,11 +75,12 @@ export interface OrderingDataServiceOptions {
   currentDate?: string;
 }
 
-type MenuItemWithProvenance = Omit<GeneratedMenuItem, 'provenance'> & {
-  provenance: SourceProvenance;
-  hasModifiers: boolean;
-  modifierGroups?: MenuModifierGroup[];
-};
+type MenuItemWithProvenance = MenuSearchProviderItem &
+  Omit<GeneratedMenuItem, 'provenance'> & {
+    provenance: SourceProvenance;
+    hasModifiers: boolean;
+    modifierGroups?: MenuModifierGroup[];
+  };
 type StoreWithProvenance = Omit<GeneratedStore, 'provenance'> & {
   provenance: SourceProvenance;
 };
@@ -91,6 +93,15 @@ function menuItemWithModifierData(
 ): MenuItemWithProvenance {
   return {
     ...item,
+    searchMetadata: {
+      identifiers: [item.code, item.itemId, item.posItemId, item.productCode],
+      aliases: [
+        ...(item.orderingMetadata?.searchAliases ?? []),
+        ...Object.values(
+          item.orderingMetadata?.componentSearchAliases ?? {},
+        ).flat(),
+      ],
+    },
     provenance: menuProvenance(item),
     hasModifiers: Boolean(modifier?.modifierGroups.length),
     ...(includeModifierGroups && modifier
@@ -414,6 +425,17 @@ export class OrderingDataService {
       mode,
       queries,
       total: items.length,
+      returned: items.length,
+      complete: true,
+      scope:
+        mode === 'full' &&
+        queries.length === 0 &&
+        input.category === undefined &&
+        input.maxPriceVnd === undefined &&
+        input.partySize === undefined &&
+        modifierQueries.length === 0
+          ? { scope: 'all' }
+          : { scope: 'filtered', query: JSON.stringify(input) },
       items,
     };
   }

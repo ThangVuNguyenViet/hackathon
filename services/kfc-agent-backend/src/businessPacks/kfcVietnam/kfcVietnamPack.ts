@@ -25,7 +25,6 @@ import {
 import { executeToolCall } from '../../ordering/toolExecutor.js';
 import type {
   AgentToolCallResult,
-  MenuSearchInput,
   ToolCallResult,
   ToolName,
   ToolTraceEntry,
@@ -154,34 +153,17 @@ function executionArguments(
   return args;
 }
 
-function menuCollectionScope(input: MenuSearchInput) {
-  const isCompleteMenu =
-    input.mode === 'full' &&
-    (input.queries?.length ?? 0) === 0 &&
-    input.category === undefined &&
-    input.maxPriceVnd === undefined &&
-    input.partySize === undefined &&
-    (input.modifierQueries?.length ?? 0) === 0;
-  return isCompleteMenu
-    ? ({ scope: 'all' } as const)
-    : ({
-        scope: 'filtered',
-        query: JSON.stringify(input),
-      } as const);
-}
-
 async function modelFacingResult(
   state: AgentState,
   result: ToolCallResult,
-  args: Record<string, unknown>,
 ): Promise<ToolCallResult | AgentToolCallResult> {
   if (!result.ok || result.toolName !== 'searchMenu') return result;
-  const parsed = toolArgumentSchemas.searchMenu.parse(args);
   const snapshot = await buildVerifiedCollectionSnapshot({
     items: result.value.items,
     total: result.value.total,
-    complete: result.value.items.length === result.value.total,
-    scope: menuCollectionScope(parsed),
+    complete: result.value.complete,
+    scope: result.value.scope,
+    ...(result.value.cursor ? { cursor: result.value.cursor } : {}),
     providerRevision: `menu-result:${await stateRevision({
       value: result.value,
       provenance: result.provenance,
@@ -240,7 +222,7 @@ async function executeModelTool(input: {
     args,
     input.currentTurnToolTrace,
   );
-  return modelFacingResult(input.state, result, args);
+  return modelFacingResult(input.state, result);
 }
 
 function createKfcTools(input: {

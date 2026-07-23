@@ -279,6 +279,100 @@ describe('KFC Vietnam business pack compatibility', () => {
     ).not.toThrow();
   });
 
+  it('preserves an upstream incomplete menu collection in KFC verified state', async () => {
+    const fixtures = await loadGeneratedFixtures(process.cwd());
+    const baseClients = createMockClients(fixtures);
+    const context = {
+      signal: new AbortController().signal,
+      deadlineAt: Date.now() + 60_000,
+    };
+    const upstream = await baseClients.menu.searchMenu('', context);
+    if (!upstream.ok || !upstream.value) {
+      throw new Error('Expected fixture menu');
+    }
+    const partialCollection = {
+      items: upstream.value.items.slice(0, 2),
+      total: upstream.value.total,
+      returned: 2,
+      complete: false,
+      scope: { scope: 'all' as const },
+      cursor: 'menu-page-2',
+    };
+    const clients = {
+      ...baseClients,
+      menu: {
+        ...baseClients.menu,
+        async searchMenu() {
+          return {
+            ok: true as const,
+            value: partialCollection,
+            message: 'partial_menu',
+          };
+        },
+      },
+    };
+
+    const output = await kfcVietnamPack.run(
+      {
+        sessionId: 'session-kfc-partial-menu',
+        customerId: 'customer-1',
+        channel: 'kfc',
+        text: 'Cho tôi xem thực đơn',
+        clients,
+        store: new MemoryStore(),
+        dashboard: new DashboardEventBus(),
+        agentModel: {} as BaseChatModel,
+      },
+      async ({ tools }) => {
+        const search = tools.find(
+          (candidate) => candidate.name === 'searchMenu',
+        );
+        if (!search) throw new Error('Missing searchMenu');
+        const result = JSON.parse(
+          toolOutputText(
+            await search.invoke({
+              type: 'tool_call',
+              name: 'searchMenu',
+              args: {
+                mode: 'full',
+                queries: [],
+                category: null,
+                maxPriceVnd: null,
+                partySize: null,
+                modifierQueries: [],
+              },
+              id: 'partial-search',
+            }),
+          ),
+        ) as {
+          value: {
+            total: number;
+            returned: number;
+            complete: boolean;
+            cursor?: string;
+          };
+        };
+        expect(result.value).toMatchObject({
+          total: partialCollection.total,
+          returned: 2,
+          complete: false,
+          cursor: 'menu-page-2',
+        });
+        return 'Đây là phần dữ liệu thực đơn hiện có.';
+      },
+    );
+
+    expect(output.state.activeMenuCollection?.result).toMatchObject({
+      total: partialCollection.total,
+      returned: 2,
+      complete: false,
+      cursor: 'menu-page-2',
+    });
+    expect(() =>
+      kfcVietnamPack.parseState(buildVerifiedStateSnapshot(output.state)),
+    ).not.toThrow();
+  });
+
   it('preserves the KFC empty-model-response error contract', async () => {
     await expect(
       runAgentTurn({

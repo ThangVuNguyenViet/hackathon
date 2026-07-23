@@ -12,14 +12,16 @@ import type {
   GeneratedStore,
   GeneratedStoreAvailability,
 } from '../fixtures/schema.js';
-import type { MenuItem, MenuModifierGroup } from '../domain/types.js';
+import type { MenuModifierGroup } from '../domain/types.js';
 import type {
   CompactModifierMatch,
   ContentEvidence,
   Disposition,
   MenuSearchInput,
+  MenuSearchProviderItem,
   MenuSearchResult,
   SourceProvenance,
+  VerifiedCollectionResult,
 } from './types.js';
 
 export function normalizeSearchText(value: string): string {
@@ -255,12 +257,20 @@ function menuItemModifierCandidates(
   return candidates;
 }
 
-function menuItemSearchDocument(item: MenuItem): MenuSearchDocument {
+function menuItemSearchDocument(
+  item: MenuSearchProviderItem,
+): MenuSearchDocument {
   return {
-    identifiers: [item.code, item.itemId ?? '', item.productCode ?? ''],
+    identifiers: [
+      item.code,
+      item.itemId ?? '',
+      item.productCode ?? '',
+      ...item.searchMetadata.identifiers,
+    ],
     name: item.name,
     category: item.category,
     description: item.description,
+    aliases: item.searchMetadata.aliases,
     modifierText: menuItemModifierText(item.modifierGroups ?? []),
   };
 }
@@ -271,9 +281,10 @@ function menuItemSearchDocument(item: MenuItem): MenuSearchDocument {
  * not infer intent from customer prose.
  */
 export function searchMenuCollection(
-  providerItems: readonly MenuItem[],
+  providerCollection: VerifiedCollectionResult<MenuSearchProviderItem>,
   input: MenuSearchInput,
 ): MenuSearchResult {
+  const providerItems = providerCollection.items;
   const mode = input.mode ?? 'search';
   const queries = (input.queries ?? [])
     .map((query) => query.trim())
@@ -349,7 +360,32 @@ export function searchMenuCollection(
       ...(modifierQueries.length > 0 ? { matchesAllModifierQueries } : {}),
     }),
   );
-  return { mode, queries, total: items.length, items };
+  const complete =
+    providerCollection.complete === true &&
+    providerCollection.scope.scope === 'all' &&
+    providerCollection.cursor === undefined &&
+    providerCollection.returned === providerCollection.items.length &&
+    providerCollection.total === providerCollection.returned;
+  return {
+    mode,
+    queries,
+    total: complete ? items.length : providerCollection.total,
+    returned: items.length,
+    complete,
+    scope:
+      mode === 'full' &&
+      queries.length === 0 &&
+      input.category === undefined &&
+      input.maxPriceVnd === undefined &&
+      input.partySize === undefined &&
+      modifierQueries.length === 0
+        ? { scope: 'all' }
+        : { scope: 'filtered', query: JSON.stringify(input) },
+    ...(complete || providerCollection.cursor === undefined
+      ? {}
+      : { cursor: providerCollection.cursor }),
+    items,
+  };
 }
 
 export function modifierSearchText(

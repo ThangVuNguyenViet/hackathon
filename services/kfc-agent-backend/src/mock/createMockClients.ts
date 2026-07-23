@@ -18,6 +18,7 @@ import { OrderingDataService } from '../ordering/orderingDataService.js';
 import type {
   ContentEvidence,
   FulfillmentMethod,
+  MenuSearchProviderItem,
   SelectedModifier,
   SourceProvenance,
 } from '../ordering/types.js';
@@ -77,6 +78,18 @@ function toMenuItem(item: MenuItem): MenuItem {
     isQuickCombo: item.isQuickCombo,
     hasModifiers: item.hasModifiers,
     modifierGroups: item.modifierGroups,
+  };
+}
+
+function toMenuSearchProviderItem(
+  item: MenuSearchProviderItem,
+): MenuSearchProviderItem {
+  return {
+    ...toMenuItem(item),
+    searchMetadata: {
+      identifiers: [...item.searchMetadata.identifiers],
+      aliases: [...item.searchMetadata.aliases],
+    },
   };
 }
 
@@ -552,12 +565,17 @@ export function createMockClients(
     },
     menu: {
       async searchMenu(query) {
-        return ok(
-          data
-            .searchMenu(query)
-            .map(toMenuItem)
-            .map(applyCurrentMenuAvailability),
-        );
+        const items = data
+          .searchMenu(query)
+          .map(toMenuSearchProviderItem)
+          .map(applyCurrentMenuAvailability);
+        return ok({
+          items,
+          total: items.length,
+          returned: items.length,
+          complete: true,
+          scope: query.trim() ? { scope: 'filtered', query } : { scope: 'all' },
+        });
       },
       async getItemDetails(code) {
         const item = data.getMenuItem(code);
