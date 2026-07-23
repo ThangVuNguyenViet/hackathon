@@ -30,22 +30,45 @@ describe('migration architecture inventory', () => {
       /\bcreateAgent\s*\(\s*\{/u.test(text),
     );
     expect(createAgentOwners.map(({ file }) => file)).toEqual([
-      resolve(root, 'agent/kfcAgent.ts'),
+      resolve(root, 'runtime/kernel.ts'),
     ]);
     expect(sources.some(({ text }) => /\bStateGraph\b/u.test(text))).toBe(false);
     expect(
-      sources.some(({ text }) => /from\s+['"]openai['"]/u.test(text)),
+      sources.some(({ text }) =>
+        /(?:from\s+|import\s*\(\s*)['"]openai(?:\/|['"])/u.test(text),
+      ),
     ).toBe(false);
   });
 
-  it('records business-pack isolation as a Task 2 seam rather than inventing it in Task 1', async () => {
+  it('keeps the semantic kernel business, storage, and provider neutral', async () => {
     const root = resolve(process.cwd(), 'src');
-    const files = await sourceFiles(root);
+    const kernel = await readFile(resolve(root, 'runtime/kernel.ts'), 'utf8');
 
-    expect(
-      files.some((file) => file.includes('/businessPacks/')),
-      'Task 2 must replace this baseline assertion with pack-isolation contract tests',
-    ).toBe(false);
+    expect(kernel).not.toMatch(
+      /kfc|ordering|persistence|StateGraph|@langchain\/openai|from\s+['"]openai['"]/iu,
+    );
+  });
+
+  it('places KFC behavior behind a versioned business pack', async () => {
+    const root = resolve(process.cwd(), 'src');
+    const facade = await readFile(resolve(root, 'agent/kfcAgent.ts'), 'utf8');
+    const pack = await readFile(
+      resolve(root, 'businessPacks/kfcVietnam/kfcVietnamPack.ts'),
+      'utf8',
+    );
+
+    expect(facade).not.toMatch(
+      /export\s+const\s+KFC_AGENT_INSTRUCTIONS|createAgent\s*\(|createKfcTools|executeToolCall/u,
+    );
+    for (const ownedBehavior of [
+      'KFC_AGENT_INSTRUCTIONS',
+      'createKfcTools',
+      'executeToolCall',
+      'loadPriorVerifiedState',
+      'persistCompletedTurn',
+    ]) {
+      expect(pack).toContain(ownedBehavior);
+    }
   });
 
   it('keeps scenario surfaces read-only instead of replaying scripted turns', async () => {
