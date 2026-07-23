@@ -104,3 +104,51 @@ All commands passed:
   envelope is validated in-process but is not persisted yet.
 - PVCFC, OpenCode/provider profiles, session model pinning, and capability
   preflight were deliberately not implemented in this task.
+
+## Important review fix: strict KFC state validation
+
+Implementation commit:
+
+- `e3408c5b` (`fix(kfc): validate pack state envelopes`)
+
+The review found that a correctly hashed and versioned KFC envelope still
+accepted any object because `parseKfcVerifiedState` used a type cast. The
+focused RED proved `{ cart: "corrupt" }` resolved successfully instead of
+rejecting.
+
+The fix adds `kfcVerifiedStateSnapshotSchema`, a strict runtime schema for the
+persisted `Partial<VerifiedStateSnapshot>` whitelist. It reuses the repository's
+authoritative address, availability, verified-ref, payment-authority, fixture,
+and evidence schemas, and adds strict KFC schemas where none existed. The pack
+now rejects malformed known fields and unknown top-level authority fields.
+
+Focused coverage proves:
+
+- a correctly bound `{ cart: "corrupt" }` envelope is rejected;
+- an unknown state-authority field is rejected;
+- a valid partial cart envelope is accepted;
+- the current legacy `buildVerifiedStateSnapshot` output remains accepted.
+
+The legacy `agent:verified_state` read/write path is unchanged; Task 3 still
+owns persistence of generic pack envelopes.
+
+Review-fix verification:
+
+```text
+npm run format
+npm test -- test/businessPacks/kfc-vietnam-pack.test.ts \
+  test/runtime/pack-state-envelope.test.ts \
+  test/runtime/kernel.test.ts \
+  test/architecture/migration-inventory.test.ts
+npm test
+npm run lint
+npm run typecheck
+npm run build
+npm run format:check
+```
+
+All commands passed:
+
+- focused Vitest: 4 files, 15 tests
+- full Vitest: 10 files, 33 tests
+- ESLint, TypeScript typecheck, clean build, and formatting check: pass
