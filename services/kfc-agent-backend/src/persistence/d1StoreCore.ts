@@ -120,6 +120,7 @@ export abstract class D1StoreCore {
       }
     }
     await this.ensureConversationTurnMetadataColumn();
+    await this.ensureConversationTurnOrdinalColumn();
     await this.ensureConversationProfilesTable();
     await this.ensureSessionControlsTable();
   }
@@ -836,6 +837,41 @@ export abstract class D1StoreCore {
       return;
     await this.db
       .prepare(`ALTER TABLE conversation_turns ADD COLUMN metadata TEXT`)
+      .run();
+  }
+
+  private async ensureConversationTurnOrdinalColumn(): Promise<void> {
+    const columns = await this.db
+      .prepare(`PRAGMA table_info(conversation_turns)`)
+      .all<D1TableInfoRow>();
+    if (!(columns.results ?? []).some((column) => column.name === 'ordinal')) {
+      await this.db
+        .prepare(`ALTER TABLE conversation_turns ADD COLUMN ordinal INTEGER`)
+        .run();
+    }
+    await this.db
+      .prepare(
+        `UPDATE conversation_turns AS target
+         SET ordinal = (
+           SELECT COUNT(*)
+           FROM conversation_turns AS candidate
+           WHERE candidate.session_id = target.session_id
+             AND (
+               candidate.created_at < target.created_at
+               OR (
+                 candidate.created_at = target.created_at
+                 AND candidate.id <= target.id
+               )
+             )
+         )
+         WHERE ordinal IS NULL`,
+      )
+      .run();
+    await this.db
+      .prepare(
+        `CREATE UNIQUE INDEX IF NOT EXISTS conversation_turns_session_ordinal_idx
+         ON conversation_turns (session_id, ordinal)`,
+      )
       .run();
   }
 

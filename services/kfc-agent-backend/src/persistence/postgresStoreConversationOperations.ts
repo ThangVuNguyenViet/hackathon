@@ -37,7 +37,11 @@ import type {
   WebhookDeliveryChannel,
   AppendCustomerRunEventInput,
   CustomerRunPatch,
+  ConversationSummary,
+  CompareAndSwapConversationSummaryInput,
+  CompareAndSwapConversationSummaryResult,
 } from './memoryStore.js';
+import type { PackRef, PackStateEnvelope } from '../runtime/businessPack.js';
 import type {
   BeginNonAgentTextDeliveryAttemptInput,
   BeginNonAgentTextDeliveryAttemptResult,
@@ -133,6 +137,7 @@ export abstract class PostgresStoreConversationOperations extends PostgresStoreC
     const turn: ConversationTurn = {
       ...input,
       id: input.id ?? `turn_${randomUUID()}`,
+      ordinal: 0,
       createdAt: input.createdAt ?? new Date().toISOString(),
     };
     await this.db.query(
@@ -172,6 +177,7 @@ export abstract class PostgresStoreConversationOperations extends PostgresStoreC
     const turn: ConversationTurn = {
       ...input,
       id: input.id ?? `turn_${randomUUID()}`,
+      ordinal: 0,
     };
     const result = await this.db.query<
       ConversationTurnRow & { inserted: boolean }
@@ -225,6 +231,32 @@ export abstract class PostgresStoreConversationOperations extends PostgresStoreC
       );
     }
     return { turn: turnFromRow(row), inserted: row.inserted };
+  }
+
+  async getConversationSummary(
+    _sessionId: string,
+  ): Promise<ConversationSummary | undefined> {
+    throw new Error('postgres_context_state_not_supported');
+  }
+
+  async compareAndSwapConversationSummary(
+    _input: CompareAndSwapConversationSummaryInput,
+  ): Promise<CompareAndSwapConversationSummaryResult> {
+    throw new Error('postgres_context_state_not_supported');
+  }
+
+  async getPackState(
+    _sessionId: string,
+    _packRef: PackRef,
+  ): Promise<PackStateEnvelope | undefined> {
+    throw new Error('postgres_context_state_not_supported');
+  }
+
+  async putPackState(
+    _sessionId: string,
+    _envelope: PackStateEnvelope,
+  ): Promise<void> {
+    throw new Error('postgres_context_state_not_supported');
   }
 
   async upsertProfile(

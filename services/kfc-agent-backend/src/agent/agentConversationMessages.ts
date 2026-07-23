@@ -34,15 +34,7 @@ export function freshMessages(
     return history;
   }
   if (!currentUserTurn) throw new Error('agent_current_user_turn_missing');
-  const currentTurnIndex = recentTurns.findIndex(
-    (turn) => turn.id === currentUserTurn.id,
-  );
-  if (currentTurnIndex < 0) {
-    throw new Error('agent_current_user_turn_missing');
-  }
-  for (const turn of recentTurns.slice(0, currentTurnIndex)) {
-    appendTurnMessage(turn);
-  }
+  for (const turn of recentTurns) appendTurnMessage(turn);
   return [
     ...history,
     new HumanMessage({

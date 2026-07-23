@@ -248,7 +248,7 @@ export class D1StoreAgentOperations extends D1StoreConversationOperations {
   async listTurns(sessionId: string): Promise<ConversationTurn[]> {
     const rows = await this.db
       .prepare(
-        `SELECT * FROM conversation_turns WHERE session_id = ? ORDER BY created_at ASC, id ASC`,
+        `SELECT * FROM conversation_turns WHERE session_id = ? ORDER BY ordinal ASC`,
       )
       .bind(sessionId)
       .all<ConversationTurnRow>();
@@ -261,7 +261,7 @@ export class D1StoreAgentOperations extends D1StoreConversationOperations {
   ): Promise<ConversationTurn[]> {
     const rows = await this.db
       .prepare(
-        `SELECT * FROM conversation_turns WHERE session_id = ? ORDER BY created_at DESC, id DESC LIMIT ?`,
+        `SELECT * FROM conversation_turns WHERE session_id = ? ORDER BY ordinal DESC LIMIT ?`,
       )
       .bind(sessionId, limit)
       .all<ConversationTurnRow>();

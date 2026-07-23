@@ -42,7 +42,11 @@ import type {
   WebhookDeliveryChannel,
   AppendCustomerRunEventInput,
   CustomerRunPatch,
+  ConversationSummary,
+  CompareAndSwapConversationSummaryInput,
+  CompareAndSwapConversationSummaryResult,
 } from './memoryStore.js';
+import type { PackRef, PackStateEnvelope } from '../runtime/businessPack.js';
 import type {
   BeginNonAgentTextDeliveryAttemptInput,
   BeginNonAgentTextDeliveryAttemptResult,
@@ -82,6 +86,8 @@ import {
   CustomerRunRow,
   CustomerRunEventRow,
   D1TableInfoRow,
+  ConversationSummaryRow,
+  PackStateRow,
   schemaStatements,
   parsePayload,
   turnFromRow,
@@ -196,31 +202,38 @@ export abstract class D1StoreConversationOperations extends D1StoreCore {
           );
     if (existing) return existing;
 
-    const turn: ConversationTurn = {
-      ...input,
-      metadata: input.metadata ?? null,
-      id: input.id ?? `turn_${crypto.randomUUID()}`,
-      createdAt: input.createdAt ?? new Date().toISOString(),
-    };
+    const turnId = input.id ?? `turn_${crypto.randomUUID()}`;
+    const createdAt = input.createdAt ?? new Date().toISOString();
     await this.db
       .prepare(
         `INSERT INTO conversation_turns (
-          id, session_id, channel, role, text, external_message_id, external_user_id, delivery_status, metadata, created_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          id, session_id, ordinal, channel, role, text, external_message_id,
+          external_user_id, delivery_status, metadata, created_at
+        )
+        SELECT ?, ?, COALESCE(MAX(ordinal), 0) + 1, ?, ?, ?, ?, ?, ?, ?, ?
+        FROM conversation_turns
+        WHERE session_id = ?`,
       )
       .bind(
-        turn.id,
-        turn.sessionId,
-        turn.channel,
-        turn.role,
-        turn.text,
-        turn.externalMessageId,
-        turn.externalUserId,
-        turn.deliveryStatus,
-        JSON.stringify(turn.metadata),
-        turn.createdAt,
+        turnId,
+        input.sessionId,
+        input.channel,
+        input.role,
+        input.text,
+        input.externalMessageId,
+        input.externalUserId,
+        input.deliveryStatus,
+        JSON.stringify(input.metadata ?? null),
+        createdAt,
+        input.sessionId,
       )
       .run();
+    const row = await this.db
+      .prepare(`SELECT * FROM conversation_turns WHERE id = ? LIMIT 1`)
+      .bind(turnId)
+      .first<ConversationTurnRow>();
+    if (!row) throw new Error('conversation_turn_insert_failed');
+    const turn = turnFromRow(row);
     await this.appendEvent(input.sessionId, `conversation_turn:${input.role}`, {
       text: input.text,
       channel: input.channel,
@@ -275,28 +288,29 @@ export abstract class D1StoreConversationOperations extends D1StoreCore {
       };
     }
 
-    const turn: ConversationTurn = {
-      ...input,
-      metadata: input.metadata ?? null,
-      id: input.id ?? `turn_${crypto.randomUUID()}`,
-    };
+    const turnId = input.id ?? `turn_${crypto.randomUUID()}`;
     await this.db
       .prepare(
         `INSERT INTO conversation_turns (
-          id, session_id, channel, role, text, external_message_id, external_user_id, delivery_status, metadata, created_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          id, session_id, ordinal, channel, role, text, external_message_id,
+          external_user_id, delivery_status, metadata, created_at
+        )
+        SELECT ?, ?, COALESCE(MAX(ordinal), 0) + 1, ?, ?, ?, ?, ?, ?, ?, ?
+        FROM conversation_turns
+        WHERE session_id = ?`,
       )
       .bind(
-        turn.id,
-        turn.sessionId,
-        turn.channel,
-        turn.role,
-        turn.text,
-        turn.externalMessageId,
-        turn.externalUserId,
-        turn.deliveryStatus,
-        JSON.stringify(turn.metadata),
-        turn.createdAt,
+        turnId,
+        input.sessionId,
+        input.channel,
+        input.role,
+        input.text,
+        input.externalMessageId,
+        input.externalUserId,
+        input.deliveryStatus,
+        JSON.stringify(input.metadata ?? null),
+        input.createdAt,
+        input.sessionId,
       )
       .run();
     await this.appendEvent(input.sessionId, `conversation_turn:${input.role}`, {
@@ -307,7 +321,131 @@ export abstract class D1StoreConversationOperations extends D1StoreCore {
       externalUserId: input.externalUserId,
       metadata: input.metadata,
     });
-    return { turn, inserted: true };
+    const row = await this.db
+      .prepare(`SELECT * FROM conversation_turns WHERE id = ? LIMIT 1`)
+      .bind(turnId)
+      .first<ConversationTurnRow>();
+    if (!row) throw new Error('conversation_turn_import_failed');
+    return { turn: turnFromRow(row), inserted: true };
+  }
+
+  async getConversationSummary(
+    sessionId: string,
+  ): Promise<ConversationSummary | undefined> {
+    const row = await this.db
+      .prepare(
+        `SELECT * FROM conversation_summaries WHERE session_id = ? LIMIT 1`,
+      )
+      .bind(sessionId)
+      .first<ConversationSummaryRow>();
+    return row
+      ? {
+          schemaVersion: Number(row.schema_version) as 1,
+          text: row.text,
+          throughOrdinal: Number(row.through_ordinal),
+          revision: Number(row.revision),
+          updatedAt: row.updated_at,
+        }
+      : undefined;
+  }
+
+  async compareAndSwapConversationSummary(
+    input: CompareAndSwapConversationSummaryInput,
+  ): Promise<CompareAndSwapConversationSummaryResult> {
+    const existing = await this.getConversationSummary(input.sessionId);
+    if (
+      existing &&
+      existing.text === input.text &&
+      existing.throughOrdinal === input.throughOrdinal
+    ) {
+      return { status: 'unchanged', summary: existing };
+    }
+    if (
+      input.throughOrdinal <= input.expectedThroughOrdinal ||
+      (input.expectedRevision === null && input.expectedThroughOrdinal !== 0)
+    ) {
+      return { status: 'stale', ...(existing ? { summary: existing } : {}) };
+    }
+    const result =
+      input.expectedRevision === null
+        ? await this.db
+            .prepare(
+              `INSERT OR IGNORE INTO conversation_summaries (
+                 session_id, schema_version, text, through_ordinal, revision, updated_at
+               ) VALUES (?, 1, ?, ?, 1, ?)`,
+            )
+            .bind(
+              input.sessionId,
+              input.text,
+              input.throughOrdinal,
+              input.updatedAt,
+            )
+            .run()
+        : await this.db
+            .prepare(
+              `UPDATE conversation_summaries
+               SET text = ?, through_ordinal = ?, revision = revision + 1,
+                   updated_at = ?
+               WHERE session_id = ? AND revision = ? AND through_ordinal = ?
+                 AND ? > through_ordinal`,
+            )
+            .bind(
+              input.text,
+              input.throughOrdinal,
+              input.updatedAt,
+              input.sessionId,
+              input.expectedRevision,
+              input.expectedThroughOrdinal,
+              input.throughOrdinal,
+            )
+            .run();
+    const summary = await this.getConversationSummary(input.sessionId);
+    if (Number(result.meta.changes ?? 0) === 1 && summary) {
+      return { status: 'committed', summary };
+    }
+    return summary?.text === input.text &&
+      summary.throughOrdinal === input.throughOrdinal
+      ? { status: 'unchanged', summary }
+      : { status: 'stale', ...(summary ? { summary } : {}) };
+  }
+
+  async getPackState(
+    sessionId: string,
+    packRef: PackRef,
+  ): Promise<PackStateEnvelope | undefined> {
+    const row = await this.db
+      .prepare(
+        `SELECT envelope_json FROM pack_state_projections
+         WHERE session_id = ? AND pack_id = ? AND pack_version = ? LIMIT 1`,
+      )
+      .bind(sessionId, packRef.packId, packRef.version)
+      .first<PackStateRow>();
+    return row
+      ? (JSON.parse(row.envelope_json) as PackStateEnvelope)
+      : undefined;
+  }
+
+  async putPackState(
+    sessionId: string,
+    envelope: PackStateEnvelope,
+  ): Promise<void> {
+    await this.db
+      .prepare(
+        `INSERT INTO pack_state_projections (
+           session_id, pack_id, pack_version, envelope_json, updated_at
+         ) VALUES (?, ?, ?, ?, ?)
+         ON CONFLICT(session_id, pack_id, pack_version) DO UPDATE SET
+           envelope_json = excluded.envelope_json,
+           updated_at = excluded.updated_at`,
+      )
+      .bind(
+        sessionId,
+        envelope.packRef.packId,
+        envelope.packRef.version,
+        JSON.stringify(envelope),
+        new Date().toISOString(),
+      )
+      .run();
   }
 
   async findTurnByExternalMessage(

@@ -18,6 +18,10 @@ export async function appendMemoryConversationTurn(input: {
     ...input.turn,
     metadata: input.turn.metadata ?? null,
     id: input.turn.id ?? `turn_${input.turns.length + 1}`,
+    ordinal:
+      input.turns
+        .filter((turn) => turn.sessionId === input.turn.sessionId)
+        .reduce((maximum, turn) => Math.max(maximum, turn.ordinal), 0) + 1,
     createdAt:
       input.turn.createdAt ??
       new Date('2026-07-07T00:00:00.000Z').toISOString(),

@@ -21,6 +21,10 @@ import {
   buildSocialPresentation,
 } from '../presentation/channelPresentation.js';
 import { resolveResponseProfile } from '../presentation/responseProfile.js';
+import {
+  createPackStateEnvelope,
+  type PackRef,
+} from '../runtime/businessPack.js';
 
 function replyIntentFor(
   state: AgentState,
@@ -39,6 +43,8 @@ export async function persistCompletedTurn(input: {
   state: AgentState;
   currentTurnToolTrace: ToolTraceEntry[];
   responseText: string;
+  packRef: PackRef;
+  packStateSchemaVersion: string;
 }): Promise<AgentTurnOutput> {
   const responseProfile = resolveResponseProfile(input.turnInput);
   const successfulToolNames = input.currentTurnToolTrace
@@ -86,6 +92,12 @@ export async function persistCompletedTurn(input: {
     metadata: Object.keys(metadata).length > 0 ? metadata : null,
   } as const;
   const fence = input.turnInput.runGuard?.commitFence;
+  const verifiedState = buildVerifiedStateSnapshot(input.state);
+  const packStateEnvelope = await createPackStateEnvelope({
+    packRef: input.packRef,
+    schemaVersion: input.packStateSchemaVersion,
+    state: verifiedState,
+  });
   const turn = fence
     ? await input.turnInput.store
         .commitAssistantTurnIfRunCurrent({
@@ -93,7 +105,11 @@ export async function persistCompletedTurn(input: {
           stateEvent: {
             sessionId: input.turnInput.sessionId,
             sourceType: verifiedStateSnapshotSourceType,
-            payload: { verifiedState: buildVerifiedStateSnapshot(input.state) },
+            payload: { verifiedState },
+          },
+          packState: {
+            sessionId: input.turnInput.sessionId,
+            envelope: packStateEnvelope,
           },
           assistantTurn,
         })
@@ -102,10 +118,14 @@ export async function persistCompletedTurn(input: {
             throw new Error('customer_run_cancelled');
           return result.turn;
         })
-    : await persistVerifiedStateSnapshot(
-        input.turnInput.store,
-        input.state,
-      ).then(() => input.turnInput.store.appendTurn(assistantTurn));
+    : await persistVerifiedStateSnapshot(input.turnInput.store, input.state)
+        .then(() =>
+          input.turnInput.store.putPackState(
+            input.turnInput.sessionId,
+            packStateEnvelope,
+          ),
+        )
+        .then(() => input.turnInput.store.appendTurn(assistantTurn));
 
   emitDashboardEvent(input.turnInput, 'conversation_turn_created', {
     turnId: turn.id,

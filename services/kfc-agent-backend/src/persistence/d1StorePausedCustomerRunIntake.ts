@@ -93,16 +93,19 @@ export async function commitD1PausedCustomerRunIntake(input: {
     input.db
       .prepare(
         `INSERT OR IGNORE INTO conversation_turns (
-         id, session_id, channel, role, text, external_message_id,
+         id, session_id, ordinal, channel, role, text, external_message_id,
          external_user_id, delivery_status, metadata, created_at
        )
-       SELECT ?, ?, ?, 'user', ?, ?, ?, 'received', ?, ?
+       SELECT ?, ?, COALESCE((
+         SELECT MAX(ordinal) FROM conversation_turns WHERE session_id = ?
+       ), 0) + 1, ?, 'user', ?, ?, ?, 'received', ?, ?
        WHERE ${pausedAuthoritySql}
          AND ${runAbsentSql}
          AND ${eventAbsentSql}`,
       )
       .bind(
         turnId,
+        input.operation.userTurn.sessionId,
         input.operation.userTurn.sessionId,
         input.operation.userTurn.channel,
         input.operation.userTurn.text,

@@ -214,10 +214,12 @@ export async function prepareD1NonAgentTextDeliveryTurn(input: {
     input.db
       .prepare(
         `INSERT INTO conversation_turns (
-         id, session_id, channel, role, text, external_message_id,
+         id, session_id, ordinal, channel, role, text, external_message_id,
          external_user_id, delivery_status, metadata, created_at
        )
-       SELECT ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
+       SELECT ?, ?, COALESCE((
+         SELECT MAX(ordinal) FROM conversation_turns WHERE session_id = ?
+       ), 0) + 1, ?, ?, ?, ?, ?, ?, ?, ?
        FROM non_agent_text_deliveries
        WHERE ${predicates}
        ON CONFLICT(id) DO NOTHING
@@ -225,6 +227,7 @@ export async function prepareD1NonAgentTextDeliveryTurn(input: {
       )
       .bind(
         operation.turn.id,
+        operation.turn.sessionId,
         operation.turn.sessionId,
         operation.turn.channel,
         operation.turn.role,

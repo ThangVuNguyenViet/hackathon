@@ -18,6 +18,7 @@ export interface PreparedAssistantTurnCommit {
 export function prepareAssistantTurnCommit(
   input: CommitAssistantTurnIfRunCurrentInput,
   now = new Date(),
+  ordinal = 0,
 ): PreparedAssistantTurnCommit {
   if (
     input.stateEvent.sessionId !== input.assistantTurn.sessionId ||
@@ -40,6 +41,7 @@ export function prepareAssistantTurnCommit(
     ...structuredClone(input.assistantTurn),
     metadata: structuredClone(input.assistantTurn.metadata ?? null),
     id: `turn_${crypto.randomUUID()}`,
+    ordinal,
     createdAt,
   };
   const stateEvent: StoredEvent = {

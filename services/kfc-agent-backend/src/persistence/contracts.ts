@@ -43,6 +43,7 @@ import type {
   ReserveNonAgentTextDeliveryInput,
   ReserveNonAgentTextDeliveryResult,
 } from './nonAgentTextDelivery.js';
+import type { PackRef, PackStateEnvelope } from '../runtime/businessPack.js';
 
 export type {
   BeginNonAgentTextDeliveryAttemptInput,
@@ -128,6 +129,11 @@ export interface CommitAssistantTurnIfRunCurrentInput {
     payload: Record<string, unknown>;
   };
   assistantTurn: AppendConversationTurnInput;
+  /** Current typed business-state projection committed under the same owner fence. */
+  packState?: {
+    sessionId: string;
+    envelope: PackStateEnvelope;
+  };
   /**
    * Opaque references staged in memory while building the presentation. They
    * become visible only in the same atomic commit as the turn that publishes
@@ -212,7 +218,10 @@ export interface HistorySearchResult extends StoredEvent {
   confidence: number;
 }
 
-export interface ImportedConversationTurn extends Omit<ConversationTurn, 'id'> {
+export interface ImportedConversationTurn extends Omit<
+  ConversationTurn,
+  'id' | 'ordinal'
+> {
   id?: string;
 }
 
@@ -518,7 +527,7 @@ export function assertSameIrreversibleOperation(
 
 export type AppendConversationTurnInput = Omit<
   ConversationTurn,
-  'id' | 'createdAt'
+  'id' | 'ordinal' | 'createdAt'
 > & {
   /**
    * Optional server-authored stable identity for an already-reserved durable
@@ -527,6 +536,27 @@ export type AppendConversationTurnInput = Omit<
   id?: string;
   createdAt?: string;
 };
+
+export interface ConversationSummary {
+  schemaVersion: 1;
+  text: string;
+  throughOrdinal: number;
+  revision: number;
+  updatedAt: string;
+}
+
+export interface CompareAndSwapConversationSummaryInput {
+  sessionId: string;
+  expectedRevision: number | null;
+  expectedThroughOrdinal: number;
+  text: string;
+  throughOrdinal: number;
+  updatedAt: string;
+}
+
+export type CompareAndSwapConversationSummaryResult =
+  | { status: 'committed' | 'unchanged'; summary: ConversationSummary }
+  | { status: 'stale'; summary?: ConversationSummary };
 
 export interface ConversationStore {
   resetSession(sessionId: string): Promise<SessionControl>;
@@ -684,6 +714,17 @@ export interface ConversationStore {
     limit: number,
   ): Promise<SessionAgentState[]>;
   listTurns(sessionId: string): Promise<ConversationTurn[]>;
+  getConversationSummary(
+    sessionId: string,
+  ): Promise<ConversationSummary | undefined>;
+  compareAndSwapConversationSummary(
+    input: CompareAndSwapConversationSummaryInput,
+  ): Promise<CompareAndSwapConversationSummaryResult>;
+  getPackState(
+    sessionId: string,
+    packRef: PackRef,
+  ): Promise<PackStateEnvelope | undefined>;
+  putPackState(sessionId: string, envelope: PackStateEnvelope): Promise<void>;
   appendEvent(
     sessionId: string,
     sourceType: string,

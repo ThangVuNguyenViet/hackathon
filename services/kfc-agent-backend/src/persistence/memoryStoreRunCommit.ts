@@ -20,6 +20,7 @@ import {
   type MemoryVerifiedRefStorageSnapshot,
 } from './memoryStoreVerifiedRefOperations.js';
 import { prepareAssistantTurnCommit } from './runCommitPreparation.js';
+import type { PackStateEnvelope } from '../runtime/businessPack.js';
 
 interface MemoryRunCommitState {
   customerRuns: ReadonlyMap<string, CustomerRun>;
@@ -83,6 +84,7 @@ export function commitMemoryAssistantTurnIfRunCurrent(input: {
   verifiedRefs: Map<string, MemoryVerifiedRefStorageSnapshot>;
   turns: ConversationTurn[];
   events: StoredEvent[];
+  packStates: Map<string, PackStateEnvelope>;
   now?: () => number;
 }): CommitAssistantTurnIfRunCurrentResult {
   const now = input.now?.() ?? Date.now();
@@ -106,7 +108,23 @@ export function commitMemoryAssistantTurnIfRunCurrent(input: {
   ) {
     return { status: 'stale' };
   }
-  const prepared = prepareAssistantTurnCommit(input.operation, new Date(now));
+  const ordinal =
+    input.turns
+      .filter(
+        (turn) => turn.sessionId === input.operation.assistantTurn.sessionId,
+      )
+      .reduce((maximum, turn) => Math.max(maximum, turn.ordinal), 0) + 1;
+  const prepared = prepareAssistantTurnCommit(
+    input.operation,
+    new Date(now),
+    ordinal,
+  );
+  if (
+    input.operation.packState &&
+    input.operation.packState.sessionId !== prepared.turn.sessionId
+  ) {
+    throw new Error('agent_turn_commit_pack_state_session_mismatch');
+  }
   const sessionGeneration =
     input.sessionGenerations.get(prepared.turn.sessionId) ?? 0;
   for (const record of prepared.verifiedRefs) {
@@ -121,6 +139,13 @@ export function commitMemoryAssistantTurnIfRunCurrent(input: {
     );
   }
   input.events.push(prepared.stateEvent);
+  if (input.operation.packState) {
+    const { envelope } = input.operation.packState;
+    input.packStates.set(
+      `${prepared.turn.sessionId}\u0000${envelope.packRef.packId}\u0000${envelope.packRef.version}`,
+      structuredClone(envelope),
+    );
+  }
   input.turns.push(prepared.turn);
   input.events.push(prepared.turnEvent);
   return {

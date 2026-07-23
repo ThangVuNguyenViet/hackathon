@@ -67,6 +67,7 @@ export interface D1DatabaseLike {
 
 export interface ConversationTurnRow {
   id: string;
+  ordinal: number;
   session_id: string;
   channel: ConversationTurn['channel'];
   role: ConversationTurn['role'];
@@ -76,6 +77,19 @@ export interface ConversationTurnRow {
   delivery_status: ConversationTurn['deliveryStatus'];
   metadata: string | null;
   created_at: string;
+}
+
+export interface ConversationSummaryRow {
+  session_id: string;
+  schema_version: number;
+  text: string;
+  through_ordinal: number;
+  revision: number;
+  updated_at: string;
+}
+
+export interface PackStateRow {
+  envelope_json: string;
 }
 
 export interface ConversationProfileRow {
@@ -239,6 +253,7 @@ export const schemaStatements = [
   `CREATE TABLE IF NOT EXISTS conversation_turns (
     id TEXT PRIMARY KEY,
     session_id TEXT NOT NULL,
+    ordinal INTEGER NOT NULL,
     channel TEXT NOT NULL,
     role TEXT NOT NULL,
     text TEXT NOT NULL,
@@ -251,8 +266,22 @@ export const schemaStatements = [
   `CREATE UNIQUE INDEX IF NOT EXISTS conversation_turns_session_external_message_idx
     ON conversation_turns (session_id, external_message_id)
     WHERE external_message_id IS NOT NULL`,
-  `CREATE INDEX IF NOT EXISTS conversation_turns_session_created_idx
-    ON conversation_turns (session_id, created_at DESC, id DESC)`,
+  `CREATE TABLE IF NOT EXISTS conversation_summaries (
+    session_id TEXT PRIMARY KEY,
+    schema_version INTEGER NOT NULL CHECK (schema_version = 1),
+    text TEXT NOT NULL,
+    through_ordinal INTEGER NOT NULL CHECK (through_ordinal > 0),
+    revision INTEGER NOT NULL CHECK (revision > 0),
+    updated_at TEXT NOT NULL
+  )`,
+  `CREATE TABLE IF NOT EXISTS pack_state_projections (
+    session_id TEXT NOT NULL,
+    pack_id TEXT NOT NULL,
+    pack_version TEXT NOT NULL,
+    envelope_json TEXT NOT NULL,
+    updated_at TEXT NOT NULL,
+    PRIMARY KEY (session_id, pack_id, pack_version)
+  )`,
   `CREATE TABLE IF NOT EXISTS conversation_events (
     id TEXT PRIMARY KEY,
     session_id TEXT NOT NULL,
@@ -609,6 +638,7 @@ export function parsePayload(value: string): Record<string, unknown> {
 export function turnFromRow(row: ConversationTurnRow): ConversationTurn {
   return {
     id: row.id,
+    ordinal: Number(row.ordinal),
     sessionId: row.session_id,
     channel: row.channel,
     role: row.role,

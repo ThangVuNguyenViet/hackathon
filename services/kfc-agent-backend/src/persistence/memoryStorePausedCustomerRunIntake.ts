@@ -113,6 +113,10 @@ function createUserTurn(
     ...input.userTurn,
     metadata: input.userTurn.metadata ?? null,
     id: `turn_${turns.length + 1}`,
+    ordinal:
+      turns
+        .filter((entry) => entry.sessionId === input.run.sessionId)
+        .reduce((maximum, entry) => Math.max(maximum, entry.ordinal), 0) + 1,
     createdAt:
       input.userTurn.createdAt ??
       new Date('2026-07-07T00:00:00.000Z').toISOString(),

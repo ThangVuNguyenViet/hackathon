@@ -31,6 +31,11 @@ import {
   pushEscalationReasons,
   verifiedStateSnapshotSourceType,
 } from './turnSupport.js';
+import {
+  createPackStateEnvelope,
+  validatePackStateEnvelope,
+  type PackRef,
+} from '../runtime/businessPack.js';
 
 export function repriceCartWithDeliveryFee(
   state: AgentState,
@@ -340,7 +345,22 @@ export function extractVerifiedStateSnapshot(
 export async function loadPriorVerifiedState(
   store: ConversationStore,
   sessionId: string,
+  projection?: {
+    packRef: PackRef;
+    schemaVersion: string;
+    parseState(value: unknown): Partial<VerifiedStateSnapshot>;
+    allowLegacyKfcV1Fallback?: boolean;
+  },
 ): Promise<Partial<VerifiedStateSnapshot>> {
+  if (projection) {
+    return (
+      (await loadVerifiedStateProjection({
+        store,
+        sessionId,
+        ...projection,
+      })) ?? {}
+    );
+  }
   const events = await store.listEvents(sessionId);
   for (let index = events.length - 1; index >= 0; index -= 1) {
     const event = events[index];
@@ -348,6 +368,58 @@ export async function loadPriorVerifiedState(
     return extractVerifiedStateSnapshot(event.payload) ?? {};
   }
   return {};
+}
+
+export async function loadVerifiedStateProjection<TState>(input: {
+  store: ConversationStore;
+  sessionId: string;
+  packRef: PackRef;
+  schemaVersion: string;
+  parseState(value: unknown): TState;
+  allowLegacyKfcV1Fallback?: boolean;
+}): Promise<TState | undefined> {
+  const envelope = await input.store.getPackState(
+    input.sessionId,
+    input.packRef,
+  );
+  if (envelope) {
+    return validatePackStateEnvelope(envelope, {
+      packRef: input.packRef,
+      schemaVersion: input.schemaVersion,
+      parseState: input.parseState,
+    });
+  }
+  if (!input.allowLegacyKfcV1Fallback) return undefined;
+  if (
+    input.packRef.packId !== 'kfc-vietnam' ||
+    input.packRef.version !== '1.0.0' ||
+    input.schemaVersion !== '1'
+  ) {
+    throw new Error('pack_state_legacy_fallback_forbidden');
+  }
+  const events = await input.store.listEvents(input.sessionId);
+  for (let index = events.length - 1; index >= 0; index -= 1) {
+    const event = events[index];
+    if (event?.sourceType !== verifiedStateSnapshotSourceType) continue;
+    if (!isRecord(event.payload.verifiedState)) return undefined;
+    return input.parseState(event.payload.verifiedState);
+  }
+  return undefined;
+}
+
+export async function persistVerifiedStateProjection<TState>(input: {
+  store: ConversationStore;
+  sessionId: string;
+  packRef: PackRef;
+  schemaVersion: string;
+  state: TState;
+}): Promise<void> {
+  const envelope = await createPackStateEnvelope({
+    packRef: input.packRef,
+    schemaVersion: input.schemaVersion,
+    state: input.state,
+  });
+  await input.store.putPackState(input.sessionId, envelope);
 }
 
 export function buildVerifiedStateSnapshot(

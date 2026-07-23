@@ -7,6 +7,12 @@ import { loadPriorVerifiedState } from './verifiedState.js';
 import { countCustomerTurns } from '../monitor/sessionIntelligence.js';
 import { buildBoundedRecentTurns } from '../session/sessionContext.js';
 import { semanticConversationTurns } from './trustedActionConversation.js';
+import { kfcVerifiedStateSnapshotSchema } from '../businessPacks/kfcVietnam/kfcVerifiedStateSchema.js';
+
+const KFC_VIETNAM_PACK_REF = {
+  packId: 'kfc-vietnam',
+  version: '1.0.0',
+} as const;
 
 export interface LoadedAgentTurnState {
   state: AgentState;
@@ -84,7 +90,18 @@ export async function rehydrateExactTurnStateReadOnly(
   const exactId = currentUserTurnId.trim();
   if (!exactId) throw new Error('agent_current_user_turn_missing');
   const [prior, allTurns] = await Promise.all([
-    loadPriorVerifiedState(input.store, input.sessionId),
+    loadPriorVerifiedState(input.store, input.sessionId, {
+      packRef: KFC_VIETNAM_PACK_REF,
+      schemaVersion: '1',
+      parseState(value) {
+        const parsed = kfcVerifiedStateSnapshotSchema.safeParse(value);
+        if (!parsed.success) throw new Error('kfc_pack_state_invalid');
+        return parsed.data as Partial<
+          Awaited<ReturnType<typeof loadPriorVerifiedState>>
+        >;
+      },
+      allowLegacyKfcV1Fallback: true,
+    }),
     input.store.listTurns(input.sessionId),
   ]);
   const exactCurrentTurnIndex = allTurns.findIndex(

@@ -3,7 +3,12 @@ import type {
   CommitAssistantTurnIfRunCurrentResult,
   RunCommitFence,
 } from './contracts.js';
-import type { D1DatabaseLike, D1PreparedStatement } from './d1StoreSupport.js';
+import {
+  turnFromRow,
+  type ConversationTurnRow,
+  type D1DatabaseLike,
+  type D1PreparedStatement,
+} from './d1StoreSupport.js';
 import { prepareAssistantTurnCommit } from './runCommitPreparation.js';
 import { verifiedRefStorageValues } from './verifiedRef.js';
 
@@ -72,6 +77,35 @@ export async function commitD1AssistantTurnIfRunCurrent(input: {
       assistantTurnEligibility(input.operation),
     ),
   );
+  if (input.operation.packState) {
+    const packState = input.operation.packState;
+    if (packState.sessionId !== prepared.turn.sessionId) {
+      throw new Error('agent_turn_commit_pack_state_session_mismatch');
+    }
+    const eligible = assistantTurnEligibility(input.operation);
+    requiredResultIndexes.push(statements.length);
+    statements.push(
+      input.db
+        .prepare(
+          `INSERT INTO pack_state_projections (
+             session_id, pack_id, pack_version, envelope_json, updated_at
+           )
+           SELECT ?, ?, ?, ?, ?
+           WHERE ${eligible.sql}
+           ON CONFLICT(session_id, pack_id, pack_version) DO UPDATE SET
+             envelope_json = excluded.envelope_json,
+             updated_at = excluded.updated_at`,
+        )
+        .bind(
+          packState.sessionId,
+          packState.envelope.packRef.packId,
+          packState.envelope.packRef.version,
+          JSON.stringify(packState.envelope),
+          prepared.turn.createdAt,
+          ...eligible.bindings,
+        ),
+    );
+  }
   requiredResultIndexes.push(statements.length);
   statements.push(
     turnStatement(
@@ -97,7 +131,16 @@ export async function commitD1AssistantTurnIfRunCurrent(input: {
   if (!changes.every((count) => count === 1)) {
     throw new Error('d1_atomic_agent_turn_commit_inconsistent');
   }
-  return { status: 'committed', ...structuredClone(prepared) };
+  const turnRow = await input.db
+    .prepare(`SELECT * FROM conversation_turns WHERE id = ? LIMIT 1`)
+    .bind(prepared.turn.id)
+    .first<ConversationTurnRow>();
+  if (!turnRow) throw new Error('d1_atomic_agent_turn_commit_missing_turn');
+  return {
+    status: 'committed',
+    ...structuredClone(prepared),
+    turn: turnFromRow(turnRow),
+  };
 }
 
 function eventStatement(
@@ -147,14 +190,17 @@ function turnStatement(
   return db
     .prepare(
       `INSERT INTO conversation_turns (
-       id, session_id, channel, role, text, external_message_id,
+       id, session_id, ordinal, channel, role, text, external_message_id,
        external_user_id, delivery_status, metadata, created_at
      )
-     SELECT ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
+     SELECT ?, ?, COALESCE((
+       SELECT MAX(ordinal) FROM conversation_turns WHERE session_id = ?
+     ), 0) + 1, ?, ?, ?, ?, ?, ?, ?, ?
      WHERE ${eligible.sql}`,
     )
     .bind(
       turn.id,
+      turn.sessionId,
       turn.sessionId,
       turn.channel,
       turn.role,

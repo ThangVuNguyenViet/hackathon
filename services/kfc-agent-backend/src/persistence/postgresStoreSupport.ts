@@ -46,6 +46,7 @@ export type Queryable = Pool | PoolClient;
 
 export interface ConversationTurnRow {
   id: string;
+  ordinal?: number;
   session_id: string;
   channel: ConversationTurn['channel'];
   role: ConversationTurn['role'];
@@ -212,6 +213,7 @@ export function normalizeDate(value: Date | string): string {
 export function turnFromRow(row: ConversationTurnRow): ConversationTurn {
   return {
     id: row.id,
+    ordinal: Number(row.ordinal ?? 0),
     sessionId: row.session_id,
     channel: row.channel,
     role: row.role,

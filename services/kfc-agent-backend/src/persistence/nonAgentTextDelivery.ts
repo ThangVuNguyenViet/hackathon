@@ -165,6 +165,10 @@ export interface PrepareNonAgentTextDeliveryTurnInput {
   sessionId: string;
   expectedSessionAuthorityGeneration: number;
   expectedAgentId: string;
+  /**
+   * `ordinal` is a zero placeholder at this boundary; the store replaces it
+   * with its atomic per-session allocation before publication.
+   */
   turn: ConversationTurn;
 }
 

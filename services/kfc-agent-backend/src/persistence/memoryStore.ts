@@ -57,7 +57,11 @@ import {
   type CommitPausedCustomerRunIntakeInput,
   type CommitPausedCustomerRunIntakeResult,
   type ConversationStore,
+  type ConversationSummary,
+  type CompareAndSwapConversationSummaryInput,
+  type CompareAndSwapConversationSummaryResult,
 } from './contracts.js';
+import type { PackRef, PackStateEnvelope } from '../runtime/businessPack.js';
 import {
   completeMemoryIrreversibleOperation,
   failMemoryIrreversibleOperation,
@@ -110,6 +114,11 @@ import {
   upsertMemoryPendingCustomerTurn,
 } from './memoryStoreAgentRunRecords.js';
 export * from './contracts.js';
+
+function memoryPackStateKey(sessionId: string, packRef: PackRef): string {
+  return `${sessionId}\u0000${packRef.packId}\u0000${packRef.version}`;
+}
+
 export class MemoryStore
   extends MemoryStoreNonAgentTextDeliveryOperations
   implements ConversationStore
@@ -119,6 +128,11 @@ export class MemoryStore
   private readonly customerRunEvents: CustomerRunEvent[] = [];
   private readonly events: StoredEvent[] = [];
   private readonly turns: ConversationTurn[] = [];
+  private readonly conversationSummaries = new Map<
+    string,
+    ConversationSummary
+  >();
+  private readonly packStates = new Map<string, PackStateEnvelope>();
   private readonly profiles = new Map<string, ConversationProfile>();
   private readonly webhookDeliveries = new Map<string, WebhookDelivery>();
   private readonly sessionControls = new Map<string, SessionControl>();
@@ -170,6 +184,8 @@ export class MemoryStore
         agentRunTurns: this.agentRunTurns,
         pendingCustomerTurns: this.pendingCustomerTurns,
         turns: this.turns,
+        conversationSummaries: this.conversationSummaries,
+        packStates: this.packStates,
         events: this.events,
         webhookDeliveries: this.webhookDeliveries,
         nonAgentTextDeliveries: this.nonAgentTextDeliveries,
@@ -403,6 +419,10 @@ export class MemoryStore
       ...input,
       metadata: input.metadata ?? null,
       id: input.id ?? `turn_${this.turns.length + 1}`,
+      ordinal:
+        this.turns
+          .filter((entry) => entry.sessionId === input.sessionId)
+          .reduce((maximum, entry) => Math.max(maximum, entry.ordinal), 0) + 1,
     };
     this.turns.push(turn);
     await this.appendEvent(input.sessionId, `conversation_turn:${input.role}`, {
@@ -678,7 +698,71 @@ export class MemoryStore
   }
 
   async listTurns(sessionId: string): Promise<ConversationTurn[]> {
-    return this.turns.filter((turn) => turn.sessionId === sessionId);
+    return this.turns
+      .filter((turn) => turn.sessionId === sessionId)
+      .sort((left, right) => left.ordinal - right.ordinal)
+      .map((turn) => structuredClone(turn));
+  }
+
+  async getConversationSummary(
+    sessionId: string,
+  ): Promise<ConversationSummary | undefined> {
+    const summary = this.conversationSummaries.get(sessionId);
+    return summary ? structuredClone(summary) : undefined;
+  }
+
+  async compareAndSwapConversationSummary(
+    input: CompareAndSwapConversationSummaryInput,
+  ): Promise<CompareAndSwapConversationSummaryResult> {
+    return this.withStoreLock(async () => {
+      const existing = this.conversationSummaries.get(input.sessionId);
+      if (
+        existing &&
+        existing.text === input.text &&
+        existing.throughOrdinal === input.throughOrdinal
+      ) {
+        return { status: 'unchanged', summary: structuredClone(existing) };
+      }
+      if (
+        (existing?.revision ?? null) !== input.expectedRevision ||
+        (existing?.throughOrdinal ?? 0) !== input.expectedThroughOrdinal ||
+        input.throughOrdinal <= input.expectedThroughOrdinal
+      ) {
+        return {
+          status: 'stale',
+          ...(existing ? { summary: structuredClone(existing) } : {}),
+        };
+      }
+      const summary: ConversationSummary = {
+        schemaVersion: 1,
+        text: input.text,
+        throughOrdinal: input.throughOrdinal,
+        revision: (existing?.revision ?? 0) + 1,
+        updatedAt: input.updatedAt,
+      };
+      this.conversationSummaries.set(input.sessionId, summary);
+      return { status: 'committed', summary: structuredClone(summary) };
+    });
+  }
+
+  async getPackState(
+    sessionId: string,
+    packRef: PackRef,
+  ): Promise<PackStateEnvelope | undefined> {
+    const envelope = this.packStates.get(
+      memoryPackStateKey(sessionId, packRef),
+    );
+    return envelope ? structuredClone(envelope) : undefined;
+  }
+
+  async putPackState(
+    sessionId: string,
+    envelope: PackStateEnvelope,
+  ): Promise<void> {
+    this.packStates.set(
+      memoryPackStateKey(sessionId, envelope.packRef),
+      structuredClone(envelope),
+    );
   }
 
   async appendEvent(
@@ -739,6 +823,7 @@ export class MemoryStore
         verifiedRefs: this.verifiedRefs,
         turns: this.turns,
         events: this.events,
+        packStates: this.packStates,
       }),
     );
   }

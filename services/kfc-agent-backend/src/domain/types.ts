@@ -213,6 +213,8 @@ export interface ConversationProfile {
 
 export interface ConversationTurn {
   id: string;
+  /** Canonical per-session transcript order. Timestamps and IDs are not ordering authority. */
+  ordinal: number;
   sessionId: string;
   channel: Channel;
   role: 'user' | 'assistant' | 'tool' | 'system';

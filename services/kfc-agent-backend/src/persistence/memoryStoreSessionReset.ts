@@ -16,7 +16,9 @@ import {
   type SessionResetHook,
   type StoredEvent,
   type WebhookDelivery,
+  type ConversationSummary,
 } from './contracts.js';
+import type { PackStateEnvelope } from '../runtime/businessPack.js';
 import {
   abandonPendingNonAgentTextDelivery,
   nonAgentTextDeliverySessionBindingDigest,
@@ -36,6 +38,8 @@ export interface MemorySessionResetState {
   agentRunTurns: AgentRunTurn[];
   pendingCustomerTurns: PendingCustomerTurn[];
   turns: ConversationTurn[];
+  conversationSummaries: Map<string, ConversationSummary>;
+  packStates: Map<string, PackStateEnvelope>;
   events: StoredEvent[];
   webhookDeliveries: Map<string, WebhookDelivery>;
   nonAgentTextDeliveries: Map<string, NonAgentTextDeliveryRecord>;
@@ -113,6 +117,10 @@ export async function resetMemorySession(
     (turn) => turn.sessionId === sessionId,
   );
   removeWhere(state.turns, (turn) => turn.sessionId === sessionId);
+  state.conversationSummaries.delete(sessionId);
+  for (const key of state.packStates.keys()) {
+    if (key.startsWith(`${sessionId}\u0000`)) state.packStates.delete(key);
+  }
   removeWhere(state.events, (event) => event.sessionId === sessionId);
   for (const runId of customerRunIds) state.customerRuns.delete(runId);
   for (const [key, runId] of state.customerRunRequestIndex) {

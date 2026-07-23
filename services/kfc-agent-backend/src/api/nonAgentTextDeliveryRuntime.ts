@@ -102,6 +102,7 @@ export async function deliverNonAgentText(input: {
       expectedAgentId: input.agentId,
       turn: {
         id: identity.assistantTurnId,
+        ordinal: 0,
         sessionId: input.sessionId,
         channel: input.channel,
         role: 'assistant',

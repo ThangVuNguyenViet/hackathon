@@ -18,6 +18,10 @@ import type { DashboardEventBus } from '../dashboard/eventBus.js';
 import type { AgentState } from './agentState.js';
 import type { GuestCheckoutAuthority } from '../security/guestCheckoutAuthority.js';
 import type { AgentTraceContext } from './agentTraceContext.js';
+import type {
+  AsyncTokenCounter,
+  SummarizeConversationExchanges,
+} from '../session/conversationContext.js';
 
 export type ReplyIntent =
   | 'ask_fulfillment_method'
@@ -52,6 +56,12 @@ export interface AgentTurnInput {
   traceContext?: AgentTraceContext;
   /** Maintained provider adapter used by the single production agent loop. */
   agentModel?: BaseChatModel;
+  /** Provider-neutral, explicit conversation-window policy. */
+  conversationContext?: {
+    tokenBudget: number;
+    countTokens?: AsyncTokenCounter;
+    summarize?: SummarizeConversationExchanges;
+  };
   /**
    * Server-constructed structured-action authority. This must never be
    * populated from request JSON, persisted turn metadata, or model output.

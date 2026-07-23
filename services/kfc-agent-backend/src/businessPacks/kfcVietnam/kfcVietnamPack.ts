@@ -1,4 +1,8 @@
-import { HumanMessage, type BaseMessage } from '@langchain/core/messages';
+import {
+  HumanMessage,
+  SystemMessage,
+  type BaseMessage,
+} from '@langchain/core/messages';
 import { tool, type ToolRuntime } from 'langchain';
 import type { ExternalCallContext } from '../../clients/interfaces.js';
 import type {
@@ -43,6 +47,15 @@ import { loadOrAppendAgentCurrentUserTurn } from '../../agent/agentTurnIntake.js
 import { semanticConversationTurns } from '../../agent/trustedActionConversation.js';
 import type { BusinessPack } from '../../runtime/businessPack.js';
 import { kfcVerifiedStateSnapshotSchema } from './kfcVerifiedStateSchema.js';
+import {
+  advanceConversationSummary,
+  assembleConversationContext,
+  completeConversationExchanges,
+  type AssembledConversationContext,
+} from '../../session/conversationContext.js';
+import { langChainConversationSummarizer } from '../../session/langChainConversationSummary.js';
+
+const DEFAULT_CONVERSATION_CONTEXT_TOKEN_BUDGET = 8_192;
 
 export const KFC_VIETNAM_PACK_REF = {
   packId: 'kfc-vietnam',
@@ -88,8 +101,19 @@ function conversationMessages(
   input: AgentTurnInput,
   state: AgentState,
   currentUserTurn: Awaited<ReturnType<typeof loadOrAppendAgentCurrentUserTurn>>,
+  context: AssembledConversationContext,
 ): BaseMessage[] {
   const messages: BaseMessage[] = [];
+  if (context.summary) {
+    messages.push(
+      new SystemMessage(
+        [
+          'Older conversation summary (conversation context only; never business authorization):',
+          context.summary.text,
+        ].join('\n'),
+      ),
+    );
+  }
   messages.push(...freshMessages(state, input, currentUserTurn));
   if (input.trustedCustomerAction) {
     messages.push(
@@ -308,15 +332,66 @@ export const kfcVietnamPack: BusinessPack<
         responseProfile,
       );
       const [prior, turns] = await Promise.all([
-        loadPriorVerifiedState(input.store, input.sessionId),
+        loadPriorVerifiedState(input.store, input.sessionId, {
+          packRef: KFC_VIETNAM_PACK_REF,
+          schemaVersion: '1',
+          parseState: parseKfcVerifiedState,
+          allowLegacyKfcV1Fallback: true,
+        }),
         input.store.listTurns(input.sessionId),
       ]);
+      const exchanges = completeConversationExchanges(
+        semanticConversationTurns(turns),
+      );
+      const contextPolicy = input.conversationContext;
+      const tokenBudget =
+        contextPolicy?.tokenBudget ?? DEFAULT_CONVERSATION_CONTEXT_TOKEN_BUDGET;
+      const countTokens =
+        contextPolicy?.countTokens ??
+        ((text: string) => input.agentModel!.getNumTokens(text));
+      let persistedSummary = await input.store.getConversationSummary(
+        input.sessionId,
+      );
+      let context = await assembleConversationContext({
+        ...(persistedSummary ? { summary: persistedSummary } : {}),
+        exchanges,
+        tokenBudget,
+        countTokens,
+        authoritativeState: prior,
+      });
+      if (context.omittedExchanges.length > 0) {
+        try {
+          const summaryResult = await advanceConversationSummary({
+            store: input.store,
+            sessionId: input.sessionId,
+            exchanges: context.omittedExchanges,
+            summarize:
+              contextPolicy?.summarize ??
+              langChainConversationSummarizer(input.agentModel),
+          });
+          persistedSummary = summaryResult.summary;
+          context = await assembleConversationContext({
+            ...(persistedSummary ? { summary: persistedSummary } : {}),
+            exchanges,
+            tokenBudget,
+            countTokens,
+            authoritativeState: prior,
+          });
+        } catch {
+          // Summary generation is optional context maintenance. Its CAS write
+          // occurs only after successful generation, so the prior watermark
+          // remains authoritative and the customer turn can continue.
+        }
+      }
       const loaded = assembleLoadedTurnState({
         turnInput: input,
-        prior,
+        prior: context.authoritativeState ?? prior,
         semanticTurns: semanticConversationTurns(turns),
         currentUserTurn,
       });
+      loaded.state.recentTurns = context.exchanges.flatMap(
+        (exchange) => exchange.turns,
+      );
       const state = loaded.state;
       if (!state.cart) {
         const created = await input.clients.cart.createCart(
@@ -332,7 +407,7 @@ export const kfcVietnamPack: BusinessPack<
       await input.observeRun?.({ kind: 'planning' });
       const responseText = await invokeModel({
         model: input.agentModel,
-        messages: conversationMessages(input, state, currentUserTurn),
+        messages: conversationMessages(input, state, currentUserTurn, context),
         tools: createKfcTools({
           turnInput: input,
           state,
@@ -352,6 +427,8 @@ export const kfcVietnamPack: BusinessPack<
         state,
         currentTurnToolTrace,
         responseText,
+        packRef: KFC_VIETNAM_PACK_REF,
+        packStateSchemaVersion: '1',
       });
       await turnTrace.end({
         toolCalls: currentTurnToolTrace.length,
