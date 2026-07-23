@@ -3,6 +3,10 @@
   "title": "01: Đặt món rõ ràng, giao hàng, voucher, thanh toán",
   "channel": "messenger_mock",
   "goal": "User đặt món rõ ràng, bot hỏi địa chỉ còn thiếu, tính phí giao hàng, áp mã, xác nhận thanh toán, ghi chú giao hàng, ghi nhận hóa đơn và tạo đơn.",
+  "preconditions": [
+    "Khách đang ở một phiên mua hàng mới, chưa có giỏ hàng hoặc đơn hàng đang chờ xác nhận.",
+    "Dữ liệu menu, vùng giao hàng, phí giao hàng, mã ưu đãi và phương thức thanh toán hiện hành có thể được tra cứu từ nguồn nghiệp vụ."
+  ],
   "useCases": [
     "UC-01",
     "UC-07",

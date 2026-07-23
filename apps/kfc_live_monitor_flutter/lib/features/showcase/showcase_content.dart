@@ -198,7 +198,7 @@ class _CriteriaCard extends StatelessWidget {
               SizedBox(width: 8),
               Expanded(
                 child: Text(
-                  'ACCEPTANCE CARD',
+                  'SCENARIO RISKS',
                   style: TextStyle(
                     fontSize: 11,
                     fontWeight: FontWeight.w900,
@@ -209,7 +209,7 @@ class _CriteriaCard extends StatelessWidget {
             ],
           ),
           const SizedBox(height: 14),
-          for (final (index, criterion) in scenario.acceptanceCriteria.indexed)
+          for (final (index, criterion) in scenario.risks.indexed)
             Padding(
               padding: const EdgeInsets.only(bottom: 10),
               child: Row(

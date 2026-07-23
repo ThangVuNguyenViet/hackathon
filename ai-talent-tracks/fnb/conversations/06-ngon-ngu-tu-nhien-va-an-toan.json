@@ -3,6 +3,10 @@
   "title": "06: Ngôn ngữ tự nhiên, mơ hồ và an toàn hội thoại",
   "channel": "messenger_mock",
   "goal": "Hiểu sai chính tả/tiếng lóng, xử lý sở thích ăn uống thông thường, spam, câu mơ hồ và yêu cầu ngoài phạm vi.",
+  "preconditions": [
+    "Khách đã đăng nhập, có thể có lịch sử đơn gần đây, nhưng chưa có lựa chọn hiện tại đủ rõ để tạo đơn.",
+    "Menu và kênh chăm sóc khách hàng chính thức có thể được tra cứu; thông tin cá nhân của nhân viên không phải dữ liệu được phép cung cấp."
+  ],
   "useCases": [
     "UC-31",
     "UC-32",

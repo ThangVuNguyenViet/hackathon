@@ -3,6 +3,10 @@
   "title": "07: Cá nhân hóa, món yêu thích, loyalty và chỉnh giỏ hàng",
   "channel": "zalo_mock",
   "goal": "User muốn đặt lại đơn cũ, lấy món hay ăn, kiểm tra điểm thành viên, đổi và dùng voucher có xác nhận, rồi chỉnh giỏ hàng.",
+  "preconditions": [
+    "Khách đã đăng nhập và liên kết tài khoản thành viên; đơn gần nhất, món thường chọn, số dư điểm và ví ưu đãi có thể được đọc từ nguồn nghiệp vụ.",
+    "Giỏ hàng ban đầu trống và chưa có thao tác đổi điểm, dùng voucher hoặc đặt đơn nào được xác nhận."
+  ],
   "useCases": [
     "UC-05",
     "UC-14",

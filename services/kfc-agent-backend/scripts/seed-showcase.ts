@@ -6,6 +6,7 @@ interface ScriptScenario {
   id: string;
   title: string;
   goal: string;
+  preconditions: string[];
   useCases: string[];
   risks: string[];
   turns: Array<{
@@ -34,7 +35,7 @@ const dataset = (await client.hasDataset({ datasetName }))
   ? await client.readDataset({ datasetName })
   : await client.createDataset(datasetName, {
       description:
-        'PM-curated KFC showcase scenarios. Inputs are fixed customer turns; outputs are acceptance criteria.',
+        'PM-curated KFC scenario narratives with preconditions, customer turns, and review risks.',
       dataType: 'kv',
       metadata: { schemaVersion: 'kfc-showcase-v1' },
     });
@@ -60,12 +61,13 @@ for (const scenario of scripts) {
       scenarioId: scenario.id,
       title: scenario.title,
       goal: scenario.goal,
+      preconditions: scenario.preconditions,
       useCases: scenario.useCases,
       turns: scenario.turns
         .filter((turn) => turn.speaker === 'User')
         .map(({ index, text, useCases }) => ({ index, text, useCases })),
     },
-    outputs: { acceptanceCriteria: scenario.risks },
+    outputs: { risks: scenario.risks },
     metadata: { schemaVersion: 'kfc-showcase-v1', scenarioId: scenario.id },
     split: 'showcase',
   });

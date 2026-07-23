@@ -27,8 +27,9 @@ class ShowcaseScenario {
     required this.id,
     required this.title,
     required this.goal,
+    required this.preconditions,
     required this.useCases,
-    required this.acceptanceCriteria,
+    required this.risks,
     required this.turns,
     required this.results,
   });
@@ -39,9 +40,13 @@ class ShowcaseScenario {
       id: json['id']! as String,
       title: json['title']! as String,
       goal: json['goal'] as String? ?? '',
+      preconditions: (json['preconditions'] as List<Object?>? ?? const [])
+          .cast<String>(),
       useCases: (json['useCases'] as List<Object?>? ?? const []).cast<String>(),
-      acceptanceCriteria:
-          (json['acceptanceCriteria'] as List<Object?>? ?? const [])
+      risks:
+          (json['risks'] as List<Object?>? ??
+                  json['acceptanceCriteria'] as List<Object?>? ??
+                  const [])
               .cast<String>(),
       turns: (json['turns'] as List<Object?>? ?? const [])
           .cast<Map<String, Object?>>()
@@ -58,8 +63,9 @@ class ShowcaseScenario {
   final String id;
   final String title;
   final String goal;
+  final List<String> preconditions;
   final List<String> useCases;
-  final List<String> acceptanceCriteria;
+  final List<String> risks;
   final List<ShowcaseTurn> turns;
   final Map<ShowcaseMode, ShowcaseResult> results;
 }

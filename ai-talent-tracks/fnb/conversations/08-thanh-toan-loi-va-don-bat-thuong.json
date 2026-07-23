@@ -3,6 +3,10 @@
   "title": "08: Lỗi thanh toán và đơn bất thường",
   "channel": "kfc",
   "goal": "Thanh toán thất bại, bấm thanh toán lỗi và đơn số lượng lớn cần nhân viên xác nhận.",
+  "preconditions": [
+    "Khách có một lần thanh toán đang chờ nhưng cổng thanh toán trả về thất bại; chưa có bằng chứng thanh toán thành công.",
+    "Chưa có đơn 200 combo nào được xác nhận, giữ tồn kho hoặc cam kết giao trong 30 phút."
+  ],
   "useCases": [
     "UC-18",
     "UC-39"

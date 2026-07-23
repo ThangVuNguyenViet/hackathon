@@ -3,6 +3,10 @@
   "title": "10: So sánh món và giải thích lựa chọn",
   "channel": "kfc",
   "goal": "So sánh hai combo bằng dữ liệu thành phần và giá đã xác minh, sau đó tư vấn lựa chọn không cay trong giới hạn dữ liệu mà không thay đổi giỏ hàng.",
+  "preconditions": [
+    "Hai mã combo 20698 và 20709 cùng dữ liệu giá, thành phần và tùy chọn hiện hành có thể được tra cứu.",
+    "Khách đang tham khảo, chưa yêu cầu thêm món hoặc thay đổi giỏ hàng; dữ liệu độ cay có thể không đầy đủ cho mọi thành phần."
+  ],
   "useCases": [
     "UC-02",
     "UC-03",

@@ -13,7 +13,8 @@ Tất cả kịch bản đều dùng mock API. Không cần API thật của KFC
 - Mỗi dòng trong bảng hội thoại phải có cột `Use case`.
 - Nếu một lượt không trực tiếp kiểm thử use case nào mà chỉ giúp hội thoại tự nhiên hơn, đánh dấu là `Filler`.
 - Một lượt có thể bao phủ nhiều use case, ví dụ `UC-17, UC-24`.
-- Mỗi JSON chỉ giữ mục tiêu, lượt hội thoại, rủi ro và trạng thái kết quả; không dùng câu chữ, chuỗi công cụ, hoặc số liệu cố định làm assertion.
+- Mỗi JSON chỉ giữ mục tiêu, tiền điều kiện tường thuật, lượt hội thoại, rủi ro và trạng thái kết quả; không dùng câu chữ, chuỗi công cụ, hoặc số liệu cố định làm assertion.
+- `preconditions` mô tả bối cảnh nghiệp vụ mà người đóng vai và reviewer cần biết; đây không phải bước seed bắt buộc hay assertion xác định trước.
 - Dùng các kịch bản để tạo bằng chứng hội thoại và đánh giá bởi reviewer độc lập, không dùng làm scenario replay test.
 - Không chỉnh kịch bản để phù hợp với đầu ra của model đã quan sát; mọi thay đổi phải được review như một thay đổi corpus.
 

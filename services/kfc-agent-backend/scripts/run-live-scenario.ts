@@ -53,6 +53,10 @@ for (const scenarioPath of scenarioPaths) {
 
   console.log('');
   console.log(`Scenario: ${basename(scenarioPath)} — ${scenario.title}`);
+  console.log('Preconditions:');
+  for (const precondition of result.preconditions) {
+    console.log(`- ${precondition}`);
+  }
   for (const turn of result.turnEvidence) {
     const tools =
       result.toolTraceByTurn

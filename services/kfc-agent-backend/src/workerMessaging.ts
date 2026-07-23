@@ -29,6 +29,7 @@ import type {
   WorkerEnv,
   WorkerExecutionContext,
 } from './worker.js';
+import { sendBoundedWorkerQueueMessage } from './workerQueueEnvelope.js';
 
 export async function enqueueMessengerWebhook(
   request: Request,
@@ -152,9 +153,11 @@ export async function enqueueMessengerWebhook(
                 },
               }
             : wakeup;
-        await env.MESSENGER_WEBHOOK_QUEUE.send(wakeupWithIngress, {
-          delaySeconds: 0,
-        });
+        await sendBoundedWorkerQueueMessage(
+          env.MESSENGER_WEBHOOK_QUEUE,
+          wakeupWithIngress,
+          { delaySeconds: 0 },
+        );
         console.log('agent_run_wakeup_queued', {
           rawEventId: event.rawEventId,
           sessionId,
@@ -162,7 +165,7 @@ export async function enqueueMessengerWebhook(
           dueAt: wakeup.dueAt,
         });
       } else {
-        await env.MESSENGER_WEBHOOK_QUEUE.send({
+        await sendBoundedWorkerQueueMessage(env.MESSENGER_WEBHOOK_QUEUE, {
           channel: 'messenger_control_event',
           event,
           sessionId,
@@ -506,9 +509,11 @@ export async function enqueueZaloWebhook(
 
       const coordinator = new AgentRunCoordinator({ store, dashboard });
       const wakeup = await coordinator.recordPendingTurn(event, sessionId);
-      await env.MESSENGER_WEBHOOK_QUEUE.send(wakeup, { delaySeconds: 0 });
+      await sendBoundedWorkerQueueMessage(env.MESSENGER_WEBHOOK_QUEUE, wakeup, {
+        delaySeconds: 0,
+      });
     } else {
-      await env.MESSENGER_WEBHOOK_QUEUE.send({
+      await sendBoundedWorkerQueueMessage(env.MESSENGER_WEBHOOK_QUEUE, {
         channel: 'zalo_control_event',
         payload: body,
         queuedAt: new Date().toISOString(),

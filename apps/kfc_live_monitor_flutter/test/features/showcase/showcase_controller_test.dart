@@ -98,8 +98,9 @@ const _catalogJson = {
       'id': 'meal-builder',
       'title': 'Build a meal',
       'goal': 'Prove a multi-turn order flow.',
+      'preconditions': ['A fresh customer session'],
       'useCases': ['menu', 'cart'],
-      'acceptanceCriteria': ['Uses the sandbox catalog', 'Keeps turn context'],
+      'risks': ['May use an ungrounded catalog', 'May lose turn context'],
       'turns': [
         {
           'index': 0,

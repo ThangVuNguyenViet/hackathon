@@ -3,6 +3,10 @@
   "title": "02: Tư vấn combo, ngân sách, khuyến mãi, upsell",
   "channel": "zalo_mock",
   "goal": "Khách đặt nhiều món lẻ cho nhóm; AI nhận ra combo tương đương tiết kiệm hơn, chờ khách đồng ý đổi đơn, rồi upsell tăng size nước và cập nhật giỏ hàng theo lựa chọn của khách.",
+  "preconditions": [
+    "Khách bắt đầu với giỏ hàng trống và đang chọn món cho nhóm bốn người trong ngân sách khoảng 300.000đ.",
+    "Menu, thành phần combo, tùy chọn kích cỡ và giá hiện hành có thể được tra cứu; chưa có thay đổi giỏ hàng nào được khách chấp thuận."
+  ],
   "useCases": [
     "UC-02",
     "UC-03",

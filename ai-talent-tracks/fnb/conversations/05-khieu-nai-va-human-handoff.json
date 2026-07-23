@@ -3,6 +3,10 @@
   "title": "05: Khiếu nại, feedback và chuyển nhân viên",
   "channel": "zalo_mock",
   "goal": "Nhận diện khiếu nại, sai món, thiếu món, feedback sau đơn, user tức giận và yêu cầu gặp nhân viên.",
+  "preconditions": [
+    "Khách đang phản hồi về một đơn vừa nhận; thông tin đơn và kênh chuyển nhân viên có thể được tra cứu nếu cần.",
+    "Chưa có hồ sơ khiếu nại hoặc yêu cầu chuyển nhân viên nào được tạo cho cuộc trao đổi này."
+  ],
   "useCases": [
     "UC-27",
     "UC-28",

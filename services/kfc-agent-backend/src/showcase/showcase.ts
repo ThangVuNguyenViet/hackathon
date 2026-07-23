@@ -21,8 +21,9 @@ export const showcaseScenarioSchema = z.object({
   id: z.string().min(1),
   title: z.string().min(1),
   goal: z.string().default(''),
+  preconditions: z.array(z.string()).default([]),
   useCases: z.array(z.string()).default([]),
-  acceptanceCriteria: z.array(z.string()).default([]),
+  risks: z.array(z.string()).default([]),
   turns: z.array(showcaseTurnSchema).min(1),
 });
 
@@ -114,10 +115,13 @@ export function showcaseScenarioFromExample(
       stringValue(inputs.scenarioId) ??
       example.id,
     goal: stringValue(inputs.goal) ?? stringValue(metadata.goal) ?? '',
+    preconditions: stringList(inputs.preconditions ?? metadata.preconditions),
     useCases: stringList(inputs.useCases ?? metadata.useCases),
-    acceptanceCriteria: stringList(
-      outputs.acceptanceCriteria ??
+    risks: stringList(
+      outputs.risks ??
+        outputs.acceptanceCriteria ??
         outputs.expectations ??
+        metadata.risks ??
         metadata.acceptanceCriteria,
     ),
     turns: rawTurns.map((raw, index) => {
@@ -262,7 +266,8 @@ export class ShowcaseService {
         mode,
         sessionId,
         fixedTurns: scenario.turns,
-        acceptanceCriteria: scenario.acceptanceCriteria,
+        preconditions: scenario.preconditions,
+        risks: scenario.risks,
       },
       metadata: {
         session_id: sessionId,

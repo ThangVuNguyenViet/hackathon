@@ -58,6 +58,7 @@ export type ScenarioEvidenceState = Partial<
 >;
 
 export interface ScenarioRunResult {
+  preconditions: string[];
   finalState: string;
   coveredUseCases: string[];
   dashboardEvents: DashboardEvent[];
@@ -231,6 +232,7 @@ export async function runScenario(
   }
 
   return {
+    preconditions: script.preconditions,
     finalState: script.finalState,
     coveredUseCases: script.useCases,
     dashboardEvents: dashboard.getEvents(sessionId),

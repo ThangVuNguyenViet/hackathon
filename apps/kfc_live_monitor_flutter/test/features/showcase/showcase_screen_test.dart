@@ -11,7 +11,7 @@ import 'package:kfc_live_monitor/features/showcase/showcase_screen.dart';
 import 'package:shadcn_ui/shadcn_ui.dart';
 
 void main() {
-  testWidgets('renders the retained real result and acceptance card', (
+  testWidgets('renders the retained real result and scenario risks', (
     tester,
   ) async {
     tester.view.physicalSize = const Size(1280, 900);
@@ -39,7 +39,7 @@ void main() {
     expect(find.text('KFC TEST KITCHEN'), findsOneWidget);
     expect(find.text('Build a meal'), findsWidgets);
     expect(find.text('First real answer'), findsOneWidget);
-    expect(find.text('ACCEPTANCE CARD'), findsOneWidget);
+    expect(find.text('SCENARIO RISKS'), findsOneWidget);
     expect(find.text('Replay with real AI'), findsOneWidget);
     expect(
       find.text(
@@ -57,8 +57,9 @@ const _catalogWithResult = {
       'id': 'meal-builder',
       'title': 'Build a meal',
       'goal': 'Prove a multi-turn order flow.',
+      'preconditions': ['A fresh customer session'],
       'useCases': ['menu', 'cart'],
-      'acceptanceCriteria': ['Uses the sandbox catalog'],
+      'risks': ['May use an ungrounded catalog'],
       'turns': [
         {
           'index': 1,
