@@ -3,9 +3,6 @@ import { agentModelCandidateIds } from './agentModelProfile.js';
 
 const appEnvSchema = z.object({
   PORT: z.coerce.number().int().positive().default(18090),
-  DATABASE_URL: z
-    .string()
-    .default('postgres://kfc_agent:kfc_agent@localhost:15432/kfc_agent'),
   KFC_AGENT_CANDIDATE: z
     .enum(agentModelCandidateIds)
     .default('openai-gpt-4.1-mini'),

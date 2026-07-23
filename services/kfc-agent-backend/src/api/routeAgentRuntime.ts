@@ -50,6 +50,11 @@ import {
   type KfcGenUiAttachment,
 } from '../genui/kfcGenUi.js';
 import { runAgentTurn } from '../agent/kfcAgent.js';
+import {
+  loadVerifiedStateProjection,
+  persistVerifiedStateProjection,
+} from '../agent/verifiedState.js';
+import { kfcVietnamPack } from '../businessPacks/kfcVietnam/kfcVietnamPack.js';
 import type { AgentTurnOutput } from '../agent/agentTurn.js';
 import type { AgentTracer } from '../observability/agentTracing.js';
 import {
@@ -323,13 +328,6 @@ export function createRouteAgentRuntime(
       }
       const currentControl = await store.getSessionControl(input.sessionId);
       if (currentControl.agentMode === 'human_paused') {
-        if (!existingTurn) {
-          await store.appendEvent(input.sessionId, 'assistant_reply_skipped', {
-            reason: 'human_paused',
-            channel: 'kfc',
-            externalMessageId: input.clientMessageId,
-          });
-        }
         return {
           status: 200,
           body: {
@@ -572,23 +570,22 @@ export function createRouteAgentRuntime(
   }
 
   async function clearPersistedHandoff(sessionId: string): Promise<void> {
-    const events = await store.listEvents(sessionId);
-    for (let index = events.length - 1; index >= 0; index -= 1) {
-      const event = events[index];
-      if (event?.sourceType !== 'agent:verified_state') continue;
-      const value = event.payload.verifiedState;
-      if (typeof value !== 'object' || value === null || Array.isArray(value)) {
-        return;
-      }
-      const { handoff: _handoff, ...verifiedState } = value as Record<
-        string,
-        unknown
-      >;
-      await store.appendEvent(sessionId, 'agent:verified_state', {
-        verifiedState,
-      });
-      return;
-    }
+    const state = await loadVerifiedStateProjection({
+      store,
+      sessionId,
+      packRef: kfcVietnamPack.ref,
+      schemaVersion: kfcVietnamPack.stateSchemaVersion,
+      parseState: kfcVietnamPack.parseState,
+    });
+    if (!state?.handoff) return;
+    const { handoff: _handoff, ...withoutHandoff } = state;
+    await persistVerifiedStateProjection({
+      store,
+      sessionId,
+      packRef: kfcVietnamPack.ref,
+      schemaVersion: kfcVietnamPack.stateSchemaVersion,
+      state: withoutHandoff,
+    });
   }
 
   async function persistedHandoffStatus(
@@ -596,16 +593,14 @@ export function createRouteAgentRuntime(
     agentMode: AgentMode,
   ): Promise<'queued' | 'joined' | undefined> {
     if (agentMode === 'human_paused') return 'joined';
-    const events = await store.listEvents(sessionId);
-    for (let index = events.length - 1; index >= 0; index -= 1) {
-      const event = events[index];
-      if (event?.sourceType !== 'agent:verified_state') continue;
-      const verifiedState = event.payload.verifiedState;
-      return isRecord(verifiedState) && isRecord(verifiedState.handoff)
-        ? 'queued'
-        : undefined;
-    }
-    return undefined;
+    const state = await loadVerifiedStateProjection({
+      store,
+      sessionId,
+      packRef: kfcVietnamPack.ref,
+      schemaVersion: kfcVietnamPack.stateSchemaVersion,
+      parseState: kfcVietnamPack.parseState,
+    });
+    return state?.handoff ? 'queued' : undefined;
   }
 
   async function persistNonAgentInboundEvent(

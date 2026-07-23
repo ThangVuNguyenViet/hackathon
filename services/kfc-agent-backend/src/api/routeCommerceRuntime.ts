@@ -207,28 +207,24 @@ export function createRouteCommerceRuntime(input: {
         clearTimeout(timeout);
       }
     };
-    const events = await store.listEvents(sessionId);
-    const storedPin = [...events]
-      .reverse()
-      .find(
-        (event) =>
-          event.sourceType === 'catalog_observation_pinned' &&
-          isRecord(event.payload.observation) &&
-          event.payload.observation.environment ===
-            options.catalog!.environment &&
-          event.payload.observation.sourceUrl ===
-            new URL(options.catalog!.sourceUrl).toString() &&
-          typeof event.payload.observation.id === 'string' &&
-          Array.isArray(event.payload.observation.items),
-      )?.payload.observation as CatalogObservation | undefined;
+    const storedProjection = await store.getCatalogPin(sessionId);
+    const storedPin =
+      storedProjection?.observation.environment ===
+        options.catalog!.environment &&
+      storedProjection.observation.sourceUrl ===
+        new URL(options.catalog!.sourceUrl).toString()
+        ? storedProjection.observation
+        : undefined;
     let pinned = storedPin
       ? Promise.resolve(storedPin)
       : catalogPinLoads.get(sessionId);
     if (!pinned) {
       pinned = loadInitialCatalogPin()
         .then(async (observation) => {
-          await store.appendEvent(sessionId, 'catalog_observation_pinned', {
+          await store.putCatalogPin({
+            sessionId,
             observation,
+            updatedAt: new Date().toISOString(),
           });
           return observation;
         })
@@ -393,10 +389,9 @@ export function createRouteCommerceRuntime(input: {
       : await latestKfcProofPreconditions(sessionId);
     const mockedProfile = profileOverride
       ? (profileOverride.providerProfile ?? undefined)
-      : proofPreconditions &&
-          isRecord(proofPreconditions.payload.providerProfile)
+      : proofPreconditions && isRecord(proofPreconditions.providerProfile)
         ? mockedUpstreamApiProfileSchema.parse(
-            proofPreconditions.payload.providerProfile,
+            proofPreconditions.providerProfile,
           )
         : undefined;
     fixtures = applyMockedUpstreamFixtureOverrides(fixtures, mockedProfile);
@@ -489,11 +484,7 @@ export function createRouteCommerceRuntime(input: {
     customerId: string,
   ): Promise<CustomerAccessContext | undefined> {
     const event = await latestKfcProofPreconditions(sessionId);
-    if (
-      event?.payload.authenticated !== true ||
-      event.payload.customerId !== customerId ||
-      typeof event.payload.expiresAt !== 'string'
-    )
+    if (event?.authenticated !== true || event.customerId !== customerId)
       return undefined;
     return {
       tenantScope: 'kfc-vietnam',
@@ -511,8 +502,8 @@ export function createRouteCommerceRuntime(input: {
         issuer: 'kfc-agent-backend',
         audience: 'kfc-agent-backend',
         authenticatedAt: event.createdAt,
-        expiresAt: event.payload.expiresAt,
-        evidenceRef: event.id,
+        expiresAt: event.expiresAt,
+        evidenceRef: `sandbox-proof:${event.sessionId}`,
       },
       authorizedScopes: [
         'customer:read',
@@ -529,15 +520,8 @@ export function createRouteCommerceRuntime(input: {
 
   async function latestKfcProofPreconditions(sessionId: string) {
     if (options.lifecycle?.environment !== 'sandbox') return undefined;
-    const event = [...(await store.listEvents(sessionId))]
-      .reverse()
-      .find(({ sourceType }) => sourceType === 'proof:kfc_preconditions');
-    if (
-      !event ||
-      typeof event.payload.expiresAt !== 'string' ||
-      Date.parse(event.payload.expiresAt) <= Date.now()
-    )
-      return undefined;
+    const event = await store.getSandboxProofSession(sessionId);
+    if (!event || Date.parse(event.expiresAt) <= Date.now()) return undefined;
     return event;
   }
 

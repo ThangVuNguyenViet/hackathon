@@ -4,7 +4,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "tsx watch src/index.ts",
+    "dev": "wrangler dev",
     "clean:dist": "node scripts/clean-dist.mjs",
     "build": "npm run clean:dist && tsc -p tsconfig.json",
     "typecheck": "tsc -p tsconfig.json --noEmit",
@@ -14,7 +14,6 @@
     "check": "npm run format:check && npm run lint && npm run typecheck",
     "test": "vitest run",
     "test:watch": "vitest",
-    "start": "node dist/src/index.js",
     "scenario:inventory": "tsx scripts/export-scenario-inventory.ts",
     "sandbox:commerce:serve": "tsx scripts/serve-sandbox-commerce-gateway.ts",
     "proof:openai:geo-canary": "tsx scripts/run-openai-geo-canary.ts",
@@ -39,13 +38,11 @@
     "gray-matter": "^4.0.3",
     "langchain": "1.5.3",
     "langsmith": "0.8.3",
-    "pg": "^8.16.3",
     "tsx": "^4.20.3",
     "zod": "3.25.76"
   },
   "devDependencies": {
     "@types/node": "^22.10.0",
-    "@types/pg": "^8.15.4",
     "eslint": "^10.7.0",
     "playwright-core": "^1.55.0",
     "prettier": "3.9.6",

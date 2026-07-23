@@ -88,8 +88,8 @@ The reviewed conversation sources live in
 ## Runtime state
 
 Conversation history and verified commerce snapshots are application-owned in
-memory, D1, or PostgreSQL. They are supplied as context on each turn. The model
-provider does not own session memory.
+Cloudflare D1. A small in-memory adapter exists only for deterministic tests.
+The model provider does not own session memory.
 
 ## GenUI
 

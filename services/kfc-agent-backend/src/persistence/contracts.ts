@@ -4,6 +4,7 @@ import type {
   AgentRunTurn,
   ConversationProfile,
   ConversationTurn,
+  DashboardEvent,
   PendingCustomerTurn,
   SessionAgentState,
 } from '../domain/types.js';
@@ -44,6 +45,7 @@ import type {
   ReserveNonAgentTextDeliveryResult,
 } from './nonAgentTextDelivery.js';
 import type { PackRef, PackStateEnvelope } from '../runtime/businessPack.js';
+import type { CatalogObservation } from '../catalog/catalogObservation.js';
 
 export type {
   BeginNonAgentTextDeliveryAttemptInput,
@@ -58,14 +60,6 @@ export type {
   ReserveNonAgentTextDeliveryInput,
   ReserveNonAgentTextDeliveryResult,
 } from './nonAgentTextDelivery.js';
-
-export interface StoredEvent {
-  id: string;
-  sessionId: string;
-  sourceType: string;
-  payload: Record<string, unknown>;
-  createdAt: string;
-}
 
 export type RunCommitFence =
   | {
@@ -91,27 +85,12 @@ export type RunCommitFence =
       sessionAuthorityGeneration: number;
     };
 
-export type AppendEventIfRunCurrentResult =
-  { status: 'committed'; event: StoredEvent } | { status: 'stale' };
-
 export interface IsRunCommitFenceCurrentInput {
   sessionId: string;
   fence: RunCommitFence;
   /**
    * Optional server-issued authorization expiry. Stores compare it with their
    * own clock in the same query as the durable owner predicate.
-   */
-  notAfter?: string;
-}
-
-export interface AppendEventIfRunCurrentInput {
-  sessionId: string;
-  sourceType: string;
-  payload: Record<string, unknown>;
-  fence: RunCommitFence;
-  /**
-   * Optional server-issued authorization expiry. Stores compare it with their
-   * own clock inside the same conditional INSERT as the run-owner predicate.
    */
   notAfter?: string;
 }
@@ -123,11 +102,6 @@ export interface CommitAssistantTurnIfRunCurrentInput {
    * own wall clock in the same atomic operation as every durable write.
    */
   notAfter?: string;
-  stateEvent: {
-    sessionId: string;
-    sourceType: string;
-    payload: Record<string, unknown>;
-  };
   assistantTurn: AppendConversationTurnInput;
   /** Current typed business-state projection committed under the same owner fence. */
   packState?: {
@@ -145,8 +119,6 @@ export interface CommitAssistantTurnIfRunCurrentInput {
 export type CommitAssistantTurnIfRunCurrentResult =
   | {
       status: 'committed';
-      stateEvent: StoredEvent;
-      turnEvent: StoredEvent;
       turn: ConversationTurn;
       verifiedRefs: VerifiedRefRecord[];
     }
@@ -224,8 +196,24 @@ export type CustomerRunPatch = Partial<
   >
 >;
 
-export interface HistorySearchResult extends StoredEvent {
+export interface HistorySearchResult extends ConversationTurn {
   confidence: number;
+}
+
+export interface CatalogPinProjection {
+  sessionId: string;
+  observation: CatalogObservation;
+  updatedAt: string;
+}
+
+export interface SandboxProofSession {
+  sessionId: string;
+  customerId: string;
+  authenticated: boolean;
+  expiresAt: string;
+  orderId: string | null;
+  providerProfile: Record<string, unknown> | null;
+  createdAt: string;
 }
 
 export interface ImportedConversationTurn extends Omit<
@@ -735,11 +723,17 @@ export interface ConversationStore {
     packRef: PackRef,
   ): Promise<PackStateEnvelope | undefined>;
   putPackState(sessionId: string, envelope: PackStateEnvelope): Promise<void>;
-  appendEvent(
+  getCatalogPin(sessionId: string): Promise<CatalogPinProjection | undefined>;
+  putCatalogPin(projection: CatalogPinProjection): Promise<void>;
+  getSandboxProofSession(
     sessionId: string,
-    sourceType: string,
-    payload: Record<string, unknown>,
-  ): Promise<StoredEvent>;
+  ): Promise<SandboxProofSession | undefined>;
+  putSandboxProofSession(record: SandboxProofSession): Promise<void>;
+  appendDashboardEvent(event: DashboardEvent): Promise<void>;
+  listDashboardEvents(
+    sessionId?: string,
+    limit?: number,
+  ): Promise<DashboardEvent[]>;
   /**
    * Advisory exact-owner read for boundaries that must fail before provider
    * dispatch. Every durable publication still uses one of the atomic CAS
@@ -748,29 +742,14 @@ export interface ConversationStore {
   isRunCommitFenceCurrent(
     input: IsRunCommitFenceCurrentInput,
   ): Promise<boolean>;
-  /**
-   * Atomically checks the durable run owner and appends the event in the same
-   * store operation. Implementations must not express this as check-then-write.
-   */
-  appendEventIfRunCurrent(
-    input: AppendEventIfRunCurrentInput,
-  ): Promise<AppendEventIfRunCurrentResult>;
-  /**
-   * Atomically validates the durable owner and commits the verified-state
-   * snapshot, any presentation references, the assistant turn, and its audit
-   * event. Implementations must not express this as check-then-write.
-   */
+  /** Atomically validates the durable owner and commits typed state, references, and transcript. */
   commitAssistantTurnIfRunCurrent(
     input: CommitAssistantTurnIfRunCurrentInput,
   ): Promise<CommitAssistantTurnIfRunCurrentResult>;
-  /**
-   * Atomically publishes compatibility state, typed pack state, references,
-   * and the assistant transcript turn when no run-owner fence is present.
-   */
+  /** Atomically publishes typed pack state, references, and the assistant transcript turn. */
   commitAssistantTurn(
     input: CommitAssistantTurnInput,
   ): Promise<CommitAssistantTurnResult>;
-  listEvents(sessionId: string): Promise<StoredEvent[]>;
   issueVerifiedRef(
     input: IssueVerifiedRefInput,
   ): Promise<IssueVerifiedRefResult>;

@@ -33,13 +33,10 @@ import type {
   SessionControl,
   SessionResetHook,
   SessionAgentStateInput,
-  StoredEvent,
   UpsertPendingCustomerTurnResult,
   WebhookDelivery,
   WebhookDeliveryChannel,
   AppendCustomerRunEventInput,
-  AppendEventIfRunCurrentInput,
-  AppendEventIfRunCurrentResult,
   CustomerRunPatch,
   AdvanceSessionAgentGenerationInput,
   AdvanceSessionAgentGenerationResult,
@@ -63,7 +60,6 @@ import {
   D1DatabaseLike,
   ConversationTurnRow,
   ConversationProfileRow,
-  StoredEventRow,
   IrreversibleOperationRow,
   DashboardEventRow,
   DashboardSessionSummary,
@@ -80,7 +76,6 @@ import {
   turnFromRow,
   parseNullablePayload,
   profileFromRow,
-  storedEventFromRow,
   dashboardEventFromRow,
   webhookDeliveryFromRow,
   sessionControlFromRow,
@@ -91,7 +86,6 @@ import {
   agentRunFromRow,
   agentRunTurnFromRow,
 } from './d1StoreSupport.js';
-import { appendD1EventIfRunCurrent } from './d1StoreRunCommit.js';
 import {
   advanceD1SessionAgentGeneration,
   claimD1AgentRunExecution,
@@ -268,64 +262,25 @@ export class D1StoreAgentOperations extends D1StoreConversationOperations {
     return (rows.results ?? []).map(turnFromRow).reverse();
   }
 
-  async appendEvent(
-    sessionId: string,
-    sourceType: string,
-    payload: Record<string, unknown>,
-  ): Promise<StoredEvent> {
-    const event: StoredEvent = {
-      id: `event_${crypto.randomUUID()}`,
-      sessionId,
-      sourceType,
-      payload,
-      createdAt: new Date().toISOString(),
-    };
-    await this.db
-      .prepare(
-        `INSERT INTO conversation_events (id, session_id, source_type, payload, created_at) VALUES (?, ?, ?, ?, ?)`,
-      )
-      .bind(
-        event.id,
-        event.sessionId,
-        event.sourceType,
-        JSON.stringify(event.payload),
-        event.createdAt,
-      )
-      .run();
-    return event;
-  }
-
-  async appendEventIfRunCurrent(
-    input: AppendEventIfRunCurrentInput,
-  ): Promise<AppendEventIfRunCurrentResult> {
-    return appendD1EventIfRunCurrent({
-      db: this.db,
-      operation: input,
-    });
-  }
-
-  async listEvents(sessionId: string): Promise<StoredEvent[]> {
-    const rows = await this.db
-      .prepare(
-        `SELECT * FROM conversation_events WHERE session_id = ? ORDER BY created_at ASC, id ASC`,
-      )
-      .bind(sessionId)
-      .all<StoredEventRow>();
-    return (rows.results ?? []).map(storedEventFromRow);
-  }
-
   async searchHistory(
     sessionId: string,
     query: string,
   ): Promise<HistorySearchResult[]> {
-    const sessionEvents = await this.listEvents(sessionId);
     const lower = query.toLowerCase();
-    return sessionEvents
-      .filter((event) => typeof event.payload.text === 'string')
-      .map((event) => {
-        const text = String(event.payload.text).toLowerCase();
+    const rows = await this.db
+      .prepare(
+        `SELECT * FROM conversation_turns
+         WHERE session_id = ? AND instr(lower(text), ?) > 0
+         ORDER BY ordinal ASC`,
+      )
+      .bind(sessionId, lower)
+      .all<ConversationTurnRow>();
+    return (rows.results ?? [])
+      .map(turnFromRow)
+      .map((turn) => {
+        const text = turn.text.toLowerCase();
         const directHit = text.includes(lower);
-        return { ...event, confidence: directHit ? 0.7 : 0 };
+        return { ...turn, confidence: directHit ? 0.7 : 0 };
       })
       .filter((event) => event.confidence > 0)
       .sort((a, b) => b.confidence - a.confidence);

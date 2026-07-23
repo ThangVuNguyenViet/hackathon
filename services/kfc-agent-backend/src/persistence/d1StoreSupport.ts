@@ -32,7 +32,8 @@ import type {
   SessionControl,
   SessionResetHook,
   SessionAgentStateInput,
-  StoredEvent,
+  CatalogPinProjection,
+  SandboxProofSession,
   UpsertPendingCustomerTurnResult,
   WebhookDelivery,
   WebhookDeliveryChannel,
@@ -46,6 +47,7 @@ import {
   type CustomerRun,
   type CustomerRunEvent,
 } from '../customerRuns/contracts.js';
+import type { CatalogObservation } from '../catalog/catalogObservation.js';
 
 export interface D1Result<T = Record<string, unknown>> {
   results?: T[];
@@ -92,6 +94,22 @@ export interface PackStateRow {
   envelope_json: string;
 }
 
+export interface CatalogPinRow {
+  session_id: string;
+  observation_json: string;
+  updated_at: string;
+}
+
+export interface SandboxProofSessionRow {
+  session_id: string;
+  customer_id: string;
+  authenticated: number;
+  expires_at: string;
+  order_id: string | null;
+  provider_profile_json: string | null;
+  created_at: string;
+}
+
 export interface ConversationProfileRow {
   channel: ConversationProfile['channel'];
   external_user_id: string;
@@ -99,14 +117,6 @@ export interface ConversationProfileRow {
   avatar_url: string | null;
   profile_source: ConversationProfile['profileSource'];
   profile_updated_at: string;
-}
-
-export interface StoredEventRow {
-  id: string;
-  session_id: string;
-  source_type: string;
-  payload: string;
-  created_at: string;
 }
 
 export interface IrreversibleOperationRow {
@@ -266,6 +276,8 @@ export const schemaStatements = [
   `CREATE UNIQUE INDEX IF NOT EXISTS conversation_turns_session_external_message_idx
     ON conversation_turns (session_id, external_message_id)
     WHERE external_message_id IS NOT NULL`,
+  `CREATE UNIQUE INDEX IF NOT EXISTS conversation_turns_session_ordinal_idx
+    ON conversation_turns (session_id, ordinal)`,
   `CREATE TABLE IF NOT EXISTS conversation_summaries (
     session_id TEXT PRIMARY KEY,
     schema_version INTEGER NOT NULL CHECK (schema_version = 1),
@@ -282,11 +294,20 @@ export const schemaStatements = [
     updated_at TEXT NOT NULL,
     PRIMARY KEY (session_id, pack_id, pack_version)
   )`,
-  `CREATE TABLE IF NOT EXISTS conversation_events (
-    id TEXT PRIMARY KEY,
-    session_id TEXT NOT NULL,
-    source_type TEXT NOT NULL,
-    payload TEXT NOT NULL,
+  `CREATE TABLE IF NOT EXISTS catalog_pin_projections (
+    session_id TEXT PRIMARY KEY,
+    observation_json TEXT NOT NULL CHECK (json_valid(observation_json)),
+    updated_at TEXT NOT NULL
+  )`,
+  `CREATE TABLE IF NOT EXISTS sandbox_proof_sessions (
+    session_id TEXT PRIMARY KEY,
+    customer_id TEXT NOT NULL,
+    authenticated INTEGER NOT NULL CHECK (authenticated IN (0, 1)),
+    expires_at TEXT NOT NULL,
+    order_id TEXT,
+    provider_profile_json TEXT CHECK (
+      provider_profile_json IS NULL OR json_valid(provider_profile_json)
+    ),
     created_at TEXT NOT NULL
   )`,
   `CREATE TABLE IF NOT EXISTS dashboard_events (
@@ -671,12 +692,26 @@ export function profileFromRow(
   };
 }
 
-export function storedEventFromRow(row: StoredEventRow): StoredEvent {
+export function catalogPinFromRow(row: CatalogPinRow): CatalogPinProjection {
   return {
-    id: row.id,
     sessionId: row.session_id,
-    sourceType: row.source_type,
-    payload: parsePayload(row.payload),
+    observation: JSON.parse(row.observation_json) as CatalogObservation,
+    updatedAt: row.updated_at,
+  };
+}
+
+export function sandboxProofSessionFromRow(
+  row: SandboxProofSessionRow,
+): SandboxProofSession {
+  return {
+    sessionId: row.session_id,
+    customerId: row.customer_id,
+    authenticated: row.authenticated === 1,
+    expiresAt: row.expires_at,
+    orderId: row.order_id,
+    providerProfile: row.provider_profile_json
+      ? (JSON.parse(row.provider_profile_json) as Record<string, unknown>)
+      : null,
     createdAt: row.created_at,
   };
 }

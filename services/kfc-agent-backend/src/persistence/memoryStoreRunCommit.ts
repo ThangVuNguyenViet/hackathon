@@ -5,8 +5,6 @@ import type {
 } from '../domain/types.js';
 import type { CustomerRun } from '../customerRuns/contracts.js';
 import type {
-  AppendEventIfRunCurrentInput,
-  AppendEventIfRunCurrentResult,
   CommitAssistantTurnIfRunCurrentInput,
   CommitAssistantTurnIfRunCurrentResult,
   CommitAssistantTurnInput,
@@ -14,7 +12,6 @@ import type {
   IrreversibleOperationInput,
   IsRunCommitFenceCurrentInput,
   SessionControl,
-  StoredEvent,
 } from './contracts.js';
 import type { MemoryIrreversibleOperationRecord } from './memoryStoreIrreversibleOperations.js';
 import {
@@ -40,52 +37,12 @@ interface MemoryRunCommitGuardState extends MemoryRunCommitState {
   now: number;
 }
 
-export function appendMemoryEventIfRunCurrent(input: {
-  operation: AppendEventIfRunCurrentInput;
-  customerRuns: ReadonlyMap<string, CustomerRun>;
-  agentRuns: ReadonlyMap<string, AgentRun>;
-  sessionAgentStates: ReadonlyMap<string, SessionAgentState>;
-  irreversibleOperations: ReadonlyMap<
-    string,
-    MemoryIrreversibleOperationRecord
-  >;
-  sessionControls: ReadonlyMap<string, SessionControl>;
-  events: StoredEvent[];
-  now?: () => number;
-}): AppendEventIfRunCurrentResult {
-  const { operation } = input;
-  const now = input.now?.() ?? Date.now();
-  const current = memoryRunCommitFenceIsCurrent({
-    guard: operation,
-    customerRuns: input.customerRuns,
-    agentRuns: input.agentRuns,
-    sessionAgentStates: input.sessionAgentStates,
-    irreversibleOperations: input.irreversibleOperations,
-    sessionControls: input.sessionControls,
-    now,
-  });
-  if (!current) return { status: 'stale' };
-  // No await may be introduced between the owner check and this write.
-  // MemoryStore run-state mutations are likewise synchronous until their
-  // returned promises resolve, making this one event-loop transaction.
-  const event: StoredEvent = {
-    id: `event_${input.events.length + 1}`,
-    sessionId: operation.sessionId,
-    sourceType: operation.sourceType,
-    payload: structuredClone(operation.payload),
-    createdAt: new Date('2026-07-07T00:00:00.000Z').toISOString(),
-  };
-  input.events.push(event);
-  return { status: 'committed', event };
-}
-
 export function commitMemoryAssistantTurnIfRunCurrent(input: {
   operation: CommitAssistantTurnIfRunCurrentInput;
   state: MemoryRunCommitState;
   sessionGenerations: ReadonlyMap<string, number>;
   verifiedRefs: Map<string, MemoryVerifiedRefStorageSnapshot>;
   turns: ConversationTurn[];
-  events: StoredEvent[];
   packStates: Map<string, PackStateEnvelope>;
   now?: () => number;
 }): CommitAssistantTurnIfRunCurrentResult {
@@ -100,7 +57,7 @@ export function commitMemoryAssistantTurnIfRunCurrent(input: {
   if (
     !memoryRunCommitFenceIsCurrent({
       guard: {
-        sessionId: input.operation.stateEvent.sessionId,
+        sessionId: input.operation.assistantTurn.sessionId,
         fence: input.operation.fence,
         ...(notAfter === undefined ? {} : { notAfter }),
       },
@@ -140,7 +97,6 @@ export function commitMemoryAssistantTurnIfRunCurrent(input: {
       memoryVerifiedRefStorageSnapshot(record, sessionGeneration),
     );
   }
-  input.events.push(prepared.stateEvent);
   if (input.operation.packState) {
     const { envelope } = input.operation.packState;
     input.packStates.set(
@@ -149,7 +105,6 @@ export function commitMemoryAssistantTurnIfRunCurrent(input: {
     );
   }
   input.turns.push(prepared.turn);
-  input.events.push(prepared.turnEvent);
   return {
     status: 'committed',
     ...structuredClone(prepared),
@@ -161,7 +116,6 @@ export function commitMemoryAssistantTurn(input: {
   sessionGenerations: ReadonlyMap<string, number>;
   verifiedRefs: Map<string, MemoryVerifiedRefStorageSnapshot>;
   turns: ConversationTurn[];
-  events: StoredEvent[];
   packStates: Map<string, PackStateEnvelope>;
   now?: () => number;
 }): CommitAssistantTurnResult {
@@ -192,14 +146,12 @@ export function commitMemoryAssistantTurn(input: {
       memoryVerifiedRefStorageSnapshot(record, sessionGeneration),
     );
   }
-  input.events.push(prepared.stateEvent);
   writeMemoryPackState(
     input.packStates,
     prepared.turn.sessionId,
     input.operation.packState,
   );
   input.turns.push(prepared.turn);
-  input.events.push(prepared.turnEvent);
   return { status: 'committed', ...structuredClone(prepared) };
 }
 

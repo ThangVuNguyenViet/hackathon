@@ -6,12 +6,9 @@ import type { ConversationTurn } from '../domain/types.js';
 import type {
   CommitAssistantTurnIfRunCurrentInput,
   CommitAssistantTurnInput,
-  StoredEvent,
 } from './contracts.js';
 
 export interface PreparedAssistantTurnCommit {
-  stateEvent: StoredEvent;
-  turnEvent: StoredEvent;
   turn: ConversationTurn;
   verifiedRefs: VerifiedRefRecord[];
 }
@@ -22,8 +19,9 @@ export function prepareAssistantTurnCommit(
   ordinal = 0,
 ): PreparedAssistantTurnCommit {
   if (
-    input.stateEvent.sessionId !== input.assistantTurn.sessionId ||
-    input.assistantTurn.role !== 'assistant'
+    input.assistantTurn.role !== 'assistant' ||
+    (input.packState &&
+      input.packState.sessionId !== input.assistantTurn.sessionId)
   ) {
     throw new Error('agent_turn_commit_shape_invalid');
   }
@@ -45,26 +43,5 @@ export function prepareAssistantTurnCommit(
     ordinal,
     createdAt,
   };
-  const stateEvent: StoredEvent = {
-    id: `event_${crypto.randomUUID()}`,
-    sessionId: input.stateEvent.sessionId,
-    sourceType: input.stateEvent.sourceType,
-    payload: structuredClone(input.stateEvent.payload),
-    createdAt: now.toISOString(),
-  };
-  const turnEvent: StoredEvent = {
-    id: `event_${crypto.randomUUID()}`,
-    sessionId: turn.sessionId,
-    sourceType: 'conversation_turn:assistant',
-    payload: {
-      text: turn.text,
-      channel: turn.channel,
-      deliveryStatus: turn.deliveryStatus,
-      externalMessageId: turn.externalMessageId,
-      externalUserId: turn.externalUserId,
-      metadata: structuredClone(turn.metadata),
-    },
-    createdAt: now.toISOString(),
-  };
-  return { stateEvent, turnEvent, turn, verifiedRefs };
+  return { turn, verifiedRefs };
 }

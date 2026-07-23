@@ -32,7 +32,6 @@ import type {
   SessionControl,
   SessionResetHook,
   SessionAgentStateInput,
-  StoredEvent,
   UpsertPendingCustomerTurnResult,
   WebhookDelivery,
   WebhookDeliveryChannel,

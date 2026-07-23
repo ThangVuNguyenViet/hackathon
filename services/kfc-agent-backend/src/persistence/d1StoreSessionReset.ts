@@ -161,7 +161,13 @@ export async function resetD1Session(input: {
       .bind(input.sessionId, input.sessionId, nextGeneration),
     input.db
       .prepare(
-        `DELETE FROM conversation_events
+        `DELETE FROM catalog_pin_projections
+       WHERE session_id = ? AND ${resetFenceSql}`,
+      )
+      .bind(input.sessionId, input.sessionId, nextGeneration),
+    input.db
+      .prepare(
+        `DELETE FROM sandbox_proof_sessions
        WHERE session_id = ? AND ${resetFenceSql}`,
       )
       .bind(input.sessionId, input.sessionId, nextGeneration),

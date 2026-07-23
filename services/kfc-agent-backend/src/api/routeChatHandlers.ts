@@ -60,6 +60,8 @@ import {
   kfcGenUiVerifiedStateRevision,
 } from '../genui/kfcGenUi.js';
 import { runAgentTurn } from '../agent/kfcAgent.js';
+import { loadVerifiedStateProjection } from '../agent/verifiedState.js';
+import { kfcVietnamPack } from '../businessPacks/kfcVietnam/kfcVietnamPack.js';
 import type { AgentState } from '../agent/agentState.js';
 import {
   calculateMonitorSessionIntelligence,
@@ -606,13 +608,13 @@ export function createChatRouteHandlers(context: RouteHandlerContext) {
       if (reservation.status !== 'reserved') {
         return { status: 409, body: { errorCode: 'genui_action_in_progress' } };
       }
-      const latestVerifiedStateEvent = [
-        ...(await store.listEvents(parsed.data.sessionId)),
-      ]
-        .reverse()
-        .find(({ sourceType }) => sourceType === 'agent:verified_state');
-      const latestVerifiedState =
-        latestVerifiedStateEvent?.payload.verifiedState;
+      const latestVerifiedState = await loadVerifiedStateProjection({
+        store,
+        sessionId: parsed.data.sessionId,
+        packRef: kfcVietnamPack.ref,
+        schemaVersion: kfcVietnamPack.stateSchemaVersion,
+        parseState: kfcVietnamPack.parseState,
+      });
       if (
         !isRecord(latestVerifiedState) ||
         kfcGenUiVerifiedStateRevision(latestVerifiedState) !==

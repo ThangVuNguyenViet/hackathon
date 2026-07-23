@@ -14,14 +14,6 @@ CREATE UNIQUE INDEX IF NOT EXISTS conversation_turns_session_external_message_id
   ON conversation_turns (session_id, external_message_id)
   WHERE external_message_id IS NOT NULL;
 
-CREATE TABLE IF NOT EXISTS conversation_events (
-  id TEXT PRIMARY KEY,
-  session_id TEXT NOT NULL,
-  source_type TEXT NOT NULL,
-  payload TEXT NOT NULL,
-  created_at TEXT NOT NULL
-);
-
 CREATE TABLE IF NOT EXISTS dashboard_events (
   id TEXT PRIMARY KEY,
   session_id TEXT NOT NULL,

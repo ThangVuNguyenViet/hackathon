@@ -179,15 +179,6 @@ export async function prepareD1NonAgentTextDeliveryTurn(input: {
   const agentBindingDigest = await nonAgentTextDeliveryAgentBindingDigest(
     operation.expectedAgentId,
   );
-  const eventId = `event_non_agent_${operation.requestKey}`;
-  const eventPayload = JSON.stringify({
-    text: operation.turn.text,
-    channel: operation.turn.channel,
-    deliveryStatus: operation.turn.deliveryStatus,
-    externalMessageId: operation.turn.externalMessageId,
-    externalUserId: operation.turn.externalUserId,
-    metadata: operation.turn.metadata,
-  });
   const predicates = `
     request_key = ?
     AND session_binding_digest = ?
@@ -238,47 +229,6 @@ export async function prepareD1NonAgentTextDeliveryTurn(input: {
         JSON.stringify(operation.turn.metadata),
         operation.turn.createdAt,
         ...predicateValues,
-      ),
-    input.db
-      .prepare(
-        `INSERT INTO conversation_events (
-         id, session_id, source_type, payload, created_at
-       )
-       SELECT ?, ?, ?, ?, ?
-       FROM non_agent_text_deliveries
-       WHERE ${predicates}
-         AND EXISTS (
-           SELECT 1 FROM conversation_turns
-           WHERE id = ?
-             AND session_id = ?
-             AND channel = ?
-             AND role = ?
-             AND text = ?
-             AND external_message_id IS ?
-             AND external_user_id IS ?
-             AND delivery_status = ?
-             AND metadata = ?
-             AND created_at = ?
-         )
-       ON CONFLICT(id) DO NOTHING`,
-      )
-      .bind(
-        eventId,
-        operation.turn.sessionId,
-        'conversation_turn:assistant',
-        eventPayload,
-        operation.turn.createdAt,
-        ...predicateValues,
-        operation.turn.id,
-        operation.turn.sessionId,
-        operation.turn.channel,
-        operation.turn.role,
-        operation.turn.text,
-        operation.turn.externalMessageId,
-        operation.turn.externalUserId,
-        operation.turn.deliveryStatus,
-        JSON.stringify(operation.turn.metadata),
-        operation.turn.createdAt,
       ),
   ]);
   const inserted = results[0]?.results?.[0] as ConversationTurnRow | undefined;

@@ -3,7 +3,7 @@ import { MemoryStore } from '../../src/persistence/memoryStore.js';
 import { createPackStateEnvelope } from '../../src/runtime/businessPack.js';
 
 describe('MemoryStore conversation contract', () => {
-  it('keeps sessions isolated and records a product turn with its audit event', async () => {
+  it('keeps canonical transcript sessions isolated', async () => {
     const store = new MemoryStore();
     const first = await store.appendTurn({
       sessionId: 'session-a',
@@ -28,16 +28,6 @@ describe('MemoryStore conversation contract', () => {
 
     expect(await store.listTurns('session-a')).toEqual([first]);
     expect(first.ordinal).toBe(1);
-    expect(await store.listEvents('session-a')).toMatchObject([
-      {
-        sessionId: 'session-a',
-        sourceType: 'conversation_turn:user',
-        payload: {
-          text: 'Xin chào',
-          externalMessageId: 'message-a',
-        },
-      },
-    ]);
   });
 
   it('allocates monotonic per-session ordinals under concurrent appends', async () => {
@@ -116,11 +106,6 @@ describe('MemoryStore conversation contract', () => {
     });
 
     const result = await store.commitAssistantTurn({
-      stateEvent: {
-        sessionId: 'session-a',
-        sourceType: 'agent:verified_state',
-        payload: { verifiedState: { cartId: 'cart-a' } },
-      },
       packState: { sessionId: 'session-a', envelope },
       assistantTurn: {
         sessionId: 'session-a',
@@ -139,7 +124,6 @@ describe('MemoryStore conversation contract', () => {
     expect(
       await store.getPackState('session-a', envelope.packRef),
     ).toEqual(envelope);
-    expect(await store.listEvents('session-a')).toHaveLength(2);
   });
 
   it('does not advance compatibility or pack state when assistant publication fails', async () => {
@@ -152,11 +136,6 @@ describe('MemoryStore conversation contract', () => {
 
     await expect(
       store.commitAssistantTurn({
-        stateEvent: {
-          sessionId: 'session-a',
-          sourceType: 'agent:verified_state',
-          payload: { verifiedState: { cartId: 'cart-a' } },
-        },
         packState: { sessionId: 'session-a', envelope },
         assistantTurn: {
           sessionId: 'session-a',
@@ -172,7 +151,6 @@ describe('MemoryStore conversation contract', () => {
     ).rejects.toThrow('agent_turn_commit_shape_invalid');
 
     expect(await store.listTurns('session-a')).toEqual([]);
-    expect(await store.listEvents('session-a')).toEqual([]);
     expect(
       await store.getPackState('session-a', envelope.packRef),
     ).toBeUndefined();

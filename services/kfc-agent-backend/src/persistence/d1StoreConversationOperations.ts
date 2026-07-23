@@ -38,7 +38,8 @@ import type {
   TransitionSessionAuthorityResult,
   SessionResetHook,
   SessionAgentStateInput,
-  StoredEvent,
+  CatalogPinProjection,
+  SandboxProofSession,
   UpsertPendingCustomerTurnResult,
   WebhookDelivery,
   WebhookDeliveryChannel,
@@ -75,7 +76,8 @@ import {
   D1DatabaseLike,
   ConversationTurnRow,
   ConversationProfileRow,
-  StoredEventRow,
+  CatalogPinRow,
+  SandboxProofSessionRow,
   IrreversibleOperationRow,
   DashboardEventRow,
   DashboardSessionSummary,
@@ -95,7 +97,8 @@ import {
   turnFromRow,
   parseNullablePayload,
   profileFromRow,
-  storedEventFromRow,
+  catalogPinFromRow,
+  sandboxProofSessionFromRow,
   dashboardEventFromRow,
   webhookDeliveryFromRow,
   sessionControlFromRow,
@@ -126,11 +129,6 @@ import {
 import { resetD1Session } from './d1StoreSessionReset.js';
 
 export abstract class D1StoreConversationOperations extends D1StoreCore {
-  abstract appendEvent(
-    sessionId: string,
-    sourceType: string,
-    payload: Record<string, unknown>,
-  ): Promise<StoredEvent>;
   async commitAssistantTurnIfRunCurrent(
     input: CommitAssistantTurnIfRunCurrentInput,
   ): Promise<CommitAssistantTurnIfRunCurrentResult> {
@@ -243,16 +241,7 @@ export abstract class D1StoreConversationOperations extends D1StoreCore {
       .bind(turnId)
       .first<ConversationTurnRow>();
     if (!row) throw new Error('conversation_turn_insert_failed');
-    const turn = turnFromRow(row);
-    await this.appendEvent(input.sessionId, `conversation_turn:${input.role}`, {
-      text: input.text,
-      channel: input.channel,
-      deliveryStatus: input.deliveryStatus,
-      externalMessageId: input.externalMessageId,
-      externalUserId: input.externalUserId,
-      metadata: input.metadata,
-    });
-    return turn;
+    return turnFromRow(row);
   }
 
   async upsertImportedTurn(
@@ -323,14 +312,6 @@ export abstract class D1StoreConversationOperations extends D1StoreCore {
         input.sessionId,
       )
       .run();
-    await this.appendEvent(input.sessionId, `conversation_turn:${input.role}`, {
-      text: input.text,
-      channel: input.channel,
-      deliveryStatus: input.deliveryStatus,
-      externalMessageId: input.externalMessageId,
-      externalUserId: input.externalUserId,
-      metadata: input.metadata,
-    });
     const row = await this.db
       .prepare(`SELECT * FROM conversation_turns WHERE id = ? LIMIT 1`)
       .bind(turnId)
@@ -454,6 +435,78 @@ export abstract class D1StoreConversationOperations extends D1StoreCore {
         envelope.packRef.version,
         JSON.stringify(envelope),
         new Date().toISOString(),
+      )
+      .run();
+  }
+
+  async getCatalogPin(
+    sessionId: string,
+  ): Promise<CatalogPinProjection | undefined> {
+    const row = await this.db
+      .prepare(
+        `SELECT session_id, observation_json, updated_at
+         FROM catalog_pin_projections WHERE session_id = ? LIMIT 1`,
+      )
+      .bind(sessionId)
+      .first<CatalogPinRow>();
+    return row ? catalogPinFromRow(row) : undefined;
+  }
+
+  async putCatalogPin(projection: CatalogPinProjection): Promise<void> {
+    await this.db
+      .prepare(
+        `INSERT INTO catalog_pin_projections (
+           session_id, observation_json, updated_at
+         ) VALUES (?, ?, ?)
+         ON CONFLICT(session_id) DO UPDATE SET
+           observation_json = excluded.observation_json,
+           updated_at = excluded.updated_at`,
+      )
+      .bind(
+        projection.sessionId,
+        JSON.stringify(projection.observation),
+        projection.updatedAt,
+      )
+      .run();
+  }
+
+  async getSandboxProofSession(
+    sessionId: string,
+  ): Promise<SandboxProofSession | undefined> {
+    const row = await this.db
+      .prepare(
+        `SELECT * FROM sandbox_proof_sessions WHERE session_id = ? LIMIT 1`,
+      )
+      .bind(sessionId)
+      .first<SandboxProofSessionRow>();
+    return row ? sandboxProofSessionFromRow(row) : undefined;
+  }
+
+  async putSandboxProofSession(record: SandboxProofSession): Promise<void> {
+    await this.db
+      .prepare(
+        `INSERT INTO sandbox_proof_sessions (
+           session_id, customer_id, authenticated, expires_at, order_id,
+           provider_profile_json, created_at
+         ) VALUES (?, ?, ?, ?, ?, ?, ?)
+         ON CONFLICT(session_id) DO UPDATE SET
+           customer_id = excluded.customer_id,
+           authenticated = excluded.authenticated,
+           expires_at = excluded.expires_at,
+           order_id = excluded.order_id,
+           provider_profile_json = excluded.provider_profile_json,
+           created_at = excluded.created_at`,
+      )
+      .bind(
+        record.sessionId,
+        record.customerId,
+        record.authenticated,
+        record.expiresAt,
+        record.orderId,
+        record.providerProfile === null
+          ? null
+          : JSON.stringify(record.providerProfile),
+        record.createdAt,
       )
       .run();
   }

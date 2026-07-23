@@ -71,14 +71,6 @@ export async function commitD1AssistantTurnIfRunCurrent(input: {
     }
   }
 
-  requiredResultIndexes.push(statements.length);
-  statements.push(
-    eventStatement(
-      input.db,
-      prepared.stateEvent,
-      assistantTurnEligibility(input.operation),
-    ),
-  );
   if (input.operation.packState) {
     const packState = input.operation.packState;
     if (packState.sessionId !== prepared.turn.sessionId) {
@@ -116,15 +108,6 @@ export async function commitD1AssistantTurnIfRunCurrent(input: {
       assistantTurnEligibility(input.operation),
     ),
   );
-  requiredResultIndexes.push(statements.length);
-  statements.push(
-    eventStatement(
-      input.db,
-      prepared.turnEvent,
-      assistantTurnEligibility(input.operation),
-    ),
-  );
-
   const results = await input.db.batch(statements);
   const changes = requiredResultIndexes.map((index) =>
     Number(results[index]?.meta.changes ?? 0),
@@ -192,8 +175,6 @@ export async function commitD1AssistantTurn(input: {
     }
   }
   const unconditional = { sql: '1', bindings: [] };
-  requiredResultIndexes.push(statements.length);
-  statements.push(eventStatement(input.db, prepared.stateEvent, unconditional));
   if (input.operation.packState) {
     requiredResultIndexes.push(statements.length);
     statements.push(
@@ -207,8 +188,6 @@ export async function commitD1AssistantTurn(input: {
   }
   requiredResultIndexes.push(statements.length);
   statements.push(turnStatement(input.db, prepared.turn, unconditional));
-  requiredResultIndexes.push(statements.length);
-  statements.push(eventStatement(input.db, prepared.turnEvent, unconditional));
 
   const results = await input.db.batch(statements);
   if (
@@ -253,34 +232,6 @@ function packStateStatement(
       packState.envelope.packRef.version,
       JSON.stringify(packState.envelope),
       updatedAt,
-      ...eligible.bindings,
-    );
-}
-
-function eventStatement(
-  db: D1DatabaseLike,
-  event: {
-    id: string;
-    sessionId: string;
-    sourceType: string;
-    payload: Record<string, unknown>;
-    createdAt: string;
-  },
-  eligible: D1RunCommitPredicate,
-): D1PreparedStatement {
-  return db
-    .prepare(
-      `INSERT INTO conversation_events
-       (id, session_id, source_type, payload, created_at)
-     SELECT ?, ?, ?, ?, ?
-     WHERE ${eligible.sql}`,
-    )
-    .bind(
-      event.id,
-      event.sessionId,
-      event.sourceType,
-      JSON.stringify(event.payload),
-      event.createdAt,
       ...eligible.bindings,
     );
 }
@@ -349,7 +300,7 @@ function assistantTurnEligibility(
   input: CommitAssistantTurnIfRunCurrentInput,
 ): D1RunCommitPredicate {
   return d1RunCommitEligibility({
-    sessionId: input.stateEvent.sessionId,
+    sessionId: input.assistantTurn.sessionId,
     fence: input.fence,
     ...(input.notAfter === undefined ? {} : { notAfter: input.notAfter }),
   });

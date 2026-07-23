@@ -213,7 +213,8 @@ curl -s 'http://localhost:8787/webhooks/messenger?hub.mode=subscribe&hub.verify_
 
 ## Optional Cloud Run Fallback
 
-Cloud Run + Neon is retained only as a fallback path for historical work. If Worker deploy is unavailable, use `scripts/deploy-backend-cloud-run.sh` and set the Messenger callback to `<CLOUD_RUN_URL>/webhooks/messenger`. Do not switch the hackathon submission to Cloud Run unless the Worker path is blocked.
+The KFC backend production path is Cloudflare Workers with D1. There is no
+secondary Node/Postgres deployment path.
 
 ## Cost Controls
 

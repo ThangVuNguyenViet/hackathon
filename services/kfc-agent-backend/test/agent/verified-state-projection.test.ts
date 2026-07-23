@@ -35,16 +35,12 @@ describe('verified state projection', () => {
         packRef: kfcRef,
         schemaVersion: '1',
         parseState,
-        allowLegacyKfcV1Fallback: true,
       }),
     ).resolves.toEqual({ cartId: 'cart-a' });
   });
 
-  it('allows the legacy event fallback only for kfc-vietnam v1', async () => {
+  it('does not recover business state from a legacy event bag', async () => {
     const store = new MemoryStore();
-    await store.appendEvent('session-a', 'agent:verified_state', {
-      verifiedState: { cartId: 'legacy-cart' },
-    });
 
     await expect(
       loadVerifiedStateProjection({
@@ -53,18 +49,7 @@ describe('verified state projection', () => {
         packRef: kfcRef,
         schemaVersion: '1',
         parseState,
-        allowLegacyKfcV1Fallback: true,
       }),
-    ).resolves.toEqual({ cartId: 'legacy-cart' });
-    await expect(
-      loadVerifiedStateProjection({
-        store,
-        sessionId: 'session-a',
-        packRef: { packId: 'pvcfc-public', version: '1.0.0' },
-        schemaVersion: '1',
-        parseState,
-        allowLegacyKfcV1Fallback: true,
-      }),
-    ).rejects.toThrow('pack_state_legacy_fallback_forbidden');
+    ).resolves.toBeUndefined();
   });
 });

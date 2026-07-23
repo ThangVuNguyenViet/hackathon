@@ -57,6 +57,12 @@ describe('D1 migration 0021', () => {
       try {
         for (const statement of schemaStatements) fresh.exec(statement);
         expect(columns(database)).toEqual(columns(fresh));
+        expect(
+          fresh
+            .prepare(`PRAGMA index_list(conversation_turns)`)
+            .all()
+            .map((row) => Reflect.get(row, 'name')),
+        ).toContain('conversation_turns_session_ordinal_idx');
       } finally {
         fresh.close();
       }

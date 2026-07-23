@@ -62,11 +62,6 @@ describe('D1 context and state contract', () => {
 
     await expect(
       store.commitAssistantTurn({
-        stateEvent: {
-          sessionId: 'session-a',
-          sourceType: 'agent:verified_state',
-          payload: { verifiedState: { cartId: 'cart-a' } },
-        },
         packState: { sessionId: 'session-a', envelope },
         assistantTurn: {
           sessionId: 'session-a',
@@ -82,7 +77,6 @@ describe('D1 context and state contract', () => {
     ).rejects.toThrow('injected assistant failure');
 
     expect(await store.listTurns('session-a')).toEqual([]);
-    expect(await store.listEvents('session-a')).toEqual([]);
     expect(
       await store.getPackState('session-a', envelope.packRef),
     ).toBeUndefined();

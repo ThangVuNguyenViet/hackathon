@@ -26,6 +26,7 @@ import type {
 import { buildBoundedRecentTurns } from '../session/sessionContext.js';
 import type { RouteOptions } from './routeHandlerContracts.js';
 import { dashboardEventId } from './routeHandlerSupport.js';
+import { kfcVietnamPack } from '../businessPacks/kfcVietnam/kfcVietnamPack.js';
 
 interface MonitorAgentTurnOutput {
   state: AgentState;
@@ -54,6 +55,22 @@ interface DurableMonitorRefinementLease {
 }
 
 const monitorRefinementDeadlineMs = 25_000;
+
+export function buildMonitorEvidenceRevision(input: {
+  latestTurnOrdinal: number;
+  customerTurnCount: number;
+  packStateSha256: string | null;
+  sessionAuthorityGeneration: number;
+  agentMode: SessionControl['agentMode'];
+  assignedAgentId: string | null;
+  latestDashboardEvent: {
+    id: string;
+    type: ReturnType<DashboardEventBus['getEvents']>[number]['type'];
+    createdAt: string;
+  } | null;
+}): string {
+  return JSON.stringify(input);
+}
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
@@ -253,31 +270,33 @@ export function createRouteMonitorRuntime(input: {
   async function captureDurableMonitorEvidence(
     sessionId: string,
   ): Promise<DurableMonitorEvidence> {
-    const [turns, events, control] = await Promise.all([
+    const [turns, packState, control, dashboardEvents] = await Promise.all([
       store.listTurns(sessionId),
-      store.listEvents(sessionId),
+      store.getPackState(sessionId, kfcVietnamPack.ref),
       store.getSessionControl(sessionId),
+      store.listDashboardEvents(sessionId),
     ]);
     const latestTurn = turns.at(-1);
-    const authoritativeEvents = events.filter(
-      (event) => event.sourceType !== 'llm:monitor_judge_failed',
-    );
-    const latestEvent = authoritativeEvents.at(-1);
+    const latestDashboardEvent = dashboardEvents.at(-1);
     const customerTurnCount = countCustomerTurns(turns);
     return {
       customerTurnCount,
       latestTurnId: latestTurn?.id ?? null,
       control,
-      revision: JSON.stringify({
+      revision: buildMonitorEvidenceRevision({
         customerTurnCount,
-        turnCount: turns.length,
-        latestTurnId: latestTurn?.id ?? null,
-        latestTurnCreatedAt: latestTurn?.createdAt ?? null,
-        eventCount: authoritativeEvents.length,
-        latestEventId: latestEvent?.id ?? null,
+        latestTurnOrdinal: latestTurn?.ordinal ?? 0,
+        packStateSha256: packState?.integrity.digest ?? null,
         agentMode: control.agentMode,
         assignedAgentId: control.assignedAgentId,
         sessionAuthorityGeneration: control.sessionAuthorityGeneration,
+        latestDashboardEvent: latestDashboardEvent
+          ? {
+              id: latestDashboardEvent.id,
+              type: latestDashboardEvent.type,
+              createdAt: latestDashboardEvent.createdAt,
+            }
+          : null,
       }),
     };
   }
@@ -311,7 +330,8 @@ export function createRouteMonitorRuntime(input: {
     error: unknown,
     fallbackMessage: string,
   ): Promise<void> {
-    await store.appendEvent(sessionId, 'llm:monitor_judge_failed', {
+    console.error('llm_monitor_judge_failed', {
+      sessionId,
       message: error instanceof Error ? error.message : fallbackMessage,
     });
   }
@@ -535,17 +555,6 @@ export function createRouteMonitorRuntime(input: {
     if (turns.length > 0) {
       let evidenceRevision: string | undefined;
       try {
-        // Dashboard buses are isolate-local. This durable audit marker makes a
-        // control transition visible to refinements scheduled by other Worker
-        // requests, even when the customer turn count did not change.
-        await store.appendEvent(
-          input.sessionId,
-          'monitor:session_control_evidence',
-          {
-            agentMode: (await store.getSessionControl(input.sessionId))
-              .agentMode,
-          },
-        );
         const durableEvidence = await captureDurableMonitorEvidence(
           input.sessionId,
         );

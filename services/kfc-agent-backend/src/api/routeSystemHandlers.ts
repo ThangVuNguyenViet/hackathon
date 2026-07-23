@@ -69,6 +69,8 @@ import {
   mockedUpstreamClientOptions,
 } from '../mock/mockedUpstreamProfile.js';
 import { paymentOrderIdentifierMatches } from '../ordering/paymentOrderAuthority.js';
+import { kfcVietnamPack } from '../businessPacks/kfcVietnam/kfcVietnamPack.js';
+import { createPackStateEnvelope } from '../runtime/businessPack.js';
 import type { ToolName } from '../ordering/types.js';
 import {
   CustomerRunCoordinator,
@@ -492,12 +494,8 @@ export function createSystemRouteHandlers(context: RouteHandlerContext) {
         store.listAgentRuns(sessionId),
         store.getSessionAgentState(sessionId),
         store
-          .listEvents(sessionId)
-          .then((events) =>
-            events.filter(
-              (event) => event.sourceType === 'catalog_observation_pinned',
-            ),
-          ),
+          .getCatalogPin(sessionId)
+          .then((projection) => (projection ? [projection] : [])),
         options.lifecycle?.proofForSession?.(sessionId) ??
           Promise.resolve({ instance: null, audit: [] }),
       ]);
@@ -597,9 +595,9 @@ export function createSystemRouteHandlers(context: RouteHandlerContext) {
       return { status: missing.length === 0 ? 200 : 409, body };
     },
     async kfcProofEnvelope(sessionId: string) {
-      const [turns, events, lifecycleSource] = await Promise.all([
+      const [turns, packState, lifecycleSource] = await Promise.all([
         store.listTurns(sessionId),
-        store.listEvents(sessionId),
+        store.getPackState(sessionId, kfcVietnamPack.ref),
         options.lifecycle?.proofForSession?.(sessionId) ??
           Promise.resolve({ instance: null, audit: [] }),
       ]);
@@ -615,7 +613,7 @@ export function createSystemRouteHandlers(context: RouteHandlerContext) {
           artifactKind: 'kfc-simple-agent-proof',
           runtime: 'simple-model-tool-loop',
           turns,
-          events,
+          packState,
           agent: options.agent?.identity ?? null,
           complete: missing.length === 0,
           missing,
@@ -683,17 +681,24 @@ export function createSystemRouteHandlers(context: RouteHandlerContext) {
           toolTrace: [],
         };
       }
-      await store.appendEvent(sessionId, 'proof:kfc_preconditions', {
+      await store.putSandboxProofSession({
+        sessionId,
         customerId: parsed.data.customerId,
         authenticated: parsed.data.authenticated,
         expiresAt,
         orderId: parsed.data.orderId ?? null,
         providerProfile: parsed.data.providerProfile ?? null,
+        createdAt: new Date().toISOString(),
       });
       if (verifiedState) {
-        await store.appendEvent(sessionId, 'agent:verified_state', {
-          verifiedState,
-        });
+        await store.putPackState(
+          sessionId,
+          await createPackStateEnvelope({
+            packRef: kfcVietnamPack.ref,
+            schemaVersion: kfcVietnamPack.stateSchemaVersion,
+            state: kfcVietnamPack.parseState(verifiedState),
+          }),
+        );
       }
       return {
         status: 201,

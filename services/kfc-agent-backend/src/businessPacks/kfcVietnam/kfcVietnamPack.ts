@@ -302,11 +302,10 @@ export const kfcVietnamPack: BusinessPack<
     const tracer = createSafeAgentTracer(
       input.tracer ?? createNoopAgentTracer(),
       (code, error) => {
-        void input.store
-          .appendEvent(input.sessionId, code, {
-            message: error instanceof Error ? error.message : String(error),
-          })
-          .catch(() => undefined);
+        console.error(code, {
+          sessionId: input.sessionId,
+          message: error instanceof Error ? error.message : String(error),
+        });
       },
     );
     const turnTrace = await tracer.startTurn({
@@ -336,7 +335,6 @@ export const kfcVietnamPack: BusinessPack<
           packRef: KFC_VIETNAM_PACK_REF,
           schemaVersion: '1',
           parseState: parseKfcVerifiedState,
-          allowLegacyKfcV1Fallback: true,
         }),
         input.store.listTurns(input.sessionId),
       ]);

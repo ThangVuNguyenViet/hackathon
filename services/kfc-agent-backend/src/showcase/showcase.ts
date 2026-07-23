@@ -130,10 +130,6 @@ export function showcaseScenarioFromExample(
   });
 }
 
-const catalogSessionId = 'showcase:catalog';
-const catalogEventType = 'showcase:catalog_cached';
-const resultEventType = 'showcase:result_completed:v2';
-
 export class ShowcaseService {
   constructor(
     private readonly options: {
@@ -166,41 +162,18 @@ export class ShowcaseService {
   }
 
   private async loadScenarios(): Promise<ShowcaseScenario[]> {
-    try {
-      const scenarios = await this.options.source.listScenarios();
-      if (scenarios.length === 0) throw new Error('showcase_dataset_empty');
-      const events = await this.options.store.listEvents(catalogSessionId);
-      const previous = events
-        .filter((event) => event.sourceType === catalogEventType)
-        .at(-1)?.payload.scenarios;
-      if (JSON.stringify(previous) !== JSON.stringify(scenarios)) {
-        await this.options.store.appendEvent(
-          catalogSessionId,
-          catalogEventType,
-          { scenarios },
-        );
-      }
-      return scenarios;
-    } catch (error) {
-      const events = await this.options.store.listEvents(catalogSessionId);
-      const cached = events
-        .filter((event) => event.sourceType === catalogEventType)
-        .at(-1)?.payload.scenarios;
-      if (!Array.isArray(cached)) throw error;
-      return z.array(showcaseScenarioSchema).parse(cached);
-    }
+    const scenarios = await this.options.source.listScenarios();
+    if (scenarios.length === 0) throw new Error('showcase_dataset_empty');
+    return scenarios;
   }
 
   private async latestResult(
     scenarioId: string,
     mode: ShowcaseMode,
   ): Promise<ShowcaseResult | undefined> {
-    const event = (
-      await this.options.store.listEvents(resultSessionId(scenarioId, mode))
-    )
-      .filter((candidate) => candidate.sourceType === resultEventType)
-      .at(-1);
-    return event?.payload as unknown as ShowcaseResult | undefined;
+    void scenarioId;
+    void mode;
+    return undefined;
   }
 }
 
@@ -210,10 +183,6 @@ export class ShowcaseValidationError extends Error {
   constructor(readonly code: string) {
     super(code);
   }
-}
-
-function resultSessionId(scenarioId: string, mode: ShowcaseMode): string {
-  return `showcase:result:${encodeURIComponent(scenarioId)}:${mode}`;
 }
 
 function record(value: unknown): Record<string, unknown> {

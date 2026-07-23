@@ -4,10 +4,7 @@ import type {
   ReplyIntent,
 } from './agentTurn.js';
 import type { AgentState } from './agentState.js';
-import {
-  emitDashboardEvent,
-  verifiedStateSnapshotSourceType,
-} from './turnSupport.js';
+import { emitDashboardEvent } from './turnSupport.js';
 import { buildVerifiedStateSnapshot } from './verifiedState.js';
 import { kfcGenUiAttachmentForPersistence } from '../genui/kfcGenUi.js';
 import { selectKfcGenUiAttachment } from '../genui/kfcGenUiSelector.js';
@@ -99,11 +96,6 @@ export async function persistCompletedTurn(input: {
     ? await input.turnInput.store
         .commitAssistantTurnIfRunCurrent({
           fence,
-          stateEvent: {
-            sessionId: input.turnInput.sessionId,
-            sourceType: verifiedStateSnapshotSourceType,
-            payload: { verifiedState },
-          },
           packState: {
             sessionId: input.turnInput.sessionId,
             envelope: packStateEnvelope,
@@ -117,11 +109,6 @@ export async function persistCompletedTurn(input: {
         })
     : await input.turnInput.store
         .commitAssistantTurn({
-          stateEvent: {
-            sessionId: input.turnInput.sessionId,
-            sourceType: verifiedStateSnapshotSourceType,
-            payload: { verifiedState },
-          },
           packState: {
             sessionId: input.turnInput.sessionId,
             envelope: packStateEnvelope,

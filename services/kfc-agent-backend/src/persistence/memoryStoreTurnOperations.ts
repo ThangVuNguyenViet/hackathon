@@ -4,11 +4,6 @@ import type { AppendConversationTurnInput } from './contracts.js';
 export async function appendMemoryConversationTurn(input: {
   turn: AppendConversationTurnInput;
   turns: ConversationTurn[];
-  appendEvent: (
-    sessionId: string,
-    sourceType: string,
-    payload: Record<string, unknown>,
-  ) => Promise<unknown>;
 }): Promise<ConversationTurn> {
   const existing = input.turn.id
     ? input.turns.find((turn) => turn.id === input.turn.id)
@@ -27,17 +22,5 @@ export async function appendMemoryConversationTurn(input: {
       new Date('2026-07-07T00:00:00.000Z').toISOString(),
   };
   input.turns.push(turn);
-  await input.appendEvent(
-    input.turn.sessionId,
-    `conversation_turn:${input.turn.role}`,
-    {
-      text: input.turn.text,
-      channel: input.turn.channel,
-      deliveryStatus: input.turn.deliveryStatus,
-      externalMessageId: input.turn.externalMessageId,
-      externalUserId: input.turn.externalUserId,
-      metadata: input.turn.metadata,
-    },
-  );
   return turn;
 }

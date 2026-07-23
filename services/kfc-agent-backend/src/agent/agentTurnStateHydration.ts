@@ -100,7 +100,6 @@ export async function rehydrateExactTurnStateReadOnly(
           Awaited<ReturnType<typeof loadPriorVerifiedState>>
         >;
       },
-      allowLegacyKfcV1Fallback: true,
     }),
     input.store.listTurns(input.sessionId),
   ]);

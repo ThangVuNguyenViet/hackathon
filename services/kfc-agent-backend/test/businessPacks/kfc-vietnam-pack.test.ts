@@ -113,15 +113,8 @@ describe('KFC Vietnam business pack compatibility', () => {
       (await store.listTurns(input.sessionId)).map((turn) => turn.role),
     ).toEqual(['user', 'assistant']);
     expect(
-      (await store.listEvents(input.sessionId)).map(
-        (event) => event.sourceType,
-      ),
-    ).toContain('agent:verified_state');
-    expect(
-      (await store.listEvents(input.sessionId)).some((event) =>
-        event.sourceType.startsWith('pack:'),
-      ),
-    ).toBe(false);
+      await store.getPackState(input.sessionId, kfcVietnamPack.ref),
+    ).toBeDefined();
     expect(() =>
       kfcVietnamPack.parseState(buildVerifiedStateSnapshot(output.state)),
     ).not.toThrow();

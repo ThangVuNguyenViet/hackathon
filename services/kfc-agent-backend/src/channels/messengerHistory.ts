@@ -320,14 +320,6 @@ export class MessengerHistorySyncService {
 
         if (result.inserted) {
           messagesImported += 1;
-          await this.input.store.appendEvent(
-            sessionId,
-            'messenger:history_imported_message',
-            {
-              conversationId: conversation.id,
-              message: message.raw,
-            },
-          );
           emitImportedDashboardEvents(this.input.dashboard, result.turn);
         } else {
           messagesSkipped += 1;

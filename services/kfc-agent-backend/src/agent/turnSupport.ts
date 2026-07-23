@@ -7,7 +7,6 @@ import {
   agentTraceScenarioId,
 } from './agentTraceContext.js';
 import type { AgentState } from './agentState.js';
-export const verifiedStateSnapshotSourceType = 'agent:verified_state';
 
 export function emitDashboardEvent(
   input: Pick<AgentTurnInput, 'sessionId' | 'dashboard'>,

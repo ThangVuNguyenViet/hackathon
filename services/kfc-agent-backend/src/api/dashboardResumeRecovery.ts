@@ -101,14 +101,10 @@ function scheduleRecovery(
     try {
       await task();
     } catch (error) {
-      await input.store.appendEvent(
-        input.sessionId,
-        'agent:resume_recovery_failed',
-        {
-          errorCode: 'resume_recovery_failed',
-          message: error instanceof Error ? error.message : String(error),
-        },
-      );
+      console.error('agent_resume_recovery_failed', {
+        sessionId: input.sessionId,
+        message: error instanceof Error ? error.message : String(error),
+      });
     }
   };
   if (input.defer) input.defer(guardedTask);

@@ -24,8 +24,10 @@ export function workerLifecycleOptions(env: WorkerEnv, store: D1Store) {
           ? Number(env.CATALOG_TTL_SECONDS)
           : 300,
       });
-      await store.appendEvent(sessionId, 'catalog_observation_pinned', {
+      await store.putCatalogPin({
+        sessionId,
         observation,
+        updatedAt: new Date().toISOString(),
       });
       const customerBinding = await workerBindingHash(
         `customer:${sessionId.startsWith('kfc:') ? sessionId.slice(4) : sessionId}`,

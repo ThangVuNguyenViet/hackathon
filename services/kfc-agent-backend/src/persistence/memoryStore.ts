@@ -4,6 +4,7 @@ import type {
   AgentRunTurn,
   ConversationProfile,
   ConversationTurn,
+  DashboardEvent,
   PendingCustomerTurn,
   SessionAgentState,
 } from '../domain/types.js';
@@ -12,7 +13,8 @@ import type {
   CustomerRunEvent,
 } from '../customerRuns/contracts.js';
 import {
-  type StoredEvent,
+  type CatalogPinProjection,
+  type SandboxProofSession,
   type AppendCustomerRunEventInput,
   type AppendCustomerRunEventsIfRunCurrentInput,
   type AppendCustomerRunEventsIfRunCurrentResult,
@@ -49,8 +51,6 @@ import {
   type IrreversibleOperationReservation,
   type IrreversibleOperationCompletion,
   type AppendConversationTurnInput,
-  type AppendEventIfRunCurrentInput,
-  type AppendEventIfRunCurrentResult,
   type IsRunCommitFenceCurrentInput,
   type CommitAssistantTurnIfRunCurrentInput,
   type CommitAssistantTurnIfRunCurrentResult,
@@ -90,7 +90,6 @@ import { MemoryStoreNonAgentTextDeliveryOperations } from './memoryStoreNonAgent
 import { reserveMemoryWebhookDelivery } from './memoryStoreNonAgentTextDelivery.js';
 import { appendMemoryConversationTurn } from './memoryStoreTurnOperations.js';
 import {
-  appendMemoryEventIfRunCurrent,
   commitMemoryAssistantTurn,
   commitMemoryAssistantTurnIfRunCurrent,
   memoryRunCommitFenceIsCurrent,
@@ -129,13 +128,18 @@ export class MemoryStore
   private readonly customerRuns = new Map<string, CustomerRun>();
   private readonly customerRunRequestIndex = new Map<string, string>();
   private readonly customerRunEvents: CustomerRunEvent[] = [];
-  private readonly events: StoredEvent[] = [];
   private readonly turns: ConversationTurn[] = [];
   private readonly conversationSummaries = new Map<
     string,
     ConversationSummary
   >();
   private readonly packStates = new Map<string, PackStateEnvelope>();
+  private readonly catalogPins = new Map<string, CatalogPinProjection>();
+  private readonly sandboxProofSessions = new Map<
+    string,
+    SandboxProofSession
+  >();
+  private readonly dashboardEvents: DashboardEvent[] = [];
   private readonly profiles = new Map<string, ConversationProfile>();
   private readonly webhookDeliveries = new Map<string, WebhookDelivery>();
   private readonly sessionControls = new Map<string, SessionControl>();
@@ -189,7 +193,9 @@ export class MemoryStore
         turns: this.turns,
         conversationSummaries: this.conversationSummaries,
         packStates: this.packStates,
-        events: this.events,
+        catalogPins: this.catalogPins,
+        sandboxProofSessions: this.sandboxProofSessions,
+        dashboardEvents: this.dashboardEvents,
         webhookDeliveries: this.webhookDeliveries,
         nonAgentTextDeliveries: this.nonAgentTextDeliveries,
         irreversibleOperations: this.irreversibleOperations,
@@ -386,8 +392,6 @@ export class MemoryStore
     return appendMemoryConversationTurn({
       turn: input,
       turns: this.turns,
-      appendEvent: (sessionId, sourceType, payload) =>
-        this.appendEvent(sessionId, sourceType, payload),
     });
   }
 
@@ -428,14 +432,6 @@ export class MemoryStore
           .reduce((maximum, entry) => Math.max(maximum, entry.ordinal), 0) + 1,
     };
     this.turns.push(turn);
-    await this.appendEvent(input.sessionId, `conversation_turn:${input.role}`, {
-      text: input.text,
-      channel: input.channel,
-      deliveryStatus: input.deliveryStatus,
-      externalMessageId: input.externalMessageId,
-      externalUserId: input.externalUserId,
-      metadata: input.metadata,
-    });
     return { turn, inserted: true };
   }
 
@@ -768,20 +764,37 @@ export class MemoryStore
     );
   }
 
-  async appendEvent(
+  async getCatalogPin(
     sessionId: string,
-    sourceType: string,
-    payload: Record<string, unknown>,
-  ): Promise<StoredEvent> {
-    const event: StoredEvent = {
-      id: `event_${this.events.length + 1}`,
-      sessionId,
-      sourceType,
-      payload,
-      createdAt: new Date('2026-07-07T00:00:00.000Z').toISOString(),
-    };
-    this.events.push(event);
-    return event;
+  ): Promise<CatalogPinProjection | undefined> {
+    const projection = this.catalogPins.get(sessionId);
+    return projection ? structuredClone(projection) : undefined;
+  }
+  async putCatalogPin(projection: CatalogPinProjection): Promise<void> {
+    this.catalogPins.set(projection.sessionId, structuredClone(projection));
+  }
+  async getSandboxProofSession(
+    sessionId: string,
+  ): Promise<SandboxProofSession | undefined> {
+    const record = this.sandboxProofSessions.get(sessionId);
+    return record ? structuredClone(record) : undefined;
+  }
+  async putSandboxProofSession(record: SandboxProofSession): Promise<void> {
+    this.sandboxProofSessions.set(record.sessionId, structuredClone(record));
+  }
+  async appendDashboardEvent(event: DashboardEvent): Promise<void> {
+    if (!this.dashboardEvents.some(({ id }) => id === event.id)) {
+      this.dashboardEvents.push(structuredClone(event));
+    }
+  }
+  async listDashboardEvents(
+    sessionId?: string,
+    limit = 200,
+  ): Promise<DashboardEvent[]> {
+    const events = sessionId
+      ? this.dashboardEvents.filter((event) => event.sessionId === sessionId)
+      : this.dashboardEvents;
+    return structuredClone(events.slice(-limit));
   }
   async isRunCommitFenceCurrent(
     input: IsRunCommitFenceCurrentInput,
@@ -794,19 +807,6 @@ export class MemoryStore
       irreversibleOperations: this.irreversibleOperations,
       sessionControls: this.sessionControls,
       now: Date.now(),
-    });
-  }
-  async appendEventIfRunCurrent(
-    input: AppendEventIfRunCurrentInput,
-  ): Promise<AppendEventIfRunCurrentResult> {
-    return appendMemoryEventIfRunCurrent({
-      operation: input,
-      customerRuns: this.customerRuns,
-      agentRuns: this.agentRuns,
-      sessionAgentStates: this.sessionAgentStates,
-      irreversibleOperations: this.irreversibleOperations,
-      sessionControls: this.sessionControls,
-      events: this.events,
     });
   }
   async commitAssistantTurnIfRunCurrent(
@@ -825,7 +825,6 @@ export class MemoryStore
         sessionGenerations: this.sessionGenerations,
         verifiedRefs: this.verifiedRefs,
         turns: this.turns,
-        events: this.events,
         packStates: this.packStates,
       }),
     );
@@ -839,26 +838,21 @@ export class MemoryStore
         sessionGenerations: this.sessionGenerations,
         verifiedRefs: this.verifiedRefs,
         turns: this.turns,
-        events: this.events,
         packStates: this.packStates,
       }),
     );
-  }
-  async listEvents(sessionId: string): Promise<StoredEvent[]> {
-    return this.events.filter((event) => event.sessionId === sessionId);
   }
   async searchHistory(
     sessionId: string,
     query: string,
   ): Promise<HistorySearchResult[]> {
-    const sessionEvents = await this.listEvents(sessionId);
     const lower = query.toLowerCase();
-    const scored = sessionEvents
-      .filter((event) => typeof event.payload.text === 'string')
-      .map((event) => {
-        const text = String(event.payload.text).toLowerCase();
+    const scored = this.turns
+      .filter((turn) => turn.sessionId === sessionId)
+      .map((turn) => {
+        const text = turn.text.toLowerCase();
         const directHit = text.includes(lower);
-        return { ...event, confidence: directHit ? 0.7 : 0 };
+        return { ...structuredClone(turn), confidence: directHit ? 0.7 : 0 };
       })
       .filter((event) => event.confidence > 0)
       .sort((a, b) => b.confidence - a.confidence);

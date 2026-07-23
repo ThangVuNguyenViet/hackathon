@@ -29,7 +29,6 @@ import {
   emitSessionUpdate,
   isRecord,
   pushEscalationReasons,
-  verifiedStateSnapshotSourceType,
 } from './turnSupport.js';
 import {
   createPackStateEnvelope,
@@ -301,47 +300,6 @@ export function invalidateDependentStateAfterCartMutation(
   state.invoiceRequest = undefined;
 }
 
-export function extractVerifiedStateSnapshot(
-  payload: Record<string, unknown>,
-): Partial<VerifiedStateSnapshot> | undefined {
-  if (!isRecord(payload.verifiedState)) return undefined;
-  const snapshot = payload.verifiedState as Partial<VerifiedStateSnapshot>;
-  const order = snapshot.order;
-  return {
-    cart: snapshot.cart,
-    address: snapshot.address,
-    addressDraft: snapshot.addressDraft,
-    orderPreview: snapshot.orderPreview,
-    order,
-    cancellationStatusChecked: snapshot.cancellationStatusChecked,
-    selectedModifiers: snapshot.selectedModifiers,
-    fulfillment: snapshot.fulfillment,
-    exactCartAvailabilityObservation: snapshot.exactCartAvailabilityObservation,
-    promotionContext: snapshot.promotionContext,
-    promotionOffers: snapshot.promotionOffers,
-    contentEvidence: snapshot.contentEvidence,
-    menuSearchResults: snapshot.menuSearchResults,
-    verifiedCollections: snapshot.verifiedCollections,
-    activeCollectionKeys: snapshot.activeCollectionKeys,
-    activeMenuCollection: snapshot.activeMenuCollection,
-    menuItemDetail: snapshot.menuItemDetail,
-    menuModifierOptions: snapshot.menuModifierOptions,
-    customerContext: customerContextWithoutSavedAddresses(
-      snapshot.customerContext,
-    ),
-    pendingSavedAddressRef: snapshot.pendingSavedAddressRef,
-    paymentAttempt: paymentAttemptForVerifiedOrder(
-      snapshot.paymentAttempt,
-      order,
-    ),
-    selectedPaymentMethod: snapshot.selectedPaymentMethod,
-    paymentMethodEvidence: snapshot.paymentMethodEvidence,
-    invoiceRequest: snapshot.invoiceRequest,
-    handoff: snapshot.handoff,
-    toolTrace: snapshot.toolTrace,
-  };
-}
-
 export async function loadPriorVerifiedState(
   store: ConversationStore,
   sessionId: string,
@@ -349,7 +307,6 @@ export async function loadPriorVerifiedState(
     packRef: PackRef;
     schemaVersion: string;
     parseState(value: unknown): Partial<VerifiedStateSnapshot>;
-    allowLegacyKfcV1Fallback?: boolean;
   },
 ): Promise<Partial<VerifiedStateSnapshot>> {
   if (projection) {
@@ -361,12 +318,6 @@ export async function loadPriorVerifiedState(
       })) ?? {}
     );
   }
-  const events = await store.listEvents(sessionId);
-  for (let index = events.length - 1; index >= 0; index -= 1) {
-    const event = events[index];
-    if (event?.sourceType !== verifiedStateSnapshotSourceType) continue;
-    return extractVerifiedStateSnapshot(event.payload) ?? {};
-  }
   return {};
 }
 
@@ -376,7 +327,6 @@ export async function loadVerifiedStateProjection<TState>(input: {
   packRef: PackRef;
   schemaVersion: string;
   parseState(value: unknown): TState;
-  allowLegacyKfcV1Fallback?: boolean;
 }): Promise<TState | undefined> {
   const envelope = await input.store.getPackState(
     input.sessionId,
@@ -388,21 +338,6 @@ export async function loadVerifiedStateProjection<TState>(input: {
       schemaVersion: input.schemaVersion,
       parseState: input.parseState,
     });
-  }
-  if (!input.allowLegacyKfcV1Fallback) return undefined;
-  if (
-    input.packRef.packId !== 'kfc-vietnam' ||
-    input.packRef.version !== '1.0.0' ||
-    input.schemaVersion !== '1'
-  ) {
-    throw new Error('pack_state_legacy_fallback_forbidden');
-  }
-  const events = await input.store.listEvents(input.sessionId);
-  for (let index = events.length - 1; index >= 0; index -= 1) {
-    const event = events[index];
-    if (event?.sourceType !== verifiedStateSnapshotSourceType) continue;
-    if (!isRecord(event.payload.verifiedState)) return undefined;
-    return input.parseState(event.payload.verifiedState);
   }
   return undefined;
 }
@@ -491,15 +426,6 @@ function customerContextWithoutSavedAddresses(
         savedAddresses: [],
       }
     : undefined;
-}
-
-export async function persistVerifiedStateSnapshot(
-  store: ConversationStore,
-  state: AgentState,
-): Promise<void> {
-  await store.appendEvent(state.sessionId, verifiedStateSnapshotSourceType, {
-    verifiedState: buildVerifiedStateSnapshot(state),
-  });
 }
 
 export function applyAgentCollectionToVerifiedState(

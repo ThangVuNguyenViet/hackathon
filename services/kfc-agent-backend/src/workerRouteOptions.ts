@@ -64,7 +64,6 @@ function buildBaseWorkerRouteOptions(
 ): RouteOptions {
   return buildServerOptionsFromEnv({
     PORT: 0,
-    DATABASE_URL: 'd1://DB',
     ...workerModelEnv(env),
     ...openAiDiagnosticEnv(env, request),
     LANGSMITH_API_KEY: env.LANGSMITH_API_KEY ?? '',

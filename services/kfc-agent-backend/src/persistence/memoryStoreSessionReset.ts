@@ -11,10 +11,11 @@ import type {
 } from '../customerRuns/contracts.js';
 import {
   SessionResetConflictError,
+  type CatalogPinProjection,
   type NonAgentTextDeliveryRecord,
+  type SandboxProofSession,
   type SessionControl,
   type SessionResetHook,
-  type StoredEvent,
   type WebhookDelivery,
   type ConversationSummary,
 } from './contracts.js';
@@ -40,7 +41,9 @@ export interface MemorySessionResetState {
   turns: ConversationTurn[];
   conversationSummaries: Map<string, ConversationSummary>;
   packStates: Map<string, PackStateEnvelope>;
-  events: StoredEvent[];
+  catalogPins: Map<string, CatalogPinProjection>;
+  sandboxProofSessions: Map<string, SandboxProofSession>;
+  dashboardEvents: Array<{ sessionId: string }>;
   webhookDeliveries: Map<string, WebhookDelivery>;
   nonAgentTextDeliveries: Map<string, NonAgentTextDeliveryRecord>;
   irreversibleOperations: Map<string, MemoryIrreversibleOperationRecord>;
@@ -121,7 +124,9 @@ export async function resetMemorySession(
   for (const key of state.packStates.keys()) {
     if (key.startsWith(`${sessionId}\u0000`)) state.packStates.delete(key);
   }
-  removeWhere(state.events, (event) => event.sessionId === sessionId);
+  state.catalogPins.delete(sessionId);
+  state.sandboxProofSessions.delete(sessionId);
+  removeWhere(state.dashboardEvents, (event) => event.sessionId === sessionId);
   for (const runId of customerRunIds) state.customerRuns.delete(runId);
   for (const [key, runId] of state.customerRunRequestIndex) {
     if (customerRunIds.has(runId)) {
