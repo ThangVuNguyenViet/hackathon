@@ -3,6 +3,7 @@ import { buildServerOptionsFromEnv } from '../../src/api/serverOptions.js';
 import { loadEnv } from '../../src/config/env.js';
 import { buildServer } from '../../src/api/server.js';
 import { ModelMonitorJudge } from '../../src/llm/monitorJudge.js';
+import { OpenAiKfcAgent } from '../../src/agent/openAiKfcAgent.js';
 
 describe('buildServerOptionsFromEnv', () => {
   it('exposes release, runtime, graph, and version bindings only in deep readiness proof metadata', async () => {
@@ -26,7 +27,7 @@ describe('buildServerOptionsFromEnv', () => {
       release: { gitSha: 'release-1', deploymentId: 'deployment-1', builtAt: '2026-07-15T00:00:00Z', dirty: false },
       proof: {
         deployment: { gitSha: 'release-1', deploymentId: 'deployment-1' },
-        graph: { runtime: 'langchain-create-agent-v1' },
+        graph: { runtime: 'langgraph-create-agent-workflow-v1' },
         versions: {
           agent: {
             provider: 'google',
@@ -142,6 +143,21 @@ describe('buildServerOptionsFromEnv', () => {
     ).toBe(false);
     expect(buildServerOptionsFromEnv(env).mockClientOptions).toBeUndefined();
     expect(buildServerOptionsFromEnv(env).agentTracer).toBeUndefined();
+  });
+
+  it('configures only the direct agent for the Responses runtime', () => {
+    const options = buildServerOptionsFromEnv(loadEnv({
+      PORT: '18090',
+      KFC_COMMERCE_MODE: 'fixture',
+      KFC_AGENT_RUNTIME: 'openai-responses',
+      KFC_AGENT_PROVIDER: 'openai',
+      KFC_AGENT_MODEL: 'gpt-4.1-mini',
+      OPENAI_API_KEY: 'openai_key_local',
+    } as NodeJS.ProcessEnv));
+
+    expect(options.agent).toBeUndefined();
+    expect(options.openAiAgent).toBeInstanceOf(OpenAiKfcAgent);
+    expect(options.readiness?.agentConfigured).toBe(true);
   });
 
   it('uses affordable deep thinking by default in explicit qualification mode', () => {

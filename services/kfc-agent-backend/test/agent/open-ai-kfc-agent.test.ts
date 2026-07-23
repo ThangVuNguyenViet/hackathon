@@ -6,6 +6,434 @@ import {
 import { MemoryStore } from '../../src/persistence/memoryStore.js';
 
 describe('runResponsesToolLoop', () => {
+  it('forces a corrected tool call after an empty retriable read result', async () => {
+    const requests: Array<Record<string, unknown>> = [];
+    const executedArguments: Array<Record<string, unknown>> = [];
+    const responses = [
+      {
+        output: [
+          {
+            type: 'function_call',
+            call_id: 'call_empty',
+            name: 'searchMenu',
+            arguments: '{"query":"nước trong combo"}',
+          },
+        ],
+        output_text: '',
+      },
+      {
+        output: [
+          {
+            type: 'function_call',
+            call_id: 'call_broader',
+            name: 'searchMenu',
+            arguments: '{"query":"","category":"Thức Uống"}',
+          },
+        ],
+        output_text: '',
+      },
+      {
+        output: [],
+        output_text: 'Mình tìm thấy các món nước bán riêng.',
+      },
+    ];
+
+    const result = await runResponsesToolLoop({
+      client: {
+        responses: {
+          create: async (request: Record<string, unknown>) => {
+            requests.push(structuredClone(request));
+            return responses.shift();
+          },
+        },
+      },
+      model: 'gpt-4.1-mini',
+      instructions: 'Bạn là trợ lý KFC.',
+      input: [{ role: 'user', content: 'Thêm giúp mình một món nước.' }],
+      tools: [
+        {
+          definition: {
+            type: 'function',
+            name: 'searchMenu',
+            description: 'Search the KFC menu.',
+            parameters: {
+              type: 'object',
+              properties: {
+                query: { type: 'string' },
+                category: { type: 'string' },
+              },
+              additionalProperties: false,
+            },
+            strict: true,
+          },
+          retryPolicy: {
+            maxAttempts: 3,
+            retryOn: [
+              'empty_result',
+              'tool_error',
+              'invalid_arguments',
+              'invalid_result',
+            ],
+          },
+          execute: async (arguments_: Record<string, unknown>) => {
+            executedArguments.push(arguments_);
+            return executedArguments.length === 1
+              ? {
+                  toolName: 'searchMenu',
+                  ok: true,
+                  value: {
+                    mode: 'search',
+                    query: 'nước trong combo',
+                    total: 0,
+                    items: [],
+                  },
+                }
+              : {
+                  toolName: 'searchMenu',
+                  ok: true,
+                  value: {
+                    mode: 'search',
+                    query: '',
+                    total: 1,
+                    items: [{ code: 'DRINK', name: 'Pepsi' }],
+                  },
+                };
+          },
+        },
+      ],
+      maxToolRounds: 12,
+    });
+
+    expect(executedArguments).toEqual([
+      { query: 'nước trong combo' },
+      { query: '', category: 'Thức Uống' },
+    ]);
+    expect(requests.map((request) => request.tool_choice)).toEqual([
+      'auto',
+      'required',
+      'auto',
+    ]);
+    expect(requests[1]?.input).toContainEqual(
+      expect.objectContaining({
+        type: 'function_call_output',
+        call_id: 'call_empty',
+        output: expect.stringContaining('"reason":"empty_result"'),
+      }),
+    );
+    expect(requests[1]?.input).toContainEqual(
+      expect.objectContaining({
+        output: expect.stringContaining(
+          '"instruction":"Retry with materially corrected or broader arguments',
+        ),
+      }),
+    );
+    expect(result.responseText).toBe('Mình tìm thấy các món nước bán riêng.');
+  });
+
+  it('stops semantic recovery after three total failed attempts', async () => {
+    const requests: Array<Record<string, unknown>> = [];
+    let executionCount = 0;
+    const responses = [
+      {
+        output: [
+          {
+            type: 'function_call',
+            call_id: 'call_1',
+            name: 'searchMenu',
+            arguments: '{"query":"a"}',
+          },
+        ],
+        output_text: '',
+      },
+      {
+        output: [
+          {
+            type: 'function_call',
+            call_id: 'call_2',
+            name: 'searchMenu',
+            arguments: '{"query":"b"}',
+          },
+        ],
+        output_text: '',
+      },
+      {
+        output: [
+          {
+            type: 'function_call',
+            call_id: 'call_3',
+            name: 'searchMenu',
+            arguments: '{"query":"","category":"Thức Uống"}',
+          },
+        ],
+        output_text: '',
+      },
+      {
+        output: [],
+        output_text: 'Mình chưa tìm được món phù hợp sau khi thử lại.',
+      },
+    ];
+
+    await runResponsesToolLoop({
+      client: {
+        responses: {
+          create: async (request: Record<string, unknown>) => {
+            requests.push(structuredClone(request));
+            return responses.shift();
+          },
+        },
+      },
+      model: 'gpt-4.1-mini',
+      instructions: 'Bạn là trợ lý KFC.',
+      input: [{ role: 'user', content: 'Tìm món nước.' }],
+      tools: [
+        {
+          definition: {
+            type: 'function',
+            name: 'searchMenu',
+            description: 'Search the KFC menu.',
+            parameters: { type: 'object', properties: {} },
+            strict: false,
+          },
+          retryPolicy: {
+            maxAttempts: 3,
+            retryOn: ['empty_result'],
+          },
+          execute: async () => {
+            executionCount += 1;
+            return { ok: true, value: { total: 0, items: [] } };
+          },
+        },
+      ],
+      maxToolRounds: 12,
+    });
+
+    expect(executionCount).toBe(3);
+    expect(requests.map((request) => request.tool_choice)).toEqual([
+      'auto',
+      'required',
+      'required',
+      'none',
+    ]);
+    expect(requests[3]?.input).toContainEqual(
+      expect.objectContaining({
+        type: 'function_call_output',
+        call_id: 'call_3',
+        output: expect.stringContaining('"exhausted":true'),
+      }),
+    );
+  });
+
+  it('lets the model repair invalid JSON without executing the rejected call', async () => {
+    const requests: Array<Record<string, unknown>> = [];
+    let executionCount = 0;
+    const responses = [
+      {
+        output: [
+          {
+            type: 'function_call',
+            call_id: 'call_invalid',
+            name: 'searchMenu',
+            arguments: '{"query":',
+          },
+        ],
+        output_text: '',
+      },
+      {
+        output: [
+          {
+            type: 'function_call',
+            call_id: 'call_valid',
+            name: 'searchMenu',
+            arguments: '{"query":"gà"}',
+          },
+        ],
+        output_text: '',
+      },
+      { output: [], output_text: 'Mình tìm thấy món gà.' },
+    ];
+
+    await runResponsesToolLoop({
+      client: {
+        responses: {
+          create: async (request: Record<string, unknown>) => {
+            requests.push(structuredClone(request));
+            return responses.shift();
+          },
+        },
+      },
+      model: 'gpt-4.1-mini',
+      instructions: 'Bạn là trợ lý KFC.',
+      input: [{ role: 'user', content: 'Tìm món gà.' }],
+      tools: [
+        {
+          definition: {
+            type: 'function',
+            name: 'searchMenu',
+            description: 'Search the KFC menu.',
+            parameters: { type: 'object', properties: {} },
+            strict: false,
+          },
+          retryPolicy: {
+            maxAttempts: 3,
+            retryOn: ['invalid_arguments'],
+          },
+          execute: async () => {
+            executionCount += 1;
+            return { ok: true, value: { total: 1, items: [{}] } };
+          },
+        },
+      ],
+      maxToolRounds: 12,
+    });
+
+    expect(executionCount).toBe(1);
+    expect(requests.map((request) => request.tool_choice)).toEqual([
+      'auto',
+      'required',
+      'auto',
+    ]);
+    expect(requests[1]?.input).toContainEqual(
+      expect.objectContaining({
+        output: expect.stringContaining('"reason":"invalid_arguments"'),
+      }),
+    );
+  });
+
+  it('does not force a retry after a mutation execution error', async () => {
+    const requests: Array<Record<string, unknown>> = [];
+    const responses = [
+      {
+        output: [
+          {
+            type: 'function_call',
+            call_id: 'call_update',
+            name: 'updateCart',
+            arguments: '{"changes":[]}',
+          },
+        ],
+        output_text: '',
+      },
+      { output: [], output_text: 'Mình chưa thể cập nhật giỏ hàng.' },
+    ];
+
+    await runResponsesToolLoop({
+      client: {
+        responses: {
+          create: async (request: Record<string, unknown>) => {
+            requests.push(structuredClone(request));
+            return responses.shift();
+          },
+        },
+      },
+      model: 'gpt-4.1-mini',
+      instructions: 'Bạn là trợ lý KFC.',
+      input: [{ role: 'user', content: 'Cập nhật giỏ.' }],
+      tools: [
+        {
+          definition: {
+            type: 'function',
+            name: 'updateCart',
+            description: 'Update the cart.',
+            parameters: { type: 'object', properties: {} },
+            strict: false,
+          },
+          retryPolicy: {
+            maxAttempts: 3,
+            retryOn: ['invalid_arguments'],
+          },
+          execute: async () => ({
+            ok: false,
+            errorCode: 'provider_failed',
+            message: 'Unknown execution outcome',
+          }),
+        },
+      ],
+      maxToolRounds: 12,
+    });
+
+    expect(requests.map((request) => request.tool_choice)).toEqual([
+      'auto',
+      'auto',
+    ]);
+  });
+
+  it('returns a read-tool execution error to the model and retries safely', async () => {
+    const requests: Array<Record<string, unknown>> = [];
+    let executionCount = 0;
+    const responses = [
+      {
+        output: [
+          {
+            type: 'function_call',
+            call_id: 'call_failed_read',
+            name: 'getModifierOptions',
+            arguments: '{"code":"ITEM"}',
+          },
+        ],
+        output_text: '',
+      },
+      {
+        output: [
+          {
+            type: 'function_call',
+            call_id: 'call_repaired_read',
+            name: 'getModifierOptions',
+            arguments: '{"code":"CORRECT_ITEM"}',
+          },
+        ],
+        output_text: '',
+      },
+      { output: [], output_text: 'Mình đã kiểm tra được lựa chọn.' },
+    ];
+
+    await runResponsesToolLoop({
+      client: {
+        responses: {
+          create: async (request: Record<string, unknown>) => {
+            requests.push(structuredClone(request));
+            return responses.shift();
+          },
+        },
+      },
+      model: 'gpt-4.1-mini',
+      instructions: 'Bạn là trợ lý KFC.',
+      input: [{ role: 'user', content: 'Kiểm tra lựa chọn.' }],
+      tools: [
+        {
+          definition: {
+            type: 'function',
+            name: 'getModifierOptions',
+            description: 'Read modifier options.',
+            parameters: { type: 'object', properties: {} },
+            strict: false,
+          },
+          retryPolicy: {
+            maxAttempts: 3,
+            retryOn: ['tool_error'],
+          },
+          execute: async () => {
+            executionCount += 1;
+            if (executionCount === 1) throw new Error('fixture read failed');
+            return { ok: true, value: { modifierGroups: [{}] } };
+          },
+        },
+      ],
+      maxToolRounds: 12,
+    });
+
+    expect(executionCount).toBe(2);
+    expect(requests.map((request) => request.tool_choice)).toEqual([
+      'auto',
+      'required',
+      'auto',
+    ]);
+    expect(requests[1]?.input).toContainEqual(
+      expect.objectContaining({
+        output: expect.stringContaining('"reason":"tool_error"'),
+      }),
+    );
+  });
+
   it('keeps message history and returns tool output to the model until it answers', async () => {
     const requests: Array<Record<string, unknown>> = [];
     const responses = [
@@ -114,9 +542,259 @@ describe('runResponsesToolLoop', () => {
       totalTokens: 65,
     });
   });
+
+  it('continues a confirmed named payment through the full tool chain in one turn', async () => {
+    const requestedTools: string[] = [];
+    const methodId = 'provider_method_from_list_result';
+    const responses = [
+      {
+        output: [
+          {
+            type: 'function_call',
+            call_id: 'call_methods',
+            name: 'listPaymentMethods',
+            arguments: '{"query":"phương thức khách vừa xác nhận"}',
+          },
+        ],
+        output_text: '',
+      },
+      {
+        output: [
+          {
+            type: 'function_call',
+            call_id: 'call_preview',
+            name: 'previewOrder',
+            arguments: '{}',
+          },
+        ],
+        output_text: '',
+      },
+      {
+        output: [
+          {
+            type: 'function_call',
+            call_id: 'call_place',
+            name: 'placeOrder',
+            arguments: '{}',
+          },
+        ],
+        output_text: '',
+      },
+      {
+        output: [
+          {
+            type: 'function_call',
+            call_id: 'call_payment',
+            name: 'createPaymentLink',
+            arguments: JSON.stringify({ methodId }),
+          },
+        ],
+        output_text: '',
+      },
+      {
+        output: [],
+        output_text: 'Đơn đã được tạo và liên kết thanh toán đã sẵn sàng.',
+      },
+    ];
+    const tool = (name: string, value: unknown) => ({
+      definition: {
+        type: 'function' as const,
+        name,
+        description: name,
+        parameters: {
+          type: 'object',
+          properties: {},
+          additionalProperties: true,
+        },
+        strict: false,
+      },
+      execute: async () => {
+        requestedTools.push(name);
+        return value;
+      },
+    });
+
+    const result = await runResponsesToolLoop({
+      client: {
+        responses: {
+          create: async () => responses.shift(),
+        },
+      },
+      model: 'gpt-4.1-mini',
+      instructions: 'Bạn là trợ lý KFC.',
+      input: [
+        {
+          role: 'user',
+          content:
+            'Đúng rồi, đặt đơn và gửi mình liên kết thanh toán bằng phương thức đó.',
+        },
+      ],
+      tools: [
+        tool('listPaymentMethods', {
+          items: [{ methodId, supported: true }],
+        }),
+        tool('previewOrder', { id: 'preview' }),
+        tool('placeOrder', { id: 'order' }),
+        tool('createPaymentLink', { status: 'pending' }),
+      ],
+      maxToolRounds: 12,
+    });
+
+    expect(requestedTools).toEqual([
+      'listPaymentMethods',
+      'previewOrder',
+      'placeOrder',
+      'createPaymentLink',
+    ]);
+    expect(result.toolCalls.at(-1)).toMatchObject({
+      name: 'createPaymentLink',
+      arguments: { methodId },
+    });
+  });
 });
 
 describe('OpenAiKfcAgent', () => {
+  async function captureDefaultInstructions(): Promise<string> {
+    const requests: Array<Record<string, unknown>> = [];
+    const agent = new OpenAiKfcAgent({
+      client: {
+        responses: {
+          create: async (request: Record<string, unknown>) => {
+            requests.push(structuredClone(request));
+            return { output: [], output_text: 'Mình đang hỗ trợ bạn.' };
+          },
+        },
+      },
+      model: 'gpt-4.1-mini',
+    });
+
+    await agent.respond({
+      sessionId: `kfc:prompt_${crypto.randomUUID()}`,
+      customerId: 'prompt_customer',
+      channel: 'kfc',
+      text: 'Mình cần hỗ trợ.',
+      externalMessageId: crypto.randomUUID(),
+      metadata: null,
+      store: new MemoryStore(),
+      tools: [],
+    });
+
+    return String(requests[0]?.instructions);
+  }
+
+  it('uses a compact English global contract for Vietnamese customer replies', async () => {
+    const instructions = await captureDefaultInstructions();
+
+    expect(instructions).toContain('# Role');
+    expect(instructions).toContain('# Grounding');
+    expect(instructions).toContain('# Actions');
+    expect(instructions).toContain('# Customer response');
+    expect(instructions).toContain('natural Vietnamese');
+    expect(instructions.length).toBeLessThan(5_000);
+    expect(instructions).not.toMatch(
+      /[ÀÁẠẢÃÂẦẤẬẨẪĂẰẮẶẲẴÈÉẸẺẼÊỀẾỆỂỄÌÍỊỈĨÒÓỌỎÕÔỒỐỘỔỖƠỜỚỢỞỠÙÚỤỦŨƯỪỨỰỬỮỲÝỴỶỸĐ]/u,
+    );
+  });
+
+  it('keeps global truth, privacy, recovery, and authorization rules in the system prompt', async () => {
+    const instructions = await captureDefaultInstructions();
+
+    expect(instructions).toContain('verified');
+    expect(instructions).toContain('Missing data');
+    expect(instructions).toContain('Never expose tool names');
+    expect(instructions).toContain('recovery');
+    expect(instructions).toContain('irreversible');
+    expect(instructions).toContain('trusted Generative UI action');
+    expect(instructions).toContain('ask one natural clarification');
+  });
+
+  it('leaves tool-specific mechanics in tool descriptions', async () => {
+    const instructions = await captureDefaultInstructions();
+
+    for (const toolSpecificTerm of [
+      'modifierQueries',
+      'partySize',
+      'maxPriceVnd',
+      'groupId',
+      'modifierId',
+      'priceDeltaVnd',
+      'missingFields',
+      'methodId',
+    ]) {
+      expect(instructions).not.toContain(toolSpecificTerm);
+    }
+  });
+
+  it('presents a successful handoff with one verified receipt instead of model timing promises', async () => {
+    const store = new MemoryStore();
+    let responseIndex = 0;
+    const agent = new OpenAiKfcAgent({
+      client: {
+        responses: {
+          create: async () => {
+            responseIndex += 1;
+            if (responseIndex === 1) {
+              return {
+                output: [
+                  {
+                    type: 'function_call',
+                    call_id: 'call_handoff',
+                    name: 'handoff',
+                    arguments: '{"reason":"Đơn số lượng lớn"}',
+                  },
+                ],
+                output_text: '',
+              };
+            }
+            return {
+              output: [],
+              output_text:
+                'Mình đã chuyển cho nhân viên và họ sẽ phản hồi bạn ngay.',
+            };
+          },
+        },
+      },
+      model: 'gpt-4.1-mini',
+    });
+
+    const result = await agent.respond({
+      sessionId: 'kfc:handoff_receipt',
+      customerId: 'handoff_receipt',
+      channel: 'kfc',
+      text: 'Nhờ nhân viên kiểm tra giúp mình.',
+      externalMessageId: 'handoff_receipt_1',
+      metadata: null,
+      store,
+      tools: [
+        {
+          definition: {
+            type: 'function',
+            name: 'handoff',
+            description: 'Queue human support.',
+            parameters: {
+              type: 'object',
+              properties: { reason: { type: 'string' } },
+              required: ['reason'],
+              additionalProperties: false,
+            },
+            strict: true,
+          },
+          execute: async () => ({
+            toolName: 'handoff',
+            ok: true,
+            value: { escalationId: 'esc_internal_1' },
+            message: 'Human-support request queued',
+            provenance: [],
+          }),
+        },
+      ],
+    });
+
+    expect(result.responseText).toBe(
+      'Yêu cầu gặp nhân viên của bạn đã được ghi nhận và đang chờ nhân viên tiếp nhận. Hiện chưa có thời gian phản hồi được xác minh.',
+    );
+  });
+
   it('uses the existing conversation store as the model context', async () => {
     const store = new MemoryStore();
     await store.appendTurn({
@@ -172,26 +850,11 @@ describe('OpenAiKfcAgent', () => {
       { role: 'assistant', content: 'Chào bạn!' },
       { role: 'user', content: 'Tư vấn món cho 4 người' },
     ]);
+    expect(requests[0]?.instructions).toContain('natural Vietnamese');
     expect(requests[0]?.instructions).toContain(
-      'searchMenu chỉ trả về ứng viên',
+      'Never expose tool names, arguments, schemas, provider data',
     );
-    expect(requests[0]?.instructions).toContain('modifierQueries');
-    expect(requests[0]?.instructions).toContain('một lần gọi searchMenu');
-    expect(requests[0]?.instructions).toContain('không X');
-    expect(requests[0]?.instructions).toContain(
-      'không chứng minh món không chứa thành phần đó',
-    );
-    expect(requests[0]?.instructions).toContain(
-      'giữ các từ tìm kiếm bằng tiếng Việt',
-    );
-    expect(requests[0]?.instructions).toContain(
-      'Mọi tên công cụ, tham số, kết quả công cụ và ngữ cảnh developer đều là thông tin vận hành riêng tư',
-    );
-    expect(requests[0]?.instructions).toContain('không nêu tên công cụ');
-    expect(requests[0]?.instructions).toContain('Không hiển thị mã món');
-    expect(requests[0]?.instructions).toContain(
-      'Không dùng các thuật ngữ nội bộ như modifier, metadata, evidence, fixture, schema hoặc cây tùy chọn',
-    );
+    expect(requests[0]?.instructions).not.toContain('modifierQueries');
     expect(result.responseText).toBe('Mình có thể giúp bạn chọn món.');
     expect(
       (await store.listTurns('kfc:customer_1')).map(({ role, text }) => ({
@@ -299,6 +962,137 @@ describe('OpenAiKfcAgent', () => {
     );
   });
 
+  it('does not let short structural identifiers corrupt quantities and removes their fixture group labels', async () => {
+    const store = new MemoryStore();
+    const agent = new OpenAiKfcAgent({
+      client: {
+        responses: {
+          create: async () => ({
+            output: [],
+            output_text:
+              'Giỏ có 2 phần 20751, giá 258000đ; Drink 1 Pepsi Tiêu Chuẩn và Side main khoai tây.',
+          }),
+        },
+      },
+      model: 'gpt-4.1-mini',
+    });
+
+    const result = await agent.respond({
+      sessionId: 'kfc:customer_structural_labels',
+      customerId: 'customer_structural_labels',
+      channel: 'kfc',
+      text: 'Đọc lại giỏ bằng tên thân thiện.',
+      externalMessageId: 'structural_labels_message_1',
+      metadata: null,
+      store,
+      tools: [],
+      verifiedBusinessContext: {
+        cart: {
+          items: [
+            {
+              itemCode: '20751',
+              name: 'Combo Hợp Gu 99K',
+              quantity: 2,
+              priceVnd: 258000,
+              modifierGroups: [
+                {
+                  groupId: '1',
+                  name: 'Drink 1',
+                  options: [],
+                },
+                {
+                  groupId: '2',
+                  name: 'Side main',
+                  options: [],
+                },
+              ],
+            },
+          ],
+        },
+      },
+    });
+
+    expect(result.responseText).toBe(
+      'Giỏ có 2 phần Combo Hợp Gu 99K, giá 258000đ; Pepsi Tiêu Chuẩn và khoai tây.',
+    );
+  });
+
+  it('does not replace a verified numeric identifier when it is written as a price', async () => {
+    const store = new MemoryStore();
+    const agent = new OpenAiKfcAgent({
+      client: {
+        responses: {
+          create: async () => ({
+            output: [],
+            output_text: 'Mã 258000 có giá 258000 VND.',
+          }),
+        },
+      },
+      model: 'gpt-4.1-mini',
+    });
+
+    const result = await agent.respond({
+      sessionId: 'kfc:customer_price_boundary',
+      customerId: 'customer_price_boundary',
+      channel: 'kfc',
+      text: 'Món đó giá bao nhiêu?',
+      externalMessageId: 'price_boundary_message_1',
+      metadata: null,
+      store,
+      tools: [],
+      verifiedBusinessContext: {
+        item: {
+          itemCode: '258000',
+          name: 'Combo Được Xác Minh',
+          priceVnd: 258000,
+        },
+      },
+    });
+
+    expect(result.responseText).toBe(
+      'Mã Combo Được Xác Minh có giá 258000 VND.',
+    );
+  });
+
+  it('replaces a verified commune code with its customer-facing place name before persistence', async () => {
+    const store = new MemoryStore();
+    const agent = new OpenAiKfcAgent({
+      client: {
+        responses: {
+          create: async () => ({
+            output: [],
+            output_text: 'Mình đã ghi nhận 27004.',
+          }),
+        },
+      },
+      model: 'gpt-4.1-mini',
+    });
+
+    const result = await agent.respond({
+      sessionId: 'kfc:customer_address_public_text',
+      customerId: 'customer_address_public_text',
+      channel: 'kfc',
+      text: 'Địa chỉ của mình đã đủ chưa?',
+      externalMessageId: 'address_public_text_message_1',
+      metadata: null,
+      store,
+      tools: [],
+      verifiedBusinessContext: {
+        deliveryAddressDraft: {
+          communeCode: '27004',
+          communeName: 'Phường Tân Bình',
+          provinceCode: '79',
+          provinceName: 'Thành phố Hồ Chí Minh',
+        },
+      },
+    });
+
+    expect(result.responseText).toBe('Mình đã ghi nhận Phường Tân Bình.');
+    expect(
+      (await store.listTurns('kfc:customer_address_public_text')).at(-1)?.text,
+    ).toBe('Mình đã ghi nhận Phường Tân Bình.');
+  });
+
   it('adds verified fixture business state without creating a second transcript', async () => {
     const store = new MemoryStore();
     const requests: Array<Record<string, unknown>> = [];
@@ -341,8 +1135,10 @@ describe('OpenAiKfcAgent', () => {
           'Verified current fixture business state; reuse these exact identifiers: {"cart":{"items":[{"itemCode":"20706","name":"Combo Gà No 279k","quantity":1}]}}',
       },
     ]);
-    expect(requests[0]?.instructions).toContain('không tự tạo mã');
-    expect(requests[0]?.instructions).toContain('không hỏi xác nhận lần nữa');
+    expect(requests[0]?.instructions).toContain('never invent identifiers');
+    expect(requests[0]?.instructions).toContain(
+      'finish all safe steps in the same turn',
+    );
     expect(
       (await store.listTurns('kfc:customer_state')).map((turn) => turn.role),
     ).toEqual(['user', 'assistant']);

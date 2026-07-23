@@ -47,7 +47,6 @@ const server = buildServer({
     },
     openAiConfigured: Boolean(env.OPENAI_API_KEY),
     openAiRequired: false,
-    agentConfigured: baseOptions.agent !== undefined,
   },
 });
 

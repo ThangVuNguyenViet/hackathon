@@ -180,7 +180,7 @@ describe('selectKfcGenUiAttachment', () => {
           modifierGroups: [
             {
               groupId: 'a:b',
-              name: 'One',
+              name: '1 main',
               min: 0,
               max: 1,
               depth: 0,
@@ -188,9 +188,9 @@ describe('selectKfcGenUiAttachment', () => {
             },
             {
               groupId: 'a',
-              name: 'Two',
-              min: 0,
-              max: 1,
+              name: 'Drink 2',
+              min: 1,
+              max: 3,
               depth: 0,
               options: [option('b:c', 'BC')],
             },
@@ -213,6 +213,37 @@ describe('selectKfcGenUiAttachment', () => {
       }),
     ]);
     expect(attachment?.authority?.actionLifecycle).toBe('one_shot');
+    expect(attachment?.data.modifierTree).toMatchObject({
+      itemCode: '3001',
+      name: 'Combo',
+      modifierGroups: [
+        expect.objectContaining({
+          groupId: 'a:b',
+          name: 'Chọn tối đa 1 tùy chọn',
+          options: [expect.objectContaining({ modifierId: 'c', name: 'C' })],
+        }),
+        expect.objectContaining({
+          groupId: 'a',
+          name: 'Chọn từ 1 đến 3 tùy chọn',
+          options: [expect.objectContaining({ modifierId: 'b:c', name: 'BC' })],
+        }),
+      ],
+    });
+    expect(attachment?.data.modifierTree).not.toHaveProperty('itemId');
+    expect(attachment?.data.modifierTree).not.toHaveProperty('productCode');
+    expect(attachment?.data.modifierTree).not.toHaveProperty('provenance');
+    expect(JSON.stringify(attachment?.data.modifierTree)).not.toContain(
+      'posItemId',
+    );
+    expect(JSON.stringify(attachment?.data.modifierTree)).not.toContain(
+      'imageName',
+    );
+    expect(JSON.stringify(attachment?.data.modifierTree)).not.toContain(
+      '1 main',
+    );
+    expect(JSON.stringify(attachment?.data.modifierTree)).not.toContain(
+      'Drink 2',
+    );
   });
 
   it('selects promotion media only from current promotion evidence', () => {
@@ -658,7 +689,7 @@ describe('selectKfcGenUiAttachment', () => {
     );
   });
 
-  it('does not offer fulfillment acceptance before an address and quote exist', () => {
+  it('does not present fulfillment controls for an empty cart', () => {
     const attachment = selectKfcGenUiAttachment({
       state: state({
         trustedPresentation: { preferredSurface: 'fulfillment' },
@@ -666,11 +697,7 @@ describe('selectKfcGenUiAttachment', () => {
       turnToolNames: ['findStores'],
     });
 
-    expect(attachment?.widgetKind).toBe('addressFulfillmentCheck');
-    expect(attachment?.actions.map((action) => action.id)).toEqual([
-      'submit_address',
-    ]);
-    expect(attachment?.actions[0]?.label).toBe('Nhập địa chỉ giao hàng');
+    expect(attachment).toBeUndefined();
   });
 
   it('renders a saved address only from turn-local opaque-ref presentation evidence', () => {
@@ -885,6 +912,22 @@ describe('selectKfcGenUiAttachment', () => {
     const attachment = selectKfcGenUiAttachment({
       state: state({
         address: confirmedAddress,
+        cart: {
+          id: 'confirmed-address-cart',
+          items: [
+            {
+              itemCode: '41141',
+              name: 'Burger Gà Zinger',
+              quantity: 1,
+              unitPriceVnd: 55_000,
+            },
+          ],
+          subtotalVnd: 55_000,
+          discountVnd: 0,
+          deliveryFeeVnd: 0,
+          totalVnd: 55_000,
+          voucherCode: null,
+        },
         trustedPresentation: { preferredSurface: 'fulfillment' },
       }),
       turnToolNames: [],
@@ -957,6 +1000,9 @@ describe('selectKfcGenUiAttachment', () => {
       label: 'Đặt đơn 73.000đ',
       intent: 'primary',
     });
+    expect(attachment?.actions.map((action) => action.id)).not.toContain(
+      'apply_voucher',
+    );
     expect(attachment?.data.fulfillment).not.toHaveProperty(
       'availability.source',
     );

@@ -5,7 +5,10 @@ import {
   type CommitPausedCustomerRunIntakeResult,
   type CreateCustomerRunInput,
 } from '../../src/persistence/memoryStore.js';
-import type { KfcGenUiAttachment } from '../../src/genui/kfcGenUi.js';
+import {
+  isKfcGenUiAttachment,
+  type KfcGenUiAttachment,
+} from '../../src/genui/kfcGenUi.js';
 import {
   CustomerRunCoordinator,
   splitCustomerText,
@@ -198,6 +201,98 @@ describe('CustomerRunCoordinator', () => {
         value: savedAddressRef,
       }),
     ]);
+  });
+
+  it('publishes the editable customer address draft while redacting provider address data', async () => {
+    const store = new MemoryStore();
+    const deferred: Array<() => Promise<void>> = [];
+    const addressDraft = {
+      recipientName: 'Nguyễn An',
+      phone: '0901234567',
+      addressLine: '54/2 Nguyễn Hồng Đào',
+      provinceCode: '79',
+      provinceName: 'Thành phố Hồ Chí Minh',
+      communeCode: '27004',
+      communeName: 'Phường Tân Bình',
+      deliveryInstructions: 'Gọi khi đến',
+      rawAddress:
+        'Nguyễn An, 0901234567, 54/2 Nguyễn Hồng Đào, Phường Tân Bình, Thành phố Hồ Chí Minh',
+      legacyDistrictText: 'Quận Tân Bình',
+    };
+    const providerAddressMarker = 'provider-resolved-private-marker-Ω';
+    const genUi: KfcGenUiAttachment = {
+      id: 'address_draft_stream_card',
+      lifecycleStage: 'fulfillment',
+      widgetKind: 'addressFulfillmentCheck',
+      status: 'active',
+      title: 'Kiểm tra giao hàng',
+      data: {
+        addressDraft,
+        addressStatus: 'quoted',
+        fulfillment: {
+          feeVnd: 18_000,
+          etaMinutes: 35,
+          resolvedAddress: {
+            line1: providerAddressMarker,
+          },
+        },
+      },
+      actions: [{
+        id: 'submit_address',
+        label: 'Đổi địa chỉ',
+        intent: 'primary',
+      }],
+      authority: {
+        schemaVersion: 'kfc-genui-v1',
+        sessionId: request.sessionId,
+        customerId: request.customerId,
+        verifiedRevision: 'verified-address-revision',
+        actionLifecycle: 'replayable',
+        issuedAt: '2026-07-23T00:00:00.000Z',
+        expiresAt: '2026-07-23T00:30:00.000Z',
+      },
+    };
+    const coordinator = new CustomerRunCoordinator({
+      store,
+      defer: (task) => deferred.push(task),
+      execute: async () => ({
+        responseText: 'Địa chỉ giao hàng đã sẵn sàng.',
+        genUi,
+      }),
+      paceMs: 0,
+    });
+
+    const started = await coordinator.start(request);
+    await deferred[0]!();
+    const runId = started.body.runId;
+    if (typeof runId !== 'string') {
+      throw new Error('customer run id missing');
+    }
+
+    const events = await store.listCustomerRunEvents(
+      runId,
+      0,
+    );
+    const snapshots = events
+      .filter(
+        ({ type }) =>
+          type === 'genui_revision' || type === 'genui_snapshot',
+      )
+      .map(({ payload }) => payload.snapshot)
+      .filter(isKfcGenUiAttachment);
+    const customerVisibleSnapshots = snapshots.filter(
+      ({ data }) => Object.keys(data).length > 0,
+    );
+
+    expect(customerVisibleSnapshots).toHaveLength(2);
+    for (const snapshot of customerVisibleSnapshots) {
+      expect(snapshot.data.addressDraft).toEqual(addressDraft);
+      expect(snapshot.data.fulfillment).not.toHaveProperty('resolvedAddress');
+      expect(snapshot.authority).toEqual(genUi.authority);
+    }
+    expect(JSON.stringify(snapshots)).not.toContain(providerAddressMarker);
+    expect(customerVisibleSnapshots[0]?.actions).toEqual([]);
+    expect(customerVisibleSnapshots[1]?.actions).toEqual(genUi.actions);
   });
 
   it('emits a stable customer-safe activity at a validated tool boundary', async () => {

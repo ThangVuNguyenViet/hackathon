@@ -508,6 +508,7 @@ export function createRouteAgentRuntime(
             clients: toolRuntime.clients,
             session: toolRuntime.session,
             accessContext,
+            fixtures: await getFixtures(),
           });
           let requiredToolCalls:
             | Array<{ name: string; arguments: Record<string, unknown> }>
@@ -525,42 +526,52 @@ export function createRouteAgentRuntime(
                 body: { errorCode: 'trusted_genui_state_unavailable' },
               };
             }
-            const preparation = prepareStructuredCustomerAction({
-              envelope: input.trustedCustomerAction,
-              revisionValidated: false,
-              state: verifiedState as unknown as AgentGraphState,
-            });
-            if (preparation.kind === 'reject') {
-              return {
-                status: 422,
-                body: { errorCode: preparation.errorCode },
-              };
-            }
-            if (
-              preparation.kind === 'present' &&
-              input.trustedCustomerAction.command.kind ===
-                'select_payment_method' &&
-              preparation.state.selectedPaymentMethod
-            ) {
-              toolRuntime.session.selectedPaymentMethod =
-                preparation.state.selectedPaymentMethod;
-            }
-            if (preparation.kind === 'execute') {
+            const command = input.trustedCustomerAction.command;
+            if (command.kind === 'submit_address' && command.address) {
               requiredToolCalls = [
                 {
-                  name: preparation.call.toolName,
-                  arguments: preparation.call.arguments,
+                  name: 'quoteFulfillment',
+                  arguments: {
+                    method: 'delivery',
+                    address: command.address,
+                  },
                 },
-                ...(input.trustedCustomerAction.command.kind ===
-                  'confirm_order' &&
-                preparation.call.toolName === 'previewOrder' &&
-                preparation.afterTool === 'prepare'
-                  ? [{ name: 'placeOrder', arguments: {} }]
-                  : []),
               ];
+            } else {
+              const preparation = prepareStructuredCustomerAction({
+                envelope: input.trustedCustomerAction,
+                revisionValidated: false,
+                state: verifiedState as unknown as AgentGraphState,
+              });
+              if (preparation.kind === 'reject') {
+                return {
+                  status: 422,
+                  body: { errorCode: preparation.errorCode },
+                };
+              }
+              if (
+                preparation.kind === 'present' &&
+                command.kind === 'select_payment_method' &&
+                preparation.state.selectedPaymentMethod
+              ) {
+                toolRuntime.session.selectedPaymentMethod =
+                  preparation.state.selectedPaymentMethod;
+              }
+              if (preparation.kind === 'execute') {
+                requiredToolCalls = [
+                  {
+                    name: preparation.call.toolName,
+                    arguments: preparation.call.arguments,
+                  },
+                  ...(command.kind === 'confirm_order' &&
+                  preparation.call.toolName === 'previewOrder' &&
+                  preparation.afterTool === 'prepare'
+                    ? [{ name: 'placeOrder', arguments: {} }]
+                    : []),
+                ];
+              }
             }
           }
-          let directVerifiedState: AgentGraphState | undefined;
           const directOutput = await options.openAiAgent.respond({
             sessionId: input.sessionId,
             customerId: input.customerId,
@@ -585,17 +596,19 @@ export function createRouteAgentRuntime(
                       toolCalls: result.toolCalls,
                       customerCommand: directMetadata.customerCommand,
                     };
-                    directVerifiedState =
-                      projectKfcOpenAiGenUiState(selectionInput).state;
                     return selectKfcOpenAiGenUi(selectionInput);
                   },
                 }),
           });
-          if (directVerifiedState) {
-            await store.appendEvent(input.sessionId, 'graph:verified_state', {
-              verifiedState: directVerifiedState,
-            });
-          }
+          const directVerifiedState = projectKfcOpenAiGenUiState({
+            session: toolRuntime.session,
+            latestUserMessage: input.text,
+            toolCalls: directOutput.toolCalls,
+            customerCommand: directMetadata.customerCommand,
+          }).state;
+          await store.appendEvent(input.sessionId, 'graph:verified_state', {
+            verifiedState: directVerifiedState,
+          });
           const presentation = buildChannelPresentation({
             channel: 'kfc',
             responseProfile: directMetadata.responseProfile,
@@ -864,6 +877,8 @@ export function createRouteAgentRuntime(
   }
 
   async function clearPersistedHandoff(sessionId: string): Promise<void> {
+    const directSession = openAiToolSessions.get(sessionId)?.session;
+    if (directSession) directSession.handoff = undefined;
     const events = await store.listEvents(sessionId);
     for (let index = events.length - 1; index >= 0; index -= 1) {
       const event = events[index];

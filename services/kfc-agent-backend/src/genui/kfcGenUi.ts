@@ -132,6 +132,12 @@ export function kfcGenUiVerifiedStateRevision(
     cart: state.cart ?? null,
     address: state.address ?? null,
     addressDraft: state.addressDraft ?? null,
+    deliveryAddressDraft: state.deliveryAddressDraft ?? null,
+    deliveryAddressStatus: state.deliveryAddressStatus ?? null,
+    deliveryAddressMissingFields:
+      state.deliveryAddressMissingFields ?? null,
+    deliveryAdministrativeOptions:
+      state.deliveryAdministrativeOptions ?? null,
     orderPreview: state.orderPreview ?? null,
     order: state.order ?? null,
     selectedModifiers: state.selectedModifiers ?? null,
@@ -173,11 +179,10 @@ export async function digestTrustedKfcGenUiAction(input: {
 }
 
 /**
- * The delivered GenUI may render an authenticated address, but conversation
- * metadata is an audit/replay surface rather than private-data storage. Keep
- * safe action authority while removing every raw address from the persisted
- * attachment. This remains fail-closed after a saved address becomes accepted
- * verified state and its turn-local provenance is no longer available.
+ * Keep the customer-entered structured address draft so a customer-scoped
+ * replay can restore the editable form. Provider-resolved and saved
+ * address data is a separate private boundary and must not enter durable GenUI
+ * snapshots. Safe action authority survives both projections.
  */
 export function kfcGenUiAttachmentForPersistence(
   attachment: KfcGenUiAttachment,

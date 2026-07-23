@@ -78,6 +78,59 @@ function menuCollectionData(
   };
 }
 
+function compactModifierTree(
+  modifier: NonNullable<AgentGraphState['menuModifierOptions']>,
+): Record<string, unknown> {
+  const customerGroupName = (min: number | '', max: number | ''): string => {
+    const minimum = typeof min === 'number' ? min : null;
+    const maximum = typeof max === 'number' ? max : null;
+    if (
+      minimum !== null &&
+      minimum > 0 &&
+      maximum !== null &&
+      maximum > minimum
+    ) {
+      return `Chọn từ ${minimum} đến ${maximum} tùy chọn`;
+    }
+    if (minimum !== null && minimum > 0 && maximum === minimum) {
+      return `Chọn ${minimum} tùy chọn`;
+    }
+    if (maximum !== null && maximum > 0) {
+      return `Chọn tối đa ${maximum} tùy chọn`;
+    }
+    if (minimum !== null && minimum > 0) {
+      return `Chọn ít nhất ${minimum} tùy chọn`;
+    }
+    return 'Tùy chọn';
+  };
+  const compactGroups = (
+    groups: NonNullable<
+      AgentGraphState['menuModifierOptions']
+    >['modifierGroups'],
+  ): Array<Record<string, unknown>> =>
+    groups.map((group) => ({
+      groupId: group.groupId,
+      name: customerGroupName(group.min, group.max),
+      min: group.min,
+      max: group.max,
+      depth: group.depth,
+      options: group.options.map((option) => ({
+        modifierId: option.modifierId,
+        name: option.name,
+        priceDeltaVnd: option.priceDeltaVnd,
+        default: option.default,
+        quantity: option.quantity,
+        modifierGroups: compactGroups(option.modifierGroups),
+      })),
+    }));
+
+  return {
+    itemCode: modifier.itemCode,
+    name: modifier.name,
+    modifierGroups: compactGroups(modifier.modifierGroups),
+  };
+}
+
 type PaymentStatusPresentation =
   | {
       executionOutcome: 'success';
@@ -302,6 +355,7 @@ function selectKfcGenUiAttachmentUnbound(
   );
   const isPromotionOnlyTurn =
     hasCurrentPromotionEvidence && !hasCurrentMenuEvidence;
+  const hasCartItems = (state.cart?.items.length ?? 0) > 0;
 
   const supportReasons = (
     state.handoff?.reasons ?? state.escalationReasons
@@ -562,6 +616,7 @@ function selectKfcGenUiAttachmentUnbound(
   }
 
   if (
+    hasCartItems &&
     ((prefersFulfillmentSurface && !state.fulfillment) ||
       input.savedAddressPresentation !== undefined ||
       turnToolNames.includes('getSavedAddresses') ||
@@ -573,12 +628,20 @@ function selectKfcGenUiAttachmentUnbound(
   ) {
     const savedAddressCandidate = input.savedAddressPresentation?.address;
     const displayedAddress = savedAddressCandidate ?? state.address ?? null;
+    const deliveryAddressDraft = state.deliveryAddressDraft ?? null;
     const addressStatus = savedAddressCandidate
       ? 'candidate'
-      : state.address
-        ? 'confirmed'
-        : 'missing';
-    const canAcceptFulfillment = Boolean(displayedAddress);
+      : (state.deliveryAddressStatus ??
+        (state.address
+          ? 'confirmed'
+          : deliveryAddressDraft
+            ? 'incomplete'
+            : 'missing'));
+    const canAcceptFulfillment =
+      Boolean(displayedAddress) &&
+      (savedAddressCandidate !== undefined ||
+        state.deliveryAddressStatus === 'quoted' ||
+        state.fulfillment !== undefined);
     return {
       id: `genui_${idBase}_fulfillment`,
       lifecycleStage: 'fulfillment',
@@ -588,7 +651,10 @@ function selectKfcGenUiAttachmentUnbound(
       data: {
         cart: state.cart ?? null,
         address: displayedAddress,
+        addressDraft: deliveryAddressDraft,
         addressStatus,
+        missingFields: state.deliveryAddressMissingFields ?? [],
+        administrativeOptions: state.deliveryAdministrativeOptions ?? null,
         fulfillment:
           !savedAddressCandidate && state.fulfillment
             ? projectFulfillment(state.fulfillment)
@@ -606,13 +672,21 @@ function selectKfcGenUiAttachmentUnbound(
             },
             { id: 'submit_address', label: 'Đổi địa chỉ' },
           ]
-        : [
-            {
-              id: 'submit_address',
-              label: 'Nhập địa chỉ giao hàng',
-              intent: 'primary',
-            },
-          ],
+        : deliveryAddressDraft
+          ? [
+              {
+                id: 'submit_address',
+                label: 'Cập nhật địa chỉ',
+                intent: 'primary',
+              },
+            ]
+          : [
+              {
+                id: 'submit_address',
+                label: 'Nhập địa chỉ giao hàng',
+                intent: 'primary',
+              },
+            ],
     };
   }
 
@@ -624,7 +698,7 @@ function selectKfcGenUiAttachmentUnbound(
       status: 'active',
       title: `Tùy chỉnh ${state.menuModifierOptions.name}`,
       data: {
-        modifierTree: state.menuModifierOptions,
+        modifierTree: compactModifierTree(state.menuModifierOptions),
         ...(state.cart ? { cart: state.cart } : {}),
       },
       actions: [{ id: 'apply_modifiers', label: 'Áp dụng', intent: 'primary' }],
@@ -689,7 +763,6 @@ function selectKfcGenUiAttachmentUnbound(
           intent: 'primary',
           value: 'confirmed',
         },
-        { id: 'apply_voucher', label: 'Áp mã giảm giá' },
       ],
     };
   }

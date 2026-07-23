@@ -153,6 +153,25 @@ export function menuSearchTextScore(
   return score;
 }
 
+export function menuSearchDocumentMatchesQuery(
+  document: MenuSearchDocument,
+  query: string,
+): boolean {
+  const queryTokens = [...new Set(searchableTokens(query))];
+  if (queryTokens.length === 0) return false;
+  const documentTokens = searchableTokens(
+    [
+      ...document.identifiers,
+      document.name,
+      document.category,
+      document.description,
+      ...(document.aliases ?? []),
+      document.modifierText ?? '',
+    ].join(' '),
+  );
+  return queryTokens.every((queryToken) => documentTokens.includes(queryToken));
+}
+
 export function menuPartySizeScore(
   document: MenuSearchDocument,
   partySize: number | undefined,

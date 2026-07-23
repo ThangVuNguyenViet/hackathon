@@ -184,6 +184,21 @@ describe('canonical searchMenu tool', () => {
     );
   });
 
+  it('treats a repeated category phrase as category browsing rather than a second text filter', async () => {
+    const output = await search({
+      mode: 'search',
+      query: 'đồ uống',
+      category: 'đồ uống',
+    });
+    const expected = fixtures.menuItems.filter(
+      (item) => item.available && item.category === 'Thức Uống & Tráng Miệng',
+    );
+
+    expect(output.items.map((item) => item.code)).toEqual(
+      expected.map((item) => item.code),
+    );
+  });
+
   it('ranks an item by a verified non-spicy modifier option', async () => {
     const output = await search({ query: 'Burger Gà Yo không cay' });
 
@@ -228,6 +243,31 @@ describe('canonical searchMenu tool', () => {
     expect(combo?.matchedModifiers).toHaveLength(2);
     expect(
       output.items.every((item) => item.matchesAllModifierQueries === true),
+    ).toBe(true);
+  });
+
+  it('keeps candidates when product terms are mistakenly supplied as modifier queries without fabricating selectable-modifier evidence', async () => {
+    const output = await search({
+      query: 'combo 4 người',
+      partySize: 4,
+      maxPriceVnd: 300000,
+      modifierQueries: ['gà rán', 'nước'],
+    });
+    const bestText = normalized(
+      `${output.items[0]?.name ?? ''} ${output.items[0]?.category ?? ''} ${output.items[0]?.description ?? ''}`,
+    );
+
+    expect(output.items.length).toBeGreaterThan(0);
+    expect(bestText).toContain('combo');
+    expect(bestText).toContain('ga ran');
+    expect(bestText).toMatch(/pepsi|nuoc/);
+    expect(
+      output.items.some(
+        (item) =>
+          item.matchesAllModifierQueries === false &&
+          (item.matchedModifiers?.length ?? 0) <
+            (['gà rán', 'nước'] as const).length,
+      ),
     ).toBe(true);
   });
 

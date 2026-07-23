@@ -1,4 +1,14 @@
-import type { Address, Cart, Channel, ConversationTurn, MenuItem, Order } from '../domain/types.js';
+import type {
+  Address,
+  Cart,
+  Channel,
+  ConversationTurn,
+  DeliveryAddressDraft,
+  DeliveryAddressRequiredField,
+  DeliveryAdministrativeOptions,
+  MenuItem,
+  Order,
+} from '../domain/types.js';
 import type {
   SelectedPaymentMethodAuthority,
 } from '../domain/opaqueProviderId.js';
@@ -46,6 +56,11 @@ export interface AgentGraphState {
   address?: Address;
   /** Customer-provided partial fields plus canonical location fields verified by the fulfillment API. */
   addressDraft?: Partial<Address>;
+  /** Structured draft owned by the direct OpenAI Responses checkout flow. */
+  deliveryAddressDraft?: DeliveryAddressDraft;
+  deliveryAddressStatus?: 'incomplete' | 'unsupported' | 'quoted';
+  deliveryAddressMissingFields?: DeliveryAddressRequiredField[];
+  deliveryAdministrativeOptions?: DeliveryAdministrativeOptions;
   orderPreview?: Order;
   order?: Order;
   /** Durable proof that submitted-order status was checked for a cancellation request. */

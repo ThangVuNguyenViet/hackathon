@@ -5,6 +5,7 @@ import type { AgentModelIdentity } from "../../src/config/agentModelProfile.js";
 import catalogPayload from "../../fixtures/catalog-baselines/kfcvn-generic-menu@2026-07-10.raw.json" with { type: "json" };
 import { loadBundledGeneratedFixtures } from "../../src/fixtures/bundledFixtures.js";
 import { createMockClients } from "../../src/mock/createMockClients.js";
+import { OpenAiKfcAgent } from "../../src/agent/openAiKfcAgent.js";
 
 describe("health route", () => {
   it("returns service status without external dependencies", async () => {
@@ -35,6 +36,56 @@ describe("health route", () => {
 
     expect(response.statusCode).toBe(503);
     expect(response.json().checks.openai.configured).toBe(true);
+  });
+
+  it("reports the direct Responses agent and conversation runtime", async () => {
+    const directAgent = new OpenAiKfcAgent({
+      client: {
+        responses: {
+          create: async () => ({
+            output: [],
+            output_text: "",
+          }),
+        },
+      },
+      model: "gpt-4.1-mini",
+    });
+    const server = buildServer({
+      openAiAgent: directAgent,
+      readiness: {
+        commerce: { mode: "fixture" },
+        runtime: {
+          agent: {
+            provider: "openai",
+            model: "gpt-4.1-mini",
+            profile: "openai-responses-gpt-4.1-mini",
+          },
+        },
+      },
+    });
+
+    const response = await server.inject({
+      method: "GET",
+      url: "/ready?deep=1",
+    });
+
+    expect(response.json()).toMatchObject({
+      checks: {
+        agent: {
+          ok: true,
+          configured: true,
+          provider: "openai",
+          model: "gpt-4.1-mini",
+          profile: "openai-responses-gpt-4.1-mini",
+        },
+      },
+      proof: {
+        graph: {
+          runtime: "openai-responses-v1",
+          checkpoint: "conversation-history-v1",
+        },
+      },
+    });
   });
 
   it("responds to dashboard CORS preflight requests", async () => {

@@ -28,6 +28,228 @@ function requestToolNames(request: Record<string, unknown> | undefined) {
 }
 
 describe('OpenAI KFC chat API', () => {
+  it('persists an incomplete address draft and accepts one structured prefilled-form update after restart', async () => {
+    const store = new MemoryStore();
+    let responseIndex = 0;
+    const requests: Array<Record<string, unknown>> = [];
+    const emptyAddressUpdate = {
+      recipientName: null,
+      phone: null,
+      addressLine: null,
+      provinceCode: null,
+      provinceName: null,
+      communeCode: null,
+      communeName: null,
+      deliveryInstructions: null,
+      rawAddress: null,
+      legacyDistrictText: null,
+    };
+    const openAiAgent = new OpenAiKfcAgent({
+      client: {
+        responses: {
+          create: async (request) => {
+            requests.push(request);
+            responseIndex += 1;
+            if (responseIndex === 1) {
+              return {
+                output: [
+                  {
+                    type: 'function_call',
+                    call_id: 'call_add_cart_item',
+                    name: 'updateCart',
+                    arguments: JSON.stringify({
+                      itemCode: '20751',
+                      quantity: 1,
+                    }),
+                  },
+                  {
+                    type: 'function_call',
+                    call_id: 'call_partial_address',
+                    name: 'quoteFulfillment',
+                    arguments: JSON.stringify({
+                      method: 'delivery',
+                      address: {
+                        ...emptyAddressUpdate,
+                        addressLine: '54/2 Nguyễn Hồng Đào',
+                        communeName: 'Phường 14',
+                        provinceName: 'TP Hồ Chí Minh',
+                        rawAddress:
+                          '54/2 Nguyễn Hồng Đào p14 q tân bình tp HCM',
+                        legacyDistrictText: 'Quận Tân Bình',
+                      },
+                    }),
+                  },
+                ],
+                output_text: '',
+              };
+            }
+            return {
+              output: [],
+              output_text:
+                responseIndex === 2
+                  ? 'Bạn cho mình xin tên người nhận và số điện thoại nhé.'
+                  : 'Mình đã lưu tên người nhận; còn thiếu số điện thoại.',
+            };
+          },
+        },
+      },
+      model: 'gpt-4.1-mini',
+    });
+    const server = buildServer({
+      store,
+      fixtures: createTestFixtures(),
+      openAiAgent,
+      readiness: {
+        commerce: {
+          mode: 'fixture',
+          requiredCapabilities: ['orders', 'payment'],
+        },
+      },
+    });
+
+    const partialResponse = await server.inject({
+      method: 'POST',
+      url: '/chat/kfc/message',
+      payload: {
+        sessionId: 'kfc:address_form:genui',
+        customerId: 'address_form',
+        clientMessageId: 'address_form_partial',
+        text: '54/2 Nguyễn Hồng Đào p14 q tân bình tp HCM',
+        metadata: { showcaseResponseMode: 'genui' },
+      },
+    });
+
+    expect(partialResponse.statusCode, partialResponse.body).toBe(200);
+    expect(partialResponse.json()).toMatchObject({
+      genUi: {
+        widgetKind: 'addressFulfillmentCheck',
+        data: {
+          addressStatus: 'incomplete',
+          addressDraft: {
+            addressLine: '54/2 Nguyễn Hồng Đào',
+            communeName: 'Phường Tân Bình',
+            provinceName: 'Thành phố Hồ Chí Minh',
+          },
+          missingFields: ['recipientName', 'phone'],
+        },
+      },
+    });
+
+    const resumedServer = buildServer({
+      store,
+      fixtures: createTestFixtures(),
+      openAiAgent,
+      readiness: {
+        commerce: {
+          mode: 'fixture',
+          requiredCapabilities: ['orders', 'payment'],
+        },
+      },
+    });
+    const updatedResponse = await resumedServer.inject({
+      method: 'POST',
+      url: '/chat/kfc/genui-action',
+      payload: {
+        sessionId: 'kfc:address_form:genui',
+        customerId: 'address_form',
+        clientMessageId: 'address_form_update',
+        action: {
+          attachmentId: partialResponse.json().genUi.id,
+          actionId: 'submit_address',
+          payload: {
+            ...emptyAddressUpdate,
+            recipientName: 'Nguyễn An',
+          },
+        },
+      },
+    });
+
+    expect(updatedResponse.statusCode, updatedResponse.body).toBe(200);
+    expect(updatedResponse.json()).toMatchObject({
+      genUi: {
+        widgetKind: 'addressFulfillmentCheck',
+        data: {
+          addressStatus: 'incomplete',
+          addressDraft: {
+            recipientName: 'Nguyễn An',
+            addressLine: '54/2 Nguyễn Hồng Đào',
+            communeName: 'Phường Tân Bình',
+            provinceName: 'Thành phố Hồ Chí Minh',
+          },
+          missingFields: ['phone'],
+        },
+      },
+    });
+    expect(requests.at(-1)?.input).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          type: 'function_call',
+          name: 'quoteFulfillment',
+          arguments: expect.stringContaining('"recipientName":"Nguyễn An"'),
+        }),
+      ]),
+    );
+
+    const quotedResponse = await resumedServer.inject({
+      method: 'POST',
+      url: '/chat/kfc/genui-action',
+      payload: {
+        sessionId: 'kfc:address_form:genui',
+        customerId: 'address_form',
+        clientMessageId: 'address_form_complete',
+        action: {
+          attachmentId: updatedResponse.json().genUi.id,
+          actionId: 'submit_address',
+          payload: {
+            ...emptyAddressUpdate,
+            phone: '0901234567',
+            addressLine: '54/2 Nguyễn Hồng Đào',
+            provinceCode: '79',
+            provinceName: 'Thành phố Hồ Chí Minh',
+            communeCode: '27004',
+            communeName: 'Phường Tân Bình',
+            rawAddress: '54/2 Nguyễn Hồng Đào p14 q Tân Bình tp HCM',
+            legacyDistrictText: 'Quận Tân Bình',
+          },
+        },
+      },
+    });
+
+    expect(quotedResponse.statusCode, quotedResponse.body).toBe(200);
+    expect(quotedResponse.json()).toMatchObject({
+      genUi: {
+        widgetKind: 'addressFulfillmentCheck',
+        data: {
+          addressStatus: 'quoted',
+          addressDraft: {
+            recipientName: 'Nguyễn An',
+            phone: '0901234567',
+            addressLine: '54/2 Nguyễn Hồng Đào',
+            provinceCode: '79',
+            provinceName: 'Thành phố Hồ Chí Minh',
+            communeCode: '27004',
+            communeName: 'Phường Tân Bình',
+          },
+          missingFields: [],
+          cart: {
+            subtotalVnd: 99_000,
+            deliveryFeeVnd: 18_000,
+            totalVnd: 117_000,
+          },
+        },
+      },
+    });
+    const latestVerifiedState = (
+      await store.listEvents('kfc:address_form:genui')
+    )
+      .filter(({ sourceType }) => sourceType === 'graph:verified_state')
+      .at(-1)?.payload.verifiedState;
+    expect(latestVerifiedState).toMatchObject({
+      deliveryAddressStatus: 'quoted',
+      deliveryAddressMissingFields: [],
+    });
+  });
+
   it('routes first-party chat through the direct Responses agent', async () => {
     const store = new MemoryStore();
     const openAiAgent = new OpenAiKfcAgent({
@@ -234,10 +456,17 @@ describe('OpenAI KFC chat API', () => {
                       arguments: JSON.stringify({
                         method: 'delivery',
                         address: {
-                          label: null,
-                          line1: '12 Nguyễn Văn Linh',
-                          district: 'Quận 7',
-                          city: 'Hồ Chí Minh',
+                          recipientName: 'Nguyễn An',
+                          phone: '0901234567',
+                          addressLine: '12 Nguyễn Văn Linh',
+                          provinceCode: null,
+                          provinceName: 'Hồ Chí Minh',
+                          communeCode: null,
+                          communeName: 'Phường Tân Hưng',
+                          deliveryInstructions: null,
+                          rawAddress:
+                            '12 Nguyễn Văn Linh, Phường Tân Phong, Quận 7, Hồ Chí Minh',
+                          legacyDistrictText: 'Quận 7',
                         },
                       }),
                     },
@@ -609,5 +838,161 @@ describe('OpenAI KFC chat API', () => {
     });
     expect(response.json()).not.toHaveProperty('genUi');
     expect(response.json().presentation).not.toHaveProperty('genUi');
+  });
+
+  it('places a confirmed order and creates its named payment link in one direct Responses turn', async () => {
+    const fixtures = createTestFixtures();
+    const supportedMethod = fixtures.paymentMethods.find(
+      ({ displayName, supported }) =>
+        supported && displayName.includes('ZaloPay'),
+    )!;
+    const store = new MemoryStore();
+    const requests: Array<Record<string, unknown>> = [];
+    const responses = [
+      {
+        output: [
+          {
+            type: 'function_call',
+            call_id: 'call_add',
+            name: 'updateCart',
+            arguments: JSON.stringify({
+              itemCode: fixtures.menuItems[0]!.code,
+              quantity: 1,
+            }),
+          },
+        ],
+        output_text: '',
+      },
+      { output: [], output_text: 'Món đã ở trong giỏ.' },
+      {
+        output: [
+          {
+            type: 'function_call',
+            call_id: 'call_quote',
+            name: 'quoteFulfillment',
+            arguments: JSON.stringify({
+              method: 'delivery',
+              address: {
+                recipientName: 'Nguyễn An',
+                phone: '0901234567',
+                addressLine: '60 Phạm Văn Nghị',
+                provinceCode: null,
+                provinceName: 'Hồ Chí Minh',
+                communeCode: null,
+                communeName: 'Phường Tân Hưng',
+                deliveryInstructions: null,
+                rawAddress: null,
+                legacyDistrictText: 'Quận 7',
+              },
+            }),
+          },
+        ],
+        output_text: '',
+      },
+      { output: [], output_text: 'Địa chỉ giao hàng đã được xác minh.' },
+      {
+        output: [
+          {
+            type: 'function_call',
+            call_id: 'call_methods',
+            name: 'listPaymentMethods',
+            arguments: JSON.stringify({ query: supportedMethod.displayName }),
+          },
+        ],
+        output_text: '',
+      },
+      {
+        output: [
+          {
+            type: 'function_call',
+            call_id: 'call_preview',
+            name: 'previewOrder',
+            arguments: '{}',
+          },
+        ],
+        output_text: '',
+      },
+      {
+        output: [
+          {
+            type: 'function_call',
+            call_id: 'call_place',
+            name: 'placeOrder',
+            arguments: '{}',
+          },
+        ],
+        output_text: '',
+      },
+      {
+        output: [
+          {
+            type: 'function_call',
+            call_id: 'call_payment',
+            name: 'createPaymentLink',
+            arguments: JSON.stringify({
+              methodId: supportedMethod.methodId,
+            }),
+          },
+        ],
+        output_text: '',
+      },
+      {
+        output: [],
+        output_text: 'Đơn đã được đặt và liên kết thanh toán đã sẵn sàng.',
+      },
+    ];
+    const openAiAgent = new OpenAiKfcAgent({
+      client: {
+        responses: {
+          create: async (request) => {
+            requests.push(structuredClone(request));
+            return responses.shift();
+          },
+        },
+      },
+      model: 'gpt-4.1-mini',
+    });
+    const server = buildServer({ store, fixtures, openAiAgent });
+    const send = (clientMessageId: string, text: string) =>
+      server.inject({
+        method: 'POST',
+        url: '/chat/kfc/message',
+        payload: {
+          sessionId: 'kfc:confirmed_payment:text',
+          customerId: 'confirmed_payment',
+          clientMessageId,
+          text,
+          metadata: { showcaseResponseMode: 'text' },
+        },
+      });
+
+    await send('payment_setup_cart', 'Thêm một phần vào giỏ.');
+    await send(
+      'payment_setup_address',
+      'Giao cho Nguyễn An, 0901234567, 60 Phạm Văn Nghị, Phường Tân Hưng, TP Hồ Chí Minh.',
+    );
+    const paymentResponse = await send(
+      'payment_confirm',
+      `Đúng rồi, đặt đơn và gửi mình liên kết thanh toán bằng ${supportedMethod.displayName}.`,
+    );
+
+    expect(paymentResponse.statusCode, paymentResponse.body).toBe(200);
+    expect(paymentResponse.json()).toMatchObject({
+      responseText: 'Đơn đã được đặt và liên kết thanh toán đã sẵn sàng.',
+    });
+    const finalInput = requests.at(-1)?.input;
+    expect(finalInput).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ name: 'listPaymentMethods' }),
+        expect.objectContaining({ name: 'previewOrder' }),
+        expect.objectContaining({ name: 'placeOrder' }),
+        expect.objectContaining({
+          name: 'createPaymentLink',
+          arguments: JSON.stringify({
+            methodId: supportedMethod.methodId,
+          }),
+        }),
+      ]),
+    );
   });
 });

@@ -19,7 +19,18 @@ describe('buildFixtures', () => {
     expect(fixtures.menuModifiers.length).toBe(58);
     expect(fixtures.stores.length).toBe(265);
     expect(fixtures.storeAvailability.length).toBe(265);
-    expect(fixtures.fulfillmentServiceAreas).toHaveLength(4);
+    expect(fixtures.administrativeDivisions.provinces).toHaveLength(34);
+    expect(fixtures.administrativeDivisions.communes).toHaveLength(3_321);
+    expect(fixtures.administrativeLegacyMappings).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          legacyDistrict: 'Quận Tân Bình',
+          legacyCommune: 'Phường 14',
+          canonicalCommuneCode: '27004',
+        }),
+      ]),
+    );
+    expect(fixtures.fulfillmentServiceAreas).toHaveLength(5);
     expect(fixtures.promotions.length).toBe(5);
     expect(fixtures.promotionVoucherOffers.length).toBeGreaterThanOrEqual(28);
     expect(fixtures.paymentMethods).toEqual(

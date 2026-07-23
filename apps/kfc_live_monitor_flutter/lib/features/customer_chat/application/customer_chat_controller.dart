@@ -515,7 +515,7 @@ class CustomerChatController extends BeaconController {
       'update_item_quantity' =>
         'Đổi số lượng ${action.value ?? 'món này'} thành ${quantity ?? 1}',
       'accept_fulfillment' => 'Giao đến địa chỉ này',
-      'submit_address' => 'Tôi muốn đổi địa chỉ',
+      'submit_address' => _addressDraftCustomerText(action),
       'confirm_order' => 'Tôi đặt đơn này',
       'apply_voucher' => 'Áp mã giảm giá',
       'open_payment' =>
@@ -530,6 +530,38 @@ class CustomerChatController extends BeaconController {
       'send_issue_summary' => 'Gửi tóm tắt lỗi cho nhân viên',
       _ => action.value ?? action.actionId,
     };
+  }
+
+  String _addressDraftCustomerText(KfcGenUiAction action) {
+    final payload = action.payload;
+    final addressParts =
+        [
+              payload['addressLine'],
+              payload['communeName'],
+              payload['provinceName'],
+            ]
+            .whereType<String>()
+            .map((value) => value.trim())
+            .where((value) => value.isNotEmpty)
+            .toList(growable: false);
+    if (addressParts.length != 3) return 'Xác nhận địa chỉ giao hàng';
+    final recipientName = payload['recipientName'] is String
+        ? (payload['recipientName']! as String).trim()
+        : '';
+    final phone = payload['phone'] is String
+        ? (payload['phone']! as String).trim()
+        : '';
+    final deliveryInstructions = payload['deliveryInstructions'] is String
+        ? (payload['deliveryInstructions']! as String).trim()
+        : '';
+    final recipient = recipientName.isEmpty || phone.isEmpty
+        ? ''
+        : ' cho $recipientName ($phone)';
+    final instructions = deliveryInstructions.isEmpty
+        ? ''
+        : '. Ghi chú: $deliveryInstructions';
+    return 'Xác nhận giao hàng đến ${addressParts.join(', ')}'
+        '$recipient$instructions';
   }
 
   String? _paymentMethodDisplayName(String? methodId) {

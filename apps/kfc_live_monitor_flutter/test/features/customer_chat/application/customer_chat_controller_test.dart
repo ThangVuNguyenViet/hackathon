@@ -189,6 +189,73 @@ void main() {
   );
 
   test(
+    'structured address action is readable in the customer transcript',
+    () async {
+      const attachment = KfcGenUiAttachment(
+        id: 'address_transcript',
+        lifecycleStage: 'fulfillment',
+        widgetKind: KfcGenUiWidgetKind.addressFulfillmentCheck,
+        status: KfcGenUiStatus.active,
+        title: 'Địa chỉ giao hàng',
+        data: {
+          'addressDraft': {
+            'addressLine': '54/2 Nguyễn Hồng Đào',
+            'provinceName': 'Thành phố Hồ Chí Minh',
+          },
+        },
+        actions: [
+          KfcGenUiActionSpec(id: 'submit_address', label: 'Xác nhận địa chỉ'),
+        ],
+      );
+      final controller = CustomerChatController(
+        repository: const FixtureCustomerChatRepository(
+          eventDelay: Duration.zero,
+        ),
+        initialState: const CustomerChatState(
+          sessionId: 'kfc:address_transcript:genui',
+          customerId: 'address_transcript',
+          messages: [
+            CustomerChatMessage(
+              id: 'address_turn',
+              role: CustomerChatRole.assistant,
+              text: 'Bạn bổ sung địa chỉ nhé.',
+              genUi: attachment,
+            ),
+          ],
+        ),
+      );
+
+      await controller.submitAction(
+        const KfcGenUiAction(
+          attachmentId: 'address_transcript',
+          actionId: 'submit_address',
+          payload: {
+            'recipientName': 'Nguyễn An',
+            'phone': '0909123456',
+            'addressLine': '54/2 Nguyễn Hồng Đào',
+            'communeName': 'Phường Tân Bình',
+            'provinceName': 'Thành phố Hồ Chí Minh',
+            'deliveryInstructions': 'Gọi khi đến',
+            'communeCode': null,
+            'provinceCode': null,
+            'rawAddress': null,
+            'legacyDistrictText': null,
+          },
+        ),
+      );
+
+      expect(
+        controller.state.value.messages
+            .firstWhere((message) => message.role == CustomerChatRole.customer)
+            .text,
+        'Xác nhận giao hàng đến 54/2 Nguyễn Hồng Đào, Phường Tân Bình, '
+        'Thành phố Hồ Chí Minh cho Nguyễn An (0909123456). '
+        'Ghi chú: Gọi khi đến',
+      );
+    },
+  );
+
+  test(
     'atomic modifier draft uses verified option names in the transcript',
     () async {
       final attachment = kfcGenUiFixture(KfcGenUiWidgetKind.modifierPicker);

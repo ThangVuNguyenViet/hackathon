@@ -709,6 +709,7 @@ export function createRouteMessengerRuntime(
             tools: createKfcOpenAiTools({
               clients: toolRuntime.clients,
               session: toolRuntime.session,
+              fixtures: await getFixtures(),
               accessContext: await kfcProofAccessContext(
                 run.sessionId,
                 run.externalUserId,

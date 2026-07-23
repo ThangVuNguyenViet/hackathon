@@ -11,9 +11,18 @@ export interface OpenAiFunctionToolDefinition {
   strict: boolean;
 }
 
+export type OpenAiToolRetryReason =
+  'empty_result' | 'tool_error' | 'invalid_arguments' | 'invalid_result';
+
+export interface OpenAiToolRetryPolicy {
+  maxAttempts: number;
+  retryOn: readonly OpenAiToolRetryReason[];
+}
+
 export interface OpenAiFunctionTool {
   definition: OpenAiFunctionToolDefinition;
   execute(arguments_: Record<string, unknown>): Promise<unknown>;
+  retryPolicy?: OpenAiToolRetryPolicy;
 }
 
 export interface OpenAiToolCallTrace {
@@ -103,33 +112,32 @@ export interface OpenAiKfcAgentTurnResult extends RunResponsesToolLoopResult {
 }
 
 const defaultInstructions = [
-  'Bạn là trợ lý KFC Việt Nam thân thiện và tự nhiên.',
-  'Dùng các công cụ khi cần dữ liệu hoặc cần thực hiện thao tác.',
-  'Trả lời trực tiếp dựa trên kết quả công cụ; không bịa dữ liệu.',
-  'Luôn dùng đúng mã món, cửa hàng và đơn hàng từ kết quả công cụ hoặc trạng thái nghiệp vụ đã xác minh; không tự tạo mã.',
-  'Tự chuyển ý định tìm món thành query ngắn gọn cùng category, partySize, maxPriceVnd và modifierQueries phù hợp; gộp các nhu cầu modifier vào một lần gọi searchMenu.',
-  'Vì fixture thực đơn là tiếng Việt, giữ các từ tìm kiếm bằng tiếng Việt và không dịch query hoặc modifierQueries sang tiếng Anh.',
-  'Với yêu cầu loại bỏ dạng "không X", đưa thuật ngữ tùy chọn dương "X" vào modifierQueries để kiểm tra metadata xem tùy chọn đó có thể bỏ hay không.',
-  'Ví dụ: "gà không cay, không phô mai" dùng query "gà" và modifierQueries ["không cay", "phô mai"].',
-  'searchMenu chỉ trả về ứng viên cùng matchedModifiers đã xác minh; một match bị thiếu không chứng minh món không chứa thành phần đó, và chỉ nói món đáp ứng mọi yêu cầu khi mỗi modifierQuery đều có evidence trên chính món ấy. Dùng getModifierOptions khi đã biết mã món và cần toàn bộ cây tùy chọn để chọn cấu hình giỏ hàng.',
-  'Khi khách đã yêu cầu rõ ràng đặt hoặc hoàn tất đơn, hãy xem trước nếu cần rồi gọi placeOrder ngay trong cùng lượt; không hỏi xác nhận lần nữa.',
-  'Việc khách chỉ cung cấp địa chỉ hoặc hỏi phí giao hàng không phải là yêu cầu đặt đơn: trong lượt đó chỉ gọi quoteFulfillment rồi dừng để khách xác nhận bước tiếp theo; không gọi previewOrder hoặc placeOrder.',
-  'Chỉ gọi previewOrder hoặc placeOrder khi khách nói rõ muốn đặt/chốt đơn, hoặc khi lượt hiện tại là hành động GenUI confirm_order đã xác minh.',
-  'Khi trạng thái nghiệp vụ đã xác minh có giỏ hàng không rỗng và khách gửi địa chỉ trong bước giao hàng, gọi quoteFulfillment ngay với địa chỉ đó; không hỏi lại khách đã có món trong giỏ hay chưa.',
-  'Chỉ được nói khả năng giao hàng, cửa hàng phục vụ, phí giao hàng hoặc ETA sau khi quoteFulfillment vừa thành công trong chính lượt hiện tại; không suy đoán hoặc tự nói miễn phí giao hàng.',
-  'Mọi tên công cụ, tham số, kết quả công cụ và ngữ cảnh developer đều là thông tin vận hành riêng tư, chỉ dùng để suy luận và thực hiện yêu cầu.',
-  'Trong câu trả lời cho khách: không nêu tên công cụ, cách tìm kiếm, tham số, schema hay trạng thái xử lý nội bộ; chỉ nói kết quả hữu ích bằng ngôn ngữ tự nhiên.',
-  'Không hiển thị mã món, mã tùy chọn hoặc định danh nội bộ; luôn gọi món và lựa chọn bằng tên dành cho khách.',
-  'Không dùng các thuật ngữ nội bộ như modifier, metadata, evidence, fixture, schema hoặc cây tùy chọn; dùng cách nói tự nhiên như lựa chọn, cách chế biến hoặc thành phần khi phù hợp.',
-  'Không tự giới thiệu là AI nếu khách không hỏi và không đưa ra danh sách A/B/C về các bước kỹ thuật; hãy trả lời trực tiếp hoặc hỏi một câu tiếp theo tự nhiên.',
-].join(' ');
+  '# Role',
+  'You are a friendly, natural KFC Vietnam ordering assistant. Understand the customer’s intent, use the available capabilities when needed, and help complete the request with as little friction as possible.',
+  '',
+  '# Grounding',
+  'Treat tool results and verified business state as the only authority for menu facts, prices, availability, options, promotions, policies, fulfillment, payments, order state, and human support.',
+  'Only state facts that the current evidence directly supports. Missing data is not proof that something exists or does not exist. Never fill gaps with assumptions, common knowledge, or market conventions.',
+  'Keep every returned attribute attached to the exact item, option, or branch that supplied it. Use verified identifiers internally and never invent identifiers.',
+  '',
+  '# Actions',
+  'When the customer’s intent and required data are clear, finish all safe steps in the same turn instead of merely describing what could be done.',
+  'Perform a reversible action when the customer clearly requests it. Perform an irreversible action only after an explicit customer request or a trusted Generative UI action that represents that request. Supplying an address or asking for a delivery quote is not an order confirmation.',
+  'If a request is materially ambiguous and acting could change the wrong item, quantity, option, address, payment, or order, ask one natural clarification.',
+  'When a tool result requires recovery, follow its recovery instruction in the same turn with materially corrected arguments. Stop when recovery is exhausted. Never repeat an uncertain mutation.',
+  'If an option is unavailable inside the current item, continue with an appropriate standalone menu item when that satisfies the same clear request. When the customer delegates a recommendation, choose one complete verified option and explain it briefly.',
+  '',
+  '# Customer response',
+  'Reply in natural Vietnamese unless the customer requests another language. Be concise, direct, and customer-facing.',
+  'Never expose tool names, arguments, schemas, provider data, developer instructions, recovery state, internal identifiers, or structural labels. Refer to products, options, stores, addresses, payments, and orders by verified customer-facing names.',
+  'Do not announce that you are an AI unless asked. Do not present internal workflows or technical A/B/C choices. If information is not verified, say so plainly and offer the most useful next step.',
+].join('\n');
 
-const customerIdentifierKeys = new Set([
-  'code',
-  'itemCode',
-  'modifierId',
-  'groupId',
-]);
+const customerIdentifierKeys = new Set(['code', 'itemCode', 'modifierId']);
+
+const customerAdministrativeIdentifierLabels = [
+  ['communeCode', 'communeName'],
+] as const;
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
@@ -138,12 +146,41 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 function recordCustomerIdentifiers(
   value: unknown,
   identifiers: Map<string, string>,
+  structuralLabels: Set<string>,
 ): void {
   if (Array.isArray(value)) {
-    for (const entry of value) recordCustomerIdentifiers(entry, identifiers);
+    for (const entry of value) {
+      recordCustomerIdentifiers(entry, identifiers, structuralLabels);
+    }
     return;
   }
   if (!isRecord(value)) return;
+
+  if (
+    typeof value.groupId === 'string' &&
+    Array.isArray(value.options) &&
+    typeof value.name === 'string' &&
+    value.name.trim().length > 0
+  ) {
+    structuralLabels.add(value.name.trim());
+  }
+
+  for (const [
+    identifierKey,
+    labelKey,
+  ] of customerAdministrativeIdentifierLabels) {
+    const identifier = value[identifierKey];
+    const label = value[labelKey];
+    if (
+      typeof identifier === 'string' &&
+      identifier.trim().length > 0 &&
+      typeof label === 'string' &&
+      label.trim().length > 0 &&
+      identifier !== label
+    ) {
+      identifiers.set(identifier, label.trim());
+    }
+  }
 
   const label =
     typeof value.name === 'string' && value.name.trim().length > 0
@@ -154,20 +191,57 @@ function recordCustomerIdentifiers(
       if (
         customerIdentifierKeys.has(key) &&
         typeof identifier === 'string' &&
-        identifier.trim().length > 0 &&
+        isCustomerIdentifier(identifier) &&
         identifier !== label
       ) {
-        identifiers.set(identifier, label);
+        identifiers.set(identifier.trim(), label);
       }
     }
   }
   for (const nested of Object.values(value)) {
-    recordCustomerIdentifiers(nested, identifiers);
+    recordCustomerIdentifiers(nested, identifiers, structuralLabels);
   }
+}
+
+function isCustomerIdentifier(value: string): boolean {
+  const identifier = value.trim();
+  return identifier.length >= 5 && /\d/u.test(identifier);
 }
 
 function escapedRegExp(value: string): string {
   return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+function isCurrencyOccurrence(
+  source: string,
+  start: number,
+  length: number,
+): boolean {
+  const before = source.slice(0, start);
+  const after = source.slice(start + length);
+  const currency = '(?:VND|VNĐ|đ|₫)';
+  return (
+    new RegExp(`${currency}\\s*$`, 'iu').test(before) ||
+    new RegExp(`^\\s*${currency}(?=\\s|[.,;:!?)]|$)`, 'iu').test(after)
+  );
+}
+
+function stripStructuralLabels(
+  customerText: string,
+  structuralLabels: ReadonlySet<string>,
+): string {
+  let result = customerText;
+  const labels = [...structuralLabels].sort(
+    (left, right) => right.length - left.length,
+  );
+  for (const label of labels) {
+    const pattern = new RegExp(
+      `(^|[^\\p{L}\\p{N}_])${escapedRegExp(label)}(?=$|[^\\p{L}\\p{N}_])`,
+      'giu',
+    );
+    result = result.replace(pattern, (_match, prefix: string) => prefix);
+  }
+  return result.replace(/[ \t]{2,}/gu, ' ').replace(/\s+([,.;:!?])/gu, '$1');
 }
 
 function presentCustomerResponse(input: {
@@ -175,10 +249,25 @@ function presentCustomerResponse(input: {
   verifiedBusinessContext?: Record<string, unknown>;
   toolCalls: OpenAiToolCallTrace[];
 }): string {
+  const successfulHandoff = input.toolCalls.some(
+    (call) =>
+      call.name === 'handoff' &&
+      isRecord(call.result) &&
+      call.result.ok === true,
+  );
+  if (successfulHandoff) {
+    return 'Yêu cầu gặp nhân viên của bạn đã được ghi nhận và đang chờ nhân viên tiếp nhận. Hiện chưa có thời gian phản hồi được xác minh.';
+  }
+
   const identifiers = new Map<string, string>();
-  recordCustomerIdentifiers(input.verifiedBusinessContext, identifiers);
+  const structuralLabels = new Set<string>();
+  recordCustomerIdentifiers(
+    input.verifiedBusinessContext,
+    identifiers,
+    structuralLabels,
+  );
   for (const call of input.toolCalls) {
-    recordCustomerIdentifiers(call.result, identifiers);
+    recordCustomerIdentifiers(call.result, identifiers, structuralLabels);
   }
 
   let customerText = input.responseText;
@@ -187,15 +276,24 @@ function presentCustomerResponse(input: {
   );
   for (const [identifier, label] of entries) {
     const pattern = new RegExp(
-      `(^|[^\\p{L}\\p{N}_])${escapedRegExp(identifier)}(?=$|[^\\p{L}\\p{N}_])`,
+      `(^|[^\\p{L}\\p{N}_])(${escapedRegExp(identifier)})(?=$|[^\\p{L}\\p{N}_])`,
       'gu',
     );
     customerText = customerText.replace(
       pattern,
-      (_match, prefix: string) => `${prefix}${label}`,
+      (
+        match: string,
+        prefix: string,
+        _matchedIdentifier: string,
+        offset: number,
+        source: string,
+      ) =>
+        isCurrencyOccurrence(source, offset + prefix.length, identifier.length)
+          ? match
+          : `${prefix}${label}`,
     );
   }
-  return customerText;
+  return stripStructuralLabels(customerText, structuralLabels);
 }
 
 export class OpenAiKfcAgent {
@@ -255,7 +353,7 @@ export class OpenAiKfcAgent {
           'Report only the supplied verified state and exact tool result.',
           'Do not claim that an order was placed, paid, or is being processed unless the verified result explicitly says so.',
           input.metadata.customerCommand.kind === 'submit_address'
-            ? 'No address was supplied; ask the customer to type their delivery address.'
+            ? 'Handle the verified structured address update and describe only its resulting draft, missing fields, serviceability, or quote.'
             : '',
         ]
           .filter(Boolean)
@@ -317,6 +415,139 @@ function isFunctionCall(
   );
 }
 
+type ToolChoice = 'auto' | 'required' | 'none';
+
+interface ToolRecovery {
+  required: boolean;
+  exhausted?: true;
+  reason: OpenAiToolRetryReason;
+  attempt: number;
+  maxAttempts: number;
+  instruction: string;
+}
+
+function toolErrorCode(result: unknown): string | undefined {
+  if (!isRecord(result) || result.ok !== false) return undefined;
+  return typeof result.errorCode === 'string' ? result.errorCode : undefined;
+}
+
+function isInvalidArgumentsResult(result: unknown): boolean {
+  const errorCode = toolErrorCode(result);
+  return (
+    errorCode === 'invalid_arguments' ||
+    errorCode === 'invalid_tool_arguments' ||
+    errorCode === 'unverified_payment_method'
+  );
+}
+
+function resultPayload(result: unknown): unknown {
+  return isRecord(result) && result.ok === true && 'value' in result
+    ? result.value
+    : result;
+}
+
+function isEmptyToolResult(result: unknown): boolean {
+  const payload = resultPayload(result);
+  if (Array.isArray(payload)) return payload.length === 0;
+  if (!isRecord(payload)) return false;
+  if (Array.isArray(payload.items)) return payload.items.length === 0;
+  return payload.total === 0;
+}
+
+function isInvalidToolResult(result: unknown): boolean {
+  const payload = resultPayload(result);
+  if (payload === undefined) return true;
+  return isRecord(payload) && Object.keys(payload).length === 0;
+}
+
+function retryReasonForResult(
+  tool: OpenAiFunctionTool,
+  result: unknown,
+): OpenAiToolRetryReason | undefined {
+  const retryOn = tool.retryPolicy?.retryOn ?? [];
+  if (
+    isInvalidArgumentsResult(result) &&
+    retryOn.includes('invalid_arguments')
+  ) {
+    return 'invalid_arguments';
+  }
+  if (
+    isRecord(result) &&
+    result.ok === false &&
+    retryOn.includes('tool_error')
+  ) {
+    return 'tool_error';
+  }
+  if (isEmptyToolResult(result) && retryOn.includes('empty_result')) {
+    return 'empty_result';
+  }
+  if (isInvalidToolResult(result) && retryOn.includes('invalid_result')) {
+    return 'invalid_result';
+  }
+  return undefined;
+}
+
+function retryReasonForThrownError(
+  tool: OpenAiFunctionTool,
+  error: unknown,
+): OpenAiToolRetryReason | undefined {
+  const retryOn = tool.retryPolicy?.retryOn ?? [];
+  const errorName =
+    isRecord(error) && typeof error.name === 'string' ? error.name : '';
+  if (
+    (errorName === 'ZodError' || error instanceof SyntaxError) &&
+    retryOn.includes('invalid_arguments')
+  ) {
+    return 'invalid_arguments';
+  }
+  return retryOn.includes('tool_error') ? 'tool_error' : undefined;
+}
+
+function toolFailureResult(
+  reason: OpenAiToolRetryReason,
+  error: unknown,
+): Record<string, unknown> {
+  const message =
+    error instanceof Error && error.message.trim().length > 0
+      ? error.message
+      : reason === 'invalid_arguments'
+        ? 'Tool arguments were invalid'
+        : 'Tool execution failed';
+  return {
+    ok: false,
+    errorCode: reason,
+    message,
+  };
+}
+
+function withRecovery(
+  result: unknown,
+  recovery: ToolRecovery,
+): Record<string, unknown> {
+  return {
+    ...(isRecord(result) ? result : { result }),
+    recovery,
+  };
+}
+
+function recoveryForAttempt(input: {
+  reason: OpenAiToolRetryReason;
+  attempt: number;
+  maxAttempts: number;
+}): ToolRecovery {
+  const exhausted = input.attempt >= input.maxAttempts;
+  return {
+    required: !exhausted,
+    ...(exhausted ? { exhausted: true as const } : {}),
+    reason: input.reason,
+    attempt: input.attempt,
+    maxAttempts: input.maxAttempts,
+    instruction: exhausted
+      ? 'Stop retrying and answer honestly from verified evidence.'
+      : 'Retry with materially corrected or broader arguments. Do not repeat identical arguments. You may choose another suitable read tool.',
+  };
+}
+
 export async function runResponsesToolLoop(
   options: RunResponsesToolLoopInput,
 ): Promise<RunResponsesToolLoopResult> {
@@ -362,13 +593,17 @@ export async function runResponsesToolLoop(
   }
 
   const modelTools = options.allowModelToolCalls === false ? [] : options.tools;
+  let nextToolChoice: ToolChoice = 'auto';
+  let semanticFailureAttempts = 0;
 
   for (let round = 0; round <= options.maxToolRounds; round += 1) {
     const response = await options.client.responses.create({
       model: options.model,
       instructions: options.instructions,
       tools: modelTools.map((tool) => tool.definition),
-      tool_choice: options.allowModelToolCalls === false ? 'none' : 'auto',
+      tool_choice:
+        options.allowModelToolCalls === false ? 'none' : nextToolChoice,
+      parallel_tool_calls: false,
       input,
     });
     if (!response) throw new Error('OpenAI returned no response');
@@ -386,11 +621,47 @@ export async function runResponsesToolLoop(
     }
 
     input.push(...response.output);
+    nextToolChoice = 'auto';
     for (const call of calls) {
       const tool = toolsByName.get(call.name);
       if (!tool) throw new Error(`OpenAI requested unknown tool: ${call.name}`);
-      const arguments_ = JSON.parse(call.arguments) as Record<string, unknown>;
-      const result = await tool.execute(arguments_);
+      let arguments_: Record<string, unknown> = {};
+      let result: unknown;
+      let retryReason: OpenAiToolRetryReason | undefined;
+      try {
+        const parsedArguments: unknown = JSON.parse(call.arguments);
+        if (!isRecord(parsedArguments)) {
+          throw new SyntaxError('Tool arguments must be a JSON object');
+        }
+        arguments_ = parsedArguments;
+      } catch (error) {
+        retryReason = tool.retryPolicy?.retryOn.includes('invalid_arguments')
+          ? 'invalid_arguments'
+          : undefined;
+        result = toolFailureResult('invalid_arguments', error);
+      }
+      if (result === undefined) {
+        try {
+          result = await tool.execute(arguments_);
+          retryReason = retryReasonForResult(tool, result);
+        } catch (error) {
+          retryReason = retryReasonForThrownError(tool, error);
+          result = toolFailureResult(retryReason ?? 'tool_error', error);
+        }
+      }
+
+      if (retryReason && tool.retryPolicy) {
+        semanticFailureAttempts += 1;
+        const maxAttempts = Math.min(tool.retryPolicy.maxAttempts, 3);
+        const recovery = recoveryForAttempt({
+          reason: retryReason,
+          attempt: semanticFailureAttempts,
+          maxAttempts,
+        });
+        result = withRecovery(result, recovery);
+        nextToolChoice = recovery.exhausted ? 'none' : 'required';
+      }
+
       toolCalls.push({ name: call.name, arguments: arguments_, result });
       input.push({
         type: 'function_call_output',

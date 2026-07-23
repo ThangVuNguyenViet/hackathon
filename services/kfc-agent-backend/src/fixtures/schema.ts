@@ -173,10 +173,64 @@ export const generatedFulfillmentServiceAreaSchema = z.object({
   canonicalCity: z.string().min(1),
   districts: z.array(z.string()).min(1),
   cities: z.array(z.string()).min(1),
+  canonicalCommune: z.string().min(1).optional(),
+  canonicalProvince: z.string().min(1).optional(),
+  communes: z.array(z.string().min(1)).min(1).optional(),
+  provinces: z.array(z.string().min(1)).min(1).optional(),
   provenance: z.object({
     sourceFile: z.string(),
     sourceApi: z.string(),
     fixtureMode: z.literal('demo_mock_seed'),
+  }),
+});
+
+const administrativeAuthoritySchema = z.object({
+  documentId: z.string().min(1),
+  decisionUrl: z.string().url(),
+  provinceCatalogUrl: z.string().url(),
+  communeCatalogUrl: z.string().url(),
+});
+
+export const generatedAdministrativeDivisionsSchema = z.object({
+  effectiveFrom: z.string().date(),
+  authority: administrativeAuthoritySchema,
+  extraction: z.object({
+    sourceUrl: z.string().url(),
+    revision: z.string().min(1),
+    license: z.string().min(1),
+    copyright: z.string().min(1),
+  }),
+  provinces: z.array(
+    z.object({
+      code: z.string().regex(/^\d{2}$/),
+      name: z.string().min(1),
+      fullName: z.string().min(1),
+      type: z.enum(['province', 'municipality']),
+    }),
+  ),
+  communes: z.array(
+    z.object({
+      code: z.string().regex(/^\d{5}$/),
+      name: z.string().min(1),
+      fullName: z.string().min(1),
+      type: z.enum(['ward', 'commune', 'special_administrative_region']),
+      provinceCode: z.string().regex(/^\d{2}$/),
+    }),
+  ),
+});
+
+export const generatedAdministrativeLegacyMappingSchema = z.object({
+  legacyProvince: z.string().min(1),
+  legacyProvinceAliases: z.array(z.string().min(1)).default([]),
+  legacyDistrict: z.string().min(1).optional(),
+  legacyDistrictAliases: z.array(z.string().min(1)).default([]),
+  legacyCommune: z.string().min(1),
+  legacyCommuneAliases: z.array(z.string().min(1)).default([]),
+  canonicalProvinceCode: z.string().regex(/^\d{2}$/),
+  canonicalCommuneCode: z.string().regex(/^\d{5}$/),
+  authority: z.object({
+    documentId: z.string().min(1),
+    sourceUrl: z.string().url(),
   }),
 });
 
@@ -426,6 +480,10 @@ export const generatedFixturesSchema = z.object({
   menuModifiers: z.array(generatedMenuModifierSchema),
   stores: z.array(generatedStoreSchema),
   storeAvailability: z.array(generatedStoreAvailabilitySchema),
+  administrativeDivisions: generatedAdministrativeDivisionsSchema,
+  administrativeLegacyMappings: z.array(
+    generatedAdministrativeLegacyMappingSchema,
+  ),
   fulfillmentServiceAreas: z.array(generatedFulfillmentServiceAreaSchema),
   fulfillmentQuotes: z.array(generatedFulfillmentQuoteSchema),
   promotions: z.array(generatedContentPageSchema),
@@ -451,6 +509,12 @@ export type GeneratedStoreAvailability = z.infer<
 >;
 export type GeneratedFulfillmentServiceArea = z.infer<
   typeof generatedFulfillmentServiceAreaSchema
+>;
+export type GeneratedAdministrativeDivisions = z.infer<
+  typeof generatedAdministrativeDivisionsSchema
+>;
+export type GeneratedAdministrativeLegacyMapping = z.infer<
+  typeof generatedAdministrativeLegacyMappingSchema
 >;
 export type GeneratedFulfillmentQuote = z.infer<
   typeof generatedFulfillmentQuoteSchema

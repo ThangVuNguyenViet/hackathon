@@ -57,6 +57,8 @@ describe('customer run streaming routes', () => {
     const deferred: Array<() => Promise<void>> = [];
     const privateAddressMarker =
       'private-sse-saved-address-marker-Ω';
+    const customerAddressDraftMarker =
+      'customer-sse-address-draft-marker-Ω';
     const savedAddressRef =
       '00000000-0000-4000-8000-000000000124';
     const genUi: KfcGenUiAttachment = {
@@ -71,6 +73,13 @@ describe('customer run streaming routes', () => {
           line1: privateAddressMarker,
           district: 'Quận 7',
           city: 'Hồ Chí Minh',
+        },
+        addressDraft: {
+          recipientName: 'Nguyễn An',
+          phone: '0901234567',
+          addressLine: customerAddressDraftMarker,
+          provinceName: 'Thành phố Hồ Chí Minh',
+          communeName: 'Phường Tân Bình',
         },
         addressStatus: 'candidate',
         cart: {
@@ -119,6 +128,7 @@ describe('customer run streaming routes', () => {
     const runId = started.body.runId as string;
     const stored = await store.listCustomerRunEvents(runId);
     expect(JSON.stringify(stored)).not.toContain(privateAddressMarker);
+    expect(JSON.stringify(stored)).toContain(customerAddressDraftMarker);
 
     const server = buildServer({
       store,
@@ -132,6 +142,7 @@ describe('customer run streaming routes', () => {
 
     expect(stream.statusCode).toBe(200);
     expect(stream.body).not.toContain(privateAddressMarker);
+    expect(stream.body).toContain(customerAddressDraftMarker);
     expect(stream.body).toContain(savedAddressRef);
     expect(stream.body).toContain('saved-address-sse-cart');
     expect(stream.body).toContain('accept_fulfillment');

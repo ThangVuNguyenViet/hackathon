@@ -30,6 +30,7 @@ import {
   normalizeSearchText,
   includesAll,
   menuCategoryMatches,
+  menuSearchDocumentMatchesQuery,
   matchMenuModifierQueries,
   menuPartySizeScore,
   menuSearchTextScore,
@@ -231,6 +232,25 @@ function searchScore(
     : textScore + menuPartySizeScore(document, partySize);
 }
 
+function menuSearchDocument(
+  item: GeneratedMenuItem,
+  modifier: GeneratedMenuModifier | undefined,
+) {
+  return {
+    identifiers: [item.code, item.itemId, item.posItemId, item.productCode],
+    name: item.name,
+    category: item.category,
+    description: item.description,
+    aliases: [
+      ...(item.orderingMetadata?.searchAliases ?? []),
+      ...Object.values(
+        item.orderingMetadata?.componentSearchAliases ?? {},
+      ).flat(),
+    ],
+    modifierText: modifierSearchText(modifier),
+  };
+}
+
 export class OrderingDataService {
   private readonly menuByCode: Map<string, GeneratedMenuItem>;
   private readonly menuByItemId: Map<string, GeneratedMenuItem>;
@@ -354,6 +374,11 @@ export class OrderingDataService {
   searchMenuTool(input: MenuSearchInput): MenuSearchResult {
     const mode = input.mode ?? 'search';
     const query = input.query?.trim() ?? '';
+    const effectiveQuery =
+      input.category &&
+      normalizeSearchText(query) === normalizeSearchText(input.category)
+        ? ''
+        : query;
     const modifierQueries = input.modifierQueries ?? [];
     const categories = [
       ...new Set(this.fixtures.menuItems.map((item) => item.category)),
@@ -365,41 +390,71 @@ export class OrderingDataService {
         (input.maxPriceVnd === undefined ||
           item.priceVnd <= input.maxPriceVnd),
     );
+    const searchCandidates = filtered.map((item, fixtureIndex) => {
+      const modifier = this.modifierByItemId.get(item.itemId);
+      const document = menuSearchDocument(item, modifier);
+      const productDocument = { ...document, modifierText: '' };
+      const matchedModifiers = matchMenuModifierQueries(
+        modifierSearchCandidates(modifier),
+        modifierQueries,
+      );
+      const matchedQueryCount = new Set(
+        matchedModifiers.map((match) => match.query),
+      ).size;
+      const documentMatchedQueries = modifierQueries.filter((modifierQuery) =>
+        menuSearchDocumentMatchesQuery(document, modifierQuery),
+      );
+      const productMatchedQueries = modifierQueries.filter((modifierQuery) =>
+        menuSearchDocumentMatchesQuery(productDocument, modifierQuery),
+      );
+      const inclusionMatchedQueries = [
+        ...new Set([
+          ...matchedModifiers.map((match) => match.query),
+          ...documentMatchedQueries,
+        ]),
+      ];
+      return {
+        item,
+        fixtureIndex,
+        matchedModifiers,
+        inclusionMatchedQueries,
+        matchesAllModifierQueries:
+          modifierQueries.length > 0 &&
+          matchedQueryCount === modifierQueries.length,
+        score:
+          searchScore(item, modifier, effectiveQuery, input.partySize) +
+          matchedQueryCount * 300 +
+          productMatchedQueries.length * 200,
+      };
+    });
+    const recognizedModifierQueries = modifierQueries.filter((modifierQuery) =>
+      this.fixtures.menuItems.some((item) =>
+        menuSearchDocumentMatchesQuery(
+          menuSearchDocument(
+            item,
+            this.modifierByItemId.get(item.itemId),
+          ),
+          modifierQuery,
+        ),
+      ),
+    );
     const ranked =
       mode === 'full' ||
-      (!query && input.partySize === undefined && modifierQueries.length === 0)
+      (!effectiveQuery &&
+        input.partySize === undefined &&
+        modifierQueries.length === 0)
         ? filtered.map((item) => ({
             item,
             matchedModifiers: [],
             matchesAllModifierQueries: undefined,
           }))
-        : filtered
-            .map((item, fixtureIndex) => {
-              const modifier = this.modifierByItemId.get(item.itemId);
-              const matchedModifiers = matchMenuModifierQueries(
-                modifierSearchCandidates(modifier),
-                modifierQueries,
-              );
-              const matchedQueryCount = new Set(
-                matchedModifiers.map((match) => match.query),
-              ).size;
-              return {
-                item,
-                fixtureIndex,
-                matchedModifiers,
-                matchesAllModifierQueries:
-                  modifierQueries.length > 0 &&
-                  matchedQueryCount === modifierQueries.length,
-                score:
-                  searchScore(item, modifier, query, input.partySize) +
-                  matchedQueryCount * 300,
-              };
-            })
+        : searchCandidates
             .filter(
-              ({ score, matchesAllModifierQueries }) =>
-                (query.length === 0 || score > 0) &&
-                (modifierQueries.length === 0 ||
-                  matchesAllModifierQueries),
+              ({ score, inclusionMatchedQueries }) =>
+                (effectiveQuery.length === 0 || score > 0) &&
+                recognizedModifierQueries.every((modifierQuery) =>
+                  inclusionMatchedQueries.includes(modifierQuery),
+                ),
             )
             .sort(
               (left, right) =>

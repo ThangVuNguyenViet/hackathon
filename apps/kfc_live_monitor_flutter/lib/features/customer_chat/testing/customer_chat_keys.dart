@@ -62,6 +62,14 @@ abstract final class CustomerChatKeys {
     return Key('kfcGenUiCartImage_${attachmentId}_$itemCode');
   }
 
+  static Key genUiAddressField(String attachmentId, String field) {
+    return Key('kfcGenUiAddressField_${attachmentId}_$field');
+  }
+
+  static Key genUiAddressMissingField(String attachmentId, String field) {
+    return Key('kfcGenUiAddressMissingField_${attachmentId}_$field');
+  }
+
   static Key genUiMenuImage(String attachmentId, String itemCode) =>
       Key('kfcGenUiMenuImage_${attachmentId}_$itemCode');
 

@@ -9,6 +9,60 @@ const _paymentMethodCollectionAuthority = <String, Object?>{
 };
 
 void main() {
+  test('authorizes one complete structured delivery-address draft', () {
+    const attachment = KfcGenUiAttachment(
+      id: 'address-authority',
+      lifecycleStage: 'fulfillment',
+      widgetKind: KfcGenUiWidgetKind.addressFulfillmentCheck,
+      status: KfcGenUiStatus.active,
+      title: 'Địa chỉ',
+      data: {
+        'addressDraft': {
+          'addressLine': '54/2 Nguyễn Hồng Đào',
+          'provinceName': 'Thành phố Hồ Chí Minh',
+        },
+      },
+      actions: [
+        KfcGenUiActionSpec(id: 'submit_address', label: 'Xác nhận địa chỉ'),
+      ],
+    );
+    const payload = {
+      'recipientName': 'Nguyễn An',
+      'phone': '0909123456',
+      'addressLine': '54/2 Nguyễn Hồng Đào',
+      'communeCode': '26740',
+      'communeName': 'Phường Tân Bình',
+      'provinceCode': '79',
+      'provinceName': 'Thành phố Hồ Chí Minh',
+      'deliveryInstructions': 'Gọi khi đến',
+      'rawAddress': null,
+      'legacyDistrictText': null,
+    };
+
+    final action = attachment.bindAction(
+      actionId: 'submit_address',
+      payload: payload,
+    );
+
+    expect(action, isNotNull);
+    expect(attachment.authorizesAction(action!), isTrue);
+    expect(
+      attachment.authorizesAction(
+        const KfcGenUiAction(
+          attachmentId: 'address-authority',
+          actionId: 'submit_address',
+          payload: {
+            'recipientName': 'Nguyễn An',
+            'phone': '0909123456',
+            'addressLine': '54/2 Nguyễn Hồng Đào',
+            'provinceName': 'Thành phố Hồ Chí Minh',
+          },
+        ),
+      ),
+      isFalse,
+    );
+  });
+
   test('parses the direct Responses full-menu browser contract', () {
     final attachment = KfcGenUiAttachment.fromJson({
       'id': 'full_menu',

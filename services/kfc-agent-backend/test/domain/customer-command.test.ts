@@ -351,6 +351,40 @@ describe('trusted customer action contract', () => {
     ).toBeUndefined();
   });
 
+  it('maps one atomic structured delivery-address draft', () => {
+    expect(
+      customerCommandFromVerifiedAction({
+        actionId: 'submit_address',
+        payload: {
+          recipientName: 'Nguyễn An',
+          phone: '0901234567',
+          addressLine: '54/2 Nguyễn Hồng Đào',
+          provinceCode: null,
+          provinceName: 'TP Hồ Chí Minh',
+          communeCode: null,
+          communeName: 'Phường 14',
+          deliveryInstructions: 'Gọi khi đến',
+          rawAddress: '54/2 Nguyễn Hồng Đào p14 q tân bình tp HCM',
+          legacyDistrictText: 'Quận Tân Bình',
+        },
+      }),
+    ).toEqual({
+      kind: 'submit_address',
+      address: {
+        recipientName: 'Nguyễn An',
+        phone: '0901234567',
+        addressLine: '54/2 Nguyễn Hồng Đào',
+        provinceCode: null,
+        provinceName: 'TP Hồ Chí Minh',
+        communeCode: null,
+        communeName: 'Phường 14',
+        deliveryInstructions: 'Gọi khi đến',
+        rawAddress: '54/2 Nguyễn Hồng Đào p14 q tân bình tp HCM',
+        legacyDistrictText: 'Quận Tân Bình',
+      },
+    });
+  });
+
   it('bounds free-form command values and preserves exact official evidence URLs', () => {
     expect(
       customerCommandFromVerifiedAction({

@@ -50,6 +50,7 @@ import type {
 import {
   createTrustedCustomerActionEnvelope,
   customerCommandFromVerifiedAction,
+  deliveryAddressUpdateSchema,
 } from '../domain/customerCommand.js';
 import {
   opaqueProviderIdSchema,
@@ -211,6 +212,8 @@ function hasExactClientActionPayload(
         canonicalJson(payload) === canonicalJson(actionSpec.payload)
       );
     }
+    case 'submit_address':
+      return deliveryAddressUpdateSchema.safeParse(payload).success;
     default:
       if (payload === undefined) return true;
       if (actionSpec.payload === undefined) {
@@ -555,6 +558,18 @@ export function createChatRouteHandlers(context: RouteHandlerContext) {
           !draft.success ||
           draft.data.itemCode !== tree.itemCode ||
           draft.data.selections.some((selection) => !validSelection(selection))
+        ) {
+          return { status: 422, body: { errorCode: 'invalid_action_payload' } };
+        }
+        trustedPayload = draft.data;
+        trustedValue = undefined;
+      } else if (actionSpec.id === 'submit_address') {
+        const draft = deliveryAddressUpdateSchema.safeParse(
+          parsed.data.action.payload,
+        );
+        if (
+          attachment.widgetKind !== 'addressFulfillmentCheck' ||
+          !draft.success
         ) {
           return { status: 422, body: { errorCode: 'invalid_action_payload' } };
         }

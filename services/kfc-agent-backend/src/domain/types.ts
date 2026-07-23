@@ -130,6 +130,43 @@ export interface FulfillmentAddressInput {
   city: string | null;
 }
 
+export const deliveryAddressRequiredFields = [
+  'recipientName',
+  'phone',
+  'addressLine',
+  'provinceName',
+  'communeName',
+] as const;
+
+export type DeliveryAddressRequiredField =
+  (typeof deliveryAddressRequiredFields)[number];
+
+/**
+ * Customer-owned address draft used by the direct Responses agent.
+ *
+ * Names may be extracted from natural language before an administrative
+ * fixture resolves stable codes. Null is reserved for strict tool input;
+ * persisted drafts contain only values that the customer actually supplied or
+ * that an administrative fixture verified.
+ */
+export interface DeliveryAddressDraft {
+  recipientName?: string;
+  phone?: string;
+  addressLine?: string;
+  provinceCode?: string;
+  provinceName?: string;
+  communeCode?: string;
+  communeName?: string;
+  deliveryInstructions?: string;
+  rawAddress?: string;
+  legacyDistrictText?: string;
+}
+
+export interface DeliveryAdministrativeOptions {
+  provinces: Array<{ code: string; name: string }>;
+  communes: Array<{ code: string; name: string; provinceCode: string }>;
+}
+
 export type OrderStatus =
   | "previewed"
   | "created"

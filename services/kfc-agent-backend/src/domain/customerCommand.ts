@@ -18,6 +18,28 @@ const savedAddressRefSchema = z
   })
   .strict();
 
+const nullableAddressFieldSchema = z
+  .string()
+  .trim()
+  .min(1)
+  .max(500)
+  .nullable();
+
+export const deliveryAddressUpdateSchema = z
+  .object({
+    recipientName: nullableAddressFieldSchema,
+    phone: nullableAddressFieldSchema,
+    addressLine: nullableAddressFieldSchema,
+    provinceCode: nullableAddressFieldSchema,
+    provinceName: nullableAddressFieldSchema,
+    communeCode: nullableAddressFieldSchema,
+    communeName: nullableAddressFieldSchema,
+    deliveryInstructions: nullableAddressFieldSchema,
+    rawAddress: nullableAddressFieldSchema,
+    legacyDistrictText: nullableAddressFieldSchema,
+  })
+  .strict();
+
 const cartUpdateCommandSchema = z
   .object({
     kind: z.literal('cart_update'),
@@ -158,6 +180,7 @@ const customerCommandSchema = z.discriminatedUnion('kind', [
     .object({
       kind: z.literal('submit_address'),
       value: addressValueSchema.optional(),
+      address: deliveryAddressUpdateSchema.optional(),
     })
     .strict(),
   z
@@ -340,13 +363,21 @@ export function customerCommandFromVerifiedAction(
     }
     case 'edit_cart':
       return commandWithoutPayload(payload, { kind: 'edit_cart' });
-    case 'submit_address':
+    case 'submit_address': {
+      const structured = deliveryAddressUpdateSchema.safeParse(payload);
+      if (structured.success) {
+        return {
+          kind: 'submit_address',
+          address: structured.data,
+        };
+      }
       return commandWithOptionalValue(
         payload,
         action.value,
         addressValueSchema,
         'submit_address',
       );
+    }
     case 'apply_voucher':
       return commandWithOptionalValue(
         payload,

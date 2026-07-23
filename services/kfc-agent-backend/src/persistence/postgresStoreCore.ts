@@ -756,14 +756,17 @@ export abstract class PostgresStoreCore {
       events.length,
       events.at(-1)!.occurredAt,
     ];
+    const eventColumnTypes = [
+      'text',
+      'text',
+      'integer',
+      'integer',
+      'text',
+      'timestamptz',
+      'jsonb',
+    ] as const;
     const rows = events.map((event) => {
-      const placeholders = Array.from({ length: 7 }, () => {
-        values.push(undefined);
-        return `$${values.length}`;
-      });
-      values.splice(
-        values.length - 7,
-        7,
+      const rowValues = [
         event.eventId,
         event.runId,
         event.sequence,
@@ -771,7 +774,11 @@ export abstract class PostgresStoreCore {
         event.type,
         event.occurredAt,
         event.payload,
-      );
+      ];
+      const placeholders = rowValues.map((value, index) => {
+        values.push(value);
+        return `$${values.length}::${eventColumnTypes[index]}`;
+      });
       return `(${placeholders.join(', ')})`;
     });
     const result = await this.db.query<CustomerRunEventRow>(

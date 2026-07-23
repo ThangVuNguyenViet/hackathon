@@ -476,6 +476,20 @@ class KfcGenUiAttachment {
         .toList(growable: false);
     if (candidates.length != 1) return null;
     final spec = candidates.single;
+    if (actionId == 'submit_address') {
+      if (data['addressDraft'] is! Map ||
+          spec.payload.isNotEmpty ||
+          spec.value != null ||
+          verifiedValue != null ||
+          !_isValidDeliveryAddressPayload(payload)) {
+        return null;
+      }
+      return KfcGenUiAction(
+        attachmentId: id,
+        actionId: spec.id,
+        payload: payload,
+      );
+    }
     if (!_isValidBoundActionPayload(actionId, payload) ||
         !_containsExactJsonBindings(payload, spec.payload) ||
         (spec.value != null && spec.value != verifiedValue) ||
@@ -492,6 +506,14 @@ class KfcGenUiAttachment {
 
   bool authorizesAction(KfcGenUiAction action) {
     if (action.attachmentId != id) return false;
+    if (action.actionId == 'submit_address' && data['addressDraft'] is Map) {
+      final rebound = bindAction(
+        actionId: action.actionId,
+        payload: action.payload,
+        verifiedValue: action.value,
+      );
+      return rebound != null && _sameAction(rebound, action);
+    }
     if (_dynamicActionIds.contains(action.actionId)) {
       final rebound = bindAction(
         actionId: action.actionId,
@@ -816,6 +838,40 @@ bool _isValidBoundActionPayload(String actionId, Map<String, Object?> payload) {
     default:
       return false;
   }
+}
+
+bool _isValidDeliveryAddressPayload(Map<String, Object?> payload) {
+  const requiredFields = {
+    'recipientName': 200,
+    'phone': 50,
+    'addressLine': 500,
+    'communeName': 200,
+    'provinceName': 200,
+  };
+  const optionalFields = {
+    'communeCode': 64,
+    'provinceCode': 64,
+    'deliveryInstructions': 1000,
+    'rawAddress': 1000,
+    'legacyDistrictText': 200,
+  };
+  final allowedFields = {...requiredFields.keys, ...optionalFields.keys};
+  if (payload.length != allowedFields.length ||
+      !payload.keys.every(allowedFields.contains)) {
+    return false;
+  }
+  for (final entry in requiredFields.entries) {
+    if (!_isCanonicalText(payload[entry.key], maximumLength: entry.value)) {
+      return false;
+    }
+  }
+  for (final entry in optionalFields.entries) {
+    final value = payload[entry.key];
+    if (value != null && !_isCanonicalText(value, maximumLength: entry.value)) {
+      return false;
+    }
+  }
+  return true;
 }
 
 Map<Object?, Map<String, Object?>>? _uniqueModifierGroups(Object? value) {

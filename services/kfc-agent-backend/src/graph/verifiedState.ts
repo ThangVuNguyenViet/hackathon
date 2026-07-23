@@ -316,6 +316,12 @@ export function extractVerifiedStateSnapshot(payload: Record<string, unknown>): 
     cart: snapshot.cart,
     address: snapshot.address,
     addressDraft: snapshot.addressDraft,
+    deliveryAddressDraft: snapshot.deliveryAddressDraft,
+    deliveryAddressStatus: snapshot.deliveryAddressStatus,
+    deliveryAddressMissingFields:
+      snapshot.deliveryAddressMissingFields,
+    deliveryAdministrativeOptions:
+      snapshot.deliveryAdministrativeOptions,
     orderPreview: snapshot.orderPreview,
     order,
     cancellationStatusChecked: snapshot.cancellationStatusChecked,
@@ -480,6 +486,12 @@ export function buildVerifiedStateSnapshot(state: AgentGraphState): VerifiedStat
     // input rather than a private saved-address lookup.
     address: quoteUsedSavedAddressRef ? undefined : state.address,
     addressDraft: state.addressDraft,
+    deliveryAddressDraft: state.deliveryAddressDraft,
+    deliveryAddressStatus: state.deliveryAddressStatus,
+    deliveryAddressMissingFields:
+      state.deliveryAddressMissingFields,
+    deliveryAdministrativeOptions:
+      state.deliveryAdministrativeOptions,
     orderPreview: state.orderPreview,
     order: state.order,
     cancellationStatusChecked: state.cancellationStatusChecked,

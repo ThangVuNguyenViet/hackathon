@@ -102,40 +102,81 @@ const savedAddressRefSchema = z
   .strict();
 
 export const toolArgumentSchemas = {
-  searchMenu: z.object({
-    query: z.string().optional().default('').describe(
-      'Concise product, category, identifier, alias, or modifier-option search terms selected from the customer intent. Do not pass the full customer sentence.',
-    ),
-    mode: z.enum(['search', 'full']).optional().default('search').describe(
-      'Use full only when the customer asks to see the complete menu; otherwise use search.',
-    ),
-    category: z.string().min(1).optional().describe(
-      'Optional normalized partial or complete fixture category wording selected by the model.',
-    ),
-    maxPriceVnd: z.number().int().nonnegative().optional().describe(
-      'Maximum item price in VND when the customer states a budget.',
-    ),
-    partySize: z.number().int().positive().optional().describe(
-      'Number of people when the customer asks for a group recommendation.',
-    ),
-    modifierQueries: z.array(z.string().min(1)).min(1).optional().describe(
-      'Independent positive modifier-option terms to match in the same menu search. For an exclusion such as không phô mai, pass the underlying option term phô mai. Matching modifier evidence is returned compactly on each candidate item.',
-    ),
-  }).strict(),
+  searchMenu: z
+    .object({
+      query: z
+        .string()
+        .optional()
+        .default('')
+        .describe(
+          'Concise product, identifier, alias, or product-composition terms selected from the customer intent. Put components named in an item or description here, not in modifierQueries. Leave empty for category-wide browsing and put the category wording only in category. Do not pass the full customer sentence.',
+        ),
+      mode: z
+        .enum(['search', 'full'])
+        .optional()
+        .default('search')
+        .describe(
+          'Use full only when the customer asks to see the complete menu; otherwise use search.',
+        ),
+      category: z
+        .string()
+        .min(1)
+        .optional()
+        .describe(
+          'Optional normalized partial or complete fixture category wording selected by the model.',
+        ),
+      maxPriceVnd: z
+        .number()
+        .int()
+        .nonnegative()
+        .optional()
+        .describe(
+          'Per-item price ceiling in VND. This is not an aggregate cart limit; for a total recommendation budget, combine returned priceVnd values.',
+        ),
+      partySize: z
+        .number()
+        .int()
+        .positive()
+        .optional()
+        .describe(
+          'Number of people used as ranking evidence for a group recommendation. It does not guarantee serving size; verify quantities from returned descriptions or item details.',
+        ),
+      modifierQueries: z
+        .array(z.string().min(1))
+        .min(1)
+        .optional()
+        .describe(
+          'Independent terms using wording exposed by the selectable option, all intended to match the same item. Keep negation when it is part of the desired option name, such as không cay; for an omitted optional add-on, pass its target wording, such as phô mai. Use this for selectable choices, not product components named in an item or description. Only matchedModifiers is verified selectable-option evidence.',
+        ),
+    })
+    .strict(),
   getItemDetails: z.object({ code: z.string().min(1) }).strict(),
   getModifierOptions: z.object({ code: z.string().min(1) }).strict(),
   updateCart: z.union([
     z
       .object({
         itemCode: z.string().min(1),
-        quantity: z.number().int().nonnegative(),
+        quantity: z
+          .number()
+          .int()
+          .nonnegative()
+          .describe(
+            'Line-item quantity in menu portions; for a product containing N pieces, use 1 for one portion, not the embedded piece count.',
+          ),
         modifiers: z
           .array(
             z
               .object({
                 groupId: z.string().min(1),
                 modifierId: z.string().min(1),
-                quantity: z.number().int().positive().optional(),
+                quantity: z
+                  .number()
+                  .int()
+                  .positive()
+                  .optional()
+                  .describe(
+                    'Selected modifier quantity per menu portion, using the verified modifier option contract.',
+                  ),
                 groupName: z.string().min(1).optional(),
                 modifierName: z.string().min(1).optional(),
                 priceDeltaVnd: z.number().int().optional(),
@@ -152,14 +193,27 @@ export const toolArgumentSchemas = {
             z
               .object({
                 itemCode: z.string().min(1),
-                quantity: z.number().int().nonnegative(),
+                quantity: z
+                  .number()
+                  .int()
+                  .nonnegative()
+                  .describe(
+                    'Line-item quantity in menu portions; for a product containing N pieces, use 1 for one portion, not the embedded piece count.',
+                  ),
                 modifiers: z
                   .array(
                     z
                       .object({
                         groupId: z.string().min(1),
                         modifierId: z.string().min(1),
-                        quantity: z.number().int().positive().optional(),
+                        quantity: z
+                          .number()
+                          .int()
+                          .positive()
+                          .optional()
+                          .describe(
+                            'Selected modifier quantity per menu portion, using the verified modifier option contract.',
+                          ),
                         groupName: z.string().min(1).optional(),
                         modifierName: z.string().min(1).optional(),
                         priceDeltaVnd: z.number().int().optional(),

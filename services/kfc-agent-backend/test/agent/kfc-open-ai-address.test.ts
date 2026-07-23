@@ -1,0 +1,348 @@
+import { describe, expect, it } from 'vitest';
+import {
+  createKfcOpenAiTools,
+  createKfcToolSession,
+  hydrateKfcToolSession,
+  verifiedKfcToolSessionContext,
+} from '../../src/agent/kfcOpenAiTools.js';
+import type { DeliveryAddressDraft } from '../../src/domain/types.js';
+import { createMockClients } from '../../src/mock/createMockClients.js';
+import { createTestFixtures } from '../fixtures/testFixtures.js';
+
+const emptyAddressUpdate = {
+  recipientName: null,
+  phone: null,
+  addressLine: null,
+  provinceCode: null,
+  provinceName: null,
+  communeCode: null,
+  communeName: null,
+  deliveryInstructions: null,
+  rawAddress: null,
+  legacyDistrictText: null,
+};
+
+async function addressTool(sessionId: string) {
+  const fixtures = createTestFixtures();
+  const clients = createMockClients(fixtures);
+  const session = await createKfcToolSession(clients, sessionId);
+  const quoteFulfillment = createKfcOpenAiTools({
+    clients,
+    session,
+    fixtures,
+  }).find((tool) => tool.definition.name === 'quoteFulfillment');
+  const updateCart = createKfcOpenAiTools({ clients, session }).find(
+    (tool) => tool.definition.name === 'updateCart',
+  );
+  if (!quoteFulfillment) throw new Error('quoteFulfillment missing');
+  if (!updateCart) throw new Error('updateCart missing');
+  await updateCart.execute({ itemCode: '20751', quantity: 1 });
+  return { session, quoteFulfillment };
+}
+
+describe('direct OpenAI delivery address flow', () => {
+  it('exposes a strict partial structured address schema to the model', async () => {
+    const { quoteFulfillment } = await addressTool('kfc:address_schema');
+    const parameters = quoteFulfillment.definition.parameters;
+    if (
+      typeof parameters !== 'object' ||
+      parameters === null ||
+      !('properties' in parameters) ||
+      typeof parameters.properties !== 'object' ||
+      parameters.properties === null ||
+      !('address' in parameters.properties)
+    ) {
+      throw new Error('quoteFulfillment address schema missing');
+    }
+    const address = parameters.properties.address;
+
+    expect(quoteFulfillment.definition.strict).toBe(true);
+    expect(address).toMatchObject({
+      type: 'object',
+      additionalProperties: false,
+      required: [
+        'recipientName',
+        'phone',
+        'addressLine',
+        'provinceCode',
+        'provinceName',
+        'communeCode',
+        'communeName',
+        'deliveryInstructions',
+        'rawAddress',
+        'legacyDistrictText',
+      ],
+    });
+  });
+
+  it('resolves fixture-declared natural administrative abbreviations before quoting', async () => {
+    const { session, quoteFulfillment } = await addressTool(
+      'kfc:address_partial',
+    );
+
+    const first = await quoteFulfillment.execute({
+      method: 'delivery',
+      address: {
+        ...emptyAddressUpdate,
+        addressLine: '54/2 Nguyễn Hồng Đào',
+        communeName: 'p14',
+        provinceName: 'tp HCM',
+        legacyDistrictText: 'q Tân Bình',
+        rawAddress: '54/2 Nguyễn Hồng Đào p14 q Tân Bình tp HCM',
+      },
+    });
+    const second = await quoteFulfillment.execute({
+      method: 'delivery',
+      address: {
+        ...emptyAddressUpdate,
+        recipientName: 'Nguyễn An',
+        phone: '0901234567',
+      },
+    });
+
+    expect(first).toMatchObject({
+      ok: true,
+      toolName: 'quoteFulfillment',
+      value: {
+        status: 'incomplete',
+        missingFields: ['recipientName', 'phone'],
+        addressDraft: {
+          addressLine: '54/2 Nguyễn Hồng Đào',
+          communeName: 'Phường Tân Bình',
+          provinceName: 'Thành phố Hồ Chí Minh',
+        },
+      },
+    });
+    expect(second).toMatchObject({
+      ok: true,
+      toolName: 'quoteFulfillment',
+      value: {
+        status: 'quoted',
+        missingFields: [],
+        addressDraft: {
+          recipientName: 'Nguyễn An',
+          phone: '0901234567',
+          addressLine: '54/2 Nguyễn Hồng Đào',
+          communeName: 'Phường Tân Bình',
+          provinceName: 'Thành phố Hồ Chí Minh',
+        },
+        fulfillment: {
+          method: 'delivery',
+          storeId: 'KFCVN0005',
+          feeVnd: 18000,
+          etaMinutes: 35,
+        },
+      },
+    });
+    expect(session.deliveryAddressDraft).toMatchObject({
+      recipientName: 'Nguyễn An',
+      phone: '0901234567',
+      addressLine: '54/2 Nguyễn Hồng Đào',
+      communeName: 'Phường Tân Bình',
+      provinceName: 'Thành phố Hồ Chí Minh',
+    });
+  });
+
+  it('resolves fixture-declared aliases from the preserved raw address when structured administrative fields are absent', async () => {
+    const { quoteFulfillment } = await addressTool('kfc:address_raw_aliases');
+
+    const result = await quoteFulfillment.execute({
+      method: 'delivery',
+      address: {
+        ...emptyAddressUpdate,
+        addressLine: '54/2 Nguyễn Hồng Đào',
+        rawAddress: '54/2 Nguyễn Hồng Đào p14 q Tân Bình tp HCM',
+      },
+    });
+
+    expect(result).toMatchObject({
+      ok: true,
+      toolName: 'quoteFulfillment',
+      value: {
+        status: 'incomplete',
+        missingFields: ['recipientName', 'phone'],
+        addressDraft: {
+          addressLine: '54/2 Nguyễn Hồng Đào',
+          communeName: 'Phường Tân Bình',
+          provinceName: 'Thành phố Hồ Chí Minh',
+        },
+      },
+    });
+  });
+
+  it('resolves fixture-declared aliases from addressLine when rawAddress is absent', async () => {
+    const { quoteFulfillment } = await addressTool('kfc:address_line_aliases');
+
+    const result = await quoteFulfillment.execute({
+      method: 'delivery',
+      address: {
+        ...emptyAddressUpdate,
+        addressLine: '54/2 Nguyễn Hồng Đào p14 q Tân Bình tp HCM',
+      },
+    });
+
+    expect(result).toMatchObject({
+      ok: true,
+      toolName: 'quoteFulfillment',
+      value: {
+        status: 'incomplete',
+        missingFields: ['recipientName', 'phone'],
+        addressDraft: {
+          addressLine: '54/2 Nguyễn Hồng Đào p14 q Tân Bình tp HCM',
+          communeCode: '27004',
+          communeName: 'Phường Tân Bình',
+          provinceCode: '79',
+          provinceName: 'Thành phố Hồ Chí Minh',
+        },
+      },
+    });
+  });
+
+  it('canonical structured fields replace stale missing state and publish a quote', async () => {
+    const { session, quoteFulfillment } = await addressTool(
+      'kfc:address_structured_repair',
+    );
+    session.deliveryAddressDraft = {
+      recipientName: 'Nguyễn An',
+      phone: '0901234567',
+      addressLine: '54/2 Nguyễn Hồng Đào',
+      rawAddress: '54/2 Nguyễn Hồng Đào p14 q Tân Bình tp HCM',
+      legacyDistrictText: 'Quận Tân Bình',
+    };
+    session.deliveryAddressStatus = 'incomplete';
+    session.deliveryAddressMissingFields = ['provinceName', 'communeName'];
+
+    const result = await quoteFulfillment.execute({
+      method: 'delivery',
+      address: {
+        ...emptyAddressUpdate,
+        provinceCode: '79',
+        provinceName: 'Thành phố Hồ Chí Minh',
+        communeCode: '27004',
+        communeName: 'Phường Tân Bình',
+      },
+    });
+
+    expect(result).toMatchObject({
+      ok: true,
+      toolName: 'quoteFulfillment',
+      value: {
+        status: 'quoted',
+        missingFields: [],
+        addressDraft: {
+          recipientName: 'Nguyễn An',
+          phone: '0901234567',
+          addressLine: '54/2 Nguyễn Hồng Đào',
+          provinceCode: '79',
+          provinceName: 'Thành phố Hồ Chí Minh',
+          communeCode: '27004',
+          communeName: 'Phường Tân Bình',
+        },
+        fulfillment: {
+          method: 'delivery',
+          storeId: 'KFCVN0005',
+          feeVnd: 18_000,
+          etaMinutes: 35,
+        },
+      },
+    });
+    expect(session.deliveryAddressStatus).toBe('quoted');
+    expect(session.deliveryAddressMissingFields).toEqual([]);
+    expect(verifiedKfcToolSessionContext(session)).not.toHaveProperty(
+      'deliveryAddressMissingFields',
+    );
+  });
+
+  it('keeps a complete unsupported address separate from an incomplete address', async () => {
+    const { quoteFulfillment } = await addressTool('kfc:address_unsupported');
+
+    const result = await quoteFulfillment.execute({
+      method: 'delivery',
+      address: {
+        ...emptyAddressUpdate,
+        recipientName: 'Nguyễn An',
+        phone: '0901234567',
+        addressLine: '1 Tràng Tiền',
+        communeName: 'Hoàn Kiếm',
+        provinceName: 'Hà Nội',
+        rawAddress: 'Nguyễn An, 0901234567, 1 Tràng Tiền, Hoàn Kiếm, Hà Nội',
+      },
+    });
+
+    expect(result).toMatchObject({
+      ok: true,
+      toolName: 'quoteFulfillment',
+      value: {
+        status: 'unsupported',
+        missingFields: [],
+      },
+    });
+  });
+
+  it('quotes a complete address and retains the canonical draft', async () => {
+    const { session, quoteFulfillment } =
+      await addressTool('kfc:address_quoted');
+
+    const result = await quoteFulfillment.execute({
+      method: 'delivery',
+      address: {
+        ...emptyAddressUpdate,
+        recipientName: 'Nguyễn An',
+        phone: '0901234567',
+        addressLine: '60 Phạm Văn Nghị',
+        communeName: 'Phường Tân Hưng',
+        provinceName: 'Hồ Chí Minh',
+        legacyDistrictText: 'Quận 7',
+        deliveryInstructions: 'Gọi khi đến',
+        rawAddress:
+          'Nguyễn An, 0901234567, 60 Phạm Văn Nghị, Phường Tân Phong, Quận 7, Hồ Chí Minh',
+      },
+    });
+
+    expect(result).toMatchObject({
+      ok: true,
+      toolName: 'quoteFulfillment',
+      value: {
+        status: 'quoted',
+        missingFields: [],
+        fulfillment: {
+          method: 'delivery',
+          feeVnd: expect.any(Number),
+        },
+      },
+    });
+    expect(session.fulfillment).toMatchObject({
+      method: 'delivery',
+      feeVnd: expect.any(Number),
+    });
+    expect(session.cart).toMatchObject({
+      subtotalVnd: 99_000,
+      discountVnd: 0,
+      deliveryFeeVnd: 18_000,
+      totalVnd: 117_000,
+    });
+    expect(session.deliveryAddressDraft?.deliveryInstructions).toBe(
+      'Gọi khi đến',
+    );
+  });
+
+  it('hydrates and publishes an address draft across direct Responses turns', async () => {
+    const clients = createMockClients(createTestFixtures());
+    const fresh = await createKfcToolSession(clients, 'kfc:address_hydrate');
+    const draft: DeliveryAddressDraft = {
+      addressLine: '54/2 Nguyễn Hồng Đào',
+      communeName: 'Phường 14',
+      provinceName: 'TP Hồ Chí Minh',
+      rawAddress: '54/2 Nguyễn Hồng Đào p14 tp HCM',
+    };
+
+    const hydrated = hydrateKfcToolSession(fresh, {
+      deliveryAddressDraft: draft,
+    });
+
+    expect(hydrated.deliveryAddressDraft).toEqual(draft);
+    expect(verifiedKfcToolSessionContext(hydrated)).toMatchObject({
+      deliveryAddressDraft: draft,
+    });
+  });
+});

@@ -163,10 +163,13 @@ export function createSystemRouteHandlers(context: RouteHandlerContext) {
       };
       const runtimeAgent =
         options.readiness?.runtime?.agent ?? options.agent?.identity;
+      const agentConfigured =
+        options.readiness?.agentConfigured ??
+        Boolean(options.openAiAgent ?? options.agent);
       const agent = {
-        ok: options.readiness?.agentConfigured ?? Boolean(options.agent),
+        ok: agentConfigured,
         required: false,
-        configured: options.readiness?.agentConfigured ?? Boolean(options.agent),
+        configured: agentConfigured,
         provider: runtimeAgent?.provider ?? "unconfigured",
         model: runtimeAgent?.model ?? "unconfigured",
         profile: runtimeAgent?.profile ?? "unconfigured",
@@ -308,7 +311,17 @@ export function createSystemRouteHandlers(context: RouteHandlerContext) {
                 modifierTreeCount: catalog.observation.modifierTreeCount,
               } : null,
               lifecycle: { provider: options.lifecycle?.environment === "sandbox" ? "d1" : null, controlsRegistered: options.lifecycle?.environment === "sandbox" },
-              graph: { runtime: KFC_AGENT_RUNTIME_ID, checkpoint: options.checkpointer ? "configured-v1" : "memory-v1" },
+              graph: options.openAiAgent
+                ? {
+                    runtime: "openai-responses-v1",
+                    checkpoint: "conversation-history-v1",
+                  }
+                : {
+                    runtime: KFC_AGENT_RUNTIME_ID,
+                    checkpoint: options.checkpointer
+                      ? "configured-v1"
+                      : "memory-v1",
+                  },
               versions: {
                 agent: runtimeAgent ?? {
                   provider: "unconfigured",

@@ -360,6 +360,11 @@ export function createMockClients(fixtures: GeneratedFixtures, options: MockClie
             (district) =>
               normalizeLocationPart(district) ===
               normalizeLocationPart(address.district!),
+          ) ||
+          (area.communes ?? []).some(
+            (commune) =>
+              normalizeLocationPart(commune) ===
+              normalizeLocationPart(address.district!),
           )
         ) &&
         (
@@ -367,6 +372,11 @@ export function createMockClients(fixtures: GeneratedFixtures, options: MockClie
           area.cities.some(
             (city) =>
               normalizeLocationPart(city) ===
+              normalizeLocationPart(address.city!),
+          ) ||
+          (area.provinces ?? []).some(
+            (province) =>
+              normalizeLocationPart(province) ===
               normalizeLocationPart(address.city!),
           )
         ),

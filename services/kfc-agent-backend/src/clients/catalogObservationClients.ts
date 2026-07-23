@@ -18,8 +18,10 @@ import { rankEligibleRecommendations } from '../ordering/recommendationRanking.j
 import {
   matchMenuModifierQueries,
   menuCategoryMatches,
+  menuSearchDocumentMatchesQuery,
   menuPartySizeScore,
   menuSearchTextScore,
+  normalizeSearchText,
   type MenuModifierSearchCandidate,
 } from '../ordering/orderingDataRetrieval.js';
 
@@ -72,6 +74,18 @@ function modifierSearchCandidates(
   };
   visit(groups);
   return candidates;
+}
+
+function menuSearchDocument(item: MenuItem) {
+  return {
+    identifiers: [item.code, item.itemId, item.productCode].filter(
+      (value): value is string => typeof value === 'string',
+    ),
+    name: item.name,
+    category: item.category,
+    description: item.description,
+    modifierText: modifierSearchText(item.modifierGroups ?? []),
+  };
 }
 
 function toModifierGroups(groups: CatalogItemFact['modifierGroups'], depth = 0): MenuModifierGroup[] {
@@ -174,11 +188,16 @@ export function createCatalogObservationClients(options: CatalogObservationClien
       const observation = await discoveryObservation(externalCallContext);
       const mode = input.mode ?? 'search';
       const query = input.query?.trim() ?? '';
+      const effectiveQuery =
+        input.category &&
+        normalizeSearchText(query) === normalizeSearchText(input.category)
+          ? ''
+          : query;
       const modifierQueries = input.modifierQueries ?? [];
       const categories = [
         ...new Set(observation.items.map((item) => item.category)),
       ];
-      const ranked = observation.items
+      const candidates = observation.items
         .map(toMenuItem)
         .filter((item) =>
           item.available &&
@@ -187,16 +206,9 @@ export function createCatalogObservationClients(options: CatalogObservationClien
             item.priceVnd <= input.maxPriceVnd),
         )
         .map((item, fixtureIndex) => {
-          const document = {
-            identifiers: [item.code, item.itemId, item.productCode].filter(
-              (value): value is string => typeof value === 'string',
-            ),
-            name: item.name,
-            category: item.category,
-            description: item.description,
-            modifierText: modifierSearchText(item.modifierGroups ?? []),
-          };
-          const textScore = menuSearchTextScore(document, query);
+          const document = menuSearchDocument(item);
+          const productDocument = { ...document, modifierText: '' };
+          const textScore = menuSearchTextScore(document, effectiveQuery);
           const matchedModifiers = matchMenuModifierQueries(
             modifierSearchCandidates(item.modifierGroups ?? []),
             modifierQueries,
@@ -204,10 +216,24 @@ export function createCatalogObservationClients(options: CatalogObservationClien
           const matchedQueryCount = new Set(
             matchedModifiers.map((match) => match.query),
           ).size;
+          const documentMatchedQueries = modifierQueries.filter(
+            (modifierQuery) =>
+              menuSearchDocumentMatchesQuery(document, modifierQuery),
+          );
+          const productMatchedQueries = modifierQueries.filter(
+            (modifierQuery) =>
+              menuSearchDocumentMatchesQuery(productDocument, modifierQuery),
+          );
           return {
             item,
             fixtureIndex,
             matchedModifiers,
+            inclusionMatchedQueries: [
+              ...new Set([
+                ...matchedModifiers.map((match) => match.query),
+                ...documentMatchedQueries,
+              ]),
+            ],
             matchesAllModifierQueries:
               modifierQueries.length > 0 &&
               matchedQueryCount === modifierQueries.length,
@@ -216,18 +242,32 @@ export function createCatalogObservationClients(options: CatalogObservationClien
                 ? undefined
                 : textScore +
                   menuPartySizeScore(document, input.partySize) +
-                  matchedQueryCount * 300,
+                  matchedQueryCount * 300 +
+                  productMatchedQueries.length * 200,
           };
-        })
+        });
+      const recognizedModifierQueries = modifierQueries.filter(
+        (modifierQuery) =>
+          observation.items
+            .map(toMenuItem)
+            .some((item) =>
+              menuSearchDocumentMatchesQuery(
+                menuSearchDocument(item),
+                modifierQuery,
+              ),
+            ),
+      );
+      const ranked = candidates
         .filter(
-          ({ score, matchesAllModifierQueries }) =>
+          ({ score, inclusionMatchedQueries }) =>
             mode === 'full' ||
-            ((query.length === 0 || score !== undefined) &&
-              (modifierQueries.length === 0 ||
-                matchesAllModifierQueries)),
+            ((effectiveQuery.length === 0 || score !== undefined) &&
+              recognizedModifierQueries.every((modifierQuery) =>
+                inclusionMatchedQueries.includes(modifierQuery),
+              )),
         )
         .sort((left, right) =>
-          mode === 'full' || (!query && input.partySize === undefined)
+          mode === 'full' || (!effectiveQuery && input.partySize === undefined)
             ? left.fixtureIndex - right.fixtureIndex
             : (right.score ?? 0) - (left.score ?? 0) ||
               left.fixtureIndex - right.fixtureIndex,
