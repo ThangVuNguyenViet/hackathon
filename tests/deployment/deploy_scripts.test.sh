@@ -12,6 +12,7 @@ required_files=(
   "$ROOT_DIR/scripts/lib/kfc-acceptance-artifacts.sh"
   "$ROOT_DIR/scripts/lib/kfc-qualification-integrity.mjs"
   "$ROOT_DIR/services/kfc-agent-backend/scripts/validate-outcome-judgments.ts"
+  "$ROOT_DIR/tests/deployment/openai_agent_target.test.sh"
   "$ROOT_DIR/docs/deployment/hackathon-free-deploy.md"
   "$ROOT_DIR/docs/deployment/two-pages-provenance-runbook.md"
   "$ROOT_DIR/services/kfc-agent-backend/wrangler.toml"
@@ -28,12 +29,16 @@ bash -n "$ROOT_DIR/scripts/deploy-backend-cloud-run.sh"
 bash -n "$ROOT_DIR/scripts/deploy-dashboard-cloudflare-pages.sh"
 bash -n "$ROOT_DIR/scripts/generate-pages-deployment-assets.sh"
 bash -n "$ROOT_DIR/scripts/run-kfc-deployed-acceptance.sh"
+bash -n "$ROOT_DIR/tests/deployment/openai_agent_target.test.sh"
 
 test -x "$ROOT_DIR/scripts/deploy-backend-cloudflare-worker.sh"
 test -x "$ROOT_DIR/scripts/deploy-backend-cloud-run.sh"
 test -x "$ROOT_DIR/scripts/deploy-dashboard-cloudflare-pages.sh"
 test -x "$ROOT_DIR/scripts/generate-pages-deployment-assets.sh"
 test -x "$ROOT_DIR/scripts/run-kfc-deployed-acceptance.sh"
+test -x "$ROOT_DIR/tests/deployment/openai_agent_target.test.sh"
+
+bash "$ROOT_DIR/tests/deployment/openai_agent_target.test.sh"
 
 grep -q "Cloudflare Worker" "$ROOT_DIR/docs/deployment/hackathon-free-deploy.md"
 grep -q "Cloudflare D1" "$ROOT_DIR/docs/deployment/hackathon-free-deploy.md"
@@ -165,7 +170,7 @@ grep -q -- "--pwa-strategy=none" "$ROOT_DIR/scripts/deploy-dashboard-cloudflare-
 grep -q "kfc-ai-chatbot" "$ROOT_DIR/scripts/deploy-dashboard-cloudflare-pages.sh"
 grep -q "kfc-ai-live-monitor" "$ROOT_DIR/scripts/deploy-dashboard-cloudflare-pages.sh"
 grep -q -- "--outdir" "$ROOT_DIR/scripts/deploy-backend-cloudflare-worker.sh"
-grep -q 'KFC_AGENT_PROVIDER=openai KFC_AGENT_MODEL=gpt-5-mini-2025-08-07 RUN_LIVE_AI_INTERRUPTION=1' "$ROOT_DIR/services/kfc-agent-backend/package.json"
+grep -q 'KFC_AGENT_PROVIDER=openai KFC_AGENT_MODEL=gpt-4.1-mini RUN_LIVE_AI_INTERRUPTION=1' "$ROOT_DIR/services/kfc-agent-backend/package.json"
 ! grep -q "run-deployed-browser-proof.ts" "$ROOT_DIR/scripts/run-kfc-deployed-acceptance.sh"
 ! grep -q "run-outcome-judgments.ts" "$ROOT_DIR/scripts/run-kfc-deployed-acceptance.sh"
 grep -q 'npm run test:live:qualification:text' "$ROOT_DIR/scripts/run-kfc-deployed-acceptance.sh"
@@ -531,7 +536,7 @@ const valid = {
     agentTraceIdsByKind: { greeting: 20, menu: 20 },
     graphNodes: {
       callModel: {
-        name: 'call_model',
+        name: 'model_request',
         runCount: 60,
         traceIds: [
           ...greetingAgentTraces,
@@ -541,7 +546,7 @@ const valid = {
         overflowed: false,
       },
       executeTools: {
-        name: 'execute_tools',
+        name: 'tools',
         runCount: 20,
         traceIds: menuAgentTraces,
         uncorrelatableSpans: [],
