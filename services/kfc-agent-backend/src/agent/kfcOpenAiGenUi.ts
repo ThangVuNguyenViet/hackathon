@@ -63,6 +63,8 @@ function presentationFor(
     command?.kind === 'edit_cart' || toolNames.includes('previewCart')
       ? 'cart'
       : command?.kind === 'start_fulfillment' ||
+          (command?.kind === 'cart_draft_commit' &&
+            command.continueToFulfillment) ||
           command?.kind === 'submit_address' ||
           toolNames.some(
             (name) =>
@@ -118,17 +120,6 @@ export function projectKfcOpenAiGenUiState(input: SelectKfcOpenAiGenUiInput): {
     return result ? [{ call, result }] : [];
   });
   const toolNames = results.map(({ result }) => result.toolName);
-  const exposesCart =
-    input.session.cart.items.length > 0 &&
-    (toolNames.some(
-      (name) =>
-        name === 'updateCart' ||
-        name === 'previewCart' ||
-        name === 'quoteFulfillment' ||
-        name === 'previewOrder' ||
-        name === 'placeOrder',
-    ) ||
-      Boolean(input.customerCommand));
   const state: AgentGraphState = {
     sessionId: input.session.sessionId,
     customerId: input.session.customerId,
@@ -145,7 +136,7 @@ export function projectKfcOpenAiGenUiState(input: SelectKfcOpenAiGenUiInput): {
           ),
         }
       : {}),
-    ...(exposesCart ? { cart: input.session.cart } : {}),
+    cart: input.session.cart,
     ...(input.session.address ? { address: input.session.address } : {}),
     ...(input.session.fulfillment
       ? { fulfillment: input.session.fulfillment }

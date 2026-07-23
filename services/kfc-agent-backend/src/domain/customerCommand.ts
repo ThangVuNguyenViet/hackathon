@@ -1,10 +1,6 @@
 import { z } from 'zod';
-import {
-  selectedPaymentMethodAuthoritySchema,
-} from './opaqueProviderId.js';
-import {
-  verifiedRefIdSchema,
-} from './verifiedRef.js';
+import { selectedPaymentMethodAuthoritySchema } from './opaqueProviderId.js';
+import { verifiedRefIdSchema } from './verifiedRef.js';
 
 const identifierSchema = z.string().trim().min(1).max(128);
 const quantitySchema = z.number().int().min(1).max(99);
@@ -15,23 +11,30 @@ const sourceUrlSchema = z.string().trim().min(1).max(2_048).url();
 const digestSchema = z.string().regex(/^[0-9a-f]{64}$/u);
 const envelopeIdentifierSchema = z.string().trim().min(1).max(256);
 const emptyPayloadSchema = z.object({}).strict();
-const savedAddressRefSchema = z.object({
-  id: verifiedRefIdSchema,
-  kind: z.literal('saved_address'),
-}).strict();
+const savedAddressRefSchema = z
+  .object({
+    id: verifiedRefIdSchema,
+    kind: z.literal('saved_address'),
+  })
+  .strict();
 
-const cartUpdateCommandSchema = z.object({
-  kind: z.literal('cart_update'),
-  itemCode: identifierSchema,
-  quantity: z.number().int().min(0).max(99),
-}).strict();
-
-const cartBatchItemsSchema = z.array(
-  z.object({
+const cartUpdateCommandSchema = z
+  .object({
+    kind: z.literal('cart_update'),
     itemCode: identifierSchema,
-    quantity: quantitySchema,
-  }).strict(),
-)
+    quantity: z.number().int().min(0).max(99),
+  })
+  .strict();
+
+const cartBatchItemsSchema = z
+  .array(
+    z
+      .object({
+        itemCode: identifierSchema,
+        quantity: quantitySchema,
+      })
+      .strict(),
+  )
   .min(1)
   .max(5)
   .superRefine((items, context) => {
@@ -48,55 +51,137 @@ const cartBatchItemsSchema = z.array(
     });
   });
 
-const cartBatchUpdateCommandSchema = z.object({
-  kind: z.literal('cart_batch_update'),
-  items: cartBatchItemsSchema,
-}).strict();
+const cartBatchUpdateCommandSchema = z
+  .object({
+    kind: z.literal('cart_batch_update'),
+    items: cartBatchItemsSchema,
+  })
+  .strict();
 
-const modifierSelectionCommandSchema = z.object({
-  kind: z.literal('modifier_selection'),
-  itemCode: identifierSchema,
-  groupId: identifierSchema,
-  modifierId: identifierSchema,
-}).strict();
+const cartDraftItemsSchema = z
+  .array(
+    z
+      .object({
+        itemCode: identifierSchema,
+        quantity: z.number().int().min(0).max(99),
+      })
+      .strict(),
+  )
+  .min(1)
+  .max(100)
+  .superRefine((items, context) => {
+    const seen = new Set<string>();
+    items.forEach((item, index) => {
+      if (seen.has(item.itemCode)) {
+        context.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ['items', index, 'itemCode'],
+          message: 'Item codes must be unique',
+        });
+      }
+      seen.add(item.itemCode);
+    });
+  });
 
-const acceptFulfillmentCommandSchema = z.object({
-  kind: z.literal('accept_fulfillment'),
-  savedAddressRef: savedAddressRefSchema.optional(),
-}).strict();
+const cartDraftCommitCommandSchema = z
+  .object({
+    kind: z.literal('cart_draft_commit'),
+    items: cartDraftItemsSchema,
+    continueToFulfillment: z.boolean(),
+  })
+  .strict();
+
+const modifierSelectionCommandSchema = z
+  .object({
+    kind: z.literal('modifier_selection'),
+    itemCode: identifierSchema,
+    groupId: identifierSchema,
+    modifierId: identifierSchema,
+  })
+  .strict();
+
+const modifierBatchSelectionCommandSchema = z
+  .object({
+    kind: z.literal('modifier_batch_selection'),
+    itemCode: identifierSchema,
+    selections: z
+      .array(
+        z
+          .object({
+            groupId: identifierSchema,
+            modifierId: identifierSchema,
+          })
+          .strict(),
+      )
+      .min(1)
+      .max(50)
+      .superRefine((selections, context) => {
+        const seen = new Set<string>();
+        selections.forEach((selection, index) => {
+          if (seen.has(selection.groupId)) {
+            context.addIssue({
+              code: z.ZodIssueCode.custom,
+              path: [index, 'groupId'],
+              message: 'Modifier groups must be unique',
+            });
+          }
+          seen.add(selection.groupId);
+        });
+      }),
+  })
+  .strict();
+
+const acceptFulfillmentCommandSchema = z
+  .object({
+    kind: z.literal('accept_fulfillment'),
+    savedAddressRef: savedAddressRefSchema.optional(),
+  })
+  .strict();
 
 const customerCommandSchema = z.discriminatedUnion('kind', [
   cartUpdateCommandSchema,
   cartBatchUpdateCommandSchema,
+  cartDraftCommitCommandSchema,
   modifierSelectionCommandSchema,
+  modifierBatchSelectionCommandSchema,
   z.object({ kind: z.literal('confirm_order') }).strict(),
   z.object({ kind: z.literal('start_fulfillment') }).strict(),
   acceptFulfillmentCommandSchema,
-  z.object({
-    kind: z.literal('select_payment_method'),
-    selection: selectedPaymentMethodAuthoritySchema,
-  }).strict(),
+  z
+    .object({
+      kind: z.literal('select_payment_method'),
+      selection: selectedPaymentMethodAuthoritySchema,
+    })
+    .strict(),
   z.object({ kind: z.literal('edit_cart') }).strict(),
-  z.object({
-    kind: z.literal('submit_address'),
-    value: addressValueSchema.optional(),
-  }).strict(),
-  z.object({
-    kind: z.literal('apply_voucher'),
-    value: voucherValueSchema.optional(),
-  }).strict(),
+  z
+    .object({
+      kind: z.literal('submit_address'),
+      value: addressValueSchema.optional(),
+    })
+    .strict(),
+  z
+    .object({
+      kind: z.literal('apply_voucher'),
+      value: voucherValueSchema.optional(),
+    })
+    .strict(),
   z.object({ kind: z.literal('change_payment_method') }).strict(),
   z.object({ kind: z.literal('continue_payment') }).strict(),
   z.object({ kind: z.literal('track_order') }).strict(),
   z.object({ kind: z.literal('request_support') }).strict(),
-  z.object({
-    kind: z.literal('add_support_detail'),
-    value: supportDetailSchema.optional(),
-  }).strict(),
-  z.object({
-    kind: z.literal('open_allergen_evidence'),
-    sourceUrl: sourceUrlSchema,
-  }).strict(),
+  z
+    .object({
+      kind: z.literal('add_support_detail'),
+      value: supportDetailSchema.optional(),
+    })
+    .strict(),
+  z
+    .object({
+      kind: z.literal('open_allergen_evidence'),
+      sourceUrl: sourceUrlSchema,
+    })
+    .strict(),
 ]);
 
 export type CustomerCommand = z.infer<typeof customerCommandSchema>;
@@ -105,15 +190,17 @@ export type CustomerCommand = z.infer<typeof customerCommandSchema>;
  * Internal authority passed separately from persisted conversation metadata.
  * Request JSON and model output must never be parsed directly into this type.
  */
-export const trustedCustomerActionEnvelopeSchema = z.object({
-  source: z.literal('kfc_genui_action'),
-  assistantTurnId: envelopeIdentifierSchema,
-  attachmentId: envelopeIdentifierSchema,
-  actionDigest: digestSchema,
-  verifiedRevision: digestSchema,
-  lifecycle: z.enum(['one_shot', 'replayable']),
-  command: customerCommandSchema,
-}).strict();
+export const trustedCustomerActionEnvelopeSchema = z
+  .object({
+    source: z.literal('kfc_genui_action'),
+    assistantTurnId: envelopeIdentifierSchema,
+    attachmentId: envelopeIdentifierSchema,
+    actionDigest: digestSchema,
+    verifiedRevision: digestSchema,
+    lifecycle: z.enum(['one_shot', 'replayable']),
+    command: customerCommandSchema,
+  })
+  .strict();
 
 export type TrustedCustomerActionEnvelope = z.infer<
   typeof trustedCustomerActionEnvelopeSchema
@@ -131,10 +218,13 @@ export function customerCommandFromVerifiedAction(
   const payload = action.payload ?? {};
   switch (action.actionId) {
     case 'add_item': {
-      const parsed = z.object({
-        itemCode: identifierSchema,
-        quantity: quantitySchema,
-      }).strict().safeParse(payload);
+      const parsed = z
+        .object({
+          itemCode: identifierSchema,
+          quantity: quantitySchema,
+        })
+        .strict()
+        .safeParse(payload);
       return parsed.success
         ? {
             kind: 'cart_update',
@@ -144,10 +234,13 @@ export function customerCommandFromVerifiedAction(
         : undefined;
     }
     case 'update_item_quantity': {
-      const parsed = z.object({
-        itemCode: identifierSchema,
-        quantity: quantitySchema,
-      }).strict().safeParse(payload);
+      const parsed = z
+        .object({
+          itemCode: identifierSchema,
+          quantity: quantitySchema,
+        })
+        .strict()
+        .safeParse(payload);
       return parsed.success
         ? {
             kind: 'cart_update',
@@ -157,9 +250,12 @@ export function customerCommandFromVerifiedAction(
         : undefined;
     }
     case 'remove_item': {
-      const parsed = z.object({
-        itemCode: identifierSchema,
-      }).strict().safeParse(payload);
+      const parsed = z
+        .object({
+          itemCode: identifierSchema,
+        })
+        .strict()
+        .safeParse(payload);
       return parsed.success
         ? {
             kind: 'cart_update',
@@ -169,9 +265,12 @@ export function customerCommandFromVerifiedAction(
         : undefined;
     }
     case 'add_items': {
-      const parsed = z.object({
-        items: cartBatchItemsSchema,
-      }).strict().safeParse(payload);
+      const parsed = z
+        .object({
+          items: cartBatchItemsSchema,
+        })
+        .strict()
+        .safeParse(payload);
       return parsed.success
         ? {
             kind: 'cart_batch_update',
@@ -179,10 +278,39 @@ export function customerCommandFromVerifiedAction(
           }
         : undefined;
     }
+    case 'update_cart':
+    case 'continue_to_fulfillment': {
+      const parsed = z
+        .object({ items: cartDraftItemsSchema })
+        .strict()
+        .safeParse(payload);
+      if (!parsed.success) return undefined;
+      if (
+        action.actionId === 'continue_to_fulfillment' &&
+        !parsed.data.items.some(({ quantity }) => quantity > 0)
+      ) {
+        return undefined;
+      }
+      return {
+        kind: 'cart_draft_commit',
+        items: parsed.data.items,
+        continueToFulfillment: action.actionId === 'continue_to_fulfillment',
+      };
+    }
+    case 'apply_modifiers': {
+      const parsed = z
+        .object({
+          itemCode: identifierSchema,
+          selections: modifierBatchSelectionCommandSchema.shape.selections,
+        })
+        .strict()
+        .safeParse(payload);
+      return parsed.success
+        ? { kind: 'modifier_batch_selection', ...parsed.data }
+        : undefined;
+    }
     case 'confirm_order':
       return commandWithoutPayload(payload, { kind: 'confirm_order' });
-    case 'continue_to_fulfillment':
-      return commandWithoutPayload(payload, { kind: 'start_fulfillment' });
     case 'accept_fulfillment': {
       if (!emptyPayloadSchema.safeParse(payload).success) return undefined;
       const refId = verifiedRefIdSchema.safeParse(action.value);
@@ -197,9 +325,12 @@ export function customerCommandFromVerifiedAction(
         : { kind: 'accept_fulfillment' };
     }
     case 'select_payment_method': {
-      const parsed = z.object({
-        selection: selectedPaymentMethodAuthoritySchema,
-      }).strict().safeParse(payload);
+      const parsed = z
+        .object({
+          selection: selectedPaymentMethodAuthoritySchema,
+        })
+        .strict()
+        .safeParse(payload);
       return parsed.success
         ? {
             kind: 'select_payment_method',
@@ -241,9 +372,12 @@ export function customerCommandFromVerifiedAction(
         'add_support_detail',
       );
     case 'open_allergen_chart': {
-      const parsed = z.object({
-        sourceUrl: sourceUrlSchema,
-      }).strict().safeParse(payload);
+      const parsed = z
+        .object({
+          sourceUrl: sourceUrlSchema,
+        })
+        .strict()
+        .safeParse(payload);
       return parsed.success
         ? {
             kind: 'open_allergen_evidence',
@@ -267,14 +401,16 @@ function modifierCommand(
   payload: Record<string, unknown>,
 ): CustomerCommand | undefined {
   if (!action.actionId.startsWith('customize_item:')) return undefined;
-  const parsed = z.object({
-    itemCode: identifierSchema,
-    groupId: identifierSchema,
-    modifierId: identifierSchema,
-  }).strict().safeParse(payload);
+  const parsed = z
+    .object({
+      itemCode: identifierSchema,
+      groupId: identifierSchema,
+      modifierId: identifierSchema,
+    })
+    .strict()
+    .safeParse(payload);
   if (!parsed.success) return undefined;
-  const expectedActionId =
-    `customize_item:${encodeURIComponent(parsed.data.groupId)}:${encodeURIComponent(parsed.data.modifierId)}`;
+  const expectedActionId = `customize_item:${encodeURIComponent(parsed.data.groupId)}:${encodeURIComponent(parsed.data.modifierId)}`;
   return action.actionId === expectedActionId
     ? {
         kind: 'modifier_selection',

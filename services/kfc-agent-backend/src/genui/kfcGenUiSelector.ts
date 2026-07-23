@@ -533,14 +533,12 @@ function selectKfcGenUiAttachmentUnbound(
       title: 'Giỏ hàng của bạn',
       data: { cart: state.cart },
       actions: [
+        { id: 'update_cart', label: 'Cập nhật' },
         {
           id: 'continue_to_fulfillment',
-          label: 'Tiếp tục giao hàng',
+          label: 'Cập nhật & tiếp tục',
           intent: 'primary',
         },
-        { id: 'edit_cart', label: 'Sửa giỏ hàng' },
-        { id: 'update_item_quantity', label: 'Đổi số lượng' },
-        { id: 'remove_item', label: 'Xóa món', intent: 'destructive' },
       ],
     };
   }
@@ -619,18 +617,6 @@ function selectKfcGenUiAttachmentUnbound(
   }
 
   if (state.menuModifierOptions && keepsModifierSurface) {
-    const actions = state.menuModifierOptions.modifierGroups.flatMap((group) =>
-      group.options.map((option) => ({
-        id: `customize_item:${encodeURIComponent(group.groupId)}:${encodeURIComponent(option.modifierId)}`,
-        label: option.name,
-        value: option.name,
-        payload: {
-          itemCode: state.menuModifierOptions!.itemCode,
-          groupId: group.groupId,
-          modifierId: option.modifierId,
-        },
-      })),
-    );
     return {
       id: `genui_${idBase}_modifier`,
       lifecycleStage: 'menu',
@@ -641,7 +627,7 @@ function selectKfcGenUiAttachmentUnbound(
         modifierTree: state.menuModifierOptions,
         ...(state.cart ? { cart: state.cart } : {}),
       },
-      actions,
+      actions: [{ id: 'apply_modifiers', label: 'Áp dụng', intent: 'primary' }],
     };
   }
 
@@ -708,7 +694,7 @@ function selectKfcGenUiAttachmentUnbound(
     };
   }
 
-  if (state.cart) {
+  if (state.cart && state.cart.items.length > 0) {
     return {
       id: `genui_${idBase}_cart`,
       lifecycleStage: 'cart',
@@ -717,14 +703,12 @@ function selectKfcGenUiAttachmentUnbound(
       title: 'Giỏ hàng của bạn',
       data: { cart: state.cart },
       actions: [
+        { id: 'update_cart', label: 'Cập nhật' },
         {
           id: 'continue_to_fulfillment',
-          label: 'Tiếp tục giao hàng',
+          label: 'Cập nhật & tiếp tục',
           intent: 'primary',
         },
-        { id: 'edit_cart', label: 'Sửa giỏ hàng' },
-        { id: 'update_item_quantity', label: 'Đổi số lượng' },
-        { id: 'remove_item', label: 'Xóa món', intent: 'destructive' },
       ],
     };
   }
@@ -752,10 +736,8 @@ function actionLifecycleForWidget(
   widgetKind: KfcGenUiAttachment['widgetKind'],
 ): NonNullable<KfcGenUiAttachment['authority']>['actionLifecycle'] {
   switch (widgetKind) {
-    case 'modifierPicker':
     case 'promotionGallery':
     case 'allergenEvidence':
-    case 'cartBuilder':
     case 'orderTrackingStatus':
       return 'replayable';
     default:

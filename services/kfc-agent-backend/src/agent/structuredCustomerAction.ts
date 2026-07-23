@@ -189,6 +189,45 @@ function modifierCartChange(
       modifiers: ModifierSelectionInput[];
     }
   | undefined {
+  return modifierBatchCartChange(state, {
+    itemCode: command.itemCode,
+    selections: [
+      {
+        groupId: command.groupId,
+        modifierId: command.modifierId,
+      },
+    ],
+  });
+}
+
+type VerifiedModifierGroup = NonNullable<
+  AgentGraphState['menuModifierOptions']
+>['modifierGroups'][number];
+
+function flattenedModifierGroups(
+  groups: readonly VerifiedModifierGroup[],
+): VerifiedModifierGroup[] {
+  return groups.flatMap((group) => [
+    group,
+    ...group.options.flatMap((option) =>
+      flattenedModifierGroups(option.modifierGroups),
+    ),
+  ]);
+}
+
+function modifierBatchCartChange(
+  state: AgentGraphState,
+  command: {
+    itemCode: string;
+    selections: readonly { groupId: string; modifierId: string }[];
+  },
+):
+  | {
+      itemCode: string;
+      quantity: number;
+      modifiers: ModifierSelectionInput[];
+    }
+  | undefined {
   const cartItem = state.cart?.items.find(
     ({ itemCode }) => itemCode === command.itemCode,
   );
@@ -196,41 +235,57 @@ function modifierCartChange(
   if (!cartItem || !tree || tree.itemCode !== command.itemCode) {
     return undefined;
   }
-  const groups = tree.modifierGroups.filter(
-    ({ groupId }) => groupId === command.groupId,
-  );
-  if (groups.length !== 1) return undefined;
-  const group = groups[0]!;
-  const options = group.options.filter(
-    ({ modifierId }) => modifierId === command.modifierId,
-  );
-  if (options.length !== 1) return undefined;
-  const option = options[0]!;
-  if (option.modifierGroups.length > 0) return undefined;
-  const groupMin = positiveInteger(group.min);
-  const groupMax = positiveInteger(group.max);
-  const quantity =
-    positiveInteger(option.quantity) ??
-    (groupMin !== undefined && groupMin === groupMax ? groupMin : undefined);
-  if (quantity === undefined) return undefined;
-  const preserved = (cartItem.modifiers ?? [])
-    .filter(({ groupId }) => groupId !== command.groupId)
-    .map((modifier) => ({
-      groupId: modifier.groupId,
-      modifierId: modifier.modifierId,
-      quantity: modifier.quantity,
-    }));
-  return {
-    itemCode: command.itemCode,
-    quantity: cartItem.quantity,
-    modifiers: [
-      ...preserved,
+  const groups = flattenedModifierGroups(tree.modifierGroups);
+  let modifiers = (cartItem.modifiers ?? []).map((modifier) => ({
+    groupId: modifier.groupId,
+    modifierId: modifier.modifierId,
+    quantity: modifier.quantity,
+  }));
+  for (const selection of command.selections) {
+    const matchingGroups = groups.filter(
+      ({ groupId }) => groupId === selection.groupId,
+    );
+    if (matchingGroups.length !== 1) return undefined;
+    const group = matchingGroups[0]!;
+    const options = group.options.filter(
+      ({ modifierId }) => modifierId === selection.modifierId,
+    );
+    if (options.length !== 1) return undefined;
+    const option = options[0]!;
+    const groupMin = positiveInteger(group.min);
+    const groupMax = positiveInteger(group.max);
+    const quantity =
+      positiveInteger(option.quantity) ??
+      (groupMin !== undefined && groupMin === groupMax ? groupMin : undefined);
+    if (quantity === undefined) return undefined;
+    modifiers = [
+      ...modifiers.filter(({ groupId }) => groupId !== group.groupId),
       {
         groupId: group.groupId,
         modifierId: option.modifierId,
         quantity,
       },
-    ],
+    ];
+  }
+  const selectedByGroup = new Map(
+    modifiers.map((modifier) => [modifier.groupId, modifier.modifierId]),
+  );
+  const groupsSatisfied = (nestedGroups: typeof tree.modifierGroups): boolean =>
+    nestedGroups.every((group) => {
+      const selectedModifierId = selectedByGroup.get(group.groupId);
+      if (!selectedModifierId) return group.min === 0;
+      const options = group.options.filter(
+        ({ modifierId }) => modifierId === selectedModifierId,
+      );
+      return (
+        options.length === 1 && groupsSatisfied(options[0]!.modifierGroups)
+      );
+    });
+  if (!groupsSatisfied(tree.modifierGroups)) return undefined;
+  return {
+    itemCode: command.itemCode,
+    quantity: cartItem.quantity,
+    modifiers,
   };
 }
 
@@ -351,8 +406,36 @@ export function prepareStructuredCustomerAction(input: {
         ? exactToolCall('updateCart', { changes })
         : reject('structured_action_cart_item_unverified');
     }
+    case 'cart_draft_commit': {
+      const currentCodes = input.state.cart?.items.map(
+        ({ itemCode }) => itemCode,
+      );
+      if (
+        !currentCodes ||
+        !exactStringSet(
+          currentCodes,
+          command.items.map(({ itemCode }) => itemCode),
+        )
+      ) {
+        return reject('structured_action_cart_snapshot_unverified');
+      }
+      const changes = command.items.map(({ itemCode, quantity }) =>
+        cartChange(input.state, itemCode, quantity),
+      );
+      return changes.every((change): change is NonNullable<typeof change> =>
+        Boolean(change),
+      )
+        ? exactToolCall('updateCart', { changes })
+        : reject('structured_action_cart_item_unverified');
+    }
     case 'modifier_selection': {
       const change = modifierCartChange(input.state, command);
+      return change
+        ? exactToolCall('updateCart', { changes: [change] })
+        : reject('structured_action_modifier_unverified');
+    }
+    case 'modifier_batch_selection': {
+      const change = modifierBatchCartChange(input.state, command);
       return change
         ? exactToolCall('updateCart', { changes: [change] })
         : reject('structured_action_modifier_unverified');

@@ -83,6 +83,104 @@ describe('OpenAI KFC chat API', () => {
     ).toEqual(['user', 'assistant']);
   });
 
+  it('persists an explicitly empty cart after a trusted GenUI removal', async () => {
+    const store = new MemoryStore();
+    let responseIndex = 0;
+    const openAiAgent = new OpenAiKfcAgent({
+      client: {
+        responses: {
+          create: async () => {
+            responseIndex += 1;
+            if (responseIndex === 1) {
+              return {
+                output: [
+                  {
+                    type: 'function_call',
+                    call_id: 'call_menu',
+                    name: 'searchMenu',
+                    arguments: JSON.stringify({ query: 'Combo Hợp Gu' }),
+                  },
+                ],
+                output_text: '',
+              };
+            }
+            return {
+              output: [],
+              output_text:
+                responseIndex === 2
+                  ? 'Mời bạn chọn combo.'
+                  : responseIndex === 3
+                    ? 'Đã thêm combo vào giỏ.'
+                    : 'Giỏ hàng của bạn hiện đã trống.',
+            };
+          },
+        },
+      },
+      model: 'gpt-4.1-mini',
+    });
+    const server = buildServer({
+      store,
+      fixtures: createTestFixtures(),
+      openAiAgent,
+      readiness: {
+        commerce: {
+          mode: 'fixture',
+          requiredCapabilities: ['orders', 'payment'],
+        },
+      },
+    });
+
+    const menuResponse = await server.inject({
+      method: 'POST',
+      url: '/chat/kfc/message',
+      payload: {
+        sessionId: 'kfc:empty_cart:genui',
+        customerId: 'empty_cart',
+        clientMessageId: 'empty_cart_menu',
+        text: 'Cho mình xem combo.',
+      },
+    });
+    const menuBody = menuResponse.json();
+    const addResponse = await server.inject({
+      method: 'POST',
+      url: '/chat/kfc/genui-action',
+      payload: {
+        sessionId: 'kfc:empty_cart:genui',
+        customerId: 'empty_cart',
+        clientMessageId: 'empty_cart_add',
+        action: {
+          attachmentId: menuBody.genUi.id,
+          actionId: 'add_items',
+          payload: { items: [{ itemCode: '20751', quantity: 1 }] },
+        },
+      },
+    });
+    const cartBody = addResponse.json();
+    const removeResponse = await server.inject({
+      method: 'POST',
+      url: '/chat/kfc/genui-action',
+      payload: {
+        sessionId: 'kfc:empty_cart:genui',
+        customerId: 'empty_cart',
+        clientMessageId: 'empty_cart_remove',
+        action: {
+          attachmentId: cartBody.genUi.id,
+          actionId: 'update_cart',
+          payload: { items: [{ itemCode: '20751', quantity: 0 }] },
+        },
+      },
+    });
+
+    expect(removeResponse.statusCode, removeResponse.body).toBe(200);
+    expect(removeResponse.json()).not.toHaveProperty('genUi');
+    const verifiedStates = (await store.listEvents('kfc:empty_cart:genui'))
+      .filter(({ sourceType }) => sourceType === 'graph:verified_state')
+      .map(({ payload }) => payload.verifiedState);
+    expect(verifiedStates.at(-1)).toMatchObject({
+      cart: { items: [] },
+    });
+  });
+
   it('projects direct tool evidence and completes a trusted GenUI order confirmation', async () => {
     const store = new MemoryStore();
     let responseIndex = 0;

@@ -207,14 +207,12 @@ describe('selectKfcGenUiAttachment', () => {
     expect(attachment?.widgetKind).toBe('modifierPicker');
     expect(attachment?.actions).toEqual([
       expect.objectContaining({
-        id: 'customize_item:a%3Ab:c',
-        payload: { itemCode: '3001', groupId: 'a:b', modifierId: 'c' },
-      }),
-      expect.objectContaining({
-        id: 'customize_item:a:b%3Ac',
-        payload: { itemCode: '3001', groupId: 'a', modifierId: 'b:c' },
+        id: 'apply_modifiers',
+        label: 'Áp dụng',
+        intent: 'primary',
       }),
     ]);
+    expect(attachment?.authority?.actionLifecycle).toBe('one_shot');
   });
 
   it('selects promotion media only from current promotion evidence', () => {
@@ -1468,6 +1466,14 @@ describe('selectKfcGenUiAttachment', () => {
     });
 
     expect(attachment?.widgetKind).toBe('cartBuilder');
+    expect(attachment?.actions).toEqual([
+      expect.objectContaining({ id: 'update_cart', label: 'Cập nhật' }),
+      expect.objectContaining({
+        id: 'continue_to_fulfillment',
+        label: 'Cập nhật & tiếp tục',
+      }),
+    ]);
+    expect(attachment?.authority?.actionLifecycle).toBe('one_shot');
   });
 
   it('keeps a successful current cart mutation ahead of a saved-address candidate', () => {

@@ -1,5 +1,8 @@
 import { describe, expect, it } from 'vitest';
-import { selectKfcOpenAiGenUi } from '../../src/agent/kfcOpenAiGenUi.js';
+import {
+  projectKfcOpenAiGenUiState,
+  selectKfcOpenAiGenUi,
+} from '../../src/agent/kfcOpenAiGenUi.js';
 import type { KfcToolSession } from '../../src/agent/kfcOpenAiTools.js';
 
 function session(): KfcToolSession {
@@ -124,5 +127,72 @@ describe('selectKfcOpenAiGenUi', () => {
     });
 
     expect(attachment?.widgetKind).toBe('smartMenuPicker');
+  });
+
+  it('preserves the verified cart while presenting modifier options', () => {
+    const activeSession = session();
+    activeSession.cart = {
+      id: 'cart_modifier',
+      items: [
+        {
+          itemCode: 'combo-1',
+          name: 'Combo 1',
+          quantity: 1,
+          unitPriceVnd: 71_000,
+        },
+      ],
+      subtotalVnd: 71_000,
+      discountVnd: 0,
+      deliveryFeeVnd: 0,
+      totalVnd: 71_000,
+      voucherCode: null,
+    };
+
+    const projection = projectKfcOpenAiGenUiState({
+      session: activeSession,
+      latestUserMessage: 'Tùy chỉnh combo 1',
+      toolCalls: [
+        {
+          name: 'getModifierOptions',
+          arguments: { code: 'combo-1' },
+          result: {
+            ok: true,
+            toolName: 'getModifierOptions',
+            value: {
+              itemCode: 'combo-1',
+              itemId: 'combo-1',
+              productCode: 'combo-1',
+              name: 'Combo 1',
+              modifierGroups: [],
+              provenance: {
+                sourceFile: 'fixture.json',
+                fixtureMode: 'public_crawl_seed',
+              },
+            },
+            message: 'Found modifier options',
+          },
+        },
+      ],
+    });
+
+    expect(projection.state.cart).toEqual(activeSession.cart);
+  });
+
+  it('persists an empty verified cart without presenting an empty cart widget', () => {
+    const activeSession = session();
+
+    const projection = projectKfcOpenAiGenUiState({
+      session: activeSession,
+      latestUserMessage: 'Cảm ơn',
+      toolCalls: [],
+    });
+    const attachment = selectKfcOpenAiGenUi({
+      session: activeSession,
+      latestUserMessage: 'Cảm ơn',
+      toolCalls: [],
+    });
+
+    expect(projection.state.cart).toEqual(activeSession.cart);
+    expect(attachment).toBeUndefined();
   });
 });

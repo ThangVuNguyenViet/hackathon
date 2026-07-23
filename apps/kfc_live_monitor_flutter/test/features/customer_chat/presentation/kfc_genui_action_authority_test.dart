@@ -164,7 +164,7 @@ void main() {
     });
   });
 
-  testWidgets('cart rows require matching actions and cap quantity at 99', (
+  testWidgets('cart rows require a valid draft action and cap quantity at 99', (
     tester,
   ) async {
     tester.view.physicalSize = const Size(390, 620);
@@ -193,18 +193,7 @@ void main() {
 
     final authoritative = _cart(
       quantity: 99,
-      actions: const [
-        KfcGenUiActionSpec(
-          id: 'update_item_quantity',
-          label: 'Đổi số lượng',
-          payload: {'itemCode': 'combo_zinger'},
-        ),
-        KfcGenUiActionSpec(
-          id: 'remove_item',
-          label: 'Xóa món',
-          payload: {'itemCode': 'combo_zinger'},
-        ),
-      ],
+      actions: const [KfcGenUiActionSpec(id: 'update_cart', label: 'Cập nhật')],
     );
     await _pump(tester, authoritative, emitted.add);
     expect(_cartIncrease(tester, authoritative).onPressed, isNull);
@@ -214,17 +203,22 @@ void main() {
         CustomerChatKeys.genUiCartRemove(authoritative.id, 'combo_zinger'),
       ),
     );
-    expect(emitted.single.payload, {'itemCode': 'combo_zinger'});
+    expect(emitted, isEmpty);
+    await tester.tap(
+      find.byKey(CustomerChatKeys.genUiAction(authoritative.id, 'update_cart')),
+    );
+    expect(emitted.single.payload, {
+      'items': [
+        {'itemCode': 'combo_zinger', 'quantity': 0},
+      ],
+    });
   });
 
   testWidgets('incoming invalid cart quantities fail closed', (tester) async {
     tester.view.physicalSize = const Size(390, 620);
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.reset);
-    const actions = [
-      KfcGenUiActionSpec(id: 'update_item_quantity', label: 'Đổi số lượng'),
-      KfcGenUiActionSpec(id: 'remove_item', label: 'Xóa món'),
-    ];
+    const actions = [KfcGenUiActionSpec(id: 'update_cart', label: 'Cập nhật')];
 
     for (final quantity in <num>[100, 1.5]) {
       final attachment = _cart(quantity: quantity, actions: actions);
@@ -289,7 +283,7 @@ void main() {
     expect(confirm.onPressed, isNull);
   });
 
-  testWidgets('a mismatched action value cannot label another cart row', (
+  testWidgets('an obsolete per-row action cannot authorize cart editing', (
     tester,
   ) async {
     tester.view.physicalSize = const Size(390, 620);
@@ -460,7 +454,7 @@ void main() {
     expect(emitted.single.payload, {'methodId': 'zalopay'});
   });
 
-  testWidgets('modifier requires exact encoded id and full payload binding', (
+  testWidgets('modifier requires one valid atomic apply binding', (
     tester,
   ) async {
     final emitted = <KfcGenUiAction>[];
@@ -478,14 +472,8 @@ void main() {
       },
     };
     const validAction = KfcGenUiActionSpec(
-      id: 'customize_item:flavor%2Fsize:hot%20spicy',
-      label: 'Cay',
-      value: 'Cay',
-      payload: {
-        'itemCode': 'item_1',
-        'groupId': 'flavor/size',
-        'modifierId': 'hot spicy',
-      },
+      id: 'apply_modifiers',
+      label: 'Áp dụng',
     );
     final invalidActions = [
       const KfcGenUiActionSpec(
@@ -553,7 +541,15 @@ void main() {
         ),
         emitted.add,
       );
-      expect(find.text('Cay'), findsNothing);
+      expect(
+        find.byKey(
+          CustomerChatKeys.genUiAction(
+            'modifier_invalid_$index',
+            'apply_modifiers',
+          ),
+        ),
+        findsNothing,
+      );
     }
 
     final overlongModifierId = 'x' * 129;
@@ -593,7 +589,12 @@ void main() {
       ),
       emitted.add,
     );
-    expect(find.text('Quá dài'), findsNothing);
+    expect(
+      find.byKey(
+        CustomerChatKeys.genUiAction('modifier_overlong', 'apply_modifiers'),
+      ),
+      findsNothing,
+    );
 
     const valid = KfcGenUiAttachment(
       id: 'modifier_valid',
@@ -614,10 +615,18 @@ void main() {
         ),
       ),
     );
+    expect(emitted, isEmpty);
+    await tester.tap(
+      find.byKey(CustomerChatKeys.genUiAction(valid.id, 'apply_modifiers')),
+    );
     expect(emitted.single, isA<KfcGenUiAction>());
-    expect(emitted.single.actionId, 'customize_item:flavor%2Fsize:hot%20spicy');
-    expect(emitted.single.value, 'Cay');
-    expect(emitted.single.payload, validAction.payload);
+    expect(emitted.single.actionId, 'apply_modifiers');
+    expect(emitted.single.payload, {
+      'itemCode': 'item_1',
+      'selections': [
+        {'groupId': 'flavor/size', 'modifierId': 'hot spicy'},
+      ],
+    });
   });
 }
 

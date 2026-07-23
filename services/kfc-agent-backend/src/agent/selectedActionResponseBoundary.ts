@@ -82,11 +82,23 @@ function commandEntityIds(command: CustomerCommand): string[] {
       return command.items.map(({ itemCode }) =>
         typedEntityId('item', itemCode),
       );
+    case 'cart_draft_commit':
+      return command.items.map(({ itemCode }) =>
+        typedEntityId('item', itemCode),
+      );
     case 'modifier_selection':
       return [
         typedEntityId('item', command.itemCode),
         typedEntityId('modifier_group', command.groupId),
         typedEntityId('modifier', command.modifierId),
+      ];
+    case 'modifier_batch_selection':
+      return [
+        typedEntityId('item', command.itemCode),
+        ...command.selections.flatMap(({ groupId, modifierId }) => [
+          typedEntityId('modifier_group', groupId),
+          typedEntityId('modifier', modifierId),
+        ]),
       ];
     case 'select_payment_method':
       return [typedEntityId('payment_method', command.selection.methodId)];

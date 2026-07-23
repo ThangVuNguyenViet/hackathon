@@ -591,7 +591,7 @@ export function createRouteAgentRuntime(
                   },
                 }),
           });
-          if (directOutput.genUi && directVerifiedState) {
+          if (directVerifiedState) {
             await store.appendEvent(input.sessionId, 'graph:verified_state', {
               verifiedState: directVerifiedState,
             });

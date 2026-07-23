@@ -27,16 +27,20 @@ function actionAttachment(input: {
     title: 'Cart',
     data: {
       cart: {
-        items: [{
-          itemCode: '20751',
-          name: 'Combo 99K',
-        }],
+        items: [
+          {
+            itemCode: '20751',
+            name: 'Combo 99K',
+          },
+        ],
       },
     },
-    actions: [{
-      id: 'update_item_quantity',
-      label: 'Update quantity',
-    }],
+    actions: [
+      {
+        id: 'update_item_quantity',
+        label: 'Update quantity',
+      },
+    ],
     expiresAt,
     authority: {
       schemaVersion: 'kfc-genui-v1',
@@ -90,10 +94,11 @@ async function actionHandlerHarness(input?: {
   });
   const handlers = createChatRouteHandlers({
     store,
-    kfcProofAccessContext: async () => controlledCustomerAccess({
-      sessionId,
-      customerId,
-    }),
+    kfcProofAccessContext: async () =>
+      controlledCustomerAccess({
+        sessionId,
+        customerId,
+      }),
     kfcAgentResponse,
   } as unknown as RouteHandlerContext);
 
@@ -108,6 +113,147 @@ async function actionHandlerHarness(input?: {
 }
 
 describe('trusted GenUI action route boundary', () => {
+  it('accepts one complete cart draft and lowers it to one trusted command', async () => {
+    const harness = await actionHandlerHarness({
+      attachmentFactory: ({ sessionId, customerId, verifiedRevision }) => {
+        const issuedAt = new Date();
+        const expiresAt = new Date(issuedAt.getTime() + 60_000).toISOString();
+        return {
+          id: 'trusted-cart-draft',
+          lifecycleStage: 'cart',
+          widgetKind: 'cartBuilder',
+          status: 'active',
+          title: 'Cart',
+          data: {
+            cart: {
+              items: [
+                { itemCode: '20751', name: 'Combo 99K' },
+                { itemCode: 'pepsi', name: 'Pepsi' },
+              ],
+            },
+          },
+          actions: [{ id: 'update_cart', label: 'Update' }],
+          expiresAt,
+          authority: {
+            schemaVersion: 'kfc-genui-v1',
+            sessionId,
+            customerId,
+            verifiedRevision,
+            actionLifecycle: 'one_shot',
+            issuedAt: issuedAt.toISOString(),
+            expiresAt,
+          },
+        };
+      },
+    });
+
+    const response = await harness.handlers.chatKfcGenUiAction({
+      sessionId: harness.sessionId,
+      customerId: harness.customerId,
+      clientMessageId: 'trusted-cart-draft-1',
+      action: {
+        attachmentId: harness.attachment.id,
+        actionId: 'update_cart',
+        payload: {
+          items: [
+            { itemCode: '20751', quantity: 2 },
+            { itemCode: 'pepsi', quantity: 0 },
+          ],
+        },
+      },
+    });
+
+    expect(response.status).toBe(200);
+    expect(harness.calls[0]?.trustedCustomerAction?.command).toEqual({
+      kind: 'cart_draft_commit',
+      items: [
+        { itemCode: '20751', quantity: 2 },
+        { itemCode: 'pepsi', quantity: 0 },
+      ],
+      continueToFulfillment: false,
+    });
+  });
+
+  it('accepts one modifier draft only when every selection belongs to the tree', async () => {
+    const harness = await actionHandlerHarness({
+      attachmentFactory: ({ sessionId, customerId, verifiedRevision }) => {
+        const issuedAt = new Date();
+        const expiresAt = new Date(issuedAt.getTime() + 60_000).toISOString();
+        return {
+          id: 'trusted-modifier-draft',
+          lifecycleStage: 'modifier',
+          widgetKind: 'modifierPicker',
+          status: 'active',
+          title: 'Customize',
+          data: {
+            modifierTree: {
+              itemCode: '20751',
+              modifierGroups: [
+                {
+                  groupId: 'flavor',
+                  options: [
+                    {
+                      modifierId: 'spicy',
+                      name: 'Spicy',
+                      modifierGroups: [
+                        {
+                          groupId: 'sauce',
+                          options: [
+                            { modifierId: 'mayo', name: 'Mayo' },
+                            { modifierId: 'chili', name: 'Chili' },
+                          ],
+                        },
+                      ],
+                    },
+                    { modifierId: 'original', name: 'Original' },
+                  ],
+                },
+              ],
+            },
+          },
+          actions: [{ id: 'apply_modifiers', label: 'Apply' }],
+          expiresAt,
+          authority: {
+            schemaVersion: 'kfc-genui-v1',
+            sessionId,
+            customerId,
+            verifiedRevision,
+            actionLifecycle: 'one_shot',
+            issuedAt: issuedAt.toISOString(),
+            expiresAt,
+          },
+        };
+      },
+    });
+
+    const response = await harness.handlers.chatKfcGenUiAction({
+      sessionId: harness.sessionId,
+      customerId: harness.customerId,
+      clientMessageId: 'trusted-modifier-draft-1',
+      action: {
+        attachmentId: harness.attachment.id,
+        actionId: 'apply_modifiers',
+        payload: {
+          itemCode: '20751',
+          selections: [
+            { groupId: 'flavor', modifierId: 'spicy' },
+            { groupId: 'sauce', modifierId: 'chili' },
+          ],
+        },
+      },
+    });
+
+    expect(response.status).toBe(200);
+    expect(harness.calls[0]?.trustedCustomerAction?.command).toEqual({
+      kind: 'modifier_batch_selection',
+      itemCode: '20751',
+      selections: [
+        { groupId: 'flavor', modifierId: 'spicy' },
+        { groupId: 'sauce', modifierId: 'chili' },
+      ],
+    });
+  });
+
   it('accepts a selected batch from the full menu browser', async () => {
     const harness = await actionHandlerHarness({
       attachmentFactory: ({ sessionId, customerId, verifiedRevision }) => {
@@ -120,11 +266,13 @@ describe('trusted GenUI action route boundary', () => {
           status: 'active',
           title: 'Full menu',
           data: {
-            items: [{
-              code: '20751',
-              name: 'Combo 99K',
-              available: true,
-            }],
+            items: [
+              {
+                code: '20751',
+                name: 'Combo 99K',
+                available: true,
+              },
+            ],
           },
           actions: [{ id: 'add_items', label: 'Confirm items' }],
           expiresAt,
@@ -341,87 +489,91 @@ describe('trusted GenUI action route boundary', () => {
   });
 
   it('binds a pre-issued payment action to its exact method while a generic picker remains selectable', async () => {
-    const paymentAttachment = (
-      preboundMethodId: string | undefined,
-    ) => actionHandlerHarness({
-      attachmentFactory: ({ sessionId, customerId, verifiedRevision }) => {
-        const issuedAt = new Date();
-        const expiresAt =
-          new Date(issuedAt.getTime() + 60_000).toISOString();
-        return {
-          id: `payment-${preboundMethodId ?? 'generic'}`,
-          lifecycleStage: 'payment_method',
-          widgetKind: 'paymentMethodPicker',
-          status: 'active',
-          title: 'Payment methods',
-          data: {
-            paymentMethodCollection: {
-              collectionKey: 'payment:all',
-              collectionRevision: 'collection-revision-1',
-              providerRevision: 'provider-revision-1',
-            },
-            methods: [
-              {
-                methodId: 'opaque-method-a',
-                displayName: 'Method A',
-                supported: true,
-                supportStatus: 'listed_supported',
+    const paymentAttachment = (preboundMethodId: string | undefined) =>
+      actionHandlerHarness({
+        attachmentFactory: ({ sessionId, customerId, verifiedRevision }) => {
+          const issuedAt = new Date();
+          const expiresAt = new Date(issuedAt.getTime() + 60_000).toISOString();
+          return {
+            id: `payment-${preboundMethodId ?? 'generic'}`,
+            lifecycleStage: 'payment_method',
+            widgetKind: 'paymentMethodPicker',
+            status: 'active',
+            title: 'Payment methods',
+            data: {
+              paymentMethodCollection: {
+                collectionKey: 'payment:all',
+                collectionRevision: 'collection-revision-1',
+                providerRevision: 'provider-revision-1',
               },
+              methods: [
+                {
+                  methodId: 'opaque-method-a',
+                  displayName: 'Method A',
+                  supported: true,
+                  supportStatus: 'listed_supported',
+                },
+                {
+                  methodId: 'opaque-method-b',
+                  displayName: 'Method B',
+                  supported: true,
+                  supportStatus: 'listed_supported',
+                },
+              ],
+            },
+            actions: [
               {
-                methodId: 'opaque-method-b',
-                displayName: 'Method B',
-                supported: true,
-                supportStatus: 'listed_supported',
+                id: 'select_payment_method',
+                label: 'Select payment method',
+                ...(preboundMethodId
+                  ? { payload: { methodId: preboundMethodId } }
+                  : {}),
               },
             ],
-          },
-          actions: [{
-            id: 'select_payment_method',
-            label: 'Select payment method',
-            ...(preboundMethodId
-              ? { payload: { methodId: preboundMethodId } }
-              : {}),
-          }],
-          expiresAt,
-          authority: {
-            schemaVersion: 'kfc-genui-v1',
-            sessionId,
-            customerId,
-            verifiedRevision,
-            actionLifecycle: 'replayable',
-            issuedAt: issuedAt.toISOString(),
             expiresAt,
-          },
-        };
-      },
-    });
+            authority: {
+              schemaVersion: 'kfc-genui-v1',
+              sessionId,
+              customerId,
+              verifiedRevision,
+              actionLifecycle: 'replayable',
+              issuedAt: issuedAt.toISOString(),
+              expiresAt,
+            },
+          };
+        },
+      });
 
     const prebound = await paymentAttachment('opaque-method-a');
-    await expect(prebound.handlers.chatKfcGenUiAction({
-      sessionId: prebound.sessionId,
-      customerId: prebound.customerId,
-      clientMessageId: 'switched-prebound-payment',
-      action: {
-        attachmentId: prebound.attachment.id,
-        actionId: 'select_payment_method',
-        payload: { methodId: 'opaque-method-b' },
-      },
-    })).resolves.toEqual({
+    await expect(
+      prebound.handlers.chatKfcGenUiAction({
+        sessionId: prebound.sessionId,
+        customerId: prebound.customerId,
+        clientMessageId: 'switched-prebound-payment',
+        action: {
+          attachmentId: prebound.attachment.id,
+          actionId: 'select_payment_method',
+          payload: { methodId: 'opaque-method-b' },
+        },
+      }),
+    ).resolves.toEqual({
       status: 422,
       body: { errorCode: 'invalid_action_payload' },
     });
     expect(prebound.calls).toHaveLength(0);
 
-    await expect(prebound.handlers.chatKfcGenUiAction({
-      sessionId: prebound.sessionId,
-      customerId: prebound.customerId,
-      clientMessageId: 'exact-prebound-payment',
-      action: {
-        attachmentId: prebound.attachment.id,
-        actionId: 'select_payment_method',
-        payload: { methodId: 'opaque-method-a' },
-      },
-    })).resolves.toMatchObject({ status: 200 });
+    await expect(
+      prebound.handlers.chatKfcGenUiAction({
+        sessionId: prebound.sessionId,
+        customerId: prebound.customerId,
+        clientMessageId: 'exact-prebound-payment',
+        action: {
+          attachmentId: prebound.attachment.id,
+          actionId: 'select_payment_method',
+          payload: { methodId: 'opaque-method-a' },
+        },
+      }),
+    ).resolves.toMatchObject({ status: 200 });
     expect(prebound.calls[0]?.trustedCustomerAction?.command).toEqual({
       kind: 'select_payment_method',
       selection: {
@@ -433,16 +585,18 @@ describe('trusted GenUI action route boundary', () => {
     });
 
     const generic = await paymentAttachment(undefined);
-    await expect(generic.handlers.chatKfcGenUiAction({
-      sessionId: generic.sessionId,
-      customerId: generic.customerId,
-      clientMessageId: 'generic-picker-payment',
-      action: {
-        attachmentId: generic.attachment.id,
-        actionId: 'select_payment_method',
-        payload: { methodId: 'opaque-method-b' },
-      },
-    })).resolves.toMatchObject({ status: 200 });
+    await expect(
+      generic.handlers.chatKfcGenUiAction({
+        sessionId: generic.sessionId,
+        customerId: generic.customerId,
+        clientMessageId: 'generic-picker-payment',
+        action: {
+          attachmentId: generic.attachment.id,
+          actionId: 'select_payment_method',
+          payload: { methodId: 'opaque-method-b' },
+        },
+      }),
+    ).resolves.toMatchObject({ status: 200 });
     expect(generic.calls[0]?.trustedCustomerAction?.command).toMatchObject({
       kind: 'select_payment_method',
       selection: { methodId: 'opaque-method-b' },

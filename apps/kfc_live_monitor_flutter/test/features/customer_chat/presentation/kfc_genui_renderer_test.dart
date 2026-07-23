@@ -50,7 +50,7 @@ void main() {
     expect(actions.single.actionId, 'confirm_order');
   });
 
-  testWidgets('cart controls emit item-specific quantity and removal actions', (
+  testWidgets('cart controls stay local until one atomic update', (
     tester,
   ) async {
     tester.view.physicalSize = const Size(390, 620);
@@ -105,11 +105,269 @@ void main() {
     await tester.tap(
       find.byKey(CustomerChatKeys.genUiCartRemove(fixture.id, 'pepsi_large')),
     );
+    await tester.pump();
 
-    expect(actions[0].actionId, 'update_item_quantity');
-    expect(actions[0].payload, {'itemCode': 'combo_zinger', 'quantity': 2});
-    expect(actions[1].actionId, 'remove_item');
-    expect(actions[1].payload, {'itemCode': 'pepsi_large'});
+    expect(actions, isEmpty);
+    expect(find.text('178.000đ'), findsWidgets);
+    final update = find.byKey(
+      CustomerChatKeys.genUiAction(fixture.id, 'update_cart'),
+    );
+    expect(update, findsOneWidget);
+    await tester.tap(update);
+    await tester.pump();
+
+    expect(actions.single.actionId, 'update_cart');
+    expect(actions.single.payload, {
+      'items': [
+        {'itemCode': 'combo_zinger', 'quantity': 2},
+        {'itemCode': 'pepsi_large', 'quantity': 0},
+      ],
+    });
+  });
+
+  testWidgets('modifier choices stay local until Apply', (tester) async {
+    final actions = <KfcGenUiAction>[];
+    final fixture = kfcGenUiFixture(KfcGenUiWidgetKind.modifierPicker);
+    await tester.pumpWidget(
+      TestApp(
+        child: KfcGenUiRenderer(attachment: fixture, onAction: actions.add),
+      ),
+    );
+
+    await tester.tap(
+      find.byKey(
+        CustomerChatKeys.genUiModifierOption(fixture.id, 'flavor', 'hot-spicy'),
+      ),
+    );
+    await tester.pump();
+    expect(actions, isEmpty);
+
+    await tester.tap(
+      find.byKey(CustomerChatKeys.genUiAction(fixture.id, 'apply_modifiers')),
+    );
+    await tester.pump();
+
+    expect(actions.single.actionId, 'apply_modifiers');
+    expect(actions.single.payload, {
+      'itemCode': 'three-chicken',
+      'selections': [
+        {'groupId': 'flavor', 'modifierId': 'hot-spicy'},
+      ],
+    });
+  });
+
+  testWidgets(
+    'modifier apply preserves verified defaults for untouched groups',
+    (tester) async {
+      final actions = <KfcGenUiAction>[];
+      const fixture = KfcGenUiAttachment(
+        id: 'modifier-defaults',
+        lifecycleStage: 'modifier',
+        widgetKind: KfcGenUiWidgetKind.modifierPicker,
+        status: KfcGenUiStatus.active,
+        title: 'Tùy chỉnh',
+        data: {
+          'modifierTree': {
+            'itemCode': 'combo',
+            'modifierGroups': [
+              {
+                'groupId': 'main',
+                'min': 1,
+                'max': 1,
+                'options': [
+                  {'modifierId': 'burger', 'name': 'Burger', 'default': true},
+                ],
+              },
+              {
+                'groupId': 'drink',
+                'min': 1,
+                'max': 1,
+                'options': [
+                  {'modifierId': 'pepsi', 'name': 'Pepsi', 'default': true},
+                  {'modifierId': 'seven-up', 'name': '7Up', 'default': false},
+                ],
+              },
+            ],
+          },
+        },
+        actions: [
+          KfcGenUiActionSpec(
+            id: 'apply_modifiers',
+            label: 'Áp dụng',
+            intent: KfcGenUiActionIntent.primary,
+          ),
+        ],
+      );
+      await tester.pumpWidget(
+        TestApp(
+          child: KfcGenUiRenderer(attachment: fixture, onAction: actions.add),
+        ),
+      );
+
+      await tester.tap(
+        find.byKey(
+          CustomerChatKeys.genUiModifierOption(fixture.id, 'drink', 'seven-up'),
+        ),
+      );
+      await tester.tap(
+        find.byKey(CustomerChatKeys.genUiAction(fixture.id, 'apply_modifiers')),
+      );
+
+      expect(actions.single.payload, {
+        'itemCode': 'combo',
+        'selections': [
+          {'groupId': 'main', 'modifierId': 'burger'},
+          {'groupId': 'drink', 'modifierId': 'seven-up'},
+        ],
+      });
+    },
+  );
+
+  testWidgets(
+    'modifier apply waits for and submits an active required nested group',
+    (tester) async {
+      final actions = <KfcGenUiAction>[];
+      const fixture = KfcGenUiAttachment(
+        id: 'nested-modifiers',
+        lifecycleStage: 'modifier',
+        widgetKind: KfcGenUiWidgetKind.modifierPicker,
+        status: KfcGenUiStatus.active,
+        title: 'Tùy chỉnh',
+        data: {
+          'modifierTree': {
+            'itemCode': 'combo',
+            'modifierGroups': [
+              {
+                'groupId': 'main',
+                'name': 'Món chính',
+                'min': 1,
+                'max': 1,
+                'options': [
+                  {
+                    'modifierId': 'burger',
+                    'name': 'Burger',
+                    'default': true,
+                    'modifierGroups': [
+                      {
+                        'groupId': 'spice',
+                        'name': 'Độ cay',
+                        'min': 1,
+                        'max': 1,
+                        'options': [
+                          {'modifierId': 'spicy', 'name': 'Cay'},
+                          {'modifierId': 'mild', 'name': 'Không cay'},
+                        ],
+                      },
+                    ],
+                  },
+                ],
+              },
+            ],
+          },
+        },
+        actions: [
+          KfcGenUiActionSpec(
+            id: 'apply_modifiers',
+            label: 'Áp dụng',
+            intent: KfcGenUiActionIntent.primary,
+          ),
+        ],
+      );
+      await tester.pumpWidget(
+        TestApp(
+          child: KfcGenUiRenderer(attachment: fixture, onAction: actions.add),
+        ),
+      );
+
+      expect(find.text('Độ cay'), findsOneWidget);
+      final applyFinder = find.byKey(
+        CustomerChatKeys.genUiAction(fixture.id, 'apply_modifiers'),
+      );
+      expect(tester.widget<ShadButton>(applyFinder).onPressed, isNull);
+
+      await tester.tap(
+        find.byKey(
+          CustomerChatKeys.genUiModifierOption(fixture.id, 'spice', 'mild'),
+        ),
+      );
+      await tester.pump();
+      expect(tester.widget<ShadButton>(applyFinder).onPressed, isNotNull);
+      await tester.tap(applyFinder);
+
+      expect(actions.single.payload, {
+        'itemCode': 'combo',
+        'selections': [
+          {'groupId': 'main', 'modifierId': 'burger'},
+          {'groupId': 'spice', 'modifierId': 'mild'},
+        ],
+      });
+    },
+  );
+
+  testWidgets('answered cart collapses to a verified read-only summary', (
+    tester,
+  ) async {
+    final source = kfcGenUiFixture(KfcGenUiWidgetKind.cartBuilder);
+    final answered = KfcGenUiAttachment(
+      id: source.id,
+      lifecycleStage: source.lifecycleStage,
+      widgetKind: source.widgetKind,
+      status: KfcGenUiStatus.answered,
+      title: source.title,
+      data: {
+        ...source.data,
+        '_completedAction': {
+          'actionId': 'update_cart',
+          'payload': {
+            'items': [
+              {'itemCode': 'combo_zinger', 'quantity': 2},
+              {'itemCode': 'pepsi_large', 'quantity': 0},
+            ],
+          },
+        },
+      },
+      actions: source.actions,
+      selectedAction: 'update_cart',
+    );
+
+    await tester.pumpWidget(
+      TestApp(
+        child: KfcGenUiRenderer(attachment: answered, onAction: (_) {}),
+      ),
+    );
+
+    expect(find.text('Đã hoàn tất · Cập nhật'), findsOneWidget);
+    expect(find.text('2 × Combo Zinger'), findsOneWidget);
+    expect(
+      find.byKey(CustomerChatKeys.genUiAction(source.id, 'update_cart')),
+      findsNothing,
+    );
+    expect(
+      find.byKey(
+        CustomerChatKeys.genUiCartQuantityIncrease(source.id, 'combo_zinger'),
+      ),
+      findsNothing,
+    );
+  });
+
+  testWidgets('an older actionable widget renders read-only', (tester) async {
+    final fixture = kfcGenUiFixture(KfcGenUiWidgetKind.smartMenuPicker);
+
+    await tester.pumpWidget(
+      TestApp(
+        child: KfcGenUiRenderer(
+          attachment: fixture,
+          interactive: false,
+          onAction: (_) {},
+        ),
+      ),
+    );
+
+    expect(find.text('Nội dung trước đó · chỉ xem'), findsWidgets);
+    expect(
+      find.byKey(CustomerChatKeys.genUiAction(fixture.id, 'add_items')),
+      findsNothing,
+    );
   });
 
   testWidgets(

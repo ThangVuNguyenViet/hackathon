@@ -406,6 +406,44 @@ describe('trusted structured customer action preparation', () => {
     });
   });
 
+  it('commits a complete cart draft in one verified update', () => {
+    const currentState = state({ cart: cart() });
+    const trustedEnvelope = envelope(currentState, {
+      kind: 'cart_draft_commit',
+      items: [{ itemCode: 'existing', quantity: 3 }],
+      continueToFulfillment: false,
+    });
+
+    expect(
+      prepareStructuredCustomerAction({
+        envelope: trustedEnvelope,
+        revisionValidated: false,
+        state: currentState,
+      }),
+    ).toEqual({
+      kind: 'execute',
+      call: {
+        toolName: 'updateCart',
+        arguments: {
+          changes: [
+            {
+              itemCode: 'existing',
+              quantity: 3,
+              modifiers: [
+                {
+                  groupId: 'size',
+                  modifierId: 'large',
+                  quantity: 2,
+                },
+              ],
+            },
+          ],
+        },
+      },
+      afterTool: 'respond',
+    });
+  });
+
   it('does not let contradictory customer text alter typed action lowering', () => {
     const authorityState = state({
       cart: cart(),
@@ -470,31 +508,28 @@ describe('trusted structured customer action preparation', () => {
     });
   });
 
-  it.each([
-    ['unavailable', { available: false }],
-  ] satisfies Array<[string, Partial<MenuItem>]>)(
-    'rejects a verified menu item that is %s',
-    (_label, itemOverrides) => {
-      const currentState = withVerifiedMenu([
-        menuItem('blocked-item', itemOverrides),
-      ]);
+  it.each([['unavailable', { available: false }]] satisfies Array<
+    [string, Partial<MenuItem>]
+  >)('rejects a verified menu item that is %s', (_label, itemOverrides) => {
+    const currentState = withVerifiedMenu([
+      menuItem('blocked-item', itemOverrides),
+    ]);
 
-      expect(
-        prepareStructuredCustomerAction({
-          envelope: envelope(currentState, {
-            kind: 'cart_update',
-            itemCode: 'blocked-item',
-            quantity: 1,
-          }),
-          revisionValidated: false,
-          state: currentState,
+    expect(
+      prepareStructuredCustomerAction({
+        envelope: envelope(currentState, {
+          kind: 'cart_update',
+          itemCode: 'blocked-item',
+          quantity: 1,
         }),
-      ).toEqual({
-        kind: 'reject',
-        errorCode: 'structured_action_cart_item_unverified',
-      });
-    },
-  );
+        revisionValidated: false,
+        state: currentState,
+      }),
+    ).toEqual({
+      kind: 'reject',
+      errorCode: 'structured_action_cart_item_unverified',
+    });
+  });
 
   it('uses the fixture default configuration for a customizable item', () => {
     const currentState = withVerifiedMenu([
@@ -689,6 +724,101 @@ describe('trusted structured customer action preparation', () => {
         },
       },
       afterTool: 'respond',
+    });
+  });
+
+  it('lowers one modifier draft across multiple verified groups', () => {
+    const currentState = modifierReadyState();
+    const command = {
+      kind: 'modifier_batch_selection' as const,
+      itemCode: 'existing',
+      selections: [
+        { groupId: 'size', modifierId: 'medium' },
+        { groupId: 'sauce', modifierId: 'chili' },
+      ],
+    };
+
+    expect(
+      prepareStructuredCustomerAction({
+        envelope: envelope(currentState, command),
+        revisionValidated: false,
+        state: currentState,
+      }),
+    ).toEqual({
+      kind: 'execute',
+      call: {
+        toolName: 'updateCart',
+        arguments: {
+          changes: [
+            {
+              itemCode: 'existing',
+              quantity: 1,
+              modifiers: [
+                { groupId: 'size', modifierId: 'medium', quantity: 1 },
+                { groupId: 'sauce', modifierId: 'chili', quantity: 1 },
+              ],
+            },
+          ],
+        },
+      },
+      afterTool: 'respond',
+    });
+  });
+
+  it('accepts a selected option with only optional nested groups', () => {
+    const currentState = modifierReadyState();
+    currentState.cart!.items[0]!.modifiers = [];
+    currentState.menuModifierOptions!.modifierGroups[0]!.options[0]!.modifierGroups =
+      [
+        {
+          groupId: 'optional-cheese',
+          name: 'Cheese',
+          min: 0,
+          max: 1,
+          depth: 1,
+          options: [
+            {
+              modifierId: 'add-cheese',
+              name: 'Add cheese',
+              priceDeltaVnd: 8_000,
+              default: false,
+              quantity: 0,
+              posItemId: 'cheese',
+              imageName: '',
+              modifierGroups: [],
+            },
+          ],
+        },
+      ];
+
+    expect(
+      prepareStructuredCustomerAction({
+        envelope: envelope(currentState, {
+          kind: 'modifier_batch_selection',
+          itemCode: 'existing',
+          selections: [
+            { groupId: 'size', modifierId: 'large' },
+            { groupId: 'sauce', modifierId: 'chili' },
+          ],
+        }),
+        revisionValidated: false,
+        state: currentState,
+      }),
+    ).toMatchObject({
+      kind: 'execute',
+      call: {
+        toolName: 'updateCart',
+        arguments: {
+          changes: [
+            {
+              modifiers: [
+                { groupId: 'size', modifierId: 'large', quantity: 1 },
+                { groupId: 'sauce', modifierId: 'chili', quantity: 1 },
+              ],
+            },
+          ],
+        },
+      },
     });
   });
 

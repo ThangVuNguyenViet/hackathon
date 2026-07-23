@@ -307,9 +307,6 @@ class KfcGenUiAttachment {
       return false;
     }
     if (!_isKnownActionForWidget(action.id)) return false;
-    if (action.id.startsWith('customize_item:')) {
-      return _isValidModifierActionSpec(action);
-    }
     if (!_dynamicActionIds.contains(action.id)) {
       return _isValidStaticActionSpec(action);
     }
@@ -330,16 +327,12 @@ class KfcGenUiAttachment {
       KfcGenUiWidgetKind.smartMenuPicker => actionId == 'add_items',
       KfcGenUiWidgetKind.fullMenuBrowser => actionId == 'add_items',
       KfcGenUiWidgetKind.productDetailCard => actionId == 'add_item',
-      KfcGenUiWidgetKind.modifierPicker => actionId.startsWith(
-        'customize_item:',
-      ),
+      KfcGenUiWidgetKind.modifierPicker => actionId == 'apply_modifiers',
       KfcGenUiWidgetKind.promotionGallery => false,
       KfcGenUiWidgetKind.allergenEvidence => actionId == 'open_allergen_chart',
       KfcGenUiWidgetKind.cartBuilder => {
         'continue_to_fulfillment',
-        'edit_cart',
-        'update_item_quantity',
-        'remove_item',
+        'update_cart',
       }.contains(actionId),
       KfcGenUiWidgetKind.addressFulfillmentCheck => {
         'accept_fulfillment',
@@ -385,43 +378,6 @@ class KfcGenUiAttachment {
     };
   }
 
-  bool _isValidModifierActionSpec(KfcGenUiActionSpec action) {
-    final tree = _record(data['modifierTree']);
-    final itemCode = tree['itemCode'];
-    final payload = action.payload;
-    if (!_isCanonicalIdentifier(itemCode) ||
-        payload.length != 3 ||
-        payload['itemCode'] != itemCode ||
-        !_isCanonicalIdentifier(payload['groupId']) ||
-        !_isCanonicalIdentifier(payload['modifierId'])) {
-      return false;
-    }
-    final groups = _uniqueRecordsByIdentifier(
-      tree['modifierGroups'],
-      'groupId',
-    );
-    final groupId = payload['groupId'];
-    final group = groups?[groupId];
-    if (group == null) return false;
-    final options = _uniqueRecordsByIdentifier(group['options'], 'modifierId');
-    final modifierId = payload['modifierId'];
-    final option = options?[modifierId];
-    if (option == null) return false;
-    final nestedGroups = option['modifierGroups'];
-    if (nestedGroups != null &&
-        (nestedGroups is! List || nestedGroups.isNotEmpty)) {
-      return false;
-    }
-    final optionName = option['name'];
-    if (!_isCanonicalText(optionName, maximumLength: 1000)) return false;
-    final expectedActionId =
-        'customize_item:${Uri.encodeComponent(groupId! as String)}:'
-        '${Uri.encodeComponent(modifierId! as String)}';
-    return action.id == expectedActionId &&
-        action.label == optionName &&
-        action.value == optionName;
-  }
-
   bool _isActionSpecBoundToAttachmentData(
     String actionId,
     Map<String, Object?> payload,
@@ -431,7 +387,6 @@ class KfcGenUiAttachment {
       return _isPayloadBoundToAttachmentData(actionId, payload, verifiedValue);
     }
     final identifierKey = switch (actionId) {
-      'update_item_quantity' || 'remove_item' => 'itemCode',
       'select_payment_method' => 'methodId',
       _ => null,
     };
@@ -442,10 +397,6 @@ class KfcGenUiAttachment {
     }
     if (verifiedValue == null) return true;
     final records = switch (actionId) {
-      'update_item_quantity' || 'remove_item' => _uniqueRecordsByIdentifier(
-        _asMap(data['cart'])['items'],
-        'itemCode',
-      ),
       'select_payment_method' => _uniqueRecordsByIdentifier(
         data['methods'],
         'methodId',
@@ -567,11 +518,18 @@ class KfcGenUiAttachment {
       'add_item' =>
         widgetKind == KfcGenUiWidgetKind.productDetailCard &&
             _productDetailRecord() != null,
-      'update_item_quantity' || 'remove_item' =>
+      'update_cart' || 'continue_to_fulfillment' =>
         widgetKind == KfcGenUiWidgetKind.cartBuilder &&
             _uniqueRecordsByIdentifier(
                   _asMap(data['cart'])['items'],
                   'itemCode',
+                ) !=
+                null,
+      'apply_modifiers' =>
+        widgetKind == KfcGenUiWidgetKind.modifierPicker &&
+            _isCanonicalIdentifier(_record(data['modifierTree'])['itemCode']) &&
+            _uniqueModifierGroups(
+                  _record(data['modifierTree'])['modifierGroups'],
                 ) !=
                 null,
       'select_payment_method' =>
@@ -618,15 +576,51 @@ class KfcGenUiAttachment {
             ) &&
             record['code'] == payload['itemCode'] &&
             _matchesVerifiedDisplayValue(record, 'name', verifiedValue);
-      case 'update_item_quantity':
-      case 'remove_item':
+      case 'update_cart':
+      case 'continue_to_fulfillment':
         final records = _uniqueRecordsByIdentifier(
           _asMap(data['cart'])['items'],
           'itemCode',
         );
-        final record = records?[payload['itemCode']];
-        return record != null &&
-            _matchesVerifiedDisplayValue(record, 'name', verifiedValue);
+        final items = payload['items'];
+        if (records == null ||
+            items is! List ||
+            items.length != records.length) {
+          return false;
+        }
+        final submittedCodes = <String>{};
+        for (final item in items) {
+          if (item is! Map) return false;
+          final itemCode = item['itemCode'];
+          if (itemCode is! String ||
+              records[itemCode] == null ||
+              !submittedCodes.add(itemCode)) {
+            return false;
+          }
+        }
+        return submittedCodes.length == records.length;
+      case 'apply_modifiers':
+        final tree = _record(data['modifierTree']);
+        if (payload['itemCode'] != tree['itemCode']) return false;
+        final groups = _uniqueModifierGroups(tree['modifierGroups']);
+        final selections = payload['selections'];
+        if (groups == null || selections is! List) return false;
+        final selectedGroups = <String>{};
+        for (final selection in selections) {
+          if (selection is! Map) return false;
+          final groupId = selection['groupId'];
+          final modifierId = selection['modifierId'];
+          if (groupId is! String ||
+              !selectedGroups.add(groupId) ||
+              _uniqueRecordsByIdentifier(
+                    groups[groupId]?['options'],
+                    'modifierId',
+                  )?[modifierId] ==
+                  null) {
+            return false;
+          }
+        }
+        return true;
       case 'select_payment_method':
         final records = _uniqueRecordsByIdentifier(
           data['methods'],
@@ -707,8 +701,9 @@ class KfcGenUiAttachment {
 const _dynamicActionIds = {
   'add_item',
   'add_items',
-  'update_item_quantity',
-  'remove_item',
+  'update_cart',
+  'continue_to_fulfillment',
+  'apply_modifiers',
   'select_payment_method',
 };
 
@@ -738,19 +733,10 @@ bool _isValidActionSpecPayload(String actionId, Map<String, Object?> payload) {
       return payload.isEmpty || _isValidBoundActionPayload(actionId, payload);
     case 'add_item':
       return _isValidBoundActionPayload(actionId, payload);
-    case 'update_item_quantity':
-      return payload.keys.every(
-            (key) => key == 'itemCode' || key == 'quantity',
-          ) &&
-          (payload['itemCode'] == null ||
-              _isCanonicalIdentifier(payload['itemCode'])) &&
-          (payload['quantity'] == null ||
-              (payload['quantity'] is int &&
-                  (payload['quantity']! as int) >= 1 &&
-                  (payload['quantity']! as int) <= 99));
-    case 'remove_item':
-      return payload.isEmpty ||
-          (payload.length == 1 && _isCanonicalIdentifier(payload['itemCode']));
+    case 'update_cart':
+    case 'continue_to_fulfillment':
+    case 'apply_modifiers':
+      return payload.isEmpty || _isValidBoundActionPayload(actionId, payload);
     case 'select_payment_method':
       return payload.isEmpty ||
           (payload.length == 1 && _isOpaqueProviderId(payload['methodId']));
@@ -785,19 +771,88 @@ bool _isValidBoundActionPayload(String actionId, Map<String, Object?> payload) {
           payload['quantity'] is int &&
           (payload['quantity']! as int) >= 1 &&
           (payload['quantity']! as int) <= 99;
-    case 'update_item_quantity':
-      return payload.length == 2 &&
-          _isCanonicalIdentifier(payload['itemCode']) &&
-          payload['quantity'] is int &&
-          (payload['quantity']! as int) >= 1 &&
-          (payload['quantity']! as int) <= 99;
-    case 'remove_item':
-      return payload.length == 1 && _isCanonicalIdentifier(payload['itemCode']);
+    case 'update_cart':
+    case 'continue_to_fulfillment':
+      if (payload.length != 1 || payload['items'] is! List) return false;
+      final items = payload['items']! as List;
+      if (items.isEmpty || items.length > 100) return false;
+      final seenItemCodes = <String>{};
+      var hasPositiveQuantity = false;
+      for (final item in items) {
+        if (item is! Map || item.length != 2) return false;
+        final itemCode = item['itemCode'];
+        final quantity = item['quantity'];
+        if (!_isCanonicalIdentifier(itemCode) ||
+            !seenItemCodes.add(itemCode as String) ||
+            quantity is! int ||
+            quantity < 0 ||
+            quantity > 99) {
+          return false;
+        }
+        hasPositiveQuantity = hasPositiveQuantity || quantity > 0;
+      }
+      return actionId != 'continue_to_fulfillment' || hasPositiveQuantity;
+    case 'apply_modifiers':
+      if (payload.length != 2 ||
+          !_isCanonicalIdentifier(payload['itemCode']) ||
+          payload['selections'] is! List) {
+        return false;
+      }
+      final selections = payload['selections']! as List;
+      if (selections.isEmpty || selections.length > 50) return false;
+      final seenGroups = <String>{};
+      for (final selection in selections) {
+        if (selection is! Map || selection.length != 2) return false;
+        final groupId = selection['groupId'];
+        if (!_isCanonicalIdentifier(groupId) ||
+            !seenGroups.add(groupId as String) ||
+            !_isCanonicalIdentifier(selection['modifierId'])) {
+          return false;
+        }
+      }
+      return true;
     case 'select_payment_method':
       return payload.length == 1 && _isOpaqueProviderId(payload['methodId']);
     default:
       return false;
   }
+}
+
+Map<Object?, Map<String, Object?>>? _uniqueModifierGroups(Object? value) {
+  final groups = <Object?, Map<String, Object?>>{};
+  var valid = true;
+  void visit(Object? nested, {bool required = false}) {
+    if (nested == null && !required) return;
+    final records = _recordList(nested);
+    if (records == null) {
+      valid = false;
+      return;
+    }
+    for (final group in records) {
+      final groupId = group['groupId'];
+      if (!_isCanonicalIdentifier(groupId) || groups.containsKey(groupId)) {
+        valid = false;
+        return;
+      }
+      groups[groupId] = group;
+      final options = _recordList(group['options']);
+      if (options == null || options.isEmpty) {
+        valid = false;
+        return;
+      }
+      for (final option in options) {
+        if (!_isCanonicalIdentifier(option['modifierId'])) {
+          valid = false;
+          return;
+        }
+        visit(option['modifierGroups']);
+        if (!valid) return;
+      }
+    }
+  }
+
+  visit(value, required: true);
+  return valid ? groups : null;
 }
 
 bool _isCanonicalIdentifier(Object? value) {

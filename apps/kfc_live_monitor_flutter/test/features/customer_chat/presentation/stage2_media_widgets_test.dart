@@ -105,28 +105,7 @@ void main() {
             ],
           },
         },
-        actions: [
-          KfcGenUiActionSpec(
-            id: 'customize_item:drink:large',
-            label: 'Nước lớn',
-            value: 'Nước lớn',
-            payload: {
-              'itemCode': 'combo_collision',
-              'groupId': 'drink',
-              'modifierId': 'large',
-            },
-          ),
-          KfcGenUiActionSpec(
-            id: 'customize_item:fries:large',
-            label: 'Khoai lớn',
-            value: 'Khoai lớn',
-            payload: {
-              'itemCode': 'combo_collision',
-              'groupId': 'fries',
-              'modifierId': 'large',
-            },
-          ),
-        ],
+        actions: [KfcGenUiActionSpec(id: 'apply_modifiers', label: 'Áp dụng')],
       );
 
       await tester.pumpWidget(
@@ -148,13 +127,22 @@ void main() {
         'large',
       );
       expect(drink, isNot(fries));
+      await tester.tap(find.byKey(drink));
       await tester.tap(find.byKey(fries));
       await tester.pump();
-      expect(actions.single.actionId, 'customize_item:fries:large');
+      expect(actions, isEmpty);
+      await tester.tap(
+        find.byKey(
+          CustomerChatKeys.genUiAction(attachment.id, 'apply_modifiers'),
+        ),
+      );
+      expect(actions.single.actionId, 'apply_modifiers');
       expect(actions.single.payload, {
         'itemCode': 'combo_collision',
-        'groupId': 'fries',
-        'modifierId': 'large',
+        'selections': [
+          {'groupId': 'drink', 'modifierId': 'large'},
+          {'groupId': 'fries', 'modifierId': 'large'},
+        ],
       });
     },
   );

@@ -148,6 +148,158 @@ void main() {
     );
   });
 
+  test(
+    'atomic cart draft uses verified item names in the transcript',
+    () async {
+      final attachment = kfcGenUiFixture(KfcGenUiWidgetKind.cartBuilder);
+      final controller = CustomerChatController(
+        repository: const FixtureCustomerChatRepository(),
+        initialState: CustomerChatState(
+          sessionId: 'kfc:cart_transcript:genui',
+          customerId: 'cart_transcript',
+          messages: [
+            CustomerChatMessage(
+              id: 'cart_turn',
+              role: CustomerChatRole.assistant,
+              text: 'Giỏ hàng',
+              genUi: attachment,
+            ),
+          ],
+        ),
+      );
+      final action = attachment.bindAction(
+        actionId: 'update_cart',
+        payload: const {
+          'items': [
+            {'itemCode': 'combo_zinger', 'quantity': 2},
+            {'itemCode': 'pepsi_large', 'quantity': 0},
+          ],
+        },
+      );
+
+      await controller.submitAction(action!);
+
+      expect(
+        controller.state.value.messages
+            .firstWhere((message) => message.role == CustomerChatRole.customer)
+            .text,
+        'Cập nhật giỏ hàng: 2 × Combo Zinger',
+      );
+    },
+  );
+
+  test(
+    'atomic modifier draft uses verified option names in the transcript',
+    () async {
+      final attachment = kfcGenUiFixture(KfcGenUiWidgetKind.modifierPicker);
+      final controller = CustomerChatController(
+        repository: const FixtureCustomerChatRepository(),
+        initialState: CustomerChatState(
+          sessionId: 'kfc:modifier_transcript:genui',
+          customerId: 'modifier_transcript',
+          messages: [
+            CustomerChatMessage(
+              id: 'modifier_turn',
+              role: CustomerChatRole.assistant,
+              text: 'Tùy chỉnh',
+              genUi: attachment,
+            ),
+          ],
+        ),
+      );
+      final action = attachment.bindAction(
+        actionId: 'apply_modifiers',
+        payload: const {
+          'itemCode': 'three-chicken',
+          'selections': [
+            {'groupId': 'flavor', 'modifierId': 'hot-spicy'},
+          ],
+        },
+      );
+
+      await controller.submitAction(action!);
+
+      expect(
+        controller.state.value.messages
+            .firstWhere((message) => message.role == CustomerChatRole.customer)
+            .text,
+        'Áp dụng tùy chọn: Gà Giòn Cay',
+      );
+    },
+  );
+
+  test('atomic modifier draft resolves verified nested option names', () async {
+    const attachment = KfcGenUiAttachment(
+      id: 'nested_modifier_transcript',
+      lifecycleStage: 'modifier',
+      widgetKind: KfcGenUiWidgetKind.modifierPicker,
+      status: KfcGenUiStatus.active,
+      title: 'Tùy chỉnh',
+      data: {
+        'modifierTree': {
+          'itemCode': 'combo',
+          'modifierGroups': [
+            {
+              'groupId': 'main',
+              'options': [
+                {
+                  'modifierId': 'burger',
+                  'name': 'Burger Gà Yo',
+                  'modifierGroups': [
+                    {
+                      'groupId': 'spice',
+                      'options': [
+                        {
+                          'modifierId': 'mild',
+                          'name': 'Burger Gà Yo (Không Cay)',
+                        },
+                      ],
+                    },
+                  ],
+                },
+              ],
+            },
+          ],
+        },
+      },
+      actions: [KfcGenUiActionSpec(id: 'apply_modifiers', label: 'Áp dụng')],
+    );
+    final controller = CustomerChatController(
+      repository: const FixtureCustomerChatRepository(),
+      initialState: const CustomerChatState(
+        sessionId: 'kfc:nested_modifier_transcript:genui',
+        customerId: 'nested_modifier_transcript',
+        messages: [
+          CustomerChatMessage(
+            id: 'nested_modifier_turn',
+            role: CustomerChatRole.assistant,
+            text: 'Tùy chỉnh',
+            genUi: attachment,
+          ),
+        ],
+      ),
+    );
+    final action = attachment.bindAction(
+      actionId: 'apply_modifiers',
+      payload: const {
+        'itemCode': 'combo',
+        'selections': [
+          {'groupId': 'main', 'modifierId': 'burger'},
+          {'groupId': 'spice', 'modifierId': 'mild'},
+        ],
+      },
+    );
+
+    await controller.submitAction(action!);
+
+    expect(
+      controller.state.value.messages
+          .firstWhere((message) => message.role == CustomerChatRole.customer)
+          .text,
+      'Áp dụng tùy chọn: Burger Gà Yo, Burger Gà Yo (Không Cay)',
+    );
+  });
+
   test('a one-shot menu action cannot be submitted twice', () async {
     final repository = _CountingFixtureRepository();
     const attachment = KfcGenUiAttachment(
@@ -218,6 +370,76 @@ void main() {
       controller.state.value.actionAttachment('one_shot_menu')?.status,
       KfcGenUiStatus.answered,
     );
+    expect(
+      controller.state.value.actionAttachment('one_shot_menu')?.selectedAction,
+      'add_items',
+    );
+  });
+
+  test('a failed one-shot action remains available to retry', () async {
+    final repository = _FailedOneShotRepository();
+    const attachment = KfcGenUiAttachment(
+      id: 'failed_one_shot_menu',
+      lifecycleStage: 'menu',
+      widgetKind: KfcGenUiWidgetKind.smartMenuPicker,
+      status: KfcGenUiStatus.active,
+      title: 'Chọn món',
+      data: {
+        'items': [
+          {
+            'code': 'combo_1',
+            'name': 'Combo Hợp Gu 99K',
+            'priceVnd': 99000,
+            'available': true,
+          },
+        ],
+      },
+      actions: [KfcGenUiActionSpec(id: 'add_items', label: 'Xác nhận')],
+      expiresAt: '2099-07-21T01:00:00.000Z',
+      authority: KfcGenUiAuthority(
+        schemaVersion: 'kfc-genui-v1',
+        sessionId: 'kfc:failed_one_shot:genui',
+        customerId: 'failed_one_shot',
+        verifiedRevision:
+            'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+        actionLifecycle: 'one_shot',
+        issuedAt: '2026-07-21T00:00:00.000Z',
+        expiresAt: '2099-07-21T01:00:00.000Z',
+      ),
+    );
+    final controller = CustomerChatController(
+      repository: repository,
+      initialState: const CustomerChatState(
+        sessionId: 'kfc:failed_one_shot:genui',
+        customerId: 'failed_one_shot',
+        messages: [
+          CustomerChatMessage(
+            id: 'menu_turn',
+            role: CustomerChatRole.assistant,
+            text: 'Bạn chọn món nhé.',
+            genUi: attachment,
+          ),
+        ],
+      ),
+    );
+
+    await controller.submitAction(
+      const KfcGenUiAction(
+        attachmentId: 'failed_one_shot_menu',
+        actionId: 'add_items',
+        payload: {
+          'items': [
+            {'itemCode': 'combo_1', 'quantity': 1},
+          ],
+        },
+      ),
+    );
+
+    expect(
+      controller.state.value.actionAttachment('failed_one_shot_menu')?.status,
+      KfcGenUiStatus.active,
+    );
+    expect(controller.state.value.errorMessage, 'Không thể xử lý.');
   });
 
   test(
@@ -1104,6 +1326,38 @@ class _CountingFixtureRepository extends FixtureCustomerChatRepository {
       action: action,
       metadata: metadata,
     );
+  }
+}
+
+class _FailedOneShotRepository extends FixtureCustomerChatRepository {
+  const _FailedOneShotRepository() : super(eventDelay: Duration.zero);
+
+  @override
+  Future<CustomerRunStartResponse> startRun({
+    required String sessionId,
+    required String customerId,
+    required String clientMessageId,
+    String? text,
+    KfcGenUiAction? action,
+    Map<String, Object?>? metadata,
+  }) async => const CustomerRunStartResponse(
+    schemaVersion: 1,
+    runId: 'failed_one_shot_run',
+    status: CustomerRunStatus.accepted,
+    nextSequence: 1,
+    replayed: false,
+  );
+
+  @override
+  Stream<CustomerRunEventEnvelope> watchRun(
+    String runId,
+    int afterSequence,
+  ) async* {
+    yield _runEvent(runId, 1, 'run_accepted', {'status': 'accepted'});
+    yield _runEvent(runId, 2, 'run_failed', {
+      'status': 'failed',
+      'message': 'Không thể xử lý.',
+    });
   }
 }
 

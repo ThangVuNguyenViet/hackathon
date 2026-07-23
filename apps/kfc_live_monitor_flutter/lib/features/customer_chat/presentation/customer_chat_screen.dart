@@ -57,6 +57,7 @@ class _CustomerChatScreenState extends State<CustomerChatScreen> {
       '${state.messages.length}:${state.activeDraft?.runId}:'
       '${state.activeDraft?.lastSequence}:${state.pendingApproval?.requestId}',
     );
+    final activeGenUiId = state.activeGenUi?.id;
 
     return DefaultTextStyle(
       style: const TextStyle(
@@ -107,6 +108,9 @@ class _CustomerChatScreenState extends State<CustomerChatScreen> {
                               message: message,
                               onAction: widget.controller.submitAction,
                               handoffStatus: state.handoffStatus,
+                              interactive:
+                                  message.genUi == null ||
+                                  message.genUi!.id == activeGenUiId,
                             ),
                           if (state.activeDraft case final draft?
                               when !(draft.materialized &&
@@ -519,11 +523,13 @@ class _MessageBlock extends StatelessWidget {
   const _MessageBlock({
     required this.message,
     required this.onAction,
+    required this.interactive,
     this.handoffStatus,
   });
 
   final CustomerChatMessage message;
   final ValueChanged<KfcGenUiAction> onAction;
+  final bool interactive;
   final String? handoffStatus;
 
   @override
@@ -581,6 +587,7 @@ class _MessageBlock extends StatelessWidget {
                   attachment: genUi,
                   onAction: onAction,
                   handoffStatus: handoffStatus,
+                  interactive: interactive,
                 ),
               ],
             ],
