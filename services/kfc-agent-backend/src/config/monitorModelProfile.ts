@@ -2,44 +2,42 @@ import type { BaseChatModel } from '@langchain/core/language_models/chat_models'
 import {
   createAgentChatModel,
   resolveAgentModelProfile,
-  type AgentProvider,
+  type AgentModelProfile,
 } from './agentModelProfile.js';
 
-export type MonitorProvider = AgentProvider;
-export interface MonitorModelProfile {
-  provider: MonitorProvider;
-  model: string;
-  profile: string;
-}
-export type MonitorModelIdentity = Readonly<MonitorModelProfile>;
+export type MonitorModelProfile = AgentModelProfile;
+export type MonitorModelIdentity = Readonly<
+  Pick<
+    MonitorModelProfile,
+    'candidateId' | 'provider' | 'model' | 'profile' | 'transport'
+  >
+>;
 
 export function resolveMonitorModelProfile(input: {
-  agentProvider: AgentProvider;
-  provider?: MonitorProvider;
-  model?: string;
+  agentCandidateId: string;
+  candidateId?: string;
 }): MonitorModelProfile {
-  const provider = input.provider ?? input.agentProvider;
-  const agentProfile = resolveAgentModelProfile({
-    provider,
-    model: input.model,
+  const profile = resolveAgentModelProfile({
+    candidateId: input.candidateId ?? input.agentCandidateId,
   });
-  return {
-    provider,
-    model: agentProfile.model,
-    profile: `monitor:${provider}:${agentProfile.model}`,
-  };
+  return Object.freeze({
+    ...profile,
+    profile: `monitor:${profile.profile}`,
+  });
 }
 
 export function createMonitorChatModel(input: {
   profile: MonitorModelProfile;
   openAiApiKey?: string;
   openAiBaseUrl?: string;
+  openCodeApiKey?: string;
   googleApiKey?: string;
 }): BaseChatModel {
   return createAgentChatModel({
-    profile: resolveAgentModelProfile(input.profile),
-    openAiApiKey: input.openAiApiKey,
-    openAiBaseUrl: input.openAiBaseUrl,
-    googleApiKey: input.googleApiKey,
+    ...input,
+    profile: resolveAgentModelProfile({
+      candidateId: input.profile.candidateId,
+      assertedModel: input.profile.model,
+    }),
   });
 }

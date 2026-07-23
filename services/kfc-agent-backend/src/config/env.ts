@@ -1,15 +1,17 @@
 import { z } from 'zod';
+import { agentModelCandidateIds } from './agentModelProfile.js';
 
 const appEnvSchema = z.object({
   PORT: z.coerce.number().int().positive().default(18090),
   DATABASE_URL: z
     .string()
     .default('postgres://kfc_agent:kfc_agent@localhost:15432/kfc_agent'),
-  KFC_AGENT_PROVIDER: z.enum(['openai', 'google']).default('google'),
-  KFC_AGENT_MODEL: z.string().optional().default(''),
-  KFC_MONITOR_PROVIDER: z.enum(['openai', 'google']).optional(),
-  KFC_MONITOR_MODEL: z.string().optional().default(''),
+  KFC_AGENT_CANDIDATE: z
+    .enum(agentModelCandidateIds)
+    .default('google-gemini-3.1-flash-lite'),
+  KFC_MONITOR_CANDIDATE: z.enum(agentModelCandidateIds).optional(),
   OPENAI_API_KEY: z.string().optional().default(''),
+  OPENCODE_API_KEY: z.string().optional().default(''),
   GOOGLE_API_KEY: z.string().optional().default(''),
   OPENAI_BASE_URL: z.string().optional().default('https://api.openai.com/v1'),
   OPENAI_DIAGNOSTIC_WORKER_RELEASE: z.string().optional().default(''),

@@ -31,6 +31,7 @@
     "worker:d1:migrate:remote": "wrangler d1 migrations apply ${KFC_D1_DATABASE_NAME:-kfc-agent-demo} --remote"
   },
   "dependencies": {
+    "@langchain/anthropic": "1.5.1",
     "@langchain/core": "1.2.3",
     "@langchain/google": "0.2.1",
     "@langchain/openai": "1.5.5",

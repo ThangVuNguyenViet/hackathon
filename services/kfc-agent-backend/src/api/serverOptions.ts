@@ -23,20 +23,21 @@ function optionalValue(value: string | undefined): string | undefined {
 export function buildServerOptionsFromEnv(env: AppEnv): BuildServerOptions {
   const openAiApiKey = optionalValue(env.OPENAI_API_KEY);
   const openAiBaseUrl = optionalValue(env.OPENAI_BASE_URL);
+  const openCodeApiKey = optionalValue(env.OPENCODE_API_KEY);
   const googleApiKey = optionalValue(env.GOOGLE_API_KEY);
   const agentIdentity = resolveAgentModelProfile({
-    provider: env.KFC_AGENT_PROVIDER,
-    model: optionalValue(env.KFC_AGENT_MODEL),
+    candidateId: env.KFC_AGENT_CANDIDATE,
   });
   const monitorIdentity = resolveMonitorModelProfile({
-    agentProvider: agentIdentity.provider,
-    provider: env.KFC_MONITOR_PROVIDER,
-    model: optionalValue(env.KFC_MONITOR_MODEL),
+    agentCandidateId: agentIdentity.candidateId,
+    candidateId: env.KFC_MONITOR_CANDIDATE,
   });
-  const agentConfigured =
-    agentIdentity.provider === 'openai'
-      ? Boolean(openAiApiKey)
-      : Boolean(googleApiKey);
+  const configuredCredentials = {
+    OPENAI_API_KEY: Boolean(openAiApiKey),
+    OPENCODE_API_KEY: Boolean(openCodeApiKey),
+    GOOGLE_API_KEY: Boolean(googleApiKey),
+  } as const;
+  const agentConfigured = configuredCredentials[agentIdentity.credentialEnv];
   const agent = agentConfigured
     ? {
         identity: agentIdentity,
@@ -44,20 +45,17 @@ export function buildServerOptionsFromEnv(env: AppEnv): BuildServerOptions {
           profile: agentIdentity,
           openAiApiKey,
           openAiBaseUrl,
+          openCodeApiKey,
           googleApiKey,
         }),
       }
     : undefined;
   const monitorConfigured =
-    monitorIdentity.provider === 'openai'
-      ? Boolean(openAiApiKey)
-      : Boolean(googleApiKey);
-  const monitorExplicitlyConfigured =
-    env.KFC_MONITOR_PROVIDER !== undefined ||
-    optionalValue(env.KFC_MONITOR_MODEL) !== undefined;
+    configuredCredentials[monitorIdentity.credentialEnv];
+  const monitorExplicitlyConfigured = env.KFC_MONITOR_CANDIDATE !== undefined;
   if (monitorExplicitlyConfigured && !monitorConfigured) {
     throw new Error(
-      `${monitorIdentity.provider === 'openai' ? 'OPENAI_API_KEY' : 'GOOGLE_API_KEY'} is required for the explicitly configured KFC monitor provider`,
+      `${monitorIdentity.credentialEnv} is required for the explicitly configured KFC monitor candidate`,
     );
   }
   const monitorJudge = monitorConfigured
@@ -67,6 +65,7 @@ export function buildServerOptionsFromEnv(env: AppEnv): BuildServerOptions {
           profile: monitorIdentity,
           openAiApiKey,
           openAiBaseUrl,
+          openCodeApiKey,
           googleApiKey,
         }),
       })

@@ -13,8 +13,9 @@ The agent is intentionally small:
 5. Persist the natural response and derive GenUI from successful tool results.
 
 There is no graph runtime, classifier, router, planner, response composer,
-checkpoint, approval node, or mandatory response-envelope tool. OpenAI and
-Google use the same provider-neutral chat-model and tool interfaces.
+checkpoint, approval node, or mandatory response-envelope tool. Every
+configured candidate uses the same provider-neutral chat-model and tool
+interfaces.
 
 ## Local setup
 
@@ -29,16 +30,32 @@ The backend fixture provider supplies menu, cart, store, fulfillment, order,
 payment, membership, content, and handoff results. In fixture mode, the only
 external AI request is the configured model provider.
 
-Select the model provider with:
+Select one immutable candidate profile with:
 
 ```bash
-KFC_AGENT_PROVIDER=openai
-# or
-KFC_AGENT_PROVIDER=google
+KFC_AGENT_CANDIDATE=openai-gpt-4.1-mini
+# deepseek-v4-flash
+# qwen3.7-max
+# minimax-m3
+# google-gemini-3.1-flash-lite
 ```
 
-Credentials come from `OPENAI_API_KEY` or `GOOGLE_API_KEY`.
-`OPENAI_BASE_URL` remains optional.
+Credentials come from `OPENAI_API_KEY`, `OPENCODE_API_KEY`, or
+`GOOGLE_API_KEY`, according to the selected profile. OpenCode candidates use
+the fixed `https://opencode.ai/zen/go/v1` endpoint; no OpenCode base URL is
+accepted from runtime configuration. `OPENAI_BASE_URL` remains optional for
+the named OpenAI control only.
+
+The OpenAI control uses Responses. DeepSeek uses the OpenAI-compatible chat
+completions transport with thinking disabled. Qwen and MiniMax use the
+Anthropic Messages adapter with protocol-required output ceilings of 65,536
+and 32,768 tokens respectively. Google support remains available but is not in
+the default live candidate matrix.
+
+`runModelCapabilityPreflight` checks ordinary invocation and typed tool-call
+behavior through `BaseChatModel`. It returns only candidate identity, pass/fail
+flags, and bounded failure codes; it never returns prompts, model response
+content, credentials, or raw provider errors.
 
 ## Export the narrative scenario inventory
 

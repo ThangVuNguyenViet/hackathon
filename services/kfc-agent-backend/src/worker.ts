@@ -58,6 +58,7 @@ import type { ConversationStore } from './persistence/memoryStore.js';
 import { sessionIdForConversationEvent } from './session/sessionContext.js';
 import { fetchCatalogObservation } from './catalog/catalogObservation.js';
 import { resolveAgentModelProfile } from './config/agentModelProfile.js';
+import type { AgentModelCandidateId } from './config/agentModelProfile.js';
 import { resolveMonitorModelProfile } from './config/monitorModelProfile.js';
 import {
   D1LifecycleRepository,
@@ -153,11 +154,10 @@ export type WorkerWebhookJob =
 
 export interface WorkerEnv {
   DB: D1DatabaseLike;
-  KFC_AGENT_PROVIDER?: 'openai' | 'google';
-  KFC_AGENT_MODEL?: string;
-  KFC_MONITOR_PROVIDER?: 'openai' | 'google';
-  KFC_MONITOR_MODEL?: string;
+  KFC_AGENT_CANDIDATE?: AgentModelCandidateId;
+  KFC_MONITOR_CANDIDATE?: AgentModelCandidateId;
   OPENAI_API_KEY?: string;
+  OPENCODE_API_KEY?: string;
   GOOGLE_API_KEY?: string;
   OPENAI_BASE_URL?: string;
   OPENAI_GEO_CANARY_TOKEN?: string;
@@ -216,19 +216,19 @@ function openAiDiagnosticEnv(env: WorkerEnv, request?: Request) {
 }
 
 function workerAgentReadiness(env: WorkerEnv): WorkerAgentReadiness {
-  const agentProvider = env.KFC_AGENT_PROVIDER ?? 'google';
+  const agentCandidateId =
+    env.KFC_AGENT_CANDIDATE ?? 'google-gemini-3.1-flash-lite';
+  const credentialConfigured = (
+    credentialEnv: 'OPENAI_API_KEY' | 'OPENCODE_API_KEY' | 'GOOGLE_API_KEY',
+  ) => Boolean(env[credentialEnv]?.trim());
   let agentReadiness: WorkerAgentReadiness;
   try {
     const identity = resolveAgentModelProfile({
-      provider: agentProvider,
-      model: env.KFC_AGENT_MODEL,
+      candidateId: agentCandidateId,
     });
     agentReadiness = {
       identity,
-      configured:
-        identity.provider === 'openai'
-          ? Boolean(env.OPENAI_API_KEY?.trim())
-          : Boolean(env.GOOGLE_API_KEY?.trim()),
+      configured: credentialConfigured(identity.credentialEnv),
     };
   } catch {
     agentReadiness = {
@@ -239,16 +239,12 @@ function workerAgentReadiness(env: WorkerEnv): WorkerAgentReadiness {
   let monitor: WorkerAgentReadiness['monitor'];
   try {
     const monitorIdentity = resolveMonitorModelProfile({
-      agentProvider,
-      provider: env.KFC_MONITOR_PROVIDER,
-      model: env.KFC_MONITOR_MODEL,
+      agentCandidateId,
+      candidateId: env.KFC_MONITOR_CANDIDATE,
     });
     monitor = {
       identity: monitorIdentity,
-      configured:
-        monitorIdentity.provider === 'openai'
-          ? Boolean(env.OPENAI_API_KEY?.trim())
-          : Boolean(env.GOOGLE_API_KEY?.trim()),
+      configured: credentialConfigured(monitorIdentity.credentialEnv),
     };
   } catch {
     monitor = {

@@ -34,11 +34,11 @@ export interface BuiltWorkerRouteOptions {
 
 function workerModelEnv(env: WorkerEnv) {
   return {
-    KFC_AGENT_PROVIDER: env.KFC_AGENT_PROVIDER ?? 'google',
-    KFC_AGENT_MODEL: env.KFC_AGENT_MODEL ?? '',
-    KFC_MONITOR_PROVIDER: env.KFC_MONITOR_PROVIDER,
-    KFC_MONITOR_MODEL: env.KFC_MONITOR_MODEL ?? '',
+    KFC_AGENT_CANDIDATE:
+      env.KFC_AGENT_CANDIDATE ?? 'google-gemini-3.1-flash-lite',
+    KFC_MONITOR_CANDIDATE: env.KFC_MONITOR_CANDIDATE,
     OPENAI_API_KEY: env.OPENAI_API_KEY ?? '',
+    OPENCODE_API_KEY: env.OPENCODE_API_KEY ?? '',
     GOOGLE_API_KEY: env.GOOGLE_API_KEY ?? '',
     OPENAI_BASE_URL: env.OPENAI_BASE_URL ?? 'https://api.openai.com/v1',
   } as const;
