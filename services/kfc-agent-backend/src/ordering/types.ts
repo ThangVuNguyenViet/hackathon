@@ -31,6 +31,42 @@ export type Disposition = 'pickup' | 'delivery';
 export type FulfillmentMethod = 'pickup' | 'delivery';
 export type ContentKind = 'promotion' | 'news' | 'allergen' | 'policy';
 
+export type MenuSearchMode = 'search' | 'full';
+
+export interface MenuSearchInput {
+  mode?: MenuSearchMode;
+  queries?: string[];
+  category?: string;
+  maxPriceVnd?: number;
+  partySize?: number;
+  modifierQueries?: string[];
+}
+
+export interface CompactModifierMatch {
+  query: string;
+  groupId: string;
+  groupName: string;
+  groupMin: number | null;
+  groupMax: number | null;
+  modifierId: string;
+  name: string;
+  priceDeltaVnd: number;
+  default: boolean;
+  quantity: number | null;
+}
+
+export interface MenuSearchItem extends MenuItem {
+  matchedModifiers?: CompactModifierMatch[];
+  matchesAllModifierQueries?: boolean;
+}
+
+export interface MenuSearchResult {
+  mode: MenuSearchMode;
+  queries: string[];
+  total: number;
+  items: MenuSearchItem[];
+}
+
 export interface SourceProvenance {
   fixtureMode: FixtureMode;
   sourceFile: string;
@@ -248,7 +284,7 @@ export interface ToolCallRequest {
 }
 
 export interface ToolResultByName {
-  searchMenu: MenuItem[];
+  searchMenu: MenuSearchResult;
   getItemDetails: MenuItem;
   getModifierOptions: GeneratedMenuModifier;
   updateCart: Cart;

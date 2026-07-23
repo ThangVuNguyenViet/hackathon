@@ -101,7 +101,16 @@ const savedAddressRefSchema = z
   .strict();
 
 export const toolArgumentSchemas = {
-  searchMenu: z.object({ query: z.string().optional().default('') }).strict(),
+  searchMenu: z
+    .object({
+      mode: z.enum(['search', 'full']).optional().default('search'),
+      queries: z.array(z.string().min(1)).optional().default([]),
+      category: z.string().min(1).optional(),
+      maxPriceVnd: z.number().int().nonnegative().optional(),
+      partySize: z.number().int().positive().optional(),
+      modifierQueries: z.array(z.string().min(1)).optional().default([]),
+    })
+    .strict(),
   getItemDetails: z.object({ code: z.string().min(1) }).strict(),
   getModifierOptions: z.object({ code: z.string().min(1) }).strict(),
   updateCart: z
@@ -242,7 +251,16 @@ export const toolArgumentSchemas = {
  * schema can be used by OpenAI and Gemini. Execution parses these again.
  */
 export const agentToolArgumentSchemas = {
-  searchMenu: agentCollectionScopeSchema,
+  searchMenu: z
+    .object({
+      mode: z.enum(['search', 'full']),
+      queries: z.array(z.string().min(1)),
+      category: z.string().min(1).nullable(),
+      maxPriceVnd: z.number().int().nonnegative().nullable(),
+      partySize: z.number().int().positive().nullable(),
+      modifierQueries: z.array(z.string().min(1)),
+    })
+    .strict(),
   getItemDetails: z.object({ code: z.string().min(1) }).strict(),
   getModifierOptions: z.object({ code: z.string().min(1) }).strict(),
   updateCart: z
@@ -382,13 +400,13 @@ export const agentToolArgumentSchemas = {
 
 export const agentToolDescriptions: Record<ToolName, string> = {
   searchMenu:
-    'Return the complete menu for scope all, or the complete matching menu collection for scope filtered.',
+    'Return the complete available menu for full mode, or every verified match for search mode. Put independent product or identifier alternatives in queries; they use OR semantics. Use category for category-wide discovery, maxPriceVnd only as a per-item ceiling, partySize only as catalog-backed ranking evidence, and modifierQueries for exact selectable-option evidence. Multiple targeted searches may be called in one turn.',
   getItemDetails:
-    'Return verified details for one previously discovered menu item code.',
+    'Return verified details, base price, and current availability for one previously discovered menu item code.',
   getModifierOptions:
-    'Return verified modifier groups and identifiers for one menu item code.',
+    'Return verified modifier groups, exact option identifiers, and exact option price deltas for one menu item code. Do not transfer evidence between options or items.',
   updateCart:
-    'Apply customer-requested quantities using previously verified item and modifier identifiers.',
+    'Apply every intended reversible cart addition, quantity change, and removal in one changes array using previously verified item and modifier identifiers. Item quantity means menu portions, not pieces described inside the item. Treat the returned cart as authoritative; this permission never extends to irreversible actions.',
   previewCart: 'Return the current verified cart and server-calculated totals.',
   recommendAddOns:
     'Return verified add-on candidates for the current cart without mutating it.',

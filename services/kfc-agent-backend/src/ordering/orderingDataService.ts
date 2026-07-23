@@ -19,6 +19,8 @@ import type {
   ContentEvidence,
   Disposition,
   ItemAvailabilityResult,
+  MenuSearchInput,
+  MenuSearchResult,
   MembershipActionResult,
   PromotionValidationResult,
   SourceProvenance,
@@ -26,6 +28,11 @@ import type {
 import {
   normalizeSearchText,
   includesAll,
+  matchMenuModifierQueries,
+  menuCategoryMatches,
+  menuPartySizeScore,
+  menuSearchDocumentMatchesQuery,
+  menuSearchTextScore,
   modifierSearchText,
   menuSearchRelevance,
   storeProvenance,
@@ -36,6 +43,8 @@ import {
   menuProvenance,
   contentKind,
   toMenuModifierGroups,
+  type MenuModifierSearchCandidate,
+  type MenuSearchDocument,
 } from './orderingDataRetrieval.js';
 
 export interface StoreSearchInput {
@@ -87,6 +96,78 @@ function menuItemWithModifierData(
     ...(includeModifierGroups && modifier
       ? { modifierGroups: toMenuModifierGroups(modifier.modifierGroups) }
       : {}),
+  };
+}
+
+function compactMenuItem(
+  item: GeneratedMenuItem,
+  hasModifiers: boolean,
+  matchedModifiers: MenuSearchResult['items'][number]['matchedModifiers'] = [],
+  matchesAllModifierQueries?: boolean,
+): MenuSearchResult['items'][number] {
+  return {
+    code: item.code,
+    category: item.category,
+    categoryId: item.category,
+    name: item.name,
+    description: item.description,
+    priceVnd: item.priceVnd,
+    originalPriceVnd: item.originalPriceVnd,
+    imageUrl: item.imageUrl,
+    available: item.available,
+    isCustomize: item.isCustomize,
+    hasModifiers,
+    ...(matchedModifiers.length > 0 ? { matchedModifiers } : {}),
+    ...(matchesAllModifierQueries === undefined
+      ? {}
+      : { matchesAllModifierQueries }),
+  };
+}
+
+function modifierSearchCandidates(
+  modifier: GeneratedMenuModifier | undefined,
+): MenuModifierSearchCandidate[] {
+  if (!modifier) return [];
+  const candidates: MenuModifierSearchCandidate[] = [];
+  const visit = (groups: GeneratedMenuModifier['modifierGroups']): void => {
+    for (const group of groups) {
+      for (const option of group.options) {
+        candidates.push({
+          groupId: group.groupId,
+          groupName: group.name,
+          groupMin: group.min === '' ? null : group.min,
+          groupMax: group.max === '' ? null : group.max,
+          modifierId: option.modifierId,
+          name: option.name,
+          priceDeltaVnd: option.priceDeltaVnd,
+          default: option.default,
+          quantity: option.quantity === '' ? null : option.quantity,
+          ...(option.searchAliases ? { aliases: option.searchAliases } : {}),
+        });
+        visit(option.modifierGroups);
+      }
+    }
+  };
+  visit(modifier.modifierGroups);
+  return candidates;
+}
+
+function menuSearchDocument(
+  item: GeneratedMenuItem,
+  modifier: GeneratedMenuModifier | undefined,
+): MenuSearchDocument {
+  return {
+    identifiers: [item.code, item.itemId, item.posItemId, item.productCode],
+    name: item.name,
+    category: item.category,
+    description: item.description,
+    aliases: [
+      ...(item.orderingMetadata?.searchAliases ?? []),
+      ...Object.values(
+        item.orderingMetadata?.componentSearchAliases ?? {},
+      ).flat(),
+    ],
+    modifierText: modifierSearchText(modifier),
   };
 }
 
@@ -203,7 +284,7 @@ export class OrderingDataService {
         menuItemWithModifierData(
           item,
           this.modifierByItemId.get(item.itemId),
-          false,
+          true,
         ),
       );
     }
@@ -232,6 +313,109 @@ export class OrderingDataService {
           true,
         ),
       );
+  }
+
+  searchMenuTool(input: MenuSearchInput): MenuSearchResult {
+    const mode = input.mode ?? 'search';
+    const queries = (input.queries ?? [])
+      .map((query) => query.trim())
+      .filter(Boolean);
+    const modifierQueries = input.modifierQueries ?? [];
+    const categories = [
+      ...new Set(this.fixtures.menuItems.map((item) => item.category)),
+    ];
+    const candidates = this.fixtures.menuItems
+      .filter(
+        (item) =>
+          item.available &&
+          menuCategoryMatches(item.category, input.category, categories) &&
+          (input.maxPriceVnd === undefined ||
+            item.priceVnd <= input.maxPriceVnd),
+      )
+      .map((item, fixtureIndex) => {
+        const modifier = this.modifierByItemId.get(item.itemId);
+        const document = menuSearchDocument(item, modifier);
+        const matchedModifiers = matchMenuModifierQueries(
+          modifierSearchCandidates(modifier),
+          modifierQueries,
+        );
+        const recognizedModifierQueries = modifierQueries.filter(
+          (modifierQuery) =>
+            this.fixtures.menuItems.some((candidate) =>
+              menuSearchDocumentMatchesQuery(
+                menuSearchDocument(
+                  candidate,
+                  this.modifierByItemId.get(candidate.itemId),
+                ),
+                modifierQuery,
+              ),
+            ),
+        );
+        const matchedModifierQueries = new Set(
+          matchedModifiers.map((match) => match.query),
+        );
+        const queryScores = queries
+          .map((query) => menuSearchTextScore(document, query))
+          .filter((score): score is number => score !== undefined);
+        return {
+          item,
+          fixtureIndex,
+          matchedModifiers,
+          matchesAllModifierQueries:
+            modifierQueries.length > 0 &&
+            modifierQueries.every((query) => matchedModifierQueries.has(query)),
+          recognizedModifierQueries,
+          score:
+            (queryScores.length > 0 ? Math.max(...queryScores) : 0) +
+            menuPartySizeScore(document, input.partySize) +
+            matchedModifierQueries.size * 300,
+          matchesQuery: queries.length === 0 || queryScores.length > 0,
+        };
+      })
+      .filter(
+        ({
+          matchesQuery,
+          recognizedModifierQueries,
+          matchedModifiers,
+          item,
+        }) => {
+          if (!matchesQuery) return false;
+          const document = menuSearchDocument(
+            item,
+            this.modifierByItemId.get(item.itemId),
+          );
+          return recognizedModifierQueries.every(
+            (query) =>
+              matchedModifiers.some((match) => match.query === query) ||
+              menuSearchDocumentMatchesQuery(document, query),
+          );
+        },
+      );
+    const ranked =
+      mode === 'full' && queries.length === 0
+        ? candidates
+        : candidates.sort(
+            (left, right) =>
+              right.score - left.score ||
+              left.fixtureIndex - right.fixtureIndex,
+          );
+    const items = ranked.map(
+      ({ item, matchedModifiers, matchesAllModifierQueries }) =>
+        compactMenuItem(
+          item,
+          Boolean(
+            this.modifierByItemId.get(item.itemId)?.modifierGroups.length,
+          ),
+          matchedModifiers,
+          matchesAllModifierQueries,
+        ),
+    );
+    return {
+      mode,
+      queries,
+      total: items.length,
+      items,
+    };
   }
 
   getMenuItem(itemIdOrCode: string): MenuItemWithProvenance | undefined {

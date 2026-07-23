@@ -652,7 +652,7 @@ export function applyToolResultToState(
       }
       return;
     case 'searchMenu': {
-      state.menuSearchResults = result.value;
+      state.menuSearchResults = result.value.items;
       return;
     }
     case 'getItemDetails':

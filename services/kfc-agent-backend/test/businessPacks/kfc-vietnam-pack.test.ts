@@ -16,6 +16,19 @@ import {
   validatePackStateEnvelope,
 } from '../../src/runtime/businessPack.js';
 
+function toolOutputText(value: unknown): string {
+  if (typeof value === 'string') return value;
+  if (
+    typeof value === 'object' &&
+    value !== null &&
+    'content' in value &&
+    typeof value.content === 'string'
+  ) {
+    return value.content;
+  }
+  throw new Error('Unexpected tool output');
+}
+
 describe('KFC Vietnam business pack compatibility', () => {
   it('rejects correctly bound malformed KFC state and accepts a valid partial state', async () => {
     const malformed = await createPackStateEnvelope({
@@ -96,12 +109,13 @@ describe('KFC Vietnam business pack compatibility', () => {
       profile: 'genui',
       text: 'Đây là thực đơn KFC.',
     });
-    expect((await store.listTurns(input.sessionId)).map((turn) => turn.role)).toEqual([
-      'user',
-      'assistant',
-    ]);
     expect(
-      (await store.listEvents(input.sessionId)).map((event) => event.sourceType),
+      (await store.listTurns(input.sessionId)).map((turn) => turn.role),
+    ).toEqual(['user', 'assistant']);
+    expect(
+      (await store.listEvents(input.sessionId)).map(
+        (event) => event.sourceType,
+      ),
     ).toContain('agent:verified_state');
     expect(
       (await store.listEvents(input.sessionId)).some((event) =>
@@ -136,6 +150,135 @@ describe('KFC Vietnam business pack compatibility', () => {
     });
   });
 
+  it('supports multiple complete menu reads and one authoritative batched cart update in the same tool loop', async () => {
+    const fixtures = await loadGeneratedFixtures(process.cwd());
+    const baseClients = createMockClients(fixtures);
+    const cartCalls: Array<{
+      priorCartId: string;
+      changes: Array<{ itemCode: string; quantity: number }>;
+    }> = [];
+    const clients = {
+      ...baseClients,
+      cart: {
+        ...baseClients.cart,
+        async applyChanges(
+          cart: Parameters<typeof baseClients.cart.applyChanges>[0],
+          changes: Parameters<typeof baseClients.cart.applyChanges>[1],
+          context: Parameters<typeof baseClients.cart.applyChanges>[2],
+        ) {
+          cartCalls.push({
+            priorCartId: cart.id,
+            changes: changes.map(({ itemCode, quantity }) => ({
+              itemCode,
+              quantity,
+            })),
+          });
+          return baseClients.cart.applyChanges(cart, changes, context);
+        },
+      },
+    };
+    const store = new MemoryStore();
+    const input = {
+      sessionId: 'session-kfc-tool-lifecycle',
+      customerId: 'customer-1',
+      channel: 'kfc' as const,
+      text: 'Lập giúp tôi một giỏ hàng',
+      clients,
+      store,
+      dashboard: new DashboardEventBus(),
+      agentModel: {} as BaseChatModel,
+    };
+    let authoritativeCart: unknown;
+
+    const output = await kfcVietnamPack.run(input, async ({ tools }) => {
+      const invoke = async (
+        name: string,
+        args: Record<string, unknown>,
+        id: string,
+      ) => {
+        const selected = tools.find((candidate) => candidate.name === name);
+        if (!selected) throw new Error(`Missing tool ${name}`);
+        return JSON.parse(
+          toolOutputText(
+            await selected.invoke({
+              type: 'tool_call',
+              name,
+              args,
+              id,
+            }),
+          ),
+        ) as Record<string, unknown>;
+      };
+
+      const firstSearch = await invoke(
+        'searchMenu',
+        {
+          mode: 'search',
+          queries: ['20751', '20752'],
+          category: null,
+          maxPriceVnd: null,
+          partySize: null,
+          modifierQueries: [],
+        },
+        'search-1',
+      );
+      const secondSearch = await invoke(
+        'searchMenu',
+        {
+          mode: 'search',
+          queries: ['gà'],
+          category: null,
+          maxPriceVnd: null,
+          partySize: null,
+          modifierQueries: ['không cay'],
+        },
+        'search-2',
+      );
+      const cartResult = await invoke(
+        'updateCart',
+        {
+          changes: [
+            { itemCode: '20751', quantity: 1, modifiers: [] },
+            { itemCode: '20752', quantity: 2, modifiers: [] },
+          ],
+        },
+        'cart-1',
+      );
+      authoritativeCart = cartResult.value as
+        Record<string, unknown> | undefined;
+
+      expect(firstSearch.value).toMatchObject({
+        returned: 2,
+        total: 2,
+        complete: true,
+      });
+      expect(secondSearch.value).toMatchObject({
+        complete: true,
+      });
+      expect(
+        (secondSearch.value as { returned: number }).returned,
+      ).toBeGreaterThan(0);
+      return 'Đã cập nhật giỏ hàng.';
+    });
+
+    expect(cartCalls).toEqual([
+      {
+        priorCartId: 'cart_session-kfc-tool-lifecycle',
+        changes: [
+          { itemCode: '20751', quantity: 1 },
+          { itemCode: '20752', quantity: 2 },
+        ],
+      },
+    ]);
+    expect(output.state.cart).toEqual(authoritativeCart);
+    expect(
+      Object.keys(output.state.verifiedCollections?.searchMenu ?? {}),
+    ).toHaveLength(2);
+    expect(() =>
+      kfcVietnamPack.parseState(buildVerifiedStateSnapshot(output.state)),
+    ).not.toThrow();
+  });
+
   it('preserves the KFC empty-model-response error contract', async () => {
     await expect(
       runAgentTurn({
@@ -143,9 +286,7 @@ describe('KFC Vietnam business pack compatibility', () => {
         customerId: 'customer-1',
         channel: 'messenger_mock',
         text: 'Xin chào',
-        clients: createMockClients(
-          await loadGeneratedFixtures(process.cwd()),
-        ),
+        clients: createMockClients(await loadGeneratedFixtures(process.cwd())),
         store: new MemoryStore(),
         dashboard: new DashboardEventBus(),
         agentModel: new FakeListChatModel({ responses: ['   '] }),

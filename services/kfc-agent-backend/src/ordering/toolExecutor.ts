@@ -36,6 +36,7 @@ import {
 } from './toolExecutionResult.js';
 import { paymentOrderIdentifierMatches } from './paymentOrderAuthority.js';
 import { executePaymentToolCall } from './paymentToolExecution.js';
+import { searchMenuCollection } from './orderingDataRetrieval.js';
 
 export interface ExecutorContext {
   externalCallContext: ExternalCallContext;
@@ -379,10 +380,25 @@ export async function executeToolCall(
   switch (request.toolName) {
     case 'searchMenu': {
       const args = toolArgumentSchemas.searchMenu.parse(request.arguments);
-      return resultFromToolResult(
-        request.toolName,
-        await clients.menu.searchMenu(args.query, context.externalCallContext),
+      const response = await clients.menu.searchMenu(
+        '',
+        context.externalCallContext,
       );
+      if (!response.ok || !response.value) {
+        return {
+          toolName: 'searchMenu',
+          ok: false,
+          errorCode: response.errorCode,
+          message: response.message,
+          provenance: response.provenance ?? [],
+        };
+      }
+      return resultFromToolResult(request.toolName, {
+        ok: true,
+        value: searchMenuCollection(response.value, args),
+        message: 'verified_menu_collection',
+        provenance: response.provenance,
+      });
     }
     case 'getItemDetails': {
       const args = toolArgumentSchemas.getItemDetails.parse(request.arguments);

@@ -230,6 +230,25 @@ const menuItemSchema = z
     isQuickCombo: z.boolean().optional(),
     hasModifiers: z.boolean().optional(),
     modifierGroups: z.array(menuModifierGroupSchema).optional(),
+    matchedModifiers: z
+      .array(
+        z
+          .object({
+            query: nonBlankStringSchema,
+            groupId: nonBlankStringSchema,
+            groupName: z.string(),
+            groupMin: z.number().int().nullable(),
+            groupMax: z.number().int().nullable(),
+            modifierId: nonBlankStringSchema,
+            name: z.string(),
+            priceDeltaVnd: z.number().int(),
+            default: z.boolean(),
+            quantity: z.number().int().nullable(),
+          })
+          .strict(),
+      )
+      .optional(),
+    matchesAllModifierQueries: z.boolean().optional(),
   })
   .strict();
 

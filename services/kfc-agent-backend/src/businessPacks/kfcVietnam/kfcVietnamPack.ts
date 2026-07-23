@@ -12,20 +12,25 @@ import {
   toolExecutionContext,
 } from '../../agent/turnSupport.js';
 import {
+  applyAgentCollectionToVerifiedState,
   applyToolResultToState,
   loadPriorVerifiedState,
 } from '../../agent/verifiedState.js';
 import {
+  agentToolArgumentSchemas,
   agentToolDescriptions,
   toolArgumentSchemas,
   toolNames,
 } from '../../ordering/toolCatalog.js';
 import { executeToolCall } from '../../ordering/toolExecutor.js';
 import type {
+  AgentToolCallResult,
+  MenuSearchInput,
   ToolCallResult,
   ToolName,
   ToolTraceEntry,
 } from '../../ordering/types.js';
+import { buildVerifiedCollectionSnapshot } from '../../ordering/verifiedCollections.js';
 import {
   createNoopAgentTracer,
   createSafeAgentTracer,
@@ -49,7 +54,11 @@ export const KFC_AGENT_INSTRUCTIONS = [
   'Bạn là trợ lý KFC Việt Nam thân thiện, tự nhiên và chủ động.',
   'Hiểu yêu cầu của khách và tự chọn công cụ phù hợp. Không cần giải thích quy trình nội bộ.',
   'Dùng dữ liệu từ lịch sử hội thoại, trạng thái nghiệp vụ đã xác minh và kết quả công cụ. Không tự bịa mã món, giá, cửa hàng, đơn hàng hoặc trạng thái thanh toán.',
-  'Nếu khách yêu cầu đầy đủ thực đơn, gọi searchMenu với truy vấn rỗng và dùng toàn bộ kết quả; không tự rút gọn danh sách dữ liệu.',
+  'Nếu khách yêu cầu đầy đủ thực đơn, dùng searchMenu ở chế độ full và dùng toàn bộ collection complete; không tự rút gọn danh sách dữ liệu.',
+  'Có thể gọi nhiều lượt tìm món theo sản phẩm hoặc danh mục trong cùng một lượt khách. Các queries trong một lần tìm là lựa chọn thay thế OR; chỉ kết luận về lựa chọn modifier khi kết quả trả về evidence tương ứng.',
+  'Với yêu cầu gợi ý cho nhóm hoặc theo ngân sách, chỉ dùng partySize và giá từ catalog làm evidence. Ngân sách tổng là mức tối đa, không phải mục tiêu cần tiêu hết; maxPriceVnd chỉ là trần giá cho từng món.',
+  'Khi khách giao chọn một giỏ hàng hoàn chỉnh, đáp ứng mọi thành phần và số lượng rõ ràng khi catalog cho phép, hoàn tất trong cùng lượt, rồi gộp các thay đổi dự kiến vào một lần gọi updateCart. Cart mà công cụ trả về là trạng thái có thẩm quyền; nếu chưa đúng ràng buộc rõ ràng, sửa lại trong cùng lượt.',
+  'updateCart là thay đổi có thể đảo ngược và không cần hỏi lại khi yêu cầu đã rõ. Không dùng quy tắc này để bỏ qua xác nhận hoặc thẩm quyền của hành động không thể đảo ngược.',
   'Nếu khách đã yêu cầu rõ ràng thực hiện một thao tác, hãy thực hiện trong cùng lượt khi đã đủ dữ liệu thay vì hỏi xác nhận lặp lại.',
   'Khi công cụ báo thiếu dữ liệu hoặc thất bại, nói ngắn gọn điều còn thiếu và tiếp tục tự nhiên.',
   'Trả lời bằng ngôn ngữ của khách.',
@@ -103,6 +112,93 @@ function toolArguments(
   return value as Record<string, unknown>;
 }
 
+function modelToolSchema(toolName: ToolName) {
+  return toolName === 'searchMenu' || toolName === 'updateCart'
+    ? agentToolArgumentSchemas[toolName]
+    : toolArgumentSchemas[toolName];
+}
+
+function executionArguments(
+  toolName: ToolName,
+  args: Record<string, unknown>,
+): Record<string, unknown> {
+  if (toolName === 'searchMenu') {
+    const parsed = agentToolArgumentSchemas.searchMenu.parse(args);
+    return {
+      mode: parsed.mode,
+      queries: parsed.queries,
+      modifierQueries: parsed.modifierQueries,
+      ...(parsed.category === null ? {} : { category: parsed.category }),
+      ...(parsed.maxPriceVnd === null
+        ? {}
+        : { maxPriceVnd: parsed.maxPriceVnd }),
+      ...(parsed.partySize === null ? {} : { partySize: parsed.partySize }),
+    };
+  }
+  if (toolName === 'updateCart') {
+    const parsed = agentToolArgumentSchemas.updateCart.parse(args);
+    return {
+      changes: parsed.changes.map((change) => ({
+        itemCode: change.itemCode,
+        quantity: change.quantity,
+        modifiers: change.modifiers.map((modifier) => ({
+          groupId: modifier.groupId,
+          modifierId: modifier.modifierId,
+          ...(modifier.quantity === null
+            ? {}
+            : { quantity: modifier.quantity }),
+        })),
+      })),
+    };
+  }
+  return args;
+}
+
+function menuCollectionScope(input: MenuSearchInput) {
+  const isCompleteMenu =
+    input.mode === 'full' &&
+    (input.queries?.length ?? 0) === 0 &&
+    input.category === undefined &&
+    input.maxPriceVnd === undefined &&
+    input.partySize === undefined &&
+    (input.modifierQueries?.length ?? 0) === 0;
+  return isCompleteMenu
+    ? ({ scope: 'all' } as const)
+    : ({
+        scope: 'filtered',
+        query: JSON.stringify(input),
+      } as const);
+}
+
+async function modelFacingResult(
+  state: AgentState,
+  result: ToolCallResult,
+  args: Record<string, unknown>,
+): Promise<ToolCallResult | AgentToolCallResult> {
+  if (!result.ok || result.toolName !== 'searchMenu') return result;
+  const parsed = toolArgumentSchemas.searchMenu.parse(args);
+  const snapshot = await buildVerifiedCollectionSnapshot({
+    items: result.value.items,
+    total: result.value.total,
+    complete: result.value.items.length === result.value.total,
+    scope: menuCollectionScope(parsed),
+    providerRevision: `menu-result:${await stateRevision({
+      value: result.value,
+      provenance: result.provenance,
+    })}`,
+  });
+  const agentResult = {
+    toolName: 'searchMenu',
+    ok: true,
+    value: snapshot.result,
+    message: result.message,
+    provenance: result.provenance,
+    verifiedCollection: snapshot,
+  } satisfies AgentToolCallResult;
+  applyAgentCollectionToVerifiedState(state, agentResult);
+  return agentResult;
+}
+
 async function executeModelTool(input: {
   turnInput: AgentTurnInput;
   state: AgentState;
@@ -111,7 +207,7 @@ async function executeModelTool(input: {
   callId: string;
   externalCallContext: ExternalCallContext;
   currentTurnToolTrace: ToolTraceEntry[];
-}): Promise<ToolCallResult> {
+}): Promise<ToolCallResult | AgentToolCallResult> {
   const bindingFingerprint = await stateRevision({
     sessionId: input.turnInput.sessionId,
     externalMessageId: input.turnInput.externalMessageId ?? null,
@@ -119,9 +215,10 @@ async function executeModelTool(input: {
     toolName: input.toolName,
     args: input.args,
   });
+  const args = executionArguments(input.toolName, input.args);
   const result = await executeToolCall(
     input.turnInput.clients,
-    { toolName: input.toolName, arguments: input.args },
+    { toolName: input.toolName, arguments: args },
     {
       ...toolExecutionContext(input.turnInput),
       externalCallContext: input.externalCallContext,
@@ -140,10 +237,10 @@ async function executeModelTool(input: {
     input.turnInput,
     input.state,
     result,
-    input.args,
+    args,
     input.currentTurnToolTrace,
   );
-  return result;
+  return modelFacingResult(input.state, result, args);
 }
 
 function createKfcTools(input: {
@@ -174,7 +271,7 @@ function createKfcTools(input: {
       {
         name: toolName,
         description: agentToolDescriptions[toolName],
-        schema: providerPortableToolSchema(toolArgumentSchemas[toolName]),
+        schema: providerPortableToolSchema(modelToolSchema(toolName)),
       },
     ),
   );
