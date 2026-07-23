@@ -89,3 +89,8 @@ warning already emitted by the controller test; neither failed the run.
 Rereview verification passed with 7 backend test files / 21 tests, formatting,
 lint, typecheck, build, a validated one-scenario inventory export, Flutter
 analysis, and both focused Flutter showcase tests.
+
+Final rereview removed the unreferenced `runner.ts` and
+`liveScenarioFixtures.ts` replay engine, including its synthetic `replay_`
+sessions and per-turn upstream fixture switching. The architecture suite now
+scans all scenario source and rejects those executable replay patterns.

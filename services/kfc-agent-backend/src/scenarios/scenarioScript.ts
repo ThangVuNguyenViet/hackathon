@@ -27,16 +27,10 @@ export const scenarioScriptJsonSchema = z
 export type ScenarioTurn = z.infer<typeof scenarioTurnSchema>;
 export type ScenarioScriptJson = z.infer<typeof scenarioScriptJsonSchema>;
 
-export interface ScenarioScript extends ScenarioScriptJson {
-  userTurns: ScenarioTurn[];
-}
+export type ScenarioScript = ScenarioScriptJson;
 
 export function parseScenarioScript(value: unknown): ScenarioScript {
-  const parsed = scenarioScriptJsonSchema.parse(value);
-  return {
-    ...parsed,
-    userTurns: parsed.turns.filter((turn) => turn.speaker === 'User'),
-  };
+  return scenarioScriptJsonSchema.parse(value);
 }
 
 export async function loadScenarioScript(

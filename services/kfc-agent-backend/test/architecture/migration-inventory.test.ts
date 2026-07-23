@@ -69,4 +69,16 @@ describe('migration architecture inventory', () => {
     );
     expect(workerRoutes).not.toContain('/showcase/results');
   });
+
+  it('has no executable deterministic replay engine or per-turn fixture applicator', async () => {
+    const scenarioRoot = resolve(process.cwd(), 'src/scenarios');
+    const files = await sourceFiles(scenarioRoot);
+    const source = (
+      await Promise.all(files.map((file) => readFile(file, 'utf8')))
+    ).join('\n');
+
+    expect(source).not.toMatch(
+      /runAgentTurn|runScenario|liveScenarioFixtures|mockedUpstreamApiForTurn|replay_|userTurns\.entries/u,
+    );
+  });
 });

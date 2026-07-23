@@ -21,9 +21,7 @@ console.log(
       schemaVersion: 'kfc-scenario-inventory-v1',
       purpose:
         'Read-only narrative prompts for independent role-player and reviewer agents.',
-      scenarios: scenarios.map(
-        ({ userTurns: _userTurns, ...scenario }) => scenario,
-      ),
+      scenarios,
     },
     null,
     2,
