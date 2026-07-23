@@ -49,13 +49,20 @@ the named OpenAI control only.
 The OpenAI control uses Responses. DeepSeek uses the OpenAI-compatible chat
 completions transport with thinking disabled. Qwen and MiniMax use the
 Anthropic Messages adapter with protocol-required output ceilings of 65,536
-and 32,768 tokens respectively. Google support remains available but is not in
-the default live candidate matrix.
+and 131,072 tokens respectively. The MiniMax value comes from the OpenCode
+model metadata for `opencode-go/minimax-m3` (`@ai-sdk/anthropic`, metadata
+`last_updated` 2026-05-31), locally verified on 2026-07-24. That metadata is
+evidence for the compiled profile only; runtime code does not read the local
+OpenCode cache. Google support remains available but is not in the default
+live candidate matrix.
 
-`runModelCapabilityPreflight` checks ordinary invocation and typed tool-call
-behavior through `BaseChatModel`. It returns only candidate identity, pass/fail
-flags, and bounded failure codes; it never returns prompts, model response
-content, credentials, or raw provider errors.
+`checkModelCapabilities` checks ordinary invocation and typed tool-call
+behavior on a `BaseChatModel` for isolated tests. Evidence-producing
+`runModelCapabilityPreflight` accepts only the opaque configured-model binding
+returned by the canonical factory, so identity and model cannot be paired
+independently. It returns only candidate identity, pass/fail flags, and bounded
+failure codes; it never returns prompts, model response content, credentials,
+or raw provider errors.
 
 ## Export the narrative scenario inventory
 

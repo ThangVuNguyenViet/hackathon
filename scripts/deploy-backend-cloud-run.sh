@@ -11,10 +11,44 @@ DASHBOARD_ORIGIN="${DASHBOARD_ORIGIN:-}"
 MAX_INSTANCES="${CLOUD_RUN_MAX_INSTANCES:-2}"
 MIN_INSTANCES="${CLOUD_RUN_MIN_INSTANCES:-0}"
 META_PAGE_ID="${META_PAGE_ID:-}"
-KFC_AGENT_PROVIDER="${KFC_AGENT_PROVIDER:-}"
-KFC_AGENT_MODEL="${KFC_AGENT_MODEL:-}"
-KFC_MONITOR_PROVIDER="${KFC_MONITOR_PROVIDER:-$KFC_AGENT_PROVIDER}"
-KFC_MONITOR_MODEL="${KFC_MONITOR_MODEL:-}"
+
+if [[
+  -n "${KFC_AGENT_PROVIDER+x}" ||
+  -n "${KFC_AGENT_MODEL+x}" ||
+  -n "${KFC_MONITOR_PROVIDER+x}" ||
+  -n "${KFC_MONITOR_MODEL+x}"
+]]; then
+  echo "ERROR: KFC_AGENT_PROVIDER, KFC_AGENT_MODEL, KFC_MONITOR_PROVIDER, and KFC_MONITOR_MODEL are no longer supported; use KFC_AGENT_CANDIDATE and optional KFC_MONITOR_CANDIDATE." >&2
+  exit 64
+fi
+
+candidate_is_valid() {
+  case "$1" in
+    openai-gpt-4.1-mini | deepseek-v4-flash | qwen3.7-max | minimax-m3 | google-gemini-3.1-flash-lite)
+      return 0
+      ;;
+    *)
+      return 1
+      ;;
+  esac
+}
+
+candidate_credential_env() {
+  case "$1" in
+    openai-gpt-4.1-mini)
+      printf '%s' "OPENAI_API_KEY"
+      ;;
+    deepseek-v4-flash | qwen3.7-max | minimax-m3)
+      printf '%s' "OPENCODE_API_KEY"
+      ;;
+    google-gemini-3.1-flash-lite)
+      printf '%s' "GOOGLE_API_KEY"
+      ;;
+  esac
+}
+
+KFC_AGENT_CANDIDATE="${KFC_AGENT_CANDIDATE:-openai-gpt-4.1-mini}"
+KFC_MONITOR_CANDIDATE="${KFC_MONITOR_CANDIDATE:-$KFC_AGENT_CANDIDATE}"
 
 if [[ -z "$PROJECT_ID" ]]; then
   echo "ERROR: Set GCP_PROJECT_ID to the Google Cloud project used for the hackathon deploy." >&2
@@ -26,24 +60,12 @@ if [[ -z "$META_PAGE_ID" ]]; then
   exit 64
 fi
 
-if [[ "$KFC_AGENT_PROVIDER" != "google" && "$KFC_AGENT_PROVIDER" != "openai" ]]; then
-  echo "ERROR: KFC_AGENT_PROVIDER must be google or openai." >&2
+if ! candidate_is_valid "$KFC_AGENT_CANDIDATE"; then
+  echo "ERROR: Unknown KFC_AGENT_CANDIDATE: $KFC_AGENT_CANDIDATE" >&2
   exit 64
 fi
-if [[ "$KFC_MONITOR_PROVIDER" != "google" && "$KFC_MONITOR_PROVIDER" != "openai" ]]; then
-  echo "ERROR: KFC_MONITOR_PROVIDER must be google or openai." >&2
-  exit 64
-fi
-if [[ "$KFC_MONITOR_PROVIDER" == "google" ]]; then
-  expected_monitor_model="gemini-3.1-flash-lite"
-else
-  expected_monitor_model="gpt-4.1-mini"
-fi
-if [[
-  -n "$KFC_MONITOR_MODEL" &&
-  "$KFC_MONITOR_MODEL" != "$expected_monitor_model"
-]]; then
-  echo "ERROR: KFC_MONITOR_MODEL must be $expected_monitor_model when KFC_MONITOR_PROVIDER=$KFC_MONITOR_PROVIDER." >&2
+if ! candidate_is_valid "$KFC_MONITOR_CANDIDATE"; then
+  echo "ERROR: Unknown KFC_MONITOR_CANDIDATE: $KFC_MONITOR_CANDIDATE" >&2
   exit 64
 fi
 
@@ -77,17 +99,9 @@ fi
 env_vars=(
   "NODE_ENV=production"
   "META_PAGE_ID=$META_PAGE_ID"
-  "KFC_AGENT_PROVIDER=$KFC_AGENT_PROVIDER"
-  "KFC_MONITOR_PROVIDER=$KFC_MONITOR_PROVIDER"
+  "KFC_AGENT_CANDIDATE=$KFC_AGENT_CANDIDATE"
+  "KFC_MONITOR_CANDIDATE=$KFC_MONITOR_CANDIDATE"
 )
-
-if [[ -n "$KFC_AGENT_MODEL" ]]; then
-  env_vars+=("KFC_AGENT_MODEL=$KFC_AGENT_MODEL")
-fi
-
-if [[ -n "$KFC_MONITOR_MODEL" ]]; then
-  env_vars+=("KFC_MONITOR_MODEL=$KFC_MONITOR_MODEL")
-fi
 
 if [[ -n "$DASHBOARD_ORIGIN" ]]; then
   env_vars+=("DASHBOARD_ORIGIN=$DASHBOARD_ORIGIN")
@@ -100,10 +114,15 @@ secret_vars=(
   "MESSENGER_VERIFY_TOKEN=MESSENGER_VERIFY_TOKEN:latest"
   "META_PAGE_ACCESS_TOKEN=META_PAGE_ACCESS_TOKEN:latest"
 )
-if [[ "$KFC_AGENT_PROVIDER" == "openai" || "$KFC_MONITOR_PROVIDER" == "openai" ]]; then
+agent_credential_env="$(candidate_credential_env "$KFC_AGENT_CANDIDATE")"
+monitor_credential_env="$(candidate_credential_env "$KFC_MONITOR_CANDIDATE")"
+if [[ "$agent_credential_env" == "OPENAI_API_KEY" || "$monitor_credential_env" == "OPENAI_API_KEY" ]]; then
   secret_vars+=("OPENAI_API_KEY=OPENAI_API_KEY:latest")
 fi
-if [[ "$KFC_AGENT_PROVIDER" == "google" || "$KFC_MONITOR_PROVIDER" == "google" ]]; then
+if [[ "$agent_credential_env" == "OPENCODE_API_KEY" || "$monitor_credential_env" == "OPENCODE_API_KEY" ]]; then
+  secret_vars+=("OPENCODE_API_KEY=OPENCODE_API_KEY:latest")
+fi
+if [[ "$agent_credential_env" == "GOOGLE_API_KEY" || "$monitor_credential_env" == "GOOGLE_API_KEY" ]]; then
   secret_vars+=("GOOGLE_API_KEY=GOOGLE_API_KEY:latest")
 fi
 secret_arg="$(IFS=,; echo "${secret_vars[*]}")"

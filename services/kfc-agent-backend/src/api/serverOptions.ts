@@ -1,8 +1,10 @@
 import type { BuildServerOptions } from './server.js';
 import type { AppEnv } from '../config/env.js';
 import {
-  createAgentChatModel,
+  createConfiguredAgentChatModel,
   resolveAgentModelProfile,
+  type AgentModelIdentity,
+  type AgentModelProfile,
 } from '../config/agentModelProfile.js';
 import {
   createMonitorChatModel,
@@ -18,6 +20,16 @@ import { LangSmithShowcaseScenarioSource } from '../showcase/showcase.js';
 function optionalValue(value: string | undefined): string | undefined {
   const normalized = value?.trim();
   return normalized ? normalized : undefined;
+}
+
+function modelIdentity(profile: AgentModelProfile): AgentModelIdentity {
+  return {
+    candidateId: profile.candidateId,
+    provider: profile.provider,
+    model: profile.model,
+    profile: profile.profile,
+    transport: profile.transport,
+  };
 }
 
 export function buildServerOptionsFromEnv(env: AppEnv): BuildServerOptions {
@@ -38,18 +50,18 @@ export function buildServerOptionsFromEnv(env: AppEnv): BuildServerOptions {
     GOOGLE_API_KEY: Boolean(googleApiKey),
   } as const;
   const agentConfigured = configuredCredentials[agentIdentity.credentialEnv];
-  const agent = agentConfigured
-    ? {
-        identity: agentIdentity,
-        model: createAgentChatModel({
-          profile: agentIdentity,
-          openAiApiKey,
-          openAiBaseUrl,
-          openCodeApiKey,
-          googleApiKey,
-        }),
-      }
+  const agentBinding = agentConfigured
+    ? createConfiguredAgentChatModel({
+        profile: agentIdentity,
+        openAiApiKey,
+        openAiBaseUrl,
+        openCodeApiKey,
+        googleApiKey,
+      })
     : undefined;
+  const agentRuntimeIdentity =
+    agentBinding?.identity ?? modelIdentity(agentIdentity);
+  const monitorRuntimeIdentity = modelIdentity(monitorIdentity);
   const monitorConfigured =
     configuredCredentials[monitorIdentity.credentialEnv];
   const monitorExplicitlyConfigured = env.KFC_MONITOR_CANDIDATE !== undefined;
@@ -110,7 +122,7 @@ export function buildServerOptionsFromEnv(env: AppEnv): BuildServerOptions {
     zaloAccessToken: optionalValue(env.ZALO_ACCESS_TOKEN),
     zaloInboxUrlTemplate: optionalValue(env.ZALO_INBOX_URL_TEMPLATE),
     zaloApiBaseUrl: optionalValue(env.ZALO_API_BASE_URL),
-    agent,
+    agent: agentBinding,
     monitorJudge,
     agentTracer: langsmithApiKey
       ? new LangSmithAgentTracer({
@@ -129,7 +141,7 @@ export function buildServerOptionsFromEnv(env: AppEnv): BuildServerOptions {
             projectName: env.LANGSMITH_PROJECT,
           }),
           releaseSha: env.RELEASE_GIT_SHA.trim() || 'unknown',
-          agent: agentIdentity,
+          agent: agentRuntimeIdentity,
         }
       : undefined,
     kfcCommerceGateway: commerceGateway
@@ -161,8 +173,8 @@ export function buildServerOptionsFromEnv(env: AppEnv): BuildServerOptions {
       },
       runtime: {
         commerceEnvironment: env.KFC_COMMERCE_ENVIRONMENT,
-        agent: agentIdentity,
-        monitor: monitorIdentity,
+        agent: agentRuntimeIdentity,
+        monitor: monitorRuntimeIdentity,
       },
       langsmith: {
         configured: Boolean(langsmithApiKey),

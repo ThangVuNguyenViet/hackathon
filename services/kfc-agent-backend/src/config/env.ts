@@ -8,7 +8,7 @@ const appEnvSchema = z.object({
     .default('postgres://kfc_agent:kfc_agent@localhost:15432/kfc_agent'),
   KFC_AGENT_CANDIDATE: z
     .enum(agentModelCandidateIds)
-    .default('google-gemini-3.1-flash-lite'),
+    .default('openai-gpt-4.1-mini'),
   KFC_MONITOR_CANDIDATE: z.enum(agentModelCandidateIds).optional(),
   OPENAI_API_KEY: z.string().optional().default(''),
   OPENCODE_API_KEY: z.string().optional().default(''),

@@ -32,6 +32,41 @@ set -a
 source "$ENV_FILE"
 set +a
 
+if [[
+  -n "${KFC_AGENT_PROVIDER+x}" ||
+  -n "${KFC_AGENT_MODEL+x}" ||
+  -n "${KFC_MONITOR_PROVIDER+x}" ||
+  -n "${KFC_MONITOR_MODEL+x}"
+]]; then
+  echo "ERROR: KFC_AGENT_PROVIDER, KFC_AGENT_MODEL, KFC_MONITOR_PROVIDER, and KFC_MONITOR_MODEL are no longer supported; use KFC_AGENT_CANDIDATE and optional KFC_MONITOR_CANDIDATE." >&2
+  exit 64
+fi
+
+candidate_is_valid() {
+  case "$1" in
+    openai-gpt-4.1-mini | deepseek-v4-flash | qwen3.7-max | minimax-m3 | google-gemini-3.1-flash-lite)
+      return 0
+      ;;
+    *)
+      return 1
+      ;;
+  esac
+}
+
+candidate_credential_env() {
+  case "$1" in
+    openai-gpt-4.1-mini)
+      printf '%s' "OPENAI_API_KEY"
+      ;;
+    deepseek-v4-flash | qwen3.7-max | minimax-m3)
+      printf '%s' "OPENCODE_API_KEY"
+      ;;
+    google-gemini-3.1-flash-lite)
+      printf '%s' "GOOGLE_API_KEY"
+      ;;
+  esac
+}
+
 for name in LANGSMITH_API_KEY LANGSMITH_PROJECT LANGSMITH_ENDPOINT META_APP_SECRET; do
   if [[ -z "${!name:-}" ]]; then
     echo "ERROR: $name must be set in $ENV_FILE" >&2
@@ -39,48 +74,30 @@ for name in LANGSMITH_API_KEY LANGSMITH_PROJECT LANGSMITH_ENDPOINT META_APP_SECR
   fi
 done
 LANGSMITH_TRACING_SAMPLING_RATE="${LANGSMITH_TRACING_SAMPLING_RATE:-1}"
-KFC_AGENT_PROVIDER="${KFC_AGENT_PROVIDER:-}"
-KFC_AGENT_MODEL="${KFC_AGENT_MODEL:-}"
-KFC_MONITOR_PROVIDER="${KFC_MONITOR_PROVIDER:-$KFC_AGENT_PROVIDER}"
-KFC_MONITOR_MODEL="${KFC_MONITOR_MODEL:-}"
+KFC_AGENT_CANDIDATE="${KFC_AGENT_CANDIDATE:-openai-gpt-4.1-mini}"
+KFC_MONITOR_CANDIDATE="${KFC_MONITOR_CANDIDATE:-$KFC_AGENT_CANDIDATE}"
 KFC_COMMERCE_MODE="${KFC_COMMERCE_MODE:-}"
 KFC_COMMERCE_ENVIRONMENT="${KFC_COMMERCE_ENVIRONMENT:-}"
 KFC_MENU_API_URL="${KFC_MENU_API_URL:-}"
 KFC_COMMERCE_GATEWAY_BASE_URL="${KFC_COMMERCE_GATEWAY_BASE_URL:-}"
 KFC_COMMERCE_GATEWAY_TOKEN="${KFC_COMMERCE_GATEWAY_TOKEN:-}"
 KFC_SHOWCASE_DATASET="${KFC_SHOWCASE_DATASET:-kfc-showcase-scenarios-v1}"
-if [[ "$KFC_AGENT_PROVIDER" != "google" && "$KFC_AGENT_PROVIDER" != "openai" ]]; then
-  echo "ERROR: KFC_AGENT_PROVIDER must be google or openai." >&2
+if ! candidate_is_valid "$KFC_AGENT_CANDIDATE"; then
+  echo "ERROR: Unknown KFC_AGENT_CANDIDATE: $KFC_AGENT_CANDIDATE" >&2
   exit 64
 fi
-if [[ "$KFC_MONITOR_PROVIDER" != "google" && "$KFC_MONITOR_PROVIDER" != "openai" ]]; then
-  echo "ERROR: KFC_MONITOR_PROVIDER must be google or openai." >&2
+if ! candidate_is_valid "$KFC_MONITOR_CANDIDATE"; then
+  echo "ERROR: Unknown KFC_MONITOR_CANDIDATE: $KFC_MONITOR_CANDIDATE" >&2
   exit 64
 fi
-if [[ "$KFC_MONITOR_PROVIDER" == "google" ]]; then
-  expected_monitor_model="gemini-3.1-flash-lite"
-else
-  expected_monitor_model="gpt-4.1-mini"
-fi
-if [[
-  -n "$KFC_MONITOR_MODEL" &&
-  "$KFC_MONITOR_MODEL" != "$expected_monitor_model"
-]]; then
-  echo "ERROR: KFC_MONITOR_MODEL must be $expected_monitor_model when KFC_MONITOR_PROVIDER=$KFC_MONITOR_PROVIDER." >&2
+agent_credential_env="$(candidate_credential_env "$KFC_AGENT_CANDIDATE")"
+monitor_credential_env="$(candidate_credential_env "$KFC_MONITOR_CANDIDATE")"
+if [[ -z "${!agent_credential_env:-}" ]]; then
+  echo "ERROR: $agent_credential_env must be set for KFC_AGENT_CANDIDATE=$KFC_AGENT_CANDIDATE." >&2
   exit 64
 fi
-if [[
-  ("$KFC_AGENT_PROVIDER" == "openai" || "$KFC_MONITOR_PROVIDER" == "openai") &&
-  -z "${OPENAI_API_KEY:-}"
-]]; then
-  echo "ERROR: OPENAI_API_KEY must be set for the selected agent or monitor provider." >&2
-  exit 64
-fi
-if [[
-  ("$KFC_AGENT_PROVIDER" == "google" || "$KFC_MONITOR_PROVIDER" == "google") &&
-  -z "${GOOGLE_API_KEY:-}"
-]]; then
-  echo "ERROR: GOOGLE_API_KEY must be set for the selected agent or monitor provider." >&2
+if [[ -z "${!monitor_credential_env:-}" ]]; then
+  echo "ERROR: $monitor_credential_env must be set for KFC_MONITOR_CANDIDATE=$KFC_MONITOR_CANDIDATE." >&2
   exit 64
 fi
 if [[ "$KFC_COMMERCE_MODE" == "fixture" && "${KFC_COMMERCE_ENVIRONMENT:-}" != "sandbox" ]]; then
@@ -148,6 +165,9 @@ mkdir -p "$(dirname "$DEPLOYMENT_OUTPUT_FILE")"
   if [[ -n "${OPENAI_API_KEY:-}" ]]; then
     printf '%s' "$OPENAI_API_KEY" | npx wrangler versions secret put OPENAI_API_KEY --name "$WORKER_NAME"
   fi
+  if [[ -n "${OPENCODE_API_KEY:-}" ]]; then
+    printf '%s' "$OPENCODE_API_KEY" | npx wrangler versions secret put OPENCODE_API_KEY --name "$WORKER_NAME"
+  fi
   if [[ -n "${GOOGLE_API_KEY:-}" ]]; then
     printf '%s' "$GOOGLE_API_KEY" | npx wrangler versions secret put GOOGLE_API_KEY --name "$WORKER_NAME"
   fi
@@ -165,10 +185,8 @@ mkdir -p "$(dirname "$DEPLOYMENT_OUTPUT_FILE")"
     --var "LANGSMITH_PROJECT:$LANGSMITH_PROJECT" \
     --var "LANGSMITH_ENDPOINT:$LANGSMITH_ENDPOINT" \
     --var "LANGSMITH_TRACING_SAMPLING_RATE:$LANGSMITH_TRACING_SAMPLING_RATE" \
-    --var "KFC_AGENT_PROVIDER:$KFC_AGENT_PROVIDER" \
-    --var "KFC_AGENT_MODEL:$KFC_AGENT_MODEL" \
-    --var "KFC_MONITOR_PROVIDER:$KFC_MONITOR_PROVIDER" \
-    --var "KFC_MONITOR_MODEL:$KFC_MONITOR_MODEL" \
+    --var "KFC_AGENT_CANDIDATE:$KFC_AGENT_CANDIDATE" \
+    --var "KFC_MONITOR_CANDIDATE:$KFC_MONITOR_CANDIDATE" \
     --var "KFC_COMMERCE_MODE:$KFC_COMMERCE_MODE" \
     --var "KFC_COMMERCE_ENVIRONMENT:$KFC_COMMERCE_ENVIRONMENT" \
     --var "KFC_MENU_API_URL:$KFC_MENU_API_URL" \
@@ -186,8 +204,8 @@ if [[ -z "$WORKER_URL" ]]; then
 fi
 
 deployed_at="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
-printf '{"gitSha":"%s","deploymentId":"%s","releaseBuiltAt":"%s","dirty":false,"deployedAt":"%s","workerName":"%s","workerUrl":"%s","agentProvider":"%s","agentModelSelector":"%s","monitorProvider":"%s","monitorModel":"%s"}\n' \
-  "$GIT_SHA" "$RELEASE_DEPLOYMENT_ID" "$RELEASE_BUILT_AT" "$deployed_at" "$WORKER_NAME" "$WORKER_URL" "$KFC_AGENT_PROVIDER" "$KFC_AGENT_MODEL" "$KFC_MONITOR_PROVIDER" "$KFC_MONITOR_MODEL" > "$DEPLOYMENT_OUTPUT_FILE"
+printf '{"gitSha":"%s","deploymentId":"%s","releaseBuiltAt":"%s","dirty":false,"deployedAt":"%s","workerName":"%s","workerUrl":"%s","agentCandidate":"%s","monitorCandidate":"%s"}\n' \
+  "$GIT_SHA" "$RELEASE_DEPLOYMENT_ID" "$RELEASE_BUILT_AT" "$deployed_at" "$WORKER_NAME" "$WORKER_URL" "$KFC_AGENT_CANDIDATE" "$KFC_MONITOR_CANDIDATE" > "$DEPLOYMENT_OUTPUT_FILE"
 
 echo
 echo "Cloudflare Worker URL:"

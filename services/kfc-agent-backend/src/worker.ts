@@ -216,8 +216,7 @@ function openAiDiagnosticEnv(env: WorkerEnv, request?: Request) {
 }
 
 function workerAgentReadiness(env: WorkerEnv): WorkerAgentReadiness {
-  const agentCandidateId =
-    env.KFC_AGENT_CANDIDATE ?? 'google-gemini-3.1-flash-lite';
+  const agentCandidateId = env.KFC_AGENT_CANDIDATE ?? 'openai-gpt-4.1-mini';
   const credentialConfigured = (
     credentialEnv: 'OPENAI_API_KEY' | 'OPENCODE_API_KEY' | 'GOOGLE_API_KEY',
   ) => Boolean(env[credentialEnv]?.trim());

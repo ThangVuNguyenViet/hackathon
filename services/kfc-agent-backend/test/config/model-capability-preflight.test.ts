@@ -2,9 +2,13 @@ import { AIMessage, AIMessageChunk } from '@langchain/core/messages';
 import { FakeStreamingChatModel } from '@langchain/core/utils/testing';
 import { describe, expect, it, vi } from 'vitest';
 import { resolveAgentModelProfile } from '../../src/config/agentModelProfile.js';
-import { runModelCapabilityPreflight } from '../../src/config/modelCapabilityPreflight.js';
+import {
+  checkModelCapabilities,
+  runModelCapabilityPreflight,
+  type ConfiguredAgentModelBinding,
+} from '../../src/config/modelCapabilityPreflight.js';
 
-describe('runModelCapabilityPreflight', () => {
+describe('model capability preflight', () => {
   it('checks ordinary invocation and a typed tool call through BaseChatModel', async () => {
     const model = new FakeStreamingChatModel({
       sleep: 0,
@@ -25,21 +29,8 @@ describe('runModelCapabilityPreflight', () => {
     });
 
     await expect(
-      runModelCapabilityPreflight({
-        profile: resolveAgentModelProfile({
-          candidateId: 'deepseek-v4-flash',
-        }),
-        model,
-      }),
+      checkModelCapabilities(model),
     ).resolves.toEqual({
-      schemaVersion: 'agent-model-capability-preflight-v1',
-      identity: {
-        candidateId: 'deepseek-v4-flash',
-        provider: 'opencode',
-        model: 'deepseek-v4-flash',
-        profile: 'opencode:deepseek-v4-flash:chat-completions',
-        transport: 'openai_compatible_chat',
-      },
       ordinaryInvocation: { passed: true },
       typedToolCall: { passed: true },
       passed: true,
@@ -61,22 +52,9 @@ describe('runModelCapabilityPreflight', () => {
       vi.spyOn(console, 'warn').mockImplementation(() => undefined),
     ];
 
-    const result = await runModelCapabilityPreflight({
-      profile: resolveAgentModelProfile({
-        candidateId: 'qwen3.7-max',
-      }),
-      model,
-    });
+    const result = await checkModelCapabilities(model);
 
     expect(result).toEqual({
-      schemaVersion: 'agent-model-capability-preflight-v1',
-      identity: {
-        candidateId: 'qwen3.7-max',
-        provider: 'opencode',
-        model: 'qwen3.7-max',
-        profile: 'opencode:qwen3.7-max:anthropic-messages:thinking-disabled',
-        transport: 'anthropic_messages',
-      },
       ordinaryInvocation: {
         passed: false,
         failure: 'invocation_failed',
@@ -89,5 +67,22 @@ describe('runModelCapabilityPreflight', () => {
     });
     expect(JSON.stringify(result)).not.toContain(sensitive);
     for (const spy of consoleSpies) expect(spy).not.toHaveBeenCalled();
+  });
+
+  it('rejects an untrusted identity and model pairing before invocation', async () => {
+    const model = new FakeStreamingChatModel({
+      sleep: 0,
+      responses: [new AIMessage('must not be invoked')],
+    });
+    const forgedBinding = {
+      identity: resolveAgentModelProfile({
+        candidateId: 'deepseek-v4-flash',
+      }),
+      model,
+    } as unknown as ConfiguredAgentModelBinding;
+
+    await expect(runModelCapabilityPreflight(forgedBinding)).rejects.toThrow(
+      'Untrusted configured agent model binding',
+    );
   });
 });

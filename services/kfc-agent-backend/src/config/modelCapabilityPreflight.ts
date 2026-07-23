@@ -4,8 +4,11 @@ import { tool } from '@langchain/core/tools';
 import { z } from 'zod';
 import type {
   AgentModelIdentity,
-  AgentModelProfile,
+  ConfiguredAgentModelBinding,
 } from './agentModelProfile.js';
+import { isTrustedConfiguredAgentModelBinding } from './agentModelProfile.js';
+
+export type { ConfiguredAgentModelBinding } from './agentModelProfile.js';
 
 const capabilityInputSchema = z.object({
   capabilityToken: z.literal('typed-tool-ok'),
@@ -36,16 +39,6 @@ export interface ModelCapabilityPreflightResult {
   ordinaryInvocation: ModelCapabilityCheck;
   typedToolCall: ModelCapabilityCheck;
   passed: boolean;
-}
-
-function identityForProfile(profile: AgentModelProfile): AgentModelIdentity {
-  return {
-    candidateId: profile.candidateId,
-    provider: profile.provider,
-    model: profile.model,
-    profile: profile.profile,
-    transport: profile.transport,
-  };
 }
 
 function hasTextContent(message: AIMessage): boolean {
@@ -101,17 +94,33 @@ async function checkTypedToolCall(
   }
 }
 
-export async function runModelCapabilityPreflight(input: {
-  profile: AgentModelProfile;
-  model: BaseChatModel;
-}): Promise<ModelCapabilityPreflightResult> {
-  const ordinaryInvocation = await checkOrdinaryInvocation(input.model);
-  const typedToolCall = await checkTypedToolCall(input.model);
+export async function checkModelCapabilities(
+  model: BaseChatModel,
+): Promise<
+  Pick<
+    ModelCapabilityPreflightResult,
+    'ordinaryInvocation' | 'typedToolCall' | 'passed'
+  >
+> {
+  const ordinaryInvocation = await checkOrdinaryInvocation(model);
+  const typedToolCall = await checkTypedToolCall(model);
   return {
-    schemaVersion: 'agent-model-capability-preflight-v1',
-    identity: identityForProfile(input.profile),
     ordinaryInvocation,
     typedToolCall,
     passed: ordinaryInvocation.passed && typedToolCall.passed,
+  };
+}
+
+export async function runModelCapabilityPreflight(
+  binding: ConfiguredAgentModelBinding,
+): Promise<ModelCapabilityPreflightResult> {
+  if (!isTrustedConfiguredAgentModelBinding(binding)) {
+    throw new Error('Untrusted configured agent model binding');
+  }
+  const capabilities = await checkModelCapabilities(binding.model);
+  return {
+    schemaVersion: 'agent-model-capability-preflight-v1',
+    identity: binding.identity,
+    ...capabilities,
   };
 }

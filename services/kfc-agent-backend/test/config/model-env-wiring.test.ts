@@ -1,8 +1,15 @@
 import { describe, expect, it } from 'vitest';
 import { buildServerOptionsFromEnv } from '../../src/api/serverOptions.js';
+import { isTrustedConfiguredAgentModelBinding } from '../../src/config/agentModelProfile.js';
 import { loadEnv } from '../../src/config/env.js';
 
 describe('model candidate environment wiring', () => {
+  it('defaults the runtime to the OpenAI control candidate', () => {
+    expect(loadEnv({}).KFC_AGENT_CANDIDATE).toBe(
+      'openai-gpt-4.1-mini',
+    );
+  });
+
   it('parses only trusted candidate identifiers', () => {
     expect(
       loadEnv({
@@ -39,6 +46,7 @@ describe('model candidate environment wiring', () => {
         baseURL: 'https://opencode.ai/zen/go/v1',
       },
     );
+    expect(isTrustedConfiguredAgentModelBinding(options.agent)).toBe(true);
     expect(options.readiness?.runtime?.agent).toEqual(options.agent?.identity);
   });
 

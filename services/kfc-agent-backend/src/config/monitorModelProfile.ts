@@ -1,6 +1,6 @@
 import type { BaseChatModel } from '@langchain/core/language_models/chat_models';
 import {
-  createAgentChatModel,
+  createConfiguredAgentChatModel,
   resolveAgentModelProfile,
   type AgentModelProfile,
 } from './agentModelProfile.js';
@@ -33,11 +33,11 @@ export function createMonitorChatModel(input: {
   openCodeApiKey?: string;
   googleApiKey?: string;
 }): BaseChatModel {
-  return createAgentChatModel({
+  return createConfiguredAgentChatModel({
     ...input,
     profile: resolveAgentModelProfile({
       candidateId: input.profile.candidateId,
       assertedModel: input.profile.model,
     }),
-  });
+  }).model;
 }

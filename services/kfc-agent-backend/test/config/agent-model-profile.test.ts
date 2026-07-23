@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   agentModelCandidateIds,
-  createAgentChatModel,
+  createConfiguredAgentChatModel,
   describeAgentChatModelFactory,
   liveAgentModelCandidateIds,
   resolveAgentModelProfile,
@@ -95,7 +95,7 @@ describe('KFC agent model candidates', () => {
       profile: 'opencode:minimax-m3:anthropic-messages',
       transport: 'anthropic_messages',
       credentialEnv: 'OPENCODE_API_KEY',
-      maxOutputTokens: 32_768,
+      maxOutputTokens: 131_072,
     });
   });
 
@@ -168,58 +168,65 @@ describe('createAgentChatModel', () => {
       credentialEnv: 'OPENCODE_API_KEY',
       baseUrl: 'https://opencode.ai/zen/go/v1',
       configurableBaseUrl: false,
-      maxOutputTokens: 32_768,
+      maxOutputTokens: 131_072,
     });
   });
 
   it('constructs the maintained adapters with the pinned transport settings', () => {
-    const openai = createAgentChatModel({
+    const openai = createConfiguredAgentChatModel({
       profile: resolveAgentModelProfile({
         candidateId: 'openai-gpt-4.1-mini',
       }),
       openAiApiKey: 'test-openai',
     });
-    const deepseek = createAgentChatModel({
+    const deepseek = createConfiguredAgentChatModel({
       profile: resolveAgentModelProfile({
         candidateId: 'deepseek-v4-flash',
       }),
       openCodeApiKey: 'test-opencode',
     });
-    const qwen = createAgentChatModel({
+    const qwen = createConfiguredAgentChatModel({
       profile: resolveAgentModelProfile({ candidateId: 'qwen3.7-max' }),
       openCodeApiKey: 'test-opencode',
     });
-    const minimax = createAgentChatModel({
+    const minimax = createConfiguredAgentChatModel({
       profile: resolveAgentModelProfile({ candidateId: 'minimax-m3' }),
       openCodeApiKey: 'test-opencode',
     });
-    const google = createAgentChatModel({
+    const google = createConfiguredAgentChatModel({
       profile: resolveAgentModelProfile({
         candidateId: 'google-gemini-3.1-flash-lite',
       }),
       googleApiKey: 'test-google',
     });
 
-    expect(openai._llmType()).toBe('openai');
-    expect(Reflect.get(openai, 'useResponsesApi')).toBe(true);
-    expect(deepseek._llmType()).toBe('openai');
-    expect(Reflect.get(deepseek, 'useResponsesApi')).toBe(false);
-    expect(Reflect.get(deepseek, 'modelKwargs')).toEqual({
+    expect(openai.model._llmType()).toBe('openai');
+    expect(Reflect.get(openai.model, 'useResponsesApi')).toBe(true);
+    expect(deepseek.model._llmType()).toBe('openai');
+    expect(Reflect.get(deepseek.model, 'useResponsesApi')).toBe(false);
+    expect(Reflect.get(deepseek.model, 'modelKwargs')).toEqual({
       thinking: { type: 'disabled' },
     });
-    expect(Reflect.get(deepseek, 'clientConfig')).toMatchObject({
+    expect(Reflect.get(deepseek.model, 'clientConfig')).toMatchObject({
       baseURL: 'https://opencode.ai/zen/go/v1',
     });
-    expect(qwen._llmType()).toBe('anthropic');
-    expect(Reflect.get(qwen, 'maxTokens')).toBe(65_536);
-    expect(Reflect.get(qwen, 'thinking')).toEqual({ type: 'disabled' });
-    expect(Reflect.get(minimax, 'maxTokens')).toBe(32_768);
-    expect(google._llmType()).toBe('google');
+    expect(qwen.model._llmType()).toBe('anthropic');
+    expect(Reflect.get(qwen.model, 'maxTokens')).toBe(65_536);
+    expect(Reflect.get(qwen.model, 'thinking')).toEqual({ type: 'disabled' });
+    expect(Reflect.get(minimax.model, 'maxTokens')).toBe(131_072);
+    expect(google.model._llmType()).toBe('google');
+    expect(openai.identity).toEqual({
+      candidateId: 'openai-gpt-4.1-mini',
+      provider: 'openai',
+      model: 'gpt-4.1-mini',
+      profile: 'openai:gpt-4.1-mini:responses',
+      transport: 'openai_responses',
+    });
   });
 
   it('requires the credential owned by the selected candidate without fallback', () => {
     expect(() =>
-      createAgentChatModel({
+      createConfiguredAgentChatModel({
         profile: resolveAgentModelProfile({
           candidateId: 'openai-gpt-4.1-mini',
         }),
@@ -229,7 +236,7 @@ describe('createAgentChatModel', () => {
       'OPENAI_API_KEY is required for candidate openai-gpt-4.1-mini',
     );
     expect(() =>
-      createAgentChatModel({
+      createConfiguredAgentChatModel({
         profile: resolveAgentModelProfile({
           candidateId: 'deepseek-v4-flash',
         }),
@@ -239,7 +246,7 @@ describe('createAgentChatModel', () => {
       'OPENCODE_API_KEY is required for candidate deepseek-v4-flash',
     );
     expect(() =>
-      createAgentChatModel({
+      createConfiguredAgentChatModel({
         profile: resolveAgentModelProfile({
           candidateId: 'google-gemini-3.1-flash-lite',
         }),
@@ -257,7 +264,7 @@ describe('createAgentChatModel', () => {
     } as AgentModelProfile;
 
     expect(() =>
-      createAgentChatModel({
+      createConfiguredAgentChatModel({
         profile: forgedProfile,
         openCodeApiKey: 'test-opencode',
       }),

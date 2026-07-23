@@ -2,7 +2,6 @@ import { existsSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { z } from 'zod';
-import type { BaseChatModel } from '@langchain/core/language_models/chat_models';
 import type { VerifiedMessengerGuestCheckoutIngress } from '../security/guestCheckoutAuthority.js';
 import type {
   ChannelMediaDeliveryResult,
@@ -60,7 +59,10 @@ import {
   resolveMonitorSessionIntelligence,
   type MonitorSessionIntelligenceJudge,
 } from '../monitor/sessionIntelligence.js';
-import type { AgentModelIdentity } from '../config/agentModelProfile.js';
+import type {
+  AgentModelIdentity,
+  ConfiguredAgentModelBinding,
+} from '../config/agentModelProfile.js';
 import type { MonitorModelIdentity } from '../config/monitorModelProfile.js';
 import type { AgentTracer } from '../observability/agentTracing.js';
 import {
@@ -390,10 +392,7 @@ export interface RouteOptions {
   zaloInboxUrlTemplate?: string;
   zaloApiBaseUrl?: string;
   zaloFetchImpl?: typeof fetch;
-  agent?: {
-    model: BaseChatModel;
-    identity: AgentModelIdentity;
-  };
+  agent?: ConfiguredAgentModelBinding;
   monitorJudge?: MonitorSessionIntelligenceJudge;
   agentTracer?: AgentTracer;
   defer?: (task: () => Promise<void>) => void;

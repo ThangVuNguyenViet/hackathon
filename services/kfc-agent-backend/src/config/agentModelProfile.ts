@@ -110,7 +110,7 @@ const agentModelProfiles: Readonly<
     profile: 'opencode:minimax-m3:anthropic-messages',
     transport: 'anthropic_messages',
     credentialEnv: 'OPENCODE_API_KEY',
-    maxOutputTokens: 32_768,
+    maxOutputTokens: 131_072,
   }),
   'google-gemini-3.1-flash-lite': Object.freeze({
     candidateId: 'google-gemini-3.1-flash-lite',
@@ -246,7 +246,18 @@ function requiredCredential(
   return normalized;
 }
 
-export function createAgentChatModel(input: {
+const configuredAgentModelBindingBrand: unique symbol = Symbol(
+  'configuredAgentModelBinding',
+);
+const trustedConfiguredAgentModelBindings = new WeakSet<object>();
+
+export interface ConfiguredAgentModelBinding {
+  readonly identity: AgentModelIdentity;
+  readonly model: BaseChatModel;
+  readonly [configuredAgentModelBindingBrand]: true;
+}
+
+function createAgentChatModel(input: {
   profile: AgentModelProfile;
   openAiApiKey?: string;
   openAiBaseUrl?: string;
@@ -295,4 +306,40 @@ export function createAgentChatModel(input: {
     maxRetries: 1,
     thinkingLevel: descriptor.thinkingLevel,
   });
+}
+
+export function createConfiguredAgentChatModel(input: {
+  profile: AgentModelProfile;
+  openAiApiKey?: string;
+  openAiBaseUrl?: string;
+  openCodeApiKey?: string;
+  googleApiKey?: string;
+}): ConfiguredAgentModelBinding {
+  const profile = resolveAgentModelProfile({
+    candidateId: input.profile.candidateId,
+    assertedModel: input.profile.model,
+  });
+  const binding: ConfiguredAgentModelBinding = Object.freeze({
+    [configuredAgentModelBindingBrand]: true as const,
+    identity: Object.freeze({
+      candidateId: profile.candidateId,
+      provider: profile.provider,
+      model: profile.model,
+      profile: profile.profile,
+      transport: profile.transport,
+    }),
+    model: createAgentChatModel({ ...input, profile }),
+  });
+  trustedConfiguredAgentModelBindings.add(binding);
+  return binding;
+}
+
+export function isTrustedConfiguredAgentModelBinding(
+  value: unknown,
+): value is ConfiguredAgentModelBinding {
+  return (
+    typeof value === 'object' &&
+    value !== null &&
+    trustedConfiguredAgentModelBindings.has(value)
+  );
 }

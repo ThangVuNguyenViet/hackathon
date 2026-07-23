@@ -34,8 +34,7 @@ export interface BuiltWorkerRouteOptions {
 
 function workerModelEnv(env: WorkerEnv) {
   return {
-    KFC_AGENT_CANDIDATE:
-      env.KFC_AGENT_CANDIDATE ?? 'google-gemini-3.1-flash-lite',
+    KFC_AGENT_CANDIDATE: env.KFC_AGENT_CANDIDATE ?? 'openai-gpt-4.1-mini',
     KFC_MONITOR_CANDIDATE: env.KFC_MONITOR_CANDIDATE,
     OPENAI_API_KEY: env.OPENAI_API_KEY ?? '',
     OPENCODE_API_KEY: env.OPENCODE_API_KEY ?? '',
