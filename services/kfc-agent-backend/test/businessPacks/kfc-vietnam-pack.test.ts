@@ -6,12 +6,67 @@ import {
   kfcVietnamPack,
 } from '../../src/businessPacks/kfcVietnam/kfcVietnamPack.js';
 import { runAgentTurn } from '../../src/agent/kfcAgent.js';
+import { buildVerifiedStateSnapshot } from '../../src/agent/verifiedState.js';
 import { DashboardEventBus } from '../../src/dashboard/eventBus.js';
 import { loadGeneratedFixtures } from '../../src/fixtures/loadFixtures.js';
 import { createMockClients } from '../../src/mock/createMockClients.js';
 import { MemoryStore } from '../../src/persistence/memoryStore.js';
+import {
+  createPackStateEnvelope,
+  validatePackStateEnvelope,
+} from '../../src/runtime/businessPack.js';
 
 describe('KFC Vietnam business pack compatibility', () => {
+  it('rejects correctly bound malformed KFC state and accepts a valid partial state', async () => {
+    const malformed = await createPackStateEnvelope({
+      packRef: kfcVietnamPack.ref,
+      schemaVersion: kfcVietnamPack.stateSchemaVersion,
+      state: { cart: 'corrupt' },
+    });
+    const valid = await createPackStateEnvelope({
+      packRef: kfcVietnamPack.ref,
+      schemaVersion: kfcVietnamPack.stateSchemaVersion,
+      state: {
+        cart: {
+          id: 'cart-1',
+          items: [],
+          subtotalVnd: 0,
+          discountVnd: 0,
+          deliveryFeeVnd: 0,
+          totalVnd: 0,
+          voucherCode: null,
+        },
+      },
+    });
+    const unknownShape = await createPackStateEnvelope({
+      packRef: kfcVietnamPack.ref,
+      schemaVersion: kfcVietnamPack.stateSchemaVersion,
+      state: { unrecognizedAuthority: {} },
+    });
+
+    await expect(
+      validatePackStateEnvelope(malformed, {
+        packRef: kfcVietnamPack.ref,
+        schemaVersion: kfcVietnamPack.stateSchemaVersion,
+        parseState: kfcVietnamPack.parseState,
+      }),
+    ).rejects.toThrow('kfc_pack_state_invalid');
+    await expect(
+      validatePackStateEnvelope(valid, {
+        packRef: kfcVietnamPack.ref,
+        schemaVersion: kfcVietnamPack.stateSchemaVersion,
+        parseState: kfcVietnamPack.parseState,
+      }),
+    ).resolves.toEqual(valid.state);
+    await expect(
+      validatePackStateEnvelope(unknownShape, {
+        packRef: kfcVietnamPack.ref,
+        schemaVersion: kfcVietnamPack.stateSchemaVersion,
+        parseState: kfcVietnamPack.parseState,
+      }),
+    ).rejects.toThrow('kfc_pack_state_invalid');
+  });
+
   it('preserves the KFC prompt, tools, verified-state snapshot, and final presentation', async () => {
     const store = new MemoryStore();
     const input = {
@@ -53,6 +108,9 @@ describe('KFC Vietnam business pack compatibility', () => {
         event.sourceType.startsWith('pack:'),
       ),
     ).toBe(false);
+    expect(() =>
+      kfcVietnamPack.parseState(buildVerifiedStateSnapshot(output.state)),
+    ).not.toThrow();
   });
 
   it('keeps runAgentTurn as a compatibility facade over the in-process kernel', async () => {

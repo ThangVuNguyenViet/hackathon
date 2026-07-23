@@ -38,6 +38,7 @@ import { assembleLoadedTurnState } from '../../agent/agentTurnStateHydration.js'
 import { loadOrAppendAgentCurrentUserTurn } from '../../agent/agentTurnIntake.js';
 import { semanticConversationTurns } from '../../agent/trustedActionConversation.js';
 import type { BusinessPack } from '../../runtime/businessPack.js';
+import { kfcVerifiedStateSnapshotSchema } from './kfcVerifiedStateSchema.js';
 
 export const KFC_VIETNAM_PACK_REF = {
   packId: 'kfc-vietnam',
@@ -180,10 +181,9 @@ function createKfcTools(input: {
 }
 
 function parseKfcVerifiedState(value: unknown): Partial<VerifiedStateSnapshot> {
-  if (typeof value !== 'object' || value === null || Array.isArray(value)) {
-    throw new Error('kfc_pack_state_invalid');
-  }
-  return value as Partial<VerifiedStateSnapshot>;
+  const parsed = kfcVerifiedStateSnapshotSchema.safeParse(value);
+  if (!parsed.success) throw new Error('kfc_pack_state_invalid');
+  return parsed.data as Partial<VerifiedStateSnapshot>;
 }
 
 export const kfcVietnamPack: BusinessPack<
