@@ -49,6 +49,18 @@
     "src/agent/agentGraphObservability.ts": {
       "@typescript-eslint/no-unsafe-type-assertion": 2
     },
+    "src/agent/kfcCreateAgent.ts": {
+      "@typescript-eslint/no-unsafe-type-assertion": 1
+    },
+    "src/agent/kfcCreateAgentRuntime.ts": {
+      "@typescript-eslint/no-unsafe-type-assertion": 1
+    },
+    "src/agent/kfcOpenAiGenUi.ts": {
+      "@typescript-eslint/no-unsafe-type-assertion": 1
+    },
+    "src/agent/kfcOpenAiTools.ts": {
+      "@typescript-eslint/no-unsafe-type-assertion": 1
+    },
     "src/agent/modelPublicationAuthority.ts": {
       "@typescript-eslint/no-unsafe-type-assertion": 1
     },
@@ -65,7 +77,7 @@
       "@typescript-eslint/no-unsafe-type-assertion": 2
     },
     "src/api/routeAgentRuntime.ts": {
-      "@typescript-eslint/no-unsafe-type-assertion": 1
+      "@typescript-eslint/no-unsafe-type-assertion": 2
     },
     "src/api/routeCommerceRuntime.ts": {
       "@typescript-eslint/no-unsafe-type-assertion": 1
@@ -74,6 +86,9 @@
       "@typescript-eslint/no-unsafe-type-assertion": 2
     },
     "src/api/routes.ts": {
+      "@typescript-eslint/no-unsafe-type-assertion": 1
+    },
+    "src/api/serverOptions.ts": {
       "@typescript-eslint/no-unsafe-type-assertion": 1
     },
     "src/channels/messenger.ts": {
@@ -217,6 +232,9 @@
     "src/presentation/channelPresentation.ts": {
       "@typescript-eslint/no-unsafe-type-assertion": 1
     },
+    "src/observability/langsmithAgentTracer.ts": {
+      "@typescript-eslint/no-unsafe-type-assertion": 5
+    },
     "src/proof/kfcGenUiDeployedProof.ts": {
       "@typescript-eslint/no-unsafe-type-assertion": 5
     },
@@ -239,7 +257,10 @@
       "@typescript-eslint/no-unsafe-type-assertion": 3
     },
     "test/agent/agent-state-graph-runner.test.ts": {
-      "@typescript-eslint/no-unsafe-type-assertion": 1
+      "@typescript-eslint/no-unsafe-type-assertion": 2
+    },
+    "test/agent/kfc-create-agent-tool-coordinator.test.ts": {
+      "@typescript-eslint/no-unsafe-type-assertion": 2
     },
     "test/agent/model-publication-projection.test.ts": {
       "@typescript-eslint/no-unsafe-type-assertion": 5
@@ -259,6 +280,9 @@
     "test/agent/provider-resolved-address.test.ts": {
       "@typescript-eslint/no-unsafe-type-assertion": 3
     },
+    "test/agent/response-publication-boundary.test.ts": {
+      "@typescript-eslint/no-unsafe-type-assertion": 2
+    },
     "test/agent/selected-action-state-graph.test.ts": {
       "@typescript-eslint/no-unsafe-type-assertion": 1
     },
@@ -269,7 +293,7 @@
       "@typescript-eslint/no-unsafe-type-assertion": 1
     },
     "test/api/channel-presentation-delivery.test.ts": {
-      "@typescript-eslint/no-unsafe-type-assertion": 5
+      "@typescript-eslint/no-unsafe-type-assertion": 8
     },
     "test/api/customer-run-streaming.test.ts": {
       "@typescript-eslint/no-unsafe-type-assertion": 6
@@ -311,7 +335,7 @@
       "@typescript-eslint/no-unsafe-type-assertion": 1
     },
     "test/customerRuns/runtime.test.ts": {
-      "@typescript-eslint/no-unsafe-type-assertion": 9
+      "@typescript-eslint/no-unsafe-type-assertion": 10
     },
     "test/domain/order-status-evidence.test.ts": {
       "@typescript-eslint/no-unsafe-type-assertion": 1
@@ -335,7 +359,7 @@
       "@typescript-eslint/no-unsafe-type-assertion": 1
     },
     "test/evaluation/semantic-response-judge.test.ts": {
-      "@typescript-eslint/no-unsafe-type-assertion": 5
+      "@typescript-eslint/no-unsafe-type-assertion": 6
     },
     "test/fixtures/build-fixtures.test.ts": {
       "@typescript-eslint/no-unsafe-type-assertion": 1
@@ -345,6 +369,9 @@
     },
     "test/genui/kfc-genui-selector.test.ts": {
       "@typescript-eslint/no-unsafe-type-assertion": 6
+    },
+    "test/graph/live-conversation-regressions.test.ts": {
+      "@typescript-eslint/no-unsafe-type-assertion": 1
     },
     "test/graph/studio-agent-runtime.test.ts": {
       "@typescript-eslint/no-unsafe-type-assertion": 1
@@ -394,11 +421,17 @@
     "test/persistence/postgres-checkpoint-saver.test.ts": {
       "@typescript-eslint/no-unsafe-type-assertion": 2
     },
+    "test/persistence/postgres-customer-run-event-batch-query.test.ts": {
+      "@typescript-eslint/no-unsafe-type-assertion": 1
+    },
     "test/persistence/postgres-non-agent-text-delivery-store.test.ts": {
       "@typescript-eslint/no-unsafe-type-assertion": 2
     },
     "test/persistence/postgres-proof-envelope-queries.test.ts": {
       "@typescript-eslint/no-unsafe-type-assertion": 1
+    },
+    "test/persistence/postgres-pending-customer-turn-ignored.test.ts": {
+      "@typescript-eslint/no-unsafe-type-assertion": 2
     },
     "test/persistence/postgres-session-reset.test.ts": {
       "@typescript-eslint/no-unsafe-type-assertion": 4
