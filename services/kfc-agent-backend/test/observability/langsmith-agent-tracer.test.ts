@@ -1,0 +1,170 @@
+import { readFile } from 'node:fs/promises';
+import { resolve } from 'node:path';
+import { describe, expect, it } from 'vitest';
+import {
+  LangSmithAgentTracer,
+  privacySafeLangSmithInputs,
+  privacySafeLangSmithOutputs,
+  type LangSmithRunConfig,
+  type LangSmithRunLike,
+} from '../../src/observability/langsmithAgentTracer.js';
+
+class FakeRun implements LangSmithRunLike {
+  readonly children: FakeRun[] = [];
+  ended?: {
+    outputs?: Record<string, unknown>;
+    error?: string;
+  };
+
+  constructor(readonly config: LangSmithRunConfig) {}
+
+  createChild(config: LangSmithRunConfig): LangSmithRunLike {
+    const child = new FakeRun(config);
+    this.children.push(child);
+    return child;
+  }
+
+  async postRun(): Promise<void> {}
+
+  async end(outputs?: Record<string, unknown>, error?: string): Promise<void> {
+    this.ended = { outputs, error };
+  }
+
+  async patchRun(): Promise<void> {}
+}
+
+describe('LangSmith agent tracer boundary', () => {
+  it('publishes only allowlisted correlation, tags, and bounded summaries', async () => {
+    const roots: FakeRun[] = [];
+    const tracer = new LangSmithAgentTracer({
+      projectName: 'test-project',
+      createRoot(config) {
+        const root = new FakeRun(config);
+        roots.push(root);
+        return root;
+      },
+    });
+    const privateText =
+      'Authorization: Bearer private-token; deliver to 18 Le Loi';
+    const turn = await tracer.startTurn({
+      name: 'kfc_agent_turn',
+      inputs: {
+        messageCharacterCount: 42,
+        structuredAction: false,
+        text: privateText,
+        providerPayload: { secret: privateText },
+      },
+      metadata: {
+        session_id: 'kfc:session-1',
+        run_id: 'run-1',
+        turn_id: 'turn-1',
+        pack_id: 'kfc-vietnam',
+        pack_version: '1.0.0',
+        candidate: 'openai-gpt-4.1-mini',
+        profile: 'openai:gpt-4.1-mini:responses',
+        transport: 'openai_responses',
+        response_profile: 'genui',
+        channel: 'kfc',
+        scenarioId: 'scenario-03',
+        probeRunId: 'probe/run-7',
+        session_id_digest: 'a'.repeat(64),
+        rawEvent: {
+          type: 'record',
+          count: 1,
+          digest: 'b'.repeat(64),
+        },
+        address: privateText,
+        apiKey: 'sk-private',
+      },
+      tags: [
+        'pack:kfc-vietnam',
+        'channel:kfc',
+        'profile:genui',
+        `customer:${privateText}`,
+      ],
+    });
+    await turn.end({
+      toolCalls: 2,
+      responseCharacterCount: 81,
+      responseText: privateText,
+      rawProviderPayload: { secret: privateText },
+    });
+    await tracer.flush();
+
+    expect(roots).toHaveLength(1);
+    expect(roots[0]!.config.inputs).toEqual({
+      messageCharacterCount: 42,
+      structuredAction: false,
+    });
+    expect(roots[0]!.config.metadata).toEqual({
+      session_id: 'kfc:session-1',
+      run_id: 'run-1',
+      turn_id: 'turn-1',
+      pack_id: 'kfc-vietnam',
+      pack_version: '1.0.0',
+      candidate: 'openai-gpt-4.1-mini',
+      profile: 'openai:gpt-4.1-mini:responses',
+      transport: 'openai_responses',
+      response_profile: 'genui',
+      channel: 'kfc',
+      scenarioId: 'scenario-03',
+      probeRunId: 'probe/run-7',
+    });
+    expect(roots[0]!.config.tags).toEqual([
+      'pack:kfc-vietnam',
+      'channel:kfc',
+      'profile:genui',
+    ]);
+    expect(roots[0]!.ended?.outputs).toEqual({
+      toolCallCount: 2,
+      responseCharacterCount: 81,
+    });
+    expect(JSON.stringify(roots)).not.toContain(privateText);
+    expect(JSON.stringify(roots)).not.toContain('sk-private');
+  });
+
+  it('sanitizes every summary with a strict whitelist', () => {
+    const privateText =
+      '4111111111111111 Authorization: Bearer private home address';
+
+    expect(
+      privacySafeLangSmithInputs({
+        messageCharacterCount: 77,
+        structuredAction: true,
+        historyExchangeCount: 4,
+        hasSummary: true,
+        text: privateText,
+      }),
+    ).toEqual({
+      messageCharacterCount: 77,
+      structuredAction: true,
+      historyExchangeCount: 4,
+      hasSummary: true,
+    });
+    expect(
+      privacySafeLangSmithOutputs({
+        toolCalls: 3,
+        responseCharacterCount: 99,
+        responseText: privateText,
+        authorization: privateText,
+        payment: privateText,
+        address: privateText,
+        providerPayload: { raw: privateText },
+      }),
+    ).toEqual({
+      toolCallCount: 3,
+      responseCharacterCount: 99,
+    });
+  });
+
+  it('keeps the neutral kernel free of KFC and LangSmith imports', async () => {
+    const kernel = await readFile(
+      resolve(process.cwd(), 'src/runtime/kernel.ts'),
+      'utf8',
+    );
+
+    expect(kernel).not.toMatch(/kfc/i);
+    expect(kernel).not.toMatch(/langsmith/i);
+    expect(kernel).not.toMatch(/observability/i);
+  });
+});

@@ -14,6 +14,8 @@ import type { AgentState } from '../../agent/agentState.js';
 import {
   stateRevision,
   toolExecutionContext,
+  traceProbeRunId,
+  traceScenarioId,
 } from '../../agent/turnSupport.js';
 import {
   applyAgentCollectionToVerifiedState,
@@ -37,6 +39,7 @@ import { buildVerifiedCollectionSnapshot } from '../../ordering/verifiedCollecti
 import {
   createNoopAgentTracer,
   createSafeAgentTracer,
+  type AgentTraceSpan,
 } from '../../observability/agentTracing.js';
 import { resolveResponseProfile } from '../../presentation/responseProfile.js';
 import { providerPortableToolSchema } from '../../agent/providerPortableToolSchema.js';
@@ -289,6 +292,80 @@ function parseKfcVerifiedState(value: unknown): Partial<VerifiedStateSnapshot> {
   return parsed.data as Partial<VerifiedStateSnapshot>;
 }
 
+function traceRunId(input: AgentTurnInput): string | undefined {
+  return input.runGuard?.commitFence?.kind === 'operation_lease'
+    ? input.runGuard.commitFence.requestId
+    : input.runGuard?.commitFence?.runId;
+}
+
+function traceMetadata(input: {
+  turnInput: AgentTurnInput;
+  turnId?: string;
+  responseProfile: ReturnType<typeof resolveResponseProfile>;
+}): Record<string, unknown> {
+  const runId = traceRunId(input.turnInput);
+  const identity = input.turnInput.agentModelIdentity;
+  const scenarioId = traceScenarioId(input.turnInput);
+  const probeRunId = traceProbeRunId(input.turnInput);
+  return {
+    session_id: input.turnInput.sessionId,
+    ...(runId ? { run_id: runId } : {}),
+    ...(input.turnId ? { turn_id: input.turnId } : {}),
+    pack_id: KFC_VIETNAM_PACK_REF.packId,
+    pack_version: KFC_VIETNAM_PACK_REF.version,
+    ...(identity
+      ? {
+          candidate: identity.candidateId,
+          profile: identity.profile,
+          transport: identity.transport,
+        }
+      : {}),
+    response_profile: input.responseProfile,
+    channel: input.turnInput.channel,
+    ...(scenarioId ? { scenarioId } : {}),
+    ...(probeRunId ? { probeRunId } : {}),
+  };
+}
+
+function traceTags(
+  input: AgentTurnInput,
+  responseProfile: ReturnType<typeof resolveResponseProfile>,
+): string[] {
+  return [
+    `pack:${KFC_VIETNAM_PACK_REF.packId}`,
+    `pack-version:${KFC_VIETNAM_PACK_REF.version}`,
+    ...(input.agentModelIdentity
+      ? [
+          `candidate:${input.agentModelIdentity.candidateId}`,
+          `transport:${input.agentModelIdentity.transport}`,
+        ]
+      : []),
+    `profile:${responseProfile}`,
+    `channel:${input.channel}`,
+  ];
+}
+
+function scheduleTraceFlush(
+  input: AgentTurnInput,
+  tracer: ReturnType<typeof createSafeAgentTracer>,
+): void {
+  const task = () => tracer.flush();
+  try {
+    if (input.deferTrace) input.deferTrace(task);
+    else void task();
+  } catch (error) {
+    console.error('agent_trace_flush_schedule_failed', {
+      sessionId: input.sessionId,
+      errorClass: traceErrorClass(error),
+    });
+  }
+}
+
+function traceErrorClass(error: unknown): string {
+  const name = error instanceof Error ? error.name : '';
+  return /^[A-Za-z][A-Za-z0-9]{0,63}$/u.test(name) ? name : 'UnknownError';
+}
+
 export const kfcVietnamPack: BusinessPack<
   AgentTurnInput,
   AgentTurnOutput,
@@ -304,32 +381,36 @@ export const kfcVietnamPack: BusinessPack<
       (code, error) => {
         console.error(code, {
           sessionId: input.sessionId,
-          message: error instanceof Error ? error.message : String(error),
+          errorClass: traceErrorClass(error),
         });
       },
     );
-    const turnTrace = await tracer.startTurn({
-      name: 'kfc_agent_turn',
-      inputs: {
-        sessionId: input.sessionId,
-        channel: input.channel,
-        text: input.text,
-      },
-      metadata: { runtime: 'langchain-create-agent' },
-      tags: ['kfc-agent'],
-    });
     const abortController = new AbortController();
     const externalCallContext: ExternalCallContext = {
       signal: abortController.signal,
       deadlineAt: Number.MAX_SAFE_INTEGER,
     };
 
+    let turnTrace: AgentTraceSpan | undefined;
     try {
       const responseProfile = resolveResponseProfile(input);
       const currentUserTurn = await loadOrAppendAgentCurrentUserTurn(
         input,
         responseProfile,
       );
+      turnTrace = await tracer.startTurn({
+        name: 'kfc_agent_turn',
+        inputs: {
+          messageCharacterCount: input.text.length,
+          structuredAction: Boolean(input.trustedCustomerAction),
+        },
+        metadata: traceMetadata({
+          turnInput: input,
+          turnId: currentUserTurn?.id,
+          responseProfile,
+        }),
+        tags: traceTags(input, responseProfile),
+      });
       const [prior, turns] = await Promise.all([
         loadPriorVerifiedState(input.store, input.sessionId, {
           packRef: KFC_VIETNAM_PACK_REF,
@@ -403,6 +484,8 @@ export const kfcVietnamPack: BusinessPack<
       }
       const currentTurnToolTrace: ToolTraceEntry[] = [];
       await input.observeRun?.({ kind: 'planning' });
+      const callbacks = await turnTrace.langchainCallbacks?.();
+      const runWithContext = turnTrace.withActiveTrace?.bind(turnTrace);
       const responseText = await invokeModel({
         model: input.agentModel,
         messages: conversationMessages(input, state, currentUserTurn, context),
@@ -414,6 +497,14 @@ export const kfcVietnamPack: BusinessPack<
         }),
         systemPrompt: systemPrompt(state),
         signal: externalCallContext.signal,
+        ...(callbacks || runWithContext
+          ? {
+              runtime: {
+                ...(callbacks ? { callbacks } : {}),
+                ...(runWithContext ? { runWithContext } : {}),
+              },
+            }
+          : {}),
         responseErrors: {
           invalid: 'kfc_agent_model_response_invalid',
           empty: 'kfc_agent_model_response_empty',
@@ -429,15 +520,15 @@ export const kfcVietnamPack: BusinessPack<
         packStateSchemaVersion: '1',
       });
       await turnTrace.end({
-        toolCalls: currentTurnToolTrace.length,
-        responseText: output.responseText,
+        toolCallCount: currentTurnToolTrace.length,
+        responseCharacterCount: output.responseText.length,
       });
-      await tracer.flush();
+      scheduleTraceFlush(input, tracer);
       return output;
     } catch (error) {
       abortController.abort(error);
-      await turnTrace.fail(error);
-      await tracer.flush();
+      await turnTrace?.fail(error);
+      scheduleTraceFlush(input, tracer);
       throw error;
     }
   },

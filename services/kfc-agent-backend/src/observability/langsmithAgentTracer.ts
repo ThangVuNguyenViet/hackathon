@@ -38,49 +38,32 @@ export interface LangSmithAgentTracerOptions {
 
 const traceFailureError = 'agent_trace_failed_closed';
 const opaqueCorrelationIdPattern = /^[A-Za-z0-9][A-Za-z0-9._:/-]{0,255}$/u;
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value);
-}
-
-function safeRawEventMetadata(
-  value: unknown,
-): Record<string, unknown> | undefined {
-  if (
-    !isRecord(value) ||
-    value.type !== 'record' ||
-    typeof value.count !== 'number' ||
-    !Number.isSafeInteger(value.count) ||
-    value.count < 0 ||
-    typeof value.digest !== 'string' ||
-    !/^[0-9a-f]{64}$/u.test(value.digest)
-  ) {
-    return undefined;
-  }
-  return {
-    type: value.type,
-    count: value.count,
-    digest: value.digest,
-  };
-}
+const safeTagPattern =
+  /^(?:candidate|channel|pack|pack-version|profile|transport):[A-Za-z0-9][A-Za-z0-9._:/-]{0,255}$/u;
 
 function privacySafeLangSmithMetadata(
   metadata: Record<string, unknown>,
 ): Record<string, unknown> {
   const safe: Record<string, unknown> = {};
-  for (const key of ['session_id', 'scenarioId'] as const) {
+  for (const key of [
+    'session_id',
+    'run_id',
+    'turn_id',
+    'pack_id',
+    'pack_version',
+    'candidate',
+    'profile',
+    'transport',
+    'response_profile',
+    'channel',
+    'scenarioId',
+  ] as const) {
     if (
       typeof metadata[key] === 'string' &&
       opaqueCorrelationIdPattern.test(metadata[key])
     ) {
       safe[key] = metadata[key];
     }
-  }
-  if (
-    typeof metadata.session_id_digest === 'string' &&
-    /^[0-9a-f]{64}$/u.test(metadata.session_id_digest)
-  ) {
-    safe.session_id_digest = metadata.session_id_digest;
   }
   if (metadata.probeRunId === null) {
     safe.probeRunId = metadata.probeRunId;
@@ -90,9 +73,11 @@ function privacySafeLangSmithMetadata(
   ) {
     safe.probeRunId = metadata.probeRunId;
   }
-  const rawEvent = safeRawEventMetadata(metadata.rawEvent);
-  if (rawEvent) safe.rawEvent = rawEvent;
   return safe;
+}
+
+function privacySafeLangSmithTags(tags: readonly string[]): string[] {
+  return tags.filter((tag) => safeTagPattern.test(tag));
 }
 
 function privacySafeLangSmithError(
@@ -173,8 +158,18 @@ export function privacySafeLangSmithOutputs(
   const safe: Record<string, unknown> = {};
   const attempt = safeBoundedInteger(outputs.attempt, 6);
   if (attempt !== undefined) safe.attempt = attempt;
-  const toolCallCount = safeBoundedInteger(outputs.toolCallCount, 100);
+  const toolCallCount = safeBoundedInteger(
+    outputs.toolCallCount ?? outputs.toolCalls,
+    100,
+  );
   if (toolCallCount !== undefined) safe.toolCallCount = toolCallCount;
+  const responseCharacterCount = safeBoundedInteger(
+    outputs.responseCharacterCount,
+    1_000_000,
+  );
+  if (responseCharacterCount !== undefined) {
+    safe.responseCharacterCount = responseCharacterCount;
+  }
   for (const key of [
     'emittedFailure',
     'emittedValidationError',
@@ -191,6 +186,23 @@ export function privacySafeLangSmithOutputs(
   return safe;
 }
 
+export function privacySafeLangSmithInputs(
+  inputs: Record<string, unknown>,
+): Record<string, unknown> {
+  const safe: Record<string, unknown> = {};
+  for (const key of [
+    'messageCharacterCount',
+    'historyExchangeCount',
+  ] as const) {
+    const value = safeBoundedInteger(inputs[key], 1_000_000);
+    if (value !== undefined) safe[key] = value;
+  }
+  for (const key of ['structuredAction', 'hasSummary'] as const) {
+    if (typeof inputs[key] === 'boolean') safe[key] = inputs[key];
+  }
+  return safe;
+}
+
 type PendingTraceOperation = () => Promise<void>;
 
 class LangSmithTraceSpan implements AgentTraceSpan {
@@ -203,16 +215,16 @@ class LangSmithTraceSpan implements AgentTraceSpan {
     const child = this.run.createChild({
       name: input.name,
       run_type: input.runType,
-      inputs: input.inputs,
+      inputs: privacySafeLangSmithInputs(input.inputs),
       metadata: privacySafeLangSmithMetadata(input.metadata ?? {}),
-      tags: [],
+      tags: privacySafeLangSmithTags(input.tags ?? []),
     });
     this.enqueue(() => child.postRun());
     return new LangSmithTraceSpan(child, this.enqueue);
   }
 
   async end(outputs: Record<string, unknown> = {}): Promise<void> {
-    const endOperation = this.run.end(outputs);
+    const endOperation = this.run.end(privacySafeLangSmithOutputs(outputs));
     void endOperation.catch(() => undefined);
     this.enqueue(async () => {
       await endOperation;
@@ -258,7 +270,7 @@ export class LangSmithAgentTracer implements AgentTracer {
       tracingSamplingRate: options.samplingRate,
       fetchImplementation: options.fetchImplementation,
       autoBatchTracing: options.autoBatchTracing,
-      hideInputs: true,
+      hideInputs: privacySafeLangSmithInputs,
       hideOutputs: privacySafeLangSmithOutputs,
       hideMetadata: privacySafeLangSmithMetadata,
       anonymizer: privacySafeLangSmithError,
@@ -275,9 +287,9 @@ export class LangSmithAgentTracer implements AgentTracer {
     const root = this.createRoot({
       name: input.name,
       run_type: 'chain',
-      inputs: input.inputs,
+      inputs: privacySafeLangSmithInputs(input.inputs),
       metadata: privacySafeLangSmithMetadata(input.metadata ?? {}),
-      tags: [],
+      tags: privacySafeLangSmithTags(input.tags ?? []),
       project_name: this.options.projectName,
     });
     this.pendingOperations.push(() => root.postRun());

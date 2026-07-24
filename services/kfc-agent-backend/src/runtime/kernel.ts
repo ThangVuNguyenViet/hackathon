@@ -27,10 +27,21 @@ export async function runSemanticKernel<TInput, TOutput, TState>(input: {
       tools: invocation.tools,
       systemPrompt: invocation.systemPrompt,
     });
-    const result = await agent.invoke(
-      { messages: invocation.messages },
-      invocation.signal ? { signal: invocation.signal } : undefined,
-    );
+    const invoke = () =>
+      agent.invoke(
+        { messages: invocation.messages },
+        invocation.signal || invocation.runtime?.callbacks
+          ? {
+              ...(invocation.signal ? { signal: invocation.signal } : {}),
+              ...(invocation.runtime?.callbacks
+                ? { callbacks: invocation.runtime.callbacks }
+                : {}),
+            }
+          : undefined,
+      );
+    const result = invocation.runtime?.runWithContext
+      ? await invocation.runtime.runWithContext(invoke)
+      : await invoke();
     const response = result.messages.at(-1);
     if (!response || !isAIMessage(response)) {
       throw new Error(

@@ -1,5 +1,10 @@
 import type { BaseChatModel } from '@langchain/core/language_models/chat_models';
+import { BaseCallbackHandler } from '@langchain/core/callbacks/base';
+import { AIMessage } from '@langchain/core/messages';
+import { fakeModel } from '@langchain/core/testing';
+import { tool } from 'langchain';
 import { describe, expect, it } from 'vitest';
+import { z } from 'zod';
 import {
   createBusinessPackRegistry,
   createPackStateEnvelope,
@@ -17,11 +22,9 @@ const fakeRef: PackRef = {
   version: '1.0.0',
 };
 
-function fakePack(observation: { runCount: number }): BusinessPack<
-  string,
-  string,
-  FakeState
-> {
+function fakePack(observation: {
+  runCount: number;
+}): BusinessPack<string, string, FakeState> {
   return {
     ref: fakeRef,
     stateSchemaVersion: '1',
@@ -46,6 +49,71 @@ function fakePack(observation: { runCount: number }): BusinessPack<
 }
 
 describe('semantic kernel pack isolation', () => {
+  it('runs createAgent with supplied callbacks inside the active invocation context', async () => {
+    const observations: string[] = [];
+    let active = false;
+    const callbacks = [
+      BaseCallbackHandler.fromMethods({
+        handleChatModelStart() {
+          observations.push(active ? 'model:active' : 'model:inactive');
+        },
+        handleToolStart() {
+          observations.push(active ? 'tool:active' : 'tool:inactive');
+        },
+      }),
+    ];
+    const model = fakeModel()
+      .respondWithTools([
+        { name: 'echo', args: { value: 'callback proof' }, id: 'echo-1' },
+      ])
+      .respond(new AIMessage('callback proof complete'));
+    const echo = tool(async ({ value }) => value, {
+      name: 'echo',
+      description: 'Returns the supplied value',
+      schema: z.object({ value: z.string() }),
+    });
+    const pack: BusinessPack<string, string, FakeState> = {
+      ref: fakeRef,
+      stateSchemaVersion: '1',
+      parseState(value) {
+        return value as FakeState;
+      },
+      async run(_input, invokeModel) {
+        return invokeModel({
+          model,
+          systemPrompt: 'Use echo once.',
+          messages: [],
+          tools: [echo],
+          runtime: {
+            callbacks,
+            async runWithContext(operation) {
+              active = true;
+              try {
+                return await operation();
+              } finally {
+                active = false;
+              }
+            },
+          },
+        });
+      },
+    };
+    const registry = createBusinessPackRegistry([pack]);
+
+    await expect(
+      runSemanticKernel({
+        registry,
+        binding: registry.createTrustedBinding(fakeRef),
+        packInput: 'input',
+      }),
+    ).resolves.toBe('callback proof complete');
+
+    expect(observations).toContain('model:active');
+    expect(observations).toContain('tool:active');
+    expect(observations).not.toContain('model:inactive');
+    expect(observations).not.toContain('tool:inactive');
+  });
+
   it('rejects an untrusted binding before pack or model work', async () => {
     const observation = { runCount: 0 };
     const registry = createBusinessPackRegistry([fakePack(observation)]);

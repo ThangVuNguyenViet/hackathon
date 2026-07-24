@@ -1,4 +1,5 @@
 import type { BaseChatModel } from '@langchain/core/language_models/chat_models';
+import type { AgentModelIdentity } from '../config/agentModelProfile.js';
 import type { ExternalClients } from '../clients/interfaces.js';
 import type { CustomerSafeProgressFamily } from '../customerRuns/progressProjection.js';
 import type { TrustedCustomerActionEnvelope } from '../domain/customerCommand.js';
@@ -56,6 +57,8 @@ export interface AgentTurnInput {
   traceContext?: AgentTraceContext;
   /** Maintained provider adapter used by the single production agent loop. */
   agentModel?: BaseChatModel;
+  /** Server-owned identity paired with the maintained provider adapter. */
+  agentModelIdentity?: AgentModelIdentity;
   /** Provider-neutral, explicit conversation-window policy. */
   conversationContext?: {
     tokenBudget: number;
@@ -89,6 +92,8 @@ export interface AgentTurnInput {
       | { kind: 'response_composition' },
   ) => Promise<void>;
   tracer?: AgentTracer;
+  /** Schedules best-effort trace delivery outside the product response path. */
+  deferTrace?: (task: () => Promise<void>) => void;
 }
 
 export interface AgentTurnOutput {

@@ -1,5 +1,6 @@
 import type { BaseChatModel } from '@langchain/core/language_models/chat_models';
 import type { BaseMessage } from '@langchain/core/messages';
+import type { Callbacks } from '@langchain/core/callbacks/manager';
 import type { StructuredToolInterface } from '@langchain/core/tools';
 
 export interface PackRef {
@@ -24,6 +25,10 @@ export interface BusinessPackInvocation {
   messages: BaseMessage[];
   tools: StructuredToolInterface[];
   signal?: AbortSignal;
+  runtime?: {
+    callbacks?: Callbacks;
+    runWithContext?<T>(operation: () => Promise<T>): Promise<T>;
+  };
   responseErrors?: {
     invalid: string;
     empty: string;

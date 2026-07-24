@@ -1,6 +1,8 @@
 import type { BaseChatModel } from '@langchain/core/language_models/chat_models';
+import type { Callbacks } from '@langchain/core/callbacks/manager';
 import { FakeListChatModel } from '@langchain/core/utils/testing';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
+import { createAgentTraceContext } from '../../src/agent/agentTraceContext.js';
 import {
   KFC_AGENT_INSTRUCTIONS,
   kfcVietnamPack,
@@ -15,6 +17,10 @@ import {
   createPackStateEnvelope,
   validatePackStateEnvelope,
 } from '../../src/runtime/businessPack.js';
+import type {
+  AgentTraceSpan,
+  AgentTracer,
+} from '../../src/observability/agentTracing.js';
 
 function toolOutputText(value: unknown): string {
   if (typeof value === 'string') return value;
@@ -30,6 +36,182 @@ function toolOutputText(value: unknown): string {
 }
 
 describe('KFC Vietnam business pack compatibility', () => {
+  it('supplies trusted turn correlation and callback runtime to the kernel invocation', async () => {
+    const roots: Array<{
+      inputs: Record<string, unknown>;
+      metadata?: Record<string, unknown>;
+      tags?: string[];
+    }> = [];
+    const callbacks = [] as unknown as Callbacks;
+    const activeContext = async <T>(operation: () => Promise<T>): Promise<T> =>
+      operation();
+    const span: AgentTraceSpan = {
+      async startSpan() {
+        return span;
+      },
+      async end() {},
+      async fail() {},
+      async langchainCallbacks() {
+        return callbacks;
+      },
+      withActiveTrace: activeContext,
+    };
+    const tracer: AgentTracer = {
+      async startTurn(input) {
+        roots.push(input);
+        return span;
+      },
+      async flush() {},
+    };
+    const store = new MemoryStore();
+    const runId = 'customer-run-7';
+    const input = {
+      sessionId: 'session-kfc-trace',
+      customerId: 'customer-1',
+      channel: 'kfc' as const,
+      text: 'Private customer message',
+      clients: createMockClients(await loadGeneratedFixtures(process.cwd())),
+      store,
+      dashboard: new DashboardEventBus(),
+      agentModel: {} as BaseChatModel,
+      agentModelIdentity: {
+        candidateId: 'openai-gpt-4.1-mini',
+        provider: 'openai',
+        model: 'gpt-4.1-mini',
+        profile: 'openai:gpt-4.1-mini:responses',
+        transport: 'openai_responses',
+      } as const,
+      traceContext: createAgentTraceContext({
+        scenarioId: 'scenario-03',
+        probeRunId: 'probe-7',
+      }),
+      runGuard: {
+        async isCurrent() {
+          return true;
+        },
+        commitFence: {
+          kind: 'customer_run' as const,
+          runId,
+          sessionAuthorityGeneration: 1,
+        },
+      },
+      tracer,
+    };
+
+    await expect(
+      kfcVietnamPack.run(input, async (invocation) => {
+        expect(invocation.runtime?.callbacks).toBe(callbacks);
+        expect(invocation.runtime?.runWithContext).toBeTypeOf('function');
+        throw new Error('stop-before-persistence');
+      }),
+    ).rejects.toThrow('stop-before-persistence');
+
+    const userTurn = (await store.listTurns(input.sessionId)).find(
+      ({ role }) => role === 'user',
+    );
+    expect(roots).toEqual([
+      {
+        name: 'kfc_agent_turn',
+        inputs: {
+          messageCharacterCount: input.text.length,
+          structuredAction: false,
+        },
+        metadata: {
+          session_id: input.sessionId,
+          run_id: runId,
+          turn_id: userTurn?.id,
+          pack_id: 'kfc-vietnam',
+          pack_version: '1.0.0',
+          candidate: 'openai-gpt-4.1-mini',
+          profile: 'openai:gpt-4.1-mini:responses',
+          transport: 'openai_responses',
+          response_profile: 'genui',
+          channel: 'kfc',
+          scenarioId: 'scenario-03',
+          probeRunId: 'probe-7',
+        },
+        tags: [
+          'pack:kfc-vietnam',
+          'pack-version:1.0.0',
+          'candidate:openai-gpt-4.1-mini',
+          'transport:openai_responses',
+          'profile:genui',
+          'channel:kfc',
+        ],
+      },
+    ]);
+    expect(JSON.stringify(roots)).not.toContain(input.text);
+  });
+
+  it('keeps callback, active-context, and quota failures off the product path', async () => {
+    const privateFailure = 'Authorization: Bearer trace-secret';
+    const diagnostics = vi
+      .spyOn(console, 'error')
+      .mockImplementation(() => undefined);
+    const deferred: Array<() => Promise<void>> = [];
+    const failedSpan: AgentTraceSpan = {
+      async startSpan() {
+        return failedSpan;
+      },
+      async end() {},
+      async fail() {},
+      async langchainCallbacks() {
+        throw new Error(privateFailure);
+      },
+      async withActiveTrace() {
+        throw new Error(privateFailure);
+      },
+    };
+    const tracer: AgentTracer = {
+      async startTurn() {
+        return failedSpan;
+      },
+      async flush() {
+        throw new Error(privateFailure);
+      },
+    };
+
+    try {
+      const output = await runAgentTurn({
+        sessionId: 'session-kfc-trace-failure',
+        customerId: 'customer-1',
+        channel: 'messenger_mock',
+        text: 'Xin chào',
+        clients: createMockClients(await loadGeneratedFixtures(process.cwd())),
+        store: new MemoryStore(),
+        dashboard: new DashboardEventBus(),
+        agentModel: new FakeListChatModel({
+          responses: ['Xin chào! Tôi có thể giúp gì cho bạn?'],
+        }),
+        tracer,
+        deferTrace(task) {
+          deferred.push(task);
+        },
+      });
+
+      expect(output.responseText).toBe('Xin chào! Tôi có thể giúp gì cho bạn?');
+      expect(deferred).toHaveLength(1);
+      await expect(deferred[0]!()).resolves.toBeUndefined();
+      expect(diagnostics).toHaveBeenCalledWith(
+        'agent_trace_callbacks_failed',
+        expect.any(Object),
+      );
+      expect(diagnostics).toHaveBeenCalledWith(
+        'agent_trace_active_context_failed',
+        expect.any(Object),
+      );
+      expect(diagnostics).toHaveBeenCalledWith(
+        'agent_trace_flush_failed',
+        expect.any(Object),
+      );
+      expect(JSON.stringify(diagnostics.mock.calls)).not.toContain(
+        privateFailure,
+      );
+    } finally {
+      diagnostics.mockRestore();
+    }
+  });
+
   it('rejects correctly bound malformed KFC state and accepts a valid partial state', async () => {
     const malformed = await createPackStateEnvelope({
       packRef: kfcVietnamPack.ref,
