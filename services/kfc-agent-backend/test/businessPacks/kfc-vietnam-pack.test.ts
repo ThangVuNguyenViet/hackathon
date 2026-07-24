@@ -550,24 +550,9 @@ describe('KFC Vietnam business pack compatibility', () => {
         expect(systemPrompt).toContain(
           'câu hỏi về khả năng đáp ứng, giá, tồn kho hoặc tư vấn cũng không cấp quyền thay đổi giỏ',
         );
-        const selected = tools.find(
-          (candidate) => candidate.name === 'updateCart',
-        );
-        if (!selected) throw new Error('Missing updateCart');
-        const result = JSON.parse(
-          toolOutputText(
-            await selected.invoke({
-              type: 'tool_call',
-              name: 'updateCart',
-              args: {},
-              id: 'advisory-cart-1',
-            }),
-          ),
-        ) as { ok: boolean; errorCode?: string };
-        expect(result).toMatchObject({
-          ok: false,
-          errorCode: 'explicit_cart_mutation_required',
-        });
+        expect(
+          tools.some((candidate) => candidate.name === 'updateCart'),
+        ).toBe(false);
         return 'Mình sẽ kiểm tra khả năng đáp ứng và báo giá, chưa thay đổi giỏ.';
       }),
     ).resolves.toMatchObject({
@@ -602,24 +587,9 @@ describe('KFC Vietnam business pack compatibility', () => {
     };
 
     await kfcVietnamPack.run(input, async ({ tools }) => {
-      const selected = tools.find(
-        (candidate) => candidate.name === 'updateCart',
-      );
-      if (!selected) throw new Error('Missing updateCart');
-      const result = JSON.parse(
-        toolOutputText(
-          await selected.invoke({
-            type: 'tool_call',
-            name: 'updateCart',
-            args: {},
-            id: 'explicit-cart-1',
-          }),
-        ),
-      ) as { ok: boolean; errorCode?: string };
-      expect(result).toMatchObject({
-        ok: false,
-        errorCode: 'explicit_cart_mutation_required',
-      });
+      expect(
+        tools.some((candidate) => candidate.name === 'updateCart'),
+      ).toBe(false);
       return 'Mình đã chuẩn bị thay đổi để bạn xác nhận.';
     });
 
@@ -727,24 +697,9 @@ describe('KFC Vietnam business pack compatibility', () => {
     };
 
     await kfcVietnamPack.run(input, async ({ tools }) => {
-      const selected = tools.find(
-        (candidate) => candidate.name === 'updateCart',
-      );
-      if (!selected) throw new Error('Missing updateCart');
-      const result = JSON.parse(
-        toolOutputText(
-          await selected.invoke({
-            type: 'tool_call',
-            name: 'updateCart',
-            args: {},
-            id: 'non-cart-action-1',
-          }),
-        ),
-      ) as { ok: boolean; errorCode?: string };
-      expect(result).toMatchObject({
-        ok: false,
-        errorCode: 'explicit_cart_mutation_required',
-      });
+      expect(
+        tools.some((candidate) => candidate.name === 'updateCart'),
+      ).toBe(false);
       return 'Bạn muốn sửa giỏ thế nào?';
     });
 

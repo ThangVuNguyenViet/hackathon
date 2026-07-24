@@ -243,6 +243,15 @@ function trustedCartChanges(
   }
 }
 
+function hasTrustedCartMutationAction(input: AgentTurnInput): boolean {
+  const kind = input.trustedCustomerAction?.command.kind;
+  return (
+    kind === 'cart_update' ||
+    kind === 'cart_batch_update' ||
+    kind === 'modifier_selection'
+  );
+}
+
 async function modelFacingResult(
   state: AgentState,
   result: ToolCallResult,
@@ -611,7 +620,13 @@ function createKfcTools(input: {
   currentTurnToolTrace: ToolTraceEntry[];
 }) {
   let executionQueue: Promise<void> = Promise.resolve();
-  return toolNames.map((toolName) =>
+  return toolNames
+    .filter(
+      (toolName) =>
+        toolName !== 'updateCart' ||
+        hasTrustedCartMutationAction(input.turnInput),
+    )
+    .map((toolName) =>
     tool(
       async (value: unknown, runtime: ToolRuntime) => {
         const args = toolArguments(toolName, value);
@@ -635,7 +650,7 @@ function createKfcTools(input: {
         schema: providerPortableToolSchema(modelToolSchema(toolName)),
       },
     ),
-  );
+    );
 }
 
 function parseKfcVerifiedState(value: unknown): Partial<VerifiedStateSnapshot> {
