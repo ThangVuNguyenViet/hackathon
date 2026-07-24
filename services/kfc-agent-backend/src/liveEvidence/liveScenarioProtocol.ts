@@ -13,6 +13,11 @@ const commandSchema = z.discriminatedUnion('type', [
 export interface LiveScenarioProtocolSession {
   submitUserMessage(text: string): Promise<{ responseText: string }>;
   finish(note?: string): Promise<void>;
+  recordProtocolError(
+    error: 'invalid_json' | 'invalid_command' | 'turn_error' | 'control_error',
+    errorClass?: string,
+  ): Promise<void>;
+  interrupt(reason: 'stdin_eof' | 'control_error'): Promise<void>;
 }
 
 export async function runLiveScenarioCommandStream(input: {
@@ -20,34 +25,55 @@ export async function runLiveScenarioCommandStream(input: {
   lines: AsyncIterable<string>;
   writeLine(line: string): void | Promise<void>;
 }): Promise<void> {
-  for await (const line of input.lines) {
-    const normalized = line.trim();
-    if (!normalized) continue;
-    let value: unknown;
-    try {
-      value = JSON.parse(normalized);
-    } catch {
-      await emit(input, { type: 'protocol_error', error: 'invalid_json' });
-      continue;
+  let finished = false;
+  let interrupted = false;
+  try {
+    for await (const line of input.lines) {
+      const normalized = line.trim();
+      if (!normalized) continue;
+      let value: unknown;
+      try {
+        value = JSON.parse(normalized);
+      } catch {
+        await input.session.recordProtocolError('invalid_json');
+        await emit(input, { type: 'protocol_error', error: 'invalid_json' });
+        continue;
+      }
+      const parsed = commandSchema.safeParse(value);
+      if (!parsed.success) {
+        await input.session.recordProtocolError('invalid_command');
+        await emit(input, { type: 'protocol_error', error: 'invalid_command' });
+        continue;
+      }
+      if (parsed.data.type === 'finish') {
+        await input.session.finish(parsed.data.note);
+        await emit(input, { type: 'finished' });
+        finished = true;
+        return;
+      }
+      try {
+        const result = await input.session.submitUserMessage(parsed.data.text);
+        await emit(input, { type: 'assistant', text: result.responseText });
+      } catch (error) {
+        const errorClass = safeErrorClass(error);
+        await input.session.recordProtocolError('turn_error', errorClass);
+        await emit(input, {
+          type: 'turn_error',
+          errorClass,
+        });
+      }
     }
-    const parsed = commandSchema.safeParse(value);
-    if (!parsed.success) {
-      await emit(input, { type: 'protocol_error', error: 'invalid_command' });
-      continue;
-    }
-    if (parsed.data.type === 'finish') {
-      await input.session.finish(parsed.data.note);
-      await emit(input, { type: 'finished' });
-      return;
-    }
-    try {
-      const result = await input.session.submitUserMessage(parsed.data.text);
-      await emit(input, { type: 'assistant', text: result.responseText });
-    } catch (error) {
-      await emit(input, {
-        type: 'turn_error',
-        errorClass: safeErrorClass(error),
-      });
+  } catch (error) {
+    interrupted = true;
+    await input.session.recordProtocolError(
+      'control_error',
+      safeErrorClass(error),
+    );
+    await input.session.interrupt('control_error');
+    throw error;
+  } finally {
+    if (!finished && !interrupted) {
+      await input.session.interrupt('stdin_eof');
     }
   }
 }

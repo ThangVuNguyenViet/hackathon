@@ -9,7 +9,10 @@ import {
 import { runModelCapabilityPreflight } from '../src/config/modelCapabilityPreflight.js';
 import { DashboardEventBus } from '../src/dashboard/eventBus.js';
 import { loadGeneratedFixtures } from '../src/fixtures/loadFixtures.js';
-import { parseLiveScenarioCliArgs } from '../src/liveEvidence/liveScenarioCli.js';
+import {
+  configuredSecretValues,
+  parseLiveScenarioCliArgs,
+} from '../src/liveEvidence/liveScenarioCli.js';
 import { runLiveScenarioCommandStream } from '../src/liveEvidence/liveScenarioProtocol.js';
 import { startLiveScenarioSession } from '../src/liveEvidence/liveScenarioSession.js';
 import { createMockClients } from '../src/mock/createMockClients.js';
@@ -62,6 +65,7 @@ async function main(): Promise<void> {
     },
     scenarioPath: args.scenarioPath,
     identity: binding.identity,
+    configuredSecrets: configuredSecretValues(process.env),
     runPreflight: () => runModelCapabilityPreflight(binding),
     executeTurn: async ({ text, recordToolEvent }) => {
       const deferredTraceTasks: Array<() => Promise<void>> = [];
@@ -87,45 +91,61 @@ async function main(): Promise<void> {
     },
   });
 
-  process.stdout.write(
-    `${JSON.stringify({
-      type: session.preflightPassed ? 'session_ready' : 'preflight_failed',
-      runId: args.runId,
-      attempt: args.attempt,
-      runDirectory: session.runDirectory,
-      model: session.identity,
-      scenario: session.scenario,
-      protocol: {
-        user: { type: 'user', text: '<improvised customer message>' },
-        finish: { type: 'finish', note: '<optional reviewer note>' },
-      },
-    })}\n`,
-  );
-  if (!session.preflightPassed) {
-    process.exitCode = 2;
-    return;
-  }
+  let protocolStarted = false;
+  try {
+    process.stdout.write(
+      `${JSON.stringify({
+        type: session.preflightPassed ? 'session_ready' : 'preflight_failed',
+        runId: args.runId,
+        attempt: args.attempt,
+        runDirectory: session.runDirectory,
+        model: session.identity,
+        scenario: session.scenario,
+        protocol: {
+          user: { type: 'user', text: '<improvised customer message>' },
+          finish: { type: 'finish', note: '<optional reviewer note>' },
+        },
+      })}\n`,
+    );
+    if (!session.preflightPassed) {
+      process.exitCode = 2;
+      return;
+    }
 
-  const lines = createInterface({
-    input: process.stdin,
-    crlfDelay: Infinity,
-  });
-  await runLiveScenarioCommandStream({
-    session,
-    lines,
-    writeLine(line) {
-      process.stdout.write(`${line}\n`);
-    },
-  });
+    const lines = createInterface({
+      input: process.stdin,
+      crlfDelay: Infinity,
+    });
+    protocolStarted = true;
+    await runLiveScenarioCommandStream({
+      session,
+      lines,
+      writeLine(line) {
+        process.stdout.write(`${line}\n`);
+      },
+    });
+  } catch (error) {
+    if (!protocolStarted) {
+      await session.recordProtocolError('control_error', safeErrorClass(error));
+    }
+    await session.interrupt('control_error');
+    throw error;
+  } finally {
+    await session.interrupt('stdin_eof');
+  }
 }
 
 void main().catch((error: unknown) => {
-  const errorClass =
-    error instanceof Error && /^[A-Za-z][A-Za-z0-9]{0,63}$/u.test(error.name)
-      ? error.name
-      : 'UnknownError';
   process.stderr.write(
-    `${JSON.stringify({ type: 'fatal_error', errorClass })}\n`,
+    `${JSON.stringify({
+      type: 'fatal_error',
+      errorClass: safeErrorClass(error),
+    })}\n`,
   );
   process.exitCode = 1;
 });
+
+function safeErrorClass(error: unknown): string {
+  const name = error instanceof Error ? error.name : '';
+  return /^[A-Za-z][A-Za-z0-9]{0,63}$/u.test(name) ? name : 'UnknownError';
+}

@@ -58,6 +58,10 @@ runs. The readable transcript includes the same tool evidence. Secret-shaped
 keys, bearer credentials, and API-key-shaped strings are redacted before local
 write.
 
+Tool timing distinguishes the model's `requestedAt` from the queued tool's
+`executionStartedAt`; completion records execution duration and correlates the
+lifecycle by call ID.
+
 The final manifest includes the session/scenario/probe correlation IDs and
 SHA-256 digests for the preflight, JSONL trace, readable transcript, and Codex
 review packet. The scenario entry independently pins the exact source-file
@@ -71,6 +75,8 @@ artifact directory.
 
 Failed attempts are evidence. Never reuse a run ID or delete its directory.
 Start a retry with a distinct run ID and incremented `--attempt`.
+EOF or a control-stream failure records protocol evidence and terminalizes the
+attempt as `abandoned`; only the explicit finish command marks it `completed`.
 
 ## Independent review
 

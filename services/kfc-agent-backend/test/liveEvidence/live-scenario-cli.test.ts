@@ -1,6 +1,9 @@
 import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { parseLiveScenarioCliArgs } from '../../src/liveEvidence/liveScenarioCli.js';
+import {
+  configuredSecretValues,
+  parseLiveScenarioCliArgs,
+} from '../../src/liveEvidence/liveScenarioCli.js';
 
 describe('live scenario CLI arguments', () => {
   it('resolves a fixed candidate, scenario, attempt, and evidence directory', () => {
@@ -50,5 +53,19 @@ describe('live scenario CLI arguments', () => {
         '/repo',
       ),
     ).toThrow('Unknown KFC agent candidate');
+  });
+
+  it('collects configured credential values without treating ordinary configuration as secret', () => {
+    const first = ['runtime', 'credential', String(Date.now())].join('-');
+    const second = ['meta', 'credential', String(Date.now())].join('-');
+
+    expect(
+      configuredSecretValues({
+        OPENCODE_API_KEY: first,
+        META_PAGE_ACCESS_TOKEN: second,
+        KFC_COMMERCE_GATEWAY_BASE_URL: 'https://example.invalid',
+        EMPTY_SECRET: '  ',
+      }),
+    ).toEqual([second, first].sort());
   });
 });

@@ -54,7 +54,7 @@ describe('live scenario evidence session', () => {
           callId: 'call-1',
           toolName: 'searchMenu',
           arguments: { queries: ['gà'] },
-          startedAt: '2026-07-24T00:00:01.000Z',
+          requestedAt: '2026-07-24T00:00:01.000Z',
         });
         await recordToolEvent({
           phase: 'completed',
@@ -66,9 +66,9 @@ describe('live scenario evidence session', () => {
             ok: true,
             items: [{ itemCode: '150078' }],
           },
-          startedAt: '2026-07-24T00:00:01.000Z',
+          executionStartedAt: '2026-07-24T00:00:01.000Z',
           completedAt: '2026-07-24T00:00:01.025Z',
-          durationMs: 25,
+          executionDurationMs: 25,
         });
         return { responseText: 'Mình tìm thấy một lựa chọn phù hợp.' };
       },
@@ -174,7 +174,7 @@ describe('live scenario evidence session', () => {
         ok: true,
         items: [{ itemCode: '150078' }],
       },
-      durationMs: 25,
+      executionDurationMs: 25,
     });
 
     const transcript = await readFile(
@@ -259,9 +259,11 @@ describe('live scenario evidence session', () => {
             harmless: 'sk-test-1234567890',
           },
           error: new Error('request used sk-test-1234567890'),
-          startedAt: '2026-07-24T00:00:01.000Z',
+          requestedAt: '2026-07-24T00:00:00.900Z',
+          executionStartedAt: '2026-07-24T00:00:01.000Z',
           completedAt: '2026-07-24T00:00:01.025Z',
-          durationMs: 25,
+          totalDurationMs: 125,
+          executionDurationMs: 25,
         });
         throw new Error('Authorization: Bearer live-token');
       },

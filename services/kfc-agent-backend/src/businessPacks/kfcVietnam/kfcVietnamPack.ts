@@ -225,8 +225,8 @@ async function executeModelTool(input: {
   externalCallContext: ExternalCallContext;
   currentTurnToolTrace: ToolTraceEntry[];
 }): Promise<ToolCallResult | AgentToolCallResult> {
-  const startedAt = new Date();
-  const startedAtMs = startedAt.getTime();
+  const executionStartedAt = new Date();
+  const executionStartedAtMs = executionStartedAt.getTime();
   const bindingFingerprint = await stateRevision({
     sessionId: input.turnInput.sessionId,
     externalMessageId: input.turnInput.externalMessageId ?? null,
@@ -270,9 +270,12 @@ async function executeModelTool(input: {
     arguments: args,
     rawResult,
     modelFacingResult: modelResult,
-    startedAt: startedAt.toISOString(),
+    executionStartedAt: executionStartedAt.toISOString(),
     completedAt: completedAt.toISOString(),
-    durationMs: Math.max(0, completedAt.getTime() - startedAtMs),
+    executionDurationMs: Math.max(
+      0,
+      completedAt.getTime() - executionStartedAtMs,
+    ),
   });
   return modelResult;
 }
@@ -289,8 +292,10 @@ function localToolEvidenceCallbacks(
       callId: string;
       toolName: string;
       arguments: unknown;
-      startedAt: string;
-      startedAtMs: number;
+      requestedAt: string;
+      requestedAtMs: number;
+      executionStartedAt?: string;
+      executionStartedAtMs?: number;
     }
   >();
   const modelStarts = new Map<
@@ -299,20 +304,20 @@ function localToolEvidenceCallbacks(
       callId: string;
       toolName: string;
       arguments: unknown;
-      startedAt: string;
-      startedAtMs: number;
+      requestedAt: string;
+      requestedAtMs: number;
     }
   >();
   const handler = BaseCallbackHandler.fromMethods({
     async handleLLMEnd(output) {
       for (const call of toolCallsFromLlmOutput(output)) {
-        const startedAt = new Date();
+        const requestedAt = new Date();
         const start = {
           callId: call.callId,
           toolName: call.toolName,
           arguments: call.arguments,
-          startedAt: startedAt.toISOString(),
-          startedAtMs: startedAt.getTime(),
+          requestedAt: requestedAt.toISOString(),
+          requestedAtMs: requestedAt.getTime(),
         };
         modelStarts.set(call.callId, start);
         await record({
@@ -320,7 +325,7 @@ function localToolEvidenceCallbacks(
           callId: start.callId,
           toolName: start.toolName,
           arguments: start.arguments,
-          startedAt: start.startedAt,
+          requestedAt: start.requestedAt,
         });
         if (!validModelToolArguments(call.toolName, call.arguments)) {
           const completedAt = new Date();
@@ -330,9 +335,12 @@ function localToolEvidenceCallbacks(
             toolName: start.toolName,
             arguments: start.arguments,
             error: new Error('local_evidence_tool_arguments_invalid'),
-            startedAt: start.startedAt,
+            requestedAt: start.requestedAt,
             completedAt: completedAt.toISOString(),
-            durationMs: Math.max(0, completedAt.getTime() - start.startedAtMs),
+            totalDurationMs: Math.max(
+              0,
+              completedAt.getTime() - start.requestedAtMs,
+            ),
           });
           modelStarts.delete(call.callId);
         }
@@ -350,16 +358,18 @@ function localToolEvidenceCallbacks(
     ) {
       const callId = toolCallId ?? runId;
       const existing = modelStarts.get(callId);
-      const startedAt = new Date();
-      const start =
-        existing ??
-        ({
+      const executionStartedAt = new Date();
+      const start = {
+        ...(existing ?? {
           callId,
           toolName: callbackToolName(tool, runName),
           arguments: parseCallbackToolInput(serializedInput),
-          startedAt: startedAt.toISOString(),
-          startedAtMs: startedAt.getTime(),
-        } as const);
+          requestedAt: executionStartedAt.toISOString(),
+          requestedAtMs: executionStartedAt.getTime(),
+        }),
+        executionStartedAt: executionStartedAt.toISOString(),
+        executionStartedAtMs: executionStartedAt.getTime(),
+      };
       starts.set(runId, start);
       if (!existing) {
         await record({
@@ -367,7 +377,7 @@ function localToolEvidenceCallbacks(
           callId: start.callId,
           toolName: start.toolName,
           arguments: start.arguments,
-          startedAt: start.startedAt,
+          requestedAt: start.requestedAt,
         });
       }
     },
@@ -380,12 +390,24 @@ function localToolEvidenceCallbacks(
         toolName: start?.toolName ?? 'unknown_tool',
         arguments: start?.arguments,
         error,
-        startedAt: start?.startedAt ?? completedAt.toISOString(),
+        requestedAt: start?.requestedAt ?? completedAt.toISOString(),
+        ...(start?.executionStartedAt
+          ? { executionStartedAt: start.executionStartedAt }
+          : {}),
         completedAt: completedAt.toISOString(),
-        durationMs: Math.max(
+        totalDurationMs: Math.max(
           0,
-          completedAt.getTime() - (start?.startedAtMs ?? completedAt.getTime()),
+          completedAt.getTime() -
+            (start?.requestedAtMs ?? completedAt.getTime()),
         ),
+        ...(start?.executionStartedAtMs !== undefined
+          ? {
+              executionDurationMs: Math.max(
+                0,
+                completedAt.getTime() - start.executionStartedAtMs,
+              ),
+            }
+          : {}),
       });
       if (start) modelStarts.delete(start.callId);
       starts.delete(runId);

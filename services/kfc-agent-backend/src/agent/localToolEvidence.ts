@@ -4,7 +4,7 @@ export type LocalToolEvidenceEvent =
       callId: string;
       toolName: string;
       arguments: unknown;
-      startedAt: string;
+      requestedAt: string;
     }
   | {
       phase: 'completed';
@@ -13,9 +13,9 @@ export type LocalToolEvidenceEvent =
       arguments: unknown;
       rawResult: unknown;
       modelFacingResult: unknown;
-      startedAt: string;
+      executionStartedAt: string;
       completedAt: string;
-      durationMs: number;
+      executionDurationMs: number;
     }
   | {
       phase: 'failed';
@@ -23,7 +23,9 @@ export type LocalToolEvidenceEvent =
       toolName: string;
       arguments: unknown;
       error: unknown;
-      startedAt: string;
+      requestedAt: string;
+      executionStartedAt?: string;
       completedAt: string;
-      durationMs: number;
+      totalDurationMs: number;
+      executionDurationMs?: number;
     };

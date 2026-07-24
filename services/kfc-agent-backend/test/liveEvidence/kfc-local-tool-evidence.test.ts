@@ -52,7 +52,7 @@ describe('KFC local live-evidence hook', () => {
         mode: 'search',
         queries: ['pesi'],
       },
-      startedAt: expect.any(String),
+      requestedAt: expect.any(String),
     });
     expect(events[1]).toMatchObject({
       phase: 'completed',
@@ -91,9 +91,9 @@ describe('KFC local live-evidence hook', () => {
           ]),
         },
       },
-      startedAt: expect.any(String),
+      executionStartedAt: expect.any(String),
       completedAt: expect.any(String),
-      durationMs: expect.any(Number),
+      executionDurationMs: expect.any(Number),
     });
   });
 
@@ -142,5 +142,77 @@ describe('KFC local live-evidence hook', () => {
         error: expect.anything(),
       }),
     ]);
+  });
+
+  it('keeps queued tool request and execution timing distinct and coherent by call ID', async () => {
+    const events: LocalToolEvidenceEvent[] = [];
+    const model = fakeModel()
+      .respondWithTools([
+        {
+          name: 'searchMenu',
+          id: 'queued-call-1',
+          args: {
+            mode: 'search',
+            queries: ['gà'],
+            modifierQueries: [],
+            category: null,
+            maxPriceVnd: null,
+            partySize: null,
+          },
+        },
+        {
+          name: 'searchMenu',
+          id: 'queued-call-2',
+          args: {
+            mode: 'search',
+            queries: ['burger'],
+            modifierQueries: [],
+            category: null,
+            maxPriceVnd: null,
+            partySize: null,
+          },
+        },
+      ])
+      .respond(new AIMessage('Mình đã kiểm tra cả hai lựa chọn.'));
+
+    await runAgentTurn({
+      sessionId: 'queued-live-evidence-session',
+      customerId: 'synthetic-customer',
+      channel: 'kfc',
+      text: 'Tìm cả gà và burger.',
+      clients: createMockClients(await loadGeneratedFixtures(process.cwd())),
+      store: new MemoryStore(),
+      dashboard: new DashboardEventBus(),
+      agentModel: model,
+      async recordLocalToolEvidence(event) {
+        events.push(event);
+      },
+    });
+
+    for (const callId of ['queued-call-1', 'queued-call-2']) {
+      const requested = events.find(
+        (event) => event.phase === 'started' && event.callId === callId,
+      );
+      const completed = events.find(
+        (event) => event.phase === 'completed' && event.callId === callId,
+      );
+      expect(requested).toMatchObject({ requestedAt: expect.any(String) });
+      expect(completed).toMatchObject({
+        executionStartedAt: expect.any(String),
+        completedAt: expect.any(String),
+        executionDurationMs: expect.any(Number),
+      });
+      if (requested?.phase !== 'started' || completed?.phase !== 'completed') {
+        throw new Error('missing_tool_lifecycle_evidence');
+      }
+      expect(
+        Date.parse(requested.requestedAt ?? '') <=
+          Date.parse(completed.executionStartedAt ?? ''),
+      ).toBe(true);
+      expect(
+        Date.parse(completed.executionStartedAt ?? '') <=
+          Date.parse(completed.completedAt),
+      ).toBe(true);
+    }
   });
 });

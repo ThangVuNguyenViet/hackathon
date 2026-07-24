@@ -8,6 +8,10 @@ import {
   loadScenarioScript,
   type ScenarioScript,
 } from '../scenarios/scenarioScript.js';
+import {
+  createEvidenceSanitizer,
+  type EvidenceSanitizer,
+} from './evidenceRedaction.js';
 
 const TRACE_SCHEMA_VERSION = 'kfc-live-scenario-trace-v1';
 const MANIFEST_SCHEMA_VERSION = 'kfc-live-scenario-manifest-v1';
@@ -20,7 +24,12 @@ export type LiveScenarioTurnExecutor = (input: {
 }) => Promise<{ responseText: string }>;
 
 type SessionStatus =
-  'ready' | 'preflight_failed' | 'running' | 'completed' | 'failed';
+  | 'ready'
+  | 'preflight_failed'
+  | 'running'
+  | 'completed'
+  | 'failed'
+  | 'abandoned';
 
 interface TraceEvent {
   schemaVersion: typeof TRACE_SCHEMA_VERSION;
@@ -78,6 +87,11 @@ export interface LiveScenarioSession {
   }>;
   readonly identity: AgentModelIdentity;
   submitUserMessage(text: string): Promise<{ responseText: string }>;
+  recordProtocolError(
+    error: 'invalid_json' | 'invalid_command' | 'turn_error' | 'control_error',
+    errorClass?: string,
+  ): Promise<void>;
+  interrupt(reason: 'stdin_eof' | 'control_error'): Promise<void>;
   finish(note?: string): Promise<void>;
 }
 
@@ -91,6 +105,7 @@ export async function startLiveScenarioSession(input: {
   };
   scenarioPath: string;
   identity: AgentModelIdentity;
+  configuredSecrets?: readonly string[];
   runPreflight(): Promise<ModelCapabilityPreflightResult>;
   executeTurn: LiveScenarioTurnExecutor;
   now?: () => Date;
@@ -100,6 +115,7 @@ export async function startLiveScenarioSession(input: {
     throw new Error('live_scenario_attempt_invalid');
   }
   const now = input.now ?? (() => new Date());
+  const sanitize = createEvidenceSanitizer(input.configuredSecrets);
   const scenarioPath = resolve(input.scenarioPath);
   const scenarioRaw = await readFile(scenarioPath);
   const scenario = await loadScenarioScript(scenarioPath);
@@ -152,7 +168,7 @@ export async function startLiveScenarioSession(input: {
   };
 
   const persistManifest = () =>
-    writeJson(join(runDirectory, 'manifest.json'), manifest);
+    writeJson(join(runDirectory, 'manifest.json'), manifest, sanitize);
   const recordTerminalArtifactHashes = async (): Promise<void> => {
     manifest.evidence.artifactSha256 = Object.fromEntries(
       await Promise.all(
@@ -190,6 +206,7 @@ export async function startLiveScenarioSession(input: {
       manifest,
       scenario,
       events,
+      sanitize,
     });
   };
 
@@ -207,7 +224,7 @@ export async function startLiveScenarioSession(input: {
       passed: false,
       error: serializedError(error),
     };
-    await writeJson(join(runDirectory, 'preflight.json'), failed);
+    await writeJson(join(runDirectory, 'preflight.json'), failed, sanitize);
     manifest.status = 'preflight_failed';
     manifest.completedAt = now().toISOString();
     await recordTraceEvidence('preflight_failed', {
@@ -217,7 +234,7 @@ export async function startLiveScenarioSession(input: {
     await persistManifest();
     return createSession();
   }
-  await writeJson(join(runDirectory, 'preflight.json'), preflight);
+  await writeJson(join(runDirectory, 'preflight.json'), preflight, sanitize);
   if (!preflight.passed) {
     manifest.status = 'preflight_failed';
     manifest.completedAt = now().toISOString();
@@ -236,20 +253,26 @@ export async function startLiveScenarioSession(input: {
     return {
       runDirectory,
       preflightPassed: manifest.status !== 'preflight_failed',
-      scenario: Object.freeze({
-        id: scenario.id,
-        title: scenario.title,
-        goal: scenario.goal,
-        preconditions: Object.freeze([...scenario.preconditions]),
-        risks: Object.freeze([...scenario.risks]),
-        finalState: scenario.finalState,
-      }),
+      scenario: Object.freeze(
+        sanitize({
+          id: scenario.id,
+          title: scenario.title,
+          goal: scenario.goal,
+          preconditions: Object.freeze([...scenario.preconditions]),
+          risks: Object.freeze([...scenario.risks]),
+          finalState: scenario.finalState,
+        }) as LiveScenarioSession['scenario'],
+      ),
       identity: Object.freeze({ ...input.identity }),
       async submitUserMessage(text) {
         if (manifest.status === 'preflight_failed') {
           throw new Error('live_scenario_preflight_failed');
         }
-        if (manifest.status === 'completed' || manifest.status === 'failed') {
+        if (
+          manifest.status === 'completed' ||
+          manifest.status === 'failed' ||
+          manifest.status === 'abandoned'
+        ) {
           throw new Error('live_scenario_session_closed');
         }
         const normalized = text.trim();
@@ -266,36 +289,43 @@ export async function startLiveScenarioSession(input: {
                   callId: toolEvent.callId,
                   toolName: toolEvent.toolName,
                   arguments: toolEvent.arguments,
-                  startedAt: toolEvent.startedAt,
+                  requestedAt: toolEvent.requestedAt,
                 });
                 return;
               }
-              const common = {
-                callId: toolEvent.callId,
-                toolName: toolEvent.toolName,
-                arguments: toolEvent.arguments,
-                startedAt: toolEvent.startedAt,
-                completedAt: toolEvent.completedAt,
-                durationMs: toolEvent.durationMs,
-              };
               await recordTraceEvidence(
                 toolEvent.phase === 'completed'
                   ? 'tool_completed'
                   : 'tool_failed',
                 toolEvent.phase === 'completed'
                   ? {
-                      ...common,
+                      callId: toolEvent.callId,
+                      toolName: toolEvent.toolName,
+                      arguments: toolEvent.arguments,
                       rawResult: toolEvent.rawResult,
                       modelFacingResult: toolEvent.modelFacingResult,
+                      executionStartedAt: toolEvent.executionStartedAt,
+                      completedAt: toolEvent.completedAt,
+                      executionDurationMs: toolEvent.executionDurationMs,
                     }
-                  : { ...common, error: serializedError(toolEvent.error) },
+                  : {
+                      callId: toolEvent.callId,
+                      toolName: toolEvent.toolName,
+                      arguments: toolEvent.arguments,
+                      error: serializedError(toolEvent.error),
+                      requestedAt: toolEvent.requestedAt,
+                      executionStartedAt: toolEvent.executionStartedAt,
+                      completedAt: toolEvent.completedAt,
+                      totalDurationMs: toolEvent.totalDurationMs,
+                      executionDurationMs: toolEvent.executionDurationMs,
+                    },
               );
             },
           });
           await recordTraceEvidence('assistant_message', {
             text: output.responseText,
           });
-          return output;
+          return sanitize(output) as { responseText: string };
         } catch (error) {
           manifest.status = 'failed';
           manifest.completedAt = now().toISOString();
@@ -307,10 +337,41 @@ export async function startLiveScenarioSession(input: {
           throw error;
         }
       },
+      async recordProtocolError(error, errorClass) {
+        await recordTraceEvidence('protocol_error', {
+          error,
+          ...(errorClass ? { errorClass } : {}),
+        });
+        if (
+          manifest.status === 'completed' ||
+          manifest.status === 'failed' ||
+          manifest.status === 'preflight_failed' ||
+          manifest.status === 'abandoned'
+        ) {
+          await recordTerminalArtifactHashes();
+          await persistManifest();
+        }
+      },
+      async interrupt(reason) {
+        if (
+          manifest.status === 'completed' ||
+          manifest.status === 'failed' ||
+          manifest.status === 'preflight_failed' ||
+          manifest.status === 'abandoned'
+        ) {
+          return;
+        }
+        manifest.status = 'abandoned';
+        manifest.completedAt = now().toISOString();
+        await recordTraceEvidence('session_interrupted', { reason });
+        await recordTerminalArtifactHashes();
+        await persistManifest();
+      },
       async finish(note) {
         if (
           manifest.status === 'preflight_failed' ||
-          manifest.status === 'failed'
+          manifest.status === 'failed' ||
+          manifest.status === 'abandoned'
         ) {
           return;
         }
@@ -335,6 +396,7 @@ async function renderReadableEvidence(input: {
   manifest: Manifest;
   scenario: ScenarioScript;
   events: TraceEvent[];
+  sanitize: EvidenceSanitizer;
 }): Promise<void> {
   const transcript = [
     `# Live transcript: ${input.scenario.title}`,
@@ -348,7 +410,7 @@ async function renderReadableEvidence(input: {
   ].join('\n');
   await writeFile(
     join(input.runDirectory, 'transcript.md'),
-    transcript,
+    String(input.sanitize(transcript)),
     'utf8',
   );
 
@@ -378,7 +440,7 @@ async function renderReadableEvidence(input: {
   ].join('\n');
   await writeFile(
     join(input.runDirectory, 'codex-review-packet.md'),
-    reviewPacket,
+    String(input.sanitize(reviewPacket)),
     'utf8',
   );
 }
@@ -405,9 +467,11 @@ function renderEvent(event: TraceEvent): string[] {
                   modelFacingResult: event.modelFacingResult,
                 }
               : { error: event.error }),
-            startedAt: event.startedAt,
+            executionStartedAt: event.executionStartedAt,
             completedAt: event.completedAt,
-            durationMs: event.durationMs,
+            executionDurationMs: event.executionDurationMs,
+            requestedAt: event.requestedAt,
+            totalDurationMs: event.totalDurationMs,
           },
           null,
           2,
@@ -424,7 +488,7 @@ function renderEvent(event: TraceEvent): string[] {
           {
             callId: event.callId,
             arguments: event.arguments,
-            startedAt: event.startedAt,
+            requestedAt: event.requestedAt,
           },
           null,
           2,
@@ -442,40 +506,38 @@ function renderEvent(event: TraceEvent): string[] {
         '```',
         '',
       ];
+    case 'protocol_error':
+    case 'session_interrupted':
+      return [
+        `### ${event.type}`,
+        '',
+        '```json',
+        JSON.stringify(
+          {
+            ...(event.error ? { error: event.error } : {}),
+            ...(event.errorClass ? { errorClass: event.errorClass } : {}),
+            ...(event.reason ? { reason: event.reason } : {}),
+          },
+          null,
+          2,
+        ),
+        '```',
+        '',
+      ];
     default:
       return [];
   }
 }
 
-async function writeJson(path: string, value: unknown): Promise<void> {
+async function writeJson(
+  path: string,
+  value: unknown,
+  sanitize: EvidenceSanitizer,
+): Promise<void> {
   await writeFile(
     path,
     `${JSON.stringify(sanitize(value), null, 2)}\n`,
     'utf8',
-  );
-}
-
-function sanitize(value: unknown, key = ''): unknown {
-  if (sensitiveKey(key)) return '[REDACTED]';
-  if (value instanceof Error) return sanitize(serializedError(value));
-  if (Array.isArray(value)) return value.map((entry) => sanitize(entry));
-  if (isRecord(value)) {
-    return Object.fromEntries(
-      Object.entries(value).map(([entryKey, entry]) => [
-        entryKey,
-        sanitize(entry, entryKey),
-      ]),
-    );
-  }
-  if (typeof value !== 'string') return value;
-  return value
-    .replace(/\bBearer\s+[^\s"',}]+/giu, 'Bearer [REDACTED]')
-    .replace(/\bsk-[A-Za-z0-9_-]{8,}\b/gu, '[REDACTED]');
-}
-
-function sensitiveKey(key: string): boolean {
-  return /(?:authorization|api[-_]?key|access[-_]?token|secret|password|cookie|signature)/iu.test(
-    key,
   );
 }
 

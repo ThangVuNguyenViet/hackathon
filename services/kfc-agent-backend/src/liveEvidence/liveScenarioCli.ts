@@ -12,6 +12,23 @@ export interface LiveScenarioCliArgs {
   artifactsRoot: string;
 }
 
+export function configuredSecretValues(
+  environment: Readonly<Record<string, string | undefined>>,
+): string[] {
+  const secretName =
+    /(?:^|_)(?:API_?KEY|TOKEN|SECRET|PASSWORD|AUTHORIZATION|COOKIE)(?:$|_)/u;
+  return [
+    ...new Set(
+      Object.entries(environment)
+        .filter(([key]) => secretName.test(key))
+        .flatMap(([, value]) => {
+          const normalized = value?.trim();
+          return normalized && normalized.length >= 8 ? [normalized] : [];
+        }),
+    ),
+  ].sort();
+}
+
 export function parseLiveScenarioCliArgs(
   argv: readonly string[],
   repoRoot: string,
