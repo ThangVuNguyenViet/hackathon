@@ -23,6 +23,7 @@ import type {
   AsyncTokenCounter,
   SummarizeConversationExchanges,
 } from '../session/conversationContext.js';
+import type { LocalToolEvidenceEvent } from './localToolEvidence.js';
 
 export type ReplyIntent =
   | 'ask_fulfillment_method'
@@ -94,6 +95,13 @@ export interface AgentTurnInput {
   tracer?: AgentTracer;
   /** Schedules best-effort trace delivery outside the product response path. */
   deferTrace?: (task: () => Promise<void>) => void;
+  /**
+   * Local qualification-only evidence sink. It is deliberately absent from
+   * durable state and remote tracing; callers must redact evidence at rest.
+   */
+  recordLocalToolEvidence?: (
+    event: LocalToolEvidenceEvent,
+  ) => Promise<void> | void;
 }
 
 export interface AgentTurnOutput {

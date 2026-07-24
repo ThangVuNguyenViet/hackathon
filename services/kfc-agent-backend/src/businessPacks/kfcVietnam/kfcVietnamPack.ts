@@ -3,6 +3,11 @@ import {
   SystemMessage,
   type BaseMessage,
 } from '@langchain/core/messages';
+import { BaseCallbackHandler } from '@langchain/core/callbacks/base';
+import {
+  CallbackManager,
+  type Callbacks,
+} from '@langchain/core/callbacks/manager';
 import { tool, type ToolRuntime } from 'langchain';
 import type { ExternalCallContext } from '../../clients/interfaces.js';
 import type {
@@ -217,6 +222,8 @@ async function executeModelTool(input: {
   externalCallContext: ExternalCallContext;
   currentTurnToolTrace: ToolTraceEntry[];
 }): Promise<ToolCallResult | AgentToolCallResult> {
+  const startedAt = new Date();
+  const startedAtMs = startedAt.getTime();
   const bindingFingerprint = await stateRevision({
     sessionId: input.turnInput.sessionId,
     externalMessageId: input.turnInput.externalMessageId ?? null,
@@ -225,7 +232,9 @@ async function executeModelTool(input: {
     args: input.args,
   });
   const args = executionArguments(input.toolName, input.args);
-  const result = await executeToolCall(
+  let rawResult: ToolCallResult;
+  let modelResult: ToolCallResult | AgentToolCallResult;
+  rawResult = await executeToolCall(
     input.turnInput.clients,
     { toolName: input.toolName, arguments: args },
     {
@@ -245,11 +254,236 @@ async function executeModelTool(input: {
   applyToolResultToState(
     input.turnInput,
     input.state,
-    result,
+    rawResult,
     args,
     input.currentTurnToolTrace,
   );
-  return modelFacingResult(input.state, result);
+  modelResult = await modelFacingResult(input.state, rawResult);
+  const completedAt = new Date();
+  await input.turnInput.recordLocalToolEvidence?.({
+    phase: 'completed',
+    callId: input.callId,
+    toolName: input.toolName,
+    arguments: args,
+    rawResult,
+    modelFacingResult: modelResult,
+    startedAt: startedAt.toISOString(),
+    completedAt: completedAt.toISOString(),
+    durationMs: Math.max(0, completedAt.getTime() - startedAtMs),
+  });
+  return modelResult;
+}
+
+function localToolEvidenceCallbacks(
+  input: AgentTurnInput,
+  callbacks: Callbacks | undefined,
+): Callbacks | undefined {
+  const record = input.recordLocalToolEvidence;
+  if (!record) return callbacks;
+  const starts = new Map<
+    string,
+    {
+      callId: string;
+      toolName: string;
+      arguments: unknown;
+      startedAt: string;
+      startedAtMs: number;
+    }
+  >();
+  const modelStarts = new Map<
+    string,
+    {
+      callId: string;
+      toolName: string;
+      arguments: unknown;
+      startedAt: string;
+      startedAtMs: number;
+    }
+  >();
+  const handler = BaseCallbackHandler.fromMethods({
+    async handleLLMEnd(output) {
+      for (const call of toolCallsFromLlmOutput(output)) {
+        const startedAt = new Date();
+        const start = {
+          callId: call.callId,
+          toolName: call.toolName,
+          arguments: call.arguments,
+          startedAt: startedAt.toISOString(),
+          startedAtMs: startedAt.getTime(),
+        };
+        modelStarts.set(call.callId, start);
+        await record({
+          phase: 'started',
+          callId: start.callId,
+          toolName: start.toolName,
+          arguments: start.arguments,
+          startedAt: start.startedAt,
+        });
+        if (!validModelToolArguments(call.toolName, call.arguments)) {
+          const completedAt = new Date();
+          await record({
+            phase: 'failed',
+            callId: start.callId,
+            toolName: start.toolName,
+            arguments: start.arguments,
+            error: new Error('local_evidence_tool_arguments_invalid'),
+            startedAt: start.startedAt,
+            completedAt: completedAt.toISOString(),
+            durationMs: Math.max(0, completedAt.getTime() - start.startedAtMs),
+          });
+          modelStarts.delete(call.callId);
+        }
+      }
+    },
+    async handleToolStart(
+      tool,
+      serializedInput,
+      runId,
+      _parentRunId,
+      _tags,
+      _metadata,
+      runName,
+      toolCallId,
+    ) {
+      const callId = toolCallId ?? runId;
+      const existing = modelStarts.get(callId);
+      const startedAt = new Date();
+      const start =
+        existing ??
+        ({
+          callId,
+          toolName: callbackToolName(tool, runName),
+          arguments: parseCallbackToolInput(serializedInput),
+          startedAt: startedAt.toISOString(),
+          startedAtMs: startedAt.getTime(),
+        } as const);
+      starts.set(runId, start);
+      if (!existing) {
+        await record({
+          phase: 'started',
+          callId: start.callId,
+          toolName: start.toolName,
+          arguments: start.arguments,
+          startedAt: start.startedAt,
+        });
+      }
+    },
+    async handleToolError(error, runId) {
+      const start = starts.get(runId);
+      const completedAt = new Date();
+      await record({
+        phase: 'failed',
+        callId: start?.callId ?? runId,
+        toolName: start?.toolName ?? 'unknown_tool',
+        arguments: start?.arguments,
+        error,
+        startedAt: start?.startedAt ?? completedAt.toISOString(),
+        completedAt: completedAt.toISOString(),
+        durationMs: Math.max(
+          0,
+          completedAt.getTime() - (start?.startedAtMs ?? completedAt.getTime()),
+        ),
+      });
+      if (start) modelStarts.delete(start.callId);
+      starts.delete(runId);
+    },
+    handleToolEnd(_output, runId) {
+      const start = starts.get(runId);
+      if (start) modelStarts.delete(start.callId);
+      starts.delete(runId);
+    },
+  });
+  handler.awaitHandlers = true;
+  handler.raiseError = true;
+  const manager = CallbackManager.configure(callbacks);
+  if (manager) {
+    manager.addHandler(handler, true);
+    return manager;
+  }
+  return CallbackManager.configure([handler]);
+}
+
+function toolCallsFromLlmOutput(output: unknown): Array<{
+  callId: string;
+  toolName: string;
+  arguments: unknown;
+}> {
+  if (
+    typeof output !== 'object' ||
+    output === null ||
+    !('generations' in output) ||
+    !Array.isArray(output.generations)
+  ) {
+    return [];
+  }
+  const calls: Array<{
+    callId: string;
+    toolName: string;
+    arguments: unknown;
+  }> = [];
+  for (const candidates of output.generations) {
+    if (!Array.isArray(candidates)) continue;
+    for (const generation of candidates) {
+      if (
+        typeof generation !== 'object' ||
+        generation === null ||
+        !('message' in generation) ||
+        typeof generation.message !== 'object' ||
+        generation.message === null
+      ) {
+        continue;
+      }
+      for (const key of ['tool_calls', 'invalid_tool_calls'] as const) {
+        if (
+          !(key in generation.message) ||
+          !Array.isArray(generation.message[key])
+        ) {
+          continue;
+        }
+        for (const call of generation.message[key]) {
+          if (
+            typeof call !== 'object' ||
+            call === null ||
+            typeof call.id !== 'string' ||
+            typeof call.name !== 'string'
+          ) {
+            continue;
+          }
+          calls.push({
+            callId: call.id,
+            toolName: call.name,
+            arguments: 'args' in call ? call.args : undefined,
+          });
+        }
+      }
+    }
+  }
+  return calls;
+}
+
+function validModelToolArguments(toolName: string, value: unknown): boolean {
+  if (!(toolNames as readonly string[]).includes(toolName)) return false;
+  return modelToolSchema(toolName as ToolName).safeParse(value).success;
+}
+
+function callbackToolName(tool: unknown, runName: string | undefined): string {
+  if (
+    typeof tool === 'object' &&
+    tool !== null &&
+    'name' in tool &&
+    typeof tool.name === 'string'
+  ) {
+    return tool.name;
+  }
+  return runName ?? 'unknown_tool';
+}
+
+function parseCallbackToolInput(value: string): unknown {
+  try {
+    return JSON.parse(value) as unknown;
+  } catch {
+    return value;
+  }
 }
 
 function createKfcTools(input: {
@@ -484,7 +718,10 @@ export const kfcVietnamPack: BusinessPack<
       }
       const currentTurnToolTrace: ToolTraceEntry[] = [];
       await input.observeRun?.({ kind: 'planning' });
-      const callbacks = await turnTrace.langchainCallbacks?.();
+      const callbacks = localToolEvidenceCallbacks(
+        input,
+        await turnTrace.langchainCallbacks?.(),
+      );
       const runWithContext = turnTrace.withActiveTrace?.bind(turnTrace);
       const responseText = await invokeModel({
         model: input.agentModel,
