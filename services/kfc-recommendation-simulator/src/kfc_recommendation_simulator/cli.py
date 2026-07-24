@@ -20,7 +20,7 @@ def main() -> None:
     subparsers = parser.add_subparsers(dest="command", required=True)
 
     generate = subparsers.add_parser("generate")
-    generate.add_argument("--preset", choices=("smoke",), default="smoke")
+    generate.add_argument("--preset", choices=("smoke", "benchmark"), default="smoke")
     generate.add_argument("--config", type=Path)
     generate.add_argument("--output", type=Path)
 
