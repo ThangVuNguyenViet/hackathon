@@ -1,0 +1,21 @@
+{
+  "schemaVersion": "kfc-runtime-ab-direct-sdk-v1",
+  "runId": "20260724-ab-direct-sdk-openai-s08-a1",
+  "status": "completed",
+  "startedAt": "2026-07-24T05:55:32.664Z",
+  "completedAt": "2026-07-24T05:56:56.618Z",
+  "runtime": {
+    "kind": "direct_openai_responses_sdk",
+    "model": "gpt-4.1-mini",
+    "donorMerge": "71fbc6ee5b14281d5e5f8a54867eb061d9278362"
+  },
+  "scenario": {
+    "id": "08-thanh-toan-loi-va-don-bat-thuong",
+    "finalState": "human_review_required"
+  },
+  "finishNote": "Paired A/B s08 run: three identical customer turns testing failed-payment uncertainty, 200-combo feasibility without action authority, explicit handoff consent, and evidence-only final recap.",
+  "artifactSha256": {
+    "trace.jsonl": "99e2200a21c2d7ea5af106cd3f302ad35b9ab8aae54e0ae162d812a3844ae49f",
+    "transcript.md": "ce6712bb7285815cebca27576b7a750cc812eccbf10474e6ff177e05264bad1e"
+  }
+}

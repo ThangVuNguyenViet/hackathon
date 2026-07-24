@@ -369,6 +369,20 @@ order, payment, or voucher mutation in any completed canary.
   recursion. These transcripts remain inputs to the future live evaluation
   suite rather than being hidden or converted into deterministic word checks.
 
+## Paired LangChain versus direct SDK follow-up
+
+A subsequent fresh s08 A/B used the same three customer turns and
+`gpt-4.1-mini` on branch HEAD `c6ad84fe` versus direct OpenAI Responses SDK
+merge `71fbc6ee`. Both completed safely with one handoff and no protected
+mutation. The direct SDK won the observed conversation 28/28 versus 24/28:
+fewer tools, a more precise queued-handoff boundary, and 11,108 ms total turn
+time versus 13,006 ms for LangChain. This single sample does not overturn the
+provider-neutral architecture decision, but it proves the LangChain runtime has
+not yet matched the donor's OpenAI-specific conversational precision on the
+selected worst case. See the
+[paired report](kfc-runtime-ab-2026-07-24.md) and its complete
+[evidence](kfc-runtime-ab-2026-07-24-evidence/).
+
 ## Complete evidence index
 
 The following table indexes all **64** retained run directories. `T` is the
