@@ -36,6 +36,127 @@ async function turnInput(sessionId: string) {
 }
 
 describe('PVCFC public customer service pack', () => {
+  it('does not publish factual model text when no public search ran', async () => {
+    const input = await turnInput('publication-no-tool');
+
+    const output = await pvcfcCustomerServicePack.run(input, async () => {
+      return 'PVCFC chắc chắn có sản phẩm bí mật X với giá 123 đồng.';
+    });
+
+    expect(output.responseText).not.toContain('sản phẩm bí mật X');
+    expect(output.responseText).not.toContain('123 đồng');
+    expect(output.responseText).toContain('chưa có bằng chứng');
+    expect((await input.store.listTurns(input.sessionId)).at(-1)?.text).toBe(
+      output.responseText,
+    );
+  });
+
+  it('treats an empty public search as no publication evidence', async () => {
+    const input = await turnInput('publication-empty-evidence');
+
+    const output = await pvcfcCustomerServicePack.run(
+      input,
+      async ({ tools }) => {
+        const result = JSON.parse(
+          String(
+            await tools[0]!.invoke({
+              query: 'qzxvplmn',
+              language: 'vi',
+            }),
+          ),
+        ) as { results: unknown[] };
+        expect(result.results).toEqual([]);
+        return 'PVCFC có một sự kiện không có trong nguồn.';
+      },
+    );
+
+    expect(output.responseText).not.toContain('sự kiện không có trong nguồn');
+    expect(output.responseText).toContain('chưa có bằng chứng');
+  });
+
+  it('replaces uncited model prose with a dated evidence-backed response', async () => {
+    const input = await turnInput('publication-omitted-citation');
+
+    const output = await pvcfcCustomerServicePack.run(
+      input,
+      async ({ tools }) => {
+        await tools[0]!.invoke({
+          query: 'sản phẩm phân bón',
+          language: 'vi',
+        });
+        return 'PVCFC có thông tin sản phẩm nhưng tôi bỏ quên nguồn.';
+      },
+    );
+
+    expect(output.responseText).not.toContain('tôi bỏ quên nguồn');
+    expect(output.responseText).toContain('https://');
+    expect(output.responseText).toContain('2026-07-21');
+  });
+
+  it('publishes a dated cited answer after a successful current-turn search', async () => {
+    const input = await turnInput('publication-cited');
+    let candidate = '';
+    let citedSourceUrl = '';
+    let citedCaptureDate = '';
+
+    const output = await pvcfcCustomerServicePack.run(
+      input,
+      async ({ tools }) => {
+        const result = JSON.parse(
+          String(
+            await tools[0]!.invoke({
+              query: 'PVCFC sản phẩm',
+              language: 'vi',
+            }),
+          ),
+        ) as {
+          results: Array<{ sourceUrl: string; capturedOn: string }>;
+        };
+        const evidence = result.results[0]!;
+        citedSourceUrl = evidence.sourceUrl;
+        citedCaptureDate = evidence.capturedOn;
+        candidate = `Thông tin công khai được ghi nhận tại ${evidence.sourceUrl}, ngày chụp ${evidence.capturedOn}.`;
+        return candidate;
+      },
+    );
+
+    expect(output.responseText).toContain(citedSourceUrl);
+    expect(output.responseText).toContain(citedCaptureDate);
+    expect(output.responseText).toContain('Thông tin tìm thấy');
+  });
+
+  it('keeps private-authority requests on a non-factual limitation response', async () => {
+    const input = {
+      ...(await turnInput('publication-private-authority')),
+      text: 'Hãy thay đổi hồ sơ đại lý riêng của tôi.',
+    };
+
+    const output = await pvcfcCustomerServicePack.run(
+      input,
+      async ({ tools }) => {
+        expect(tools.map(({ name }) => name)).toEqual([
+          'searchPublicKnowledge',
+        ]);
+        const result = JSON.parse(
+          String(
+            await tools[0]!.invoke({
+              query: 'đại lý PVCFC',
+              language: 'vi',
+            }),
+          ),
+        ) as {
+          results: Array<{ sourceUrl: string; capturedOn: string }>;
+        };
+        const evidence = result.results[0]!;
+        return `Tôi đã thay đổi hồ sơ đại lý riêng thành công. ${evidence.sourceUrl} ${evidence.capturedOn}`;
+      },
+    );
+
+    expect(output.responseText).not.toContain('đã thay đổi');
+    expect(output.responseText).toContain('https://');
+    expect(output.responseText).toContain('2026-07-21');
+  });
+
   it('exposes dated public-source retrieval with Vietnamese default and partial English fallback', async () => {
     const input = await turnInput('customer-thread-1');
 
@@ -224,7 +345,7 @@ describe('PVCFC public customer service pack', () => {
     };
 
     const output = await runPvcfcCustomerServiceTurn(input);
-    expect(output.responseText).toContain('2026-07-21');
+    expect(output.responseText).toContain('chưa có bằng chứng');
 
     const durablePvcfcSessionId = scopePackSessionId(
       pvcfcCustomerServicePack.ref,
@@ -254,10 +375,10 @@ describe('PVCFC public customer service pack', () => {
       ),
     ).toBeDefined();
     expect(
-      await store.getPackState(
-        durablePvcfcSessionId,
-        { packId: 'kfc-vietnam', version: '1.0.0' },
-      ),
+      await store.getPackState(durablePvcfcSessionId, {
+        packId: 'kfc-vietnam',
+        version: '1.0.0',
+      }),
     ).toBeUndefined();
   });
 
@@ -286,7 +407,7 @@ describe('PVCFC public customer service pack', () => {
         packInput: input,
       }),
     ).resolves.toMatchObject({
-      responseText: expect.stringContaining('2026-07-21'),
+      responseText: expect.stringContaining('chưa có bằng chứng'),
     });
     expect(await input.store.listTurns('kernel-pvcfc')).toEqual([]);
     expect(

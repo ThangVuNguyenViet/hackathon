@@ -22,6 +22,7 @@ import {
   type AssembledConversationContext,
 } from '../../session/conversationContext.js';
 import { langChainConversationSummarizer } from '../../session/langChainConversationSummary.js';
+import { bindConfiguredSessionAgentModel } from '../../persistence/sessionAgentModelBinding.js';
 
 export const PVCFC_CUSTOMER_SERVICE_PACK_REF = {
   packId: 'pvcfc-customer-service',
@@ -50,6 +51,13 @@ interface PublicKnowledgeDocument {
   text: string;
 }
 
+interface PublicKnowledgeEvidence {
+  title: string;
+  excerpt: string;
+  sourceUrl: string;
+  capturedOn: string;
+}
+
 interface PvcfcPackState {
   corpusId: typeof CORPUS_ID;
   lastCitations: string[];
@@ -76,7 +84,9 @@ function parsePvcfcState(value: unknown): PvcfcPackState {
   return parsed.data;
 }
 
-function createPublicKnowledgeTool(citations: Set<string>) {
+function createPublicKnowledgeTool(
+  currentTurnEvidence: Map<string, PublicKnowledgeEvidence>,
+) {
   return tool(
     ({ query, language = 'vi' }) => {
       const queryTerms = normalizedTerms(query);
@@ -93,13 +103,17 @@ function createPublicKnowledgeTool(citations: Set<string>) {
             left.document.id.localeCompare(right.document.id),
         );
       const results = matches.slice(0, 5).map(({ document }) => {
-        citations.add(document.sourceUrl);
-        return {
+        const evidence = {
           title: document.title,
           excerpt: relevantExcerpt(document.text, queryTerms),
           sourceUrl: document.sourceUrl,
           capturedOn: document.capturedOn,
         };
+        currentTurnEvidence.set(
+          JSON.stringify([evidence.sourceUrl, evidence.capturedOn]),
+          evidence,
+        );
+        return evidence;
       });
       return JSON.stringify({
         corpusId: index.corpusId,
@@ -121,6 +135,27 @@ function createPublicKnowledgeTool(citations: Set<string>) {
       }),
     },
   );
+}
+
+const NO_CURRENT_TURN_EVIDENCE_RESPONSE =
+  'Tôi chưa có bằng chứng công khai từ searchPublicKnowledge trong lượt này để trả lời nội dung đó. Tôi không thể xác nhận thông tin thực tế hoặc thực hiện thao tác trên hệ thống riêng; vui lòng dùng kênh hỗ trợ chính thức của PVCFC.';
+
+function enforcePublicKnowledgePublication(
+  currentTurnEvidence: readonly PublicKnowledgeEvidence[],
+): string {
+  if (currentTurnEvidence.length === 0) {
+    return NO_CURRENT_TURN_EVIDENCE_RESPONSE;
+  }
+
+  return [
+    'Thông tin tìm thấy trong nguồn công khai hiện có:',
+    ...currentTurnEvidence
+      .slice(0, 3)
+      .map(
+        ({ title, excerpt, sourceUrl, capturedOn }) =>
+          `- ${title}: ${excerpt}\n  Nguồn công khai: ${sourceUrl} (ngày chụp: ${capturedOn})`,
+      ),
+  ].join('\n\n');
 }
 
 function normalizedTerms(text: string): string[] {
@@ -218,6 +253,13 @@ export const pvcfcCustomerServicePack: BusinessPack<
   async run(input, invokeModel) {
     const model = input.agentModel;
     if (!model) throw new Error('pvcfc_agent_not_configured');
+    if (input.agentModelIdentity) {
+      await bindConfiguredSessionAgentModel({
+        store: input.store,
+        sessionId: input.sessionId,
+        identity: input.agentModelIdentity,
+      });
+    }
     await input.store.appendTurn({
       sessionId: input.sessionId,
       channel: input.channel,
@@ -266,26 +308,28 @@ export const pvcfcCustomerServicePack: BusinessPack<
         // a new watermark or block the current public-information turn.
       }
     }
-    const citations = new Set<string>();
-    const responseText = await invokeModel({
+    const currentTurnEvidence = new Map<string, PublicKnowledgeEvidence>();
+    await invokeModel({
       model,
       systemPrompt: PVCFC_CUSTOMER_SERVICE_INSTRUCTIONS,
       messages: conversationMessages({
         context,
         currentUserText: input.text,
       }),
-      tools: [createPublicKnowledgeTool(citations)],
+      tools: [createPublicKnowledgeTool(currentTurnEvidence)],
       responseErrors: {
         invalid: 'pvcfc_agent_model_response_invalid',
         empty: 'pvcfc_agent_model_response_empty',
       },
     });
+    const evidence = [...currentTurnEvidence.values()];
+    const responseText = enforcePublicKnowledgePublication(evidence);
     const envelope = await createPackStateEnvelope({
       packRef: PVCFC_CUSTOMER_SERVICE_PACK_REF,
       schemaVersion: '1',
       state: {
         corpusId: CORPUS_ID,
-        lastCitations: [...citations].slice(0, 10),
+        lastCitations: evidence.map(({ sourceUrl }) => sourceUrl).slice(0, 10),
       } satisfies PvcfcPackState,
     });
     const committed = await input.store.commitAssistantTurn({
