@@ -7,6 +7,7 @@ import {
   resolveAgentModelProfile,
 } from '../src/config/agentModelProfile.js';
 import { runModelCapabilityPreflight } from '../src/config/modelCapabilityPreflight.js';
+import { loadOptionalEnvFile } from '../src/config/optionalEnvFile.js';
 import { DashboardEventBus } from '../src/dashboard/eventBus.js';
 import { loadGeneratedFixtures } from '../src/fixtures/loadFixtures.js';
 import {
@@ -25,12 +26,14 @@ import { MemoryStore } from '../src/persistence/memoryStore.js';
 import { legacySessionIdOutsidePackNamespace } from '../src/runtime/businessPack.js';
 import { loadScenarioScript } from '../src/scenarios/scenarioScript.js';
 
+const serviceRoot = process.cwd();
+const repoRoot = resolve(serviceRoot, '../..');
+loadOptionalEnvFile(resolve(repoRoot, '.env'));
+
 const configuredSecrets = configuredSecretValues(process.env);
 const sanitizeOutput = createEvidenceSanitizer(configuredSecrets);
 
 async function main(): Promise<void> {
-  const serviceRoot = process.cwd();
-  const repoRoot = resolve(serviceRoot, '../..');
   const args = parseLiveScenarioCliArgs(process.argv.slice(2), repoRoot);
   const profile = resolveAgentModelProfile({
     candidateId: args.candidateId,
