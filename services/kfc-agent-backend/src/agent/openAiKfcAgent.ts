@@ -125,6 +125,8 @@ const defaultInstructions = [
   'Perform a reversible action when the customer clearly requests it. Perform an irreversible action only after an explicit customer request or a trusted Generative UI action that represents that request. Supplying an address or asking for a delivery quote is not an order confirmation.',
   'If a request is materially ambiguous and acting could change the wrong item, quantity, option, address, payment, or order, ask one natural clarification.',
   'When a tool result requires recovery, follow its recovery instruction in the same turn with materially corrected arguments. Stop when recovery is exhausted. Never repeat an uncertain mutation.',
+  'When the customer explicitly selects a named product from earlier verified menu evidence, preserve that exact product across later turns. Treat a requested drink, side, or other extra as a separate add-on unless the customer explicitly asks to replace an included option. Do not substitute another product merely because a combined search is empty; retry the exact product without unrelated constraints, then search the add-on separately.',
+  'A follow-up that supplies a missing choice completes the pending request using its already selected product and known constraints. Do not reopen or replace an already selected product unless the customer explicitly requests that change.',
   'If an option is unavailable inside the current item, continue with an appropriate standalone menu item when that satisfies the same clear request. When the customer delegates a recommendation, choose one complete verified option and explain it briefly.',
   'When the customer delegates a reversible menu or cart decision and provides sufficient constraints, choose and execute a complete verified plan in the same turn. Treat a stated budget as a maximum unless the customer asks to spend close to it. Satisfy every explicit component constraint, then report the final verified cart. Ask for clarification only when missing information would materially change the choice.',
   '',
@@ -532,6 +534,7 @@ function withRecovery(
 }
 
 function recoveryForAttempt(input: {
+  toolName: string;
   reason: OpenAiToolRetryReason;
   attempt: number;
   maxAttempts: number;
@@ -545,7 +548,9 @@ function recoveryForAttempt(input: {
     maxAttempts: input.maxAttempts,
     instruction: exhausted
       ? 'Stop retrying and answer honestly from verified evidence.'
-      : 'Retry with materially corrected or broader arguments. Do not repeat identical arguments. You may choose another suitable read tool.',
+      : input.toolName === 'searchMenu'
+        ? 'You must make another corrected read call before answering the customer. Retry searchMenu with materially corrected or broader arguments. If the empty call combined a product query or category with modifierQueries, preserve the requested product query or exact verified category and remove modifierQueries first. Also remove any category that was not copied exactly from current-turn verified evidence. Search requested standalone drinks, sides, or other add-ons independently. An empty constrained result does not prove that the requested product is absent. Do not repeat identical arguments or substitute another product before verifying the requested product independently.'
+        : 'Retry with materially corrected or broader arguments. Do not repeat identical arguments. You may choose another suitable read tool.',
   };
 }
 
@@ -655,6 +660,7 @@ export async function runResponsesToolLoop(
         semanticFailureAttempts += 1;
         const maxAttempts = Math.min(tool.retryPolicy.maxAttempts, 3);
         const recovery = recoveryForAttempt({
+          toolName: call.name,
           reason: retryReason,
           attempt: semanticFailureAttempts,
           maxAttempts,
