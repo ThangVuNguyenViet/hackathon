@@ -51,6 +51,14 @@ export interface ExecutorContext {
   commerceTraceId?: string;
   commerceScenarioId?: string;
   providerMutationIdentity?: ProviderMutationIdentity;
+  /**
+   * Server-verified, current-turn authority for one exact protected mutation.
+   * Model output and provider mutation identity are not authorization.
+   */
+  trustedActionAuthority?: {
+    toolName: ToolCallRequest['toolName'];
+    customerConfirmed?: true;
+  };
   runGuard?: {
     isCurrent(): Promise<boolean>;
     recordIrreversibleBoundary?(
@@ -252,6 +260,21 @@ export function classifyToolSideEffect(
   }
 }
 
+function requiresTrustedActionAuthority(
+  toolName: ToolCallRequest['toolName'],
+): boolean {
+  switch (toolName) {
+    case 'placeOrder':
+    case 'createPaymentLink':
+    case 'acquireVoucher':
+    case 'redeemReward':
+    case 'resolveHandoff':
+      return true;
+    default:
+      return false;
+  }
+}
+
 export async function executeToolCall(
   clients: ExternalClients,
   request: ToolCallRequest,
@@ -303,6 +326,19 @@ export async function executeToolCall(
   const orderPreview = getOrderPreview(context);
   const sessionId = getSessionId(context);
   const customerId = context.state?.customerId;
+  if (
+    requiresTrustedActionAuthority(request.toolName) &&
+    (context.trustedActionAuthority?.toolName !== request.toolName ||
+      context.trustedActionAuthority.customerConfirmed !== true)
+  ) {
+    return result(
+      request,
+      false,
+      undefined,
+      'Verified current-turn action authority is required',
+      'trusted_action_authority_required',
+    );
+  }
   const requiredScopes = privateToolScopes[request.toolName];
   if (requiredScopes) {
     if (!sessionId || !customerId || !context.state?.channel) {
@@ -661,7 +697,10 @@ export async function executeToolCall(
       return resultFromToolResult(
         request.toolName,
         await clients.membership.acquireVoucher(
-          { rewardId: args.rewardId, confirmed: true },
+          {
+            rewardId: args.rewardId,
+            confirmed: context.trustedActionAuthority!.customerConfirmed!,
+          },
           context.externalCallContext,
           context.providerMutationIdentity!,
         ),
@@ -675,7 +714,7 @@ export async function executeToolCall(
           {
             voucherId: args.voucherId,
             channel: args.channel,
-            confirmed: true,
+            confirmed: context.trustedActionAuthority!.customerConfirmed!,
           },
           context.externalCallContext,
           context.providerMutationIdentity!,
@@ -755,7 +794,7 @@ export async function executeToolCall(
         await clients.oms.placeOrder(
           {
             preview: orderPreview,
-            userConfirmed: true,
+            userConfirmed: context.trustedActionAuthority!.customerConfirmed!,
             context:
               context.sessionId && context.clientMessageId
                 ? {

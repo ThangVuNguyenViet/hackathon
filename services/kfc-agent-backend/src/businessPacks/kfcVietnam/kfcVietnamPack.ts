@@ -44,6 +44,7 @@ import type {
   ToolTraceEntry,
 } from '../../ordering/types.js';
 import { buildVerifiedCollectionSnapshot } from '../../ordering/verifiedCollections.js';
+import { selectedPaymentMethodAuthorityMatchesActiveCollection } from '../../ordering/paymentMethodAuthority.js';
 import {
   createNoopAgentTracer,
   createSafeAgentTracer,
@@ -151,6 +152,9 @@ function toolArguments(
 }
 
 function modelToolSchema(toolName: ToolName) {
+  if (toolName === 'createPaymentLink') {
+    return toolArgumentSchemas.placeOrder;
+  }
   return toolName === 'searchMenu' || toolName === 'updateCart'
     ? agentToolArgumentSchemas[toolName]
     : toolArgumentSchemas[toolName];
@@ -252,6 +256,34 @@ function hasTrustedCartMutationAction(input: AgentTurnInput): boolean {
   );
 }
 
+function modelMayUseTool(
+  input: AgentTurnInput,
+  state: AgentState,
+  toolName: ToolName,
+): boolean {
+  const command = input.trustedCustomerAction?.command.kind;
+  switch (toolName) {
+    case 'updateCart':
+      return hasTrustedCartMutationAction(input);
+    case 'placeOrder':
+      return command === 'confirm_order';
+    case 'createPaymentLink':
+      return (
+        input.trustedCustomerAction?.command.kind === 'select_payment_method' &&
+        selectedPaymentMethodAuthorityMatchesActiveCollection(
+          state,
+          input.trustedCustomerAction.command.selection,
+        )
+      );
+    case 'acquireVoucher':
+    case 'redeemReward':
+    case 'resolveHandoff':
+      return false;
+    default:
+      return true;
+  }
+}
+
 async function modelFacingResult(
   state: AgentState,
   result: ToolCallResult,
@@ -286,6 +318,8 @@ async function executeModelTool(input: {
   toolName: ToolName;
   args: Record<string, unknown>;
   callId: string;
+  durableTurnId: string;
+  operationOccurrence: number;
   externalCallContext: ExternalCallContext;
   currentTurnToolTrace: ToolTraceEntry[];
 }): Promise<ToolCallResult | AgentToolCallResult> {
@@ -299,16 +333,63 @@ async function executeModelTool(input: {
   if (input.toolName === 'updateCart' && authorizedCartChanges) {
     args = { changes: authorizedCartChanges };
   }
-  const bindingFingerprint = await stateRevision({
+  const trustedActionToolName =
+    input.turnInput.trustedCustomerAction?.command.kind === 'confirm_order'
+      ? 'placeOrder'
+      : input.turnInput.trustedCustomerAction?.command.kind ===
+          'select_payment_method'
+        ? 'createPaymentLink'
+        : undefined;
+  if (input.toolName === 'createPaymentLink') {
+    const command = input.turnInput.trustedCustomerAction?.command;
+    if (
+      command?.kind === 'select_payment_method' &&
+      selectedPaymentMethodAuthorityMatchesActiveCollection(
+        input.state,
+        command.selection,
+      )
+    ) {
+      args = { methodId: command.selection.methodId };
+    } else {
+      args = {};
+    }
+  }
+  const durableRequestIdentity =
+    input.turnInput.externalMessageId ??
+    traceRunId(input.turnInput) ??
+    input.turnInput.trustedCustomerAction?.actionDigest ??
+    input.durableTurnId;
+  const operationFingerprint = await stateRevision({
     sessionId: input.turnInput.sessionId,
-    externalMessageId: input.turnInput.externalMessageId ?? null,
-    callId: input.callId,
+    durableRequestIdentity,
+    trustedAction: input.turnInput.trustedCustomerAction
+      ? {
+          actionDigest: input.turnInput.trustedCustomerAction.actionDigest,
+          verifiedRevision:
+            input.turnInput.trustedCustomerAction.verifiedRevision,
+        }
+      : null,
     toolName: input.toolName,
+    operationOccurrence: input.operationOccurrence,
+  });
+  const bindingFingerprint = await stateRevision({
+    operationFingerprint,
     args,
   });
   let rawResult: ToolCallResult;
   let modelResult: ToolCallResult | AgentToolCallResult;
-  if (input.toolName === 'updateCart') {
+  if (
+    trustedActionToolName === input.toolName &&
+    input.operationOccurrence > 0
+  ) {
+    rawResult = {
+      toolName: input.toolName,
+      ok: false,
+      message: 'Verified current-turn action has already been consumed',
+      errorCode: 'trusted_action_already_consumed',
+      provenance: [],
+    } as ToolCallResult;
+  } else if (input.toolName === 'updateCart') {
     if (!authorizedCartChanges) {
       rawResult = {
         toolName: 'updateCart',
@@ -331,7 +412,7 @@ async function executeModelTool(input: {
           order: input.state.order,
           orderPreview: input.state.orderPreview,
           providerMutationIdentity: {
-            idempotencyKey: `kfc-agent:${bindingFingerprint}`,
+            idempotencyKey: `kfc-agent:${operationFingerprint}`,
             bindingFingerprint,
           },
         },
@@ -350,9 +431,17 @@ async function executeModelTool(input: {
         order: input.state.order,
         orderPreview: input.state.orderPreview,
         providerMutationIdentity: {
-          idempotencyKey: `kfc-agent:${bindingFingerprint}`,
+          idempotencyKey: `kfc-agent:${operationFingerprint}`,
           bindingFingerprint,
         },
+        ...(trustedActionToolName === input.toolName
+          ? {
+              trustedActionAuthority: {
+                toolName: input.toolName,
+                customerConfirmed: true,
+              },
+            }
+          : {}),
       },
     );
   }
@@ -618,24 +707,27 @@ function createKfcTools(input: {
   state: AgentState;
   externalCallContext: ExternalCallContext;
   currentTurnToolTrace: ToolTraceEntry[];
+  durableTurnId: string;
 }) {
   let executionQueue: Promise<void> = Promise.resolve();
+  const operationOccurrences = new Map<ToolName, number>();
   return toolNames
-    .filter(
-      (toolName) =>
-        toolName !== 'updateCart' ||
-        hasTrustedCartMutationAction(input.turnInput),
+    .filter((toolName) =>
+      modelMayUseTool(input.turnInput, input.state, toolName),
     )
     .map((toolName) =>
       tool(
         async (value: unknown, runtime: ToolRuntime) => {
           const args = toolArguments(toolName, value);
+          const operationOccurrence = operationOccurrences.get(toolName) ?? 0;
+          operationOccurrences.set(toolName, operationOccurrence + 1);
           const execution = executionQueue.then(() =>
             executeModelTool({
               ...input,
               toolName,
               args,
               callId: runtime.toolCallId,
+              operationOccurrence,
             }),
           );
           executionQueue = execution.then(
@@ -769,6 +861,9 @@ export const kfcVietnamPack: BusinessPack<
         input,
         responseProfile,
       );
+      if (!currentUserTurn) {
+        throw new Error('kfc_current_user_turn_required');
+      }
       turnTrace = await tracer.startTurn({
         name: 'kfc_agent_turn',
         inputs: {
@@ -868,6 +963,7 @@ export const kfcVietnamPack: BusinessPack<
           state,
           externalCallContext,
           currentTurnToolTrace,
+          durableTurnId: currentUserTurn.id,
         }),
         systemPrompt: systemPrompt(state),
         signal: externalCallContext.signal,

@@ -21,6 +21,7 @@ import type {
   AgentTraceSpan,
   AgentTracer,
 } from '../../src/observability/agentTracing.js';
+import { buildVerifiedCollectionSnapshot } from '../../src/ordering/verifiedCollections.js';
 
 function toolOutputText(value: unknown): string {
   if (typeof value === 'string') return value;
@@ -36,6 +37,351 @@ function toolOutputText(value: unknown): string {
 }
 
 describe('KFC Vietnam business pack compatibility', () => {
+  it('does not expose protected commerce mutations on an ordinary text turn', async () => {
+    const input = {
+      sessionId: 'session-kfc-ordinary-protected-tools',
+      customerId: 'customer-1',
+      channel: 'kfc' as const,
+      text: 'Đặt đơn và thanh toán ngay giúp tôi',
+      clients: createMockClients(await loadGeneratedFixtures(process.cwd())),
+      store: new MemoryStore(),
+      dashboard: new DashboardEventBus(),
+      agentModel: {} as BaseChatModel,
+    };
+
+    await kfcVietnamPack.run(input, async ({ tools }) => {
+      const visibleNames = tools.map(({ name }) => name);
+      expect(visibleNames).not.toEqual(
+        expect.arrayContaining([
+          'placeOrder',
+          'createPaymentLink',
+          'acquireVoucher',
+          'redeemReward',
+          'resolveHandoff',
+        ]),
+      );
+      // Creating a support request is non-commerce escalation and remains
+      // available so a customer can always ask for human help.
+      expect(visibleNames).toContain('handoff');
+      return 'Mình sẽ chuẩn bị các bước cần xác nhận.';
+    });
+  });
+
+  it('reuses one order idempotency identity after a provider effect and changed model call id', async () => {
+    const fixtures = await loadGeneratedFixtures(process.cwd());
+    const baseClients = createMockClients(fixtures);
+    const store = new MemoryStore();
+    const sessionId = 'session-kfc-order-idempotency-retry';
+    const cartResult = await baseClients.cart.createCart(sessionId, {
+      signal: new AbortController().signal,
+      deadlineAt: Date.now() + 60_000,
+    });
+    if (!cartResult.ok || !cartResult.value) {
+      throw new Error('Expected test cart');
+    }
+    const orderPreview = {
+      id: 'preview-order-idempotency-retry',
+      cart: cartResult.value,
+      status: 'previewed' as const,
+      paymentStatus: 'not_started' as const,
+      assignedStoreId: 'store-1',
+      createdAt: '2026-07-24T00:00:00.000Z',
+    };
+    await store.putPackState(
+      sessionId,
+      await createPackStateEnvelope({
+        packRef: kfcVietnamPack.ref,
+        schemaVersion: kfcVietnamPack.stateSchemaVersion,
+        state: { cart: cartResult.value, orderPreview },
+      }),
+    );
+
+    const providerIdentities: Array<{
+      idempotencyKey: string;
+      bindingFingerprint: string;
+    }> = [];
+    const providerEffects = new Map<
+      string,
+      Awaited<ReturnType<typeof baseClients.oms.placeOrder>>
+    >();
+    const clients = {
+      ...baseClients,
+      oms: {
+        ...baseClients.oms,
+        async placeOrder(
+          order: Parameters<typeof baseClients.oms.placeOrder>[0],
+          context: Parameters<typeof baseClients.oms.placeOrder>[1],
+          identity: Parameters<typeof baseClients.oms.placeOrder>[2],
+        ) {
+          providerIdentities.push(identity);
+          const prior = providerEffects.get(identity.idempotencyKey);
+          if (prior) return prior;
+          const result = await baseClients.oms.placeOrder(
+            order,
+            context,
+            identity,
+          );
+          providerEffects.set(identity.idempotencyKey, result);
+          return result;
+        },
+      },
+    };
+    const input = {
+      sessionId,
+      customerId: 'customer-1',
+      channel: 'kfc' as const,
+      externalMessageId: 'message-order-idempotency-retry',
+      text: '',
+      trustedCustomerAction: {
+        source: 'kfc_genui_action' as const,
+        assistantTurnId: 'assistant-order-idempotency-retry',
+        attachmentId: 'attachment-order-idempotency-retry',
+        actionDigest: '3'.repeat(64),
+        verifiedRevision: '4'.repeat(64),
+        lifecycle: 'one_shot' as const,
+        command: { kind: 'confirm_order' as const },
+      },
+      clients,
+      store,
+      dashboard: new DashboardEventBus(),
+      agentModel: {} as BaseChatModel,
+    };
+    const invokeOrder = async (
+      tools: Parameters<Parameters<typeof kfcVietnamPack.run>[1]>[0]['tools'],
+      callId: string,
+    ) => {
+      const placeOrder = tools.find(({ name }) => name === 'placeOrder');
+      if (!placeOrder) throw new Error('Missing placeOrder');
+      return JSON.parse(
+        toolOutputText(
+          await placeOrder.invoke({
+            type: 'tool_call',
+            name: 'placeOrder',
+            args: {},
+            id: callId,
+          }),
+        ),
+      ) as { ok: boolean };
+    };
+
+    await expect(
+      kfcVietnamPack.run(input, async ({ tools }) => {
+        expect(
+          await invokeOrder(tools, 'model-call-before-crash'),
+        ).toMatchObject({ ok: true });
+        expect(
+          await invokeOrder(tools, 'model-call-duplicate-same-action'),
+        ).toMatchObject({
+          ok: false,
+          errorCode: 'trusted_action_already_consumed',
+        });
+        throw new Error('simulated_crash_after_provider_effect');
+      }),
+    ).rejects.toThrow('simulated_crash_after_provider_effect');
+    await kfcVietnamPack.run(input, async ({ tools }) => {
+      expect(
+        await invokeOrder(tools, 'different-model-call-on-retry'),
+      ).toMatchObject({ ok: true });
+      return 'Đơn hàng đã được tạo.';
+    });
+
+    expect(providerIdentities).toHaveLength(2);
+    expect(providerIdentities[1]).toEqual(providerIdentities[0]);
+    expect(providerEffects).toHaveLength(1);
+  });
+
+  it('derives payment arguments from trusted selection and reuses identity after a crash', async () => {
+    const fixtures = await loadGeneratedFixtures(process.cwd());
+    const baseClients = createMockClients(fixtures);
+    const store = new MemoryStore();
+    const sessionId = 'session-kfc-payment-idempotency-retry';
+    const externalCallContext = {
+      signal: new AbortController().signal,
+      deadlineAt: Date.now() + 60_000,
+    };
+    const cart = await baseClients.cart.createCart(
+      sessionId,
+      externalCallContext,
+    );
+    if (!cart.ok || !cart.value) throw new Error('Expected test cart');
+    const methods = await baseClients.payment.listMethods(
+      {},
+      externalCallContext,
+    );
+    if (!methods.ok || !methods.value)
+      throw new Error('Expected payment methods');
+    const snapshot = await buildVerifiedCollectionSnapshot({
+      items: methods.value,
+      scope: { scope: 'all' },
+      providerRevision: 'payment-methods-revision',
+    });
+    const selected = methods.value.find(
+      ({ supported, supportStatus }) =>
+        supported && supportStatus === 'listed_supported',
+    );
+    if (!selected) throw new Error('Expected supported payment method');
+    const order = {
+      id: 'KFC-PAYMENT-IDEMPOTENCY-ORDER',
+      cart: cart.value,
+      status: 'created' as const,
+      paymentStatus: 'pending' as const,
+      assignedStoreId: 'store-1',
+      createdAt: '2026-07-24T00:00:00.000Z',
+    };
+    await store.putPackState(
+      sessionId,
+      await createPackStateEnvelope({
+        packRef: kfcVietnamPack.ref,
+        schemaVersion: kfcVietnamPack.stateSchemaVersion,
+        state: {
+          cart: cart.value,
+          order,
+          verifiedCollections: {
+            listPaymentMethods: { [snapshot.key]: snapshot },
+          },
+          activeCollectionKeys: { listPaymentMethods: snapshot.key },
+        },
+      }),
+    );
+
+    const identities: Array<{
+      idempotencyKey: string;
+      bindingFingerprint: string;
+    }> = [];
+    const providerEffects = new Map<
+      string,
+      Awaited<ReturnType<typeof baseClients.payment.createPaymentLink>>
+    >();
+    const clients = {
+      ...baseClients,
+      payment: {
+        ...baseClients.payment,
+        async createPaymentLink(
+          paymentOrder: Parameters<
+            typeof baseClients.payment.createPaymentLink
+          >[0],
+          methodId: Parameters<typeof baseClients.payment.createPaymentLink>[1],
+          context: Parameters<typeof baseClients.payment.createPaymentLink>[2],
+          identity: Parameters<typeof baseClients.payment.createPaymentLink>[3],
+        ) {
+          expect(methodId).toBe(selected.methodId);
+          identities.push(identity);
+          const prior = providerEffects.get(identity.idempotencyKey);
+          if (prior) return prior;
+          const result = await baseClients.payment.createPaymentLink(
+            paymentOrder,
+            methodId,
+            context,
+            identity,
+          );
+          providerEffects.set(identity.idempotencyKey, result);
+          return result;
+        },
+      },
+    };
+    const input = {
+      sessionId,
+      customerId: 'customer-1',
+      channel: 'kfc' as const,
+      externalMessageId: 'message-payment-idempotency-retry',
+      text: '',
+      trustedCustomerAction: {
+        source: 'kfc_genui_action' as const,
+        assistantTurnId: 'assistant-payment-idempotency-retry',
+        attachmentId: 'attachment-payment-idempotency-retry',
+        actionDigest: '5'.repeat(64),
+        verifiedRevision: '6'.repeat(64),
+        lifecycle: 'one_shot' as const,
+        command: {
+          kind: 'select_payment_method' as const,
+          selection: {
+            methodId: selected.methodId,
+            collectionKey: snapshot.key,
+            collectionRevision: snapshot.revision,
+            providerRevision: snapshot.providerRevision,
+          },
+        },
+      },
+      clients,
+      store,
+      dashboard: new DashboardEventBus(),
+      agentModel: {} as BaseChatModel,
+    };
+    const invokePayment = async (
+      tools: Parameters<Parameters<typeof kfcVietnamPack.run>[1]>[0]['tools'],
+      callId: string,
+    ) => {
+      const payment = tools.find(({ name }) => name === 'createPaymentLink');
+      if (!payment) throw new Error('Missing createPaymentLink');
+      return JSON.parse(
+        toolOutputText(
+          await payment.invoke({
+            type: 'tool_call',
+            name: 'createPaymentLink',
+            args: {},
+            id: callId,
+          }),
+        ),
+      ) as { ok: boolean };
+    };
+
+    await expect(
+      kfcVietnamPack.run(input, async ({ tools }) => {
+        expect(
+          await invokePayment(tools, 'payment-call-before-crash'),
+        ).toMatchObject({ ok: true });
+        throw new Error('simulated_crash_after_payment_effect');
+      }),
+    ).rejects.toThrow('simulated_crash_after_payment_effect');
+    await kfcVietnamPack.run(input, async ({ tools }) => {
+      expect(
+        await invokePayment(tools, 'changed-payment-call-on-retry'),
+      ).toMatchObject({ ok: true });
+      return 'Liên kết thanh toán đã sẵn sàng.';
+    });
+
+    expect(identities).toHaveLength(2);
+    expect(identities[1]).toEqual(identities[0]);
+    expect(providerEffects).toHaveLength(1);
+  });
+
+  it('does not expose payment mutation for a stale trusted selection', async () => {
+    const input = {
+      sessionId: 'session-kfc-stale-payment-selection',
+      customerId: 'customer-1',
+      channel: 'kfc' as const,
+      text: '',
+      trustedCustomerAction: {
+        source: 'kfc_genui_action' as const,
+        assistantTurnId: 'assistant-stale-payment',
+        attachmentId: 'attachment-stale-payment',
+        actionDigest: '7'.repeat(64),
+        verifiedRevision: '8'.repeat(64),
+        lifecycle: 'one_shot' as const,
+        command: {
+          kind: 'select_payment_method' as const,
+          selection: {
+            methodId: 'stale-method',
+            collectionKey: 'stale-collection',
+            collectionRevision: 'stale-revision',
+            providerRevision: 'stale-provider-revision',
+          },
+        },
+      },
+      clients: createMockClients(await loadGeneratedFixtures(process.cwd())),
+      store: new MemoryStore(),
+      dashboard: new DashboardEventBus(),
+      agentModel: {} as BaseChatModel,
+    };
+
+    await kfcVietnamPack.run(input, async ({ tools }) => {
+      expect(tools.some(({ name }) => name === 'createPaymentLink')).toBe(
+        false,
+      );
+      return 'Phương thức thanh toán đã hết hiệu lực, vui lòng chọn lại.';
+    });
+  });
+
   it('supplies trusted turn correlation and callback runtime to the kernel invocation', async () => {
     const roots: Array<{
       inputs: Record<string, unknown>;
@@ -484,11 +830,7 @@ describe('KFC Vietnam business pack compatibility', () => {
         },
         'search-2',
       );
-      const cartResult = await invoke(
-        'updateCart',
-        {},
-        'cart-1',
-      );
+      const cartResult = await invoke('updateCart', {}, 'cart-1');
       authoritativeCart = cartResult.value as
         Record<string, unknown> | undefined;
 
@@ -550,9 +892,9 @@ describe('KFC Vietnam business pack compatibility', () => {
         expect(systemPrompt).toContain(
           'câu hỏi về khả năng đáp ứng, giá, tồn kho hoặc tư vấn cũng không cấp quyền thay đổi giỏ',
         );
-        expect(
-          tools.some((candidate) => candidate.name === 'updateCart'),
-        ).toBe(false);
+        expect(tools.some((candidate) => candidate.name === 'updateCart')).toBe(
+          false,
+        );
         return 'Mình sẽ kiểm tra khả năng đáp ứng và báo giá, chưa thay đổi giỏ.';
       }),
     ).resolves.toMatchObject({
@@ -587,9 +929,9 @@ describe('KFC Vietnam business pack compatibility', () => {
     };
 
     await kfcVietnamPack.run(input, async ({ tools }) => {
-      expect(
-        tools.some((candidate) => candidate.name === 'updateCart'),
-      ).toBe(false);
+      expect(tools.some((candidate) => candidate.name === 'updateCart')).toBe(
+        false,
+      );
       return 'Mình đã chuẩn bị thay đổi để bạn xác nhận.';
     });
 
@@ -757,9 +1099,9 @@ describe('KFC Vietnam business pack compatibility', () => {
     };
 
     await kfcVietnamPack.run(input, async ({ tools }) => {
-      expect(
-        tools.some((candidate) => candidate.name === 'updateCart'),
-      ).toBe(false);
+      expect(tools.some((candidate) => candidate.name === 'updateCart')).toBe(
+        false,
+      );
       return 'Bạn muốn sửa giỏ thế nào?';
     });
 
