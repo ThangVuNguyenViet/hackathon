@@ -6,6 +6,7 @@ import {
   createConfiguredAgentChatModel,
   resolveAgentModelProfile,
 } from '../src/config/agentModelProfile.js';
+import { resolveLiveScenarioPaths } from '../src/config/liveScenarioPaths.js';
 import { runModelCapabilityPreflight } from '../src/config/modelCapabilityPreflight.js';
 import { loadOptionalEnvFile } from '../src/config/optionalEnvFile.js';
 import { DashboardEventBus } from '../src/dashboard/eventBus.js';
@@ -26,8 +27,7 @@ import { MemoryStore } from '../src/persistence/memoryStore.js';
 import { legacySessionIdOutsidePackNamespace } from '../src/runtime/businessPack.js';
 import { loadScenarioScript } from '../src/scenarios/scenarioScript.js';
 
-const serviceRoot = process.cwd();
-const repoRoot = resolve(serviceRoot, '../..');
+const { serviceRoot, repoRoot } = resolveLiveScenarioPaths(import.meta.url);
 loadOptionalEnvFile(resolve(repoRoot, '.env'));
 
 const configuredSecrets = configuredSecretValues(process.env);
