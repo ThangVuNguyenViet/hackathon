@@ -137,8 +137,13 @@ function createPublicKnowledgeTool(
   );
 }
 
-const NO_CURRENT_TURN_EVIDENCE_RESPONSE =
-  'Tôi chưa có bằng chứng công khai từ searchPublicKnowledge trong lượt này để trả lời nội dung đó. Tôi không thể xác nhận thông tin thực tế hoặc thực hiện thao tác trên hệ thống riêng; vui lòng dùng kênh hỗ trợ chính thức của PVCFC.';
+const PUBLIC_ONLY_AUTHORITY_NOTICE =
+  'Giới hạn thẩm quyền: Gói này chỉ cung cấp thông tin công khai; không thể đọc hoặc thay đổi hồ sơ riêng về đại lý, khách hàng, đơn hàng, khiếu nại hoặc tham quan, và không thể thực hiện bất kỳ thao tác riêng nào.';
+
+const NO_CURRENT_TURN_EVIDENCE_RESPONSE = [
+  'Tôi chưa có bằng chứng công khai từ searchPublicKnowledge trong lượt này để trả lời nội dung đó. Tôi không thể xác nhận thông tin thực tế; vui lòng dùng kênh hỗ trợ chính thức của PVCFC.',
+  PUBLIC_ONLY_AUTHORITY_NOTICE,
+].join('\n\n');
 
 function enforcePublicKnowledgePublication(
   currentTurnEvidence: readonly PublicKnowledgeEvidence[],
@@ -155,6 +160,7 @@ function enforcePublicKnowledgePublication(
         ({ title, excerpt, sourceUrl, capturedOn }) =>
           `- ${title}: ${excerpt}\n  Nguồn công khai: ${sourceUrl} (ngày chụp: ${capturedOn})`,
       ),
+    PUBLIC_ONLY_AUTHORITY_NOTICE,
   ].join('\n\n');
 }
 

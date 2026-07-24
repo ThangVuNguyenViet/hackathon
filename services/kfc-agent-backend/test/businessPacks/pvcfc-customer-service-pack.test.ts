@@ -155,6 +155,14 @@ describe('PVCFC public customer service pack', () => {
     expect(output.responseText).not.toContain('đã thay đổi');
     expect(output.responseText).toContain('https://');
     expect(output.responseText).toContain('2026-07-21');
+    expect(output.responseText).toContain('chỉ cung cấp thông tin công khai');
+    expect(output.responseText).toContain('không thể đọc hoặc thay đổi');
+    expect(output.responseText).toContain('đại lý');
+    expect(output.responseText).toContain('khách hàng');
+    expect(output.responseText).toContain('đơn hàng');
+    expect(output.responseText).toContain('khiếu nại');
+    expect(output.responseText).toContain('tham quan');
+    expect(output.responseText).toContain('thao tác riêng');
   });
 
   it('exposes dated public-source retrieval with Vietnamese default and partial English fallback', async () => {
