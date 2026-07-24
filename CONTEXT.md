@@ -215,3 +215,73 @@ _Avoid_: GenUI Snapshot, platform payload, image attachment, gallery
 **Media Delivery Outcome**:
 The per-channel result of attempting a Catalog Media Intent, tracked independently from delivery of the assistant's authoritative text.
 _Avoid_: Assistant reply status, GenUI render state, image availability
+
+### Product Recommendations
+
+**Product Family**:
+A customer-recognizable product concept that may have one or more orderable Sellable Items across catalog authorities or variants.
+_Avoid_: SKU, item code, cart line
+
+**Sellable Item**:
+An orderable catalog identity with an app-owned stable identifier and typed aliases for provider item, product, POS, and catalog codes.
+_Avoid_: Product Family, POS item ID, array position
+
+**Recommendation Placement**:
+A named point in an ordering journey where one recommendation mode may present ranked products or modifiers, such as local favorites, modifier upsell, smart cross-sell, or single upsell.
+_Avoid_: Screen, widget, recommendation type
+
+**Recommendation Candidate**:
+A product or modifier eligible to compete for presentation at one Recommendation Placement in one ordering context.
+_Avoid_: Entire catalog, displayed recommendation, arbitrary item
+
+**Modifier Action**:
+An exact orderable modifier change identified by its parent Sellable Item, recursive modifier-group path, option identity, and requested action.
+_Avoid_: Bare modifier ID, modifier label, UI selection
+
+**Commerce Snapshot Set**:
+The immutable, version-bound combination of catalog, modifier graph, stores, availability, and promotion observations used to evaluate one recommendation request.
+_Avoid_: Current database state, mutable fixture set, provider response
+
+**Eligibility Policy**:
+The authoritative rules that determine whether a Recommendation Candidate is valid for the current catalog, store, time, basket, promotion, modifier relationship, and dietary constraints.
+_Avoid_: Model preference, ranking score, merchandising boost
+
+**Eligibility Decision**:
+The version-bound eligible or ineligible result for one Recommendation Candidate, including typed reason codes and the authoritative evidence evaluated by Eligibility Policy.
+_Avoid_: Ranking result, merchandising exclusion, availability guess
+
+**Recommendation Ranker**:
+A learned or statistical decision-maker that orders eligible Recommendation Candidates by expected value for the current ordering context.
+_Avoid_: Eligibility Policy, catalog search, generative explanation
+
+**Merchandising Policy**:
+An authored instruction that may exclude, boost, pin, or replace recommendations for a scoped placement, store group, time window, or campaign, while remaining subject to Eligibility Policy.
+_Avoid_: Model training label, hidden prompt rule, client-side override
+
+**Recommendation Decision Source**:
+The declared authority that produced a displayed recommendation set: merchandising override, learned ranker, or fallback.
+_Avoid_: Model name, UI source, undocumented heuristic
+
+**Recommendation Decision**:
+A version-bound ordered recommendation result produced for one request before any client has confirmed that it was rendered.
+_Avoid_: Recommendation Impression, basket mutation, model prediction alone
+
+**Recommendation Impression**:
+The recorded presentation of a versioned recommendation set to one anonymous ordering session, including placement and candidate positions, from which selection, rejection, cart, and checkout outcomes can be attributed.
+_Avoid_: API response, model prediction, page view
+
+**Ordering Journey**:
+An opaque anonymous ordering boundary that owns one cart progression, recommendation experiment assignment, impressions, and outcomes until checkout, explicit abandonment, or a declared cart reset.
+_Avoid_: Chat session, customer identity, individual recommendation request
+
+**Recommendation Non-Selection**:
+The journey-end observation that a displayed candidate was not selected; it is distinct from an explicit customer rejection and from an unobserved candidate.
+_Avoid_: Rejection, negative preference, missing label
+
+**Recommendation Outcome Event**:
+An append-only attributed fact after an Impression, such as selection, explicit rejection, non-selection, basket mutation result, removal, checkout, or abandonment.
+_Avoid_: Mutable recommendation status, inferred conversion, API response
+
+**Simulator Oracle**:
+Synthetic-only hidden potential outcomes and response probabilities used to evaluate whether a ranker recovers the behavior planted in a versioned simulated world.
+_Avoid_: Training feature, serving input, observed customer outcome
