@@ -1,0 +1,12 @@
+{
+  "schema_version": 1,
+  "corpus_id": "pvcfc-public-web-2026-07-21",
+  "source_kind": "untracked_donor_worktree",
+  "donor_commit": null,
+  "donor_path": ".claude/worktrees/wayfinder-pvcfc-multivendor/docs/wayfinder/pvcfc-multibusiness-chatbot/assets/pvcfc-crawl",
+  "imported_on": "2026-07-24",
+  "manifest_sha256": "0311e71df1ce34e963723849a76026621f15013d313c05286b5c7ee8c657a28e",
+  "artifact_count": 24,
+  "artifact_bytes": 1243751,
+  "notes": "The donor files were untracked, so there is no truthful donor commit to record. Raw artifacts and manifest are copied byte-for-byte; refreshes require a new versioned corpus directory."
+}
