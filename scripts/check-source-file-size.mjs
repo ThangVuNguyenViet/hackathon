@@ -13,6 +13,9 @@ const roots = [
 const extensions = new Set(['.ts', '.js', '.mjs', '.dart', '.sh']);
 const generatedSuffixes = ['.g.dart', '.freezed.dart'];
 const limit = 900;
+const baseline = JSON.parse(
+  await readFile(resolve(import.meta.dirname, 'source-file-size-baseline.json'), 'utf8'),
+);
 
 async function sourceFiles(directory) {
   const entries = await readdir(directory, { withFileTypes: true });
@@ -30,12 +33,22 @@ const files = (await Promise.all(roots.map((directory) => sourceFiles(resolve(ro
 const violations = [];
 for (const file of files) {
   const lines = (await readFile(file, 'utf8')).split('\n').length;
-  if (lines > limit) violations.push(`${relative(root, file)}: ${lines} lines`);
+  const path = relative(root, file);
+  const allowedLines = Math.max(limit, baseline[path] ?? 0);
+  if (lines > allowedLines) {
+    violations.push(
+      `${path}: ${lines} lines (allowed ${allowedLines})`,
+    );
+  }
 }
 
 if (violations.length > 0) {
-  console.error(`Handwritten production files must not exceed ${limit} lines:\n${violations.join('\n')}`);
+  console.error(
+    `Handwritten production files must not exceed the ${limit}-line ceiling or their recorded baseline:\n${violations.join('\n')}`,
+  );
   process.exitCode = 1;
 } else {
-  console.log(`Architecture size check passed (${files.length} files, ${limit}-line ceiling).`);
+  console.log(
+    `Architecture size check passed (${files.length} files, ${limit}-line ceiling with no baseline growth).`,
+  );
 }

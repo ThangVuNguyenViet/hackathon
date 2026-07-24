@@ -123,7 +123,28 @@ describe('runResponsesToolLoop', () => {
     expect(requests[1]?.input).toContainEqual(
       expect.objectContaining({
         output: expect.stringContaining(
-          '"instruction":"Retry with materially corrected or broader arguments',
+          '"instruction":"You must make another corrected read call before answering the customer',
+        ),
+      }),
+    );
+    expect(requests[1]?.input).toContainEqual(
+      expect.objectContaining({
+        output: expect.stringContaining(
+          'Search requested standalone drinks, sides, or other add-ons independently',
+        ),
+      }),
+    );
+    expect(requests[1]?.input).toContainEqual(
+      expect.objectContaining({
+        output: expect.stringContaining(
+          'An empty constrained result does not prove that the requested product is absent',
+        ),
+      }),
+    );
+    expect(requests[1]?.input).toContainEqual(
+      expect.objectContaining({
+        output: expect.stringContaining(
+          'remove any category that was not copied exactly from current-turn verified evidence',
         ),
       }),
     );
@@ -706,12 +727,29 @@ describe('OpenAiKfcAgent', () => {
     expect(instructions).toContain('irreversible');
     expect(instructions).toContain('trusted Generative UI action');
     expect(instructions).toContain('ask one natural clarification');
+    expect(instructions).toContain(
+      'preserve that exact product across later turns',
+    );
+    expect(instructions).toContain(
+      'Treat a requested drink, side, or other extra as a separate add-on',
+    );
+    expect(instructions).toContain(
+      'Do not substitute another product merely because a combined search is empty',
+    );
+    expect(instructions).toContain(
+      'A follow-up that supplies a missing choice completes the pending request',
+    );
+    expect(instructions).toContain(
+      'Do not reopen or replace an already selected product',
+    );
   });
 
   it('finishes delegated reversible plans within the supplied constraints', async () => {
     const instructions = await captureDefaultInstructions();
 
-    expect(instructions).toContain('delegates a reversible menu or cart decision');
+    expect(instructions).toContain(
+      'delegates a reversible menu or cart decision',
+    );
     expect(instructions).toContain('complete verified plan in the same turn');
     expect(instructions).toContain('stated budget as a maximum');
     expect(instructions).toContain('every explicit component constraint');

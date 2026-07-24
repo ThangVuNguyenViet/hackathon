@@ -127,6 +127,27 @@ describe('KFC OpenAI tools', () => {
     );
     expect(searchMenu?.definition.description).toContain('leave query empty');
     expect(searchMenu?.definition.description).toContain(
+      'Search a requested standalone drink, side, or other add-on independently',
+    );
+    expect(searchMenu?.definition.description).toContain(
+      'retry the exact product without modifierQueries',
+    );
+    expect(searchMenu?.definition.description).toContain(
+      'does not prove that the requested product is absent',
+    );
+    expect(searchMenu?.definition.description).toContain(
+      'Never invent, translate, or shorten a category',
+    );
+    expect(searchMenu?.definition.description).toContain(
+      'otherwise omit category',
+    );
+    expect(searchMenu?.definition.description).toContain(
+      'search the exact named main product first',
+    );
+    expect(searchMenu?.definition.description).toContain(
+      'A component match in another item description does not verify the named product',
+    );
+    expect(searchMenu?.definition.description).toContain(
       'filter customer exclusions',
     );
     expect(searchMenu?.definition.parameters.properties).toHaveProperty(
@@ -247,8 +268,30 @@ describe('KFC OpenAI tools', () => {
       'one multi-change call',
     );
     expect(updateCart?.definition.description).toContain(
-      'quantity 0',
+      'submit only the requested add-on as the change',
     );
+    expect(updateCart?.definition.description).toContain(
+      'Do not repeat, replace, or remove existing cart lines',
+    );
+    expect(updateCart?.definition.description).toContain(
+      'not an exact customer-requested match',
+    );
+    expect(updateCart?.definition.description).toContain(
+      'changes must contain only that add-on',
+    );
+    expect(updateCart?.definition.description).toContain(
+      'current-turn exact-name search',
+    );
+    expect(updateCart?.definition.description).toContain(
+      'Never reuse an item code from an add-on search',
+    );
+    expect(updateCart?.definition.description).toContain(
+      'MUST call searchMenu for that exact item in the same turn',
+    );
+    expect(updateCart?.definition.description).toContain(
+      'Never call updateCart first',
+    );
+    expect(updateCart?.definition.description).toContain('quantity 0');
     expect(updateCart?.definition.description).toContain(
       'authoritative current cart',
     );
