@@ -1,0 +1,23 @@
+[project]
+name = "kfc-recommendation-simulator"
+version = "0.0.1"
+description = "Throwaway synthetic behavioral-world prototype for KFC recommendations"
+readme = "README.md"
+requires-python = ">=3.11,<3.13"
+dependencies = [
+  "jsonschema>=4.23,<5",
+  "numpy>=2.1,<3",
+  "pyarrow>=18,<24",
+  "pydantic>=2.10,<3",
+  "streamlit>=1.50,<2",
+]
+
+[project.scripts]
+kfc-rec-sim = "kfc_recommendation_simulator.cli:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/kfc_recommendation_simulator"]

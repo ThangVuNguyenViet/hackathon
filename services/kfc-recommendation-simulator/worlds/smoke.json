@@ -1,0 +1,16 @@
+{
+  "schemaVersion": "simulator-world-v1",
+  "worldId": "kfc-vn-public-crawl-smoke-v1",
+  "journeyCount": 1000,
+  "worldSeed": 1741,
+  "trafficSeed": 2897,
+  "loggingSeed": 3253,
+  "outcomeSeed": 4001,
+  "horizonDays": 180,
+  "loggingPolicyWeights": {
+    "popularity": 0.3,
+    "basket_association": 0.3,
+    "promotion_biased": 0.2,
+    "randomized_exploration": 0.2
+  }
+}
