@@ -265,6 +265,7 @@ export const agentToolArgumentSchemas = {
   getModifierOptions: z.object({ code: z.string().min(1) }).strict(),
   updateCart: z
     .object({
+      customerRequest: z.string().min(1).nullable(),
       changes: z
         .array(
           z
@@ -406,7 +407,7 @@ export const agentToolDescriptions: Record<ToolName, string> = {
   getModifierOptions:
     'Return verified modifier groups, exact option identifiers, and exact option price deltas for one menu item code. Do not transfer evidence between options or items.',
   updateCart:
-    'Apply every intended reversible cart addition, quantity change, and removal in one changes array using previously verified item and modifier identifiers. Item quantity means menu portions, not pieces described inside the item. Treat the returned cart as authoritative; this permission never extends to irreversible actions.',
+    'Apply every intended reversible cart addition, quantity change, and removal in one changes array using previously verified item and modifier identifiers. Set customerRequest to the exact complete current user message only when that message explicitly requests this cart change; use null for a trusted structured cart action. Capability, price, availability, and advisory questions do not authorize mutation. Item quantity means menu portions, not pieces described inside the item. Treat the returned cart as authoritative; this permission never extends to irreversible actions.',
   previewCart: 'Return the current verified cart and server-calculated totals.',
   recommendAddOns:
     'Return verified add-on candidates for the current cart without mutating it.',

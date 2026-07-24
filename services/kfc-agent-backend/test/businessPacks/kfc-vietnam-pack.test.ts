@@ -472,6 +472,7 @@ describe('KFC Vietnam business pack compatibility', () => {
       const cartResult = await invoke(
         'updateCart',
         {
+          customerRequest: 'Lập giúp tôi một giỏ hàng',
           changes: [
             { itemCode: '20751', quantity: 1, modifiers: [] },
             { itemCode: '20752', quantity: 2, modifiers: [] },
@@ -512,6 +513,120 @@ describe('KFC Vietnam business pack compatibility', () => {
     expect(() =>
       kfcVietnamPack.parseState(buildVerifiedStateSnapshot(output.state)),
     ).not.toThrow();
+  });
+
+  it('rejects a cart mutation not bound to the current advisory user turn', async () => {
+    const fixtures = await loadGeneratedFixtures(process.cwd());
+    const baseClients = createMockClients(fixtures);
+    const applyChanges = vi.fn(baseClients.cart.applyChanges);
+    const input = {
+      sessionId: 'session-kfc-advisory-cart',
+      customerId: 'customer-1',
+      channel: 'kfc' as const,
+      text: 'Bên bạn có làm được 200 combo không, tổng giá khoảng bao nhiêu?',
+      clients: {
+        ...baseClients,
+        cart: {
+          ...baseClients.cart,
+          applyChanges,
+        },
+      },
+      store: new MemoryStore(),
+      dashboard: new DashboardEventBus(),
+      agentModel: {} as BaseChatModel,
+    };
+
+    await expect(
+      kfcVietnamPack.run(input, async ({ systemPrompt, tools }) => {
+        expect(systemPrompt).toContain(
+          'Câu hỏi về khả năng đáp ứng, giá, tồn kho hoặc tư vấn không phải là yêu cầu thay đổi giỏ hàng',
+        );
+        const selected = tools.find(
+          (candidate) => candidate.name === 'updateCart',
+        );
+        if (!selected) throw new Error('Missing updateCart');
+        const result = JSON.parse(
+          toolOutputText(
+            await selected.invoke({
+              type: 'tool_call',
+              name: 'updateCart',
+              args: {
+                customerRequest: 'Thêm 200 combo vào giỏ hàng',
+                changes: [
+                  {
+                    itemCode: fixtures.menuItems[0]!.code,
+                    quantity: 200,
+                    modifiers: [],
+                  },
+                ],
+              },
+              id: 'advisory-cart-1',
+            }),
+          ),
+        ) as { ok: boolean; errorCode?: string };
+        expect(result).toMatchObject({
+          ok: false,
+          errorCode: 'explicit_cart_mutation_required',
+        });
+        return 'Mình sẽ kiểm tra khả năng đáp ứng và báo giá, chưa thay đổi giỏ.';
+      }),
+    ).resolves.toMatchObject({
+      responseText:
+        'Mình sẽ kiểm tra khả năng đáp ứng và báo giá, chưa thay đổi giỏ.',
+    });
+
+    expect(applyChanges).not.toHaveBeenCalled();
+  });
+
+  it('allows one reversible cart batch bound to an exact explicit current request', async () => {
+    const fixtures = await loadGeneratedFixtures(process.cwd());
+    const baseClients = createMockClients(fixtures);
+    const applyChanges = vi.fn(baseClients.cart.applyChanges);
+    const itemCode = fixtures.menuItems[0]!.code;
+    const currentRequest = `Thêm 2 phần ${itemCode} vào giỏ giúp tôi`;
+    const input = {
+      sessionId: 'session-kfc-explicit-cart',
+      customerId: 'customer-1',
+      channel: 'kfc' as const,
+      text: currentRequest,
+      clients: {
+        ...baseClients,
+        cart: {
+          ...baseClients.cart,
+          applyChanges,
+        },
+      },
+      store: new MemoryStore(),
+      dashboard: new DashboardEventBus(),
+      agentModel: {} as BaseChatModel,
+    };
+
+    await kfcVietnamPack.run(input, async ({ tools }) => {
+      const selected = tools.find(
+        (candidate) => candidate.name === 'updateCart',
+      );
+      if (!selected) throw new Error('Missing updateCart');
+      const result = JSON.parse(
+        toolOutputText(
+          await selected.invoke({
+            type: 'tool_call',
+            name: 'updateCart',
+            args: {
+              customerRequest: currentRequest,
+              changes: [{ itemCode, quantity: 2, modifiers: [] }],
+            },
+            id: 'explicit-cart-1',
+          }),
+        ),
+      ) as { ok: boolean };
+      expect(result.ok).toBe(true);
+      return 'Đã thêm vào giỏ.';
+    });
+
+    expect(applyChanges).toHaveBeenCalledOnce();
+    expect(applyChanges.mock.calls[0]?.[1]).toEqual([
+      { itemCode, quantity: 2, modifiers: [] },
+    ]);
   });
 
   it('preserves an upstream incomplete menu collection in KFC verified state', async () => {

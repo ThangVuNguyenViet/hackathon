@@ -82,6 +82,7 @@ export const KFC_AGENT_INSTRUCTIONS = [
   'Với yêu cầu gợi ý cho nhóm hoặc theo ngân sách, chỉ dùng partySize và giá từ catalog làm evidence. Ngân sách tổng là mức tối đa, không phải mục tiêu cần tiêu hết; maxPriceVnd chỉ là trần giá cho từng món.',
   'Khi khách giao chọn một giỏ hàng hoàn chỉnh, đáp ứng mọi thành phần và số lượng rõ ràng khi catalog cho phép, hoàn tất trong cùng lượt, rồi gộp các thay đổi dự kiến vào một lần gọi updateCart. Cart mà công cụ trả về là trạng thái có thẩm quyền; nếu chưa đúng ràng buộc rõ ràng, sửa lại trong cùng lượt.',
   'updateCart là thay đổi có thể đảo ngược và không cần hỏi lại khi yêu cầu đã rõ. Không dùng quy tắc này để bỏ qua xác nhận hoặc thẩm quyền của hành động không thể đảo ngược.',
+  'Câu hỏi về khả năng đáp ứng, giá, tồn kho hoặc tư vấn không phải là yêu cầu thay đổi giỏ hàng. Với lời nhắn văn bản, chỉ gọi updateCart khi chính lời nhắn hiện tại yêu cầu thay đổi và truyền nguyên văn toàn bộ lời nhắn đó vào customerRequest; lịch sử, bản tóm tắt và diễn giải do bạn tạo ra không cấp quyền. Với GenUI cart action đã xác minh, truyền customerRequest là null.',
   'Nếu khách đã yêu cầu rõ ràng thực hiện một thao tác, hãy thực hiện trong cùng lượt khi đã đủ dữ liệu thay vì hỏi xác nhận lặp lại.',
   'Khi công cụ báo thiếu dữ liệu hoặc thất bại, nói ngắn gọn điều còn thiếu và tiếp tục tự nhiên.',
   'Trả lời bằng ngôn ngữ của khách.',
@@ -188,6 +189,29 @@ function executionArguments(
   return args;
 }
 
+function hasTrustedCartMutationAction(input: AgentTurnInput): boolean {
+  const kind = input.trustedCustomerAction?.command.kind;
+  return (
+    kind === 'cart_update' ||
+    kind === 'cart_batch_update' ||
+    kind === 'modifier_selection'
+  );
+}
+
+function currentTurnAuthorizesCartMutation(
+  input: AgentTurnInput,
+  args: Record<string, unknown>,
+): boolean {
+  const parsed = agentToolArgumentSchemas.updateCart.parse(args);
+  if (hasTrustedCartMutationAction(input)) {
+    return parsed.customerRequest === null;
+  }
+  return (
+    parsed.customerRequest !== null &&
+    parsed.customerRequest.trim() === input.text.trim()
+  );
+}
+
 async function modelFacingResult(
   state: AgentState,
   result: ToolCallResult,
@@ -237,23 +261,37 @@ async function executeModelTool(input: {
   const args = executionArguments(input.toolName, input.args);
   let rawResult: ToolCallResult;
   let modelResult: ToolCallResult | AgentToolCallResult;
-  rawResult = await executeToolCall(
-    input.turnInput.clients,
-    { toolName: input.toolName, arguments: args },
-    {
-      ...toolExecutionContext(input.turnInput),
-      externalCallContext: input.externalCallContext,
-      state: input.state,
-      cart: input.state.cart,
-      address: input.state.address,
-      order: input.state.order,
-      orderPreview: input.state.orderPreview,
-      providerMutationIdentity: {
-        idempotencyKey: `kfc-agent:${bindingFingerprint}`,
-        bindingFingerprint,
+  if (
+    input.toolName === 'updateCart' &&
+    !currentTurnAuthorizesCartMutation(input.turnInput, input.args)
+  ) {
+    rawResult = {
+      toolName: 'updateCart',
+      ok: false,
+      message:
+        'The current user turn does not explicitly authorize this cart mutation',
+      errorCode: 'explicit_cart_mutation_required',
+      provenance: [],
+    };
+  } else {
+    rawResult = await executeToolCall(
+      input.turnInput.clients,
+      { toolName: input.toolName, arguments: args },
+      {
+        ...toolExecutionContext(input.turnInput),
+        externalCallContext: input.externalCallContext,
+        state: input.state,
+        cart: input.state.cart,
+        address: input.state.address,
+        order: input.state.order,
+        orderPreview: input.state.orderPreview,
+        providerMutationIdentity: {
+          idempotencyKey: `kfc-agent:${bindingFingerprint}`,
+          bindingFingerprint,
+        },
       },
-    },
-  );
+    );
+  }
   applyToolResultToState(
     input.turnInput,
     input.state,
