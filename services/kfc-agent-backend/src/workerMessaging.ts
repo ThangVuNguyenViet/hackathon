@@ -13,7 +13,6 @@ import { normalizeZaloWebhook } from './channels/zalo.js';
 import { DashboardEventBus } from './dashboard/eventBus.js';
 import { dashboardSessionTarget } from './dashboard/sessionVisibility.js';
 import type { HandlerResponse } from './api/routeHandlers.js';
-import { verifyMessengerGuestCheckoutIngress } from './security/guestCheckoutAuthority.js';
 import { verifyMetaWebhookSignature } from './security/webhookAuthenticity.js';
 import { sessionIdForConversationEvent } from './session/sessionContext.js';
 import { D1Store } from './persistence/d1Store.js';
@@ -30,11 +29,13 @@ import type {
   WorkerExecutionContext,
 } from './worker.js';
 import { sendBoundedWorkerQueueMessage } from './workerQueueEnvelope.js';
+import { issueMessengerIngressClaim } from './security/messengerIngressClaim.js';
+import type { ConversationStore } from './persistence/memoryStore.js';
 
 export async function enqueueMessengerWebhook(
   request: Request,
   env: WorkerEnv,
-  store: D1Store,
+  store: ConversationStore,
   context?: WorkerExecutionContext,
 ): Promise<HandlerResponse> {
   if (!env.MESSENGER_WEBHOOK_QUEUE) {
@@ -70,13 +71,6 @@ export async function enqueueMessengerWebhook(
       body: { errorCode: 'invalid_messenger_webhook_signature' },
     };
   }
-  const verifiedIngress = await verifyMessengerGuestCheckoutIngress({
-    rawBody,
-    signatureHeader,
-    appSecret: env.META_APP_SECRET,
-    pageId: env.META_PAGE_ID ?? '',
-  });
-
   const events = normalizeMessengerWebhook(
     JSON.parse(new TextDecoder().decode(rawBody)),
     env.META_PAGE_ID ?? '',
@@ -133,26 +127,19 @@ export async function enqueueMessengerWebhook(
         scheduleImmediateMessengerTyping(env, event, context);
         const coordinator = new AgentRunCoordinator({ store, dashboard });
         const wakeup = await coordinator.recordPendingTurn(event, sessionId);
-        const exactIngress = verifiedIngress.find(
-          (ingress) =>
-            ingress.sessionId === sessionId &&
-            ingress.customerId === event.externalUserId &&
-            ingress.surfaceSubjectRef === event.externalUserId &&
-            ingress.externalThreadRef === event.externalThreadId &&
-            ingress.externalMessageId === event.rawEventId &&
-            ingress.receivedAt === event.receivedAt,
-        );
-        const wakeupWithIngress: MessengerAgentRunWakeupJob =
-          exactIngress && signatureHeader
-            ? {
-                ...wakeup,
-                messengerIngressProof: {
-                  schemaVersion: 'kfc-messenger-ingress-proof-v1',
-                  rawBodyBytes: Array.from(rawBody),
-                  signatureHeader,
-                },
-              }
-            : wakeup;
+        const wakeupWithIngress: MessengerAgentRunWakeupJob = {
+          ...wakeup,
+          messengerExternalMessageId: event.rawEventId,
+          messengerIngressClaim: await issueMessengerIngressClaim({
+            event,
+            sessionId,
+            queueBinding: {
+              kind: 'agent_run_wakeup',
+              generation: wakeup.generation,
+            },
+            appSecret: env.META_APP_SECRET,
+          }),
+        };
         await sendBoundedWorkerQueueMessage(
           env.MESSENGER_WEBHOOK_QUEUE,
           wakeupWithIngress,
@@ -167,8 +154,14 @@ export async function enqueueMessengerWebhook(
       } else {
         await sendBoundedWorkerQueueMessage(env.MESSENGER_WEBHOOK_QUEUE, {
           channel: 'messenger_control_event',
-          event,
           sessionId,
+          externalMessageId: event.rawEventId,
+          messengerIngressClaim: await issueMessengerIngressClaim({
+            event,
+            sessionId,
+            queueBinding: { kind: 'messenger_control_event' },
+            appSecret: env.META_APP_SECRET,
+          }),
           queuedAt: new Date().toISOString(),
         });
       }

@@ -1,6 +1,10 @@
 import type { ConversationEvent } from '../channels/conversationEvent.js';
 import { normalizeMessengerWebhook } from '../channels/messenger.js';
 import type { RunCommitFence } from '../persistence/contracts.js';
+import {
+  verifyMessengerIngressClaimEvidence,
+  type VerifyMessengerIngressClaimEvidenceInput,
+} from './messengerIngressClaim.js';
 import { verifyMetaWebhookSignature } from './webhookAuthenticity.js';
 
 export const GUEST_CHECKOUT_AUTHORITY_SCHEMA_VERSION =
@@ -22,6 +26,23 @@ export interface VerifiedMessengerGuestCheckoutIngress {
   readonly receivedAt: string;
   readonly evidenceRef: string;
   readonly evidenceDigest: string;
+}
+
+function registerVerifiedMessengerGuestCheckoutIngress(
+  input: VerifiedMessengerGuestCheckoutIngress,
+): VerifiedMessengerGuestCheckoutIngress {
+  const ingress = Object.freeze({ ...input });
+  issuedMessengerIngressAttestations.add(ingress);
+  return ingress;
+}
+
+export async function verifyMessengerIngressClaim(
+  input: VerifyMessengerIngressClaimEvidenceInput,
+): Promise<VerifiedMessengerGuestCheckoutIngress | undefined> {
+  const verified = await verifyMessengerIngressClaimEvidence(input);
+  return verified
+    ? registerVerifiedMessengerGuestCheckoutIngress(verified)
+    : undefined;
 }
 export interface GuestCheckoutAuthority {
   readonly schemaVersion: typeof GUEST_CHECKOUT_AUTHORITY_SCHEMA_VERSION;
@@ -165,11 +186,10 @@ export async function verifyMessengerGuestCheckoutIngress(input: {
       receivedAt: event.receivedAt,
       evidenceRef: `meta-webhook:${event.rawEventId}`,
     };
-    const attestation = Object.freeze({
+    const attestation = registerVerifiedMessengerGuestCheckoutIngress({
       ...binding,
       evidenceDigest: await sha256(binding),
     });
-    issuedMessengerIngressAttestations.add(attestation);
     attestations.push(attestation);
   }
   return Object.freeze(attestations);

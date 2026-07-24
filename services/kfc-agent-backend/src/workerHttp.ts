@@ -251,7 +251,7 @@ export function customerRunEventResponse(
 
 export async function persistDashboardEvent(
   env: WorkerEnv,
-  store: D1Store,
+  store: Pick<ConversationStore, 'appendDashboardEvent'>,
   event: DashboardEvent,
 ): Promise<void> {
   await store.appendDashboardEvent(event);
@@ -271,7 +271,7 @@ export async function persistDashboardEvent(
 
 export function scheduleDashboardEvent(
   env: WorkerEnv,
-  store: D1Store,
+  store: Pick<ConversationStore, 'appendDashboardEvent'>,
   event: DashboardEvent,
   context?: WorkerExecutionContext,
 ): Promise<void> | void {

@@ -33,12 +33,10 @@ import {
 } from './api/routeHandlers.js';
 import type { AgentTracer } from './observability/agentTracing.js';
 import { authorizeDemoAdminHeaders } from './security/demoAdminAuth.js';
-import { verifyMessengerGuestCheckoutIngress } from './security/guestCheckoutAuthority.js';
 import {
   AgentRunCoordinator,
   type AgentRunWakeupJob,
 } from './agentRuns/coordinator.js';
-import type { ConversationEvent } from './channels/conversationEvent.js';
 import {
   createMessengerHistoryClient,
   MessengerHistorySyncCoordinator,
@@ -67,6 +65,8 @@ import {
   lifecycleBinding,
 } from './commerce/lifecycleProvider.js';
 import { buildWorkerRouteOptions } from './workerRouteOptions.js';
+import type { MessengerIngressClaim } from './security/messengerIngressClaim.js';
+import { verifyQueuedMessengerIngress } from './workerMessengerIngress.js';
 
 export interface QueueBinding<T> {
   send(message: T, options?: { delaySeconds?: number }): Promise<void>;
@@ -124,8 +124,9 @@ export function scheduleAgentBackground(
 
 export interface MessengerWebhookJob {
   channel: 'messenger_control_event';
-  event: ConversationEvent;
   sessionId: string;
+  externalMessageId: string;
+  messengerIngressClaim: MessengerIngressClaim;
   queuedAt: string;
 }
 
@@ -135,22 +136,16 @@ export interface ZaloWebhookJob {
   queuedAt: string;
 }
 
-export interface MessengerIngressProof {
-  schemaVersion: 'kfc-messenger-ingress-proof-v1';
-  /**
-   * Bounded transient queue evidence. It can contain customer input and must
-   * never be logged, persisted, or copied into AgentRun state.
-   */
-  rawBodyBytes: number[];
-  signatureHeader: string;
-}
-
 export type MessengerAgentRunWakeupJob = AgentRunWakeupJob & {
-  messengerIngressProof?: MessengerIngressProof;
+  messengerExternalMessageId: string;
+  messengerIngressClaim: MessengerIngressClaim;
 };
 
 export type WorkerWebhookJob =
-  MessengerWebhookJob | ZaloWebhookJob | MessengerAgentRunWakeupJob;
+  | MessengerWebhookJob
+  | ZaloWebhookJob
+  | AgentRunWakeupJob
+  | MessengerAgentRunWakeupJob;
 
 export interface WorkerEnv {
   DB: D1DatabaseLike;
@@ -672,22 +667,38 @@ export default {
           );
         const coordinator = new AgentRunCoordinator({ store, dashboard });
         const result = await coordinator.claimWakeupRun(message.body);
-        const ingressProof =
-          'messengerIngressProof' in message.body
-            ? message.body.messengerIngressProof
-            : undefined;
-        const verifiedIngress =
-          ingressProof &&
-          ingressProof.schemaVersion === 'kfc-messenger-ingress-proof-v1' &&
-          ingressProof.rawBodyBytes.length <= 1_000_000 &&
+        let verifiedIngress;
+        if (
+          'messengerIngressClaim' in message.body &&
+          'messengerExternalMessageId' in message.body &&
           env.META_APP_SECRET
-            ? await verifyMessengerGuestCheckoutIngress({
-                rawBody: Uint8Array.from(ingressProof.rawBodyBytes),
-                signatureHeader: ingressProof.signatureHeader,
+        ) {
+          const delivery = await store.getWebhookDelivery(
+            'messenger',
+            message.body.messengerExternalMessageId,
+          );
+          const verified = delivery
+            ? await verifyQueuedMessengerIngress({
+                claim: message.body.messengerIngressClaim,
+                delivery,
+                expectedExternalMessageId:
+                  message.body.messengerExternalMessageId,
+                expectedSessionId: message.body.sessionId,
+                expectedQueueBinding: {
+                  kind: 'agent_run_wakeup',
+                  generation: message.body.generation,
+                },
                 appSecret: env.META_APP_SECRET,
-                pageId: env.META_PAGE_ID ?? '',
               })
             : undefined;
+          if (verified) verifiedIngress = [verified.verifiedIngress];
+          else {
+            console.warn('messenger_ingress_claim_rejected', {
+              sessionId: message.body.sessionId,
+              externalMessageId: message.body.messengerExternalMessageId,
+            });
+          }
+        }
         if (result.dispatch && result.runId) {
           await handlers.processMessengerAgentRun(
             result.runId,
@@ -722,12 +733,42 @@ export default {
         continue;
       }
       console.log('messenger_queue_processing_started', {
-        rawEventId: message.body.event.rawEventId,
+        rawEventId: message.body.externalMessageId,
         sessionId: message.body.sessionId,
       });
-      const result = await handlers.processMessengerEvent(message.body.event);
+      const delivery = await store.getWebhookDelivery(
+        'messenger',
+        message.body.externalMessageId,
+      );
+      const verified =
+        delivery && env.META_APP_SECRET
+          ? await verifyQueuedMessengerIngress({
+              claim: message.body.messengerIngressClaim,
+              delivery,
+              expectedExternalMessageId: message.body.externalMessageId,
+              expectedSessionId: message.body.sessionId,
+              expectedQueueBinding: { kind: 'messenger_control_event' },
+              appSecret: env.META_APP_SECRET,
+            })
+          : undefined;
+      if (!verified) {
+        if (delivery) {
+          await store.markWebhookDeliveryFailed(
+            'messenger',
+            message.body.externalMessageId,
+            'messenger_ingress_claim_invalid',
+          );
+        }
+        console.warn('messenger_ingress_claim_rejected', {
+          sessionId: message.body.sessionId,
+          externalMessageId: message.body.externalMessageId,
+        });
+        message.ack?.();
+        continue;
+      }
+      const result = await handlers.processMessengerEvent(verified.event);
       console.log('messenger_queue_processing_finished', {
-        rawEventId: message.body.event.rawEventId,
+        rawEventId: message.body.externalMessageId,
         sessionId: message.body.sessionId,
         status: result.status,
         errorCode: result.errorCode,
