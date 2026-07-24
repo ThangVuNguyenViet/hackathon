@@ -130,7 +130,6 @@ describe('KFC Vietnam business pack compatibility', () => {
       sessionId,
       customerId: 'customer-1',
       channel: 'kfc' as const,
-      externalMessageId: 'message-order-idempotency-retry',
       text: '',
       trustedCustomerAction: {
         source: 'kfc_genui_action' as const,
@@ -165,25 +164,63 @@ describe('KFC Vietnam business pack compatibility', () => {
     };
 
     await expect(
-      kfcVietnamPack.run(input, async ({ tools }) => {
-        expect(
-          await invokeOrder(tools, 'model-call-before-crash'),
-        ).toMatchObject({ ok: true });
-        expect(
-          await invokeOrder(tools, 'model-call-duplicate-same-action'),
-        ).toMatchObject({
-          ok: false,
-          errorCode: 'trusted_action_already_consumed',
-        });
-        throw new Error('simulated_crash_after_provider_effect');
-      }),
+      kfcVietnamPack.run(
+        {
+          ...input,
+          runGuard: {
+            commitFence: {
+              kind: 'agent_run',
+              runId: 'run-before-crash',
+              generation: 1,
+              sessionAuthorityGeneration: 1,
+              executionAttempt: 1,
+              executionLeaseToken: 'lease-before-crash',
+            } as const,
+            async isCurrent() {
+              return true;
+            },
+          },
+        },
+        async ({ tools }) => {
+          expect(
+            await invokeOrder(tools, 'model-call-before-crash'),
+          ).toMatchObject({ ok: true });
+          expect(
+            await invokeOrder(tools, 'model-call-duplicate-same-action'),
+          ).toMatchObject({
+            ok: false,
+            errorCode: 'trusted_action_already_consumed',
+          });
+          throw new Error('simulated_crash_after_provider_effect');
+        },
+      ),
     ).rejects.toThrow('simulated_crash_after_provider_effect');
-    await kfcVietnamPack.run(input, async ({ tools }) => {
-      expect(
-        await invokeOrder(tools, 'different-model-call-on-retry'),
-      ).toMatchObject({ ok: true });
-      return 'Đơn hàng đã được tạo.';
-    });
+    await expect(
+      kfcVietnamPack.run(
+        {
+          ...input,
+          runGuard: {
+            commitFence: {
+              kind: 'agent_run',
+              runId: 'changed-run-on-retry',
+              generation: 2,
+              sessionAuthorityGeneration: 2,
+              executionAttempt: 1,
+              executionLeaseToken: 'changed-lease-on-retry',
+            } as const,
+            async isCurrent() {
+              return true;
+            },
+          },
+        },
+        async ({ tools }) => {
+          expect(
+            await invokeOrder(tools, 'different-model-call-on-retry'),
+          ).toMatchObject({ ok: true });
+          return 'Đơn hàng đã được tạo.';
+        },
+      ),
+    ).rejects.toThrow('customer_run_cancelled');
 
     expect(providerIdentities).toHaveLength(2);
     expect(providerIdentities[1]).toEqual(providerIdentities[0]);

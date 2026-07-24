@@ -37,6 +37,10 @@ import {
 import { paymentOrderIdentifierMatches } from './paymentOrderAuthority.js';
 import { executePaymentToolCall } from './paymentToolExecution.js';
 import { searchMenuCollection } from './orderingDataRetrieval.js';
+import {
+  validateTrustedActionToolAuthority,
+  type TrustedActionToolAuthority,
+} from './trustedActionToolAuthority.js';
 
 export interface ExecutorContext {
   externalCallContext: ExternalCallContext;
@@ -51,14 +55,9 @@ export interface ExecutorContext {
   commerceTraceId?: string;
   commerceScenarioId?: string;
   providerMutationIdentity?: ProviderMutationIdentity;
-  /**
-   * Server-verified, current-turn authority for one exact protected mutation.
-   * Model output and provider mutation identity are not authorization.
-   */
-  trustedActionAuthority?: {
-    toolName: ToolCallRequest['toolName'];
-    customerConfirmed?: true;
-  };
+  trustedActionAuthority?: TrustedActionToolAuthority;
+  currentRunIdentity?: string;
+  durableRequestIdentity?: string;
   runGuard?: {
     isCurrent(): Promise<boolean>;
     recordIrreversibleBoundary?(
@@ -326,10 +325,20 @@ export async function executeToolCall(
   const orderPreview = getOrderPreview(context);
   const sessionId = getSessionId(context);
   const customerId = context.state?.customerId;
+  const trustedActionAuthorization = requiresTrustedActionAuthority(
+    request.toolName,
+  )
+    ? await validateTrustedActionToolAuthority({
+        authority: context.trustedActionAuthority,
+        sessionId,
+        currentRunIdentity: context.currentRunIdentity,
+        durableRequestIdentity: context.durableRequestIdentity,
+        request,
+      })
+    : undefined;
   if (
     requiresTrustedActionAuthority(request.toolName) &&
-    (context.trustedActionAuthority?.toolName !== request.toolName ||
-      context.trustedActionAuthority.customerConfirmed !== true)
+    !trustedActionAuthorization
   ) {
     return result(
       request,
@@ -699,7 +708,7 @@ export async function executeToolCall(
         await clients.membership.acquireVoucher(
           {
             rewardId: args.rewardId,
-            confirmed: context.trustedActionAuthority!.customerConfirmed!,
+            confirmed: trustedActionAuthorization!.customerConfirmed,
           },
           context.externalCallContext,
           context.providerMutationIdentity!,
@@ -714,7 +723,7 @@ export async function executeToolCall(
           {
             voucherId: args.voucherId,
             channel: args.channel,
-            confirmed: context.trustedActionAuthority!.customerConfirmed!,
+            confirmed: trustedActionAuthorization!.customerConfirmed,
           },
           context.externalCallContext,
           context.providerMutationIdentity!,
@@ -794,7 +803,7 @@ export async function executeToolCall(
         await clients.oms.placeOrder(
           {
             preview: orderPreview,
-            userConfirmed: context.trustedActionAuthority!.customerConfirmed!,
+            userConfirmed: trustedActionAuthorization!.customerConfirmed,
             context:
               context.sessionId && context.clientMessageId
                 ? {

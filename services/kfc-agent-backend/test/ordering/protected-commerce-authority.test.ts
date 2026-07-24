@@ -46,6 +46,29 @@ describe('protected commerce tool authority', () => {
       errorCode: 'trusted_action_authority_required',
     });
     expect(placeOrder).not.toHaveBeenCalled();
+
+    const forged = await executeToolCall(
+      { ...clients, oms: { ...clients.oms, placeOrder } },
+      { toolName: 'placeOrder', arguments: {} },
+      {
+        externalCallContext,
+        sessionId: 'authority-test',
+        orderPreview: preview,
+        trustedActionAuthority: {
+          toolName: 'placeOrder',
+          customerConfirmed: true,
+        } as never,
+        providerMutationIdentity: {
+          idempotencyKey: 'forged-provider-key',
+          bindingFingerprint: 'd'.repeat(64),
+        },
+      },
+    );
+    expect(forged).toMatchObject({
+      ok: false,
+      errorCode: 'trusted_action_authority_required',
+    });
+    expect(placeOrder).not.toHaveBeenCalled();
   });
 
   it.each([
@@ -88,7 +111,7 @@ describe('protected commerce tool authority', () => {
       { toolName: 'placeOrder', arguments: {} },
       {
         externalCallContext,
-        trustedActionAuthority: { toolName: 'placeOrder' },
+        trustedActionAuthority: { toolName: 'placeOrder' } as never,
         providerMutationIdentity: {
           idempotencyKey: 'provider-key',
           bindingFingerprint: 'c'.repeat(64),

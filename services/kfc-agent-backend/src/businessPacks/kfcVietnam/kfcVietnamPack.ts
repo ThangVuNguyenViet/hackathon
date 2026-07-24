@@ -45,6 +45,7 @@ import type {
 } from '../../ordering/types.js';
 import { buildVerifiedCollectionSnapshot } from '../../ordering/verifiedCollections.js';
 import { selectedPaymentMethodAuthorityMatchesActiveCollection } from '../../ordering/paymentMethodAuthority.js';
+import { createTrustedActionToolAuthority } from '../../ordering/trustedActionToolAuthority.js';
 import {
   createNoopAgentTracer,
   createSafeAgentTracer,
@@ -357,9 +358,10 @@ async function executeModelTool(input: {
   }
   const durableRequestIdentity =
     input.turnInput.externalMessageId ??
-    traceRunId(input.turnInput) ??
     input.turnInput.trustedCustomerAction?.actionDigest ??
+    traceRunId(input.turnInput) ??
     input.durableTurnId;
+  const currentRunIdentity = traceRunId(input.turnInput) ?? input.durableTurnId;
   const operationFingerprint = await stateRevision({
     sessionId: input.turnInput.sessionId,
     durableRequestIdentity,
@@ -377,6 +379,16 @@ async function executeModelTool(input: {
     operationFingerprint,
     args,
   });
+  const trustedActionAuthority =
+    trustedActionToolName === input.toolName
+      ? await createTrustedActionToolAuthority({
+          action: input.turnInput.trustedCustomerAction,
+          sessionId: input.turnInput.sessionId,
+          currentRunIdentity,
+          durableRequestIdentity,
+          request: { toolName: input.toolName, arguments: args },
+        })
+      : undefined;
   let rawResult: ToolCallResult;
   let modelResult: ToolCallResult | AgentToolCallResult;
   if (
@@ -435,12 +447,11 @@ async function executeModelTool(input: {
           idempotencyKey: `kfc-agent:${operationFingerprint}`,
           bindingFingerprint,
         },
-        ...(trustedActionToolName === input.toolName
+        currentRunIdentity,
+        durableRequestIdentity,
+        ...(trustedActionAuthority
           ? {
-              trustedActionAuthority: {
-                toolName: input.toolName,
-                customerConfirmed: true,
-              },
+              trustedActionAuthority,
             }
           : {}),
       },
