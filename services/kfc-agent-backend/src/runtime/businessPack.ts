@@ -43,6 +43,11 @@ export interface BusinessPack<TInput, TOutput, TState> {
   readonly ref: PackRef;
   readonly stateSchemaVersion: string;
   parseState(value: unknown): TState;
+  /**
+   * Applies the pack-owned durable namespace to external identifiers.
+   * The semantic kernel invokes this only after resolving a trusted binding.
+   */
+  scopeInput(input: TInput): TInput;
   run(input: TInput, invokeModel: InvokeBusinessPackModel): Promise<TOutput>;
 }
 
@@ -120,6 +125,30 @@ export async function createPackStateEnvelope<TState>(input: {
       digest: await sha256(unsigned),
     },
   };
+}
+
+export function scopePackSessionId(
+  packRef: PackRef,
+  externalSessionId: string,
+): string {
+  assertPackRef(packRef);
+  if (!externalSessionId.trim()) throw new Error('session_id_invalid');
+  return `pack:${packRef.packId}@${packRef.version}:${externalSessionId}`;
+}
+
+/**
+ * Keeps KFC's established durable keys coherent with existing run, delivery,
+ * dashboard, and session-authority records. The `pack:` prefix is reserved
+ * exclusively for namespaced pluggable business packs.
+ */
+export function legacySessionIdOutsidePackNamespace(
+  externalSessionId: string,
+): string {
+  if (!externalSessionId.trim()) throw new Error('session_id_invalid');
+  if (externalSessionId.startsWith('pack:')) {
+    throw new Error('business_pack_session_namespace_reserved');
+  }
+  return externalSessionId;
 }
 
 export async function validatePackStateEnvelope<TState>(

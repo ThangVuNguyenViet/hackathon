@@ -105,6 +105,90 @@ describe('PVCFC public customer service pack', () => {
     );
   });
 
+  it('resumes week-old complete exchanges through rolling summary plus a token-bounded recent window', async () => {
+    const store = new MemoryStore();
+    const sessionId = 'pack:pvcfc-customer-service@1.0.0:week-resume';
+    const append = (
+      role: 'user' | 'assistant',
+      text: string,
+      createdAt: string,
+    ) =>
+      store.appendTurn({
+        sessionId,
+        channel: 'messenger_mock',
+        role,
+        text,
+        externalMessageId: null,
+        externalUserId: role === 'user' ? 'public-customer' : null,
+        deliveryStatus: 'not_applicable',
+        metadata: null,
+        createdAt,
+      });
+    await append('user', 'older-user', '2026-07-10T00:00:00.000Z');
+    await append('assistant', 'older-assistant', '2026-07-10T00:01:00.000Z');
+    await append('user', 'week-resume-user', '2026-07-17T00:00:00.000Z');
+    await append(
+      'assistant',
+      'week-resume-assistant',
+      '2026-07-17T00:01:00.000Z',
+    );
+    await append(
+      'user',
+      'orphan-user-must-not-leak',
+      '2026-07-18T00:00:00.000Z',
+    );
+    const summarized: string[][] = [];
+    const input = {
+      ...(await turnInput('week-resume')),
+      sessionId,
+      text: 'current-user',
+      store,
+      conversationContext: {
+        tokenBudget: 5,
+        async countTokens(text: string) {
+          if (text === 'older-summary') return 1;
+          if (text.includes('older-')) return 4;
+          if (text.includes('week-resume-')) return 4;
+          return 1;
+        },
+        async summarize({
+          exchanges,
+        }: {
+          exchanges: readonly {
+            turns: readonly { text: string }[];
+          }[];
+        }) {
+          summarized.push(
+            exchanges.map((exchange) =>
+              exchange.turns.map(({ text }) => text).join('|'),
+            ),
+          );
+          return 'older-summary';
+        },
+      },
+    };
+
+    await pvcfcCustomerServicePack.run(input, async ({ messages }) => {
+      const contents = messages.map(({ content }) => String(content));
+      expect(contents).toEqual([
+        expect.stringContaining('older-summary'),
+        'week-resume-user',
+        'week-resume-assistant',
+        'current-user',
+      ]);
+      expect(contents.join('\n')).not.toContain('orphan-user-must-not-leak');
+      return 'Đã tiếp tục cuộc trò chuyện.';
+    });
+
+    expect(summarized).toEqual([['older-user|older-assistant']]);
+    await expect(
+      store.getConversationSummary(sessionId),
+    ).resolves.toMatchObject({
+      text: 'older-summary',
+      throughOrdinal: 2,
+    });
+  });
+
   it('keeps KFC and PVCFC transcript and state namespaces isolated for the same external session', async () => {
     const store = new MemoryStore();
     const kfcEnvelope = await createPackStateEnvelope({
@@ -137,7 +221,7 @@ describe('PVCFC public customer service pack', () => {
     expect(output.responseText).toContain('2026-07-21');
 
     const pvcfcTurns = await store.listTurns(
-      'pvcfc-customer-service@1.0.0:same-external-session',
+      'pack:pvcfc-customer-service@1.0.0:same-external-session',
     );
     expect(pvcfcTurns.map(({ text }) => text)).toEqual([
       input.text,
@@ -157,13 +241,13 @@ describe('PVCFC public customer service pack', () => {
     ).toBeUndefined();
     expect(
       await store.getPackState(
-        'pvcfc-customer-service@1.0.0:same-external-session',
+        'pack:pvcfc-customer-service@1.0.0:same-external-session',
         pvcfcCustomerServicePack.ref,
       ),
     ).toBeDefined();
     expect(
       await store.getPackState(
-        'pvcfc-customer-service@1.0.0:same-external-session',
+        'pack:pvcfc-customer-service@1.0.0:same-external-session',
         { packId: 'kfc-vietnam', version: '1.0.0' },
       ),
     ).toBeUndefined();
@@ -198,7 +282,9 @@ describe('PVCFC public customer service pack', () => {
     });
     expect(await input.store.listTurns('kernel-pvcfc')).toEqual([]);
     expect(
-      await input.store.listTurns('pvcfc-customer-service@1.0.0:kernel-pvcfc'),
+      await input.store.listTurns(
+        'pack:pvcfc-customer-service@1.0.0:kernel-pvcfc',
+      ),
     ).toHaveLength(2);
   });
 });

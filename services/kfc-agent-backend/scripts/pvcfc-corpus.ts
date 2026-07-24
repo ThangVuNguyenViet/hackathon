@@ -9,6 +9,7 @@ import {
   rm,
   writeFile,
 } from 'node:fs/promises';
+import { constants as fsConstants } from 'node:fs';
 import { createHash, randomUUID } from 'node:crypto';
 import { basename, dirname, join, relative, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -111,6 +112,14 @@ export async function verifyPvcfcCorpus(root: string): Promise<{
   };
 }
 
+/**
+ * Publishes without ever renaming over an existing destination.
+ *
+ * The corpus is first verified in a temporary sibling. An exclusive mkdir
+ * then reserves the destination, and verified files are copied into that
+ * reservation. Consumers must treat the directory as logically invisible
+ * until `.ready.json` is atomically renamed into place as the final step.
+ */
 export async function installPvcfcCorpus(input: {
   source: string;
   target: string;
@@ -126,13 +135,15 @@ export async function installPvcfcCorpus(input: {
     dirname(target),
     `.${basename(target)}.tmp-${randomUUID()}`,
   );
+  const reservationToken = randomUUID();
+  let targetReserved = false;
   await mkdir(dirname(target), { recursive: true });
   try {
     await mkdir(temporary);
     await copyFile(
       join(source, 'manifest.json'),
       join(temporary, 'manifest.json'),
-      1,
+      fsConstants.COPYFILE_EXCL,
     );
     await cp(join(source, 'raw'), join(temporary, 'raw'), {
       recursive: true,
@@ -162,12 +173,69 @@ export async function installPvcfcCorpus(input: {
     );
     await writePvcfcPublicKnowledgeIndex(temporary);
     await verifyPvcfcCorpus(temporary);
-    if (await pathExists(target)) {
-      throw new Error('pvcfc_corpus_target_exists');
+    try {
+      await mkdir(target);
+      targetReserved = true;
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === 'EEXIST') {
+        throw new Error('pvcfc_corpus_target_exists');
+      }
+      throw error;
     }
-    await rename(temporary, target);
+    const installingMarker = join(target, '.installing.json');
+    const stagedReadyMarker = join(target, `.ready-${reservationToken}.json`);
+    await writeFile(
+      installingMarker,
+      `${JSON.stringify({
+        status: 'installing',
+        reservationToken,
+      })}\n`,
+      { flag: 'wx' },
+    );
+    await copyFile(
+      join(temporary, 'manifest.json'),
+      join(target, 'manifest.json'),
+      fsConstants.COPYFILE_EXCL,
+    );
+    await cp(join(temporary, 'raw'), join(target, 'raw'), {
+      recursive: true,
+      force: false,
+      errorOnExist: true,
+    });
+    await copyFile(
+      join(temporary, 'custody.json'),
+      join(target, 'custody.json'),
+      fsConstants.COPYFILE_EXCL,
+    );
+    await cp(join(temporary, 'derived'), join(target, 'derived'), {
+      recursive: true,
+      force: false,
+      errorOnExist: true,
+    });
+    await verifyPvcfcCorpus(target);
+    await writeFile(
+      stagedReadyMarker,
+      `${JSON.stringify(
+        {
+          status: 'ready',
+          manifestSha256: verified.manifestSha256,
+          reservationToken,
+          publicationProtocol:
+            'The exclusive target directory is logically visible only after this marker is atomically published.',
+        },
+        null,
+        2,
+      )}\n`,
+      { flag: 'wx' },
+    );
+    await rm(installingMarker);
+    await rename(stagedReadyMarker, join(target, '.ready.json'));
+    await rm(temporary, { recursive: true, force: true });
   } catch (error) {
     await rm(temporary, { recursive: true, force: true });
+    if (targetReserved) {
+      await removeOwnedReservation(target, reservationToken);
+    }
     throw error;
   }
 }
@@ -378,6 +446,29 @@ async function pathExists(path: string): Promise<boolean> {
     return (error as NodeJS.ErrnoException).code !== 'ENOENT'
       ? Promise.reject(error)
       : false;
+  }
+}
+
+async function removeOwnedReservation(
+  target: string,
+  reservationToken: string,
+): Promise<void> {
+  const candidates = [
+    join(target, '.installing.json'),
+    join(target, `.ready-${reservationToken}.json`),
+  ];
+  for (const marker of candidates) {
+    try {
+      const value = JSON.parse(await readFile(marker, 'utf8')) as {
+        reservationToken?: unknown;
+      };
+      if (value.reservationToken === reservationToken) {
+        await rm(target, { recursive: true, force: true });
+        return;
+      }
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
+    }
   }
 }
 

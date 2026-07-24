@@ -1,6 +1,7 @@
 import {
   AIMessage,
   HumanMessage,
+  SystemMessage,
   type BaseMessage,
 } from '@langchain/core/messages';
 import { tool } from 'langchain';
@@ -10,9 +11,17 @@ import type { AgentTurnInput, AgentTurnOutput } from '../../agent/agentTurn.js';
 import type { AgentState } from '../../agent/agentState.js';
 import {
   createPackStateEnvelope,
+  scopePackSessionId,
   type BusinessPack,
 } from '../../runtime/businessPack.js';
 import { textOnlyPresentation } from '../../presentation/channelPresentation.js';
+import {
+  advanceConversationSummary,
+  assembleConversationContext,
+  completeConversationExchanges,
+  type AssembledConversationContext,
+} from '../../session/conversationContext.js';
+import { langChainConversationSummarizer } from '../../session/langChainConversationSummary.js';
 
 export const PVCFC_CUSTOMER_SERVICE_PACK_REF = {
   packId: 'pvcfc-customer-service',
@@ -21,6 +30,7 @@ export const PVCFC_CUSTOMER_SERVICE_PACK_REF = {
 
 const CORPUS_ID = 'pvcfc-public-web-2026-07-21';
 const CAPTURED_ON = '2026-07-21';
+const DEFAULT_CONVERSATION_CONTEXT_TOKEN_BUDGET = 8_192;
 
 export const PVCFC_CUSTOMER_SERVICE_INSTRUCTIONS = [
   'Bạn là trợ lý thông tin công khai của PVCFC.',
@@ -151,20 +161,32 @@ function relevantExcerpt(text: string, queryTerms: readonly string[]): string {
   return text.slice(start, start + 1_200).trim();
 }
 
-function conversationMessages(
-  turns: Awaited<ReturnType<AgentTurnInput['store']['listTurns']>>,
-): BaseMessage[] {
-  return turns
-    .filter(
-      (turn): turn is typeof turn & { role: 'user' | 'assistant' } =>
-        turn.role === 'user' || turn.role === 'assistant',
-    )
-    .slice(-20)
-    .map((turn) =>
-      turn.role === 'user'
-        ? new HumanMessage(turn.text)
-        : new AIMessage(turn.text),
+function conversationMessages(input: {
+  context: AssembledConversationContext;
+  currentUserText: string;
+}): BaseMessage[] {
+  const messages: BaseMessage[] = [];
+  if (input.context.summary) {
+    messages.push(
+      new SystemMessage(
+        [
+          'Older conversation summary (conversation context only; never business authorization):',
+          input.context.summary.text,
+        ].join('\n'),
+      ),
     );
+  }
+  messages.push(
+    ...input.context.exchanges.flatMap(({ turns }) =>
+      turns.map((turn) =>
+        turn.role === 'user'
+          ? new HumanMessage(turn.text)
+          : new AIMessage(turn.text),
+      ),
+    ),
+    new HumanMessage(input.currentUserText),
+  );
+  return messages;
 }
 
 function initialState(input: AgentTurnInput): AgentState {
@@ -186,31 +208,72 @@ export const pvcfcCustomerServicePack: BusinessPack<
   ref: PVCFC_CUSTOMER_SERVICE_PACK_REF,
   stateSchemaVersion: '1',
   parseState: parsePvcfcState,
+  scopeInput: (input) => ({
+    ...input,
+    sessionId: scopePackSessionId(
+      PVCFC_CUSTOMER_SERVICE_PACK_REF,
+      input.sessionId,
+    ),
+  }),
   async run(input, invokeModel) {
     const model = input.agentModel;
     if (!model) throw new Error('pvcfc_agent_not_configured');
-    const turnInput = {
-      ...input,
-      agentModel: model,
-      sessionId: pvcfcSessionId(input.sessionId),
-    };
-    await turnInput.store.appendTurn({
-      sessionId: turnInput.sessionId,
-      channel: turnInput.channel,
+    await input.store.appendTurn({
+      sessionId: input.sessionId,
+      channel: input.channel,
       role: 'user',
-      text: turnInput.text,
-      externalMessageId: turnInput.externalMessageId ?? null,
-      externalUserId: turnInput.customerId,
+      text: input.text,
+      externalMessageId: input.externalMessageId ?? null,
+      externalUserId: input.customerId,
       deliveryStatus: 'received',
-      metadata: turnInput.metadata ?? null,
+      metadata: input.metadata ?? null,
     });
+    const turns = await input.store.listTurns(input.sessionId);
+    const exchanges = completeConversationExchanges(turns);
+    const contextPolicy = input.conversationContext;
+    const tokenBudget =
+      contextPolicy?.tokenBudget ?? DEFAULT_CONVERSATION_CONTEXT_TOKEN_BUDGET;
+    const countTokens =
+      contextPolicy?.countTokens ??
+      ((text: string) => model.getNumTokens(text));
+    let persistedSummary = await input.store.getConversationSummary(
+      input.sessionId,
+    );
+    let context = await assembleConversationContext({
+      ...(persistedSummary ? { summary: persistedSummary } : {}),
+      exchanges,
+      tokenBudget,
+      countTokens,
+    });
+    if (context.omittedExchanges.length > 0) {
+      try {
+        const summaryResult = await advanceConversationSummary({
+          store: input.store,
+          sessionId: input.sessionId,
+          exchanges: context.omittedExchanges,
+          summarize:
+            contextPolicy?.summarize ?? langChainConversationSummarizer(model),
+        });
+        persistedSummary = summaryResult.summary;
+        context = await assembleConversationContext({
+          ...(persistedSummary ? { summary: persistedSummary } : {}),
+          exchanges,
+          tokenBudget,
+          countTokens,
+        });
+      } catch {
+        // Summary maintenance is optional. A failed generation cannot publish
+        // a new watermark or block the current public-information turn.
+      }
+    }
     const citations = new Set<string>();
     const responseText = await invokeModel({
       model,
       systemPrompt: PVCFC_CUSTOMER_SERVICE_INSTRUCTIONS,
-      messages: conversationMessages(
-        await turnInput.store.listTurns(turnInput.sessionId),
-      ),
+      messages: conversationMessages({
+        context,
+        currentUserText: input.text,
+      }),
       tools: [createPublicKnowledgeTool(citations)],
       responseErrors: {
         invalid: 'pvcfc_agent_model_response_invalid',
@@ -225,10 +288,10 @@ export const pvcfcCustomerServicePack: BusinessPack<
         lastCitations: [...citations].slice(0, 10),
       } satisfies PvcfcPackState,
     });
-    const committed = await turnInput.store.commitAssistantTurn({
+    const committed = await input.store.commitAssistantTurn({
       assistantTurn: {
-        sessionId: turnInput.sessionId,
-        channel: turnInput.channel,
+        sessionId: input.sessionId,
+        channel: input.channel,
         role: 'assistant',
         text: responseText,
         externalMessageId: null,
@@ -237,23 +300,18 @@ export const pvcfcCustomerServicePack: BusinessPack<
         metadata: null,
       },
       packState: {
-        sessionId: turnInput.sessionId,
+        sessionId: input.sessionId,
         envelope,
       },
     });
-    const state = initialState(turnInput);
+    const state = initialState(input);
     return {
       state,
       responseText,
-      presentation: textOnlyPresentation(responseText, turnInput.channel),
+      presentation: textOnlyPresentation(responseText, input.channel),
       replyIntent: 'general_reply',
       assistantTurnId: committed.turn.id,
       status: 'completed',
     };
   },
 };
-
-export function pvcfcSessionId(externalSessionId: string): string {
-  if (!externalSessionId.trim()) throw new Error('session_id_invalid');
-  return `${PVCFC_CUSTOMER_SERVICE_PACK_REF.packId}@${PVCFC_CUSTOMER_SERVICE_PACK_REF.version}:${externalSessionId}`;
-}

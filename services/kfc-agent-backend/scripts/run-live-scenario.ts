@@ -15,6 +15,7 @@ import { startLiveScenarioSession } from '../src/liveEvidence/liveScenarioSessio
 import { createMockClients } from '../src/mock/createMockClients.js';
 import { LangSmithAgentTracer } from '../src/observability/langsmithAgentTracer.js';
 import { MemoryStore } from '../src/persistence/memoryStore.js';
+import { legacySessionIdOutsidePackNamespace } from '../src/runtime/businessPack.js';
 import { loadScenarioScript } from '../src/scenarios/scenarioScript.js';
 
 async function main(): Promise<void> {
@@ -49,18 +50,23 @@ async function main(): Promise<void> {
     scenarioId: narrative.id,
     probeRunId: args.runId,
   });
+  const externalSessionId = `live-${args.runId}`;
 
   const session = await startLiveScenarioSession({
     artifactsRoot: args.artifactsRoot,
     runId: args.runId,
     attempt: args.attempt,
+    correlation: {
+      externalSessionId,
+      durableSessionId: legacySessionIdOutsidePackNamespace(externalSessionId),
+    },
     scenarioPath: args.scenarioPath,
     identity: binding.identity,
     runPreflight: () => runModelCapabilityPreflight(binding),
     executeTurn: async ({ text, recordToolEvent }) => {
       const deferredTraceTasks: Array<() => Promise<void>> = [];
       const output = await runAgentTurn({
-        sessionId: `live-${args.runId}`,
+        sessionId: externalSessionId,
         customerId: 'synthetic-live-role-player',
         channel: narrative.channel,
         text,

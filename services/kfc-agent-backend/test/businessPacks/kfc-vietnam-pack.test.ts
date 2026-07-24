@@ -325,6 +325,66 @@ describe('KFC Vietnam business pack compatibility', () => {
     });
   });
 
+  it('keeps route-owned run fences, transcript, pack state, and dashboard on one KFC durable session', async () => {
+    const sessionId = 'messenger:route-customer';
+    const store = new MemoryStore();
+    const dashboard = new DashboardEventBus();
+    const run = await store.createCustomerRun({
+      id: 'customer-run-route-proof',
+      schemaVersion: 1,
+      sessionId,
+      customerId: 'route-customer',
+      clientMessageId: 'route-message-1',
+      requestFingerprint: 'route-fingerprint',
+      generation: 1,
+      status: 'accepted',
+      phase: 'queued',
+      nextEventSequence: 1,
+      clientSchemaVersion: 1,
+      acceptedAt: '2026-07-24T00:00:00.000Z',
+      startedAt: null,
+      terminalAt: null,
+      updatedAt: '2026-07-24T00:00:00.000Z',
+    });
+    const commitFence = {
+      kind: 'customer_run' as const,
+      runId: run.id,
+      sessionAuthorityGeneration: run.sessionAuthorityGeneration,
+    };
+
+    const output = await runAgentTurn({
+      sessionId,
+      customerId: 'route-customer',
+      channel: 'messenger_mock',
+      text: 'Xin chào',
+      clients: createMockClients(await loadGeneratedFixtures(process.cwd())),
+      store,
+      dashboard,
+      agentModel: new FakeListChatModel({ responses: ['Xin chào!'] }),
+      runGuard: {
+        commitFence,
+        isCurrent: () =>
+          store.isRunCommitFenceCurrent({ sessionId, fence: commitFence }),
+      },
+    });
+
+    expect(output.suppressed).not.toBe(true);
+    expect((await store.listTurns(sessionId)).at(-1)).toMatchObject({
+      role: 'assistant',
+      text: 'Xin chào!',
+    });
+    expect(
+      await store.getPackState(sessionId, kfcVietnamPack.ref),
+    ).toBeDefined();
+    expect(dashboard.getEvents(sessionId).length).toBeGreaterThan(0);
+    expect(
+      dashboard
+        .getEvents(sessionId)
+        .every((event) => event.sessionId === sessionId),
+    ).toBe(true);
+    expect(dashboard.getEvents(`pack:${sessionId}`)).toEqual([]);
+  });
+
   it('supports multiple complete menu reads and one authoritative batched cart update in the same tool loop', async () => {
     const fixtures = await loadGeneratedFixtures(process.cwd());
     const baseClients = createMockClients(fixtures);

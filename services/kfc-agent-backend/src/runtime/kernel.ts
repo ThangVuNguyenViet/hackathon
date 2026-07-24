@@ -21,7 +21,7 @@ export async function runSemanticKernel<TInput, TOutput, TState>(input: {
       parseState: (value) => pack.parseState(value),
     });
   }
-  return pack.run(input.packInput, async (invocation) => {
+  return pack.run(pack.scopeInput(input.packInput), async (invocation) => {
     const agent = createAgent({
       model: invocation.model,
       tools: invocation.tools,

@@ -53,7 +53,10 @@ import { persistCompletedTurn } from '../../agent/agentTurnPersistence.js';
 import { assembleLoadedTurnState } from '../../agent/agentTurnStateHydration.js';
 import { loadOrAppendAgentCurrentUserTurn } from '../../agent/agentTurnIntake.js';
 import { semanticConversationTurns } from '../../agent/trustedActionConversation.js';
-import type { BusinessPack } from '../../runtime/businessPack.js';
+import {
+  legacySessionIdOutsidePackNamespace,
+  type BusinessPack,
+} from '../../runtime/businessPack.js';
 import { kfcVerifiedStateSnapshotSchema } from './kfcVerifiedStateSchema.js';
 import {
   advanceConversationSummary,
@@ -608,6 +611,10 @@ export const kfcVietnamPack: BusinessPack<
   ref: KFC_VIETNAM_PACK_REF,
   stateSchemaVersion: '1',
   parseState: parseKfcVerifiedState,
+  scopeInput: (input) => ({
+    ...input,
+    sessionId: legacySessionIdOutsidePackNamespace(input.sessionId),
+  }),
   async run(input, invokeModel) {
     if (!input.agentModel) throw new Error('kfc_agent_not_configured');
     const tracer = createSafeAgentTracer(

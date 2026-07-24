@@ -3,6 +3,7 @@ import {
   mkdtemp,
   mkdir,
   readFile,
+  readdir,
   symlink,
   writeFile,
 } from 'node:fs/promises';
@@ -103,6 +104,13 @@ describe('PVCFC production-like public corpus', () => {
       artifactCount: 24,
       totalBytes: 1_243_751,
     });
+    await expect(
+      readFile(join(installed, '.ready.json'), 'utf8').then(JSON.parse),
+    ).resolves.toMatchObject({
+      status: 'ready',
+      manifestSha256:
+        '0311e71df1ce34e963723849a76026621f15013d313c05286b5c7ee8c657a28e',
+    });
 
     const corruptSource = join(scratch, 'corrupt-source');
     const rejectedTarget = join(scratch, 'rejected');
@@ -118,5 +126,26 @@ describe('PVCFC production-like public corpus', () => {
     await expect(access(rejectedTarget)).rejects.toMatchObject({
       code: 'ENOENT',
     });
+  });
+
+  it('never replaces an empty target created while staging', async () => {
+    const scratch = await mkdtemp(join(tmpdir(), 'pvcfc-race-'));
+    const target = join(scratch, 'contended');
+    const installation = installPvcfcCorpus({
+      source: corpusRoot,
+      target,
+      importedOn: '2026-07-24',
+    });
+    for (let attempt = 0; attempt < 200; attempt += 1) {
+      const stagingStarted = (await readdir(scratch)).some((entry) =>
+        entry.startsWith('.contended.tmp-'),
+      );
+      if (stagingStarted) break;
+      await new Promise((resolve) => setTimeout(resolve, 1));
+    }
+    await mkdir(target);
+
+    await expect(installation).rejects.toThrow('pvcfc_corpus_target_exists');
+    expect(await readdir(target)).toEqual([]);
   });
 });

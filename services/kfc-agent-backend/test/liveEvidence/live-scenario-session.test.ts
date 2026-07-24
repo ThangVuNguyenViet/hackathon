@@ -78,6 +78,10 @@ describe('live scenario evidence session', () => {
       artifactsRoot: join(root, 'artifacts'),
       runId: 'run-1',
       attempt: 1,
+      correlation: {
+        externalSessionId: 'live-run-1',
+        durableSessionId: 'live-run-1',
+      },
       scenarioPath,
       identity,
       runPreflight: async () => {
@@ -116,7 +120,8 @@ describe('live scenario evidence session', () => {
       attempt: 1,
       status: 'completed',
       correlation: {
-        sessionId: 'live-run-1',
+        externalSessionId: 'live-run-1',
+        durableSessionId: 'live-run-1',
         scenarioId: scenario.id,
         probeRunId: 'run-1',
       },
@@ -192,6 +197,10 @@ describe('live scenario evidence session', () => {
       artifactsRoot: join(root, 'artifacts'),
       runId: 'failed-preflight',
       attempt: 2,
+      correlation: {
+        externalSessionId: 'live-failed-preflight',
+        durableSessionId: 'live-failed-preflight',
+      },
       scenarioPath,
       identity,
       runPreflight: async () => ({
@@ -225,6 +234,10 @@ describe('live scenario evidence session', () => {
       artifactsRoot: join(root, 'artifacts'),
       runId: 'collision',
       attempt: 1,
+      correlation: {
+        externalSessionId: 'live-collision',
+        durableSessionId: 'live-collision',
+      },
       scenarioPath,
       identity,
       runPreflight: async () => ({

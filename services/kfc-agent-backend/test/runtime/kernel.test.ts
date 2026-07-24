@@ -8,6 +8,8 @@ import { z } from 'zod';
 import {
   createBusinessPackRegistry,
   createPackStateEnvelope,
+  legacySessionIdOutsidePackNamespace,
+  scopePackSessionId,
   type BusinessPack,
   type PackRef,
 } from '../../src/runtime/businessPack.js';
@@ -28,6 +30,7 @@ function fakePack(observation: {
   return {
     ref: fakeRef,
     stateSchemaVersion: '1',
+    scopeInput: (input) => input,
     parseState(value) {
       const candidate = value as { value?: unknown };
       if (typeof candidate.value !== 'string') {
@@ -49,6 +52,58 @@ function fakePack(observation: {
 }
 
 describe('semantic kernel pack isolation', () => {
+  it('applies pack-owned session scoping at the trusted kernel boundary', async () => {
+    type SessionInput = { sessionId: string };
+    const kfcRef = { packId: 'kfc-vietnam', version: '1.0.0' };
+    const pvcfcRef = {
+      packId: 'pvcfc-customer-service',
+      version: '1.0.0',
+    };
+    const scopedPack = (
+      ref: PackRef,
+    ): BusinessPack<SessionInput, string, FakeState> & {
+      scopeInput(input: SessionInput): SessionInput;
+    } => ({
+      ref,
+      stateSchemaVersion: '1',
+      parseState: (value) => value as FakeState,
+      scopeInput(input) {
+        return {
+          ...input,
+          sessionId:
+            ref.packId === 'kfc-vietnam'
+              ? legacySessionIdOutsidePackNamespace(input.sessionId)
+              : scopePackSessionId(ref, input.sessionId),
+        };
+      },
+      async run(input) {
+        return input.sessionId;
+      },
+    });
+    const registry = createBusinessPackRegistry([
+      scopedPack(kfcRef),
+      scopedPack(pvcfcRef),
+    ]);
+
+    const pvcfcExternalSession = 'shared';
+    const craftedKfcExternalSession =
+      'pack:pvcfc-customer-service@1.0.0:shared';
+    await expect(
+      runSemanticKernel({
+        registry,
+        binding: registry.createTrustedBinding(kfcRef),
+        packInput: { sessionId: craftedKfcExternalSession },
+      }),
+    ).rejects.toThrow('business_pack_session_namespace_reserved');
+    await expect(
+      runSemanticKernel({
+        registry,
+        binding: registry.createTrustedBinding(pvcfcRef),
+        packInput: { sessionId: pvcfcExternalSession },
+      }),
+    ).resolves.toBe('pack:pvcfc-customer-service@1.0.0:shared');
+  });
+
   it('runs createAgent with supplied callbacks inside the active invocation context', async () => {
     const observations: string[] = [];
     let active = false;
@@ -75,6 +130,7 @@ describe('semantic kernel pack isolation', () => {
     const pack: BusinessPack<string, string, FakeState> = {
       ref: fakeRef,
       stateSchemaVersion: '1',
+      scopeInput: (input) => input,
       parseState(value) {
         return value as FakeState;
       },

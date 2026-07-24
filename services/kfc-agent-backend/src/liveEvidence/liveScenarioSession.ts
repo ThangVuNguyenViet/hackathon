@@ -38,7 +38,8 @@ interface Manifest {
   startedAt: string;
   completedAt?: string;
   correlation: {
-    sessionId: string;
+    externalSessionId: string;
+    durableSessionId: string;
     scenarioId: string;
     probeRunId: string;
   };
@@ -84,6 +85,10 @@ export async function startLiveScenarioSession(input: {
   artifactsRoot: string;
   runId: string;
   attempt: number;
+  correlation: {
+    externalSessionId: string;
+    durableSessionId: string;
+  };
   scenarioPath: string;
   identity: AgentModelIdentity;
   runPreflight(): Promise<ModelCapabilityPreflightResult>;
@@ -121,7 +126,8 @@ export async function startLiveScenarioSession(input: {
     status: 'ready',
     startedAt,
     correlation: {
-      sessionId: `live-${input.runId}`,
+      externalSessionId: input.correlation.externalSessionId,
+      durableSessionId: input.correlation.durableSessionId,
       scenarioId: scenario.id,
       probeRunId: input.runId,
     },
