@@ -22,6 +22,7 @@ import type {
   AgentTracer,
 } from '../../src/observability/agentTracing.js';
 import { buildVerifiedCollectionSnapshot } from '../../src/ordering/verifiedCollections.js';
+import { configuredTestAgent } from '../support/configured-agent-model.js';
 
 function toolOutputText(value: unknown): string {
   if (typeof value === 'string') return value;
@@ -37,6 +38,77 @@ function toolOutputText(value: unknown): string {
 }
 
 describe('KFC Vietnam business pack compatibility', () => {
+  it('rejects a model without a trusted configured binding before transcript work', async () => {
+    const store = new MemoryStore();
+    const input = {
+      sessionId: 'session-kfc-unbound-model',
+      customerId: 'customer-1',
+      channel: 'kfc' as const,
+      text: 'Xin chào',
+      clients: createMockClients(await loadGeneratedFixtures(process.cwd())),
+      store,
+      dashboard: new DashboardEventBus(),
+      agentModel: {} as BaseChatModel,
+    };
+
+    await expect(
+      kfcVietnamPack.run(input, async () => 'must not run'),
+    ).rejects.toThrow('agent_model_binding_untrusted');
+    await expect(store.listTurns(input.sessionId)).resolves.toEqual([]);
+  });
+
+  it('rejects a raw unrelated identity before transcript work', async () => {
+    const store = new MemoryStore();
+    const input = {
+      sessionId: 'session-kfc-raw-identity',
+      customerId: 'customer-1',
+      channel: 'kfc' as const,
+      text: 'Xin chào',
+      clients: createMockClients(await loadGeneratedFixtures(process.cwd())),
+      store,
+      dashboard: new DashboardEventBus(),
+      agentModel: {} as BaseChatModel,
+      agentModelIdentity: {
+        candidateId: 'qwen3.7-max',
+        provider: 'opencode',
+        model: 'qwen3.7-max',
+        profile: 'opencode:qwen3.7-max:anthropic-messages:thinking-disabled',
+        transport: 'anthropic_messages',
+      } as const,
+    };
+
+    await expect(
+      kfcVietnamPack.run(input, async () => 'must not run'),
+    ).rejects.toThrow('agent_model_binding_untrusted');
+    await expect(store.listTurns(input.sessionId)).resolves.toEqual([]);
+  });
+
+  it('rejects raw identity fields that contradict a trusted binding', async () => {
+    const store = new MemoryStore();
+    const input = {
+      sessionId: 'session-kfc-contradictory-identity',
+      customerId: 'customer-1',
+      channel: 'kfc' as const,
+      text: 'Xin chào',
+      clients: createMockClients(await loadGeneratedFixtures(process.cwd())),
+      store,
+      dashboard: new DashboardEventBus(),
+      agentModelBinding: configuredTestAgent({} as BaseChatModel),
+      agentModelIdentity: {
+        candidateId: 'qwen3.7-max',
+        provider: 'opencode',
+        model: 'qwen3.7-max',
+        profile: 'opencode:qwen3.7-max:anthropic-messages:thinking-disabled',
+        transport: 'anthropic_messages',
+      } as const,
+    };
+
+    await expect(
+      kfcVietnamPack.run(input, async () => 'must not run'),
+    ).rejects.toThrow('agent_model_binding_mismatch');
+    await expect(store.listTurns(input.sessionId)).resolves.toEqual([]);
+  });
+
   it('does not expose protected commerce mutations on an ordinary text turn', async () => {
     const input = {
       sessionId: 'session-kfc-ordinary-protected-tools',
@@ -46,7 +118,7 @@ describe('KFC Vietnam business pack compatibility', () => {
       clients: createMockClients(await loadGeneratedFixtures(process.cwd())),
       store: new MemoryStore(),
       dashboard: new DashboardEventBus(),
-      agentModel: {} as BaseChatModel,
+      agentModelBinding: configuredTestAgent({} as BaseChatModel),
     };
 
     await kfcVietnamPack.run(input, async ({ tools }) => {
@@ -143,7 +215,7 @@ describe('KFC Vietnam business pack compatibility', () => {
       clients,
       store,
       dashboard: new DashboardEventBus(),
-      agentModel: {} as BaseChatModel,
+      agentModelBinding: configuredTestAgent({} as BaseChatModel),
     };
     const invokeOrder = async (
       tools: Parameters<Parameters<typeof kfcVietnamPack.run>[1]>[0]['tools'],
@@ -342,7 +414,7 @@ describe('KFC Vietnam business pack compatibility', () => {
       clients,
       store,
       dashboard: new DashboardEventBus(),
-      agentModel: {} as BaseChatModel,
+      agentModelBinding: configuredTestAgent({} as BaseChatModel),
     };
     const invokePayment = async (
       tools: Parameters<Parameters<typeof kfcVietnamPack.run>[1]>[0]['tools'],
@@ -408,7 +480,7 @@ describe('KFC Vietnam business pack compatibility', () => {
       clients: createMockClients(await loadGeneratedFixtures(process.cwd())),
       store: new MemoryStore(),
       dashboard: new DashboardEventBus(),
-      agentModel: {} as BaseChatModel,
+      agentModelBinding: configuredTestAgent({} as BaseChatModel),
     };
 
     await kfcVietnamPack.run(input, async ({ tools }) => {
@@ -456,14 +528,7 @@ describe('KFC Vietnam business pack compatibility', () => {
       clients: createMockClients(await loadGeneratedFixtures(process.cwd())),
       store,
       dashboard: new DashboardEventBus(),
-      agentModel: {} as BaseChatModel,
-      agentModelIdentity: {
-        candidateId: 'openai-gpt-4.1-mini',
-        provider: 'openai',
-        model: 'gpt-4.1-mini',
-        profile: 'openai:gpt-4.1-mini:responses',
-        transport: 'openai_responses',
-      } as const,
+      agentModelBinding: configuredTestAgent({} as BaseChatModel),
       traceContext: createAgentTraceContext({
         scenarioId: 'scenario-03',
         probeRunId: 'probe-7',
@@ -563,9 +628,11 @@ describe('KFC Vietnam business pack compatibility', () => {
         clients: createMockClients(await loadGeneratedFixtures(process.cwd())),
         store: new MemoryStore(),
         dashboard: new DashboardEventBus(),
-        agentModel: new FakeListChatModel({
-          responses: ['Xin chào! Tôi có thể giúp gì cho bạn?'],
-        }),
+        agentModelBinding: configuredTestAgent(
+          new FakeListChatModel({
+            responses: ['Xin chào! Tôi có thể giúp gì cho bạn?'],
+          }),
+        ),
         tracer,
         deferTrace(task) {
           deferred.push(task);
@@ -655,13 +722,13 @@ describe('KFC Vietnam business pack compatibility', () => {
       clients: createMockClients(await loadGeneratedFixtures(process.cwd())),
       store,
       dashboard: new DashboardEventBus(),
-      agentModel: {} as BaseChatModel,
+      agentModelBinding: configuredTestAgent({} as BaseChatModel),
     };
 
     const output = await kfcVietnamPack.run(
       input,
       async ({ model, systemPrompt, messages, tools }) => {
-        expect(model).toBe(input.agentModel);
+        expect(model).toBe(input.agentModelBinding.model);
         expect(systemPrompt).toContain(KFC_AGENT_INSTRUCTIONS);
         expect(messages.at(-1)?.content).toBe(input.text);
         expect(tools.map((tool) => tool.name)).toContain('searchMenu');
@@ -695,9 +762,11 @@ describe('KFC Vietnam business pack compatibility', () => {
       clients: createMockClients(await loadGeneratedFixtures(process.cwd())),
       store,
       dashboard: new DashboardEventBus(),
-      agentModel: new FakeListChatModel({
-        responses: ['Xin chào! Tôi có thể giúp gì cho bạn?'],
-      }),
+      agentModelBinding: configuredTestAgent(
+        new FakeListChatModel({
+          responses: ['Xin chào! Tôi có thể giúp gì cho bạn?'],
+        }),
+      ),
     });
 
     expect(output.responseText).toBe('Xin chào! Tôi có thể giúp gì cho bạn?');
@@ -743,7 +812,9 @@ describe('KFC Vietnam business pack compatibility', () => {
       clients: createMockClients(await loadGeneratedFixtures(process.cwd())),
       store,
       dashboard,
-      agentModel: new FakeListChatModel({ responses: ['Xin chào!'] }),
+      agentModelBinding: configuredTestAgent(
+        new FakeListChatModel({ responses: ['Xin chào!'] }),
+      ),
       runGuard: {
         commitFence,
         isCurrent: () =>
@@ -819,7 +890,7 @@ describe('KFC Vietnam business pack compatibility', () => {
       clients,
       store,
       dashboard: new DashboardEventBus(),
-      agentModel: {} as BaseChatModel,
+      agentModelBinding: configuredTestAgent({} as BaseChatModel),
     };
     let authoritativeCart: unknown;
 
@@ -921,7 +992,7 @@ describe('KFC Vietnam business pack compatibility', () => {
       },
       store: new MemoryStore(),
       dashboard: new DashboardEventBus(),
-      agentModel: {} as BaseChatModel,
+      agentModelBinding: configuredTestAgent({} as BaseChatModel),
     };
 
     await expect(
@@ -962,7 +1033,7 @@ describe('KFC Vietnam business pack compatibility', () => {
       },
       store: new MemoryStore(),
       dashboard: new DashboardEventBus(),
-      agentModel: {} as BaseChatModel,
+      agentModelBinding: configuredTestAgent({} as BaseChatModel),
     };
 
     await kfcVietnamPack.run(input, async ({ tools }) => {
@@ -1007,7 +1078,7 @@ describe('KFC Vietnam business pack compatibility', () => {
       },
       store: new MemoryStore(),
       dashboard: new DashboardEventBus(),
-      agentModel: {} as BaseChatModel,
+      agentModelBinding: configuredTestAgent({} as BaseChatModel),
     };
 
     await kfcVietnamPack.run(input, async ({ tools }) => {
@@ -1077,7 +1148,7 @@ describe('KFC Vietnam business pack compatibility', () => {
       },
       store: new MemoryStore(),
       dashboard: new DashboardEventBus(),
-      agentModel: {} as BaseChatModel,
+      agentModelBinding: configuredTestAgent({} as BaseChatModel),
     };
 
     await kfcVietnamPack.run(input, async ({ tools }) => {
@@ -1132,7 +1203,7 @@ describe('KFC Vietnam business pack compatibility', () => {
       },
       store: new MemoryStore(),
       dashboard: new DashboardEventBus(),
-      agentModel: {} as BaseChatModel,
+      agentModelBinding: configuredTestAgent({} as BaseChatModel),
     };
 
     await kfcVietnamPack.run(input, async ({ tools }) => {
@@ -1187,7 +1258,7 @@ describe('KFC Vietnam business pack compatibility', () => {
         clients,
         store: new MemoryStore(),
         dashboard: new DashboardEventBus(),
-        agentModel: {} as BaseChatModel,
+        agentModelBinding: configuredTestAgent({} as BaseChatModel),
       },
       async ({ tools }) => {
         const search = tools.find(
@@ -1249,7 +1320,9 @@ describe('KFC Vietnam business pack compatibility', () => {
         clients: createMockClients(await loadGeneratedFixtures(process.cwd())),
         store: new MemoryStore(),
         dashboard: new DashboardEventBus(),
-        agentModel: new FakeListChatModel({ responses: ['   '] }),
+        agentModelBinding: configuredTestAgent(
+          new FakeListChatModel({ responses: ['   '] }),
+        ),
       }),
     ).rejects.toThrow('kfc_agent_model_response_empty');
   });

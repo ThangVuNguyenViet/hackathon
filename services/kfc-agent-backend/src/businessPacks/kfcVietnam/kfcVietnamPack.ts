@@ -71,6 +71,7 @@ import {
 } from '../../session/conversationContext.js';
 import { langChainConversationSummarizer } from '../../session/langChainConversationSummary.js';
 import { bindConfiguredSessionAgentModel } from '../../persistence/sessionAgentModelBinding.js';
+import { requireTrustedConfiguredAgentModelBinding } from '../../config/agentModelProfile.js';
 
 const DEFAULT_CONVERSATION_CONTEXT_TOKEN_BUDGET = 8_192;
 
@@ -850,14 +851,23 @@ export const kfcVietnamPack: BusinessPack<
     sessionId: legacySessionIdOutsidePackNamespace(input.sessionId),
   }),
   async run(input, invokeModel) {
-    if (!input.agentModel) throw new Error('kfc_agent_not_configured');
-    if (input.agentModelIdentity) {
-      await bindConfiguredSessionAgentModel({
-        store: input.store,
-        sessionId: input.sessionId,
+    const agent = requireTrustedConfiguredAgentModelBinding(
+      input.agentModelBinding,
+      {
+        model: input.agentModel,
         identity: input.agentModelIdentity,
-      });
-    }
+      },
+    );
+    input = {
+      ...input,
+      agentModel: agent.model,
+      agentModelIdentity: agent.identity,
+    };
+    await bindConfiguredSessionAgentModel({
+      store: input.store,
+      sessionId: input.sessionId,
+      identity: agent.identity,
+    });
     const tracer = createSafeAgentTracer(
       input.tracer ?? createNoopAgentTracer(),
       (code, error) => {
@@ -912,7 +922,7 @@ export const kfcVietnamPack: BusinessPack<
         contextPolicy?.tokenBudget ?? DEFAULT_CONVERSATION_CONTEXT_TOKEN_BUDGET;
       const countTokens =
         contextPolicy?.countTokens ??
-        ((text: string) => input.agentModel!.getNumTokens(text));
+        ((text: string) => agent.model.getNumTokens(text));
       let persistedSummary = await input.store.getConversationSummary(
         input.sessionId,
       );
@@ -931,7 +941,7 @@ export const kfcVietnamPack: BusinessPack<
             exchanges: context.omittedExchanges,
             summarize:
               contextPolicy?.summarize ??
-              langChainConversationSummarizer(input.agentModel),
+              langChainConversationSummarizer(agent.model),
           });
           persistedSummary = summaryResult.summary;
           context = await assembleConversationContext({
@@ -975,7 +985,7 @@ export const kfcVietnamPack: BusinessPack<
       );
       const runWithContext = turnTrace.withActiveTrace?.bind(turnTrace);
       const responseText = await invokeModel({
-        model: input.agentModel,
+        model: agent.model,
         messages: conversationMessages(input, state, currentUserTurn, context),
         tools: createKfcTools({
           turnInput: input,

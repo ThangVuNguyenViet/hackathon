@@ -1,5 +1,8 @@
 import type { BaseChatModel } from '@langchain/core/language_models/chat_models';
-import type { AgentModelIdentity } from '../config/agentModelProfile.js';
+import type {
+  AgentModelIdentity,
+  ConfiguredAgentModelBinding,
+} from '../config/agentModelProfile.js';
 import type { ExternalClients } from '../clients/interfaces.js';
 import type { CustomerSafeProgressFamily } from '../customerRuns/progressProjection.js';
 import type { TrustedCustomerActionEnvelope } from '../domain/customerCommand.js';
@@ -56,10 +59,21 @@ export interface AgentTurnInput {
    * never populate this capability.
    */
   traceContext?: AgentTraceContext;
-  /** Maintained provider adapter used by the single production agent loop. */
+  /**
+   * Pack-internal normalized adapter. A loose caller-supplied value is not
+   * execution authority and must match `agentModelBinding`.
+   */
   agentModel?: BaseChatModel;
-  /** Server-owned identity paired with the maintained provider adapter. */
+  /**
+   * Pack-internal normalized identity. A loose caller-supplied value is not
+   * execution authority and must match `agentModelBinding`.
+   */
   agentModelIdentity?: AgentModelIdentity;
+  /**
+   * Unforgeable server-created pairing of the validated identity and adapter.
+   * Executable pack turns reject its absence before durable transcript work.
+   */
+  agentModelBinding?: ConfiguredAgentModelBinding;
   /** Provider-neutral, explicit conversation-window policy. */
   conversationContext?: {
     tokenBudget: number;

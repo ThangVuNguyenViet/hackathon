@@ -23,6 +23,7 @@ import {
 } from '../../session/conversationContext.js';
 import { langChainConversationSummarizer } from '../../session/langChainConversationSummary.js';
 import { bindConfiguredSessionAgentModel } from '../../persistence/sessionAgentModelBinding.js';
+import { requireTrustedConfiguredAgentModelBinding } from '../../config/agentModelProfile.js';
 
 export const PVCFC_CUSTOMER_SERVICE_PACK_REF = {
   packId: 'pvcfc-customer-service',
@@ -257,15 +258,24 @@ export const pvcfcCustomerServicePack: BusinessPack<
     ),
   }),
   async run(input, invokeModel) {
-    const model = input.agentModel;
-    if (!model) throw new Error('pvcfc_agent_not_configured');
-    if (input.agentModelIdentity) {
-      await bindConfiguredSessionAgentModel({
-        store: input.store,
-        sessionId: input.sessionId,
+    const agent = requireTrustedConfiguredAgentModelBinding(
+      input.agentModelBinding,
+      {
+        model: input.agentModel,
         identity: input.agentModelIdentity,
-      });
-    }
+      },
+    );
+    const model = agent.model;
+    input = {
+      ...input,
+      agentModel: model,
+      agentModelIdentity: agent.identity,
+    };
+    await bindConfiguredSessionAgentModel({
+      store: input.store,
+      sessionId: input.sessionId,
+      identity: agent.identity,
+    });
     await input.store.appendTurn({
       sessionId: input.sessionId,
       channel: input.channel,

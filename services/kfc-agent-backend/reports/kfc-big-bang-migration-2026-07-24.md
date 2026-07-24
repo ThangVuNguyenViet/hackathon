@@ -98,11 +98,14 @@ and profile identity in the scoped session state. A resumed turn must present
 the exact same candidate, provider, model, profile, and transport; a deployment
 configuration change therefore fails closed with
 `session_agent_model_binding_mismatch` instead of silently moving an active
-conversation between models. Legacy rows have a null binding and pin on their
-next configured turn. Changing a session's model requires an explicit session
-reset/new session; the runtime does not retain old credentials or reconstruct a
-second provider path. Ordinary invocation plus typed tool calling must preflight
-successfully before a live scenario can proceed.
+conversation between models. Pack execution also requires the server-created
+binding that pairs that validated identity with its model adapter; a loose model,
+raw identity, or contradictory pair is rejected before transcript, model, or
+tool work. Legacy rows have a null binding and pin on their next configured
+turn. Changing a session's model requires an explicit session reset/new session;
+the runtime does not retain old credentials or reconstruct a second provider
+path. Ordinary invocation plus typed tool calling must preflight successfully
+before a live scenario can proceed.
 
 ### Business-agnostic trusted packs
 

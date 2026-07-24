@@ -7,6 +7,7 @@ import { DashboardEventBus } from '../../src/dashboard/eventBus.js';
 import { loadGeneratedFixtures } from '../../src/fixtures/loadFixtures.js';
 import { createMockClients } from '../../src/mock/createMockClients.js';
 import { MemoryStore } from '../../src/persistence/memoryStore.js';
+import { configuredTestAgent } from '../support/configured-agent-model.js';
 
 describe('KFC local live-evidence hook', () => {
   it('reports complete model-facing tool arguments and results without changing the neutral kernel', async () => {
@@ -36,7 +37,7 @@ describe('KFC local live-evidence hook', () => {
       clients: createMockClients(await loadGeneratedFixtures(process.cwd())),
       store: new MemoryStore(),
       dashboard: new DashboardEventBus(),
-      agentModel: model,
+      agentModelBinding: configuredTestAgent(model),
       async recordLocalToolEvidence(event) {
         events.push(event);
       },
@@ -118,7 +119,7 @@ describe('KFC local live-evidence hook', () => {
         clients: createMockClients(await loadGeneratedFixtures(process.cwd())),
         store: new MemoryStore(),
         dashboard: new DashboardEventBus(),
-        agentModel: model,
+        agentModelBinding: configuredTestAgent(model),
         async recordLocalToolEvidence(event) {
           events.push(event);
         },
@@ -183,7 +184,7 @@ describe('KFC local live-evidence hook', () => {
       clients: createMockClients(await loadGeneratedFixtures(process.cwd())),
       store: new MemoryStore(),
       dashboard: new DashboardEventBus(),
-      agentModel: model,
+      agentModelBinding: configuredTestAgent(model),
       async recordLocalToolEvidence(event) {
         events.push(event);
       },

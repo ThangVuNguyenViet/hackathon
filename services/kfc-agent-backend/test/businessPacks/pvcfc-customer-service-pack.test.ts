@@ -19,6 +19,7 @@ import { DashboardEventBus } from '../../src/dashboard/eventBus.js';
 import { loadGeneratedFixtures } from '../../src/fixtures/loadFixtures.js';
 import { createMockClients } from '../../src/mock/createMockClients.js';
 import { MemoryStore } from '../../src/persistence/memoryStore.js';
+import { configuredTestAgent } from '../support/configured-agent-model.js';
 
 async function turnInput(sessionId: string) {
   return {
@@ -29,13 +30,30 @@ async function turnInput(sessionId: string) {
     clients: createMockClients(await loadGeneratedFixtures(process.cwd())),
     store: new MemoryStore(),
     dashboard: new DashboardEventBus(),
-    agentModel: new FakeListChatModel({
-      responses: ['Thông tin công khai PVCFC được chụp ngày 2026-07-21.'],
-    }),
+    agentModelBinding: configuredTestAgent(
+      new FakeListChatModel({
+        responses: ['Thông tin công khai PVCFC được chụp ngày 2026-07-21.'],
+      }),
+    ),
   };
 }
 
 describe('PVCFC public customer service pack', () => {
+  it('rejects a loose model before writing the scoped transcript', async () => {
+    const store = new MemoryStore();
+    const input = {
+      ...(await turnInput('pvcfc-loose-model')),
+      store,
+      agentModelBinding: undefined,
+      agentModel: new FakeListChatModel({ responses: ['must not run'] }),
+    };
+
+    await expect(
+      pvcfcCustomerServicePack.run(input, async () => 'must not run'),
+    ).rejects.toThrow('agent_model_binding_untrusted');
+    await expect(store.listTurns(input.sessionId)).resolves.toEqual([]);
+  });
+
   it('does not publish factual model text when no public search ran', async () => {
     const input = await turnInput('publication-no-tool');
 
@@ -350,13 +368,6 @@ describe('PVCFC public customer service pack', () => {
     const input = {
       ...(await turnInput('same-external-session')),
       store,
-      agentModelIdentity: {
-        candidateId: 'openai-gpt-4.1-mini',
-        provider: 'openai',
-        model: 'gpt-4.1-mini',
-        profile: 'openai:gpt-4.1-mini:responses',
-        transport: 'openai_responses',
-      } as const,
     };
 
     const output = await runPvcfcCustomerServiceTurn(input);
@@ -398,7 +409,7 @@ describe('PVCFC public customer service pack', () => {
     expect(
       (await store.getSessionAgentState(durablePvcfcSessionId))
         .agentModelBinding,
-    ).toEqual(input.agentModelIdentity);
+    ).toEqual(input.agentModelBinding.identity);
     expect(
       (await store.getSessionAgentState('same-external-session'))
         .agentModelBinding,

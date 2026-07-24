@@ -269,6 +269,33 @@ export interface ConfiguredAgentModelBinding {
   readonly [configuredAgentModelBindingBrand]: true;
 }
 
+/**
+ * Creates the unforgeable runtime capability after server code has selected a
+ * roster profile and constructed its model adapter.
+ */
+export function createConfiguredAgentModelBinding(input: {
+  profile: AgentModelProfile;
+  model: BaseChatModel;
+}): ConfiguredAgentModelBinding {
+  const profile = resolveAgentModelProfile({
+    candidateId: input.profile.candidateId,
+    assertedModel: input.profile.model,
+  });
+  const binding: ConfiguredAgentModelBinding = Object.freeze({
+    [configuredAgentModelBindingBrand]: true as const,
+    identity: Object.freeze({
+      candidateId: profile.candidateId,
+      provider: profile.provider,
+      model: profile.model,
+      profile: profile.profile,
+      transport: profile.transport,
+    }),
+    model: input.model,
+  });
+  trustedConfiguredAgentModelBindings.add(binding);
+  return binding;
+}
+
 function createAgentChatModel(input: {
   profile: AgentModelProfile;
   openAiApiKey?: string;
@@ -331,19 +358,10 @@ export function createConfiguredAgentChatModel(input: {
     candidateId: input.profile.candidateId,
     assertedModel: input.profile.model,
   });
-  const binding: ConfiguredAgentModelBinding = Object.freeze({
-    [configuredAgentModelBindingBrand]: true as const,
-    identity: Object.freeze({
-      candidateId: profile.candidateId,
-      provider: profile.provider,
-      model: profile.model,
-      profile: profile.profile,
-      transport: profile.transport,
-    }),
+  return createConfiguredAgentModelBinding({
+    profile,
     model: createAgentChatModel({ ...input, profile }),
   });
-  trustedConfiguredAgentModelBindings.add(binding);
-  return binding;
 }
 
 export function isTrustedConfiguredAgentModelBinding(
@@ -353,5 +371,38 @@ export function isTrustedConfiguredAgentModelBinding(
     typeof value === 'object' &&
     value !== null &&
     trustedConfiguredAgentModelBindings.has(value)
+  );
+}
+
+export function requireTrustedConfiguredAgentModelBinding(
+  value: unknown,
+  asserted?: {
+    model?: unknown;
+    identity?: AgentModelIdentity;
+  },
+): ConfiguredAgentModelBinding {
+  if (!isTrustedConfiguredAgentModelBinding(value)) {
+    throw new Error('agent_model_binding_untrusted');
+  }
+  if (
+    (asserted?.model !== undefined && asserted.model !== value.model) ||
+    (asserted?.identity !== undefined &&
+      !sameAgentModelIdentity(asserted.identity, value.identity))
+  ) {
+    throw new Error('agent_model_binding_mismatch');
+  }
+  return value;
+}
+
+function sameAgentModelIdentity(
+  left: AgentModelIdentity,
+  right: AgentModelIdentity,
+): boolean {
+  return (
+    left.candidateId === right.candidateId &&
+    left.provider === right.provider &&
+    left.model === right.model &&
+    left.profile === right.profile &&
+    left.transport === right.transport
   );
 }
