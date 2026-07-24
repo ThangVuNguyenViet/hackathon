@@ -389,7 +389,7 @@ export const agentToolDescriptions: Record<ToolName, string> = {
   recommendAddOns:
     'Return verified add-on candidates for the current cart without mutating it. If a requested add-on is not returned, that does not prove that item is absent from the full menu; searchMenu can check for a standalone item.',
   findStores:
-    'Return verified stores matching the supplied structured location filters. An empty filtered result means only that this query returned no matches; it does not prove that no KFC store exists in the location. A nearby or named store does not verify delivery coverage, fee, ETA, or item serviceability; use quoteFulfillment with complete delivery details for those facts.',
+    'Return store candidates for the supplied structured location filters. Treat each returned row only as evidence for its own address. Empty results or rows outside the requested location do not prove either a matching store or exhaustive absence. This query does not prove that no KFC store exists in the location. A nearby or named store does not verify inventory or capacity and does not verify delivery coverage, fee, ETA, or item serviceability; use quoteFulfillment with complete delivery details for fulfillment facts.',
   checkStoreAvailability:
     'Check the exact current cart at one store and one pickup or delivery disposition; cart item codes are injected by the server. This verifies item availability only and does not verify delivery fee or ETA.',
   quoteFulfillment:

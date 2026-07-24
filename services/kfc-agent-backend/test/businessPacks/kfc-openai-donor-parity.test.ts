@@ -68,6 +68,15 @@ describe('portable Direct SDK behavior retained by the KFC LangChain pack', () =
     expect(agentToolDescriptions.findStores).toContain(
       'does not prove that no KFC store exists',
     );
+    expect(agentToolDescriptions.findStores).toContain(
+      'Treat each returned row only as evidence for its own address',
+    );
+    expect(agentToolDescriptions.findStores).toContain(
+      'do not prove either a matching store or exhaustive absence',
+    );
+    expect(agentToolDescriptions.findStores).toContain(
+      'does not verify inventory or capacity',
+    );
     expect(agentToolDescriptions.checkStoreAvailability).toContain(
       'does not verify delivery fee or ETA',
     );
