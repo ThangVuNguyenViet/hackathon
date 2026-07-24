@@ -512,30 +512,62 @@ def _recommendation_html(
     """
 
 
-def _outcome_html(
+def _response_html(
+    decision: str,
+    request: dict[str, Any],
     outcome: dict[str, Any],
+    slate: list[dict[str, Any]],
     candidate_lookup: dict[str, dict[str, Any]],
 ) -> str:
-    accepted = outcome["selected_candidate_id"] is not None
-    selected_name = _selected_name(outcome, candidate_lookup)
-    style = "outcome-success" if accepted else "outcome-neutral"
-    title = f"Accepted · {_safe(selected_name)}" if accepted else "No offer accepted"
-    checkout = "Checkout completed" if outcome["checked_out"] else "Checkout abandoned"
+    if decision == "accepted":
+        primary = candidate_lookup[slate[0]["candidate_id"]]
+        increment = int(primary["price_delta_vnd"])
+        basket_after = int(request["basket_subtotal_vnd"]) + increment
+        style = "outcome-success"
+        eyebrow = "Customer choice"
+        title = f"Added · {_safe(primary['name'])}"
+        meta = (
+            f"Basket {_money(basket_after)} · Ready for checkout "
+            f"· Increment {_money(increment)} · Acceptance logged"
+        )
+    elif decision == "declined":
+        style = "outcome-neutral"
+        eyebrow = "Customer choice"
+        title = "No thanks"
+        meta = (
+            f"Basket unchanged at {_money(request['basket_subtotal_vnd'])} "
+            "· Rejection logged"
+        )
+    else:
+        accepted = outcome["selected_candidate_id"] is not None
+        selected_name = _selected_name(outcome, candidate_lookup)
+        style = "outcome-success" if accepted else "outcome-neutral"
+        eyebrow = "Recorded synthetic response"
+        title = (
+            f"Auto-played · {_safe(selected_name)}"
+            if accepted
+            else "Auto-played · No offer accepted"
+        )
+        checkout = (
+            "Checkout completed" if outcome["checked_out"] else "Checkout abandoned"
+        )
+        meta = (
+            f"Basket {_money(outcome['basket_subtotal_after_vnd'])} "
+            f"· {checkout} "
+            f"· Increment {_money(outcome['gross_incremental_value_vnd'])}"
+        )
     return f"""
     <div class="{style}">
-      <div class="eyebrow" style="color:inherit">Simulated customer response</div>
+      <div class="eyebrow" style="color:inherit">{eyebrow}</div>
       <div class="outcome-title">{title}</div>
-      <div class="outcome-meta">
-        Basket {_money(outcome["basket_subtotal_after_vnd"])}
-        · {checkout}
-        · Increment {_money(outcome["gross_incremental_value_vnd"])}
-      </div>
+      <div class="outcome-meta">{meta}</div>
     </div>
     """
 
 
 def _reset_stage() -> None:
     st.session_state["demo_stage"] = 0
+    st.session_state["demo_decision"] = None
 
 
 def _step_strip(stage: int) -> None:
@@ -550,6 +582,7 @@ def _step_strip(stage: int) -> None:
 def _variant_guided(data: dict[str, Any]) -> None:
     _header("Guided story")
     st.session_state.setdefault("demo_stage", 0)
+    st.session_state.setdefault("demo_decision", None)
     stage = int(st.session_state["demo_stage"])
     _step_strip(stage)
     journey_id, scenario = _scenario_picker("guided")
@@ -582,6 +615,7 @@ def _variant_guided(data: dict[str, Any]) -> None:
             "Eligibility is applied before ranking."
         )
         if st.button("Generate recommendations", type="primary", use_container_width=True):
+            st.session_state["demo_decision"] = None
             st.session_state["demo_stage"] = 2
             st.rerun()
         return
@@ -589,19 +623,52 @@ def _variant_guided(data: dict[str, Any]) -> None:
     st.markdown(_recommendation_html(slate, lookup), unsafe_allow_html=True)
     if stage == 2:
         st.caption(
-            "The primary card is what the system proposes. Alternatives remain "
-            "available if the customer wants another choice."
+            "The recommendation has been made. The next action belongs to the "
+            "customer—not the simulator."
         )
-        if st.button(
-            "Simulate customer response",
+        accept_column, decline_column = st.columns(2)
+        if accept_column.button(
+            "Add to order",
             type="primary",
             use_container_width=True,
+            key="guided_accept",
         ):
+            st.session_state["demo_decision"] = "accepted"
             st.session_state["demo_stage"] = 3
             st.rerun()
+        if decline_column.button(
+            "No thanks",
+            use_container_width=True,
+            key="guided_decline",
+        ):
+            st.session_state["demo_decision"] = "declined"
+            st.session_state["demo_stage"] = 3
+            st.rerun()
+        with st.expander("Presenter controls", expanded=False):
+            st.caption(
+                "Auto-play uses the response stored in the synthetic journey. "
+                "It is not a customer-facing action."
+            )
+            if st.button(
+                "Auto-play recorded synthetic response",
+                use_container_width=True,
+                key="guided_autoplay",
+            ):
+                st.session_state["demo_decision"] = "recorded"
+                st.session_state["demo_stage"] = 3
+                st.rerun()
         return
 
-    st.markdown(_outcome_html(outcome, lookup), unsafe_allow_html=True)
+    st.markdown(
+        _response_html(
+            str(st.session_state["demo_decision"] or "recorded"),
+            request,
+            outcome,
+            slate,
+            lookup,
+        ),
+        unsafe_allow_html=True,
+    )
     if st.button("Start another demo", use_container_width=True):
         _reset_stage()
         st.rerun()
@@ -610,6 +677,7 @@ def _variant_guided(data: dict[str, Any]) -> None:
 def _variant_theatre(data: dict[str, Any]) -> None:
     _header("Kiosk theatre")
     st.session_state.setdefault("demo_stage", 0)
+    st.session_state.setdefault("demo_decision", None)
     journey_id, scenario = _scenario_picker("theatre")
     request, outcome, slate, lookup = _scenario_data(
         data, journey_id, str(scenario["placement"])
@@ -640,14 +708,37 @@ def _variant_theatre(data: dict[str, Any]) -> None:
             type="primary",
             use_container_width=True,
         ):
+            st.session_state["demo_decision"] = None
             st.session_state["demo_stage"] = 2
             st.rerun()
-        if stage >= 2 and st.button(
-            "Reveal customer decision",
-            use_container_width=True,
-        ):
-            st.session_state["demo_stage"] = 3
-            st.rerun()
+        if stage >= 2:
+            accept_column, decline_column = st.columns(2)
+            if accept_column.button(
+                "Add to order",
+                type="primary",
+                use_container_width=True,
+                key="theatre_accept",
+            ):
+                st.session_state["demo_decision"] = "accepted"
+                st.session_state["demo_stage"] = 3
+                st.rerun()
+            if decline_column.button(
+                "No thanks",
+                use_container_width=True,
+                key="theatre_decline",
+            ):
+                st.session_state["demo_decision"] = "declined"
+                st.session_state["demo_stage"] = 3
+                st.rerun()
+            with st.expander("Presenter controls", expanded=False):
+                if st.button(
+                    "Auto-play recorded response",
+                    use_container_width=True,
+                    key="theatre_autoplay",
+                ):
+                    st.session_state["demo_decision"] = "recorded"
+                    st.session_state["demo_stage"] = 3
+                    st.rerun()
 
     with right:
         st.markdown('<div class="theatre-shell">', unsafe_allow_html=True)
@@ -667,7 +758,16 @@ def _variant_theatre(data: dict[str, Any]) -> None:
         else:
             st.markdown(_recommendation_html(slate, lookup), unsafe_allow_html=True)
             if stage >= 3:
-                st.markdown(_outcome_html(outcome, lookup), unsafe_allow_html=True)
+                st.markdown(
+                    _response_html(
+                        str(st.session_state["demo_decision"] or "recorded"),
+                        request,
+                        outcome,
+                        slate,
+                        lookup,
+                    ),
+                    unsafe_allow_html=True,
+                )
         st.markdown("</div>", unsafe_allow_html=True)
 
 

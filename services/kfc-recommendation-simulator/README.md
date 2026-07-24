@@ -30,7 +30,7 @@ Use the fixed arrow switcher, the keyboard left/right arrows, or open a variant
 directly:
 
 - `/?variant=A` — a guided three-step story: simulate context, generate
-  recommendations, then simulate the customer response;
+  recommendations, then let the customer choose `Add to order` or `No thanks`;
 - `/?variant=B` — a kiosk-theatre layout with the order ticket beside the
   recommendation stage;
 - `/?variant=C` — a one-screen evidence board with model-visible and oracle
@@ -39,6 +39,8 @@ directly:
 Start a stakeholder walkthrough with variant A and the
 `Quick lunch · cross-sell accepted` scenario. The scenario is a replay from the
 generated synthetic bundle, not a live production recommendation request.
+The pre-generated response remains available under `Presenter controls`;
+customer-facing buttons mutate only in-memory demo state.
 
 ## Question this prototype answers
 
