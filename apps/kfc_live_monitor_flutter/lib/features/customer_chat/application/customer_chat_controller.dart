@@ -4,6 +4,7 @@ import 'package:state_beacon/state_beacon.dart';
 
 import '../data/customer_chat_repository.dart';
 import '../domain/customer_confirmation_models.dart';
+import '../domain/kfc_agent_model_candidate.dart';
 import '../domain/customer_run_models.dart';
 import '../domain/kfc_genui_models.dart';
 import 'customer_chat_state.dart';
@@ -49,6 +50,11 @@ class CustomerChatController extends BeaconController {
 
   void updateDraft(String value) {
     state.value = state.value.copyWith(draftText: value, clearError: true);
+  }
+
+  void selectModel(KfcAgentModelCandidate model) {
+    if (state.value.isSending) return;
+    state.value = state.value.copyWith(selectedModel: model, clearError: true);
   }
 
   Future<void> sendDraft() {
@@ -177,6 +183,7 @@ class CustomerChatController extends BeaconController {
   }
 
   Future<void> _startCustomerRun({String? text, KfcGenUiAction? action}) async {
+    final modelCandidate = state.value.selectedModel;
     final customerText = text ?? _customerTextForAction(action!);
     final customerMessage = _message(CustomerChatRole.customer, customerText);
     state.value = state.value.copyWith(
@@ -193,10 +200,14 @@ class CustomerChatController extends BeaconController {
         clientMessageId: customerMessage.id,
         text: text,
         action: action,
+        candidateId: modelCandidate.wireName,
       );
       if (_disposed) return;
       state.value = state.value.copyWith(
-        activeDraft: ActiveAssistantDraft.accepted(runId: accepted.runId),
+        activeDraft: ActiveAssistantDraft.accepted(
+          runId: accepted.runId,
+          modelCandidate: modelCandidate,
+        ),
       );
       final completion = _watchAcceptedRun(accepted.runId);
       _activeRunCompletion = completion;
@@ -304,6 +315,7 @@ class CustomerChatController extends BeaconController {
               CustomerChatRole.assistant,
               draft.text,
               genUi: draft.genUi,
+              modelCandidate: draft.modelCandidate,
             ),
           ]
         : state.value.messages;
@@ -404,6 +416,7 @@ class CustomerChatController extends BeaconController {
     CustomerChatRole role,
     String text, {
     KfcGenUiAttachment? genUi,
+    KfcAgentModelCandidate? modelCandidate,
   }) {
     _messageSequence += 1;
     return CustomerChatMessage(
@@ -411,6 +424,7 @@ class CustomerChatController extends BeaconController {
       role: role,
       text: text,
       genUi: genUi,
+      modelCandidate: modelCandidate,
     );
   }
 

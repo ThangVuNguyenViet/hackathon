@@ -990,11 +990,13 @@ export const kfcVietnamPack: BusinessPack<
       agentModel: agent.model,
       agentModelIdentity: agent.identity,
     };
-    await bindConfiguredSessionAgentModel({
-      store: input.store,
-      sessionId: input.sessionId,
-      identity: agent.identity,
-    });
+    if (input.channel !== 'kfc') {
+      await bindConfiguredSessionAgentModel({
+        store: input.store,
+        sessionId: input.sessionId,
+        identity: agent.identity,
+      });
+    }
     const tracer = createSafeAgentTracer(
       input.tracer ?? createNoopAgentTracer(),
       (code, error) => {

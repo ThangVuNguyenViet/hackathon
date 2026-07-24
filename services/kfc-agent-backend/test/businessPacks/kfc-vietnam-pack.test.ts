@@ -42,6 +42,53 @@ function toolOutputText(value: unknown): string {
 }
 
 describe('KFC Vietnam business pack compatibility', () => {
+  it('allows trusted demo turns to switch models while preserving history and provenance', async () => {
+    const store = new MemoryStore();
+    const clients = createMockClients(await loadGeneratedFixtures(process.cwd()));
+    const dashboard = new DashboardEventBus();
+    const openAi = configuredTestAgent(
+      new FakeListChatModel({ responses: ['Phản hồi OpenAI'] }),
+    );
+    const qwen = configuredTestAgent(
+      new FakeListChatModel({ responses: ['Phản hồi Qwen'] }),
+      'qwen3.7-max',
+    );
+
+    await runAgentTurn({
+      sessionId: 'session-kfc-model-switch',
+      customerId: 'customer-1',
+      channel: 'kfc',
+      text: 'Lượt đầu',
+      clients,
+      store,
+      dashboard,
+      agentModelBinding: openAi,
+    });
+    await runAgentTurn({
+      sessionId: 'session-kfc-model-switch',
+      customerId: 'customer-1',
+      channel: 'kfc',
+      text: 'Lượt tiếp theo',
+      clients,
+      store,
+      dashboard,
+      agentModelBinding: qwen,
+    });
+
+    const turns = await store.listTurns('session-kfc-model-switch');
+    expect(turns.map((turn) => turn.text)).toEqual([
+      'Lượt đầu',
+      'Phản hồi OpenAI',
+      'Lượt tiếp theo',
+      'Phản hồi Qwen',
+    ]);
+    expect(
+      turns
+        .filter((turn) => turn.role === 'assistant')
+        .map((turn) => turn.metadata?.agentModel?.candidateId),
+    ).toEqual(['openai-gpt-4.1-mini', 'qwen3.7-max']);
+  });
+
   it('rejects a model without a trusted configured binding before transcript work', async () => {
     const store = new MemoryStore();
     const input = {

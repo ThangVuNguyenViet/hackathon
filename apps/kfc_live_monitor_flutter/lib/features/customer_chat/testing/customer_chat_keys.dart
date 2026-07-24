@@ -14,6 +14,10 @@ abstract final class CustomerChatKeys {
   static const approvalCard = Key('customerChatApprovalCard');
   static const approvalApproveButton = Key('customerChatApprovalApproveButton');
   static const approvalRejectButton = Key('customerChatApprovalRejectButton');
+  static const modelSelector = Key('customerChatModelSelector');
+
+  static Key modelLabel(String candidateId) =>
+      Key('customerChatModelLabel_$candidateId');
 
   static Key quickPrompt(String id) => Key('customerChatQuickPrompt_$id');
 

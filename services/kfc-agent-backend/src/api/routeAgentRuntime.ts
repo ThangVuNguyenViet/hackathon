@@ -56,6 +56,7 @@ import {
 } from '../agent/verifiedState.js';
 import { kfcVietnamPack } from '../businessPacks/kfcVietnam/kfcVietnamPack.js';
 import type { AgentTurnOutput } from '../agent/agentTurn.js';
+import type { ConfiguredAgentModelBinding } from '../config/agentModelProfile.js';
 import type { AgentTracer } from '../observability/agentTracing.js';
 import {
   createMockClients,
@@ -147,6 +148,7 @@ export interface StreamingRunObserver {
   observe: (observation: CustomerRunObservation) => Promise<void>;
   isCurrent: () => Promise<boolean>;
   commitFence: RunCommitFence;
+  agentModelBinding?: ConfiguredAgentModelBinding;
 }
 
 export type StreamingRunObservers = Map<string, StreamingRunObserver>;
@@ -273,6 +275,7 @@ export function createRouteAgentRuntime(
     clientMessageId: string;
     text: string;
     metadata: ConversationTurnMetadata;
+    agentModelBinding?: ConfiguredAgentModelBinding;
     trustedCustomerAction?: TrustedCustomerActionEnvelope;
     observeRun?: (observation: CustomerRunObservation) => Promise<void>;
     runGuard?: {
@@ -292,7 +295,13 @@ export function createRouteAgentRuntime(
       metadata: trustedMetadata,
       trustedCustomerAction: input.trustedCustomerAction ?? null,
     });
-    if (!options.agent && process.env.NODE_ENV !== 'test') {
+    const selectedAgentModelBinding =
+      input.agentModelBinding ??
+      streamingRunObservers.get(
+        streamingRunObserverKey(input.sessionId, input.clientMessageId),
+      )?.agentModelBinding ??
+      options.agent;
+    if (!selectedAgentModelBinding && process.env.NODE_ENV !== 'test') {
       return {
         status: 503,
         body: { errorCode: 'kfc_agent_not_configured' },
@@ -392,7 +401,7 @@ export function createRouteAgentRuntime(
         ),
         store,
         dashboard,
-        agentModelBinding: options.agent,
+        agentModelBinding: selectedAgentModelBinding,
         tracer: options.agentTracer,
         deferTrace: options.defer,
         accessContext,

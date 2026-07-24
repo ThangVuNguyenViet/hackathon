@@ -7,6 +7,7 @@ import 'package:kfc_live_monitor/features/customer_chat/application/customer_cha
 import 'package:kfc_live_monitor/features/customer_chat/application/customer_chat_state.dart';
 import 'package:kfc_live_monitor/features/customer_chat/data/customer_chat_repository.dart';
 import 'package:kfc_live_monitor/features/customer_chat/domain/customer_confirmation_models.dart';
+import 'package:kfc_live_monitor/features/customer_chat/domain/kfc_agent_model_candidate.dart';
 import 'package:kfc_live_monitor/features/customer_chat/domain/customer_run_models.dart';
 import 'package:kfc_live_monitor/features/customer_chat/domain/kfc_genui_models.dart';
 import 'package:kfc_live_monitor/features/customer_chat/presentation/customer_chat_screen.dart';
@@ -15,6 +16,81 @@ import 'package:kfc_live_monitor/features/customer_chat/testing/customer_chat_ke
 import '../../test_app.dart';
 
 void main() {
+  testWidgets(
+    'model selector changes the next-turn model and labels its assistant reply',
+    (tester) async {
+      final controller = CustomerChatController(
+        repository: const FixtureCustomerChatRepository(
+          eventDelay: Duration.zero,
+        ),
+      );
+      await tester.pumpWidget(
+        TestApp(child: CustomerChatScreen(controller: controller)),
+      );
+      await tester.pumpAndSettle();
+
+      final selector = tester.widget<ShadSelect<KfcAgentModelCandidate>>(
+        find.byKey(CustomerChatKeys.modelSelector),
+      );
+      expect(selector.initialValue, KfcAgentModelCandidate.openAi);
+      expect(selector.enabled, isTrue);
+      expect(selector.options, hasLength(4));
+
+      selector.onChanged!(KfcAgentModelCandidate.qwen);
+      await tester.pump();
+      expect(controller.state.value.selectedModel, KfcAgentModelCandidate.qwen);
+
+      await controller.sendQuickPrompt('Gợi ý combo');
+      await tester.pumpAndSettle();
+      expect(
+        find.byKey(
+          CustomerChatKeys.modelLabel(KfcAgentModelCandidate.qwen.wireName),
+        ),
+        findsOneWidget,
+      );
+      expect(find.text('Qwen 3.7 Max'), findsWidgets);
+    },
+  );
+
+  testWidgets('model selector stays usable on a narrow layout', (tester) async {
+    tester.view.physicalSize = const Size(360, 760);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.reset);
+    final controller = CustomerChatController();
+
+    await tester.pumpWidget(
+      TestApp(child: CustomerChatScreen(controller: controller)),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(CustomerChatKeys.modelSelector), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('model selector is disabled during an active run', (
+    tester,
+  ) async {
+    final controller = CustomerChatController(
+      initialState: CustomerChatState(
+        sessionId: 'kfc:customer-1',
+        customerId: 'customer-1',
+        activeDraft: ActiveAssistantDraft.accepted(
+          runId: 'run-1',
+          modelCandidate: KfcAgentModelCandidate.openAi,
+        ),
+      ),
+    );
+    await tester.pumpWidget(
+      TestApp(child: CustomerChatScreen(controller: controller)),
+    );
+    await tester.pump();
+
+    final selector = tester.widget<ShadSelect<KfcAgentModelCandidate>>(
+      find.byKey(CustomerChatKeys.modelSelector),
+    );
+    expect(selector.enabled, isFalse);
+  });
+
   testWidgets('quick prompt renders customer chat GenUI', (tester) async {
     tester.view.physicalSize = const Size(920, 900);
     tester.view.devicePixelRatio = 1.0;

@@ -73,6 +73,9 @@ export async function persistCompletedTurn(input: {
     ...(input.turnInput.responseProfile
       ? { responseProfile: input.turnInput.responseProfile }
       : {}),
+    ...(input.turnInput.agentModelIdentity
+      ? { agentModel: input.turnInput.agentModelIdentity }
+      : {}),
     ...(genUi ? { genUi: kfcGenUiAttachmentForPersistence(genUi) } : {}),
   };
   const assistantTurn = {

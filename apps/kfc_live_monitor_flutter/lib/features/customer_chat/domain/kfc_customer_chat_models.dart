@@ -41,12 +41,14 @@ class CustomerChatMessage {
     required this.role,
     required this.text,
     this.genUi,
+    this.modelCandidate,
   });
 
   final String id;
   final CustomerChatRole role;
   final String text;
   final KfcGenUiAttachment? genUi;
+  final KfcAgentModelCandidate? modelCandidate;
 }
 
 enum CustomerChatRole { customer, assistant }

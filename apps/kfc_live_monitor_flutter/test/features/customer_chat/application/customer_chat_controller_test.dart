@@ -5,6 +5,7 @@ import 'package:kfc_live_monitor/features/customer_chat/application/customer_cha
 import 'package:kfc_live_monitor/features/customer_chat/application/customer_chat_state.dart';
 import 'package:kfc_live_monitor/features/customer_chat/data/customer_chat_repository.dart';
 import 'package:kfc_live_monitor/features/customer_chat/domain/customer_confirmation_models.dart';
+import 'package:kfc_live_monitor/features/customer_chat/domain/kfc_agent_model_candidate.dart';
 import 'package:kfc_live_monitor/features/customer_chat/domain/kfc_genui_models.dart';
 import 'package:kfc_live_monitor/features/customer_chat/domain/customer_run_models.dart';
 
@@ -19,6 +20,57 @@ void main() {
     expect(second.sessionId, 'kfc:${second.customerId}');
     expect(second.sessionId, isNot(first.sessionId));
     expect(second.customerId, isNot(first.customerId));
+    expect(first.selectedModel, KfcAgentModelCandidate.openAi);
+  });
+
+  test(
+    'switching models affects the next run and preserves shared transcript provenance',
+    () async {
+      final repository = _RecordingStartRepository();
+      final controller = CustomerChatController(repository: repository);
+
+      await controller.sendQuickPrompt('Gợi ý combo');
+      controller.selectModel(KfcAgentModelCandidate.qwen);
+      await controller.sendQuickPrompt('Thêm món vào giỏ');
+
+      expect(repository.candidateIds, [
+        KfcAgentModelCandidate.openAi.wireName,
+        KfcAgentModelCandidate.qwen.wireName,
+      ]);
+      expect(
+        controller.state.value.messages.where(
+          (message) => message.role == CustomerChatRole.customer,
+        ),
+        hasLength(2),
+      );
+      expect(
+        controller.state.value.messages
+            .where(
+              (message) =>
+                  message.role == CustomerChatRole.assistant &&
+                  message.id != 'welcome',
+            )
+            .map((message) => message.modelCandidate),
+        [KfcAgentModelCandidate.openAi, KfcAgentModelCandidate.qwen],
+      );
+    },
+  );
+
+  test('cannot change the captured model while a run is active', () {
+    final controller = CustomerChatController(
+      initialState: CustomerChatState(
+        sessionId: 'kfc:customer-1',
+        customerId: 'customer-1',
+        activeDraft: ActiveAssistantDraft.accepted(
+          runId: 'run-1',
+          modelCandidate: KfcAgentModelCandidate.openAi,
+        ),
+      ),
+    );
+
+    controller.selectModel(KfcAgentModelCandidate.miniMax);
+
+    expect(controller.state.value.selectedModel, KfcAgentModelCandidate.openAi);
   });
 
   test('sendDraft appends customer and assistant GenUI turn', () async {
@@ -753,6 +805,7 @@ class _ApprovalPointerRepository extends FixtureCustomerChatRepository {
     String? text,
     KfcGenUiAction? action,
     Map<String, Object?>? metadata,
+    String? candidateId,
   }) async => const CustomerRunStartResponse(
     schemaVersion: 1,
     runId: 'approval_pointer_run',
@@ -794,6 +847,7 @@ class _RecordingStartRepository extends FixtureCustomerChatRepository {
   _RecordingStartRepository() : super(eventDelay: Duration.zero);
 
   var startCount = 0;
+  final candidateIds = <String?>[];
 
   @override
   Future<CustomerRunStartResponse> startRun({
@@ -803,8 +857,10 @@ class _RecordingStartRepository extends FixtureCustomerChatRepository {
     String? text,
     KfcGenUiAction? action,
     Map<String, Object?>? metadata,
+    String? candidateId,
   }) async {
     startCount += 1;
+    candidateIds.add(candidateId);
     return const CustomerRunStartResponse(
       schemaVersion: 1,
       runId: 'unexpected_run',
@@ -826,6 +882,7 @@ class _HumanPausedRepository extends FixtureCustomerChatRepository {
     String? text,
     KfcGenUiAction? action,
     Map<String, Object?>? metadata,
+    String? candidateId,
   }) async => const CustomerRunStartResponse(
     schemaVersion: 1,
     runId: 'human_paused_run',
@@ -872,6 +929,7 @@ class _GenericSupersededRepository extends FixtureCustomerChatRepository {
     String? text,
     KfcGenUiAction? action,
     Map<String, Object?>? metadata,
+    String? candidateId,
   }) async => const CustomerRunStartResponse(
     schemaVersion: 1,
     runId: 'generic_superseded_run',
@@ -913,6 +971,7 @@ class _GapRepository extends FixtureCustomerChatRepository {
     String? text,
     KfcGenUiAction? action,
     Map<String, Object?>? metadata,
+    String? candidateId,
   }) async {
     startCount += 1;
     return const CustomerRunStartResponse(
@@ -957,6 +1016,7 @@ class _StopRepository extends FixtureCustomerChatRepository {
     String? text,
     KfcGenUiAction? action,
     Map<String, Object?>? metadata,
+    String? candidateId,
   }) async => const CustomerRunStartResponse(
     schemaVersion: 1,
     runId: 'stop_run',

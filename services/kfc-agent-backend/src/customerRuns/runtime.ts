@@ -780,7 +780,7 @@ export function splitCustomerText(text: string, maxEvents = 24): string[] {
   return chunks;
 }
 
-async function fingerprintFor(
+export async function fingerprintFor(
   request: CustomerRunStartRequest,
 ): Promise<string> {
   const encoded = new TextEncoder().encode(JSON.stringify(request));

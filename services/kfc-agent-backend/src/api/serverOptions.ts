@@ -2,7 +2,9 @@ import type { BuildServerOptions } from './server.js';
 import type { AppEnv } from '../config/env.js';
 import {
   createConfiguredAgentChatModel,
+  liveAgentModelCandidateIds,
   resolveAgentModelProfile,
+  type AgentModelCandidateId,
   type AgentModelIdentity,
   type AgentModelProfile,
 } from '../config/agentModelProfile.js';
@@ -49,6 +51,31 @@ export function buildServerOptionsFromEnv(env: AppEnv): BuildServerOptions {
     OPENCODE_API_KEY: Boolean(openCodeApiKey),
     GOOGLE_API_KEY: Boolean(googleApiKey),
   } as const;
+  const agentCandidates = Object.freeze(
+    Object.fromEntries(
+      liveAgentModelCandidateIds.flatMap((candidateId) => {
+        const profile = resolveAgentModelProfile({ candidateId });
+        if (!configuredCredentials[profile.credentialEnv]) return [];
+        return [
+          [
+            candidateId,
+            createConfiguredAgentChatModel({
+              profile,
+              openAiApiKey,
+              openAiBaseUrl,
+              openCodeApiKey,
+              googleApiKey,
+            }),
+          ],
+        ];
+      }),
+    ) as Partial<
+      Record<
+        AgentModelCandidateId,
+        ReturnType<typeof createConfiguredAgentChatModel>
+      >
+    >,
+  );
   const agentConfigured = configuredCredentials[agentIdentity.credentialEnv];
   const agentBinding = agentConfigured
     ? createConfiguredAgentChatModel({
@@ -123,6 +150,7 @@ export function buildServerOptionsFromEnv(env: AppEnv): BuildServerOptions {
     zaloInboxUrlTemplate: optionalValue(env.ZALO_INBOX_URL_TEMPLATE),
     zaloApiBaseUrl: optionalValue(env.ZALO_API_BASE_URL),
     agent: agentBinding,
+    agentCandidates,
     monitorJudge,
     agentTracer: langsmithApiKey
       ? new LangSmithAgentTracer({

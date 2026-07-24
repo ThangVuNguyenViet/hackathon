@@ -153,6 +153,7 @@ import {
 } from './routeHandlerSupport.js';
 
 import type { RouteHandlerContext } from './routeHandlerContext.js';
+import { resolveDemoAgentModelBinding } from './demoAgentModelSelection.js';
 
 const clientItemSelectionSchema = z
   .object({
@@ -284,6 +285,24 @@ export function createChatRouteHandlers(context: RouteHandlerContext) {
       });
     },
     async chatKfcStartRun(body: unknown) {
+      if (
+        isRecord(body) &&
+        body.candidateId !== undefined &&
+        typeof body.candidateId === 'string'
+      ) {
+        const selectedAgent = resolveDemoAgentModelBinding({
+          candidateId: body.candidateId,
+          defaultBinding:
+            options.agentCandidates?.['openai-gpt-4.1-mini'] ?? options.agent,
+          candidates: options.agentCandidates,
+        });
+        if (!selectedAgent.ok) {
+          return {
+            status: selectedAgent.status,
+            body: { errorCode: selectedAgent.errorCode },
+          };
+        }
+      }
       return customerRuns.start(body);
     },
     async chatKfcCancelRun(runId: string) {

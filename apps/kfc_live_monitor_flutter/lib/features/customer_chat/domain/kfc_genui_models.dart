@@ -1,4 +1,5 @@
 import 'customer_confirmation_models.dart';
+import 'kfc_agent_model_candidate.dart';
 
 part 'kfc_genui_action_authority.dart';
 part 'kfc_customer_chat_models.dart';

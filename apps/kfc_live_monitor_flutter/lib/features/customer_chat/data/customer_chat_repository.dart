@@ -18,6 +18,7 @@ abstract interface class CustomerChatRepository {
     String? text,
     KfcGenUiAction? action,
     Map<String, Object?>? metadata,
+    String? candidateId,
   });
 
   Stream<CustomerRunEventEnvelope> watchRun(String runId, int afterSequence);
@@ -72,6 +73,7 @@ class BackendCustomerChatRepository implements CustomerChatRepository {
     String? text,
     KfcGenUiAction? action,
     Map<String, Object?>? metadata,
+    String? candidateId,
   }) async {
     if ((text == null) == (action == null)) {
       throw ArgumentError('Exactly one customer run input is required');
@@ -81,6 +83,7 @@ class BackendCustomerChatRepository implements CustomerChatRepository {
       'sessionId': sessionId,
       'customerId': customerId,
       'clientMessageId': clientMessageId,
+      'candidateId': ?candidateId,
       'metadata': ?metadata,
       'input': text != null
           ? {'kind': 'text', 'text': text}

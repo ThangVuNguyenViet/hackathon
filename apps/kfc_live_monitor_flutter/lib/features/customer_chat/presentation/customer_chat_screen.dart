@@ -7,6 +7,7 @@ import 'package:state_beacon/state_beacon.dart';
 import '../../../app/theme/kfc_ops_tokens.dart';
 import '../application/customer_chat_controller.dart';
 import '../domain/customer_confirmation_models.dart';
+import '../domain/kfc_agent_model_candidate.dart';
 import '../domain/customer_run_models.dart';
 import '../domain/kfc_genui_models.dart';
 import '../testing/customer_chat_keys.dart';
@@ -153,6 +154,8 @@ class _CustomerChatScreenState extends State<CustomerChatScreen> {
                     canStop:
                         state.activeDraft?.cancellable == true &&
                         state.activeDraft?.isStopping != true,
+                    selectedModel: state.selectedModel,
+                    onModelChanged: widget.controller.selectModel,
                     onChanged: widget.controller.updateDraft,
                     onSend: widget.controller.sendDraft,
                     onStop: widget.controller.stopActiveRun,
@@ -456,6 +459,22 @@ class _MessageBlock extends StatelessWidget {
                   ),
                 ),
               ),
+              if (!isCustomer && message.modelCandidate != null) ...[
+                const SizedBox(height: KfcOpsTokens.spacingXs),
+                Text(
+                  message.modelCandidate!.displayName,
+                  key: CustomerChatKeys.modelLabel(
+                    message.modelCandidate!.wireName,
+                  ),
+                  style: const TextStyle(
+                    color: KfcOpsTokens.secondary,
+                    fontSize: 10,
+                    fontWeight: FontWeight.w600,
+                    height: 14 / 10,
+                    letterSpacing: 0,
+                  ),
+                ),
+              ],
               if (message.genUi case final genUi?) ...[
                 const SizedBox(height: KfcOpsTokens.spacingSm),
                 KfcGenUiRenderer(
@@ -506,6 +525,8 @@ class _Composer extends StatelessWidget {
     required this.controller,
     required this.isSending,
     required this.canStop,
+    required this.selectedModel,
+    required this.onModelChanged,
     required this.onChanged,
     required this.onSend,
     required this.onStop,
@@ -514,6 +535,8 @@ class _Composer extends StatelessWidget {
   final TextEditingController controller;
   final bool isSending;
   final bool canStop;
+  final KfcAgentModelCandidate selectedModel;
+  final ValueChanged<KfcAgentModelCandidate> onModelChanged;
   final ValueChanged<String> onChanged;
   final VoidCallback onSend;
   final VoidCallback onStop;
@@ -527,72 +550,160 @@ class _Composer extends StatelessWidget {
       ),
       child: Padding(
         padding: const EdgeInsets.all(KfcOpsTokens.gutter),
-        child: Row(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Expanded(
-              child: DecoratedBox(
-                decoration: BoxDecoration(
-                  color: KfcOpsTokens.surfaceContainerLow,
-                  borderRadius: const BorderRadius.all(KfcOpsTokens.radiusMd),
-                  border: Border.all(color: KfcOpsTokens.secondaryContainer),
+            Row(
+              children: [
+                const Text(
+                  'Model',
+                  style: TextStyle(
+                    color: KfcOpsTokens.secondary,
+                    fontSize: 11,
+                    fontWeight: FontWeight.w700,
+                    height: 14 / 11,
+                  ),
                 ),
-                child: Material(
-                  color: Colors.transparent,
-                  child: TextField(
-                    key: CustomerChatKeys.messageInput,
-                    controller: controller,
-                    enabled: !isSending,
-                    onChanged: onChanged,
-                    onSubmitted: (_) => onSend(),
+                const SizedBox(width: KfcOpsTokens.spacingSm),
+                ShadSelect<KfcAgentModelCandidate>(
+                  key: CustomerChatKeys.modelSelector,
+                  enabled: !isSending,
+                  initialValue: selectedModel,
+                  minWidth: 180,
+                  maxWidth: 240,
+                  maxHeight: 260,
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: KfcOpsTokens.spacingSm,
+                    vertical: KfcOpsTokens.spacingXs,
+                  ),
+                  options: KfcAgentModelCandidate.values
+                      .map(
+                        (model) => ShadOption<KfcAgentModelCandidate>(
+                          value: model,
+                          child: _ModelOption(model: model),
+                        ),
+                      )
+                      .toList(growable: false),
+                  selectedOptionBuilder: (context, model) => Text(
+                    model.displayName,
                     style: const TextStyle(
-                      fontFamily: KfcOpsTokens.fontFamily,
-                      fontSize: 14,
-                      height: 20 / 14,
-                      letterSpacing: 0,
+                      color: KfcOpsTokens.onSurface,
+                      fontSize: 11,
+                      fontWeight: FontWeight.w700,
+                      height: 14 / 11,
                     ),
-                    decoration: const InputDecoration(
-                      hintText: 'Nhắn KFC...',
-                      border: InputBorder.none,
-                      contentPadding: EdgeInsets.symmetric(
-                        horizontal: KfcOpsTokens.spacingMd,
-                        vertical: KfcOpsTokens.spacingSm,
+                  ),
+                  onChanged: (model) {
+                    if (model != null) onModelChanged(model);
+                  },
+                ),
+              ],
+            ),
+            const SizedBox(height: KfcOpsTokens.spacingSm),
+            Row(
+              children: [
+                Expanded(
+                  child: DecoratedBox(
+                    decoration: BoxDecoration(
+                      color: KfcOpsTokens.surfaceContainerLow,
+                      borderRadius: const BorderRadius.all(
+                        KfcOpsTokens.radiusMd,
+                      ),
+                      border: Border.all(
+                        color: KfcOpsTokens.secondaryContainer,
+                      ),
+                    ),
+                    child: Material(
+                      color: Colors.transparent,
+                      child: TextField(
+                        key: CustomerChatKeys.messageInput,
+                        controller: controller,
+                        enabled: !isSending,
+                        onChanged: onChanged,
+                        onSubmitted: (_) => onSend(),
+                        style: const TextStyle(
+                          fontFamily: KfcOpsTokens.fontFamily,
+                          fontSize: 14,
+                          height: 20 / 14,
+                          letterSpacing: 0,
+                        ),
+                        decoration: const InputDecoration(
+                          hintText: 'Nhắn KFC...',
+                          border: InputBorder.none,
+                          contentPadding: EdgeInsets.symmetric(
+                            horizontal: KfcOpsTokens.spacingMd,
+                            vertical: KfcOpsTokens.spacingSm,
+                          ),
+                        ),
                       ),
                     ),
                   ),
                 ),
-              ),
-            ),
-            const SizedBox(width: KfcOpsTokens.spacingSm),
-            ShadIconButton(
-              key: canStop
-                  ? CustomerChatKeys.stopButton
-                  : CustomerChatKeys.sendButton,
-              width: 42,
-              height: 42,
-              backgroundColor: canStop
-                  ? KfcOpsTokens.critical
-                  : isSending
-                  ? KfcOpsTokens.secondaryContainer
-                  : KfcOpsTokens.primary,
-              hoverBackgroundColor: KfcOpsTokens.primary,
-              foregroundColor: KfcOpsTokens.onPrimary,
-              iconSize: 18,
-              enabled: !isSending || canStop,
-              onPressed: () {
-                if (canStop) {
-                  onStop();
-                } else {
-                  onSend();
-                }
-              },
-              icon: Icon(
-                canStop ? LucideIcons.square : LucideIcons.send,
-                color: KfcOpsTokens.onPrimary,
-              ),
+                const SizedBox(width: KfcOpsTokens.spacingSm),
+                ShadIconButton(
+                  key: canStop
+                      ? CustomerChatKeys.stopButton
+                      : CustomerChatKeys.sendButton,
+                  width: 42,
+                  height: 42,
+                  backgroundColor: canStop
+                      ? KfcOpsTokens.critical
+                      : isSending
+                      ? KfcOpsTokens.secondaryContainer
+                      : KfcOpsTokens.primary,
+                  hoverBackgroundColor: KfcOpsTokens.primary,
+                  foregroundColor: KfcOpsTokens.onPrimary,
+                  iconSize: 18,
+                  enabled: !isSending || canStop,
+                  onPressed: () {
+                    if (canStop) {
+                      onStop();
+                    } else {
+                      onSend();
+                    }
+                  },
+                  icon: Icon(
+                    canStop ? LucideIcons.square : LucideIcons.send,
+                    color: KfcOpsTokens.onPrimary,
+                  ),
+                ),
+              ],
             ),
           ],
         ),
       ),
+    );
+  }
+}
+
+class _ModelOption extends StatelessWidget {
+  const _ModelOption({required this.model});
+
+  final KfcAgentModelCandidate model;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          model.displayName,
+          style: const TextStyle(
+            color: KfcOpsTokens.onSurface,
+            fontSize: 12,
+            fontWeight: FontWeight.w700,
+            height: 16 / 12,
+          ),
+        ),
+        Text(
+          model.providerName,
+          style: const TextStyle(
+            color: KfcOpsTokens.secondary,
+            fontSize: 10,
+            height: 14 / 10,
+          ),
+        ),
+      ],
     );
   }
 }

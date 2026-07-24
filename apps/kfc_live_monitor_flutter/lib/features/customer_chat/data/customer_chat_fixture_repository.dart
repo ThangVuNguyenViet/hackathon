@@ -15,6 +15,7 @@ class FixtureCustomerChatRepository implements CustomerChatRepository {
     String? text,
     KfcGenUiAction? action,
     Map<String, Object?>? metadata,
+    String? candidateId,
   }) async => CustomerRunStartResponse(
     schemaVersion: 1,
     runId: action == null

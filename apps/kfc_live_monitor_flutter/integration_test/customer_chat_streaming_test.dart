@@ -95,6 +95,7 @@ class _AutoStopRepository implements CustomerChatRepository {
     String? text,
     KfcGenUiAction? action,
     Map<String, Object?>? metadata,
+    String? candidateId,
   }) => delegate.startRun(
     sessionId: sessionId,
     customerId: customerId,
@@ -102,6 +103,7 @@ class _AutoStopRepository implements CustomerChatRepository {
     text: text,
     action: action,
     metadata: metadata,
+    candidateId: candidateId,
   );
 
   @override
@@ -201,6 +203,7 @@ class _RecordingDisconnectRepository implements CustomerChatRepository {
     String? text,
     KfcGenUiAction? action,
     Map<String, Object?>? metadata,
+    String? candidateId,
   }) {
     startCount += 1;
     return delegate.startRun(
@@ -210,6 +213,7 @@ class _RecordingDisconnectRepository implements CustomerChatRepository {
       text: text,
       action: action,
       metadata: metadata,
+      candidateId: candidateId,
     );
   }
 

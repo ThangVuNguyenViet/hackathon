@@ -61,6 +61,7 @@ import {
 } from '../monitor/sessionIntelligence.js';
 import type {
   AgentModelIdentity,
+  AgentModelCandidateId,
   ConfiguredAgentModelBinding,
 } from '../config/agentModelProfile.js';
 import type { MonitorModelIdentity } from '../config/monitorModelProfile.js';
@@ -393,6 +394,9 @@ export interface RouteOptions {
   zaloApiBaseUrl?: string;
   zaloFetchImpl?: typeof fetch;
   agent?: ConfiguredAgentModelBinding;
+  agentCandidates?: Readonly<
+    Partial<Record<AgentModelCandidateId, ConfiguredAgentModelBinding>>
+  >;
   monitorJudge?: MonitorSessionIntelligenceJudge;
   agentTracer?: AgentTracer;
   defer?: (task: () => Promise<void>) => void;

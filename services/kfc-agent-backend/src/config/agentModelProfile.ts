@@ -18,6 +18,8 @@ export const liveAgentModelCandidateIds = Object.freeze([
   'qwen3.7-max',
   'minimax-m3',
 ] as const satisfies readonly AgentModelCandidateId[]);
+export type LiveAgentModelCandidateId =
+  (typeof liveAgentModelCandidateIds)[number];
 export type AgentProvider = 'openai' | 'opencode' | 'google';
 export type AgentModelTransport =
   | 'openai_responses'
@@ -137,6 +139,14 @@ function isAgentModelCandidateId(
   candidateId: string,
 ): candidateId is AgentModelCandidateId {
   return (agentModelCandidateIds as readonly string[]).includes(candidateId);
+}
+
+export function isLiveAgentModelCandidateId(
+  candidateId: string,
+): candidateId is LiveAgentModelCandidateId {
+  return (liveAgentModelCandidateIds as readonly string[]).includes(
+    candidateId,
+  );
 }
 
 export function resolveAgentModelProfile(input: {

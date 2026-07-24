@@ -1,3 +1,4 @@
+import 'kfc_agent_model_candidate.dart';
 import 'kfc_genui_models.dart';
 
 enum CustomerRunEventType {
@@ -250,17 +251,22 @@ class ActiveAssistantDraft {
     this.terminalMessage,
     this.approvalPausePointer,
     this.agentMode,
+    this.modelCandidate,
     this.isStopping = false,
     this.materialized = false,
   });
 
-  factory ActiveAssistantDraft.accepted({required String runId}) {
+  factory ActiveAssistantDraft.accepted({
+    required String runId,
+    KfcAgentModelCandidate? modelCandidate,
+  }) {
     return ActiveAssistantDraft(
       runId: runId,
       lastSequence: 0,
       connection: CustomerRunConnectionState.connecting,
       text: '',
       cancellable: false,
+      modelCandidate: modelCandidate,
     );
   }
 
@@ -276,6 +282,7 @@ class ActiveAssistantDraft {
   final String? terminalMessage;
   final CustomerApprovalPausePointer? approvalPausePointer;
   final CustomerRunAgentMode? agentMode;
+  final KfcAgentModelCandidate? modelCandidate;
   final bool materialized;
 
   bool get isTerminal => terminal != null;
@@ -376,6 +383,7 @@ class ActiveAssistantDraft {
     CustomerApprovalPausePointer? approvalPausePointer,
     bool clearApprovalPausePointer = false,
     CustomerRunAgentMode? agentMode,
+    KfcAgentModelCandidate? modelCandidate,
     bool? materialized,
   }) {
     return ActiveAssistantDraft(
@@ -393,6 +401,7 @@ class ActiveAssistantDraft {
           ? null
           : (approvalPausePointer ?? this.approvalPausePointer),
       agentMode: agentMode ?? this.agentMode,
+      modelCandidate: modelCandidate ?? this.modelCandidate,
       materialized: materialized ?? this.materialized,
     );
   }

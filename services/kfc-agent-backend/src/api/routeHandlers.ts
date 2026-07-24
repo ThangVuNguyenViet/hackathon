@@ -10,6 +10,7 @@ import { createSystemRouteHandlers } from './routeSystemHandlers.js';
 import { createChatRouteHandlers } from './routeChatHandlers.js';
 import { createChannelRouteHandlers } from './routeChannelHandlers.js';
 import { createDashboardRouteHandlers } from './routeDashboardHandlers.js';
+import { resolveDemoAgentModelBinding } from './demoAgentModelSelection.js';
 import {
   isRecord,
   type HandlerResponse,
@@ -56,6 +57,7 @@ import { DashboardEventBus } from '../dashboard/eventBus.js';
 import { dashboardSessionTarget } from '../dashboard/sessionVisibility.js';
 import type { GeneratedFixtures } from '../fixtures/schema.js';
 import { loadGeneratedFixtures } from '../fixtures/loadFixtures.js';
+import type { ConfiguredAgentModelBinding } from '../config/agentModelProfile.js';
 import type {
   AgentMode,
   Channel,
@@ -130,6 +132,7 @@ export function createRouteHandlers(options: RouteOptions = {}): RouteHandlers {
       observe: (observation: CustomerRunObservation) => Promise<void>;
       isCurrent: () => Promise<boolean>;
       commitFence: RunCommitFence;
+      agentModelBinding?: ConfiguredAgentModelBinding;
     }
   >();
   const commerceRuntime = createRouteCommerceRuntime({
@@ -167,6 +170,18 @@ export function createRouteHandlers(options: RouteOptions = {}): RouteHandlers {
       observeRun,
       isCurrent,
     ) => {
+      const selectedAgent = resolveDemoAgentModelBinding({
+        candidateId: request.candidateId,
+        defaultBinding:
+          options.agentCandidates?.['openai-gpt-4.1-mini'] ?? options.agent,
+        candidates: options.agentCandidates,
+      });
+      if (!selectedAgent.ok && request.candidateId) {
+        throw new Error(selectedAgent.errorCode);
+      }
+      const agentModelBinding = selectedAgent.ok
+        ? selectedAgent.binding
+        : undefined;
       const commitFence = {
         kind: 'customer_run',
         runId: run.id,
@@ -189,6 +204,7 @@ export function createRouteHandlers(options: RouteOptions = {}): RouteHandlers {
             rawEvent: { source: 'kfc_stream', ...request.metadata },
             ...(responseProfile ? { responseProfile } : {}),
           },
+          agentModelBinding,
           observeRun,
           runGuard: { isCurrent, commitFence },
         });
@@ -201,6 +217,7 @@ export function createRouteHandlers(options: RouteOptions = {}): RouteHandlers {
           observe: observeRun,
           isCurrent,
           commitFence,
+          agentModelBinding,
         };
         streamingRunObservers.set(observerKey, observer);
         try {

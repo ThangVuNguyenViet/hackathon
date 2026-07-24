@@ -4,6 +4,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 import 'package:kfc_live_monitor/features/customer_chat/data/customer_chat_repository.dart';
+import 'package:kfc_live_monitor/features/customer_chat/domain/kfc_agent_model_candidate.dart';
 import 'package:kfc_live_monitor/features/customer_chat/domain/customer_run_models.dart';
 
 void main() {
@@ -49,6 +50,7 @@ void main() {
         customerId: 'c1',
         clientMessageId: 'm1',
         text: 'hello',
+        candidateId: KfcAgentModelCandidate.qwen.wireName,
       );
       final events = await repository.watchRun(accepted.runId, 0).toList();
       expect(accepted.runId, 'run_1');
@@ -60,6 +62,10 @@ void main() {
       expect(
         requests.where((request) => request.method == 'POST'),
         hasLength(1),
+      );
+      expect(
+        jsonDecode(requests.first.body),
+        containsPair('candidateId', KfcAgentModelCandidate.qwen.wireName),
       );
       expect(requests.last.url.queryParameters['after'], '0');
     },

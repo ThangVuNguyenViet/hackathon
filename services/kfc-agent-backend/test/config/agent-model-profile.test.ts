@@ -3,6 +3,7 @@ import {
   agentModelCandidateIds,
   createConfiguredAgentChatModel,
   describeAgentChatModelFactory,
+  isLiveAgentModelCandidateId,
   liveAgentModelCandidateIds,
   resolveAgentModelProfile,
   type AgentModelProfile,
@@ -36,6 +37,11 @@ describe('KFC agent model candidates', () => {
       'google-gemini-3.1-flash-lite',
     );
     expect(Object.isFrozen(liveAgentModelCandidateIds)).toBe(true);
+    expect(isLiveAgentModelCandidateId('qwen3.7-max')).toBe(true);
+    expect(
+      isLiveAgentModelCandidateId('google-gemini-3.1-flash-lite'),
+    ).toBe(false);
+    expect(isLiveAgentModelCandidateId('untrusted-model')).toBe(false);
   });
 
   it('pins the OpenAI Responses control and preserves Google support', () => {

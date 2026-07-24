@@ -189,6 +189,13 @@ export interface ConversationTurnMetadata {
   authorType?: 'ai_agent' | 'human_agent';
   agentId?: string;
   responseProfile?: 'genui' | 'social';
+  agentModel?: {
+    candidateId: string;
+    provider: string;
+    model: string;
+    profile: string;
+    transport: string;
+  };
   release?: {
     gitSha: string;
     deploymentId: string;

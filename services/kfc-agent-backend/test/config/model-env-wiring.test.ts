@@ -48,6 +48,37 @@ describe('model candidate environment wiring', () => {
     );
     expect(isTrustedConfiguredAgentModelBinding(options.agent)).toBe(true);
     expect(options.readiness?.runtime?.agent).toEqual(options.agent?.identity);
+    expect(Object.keys(options.agentCandidates ?? {}).sort()).toEqual([
+      'deepseek-v4-flash',
+      'minimax-m3',
+      'qwen3.7-max',
+    ]);
+    expect(
+      options.agentCandidates?.['deepseek-v4-flash']?.identity.candidateId,
+    ).toBe('deepseek-v4-flash');
+  });
+
+  it('exposes every credential-backed live candidate without changing the default', () => {
+    const options = buildServerOptionsFromEnv(
+      loadEnv({
+        KFC_AGENT_CANDIDATE: 'openai-gpt-4.1-mini',
+        OPENAI_API_KEY: 'test-openai',
+        OPENCODE_API_KEY: 'test-opencode',
+        GOOGLE_API_KEY: 'test-google',
+        KFC_COMMERCE_MODE: 'fixture',
+      }),
+    );
+
+    expect(options.agent?.identity.candidateId).toBe('openai-gpt-4.1-mini');
+    expect(Object.keys(options.agentCandidates ?? {}).sort()).toEqual([
+      'deepseek-v4-flash',
+      'minimax-m3',
+      'openai-gpt-4.1-mini',
+      'qwen3.7-max',
+    ]);
+    expect(options.agentCandidates).not.toHaveProperty(
+      'google-gemini-3.1-flash-lite',
+    );
   });
 
   it('keeps an explicitly selected monitor pinned to its own candidate', () => {

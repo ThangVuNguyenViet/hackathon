@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { liveAgentModelCandidateIds } from '../config/agentModelProfile.js';
 
 export const CUSTOMER_RUN_SCHEMA_VERSION = 1 as const;
 
@@ -60,6 +61,7 @@ export const customerRunStartRequestSchema = z
     sessionId: opaqueIdSchema,
     customerId: opaqueIdSchema,
     clientMessageId: opaqueIdSchema,
+    candidateId: z.enum(liveAgentModelCandidateIds).optional(),
     metadata: z.record(z.unknown()).optional(),
     input: z.discriminatedUnion('kind', [
       z

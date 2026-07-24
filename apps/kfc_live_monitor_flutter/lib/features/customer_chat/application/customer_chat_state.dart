@@ -1,4 +1,5 @@
 import '../domain/customer_confirmation_models.dart';
+import '../domain/kfc_agent_model_candidate.dart';
 import '../domain/kfc_genui_models.dart';
 import '../domain/customer_run_models.dart';
 import 'customer_chat_identity.dart';
@@ -14,6 +15,7 @@ class CustomerChatState {
     this.isResumingApproval = false,
     this.errorMessage,
     this.handoffStatus,
+    this.selectedModel = KfcAgentModelCandidate.openAi,
   });
 
   factory CustomerChatState.initial({String? sessionId, String? customerId}) {
@@ -46,6 +48,7 @@ class CustomerChatState {
       isResumingApproval;
   final String? errorMessage;
   final String? handoffStatus;
+  final KfcAgentModelCandidate selectedModel;
 
   KfcGenUiAttachment? get activeGenUi {
     for (final message in messages.reversed) {
@@ -76,6 +79,7 @@ class CustomerChatState {
     bool clearError = false,
     String? handoffStatus,
     bool clearHandoffStatus = false,
+    KfcAgentModelCandidate? selectedModel,
   }) {
     return CustomerChatState(
       sessionId: sessionId,
@@ -91,6 +95,7 @@ class CustomerChatState {
       handoffStatus: clearHandoffStatus
           ? null
           : (handoffStatus ?? this.handoffStatus),
+      selectedModel: selectedModel ?? this.selectedModel,
     );
   }
 }
