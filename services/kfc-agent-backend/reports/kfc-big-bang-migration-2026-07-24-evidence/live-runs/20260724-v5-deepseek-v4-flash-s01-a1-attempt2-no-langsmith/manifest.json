@@ -1,0 +1,51 @@
+{
+  "schemaVersion": "kfc-live-scenario-manifest-v1",
+  "runId": "20260724-v5-deepseek-v4-flash-s01-a1",
+  "attempt": 2,
+  "status": "completed",
+  "startedAt": "2026-07-24T03:13:28.952Z",
+  "correlation": {
+    "externalSessionId": "live-20260724-v5-deepseek-v4-flash-s01-a1",
+    "durableSessionId": "live-20260724-v5-deepseek-v4-flash-s01-a1",
+    "scenarioId": "02-tu-van-combo-va-upsell",
+    "probeRunId": "20260724-v5-deepseek-v4-flash-s01-a1"
+  },
+  "scenario": {
+    "id": "02-tu-van-combo-va-upsell",
+    "title": "02: Tư vấn combo, ngân sách, khuyến mãi, upsell",
+    "goal": "Khách đặt nhiều món lẻ cho nhóm; AI nhận ra combo tương đương tiết kiệm hơn, chờ khách đồng ý đổi đơn, rồi upsell tăng size nước và cập nhật giỏ hàng theo lựa chọn của khách.",
+    "preconditions": [
+      "Khách bắt đầu với giỏ hàng trống và đang chọn món cho nhóm bốn người trong ngân sách khoảng 300.000đ.",
+      "Menu, thành phần combo, tùy chọn kích cỡ và giá hiện hành có thể được tra cứu; chưa có thay đổi giỏ hàng nào được khách chấp thuận."
+    ],
+    "risks": [
+      "Recommendations must be grounded in available menu and price information.",
+      "Cart changes and upsells require clear customer agreement."
+    ],
+    "finalState": "cart_ready",
+    "sourceFile": "02-tu-van-combo-va-upsell.json",
+    "sourcePath": "/Users/vietthangvunguyen/Workspace/hackathon/.worktrees/kfc-kiss-model-agnostic/ai-talent-tracks/fnb/conversations/02-tu-van-combo-va-upsell.json",
+    "sourceSha256": "31a4511881be7cbfe03c66a6ddfadceb13e81c5dbe1f625cbd1c0ce9a84cf104"
+  },
+  "model": {
+    "candidateId": "deepseek-v4-flash",
+    "provider": "opencode",
+    "model": "deepseek-v4-flash",
+    "profile": "opencode:deepseek-v4-flash:chat-completions",
+    "transport": "openai_compatible_chat"
+  },
+  "evidence": {
+    "trace": "trace.jsonl",
+    "transcript": "transcript.md",
+    "preflight": "preflight.json",
+    "reviewPacket": "codex-review-packet.md",
+    "artifactSha256": {
+      "preflight.json": "74796d6891a6d6bef5ce6d39c55c8099c557001b5f1744731db0e13b51044739",
+      "trace.jsonl": "c1a12947d8971d3b622743b392666b9fa5bc17a7345aa2ab79895ed96d22d7cf",
+      "transcript.md": "c99be66f797169e49aa1a74efc9b81d155db2d73e37d9619b702b89573abcaad",
+      "codex-review-packet.md": "62814df6e8fe9fd63436ca5ffd19fcf14e27161db73883cfdc56b19fece6e7ff"
+    }
+  },
+  "completedAt": "2026-07-24T03:14:51.894Z",
+  "finishNote": "Completed 4-turn improvised canary; ordinary text confirmation only, no verified GenUI action supplied."
+}

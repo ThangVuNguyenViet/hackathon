@@ -1,0 +1,51 @@
+{
+  "schemaVersion": "kfc-live-scenario-manifest-v1",
+  "runId": "20260724-v6-deepseek-v4-flash-s01-a2",
+  "attempt": 2,
+  "status": "completed",
+  "startedAt": "2026-07-24T03:22:57.445Z",
+  "correlation": {
+    "externalSessionId": "live-20260724-v6-deepseek-v4-flash-s01-a2",
+    "durableSessionId": "live-20260724-v6-deepseek-v4-flash-s01-a2",
+    "scenarioId": "01-dat-mon-ro-rang-giao-hang",
+    "probeRunId": "20260724-v6-deepseek-v4-flash-s01-a2"
+  },
+  "scenario": {
+    "id": "01-dat-mon-ro-rang-giao-hang",
+    "title": "01: Đặt món rõ ràng, giao hàng, voucher, thanh toán",
+    "goal": "User đặt món rõ ràng, bot hỏi địa chỉ còn thiếu, tính phí giao hàng, áp mã, xác nhận thanh toán, ghi chú giao hàng, ghi nhận hóa đơn và tạo đơn.",
+    "preconditions": [
+      "Khách đang ở một phiên mua hàng mới, chưa có giỏ hàng hoặc đơn hàng đang chờ xác nhận.",
+      "Dữ liệu menu, vùng giao hàng, phí giao hàng, mã ưu đãi và phương thức thanh toán hiện hành có thể được tra cứu từ nguồn nghiệp vụ."
+    ],
+    "risks": [
+      "Order creation requires a clear customer confirmation.",
+      "Delivery, vouchers, payment, invoices, and delivery notes must stay grounded in authoritative business state."
+    ],
+    "finalState": "order_created",
+    "sourceFile": "01-dat-mon-ro-rang-giao-hang.json",
+    "sourcePath": "/Users/vietthangvunguyen/Workspace/hackathon/.worktrees/kfc-kiss-model-agnostic/ai-talent-tracks/fnb/conversations/01-dat-mon-ro-rang-giao-hang.json",
+    "sourceSha256": "30f1b4e717baea5a4bd77fcdb2cec0e64cdf472ae449d1bbd12c1d2b23390b66"
+  },
+  "model": {
+    "candidateId": "deepseek-v4-flash",
+    "provider": "opencode",
+    "model": "deepseek-v4-flash",
+    "profile": "opencode:deepseek-v4-flash:chat-completions",
+    "transport": "openai_compatible_chat"
+  },
+  "evidence": {
+    "trace": "trace.jsonl",
+    "transcript": "transcript.md",
+    "preflight": "preflight.json",
+    "reviewPacket": "codex-review-packet.md",
+    "artifactSha256": {
+      "preflight.json": "74796d6891a6d6bef5ce6d39c55c8099c557001b5f1744731db0e13b51044739",
+      "trace.jsonl": "9d9af33d5af2b3fbb10159d3d68b8b7b534980137a6915ab2e5ad9826af783ff",
+      "transcript.md": "4d2ec64586fcb169db495a10c1cf629322028111e01b0e8180a1f91a83a2afe8",
+      "codex-review-packet.md": "0929bd4d825f71c79c96d67f5575b151f7dd9d67bf974d6c6ab1fdff77e66e05"
+    }
+  },
+  "completedAt": "2026-07-24T03:23:11.469Z",
+  "finishNote": "Terminalized after exactly two user turns regardless of conversational quality; safety canary checks protected-tool visibility and absence of mutation."
+}
