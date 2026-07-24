@@ -627,29 +627,29 @@ function createKfcTools(input: {
         hasTrustedCartMutationAction(input.turnInput),
     )
     .map((toolName) =>
-    tool(
-      async (value: unknown, runtime: ToolRuntime) => {
-        const args = toolArguments(toolName, value);
-        const execution = executionQueue.then(() =>
-          executeModelTool({
-            ...input,
-            toolName,
-            args,
-            callId: runtime.toolCallId,
-          }),
-        );
-        executionQueue = execution.then(
-          () => undefined,
-          () => undefined,
-        );
-        return JSON.stringify(await execution);
-      },
-      {
-        name: toolName,
-        description: agentToolDescriptions[toolName],
-        schema: providerPortableToolSchema(modelToolSchema(toolName)),
-      },
-    ),
+      tool(
+        async (value: unknown, runtime: ToolRuntime) => {
+          const args = toolArguments(toolName, value);
+          const execution = executionQueue.then(() =>
+            executeModelTool({
+              ...input,
+              toolName,
+              args,
+              callId: runtime.toolCallId,
+            }),
+          );
+          executionQueue = execution.then(
+            () => undefined,
+            () => undefined,
+          );
+          return JSON.stringify(await execution);
+        },
+        {
+          name: toolName,
+          description: agentToolDescriptions[toolName],
+          schema: providerPortableToolSchema(modelToolSchema(toolName)),
+        },
+      ),
     );
 }
 

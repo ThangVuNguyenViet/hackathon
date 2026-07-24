@@ -666,6 +666,66 @@ describe('KFC Vietnam business pack compatibility', () => {
     ]);
   });
 
+  it('keeps the executor fail closed when a visible cart action cannot bind to current state', async () => {
+    const fixtures = await loadGeneratedFixtures(process.cwd());
+    const baseClients = createMockClients(fixtures);
+    const applyChanges = vi.fn(baseClients.cart.applyChanges);
+    const input = {
+      sessionId: 'session-kfc-unbound-modifier',
+      customerId: 'customer-1',
+      channel: 'kfc' as const,
+      text: '',
+      trustedCustomerAction: {
+        source: 'kfc_genui_action' as const,
+        assistantTurnId: 'assistant-turn-unbound',
+        attachmentId: 'attachment-unbound',
+        actionDigest: 'e'.repeat(64),
+        verifiedRevision: 'f'.repeat(64),
+        lifecycle: 'one_shot' as const,
+        command: {
+          kind: 'modifier_selection' as const,
+          itemCode: fixtures.menuItems[0]!.code,
+          groupId: 'group-not-in-cart',
+          modifierId: 'modifier-not-in-cart',
+        },
+      },
+      clients: {
+        ...baseClients,
+        cart: {
+          ...baseClients.cart,
+          applyChanges,
+        },
+      },
+      store: new MemoryStore(),
+      dashboard: new DashboardEventBus(),
+      agentModel: {} as BaseChatModel,
+    };
+
+    await kfcVietnamPack.run(input, async ({ tools }) => {
+      const selected = tools.find(
+        (candidate) => candidate.name === 'updateCart',
+      );
+      expect(selected).toBeDefined();
+      const result = JSON.parse(
+        toolOutputText(
+          await selected!.invoke({
+            type: 'tool_call',
+            name: 'updateCart',
+            args: {},
+            id: 'unbound-modifier-1',
+          }),
+        ),
+      ) as { ok: boolean; errorCode?: string };
+      expect(result).toMatchObject({
+        ok: false,
+        errorCode: 'explicit_cart_mutation_required',
+      });
+      return 'Không thể áp dụng lựa chọn này vào giỏ hiện tại.';
+    });
+
+    expect(applyChanges).not.toHaveBeenCalled();
+  });
+
   it('rejects a cart write under a trusted non-cart action', async () => {
     const fixtures = await loadGeneratedFixtures(process.cwd());
     const baseClients = createMockClients(fixtures);
