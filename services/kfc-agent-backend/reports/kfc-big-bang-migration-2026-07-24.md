@@ -459,11 +459,9 @@ evaluation when present.
 
 ## Pull request and handoff state
 
-At report time, [PR #69](https://github.com/ThangVuNguyenViet/hackathon/pull/69)
-is open and draft, with head `codex/kfc-kiss-model-agnostic` and base
-`codex/test-suite-inventory`. Retargeting to `main` is therefore **pending**.
-No merge or deployment is authorized by this workstream.
-
-The remaining handoff is to push the target branch, retarget/update draft PR
-#69 to `main`, and keep it draft until the remaining initial matrix defects and
-fixture gaps are consciously accepted or assigned.
+[PR #69](https://github.com/ThangVuNguyenViet/hackathon/pull/69) is open and
+draft, with head `codex/kfc-kiss-model-agnostic` and base `main`. The branch and
+complete evidence set were pushed after final verification. No merge or
+deployment is authorized by this workstream; keep the PR draft until the
+remaining initial matrix defects and fixture gaps are consciously accepted or
+assigned.
