@@ -263,30 +263,7 @@ export const agentToolArgumentSchemas = {
     .strict(),
   getItemDetails: z.object({ code: z.string().min(1) }).strict(),
   getModifierOptions: z.object({ code: z.string().min(1) }).strict(),
-  updateCart: z
-    .object({
-      customerRequest: z.string().min(1).nullable(),
-      changes: z
-        .array(
-          z
-            .object({
-              itemCode: z.string().min(1),
-              quantity: z.number().int().nonnegative(),
-              modifiers: z.array(
-                z
-                  .object({
-                    groupId: z.string().min(1),
-                    modifierId: z.string().min(1),
-                    quantity: z.number().int().positive().nullable(),
-                  })
-                  .strict(),
-              ),
-            })
-            .strict(),
-        )
-        .min(1),
-    })
-    .strict(),
+  updateCart: z.object({}).strict(),
   previewCart: z.object({}).strict(),
   recommendAddOns: z.object({}).strict(),
   findStores: z
@@ -407,7 +384,7 @@ export const agentToolDescriptions: Record<ToolName, string> = {
   getModifierOptions:
     'Return verified modifier groups, exact option identifiers, and exact option price deltas for one menu item code. Do not transfer evidence between options or items.',
   updateCart:
-    'Apply every intended reversible cart addition, quantity change, and removal in one changes array using previously verified item and modifier identifiers. Set customerRequest to the exact complete current user message only when that message explicitly requests this cart change; use null for a trusted structured cart action. Capability, price, availability, and advisory questions do not authorize mutation. Item quantity means menu portions, not pieces described inside the item. Treat the returned cart as authoritative; this permission never extends to irreversible actions.',
+    'Apply the current verified GenUI cart action. The server derives the authorized item identifiers, quantities, and modifiers from that typed action and ignores wider model-authored changes. Plain-text messages, including explicit requests, can prepare a proposal but do not authorize this tool. Item quantity means menu portions, not pieces described inside the item. Treat the returned cart as authoritative; this permission never extends to irreversible actions.',
   previewCart: 'Return the current verified cart and server-calculated totals.',
   recommendAddOns:
     'Return verified add-on candidates for the current cart without mutating it.',

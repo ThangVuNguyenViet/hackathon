@@ -9,7 +9,10 @@ import {
   type Callbacks,
 } from '@langchain/core/callbacks/manager';
 import { tool, type ToolRuntime } from 'langchain';
-import type { ExternalCallContext } from '../../clients/interfaces.js';
+import type {
+  CartChange,
+  ExternalCallContext,
+} from '../../clients/interfaces.js';
 import type {
   AgentTurnInput,
   AgentTurnOutput,
@@ -80,10 +83,10 @@ export const KFC_AGENT_INSTRUCTIONS = [
   'Nếu khách yêu cầu đầy đủ thực đơn, dùng searchMenu ở chế độ full và dùng toàn bộ collection complete; không tự rút gọn danh sách dữ liệu.',
   'Có thể gọi nhiều lượt tìm món theo sản phẩm hoặc danh mục trong cùng một lượt khách. Các queries trong một lần tìm là lựa chọn thay thế OR; chỉ kết luận về lựa chọn modifier khi kết quả trả về evidence tương ứng.',
   'Với yêu cầu gợi ý cho nhóm hoặc theo ngân sách, chỉ dùng partySize và giá từ catalog làm evidence. Ngân sách tổng là mức tối đa, không phải mục tiêu cần tiêu hết; maxPriceVnd chỉ là trần giá cho từng món.',
-  'Khi khách giao chọn một giỏ hàng hoàn chỉnh, đáp ứng mọi thành phần và số lượng rõ ràng khi catalog cho phép, hoàn tất trong cùng lượt, rồi gộp các thay đổi dự kiến vào một lần gọi updateCart. Cart mà công cụ trả về là trạng thái có thẩm quyền; nếu chưa đúng ràng buộc rõ ràng, sửa lại trong cùng lượt.',
-  'updateCart là thay đổi có thể đảo ngược và không cần hỏi lại khi yêu cầu đã rõ. Không dùng quy tắc này để bỏ qua xác nhận hoặc thẩm quyền của hành động không thể đảo ngược.',
-  'Câu hỏi về khả năng đáp ứng, giá, tồn kho hoặc tư vấn không phải là yêu cầu thay đổi giỏ hàng. Với lời nhắn văn bản, chỉ gọi updateCart khi chính lời nhắn hiện tại yêu cầu thay đổi và truyền nguyên văn toàn bộ lời nhắn đó vào customerRequest; lịch sử, bản tóm tắt và diễn giải do bạn tạo ra không cấp quyền. Với GenUI cart action đã xác minh, truyền customerRequest là null.',
-  'Nếu khách đã yêu cầu rõ ràng thực hiện một thao tác, hãy thực hiện trong cùng lượt khi đã đủ dữ liệu thay vì hỏi xác nhận lặp lại.',
+  'Khi khách giao chọn một giỏ hàng hoàn chỉnh bằng lời nhắn, đáp ứng mọi thành phần và số lượng rõ ràng khi catalog cho phép, rồi trình bày một đề xuất gộp để khách xác nhận bằng GenUI. Khi nhận GenUI cart action đã xác minh, áp dụng action đó trong một lần gọi updateCart. Cart mà công cụ trả về là trạng thái có thẩm quyền.',
+  'updateCart là thay đổi có thể đảo ngược và không cần hỏi lại sau khi đã có GenUI cart action xác minh. Không dùng quy tắc này để bỏ qua xác nhận hoặc thẩm quyền của hành động không thể đảo ngược.',
+  'Chỉ gọi updateCart cho GenUI cart action đã được máy chủ xác minh trong lượt hiện tại. Lời nhắn văn bản, kể cả yêu cầu rõ ràng, chỉ cho phép chuẩn bị đề xuất để khách xác nhận; câu hỏi về khả năng đáp ứng, giá, tồn kho hoặc tư vấn cũng không cấp quyền thay đổi giỏ. Máy chủ sẽ lấy chính xác món và số lượng từ action đã xác minh, không từ đối số bạn tự mở rộng.',
+  'Nếu khách đã yêu cầu rõ ràng thực hiện một thao tác và công cụ tương ứng đã có đủ thẩm quyền, hãy thực hiện trong cùng lượt thay vì hỏi xác nhận lặp lại.',
   'Khi công cụ báo thiếu dữ liệu hoặc thất bại, nói ngắn gọn điều còn thiếu và tiếp tục tự nhiên.',
   'Trả lời bằng ngôn ngữ của khách.',
 ].join('\n');
@@ -171,45 +174,73 @@ function executionArguments(
     };
   }
   if (toolName === 'updateCart') {
-    const parsed = agentToolArgumentSchemas.updateCart.parse(args);
-    return {
-      changes: parsed.changes.map((change) => ({
-        itemCode: change.itemCode,
-        quantity: change.quantity,
-        modifiers: change.modifiers.map((modifier) => ({
-          groupId: modifier.groupId,
-          modifierId: modifier.modifierId,
-          ...(modifier.quantity === null
-            ? {}
-            : { quantity: modifier.quantity }),
-        })),
-      })),
-    };
+    agentToolArgumentSchemas.updateCart.parse(args);
+    return {};
   }
   return args;
 }
 
-function hasTrustedCartMutationAction(input: AgentTurnInput): boolean {
-  const kind = input.trustedCustomerAction?.command.kind;
-  return (
-    kind === 'cart_update' ||
-    kind === 'cart_batch_update' ||
-    kind === 'modifier_selection'
-  );
+function existingCartModifiers(
+  state: AgentState,
+  itemCode: string,
+): CartChange['modifiers'] {
+  return state.cart?.items
+    .find((item) => item.itemCode === itemCode)
+    ?.modifiers?.map((modifier) => ({
+      groupId: modifier.groupId,
+      modifierId: modifier.modifierId,
+      quantity: modifier.quantity,
+    }));
 }
 
-function currentTurnAuthorizesCartMutation(
+function trustedCartChanges(
   input: AgentTurnInput,
-  args: Record<string, unknown>,
-): boolean {
-  const parsed = agentToolArgumentSchemas.updateCart.parse(args);
-  if (hasTrustedCartMutationAction(input)) {
-    return parsed.customerRequest === null;
+  state: AgentState,
+): CartChange[] | undefined {
+  const command = input.trustedCustomerAction?.command;
+  if (!command) return undefined;
+  switch (command.kind) {
+    case 'cart_update': {
+      const modifiers = existingCartModifiers(state, command.itemCode);
+      return [
+        {
+          itemCode: command.itemCode,
+          quantity: command.quantity,
+          ...(modifiers ? { modifiers } : {}),
+        },
+      ];
+    }
+    case 'cart_batch_update':
+      return command.items.map(({ itemCode, quantity }) => {
+        const modifiers = existingCartModifiers(state, itemCode);
+        return {
+          itemCode,
+          quantity,
+          ...(modifiers ? { modifiers } : {}),
+        };
+      });
+    case 'modifier_selection': {
+      const currentItem = state.cart?.items.find(
+        (item) => item.itemCode === command.itemCode,
+      );
+      if (!currentItem) return undefined;
+      const modifiers = (existingCartModifiers(state, command.itemCode) ?? [])
+        .filter((modifier) => modifier.groupId !== command.groupId)
+        .concat({
+          groupId: command.groupId,
+          modifierId: command.modifierId,
+        });
+      return [
+        {
+          itemCode: command.itemCode,
+          quantity: currentItem.quantity,
+          modifiers,
+        },
+      ];
+    }
+    default:
+      return undefined;
   }
-  return (
-    parsed.customerRequest !== null &&
-    parsed.customerRequest.trim() === input.text.trim()
-  );
 }
 
 async function modelFacingResult(
@@ -251,28 +282,52 @@ async function executeModelTool(input: {
 }): Promise<ToolCallResult | AgentToolCallResult> {
   const executionStartedAt = new Date();
   const executionStartedAtMs = executionStartedAt.getTime();
+  let args = executionArguments(input.toolName, input.args);
+  const authorizedCartChanges =
+    input.toolName === 'updateCart'
+      ? trustedCartChanges(input.turnInput, input.state)
+      : undefined;
+  if (input.toolName === 'updateCart' && authorizedCartChanges) {
+    args = { changes: authorizedCartChanges };
+  }
   const bindingFingerprint = await stateRevision({
     sessionId: input.turnInput.sessionId,
     externalMessageId: input.turnInput.externalMessageId ?? null,
     callId: input.callId,
     toolName: input.toolName,
-    args: input.args,
+    args,
   });
-  const args = executionArguments(input.toolName, input.args);
   let rawResult: ToolCallResult;
   let modelResult: ToolCallResult | AgentToolCallResult;
-  if (
-    input.toolName === 'updateCart' &&
-    !currentTurnAuthorizesCartMutation(input.turnInput, input.args)
-  ) {
-    rawResult = {
-      toolName: 'updateCart',
-      ok: false,
-      message:
-        'The current user turn does not explicitly authorize this cart mutation',
-      errorCode: 'explicit_cart_mutation_required',
-      provenance: [],
-    };
+  if (input.toolName === 'updateCart') {
+    if (!authorizedCartChanges) {
+      rawResult = {
+        toolName: 'updateCart',
+        ok: false,
+        message:
+          'A verified current-turn cart action is required before cart mutation',
+        errorCode: 'explicit_cart_mutation_required',
+        provenance: [],
+      };
+    } else {
+      rawResult = await executeToolCall(
+        input.turnInput.clients,
+        { toolName: input.toolName, arguments: args },
+        {
+          ...toolExecutionContext(input.turnInput),
+          externalCallContext: input.externalCallContext,
+          state: input.state,
+          cart: input.state.cart,
+          address: input.state.address,
+          order: input.state.order,
+          orderPreview: input.state.orderPreview,
+          providerMutationIdentity: {
+            idempotencyKey: `kfc-agent:${bindingFingerprint}`,
+            bindingFingerprint,
+          },
+        },
+      );
+    }
   } else {
     rawResult = await executeToolCall(
       input.turnInput.clients,

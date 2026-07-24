@@ -417,7 +417,22 @@ describe('KFC Vietnam business pack compatibility', () => {
       sessionId: 'session-kfc-tool-lifecycle',
       customerId: 'customer-1',
       channel: 'kfc' as const,
-      text: 'Lập giúp tôi một giỏ hàng',
+      text: '',
+      trustedCustomerAction: {
+        source: 'kfc_genui_action' as const,
+        assistantTurnId: 'assistant-turn-batch',
+        attachmentId: 'attachment-batch',
+        actionDigest: '1'.repeat(64),
+        verifiedRevision: '2'.repeat(64),
+        lifecycle: 'one_shot' as const,
+        command: {
+          kind: 'cart_batch_update' as const,
+          items: [
+            { itemCode: '20751', quantity: 1 },
+            { itemCode: '20752', quantity: 2 },
+          ],
+        },
+      },
       clients,
       store,
       dashboard: new DashboardEventBus(),
@@ -471,13 +486,7 @@ describe('KFC Vietnam business pack compatibility', () => {
       );
       const cartResult = await invoke(
         'updateCart',
-        {
-          customerRequest: 'Lập giúp tôi một giỏ hàng',
-          changes: [
-            { itemCode: '20751', quantity: 1, modifiers: [] },
-            { itemCode: '20752', quantity: 2, modifiers: [] },
-          ],
-        },
+        {},
         'cart-1',
       );
       authoritativeCart = cartResult.value as
@@ -515,7 +524,7 @@ describe('KFC Vietnam business pack compatibility', () => {
     ).not.toThrow();
   });
 
-  it('rejects a cart mutation not bound to the current advisory user turn', async () => {
+  it('rejects a cart mutation bound to an exact advisory user turn', async () => {
     const fixtures = await loadGeneratedFixtures(process.cwd());
     const baseClients = createMockClients(fixtures);
     const applyChanges = vi.fn(baseClients.cart.applyChanges);
@@ -539,7 +548,7 @@ describe('KFC Vietnam business pack compatibility', () => {
     await expect(
       kfcVietnamPack.run(input, async ({ systemPrompt, tools }) => {
         expect(systemPrompt).toContain(
-          'Câu hỏi về khả năng đáp ứng, giá, tồn kho hoặc tư vấn không phải là yêu cầu thay đổi giỏ hàng',
+          'câu hỏi về khả năng đáp ứng, giá, tồn kho hoặc tư vấn cũng không cấp quyền thay đổi giỏ',
         );
         const selected = tools.find(
           (candidate) => candidate.name === 'updateCart',
@@ -550,16 +559,7 @@ describe('KFC Vietnam business pack compatibility', () => {
             await selected.invoke({
               type: 'tool_call',
               name: 'updateCart',
-              args: {
-                customerRequest: 'Thêm 200 combo vào giỏ hàng',
-                changes: [
-                  {
-                    itemCode: fixtures.menuItems[0]!.code,
-                    quantity: 200,
-                    modifiers: [],
-                  },
-                ],
-              },
+              args: {},
               id: 'advisory-cart-1',
             }),
           ),
@@ -578,7 +578,7 @@ describe('KFC Vietnam business pack compatibility', () => {
     expect(applyChanges).not.toHaveBeenCalled();
   });
 
-  it('allows one reversible cart batch bound to an exact explicit current request', async () => {
+  it('rejects plain-text cart mutation even when the current request is explicit', async () => {
     const fixtures = await loadGeneratedFixtures(process.cwd());
     const baseClients = createMockClients(fixtures);
     const applyChanges = vi.fn(baseClients.cart.applyChanges);
@@ -611,22 +611,144 @@ describe('KFC Vietnam business pack compatibility', () => {
           await selected.invoke({
             type: 'tool_call',
             name: 'updateCart',
-            args: {
-              customerRequest: currentRequest,
-              changes: [{ itemCode, quantity: 2, modifiers: [] }],
-            },
+            args: {},
             id: 'explicit-cart-1',
+          }),
+        ),
+      ) as { ok: boolean; errorCode?: string };
+      expect(result).toMatchObject({
+        ok: false,
+        errorCode: 'explicit_cart_mutation_required',
+      });
+      return 'Mình đã chuẩn bị thay đổi để bạn xác nhận.';
+    });
+
+    expect(applyChanges).not.toHaveBeenCalled();
+  });
+
+  it('derives an authorized GenUI cart change from the typed command', async () => {
+    const fixtures = await loadGeneratedFixtures(process.cwd());
+    const baseClients = createMockClients(fixtures);
+    const applyChanges = vi.fn(baseClients.cart.applyChanges);
+    const itemCode = fixtures.menuItems[0]!.code;
+    const input = {
+      sessionId: 'session-kfc-trusted-cart',
+      customerId: 'customer-1',
+      channel: 'kfc' as const,
+      text: '',
+      trustedCustomerAction: {
+        source: 'kfc_genui_action' as const,
+        assistantTurnId: 'assistant-turn-1',
+        attachmentId: 'attachment-1',
+        actionDigest: 'a'.repeat(64),
+        verifiedRevision: 'b'.repeat(64),
+        lifecycle: 'one_shot' as const,
+        command: {
+          kind: 'cart_update' as const,
+          itemCode,
+          quantity: 1,
+        },
+      },
+      clients: {
+        ...baseClients,
+        cart: {
+          ...baseClients.cart,
+          applyChanges,
+        },
+      },
+      store: new MemoryStore(),
+      dashboard: new DashboardEventBus(),
+      agentModel: {} as BaseChatModel,
+    };
+
+    await kfcVietnamPack.run(input, async ({ tools }) => {
+      const selected = tools.find(
+        (candidate) => candidate.name === 'updateCart',
+      );
+      if (!selected) throw new Error('Missing updateCart');
+      await expect(
+        selected.invoke({
+          type: 'tool_call',
+          name: 'updateCart',
+          args: {
+            changes: [{ itemCode, quantity: 5, modifiers: [] }],
+          },
+          id: 'trusted-cart-widened',
+        }),
+      ).rejects.toThrow('Received tool input did not match expected schema');
+      const result = JSON.parse(
+        toolOutputText(
+          await selected.invoke({
+            type: 'tool_call',
+            name: 'updateCart',
+            args: {},
+            id: 'trusted-cart-1',
           }),
         ),
       ) as { ok: boolean };
       expect(result.ok).toBe(true);
-      return 'Đã thêm vào giỏ.';
+      return 'Đã cập nhật giỏ.';
     });
 
     expect(applyChanges).toHaveBeenCalledOnce();
     expect(applyChanges.mock.calls[0]?.[1]).toEqual([
-      { itemCode, quantity: 2, modifiers: [] },
+      { itemCode, quantity: 1 },
     ]);
+  });
+
+  it('rejects a cart write under a trusted non-cart action', async () => {
+    const fixtures = await loadGeneratedFixtures(process.cwd());
+    const baseClients = createMockClients(fixtures);
+    const applyChanges = vi.fn(baseClients.cart.applyChanges);
+    const input = {
+      sessionId: 'session-kfc-non-cart-action',
+      customerId: 'customer-1',
+      channel: 'kfc' as const,
+      text: '',
+      trustedCustomerAction: {
+        source: 'kfc_genui_action' as const,
+        assistantTurnId: 'assistant-turn-2',
+        attachmentId: 'attachment-2',
+        actionDigest: 'c'.repeat(64),
+        verifiedRevision: 'd'.repeat(64),
+        lifecycle: 'one_shot' as const,
+        command: { kind: 'edit_cart' as const },
+      },
+      clients: {
+        ...baseClients,
+        cart: {
+          ...baseClients.cart,
+          applyChanges,
+        },
+      },
+      store: new MemoryStore(),
+      dashboard: new DashboardEventBus(),
+      agentModel: {} as BaseChatModel,
+    };
+
+    await kfcVietnamPack.run(input, async ({ tools }) => {
+      const selected = tools.find(
+        (candidate) => candidate.name === 'updateCart',
+      );
+      if (!selected) throw new Error('Missing updateCart');
+      const result = JSON.parse(
+        toolOutputText(
+          await selected.invoke({
+            type: 'tool_call',
+            name: 'updateCart',
+            args: {},
+            id: 'non-cart-action-1',
+          }),
+        ),
+      ) as { ok: boolean; errorCode?: string };
+      expect(result).toMatchObject({
+        ok: false,
+        errorCode: 'explicit_cart_mutation_required',
+      });
+      return 'Bạn muốn sửa giỏ thế nào?';
+    });
+
+    expect(applyChanges).not.toHaveBeenCalled();
   });
 
   it('preserves an upstream incomplete menu collection in KFC verified state', async () => {
