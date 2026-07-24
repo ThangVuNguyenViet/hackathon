@@ -42,9 +42,11 @@ KFC_AGENT_CANDIDATE=openai-gpt-4.1-mini
 
 Credentials come from `OPENAI_API_KEY`, `OPENCODE_API_KEY`, or
 `GOOGLE_API_KEY`, according to the selected profile. OpenCode candidates use
-the fixed `https://opencode.ai/zen/go/v1` endpoint; no OpenCode base URL is
-accepted from runtime configuration. `OPENAI_BASE_URL` remains optional for
-the named OpenAI control only.
+the fixed `https://opencode.ai/zen/go/v1` API endpoint; no OpenCode base URL is
+accepted from runtime configuration. The Anthropic SDK is configured with
+`https://opencode.ai/zen/go` because it appends `/v1/messages` itself. The
+OpenAI-compatible adapter receives the full `/v1` base. `OPENAI_BASE_URL`
+remains optional for the named OpenAI control only.
 
 The OpenAI control uses Responses. DeepSeek uses the OpenAI-compatible chat
 completions transport with thinking disabled. Qwen and MiniMax use the

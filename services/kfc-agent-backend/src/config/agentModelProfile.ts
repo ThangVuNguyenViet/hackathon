@@ -78,7 +78,9 @@ export type AgentModelIdentity = Readonly<
 >;
 
 const disabledThinking = Object.freeze({ type: 'disabled' } as const);
-const openCodeBaseUrl = 'https://opencode.ai/zen/go/v1';
+const openCodeOpenAiBaseUrl = 'https://opencode.ai/zen/go/v1';
+// The Anthropic SDK appends `/v1/messages` to its configured base URL.
+const openCodeAnthropicBaseUrl = 'https://opencode.ai/zen/go';
 const openAiBaseUrl = 'https://api.openai.com/v1';
 
 const agentModelProfiles: Readonly<
@@ -205,7 +207,7 @@ export function describeAgentChatModelFactory(
       model: profile.model,
       transport: profile.transport,
       credentialEnv: profile.credentialEnv,
-      baseUrl: openCodeBaseUrl,
+      baseUrl: openCodeOpenAiBaseUrl,
       configurableBaseUrl: false,
       useResponsesApi: false,
       thinking: profile.thinking,
@@ -217,7 +219,7 @@ export function describeAgentChatModelFactory(
       model: profile.model,
       transport: profile.transport,
       credentialEnv: profile.credentialEnv,
-      baseUrl: openCodeBaseUrl,
+      baseUrl: openCodeAnthropicBaseUrl,
       configurableBaseUrl: false,
       maxOutputCapabilityTokens: profile.maxOutputCapabilityTokens,
       requestMaxOutputTokens: agentResponseMaxOutputTokens,

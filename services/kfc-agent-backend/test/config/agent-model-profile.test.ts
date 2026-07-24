@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   agentModelCandidateIds,
   createConfiguredAgentChatModel,
@@ -113,6 +113,10 @@ describe('KFC agent model candidates', () => {
 });
 
 describe('createAgentChatModel', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
   it('describes exact adapter construction without exposing credentials', () => {
     expect(
       describeAgentChatModelFactory(
@@ -150,7 +154,7 @@ describe('createAgentChatModel', () => {
       model: 'qwen3.7-max',
       transport: 'anthropic_messages',
       credentialEnv: 'OPENCODE_API_KEY',
-      baseUrl: 'https://opencode.ai/zen/go/v1',
+      baseUrl: 'https://opencode.ai/zen/go',
       configurableBaseUrl: false,
       maxOutputCapabilityTokens: 65_536,
       requestMaxOutputTokens: 4_096,
@@ -165,7 +169,7 @@ describe('createAgentChatModel', () => {
       model: 'minimax-m3',
       transport: 'anthropic_messages',
       credentialEnv: 'OPENCODE_API_KEY',
-      baseUrl: 'https://opencode.ai/zen/go/v1',
+      baseUrl: 'https://opencode.ai/zen/go',
       configurableBaseUrl: false,
       maxOutputCapabilityTokens: 131_072,
       requestMaxOutputTokens: 4_096,
@@ -212,6 +216,9 @@ describe('createAgentChatModel', () => {
     });
     expect(qwen.model._llmType()).toBe('anthropic');
     expect(Reflect.get(qwen.model, 'maxTokens')).toBe(4_096);
+    expect(Reflect.get(qwen.model, 'clientOptions')).toMatchObject({
+      baseURL: 'https://opencode.ai/zen/go',
+    });
     expect(Reflect.get(qwen.model, 'thinking')).toEqual({ type: 'disabled' });
     expect(Reflect.get(minimax.model, 'maxTokens')).toBe(4_096);
     expect(google.model._llmType()).toBe('google');
@@ -222,6 +229,42 @@ describe('createAgentChatModel', () => {
       profile: 'openai:gpt-4.1-mini:responses',
       transport: 'openai_responses',
     });
+  });
+
+  it('composes the Anthropic SDK request onto the exact OpenCode Messages endpoint', async () => {
+    const requestedUrls: string[] = [];
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (request: RequestInfo | URL) => {
+        requestedUrls.push(
+          request instanceof Request ? request.url : String(request),
+        );
+        return new Response(
+          JSON.stringify({
+            id: 'msg_test',
+            type: 'message',
+            role: 'assistant',
+            model: 'qwen3.7-max',
+            content: [{ type: 'text', text: 'OK' }],
+            stop_reason: 'end_turn',
+            stop_sequence: null,
+            usage: { input_tokens: 1, output_tokens: 1 },
+          }),
+          {
+            status: 200,
+            headers: { 'content-type': 'application/json' },
+          },
+        );
+      }),
+    );
+    const qwen = createConfiguredAgentChatModel({
+      profile: resolveAgentModelProfile({ candidateId: 'qwen3.7-max' }),
+      openCodeApiKey: 'test-opencode',
+    });
+
+    await qwen.model.invoke('Reply briefly with OK.');
+
+    expect(requestedUrls).toEqual(['https://opencode.ai/zen/go/v1/messages']);
   });
 
   it('requires the credential owned by the selected candidate without fallback', () => {
