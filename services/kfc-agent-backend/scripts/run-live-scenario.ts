@@ -15,11 +15,18 @@ import {
 } from '../src/liveEvidence/liveScenarioCli.js';
 import { runLiveScenarioCommandStream } from '../src/liveEvidence/liveScenarioProtocol.js';
 import { startLiveScenarioSession } from '../src/liveEvidence/liveScenarioSession.js';
+import {
+  createEvidenceSanitizer,
+  serializeEvidenceJsonLine,
+} from '../src/liveEvidence/evidenceRedaction.js';
 import { createMockClients } from '../src/mock/createMockClients.js';
 import { LangSmithAgentTracer } from '../src/observability/langsmithAgentTracer.js';
 import { MemoryStore } from '../src/persistence/memoryStore.js';
 import { legacySessionIdOutsidePackNamespace } from '../src/runtime/businessPack.js';
 import { loadScenarioScript } from '../src/scenarios/scenarioScript.js';
+
+const configuredSecrets = configuredSecretValues(process.env);
+const sanitizeOutput = createEvidenceSanitizer(configuredSecrets);
 
 async function main(): Promise<void> {
   const serviceRoot = process.cwd();
@@ -65,7 +72,7 @@ async function main(): Promise<void> {
     },
     scenarioPath: args.scenarioPath,
     identity: binding.identity,
-    configuredSecrets: configuredSecretValues(process.env),
+    configuredSecrets,
     runPreflight: () => runModelCapabilityPreflight(binding),
     executeTurn: async ({ text, recordToolEvent }) => {
       const deferredTraceTasks: Array<() => Promise<void>> = [];
@@ -94,18 +101,21 @@ async function main(): Promise<void> {
   let protocolStarted = false;
   try {
     process.stdout.write(
-      `${JSON.stringify({
-        type: session.preflightPassed ? 'session_ready' : 'preflight_failed',
-        runId: args.runId,
-        attempt: args.attempt,
-        runDirectory: session.runDirectory,
-        model: session.identity,
-        scenario: session.scenario,
-        protocol: {
-          user: { type: 'user', text: '<improvised customer message>' },
-          finish: { type: 'finish', note: '<optional reviewer note>' },
+      `${serializeEvidenceJsonLine(
+        {
+          type: session.preflightPassed ? 'session_ready' : 'preflight_failed',
+          runId: args.runId,
+          attempt: args.attempt,
+          runDirectory: session.runDirectory,
+          model: session.identity,
+          scenario: session.scenario,
+          protocol: {
+            user: { type: 'user', text: '<improvised customer message>' },
+            finish: { type: 'finish', note: '<optional reviewer note>' },
+          },
         },
-      })}\n`,
+        sanitizeOutput,
+      )}\n`,
     );
     if (!session.preflightPassed) {
       process.exitCode = 2;
@@ -120,6 +130,7 @@ async function main(): Promise<void> {
     await runLiveScenarioCommandStream({
       session,
       lines,
+      sanitize: sanitizeOutput,
       writeLine(line) {
         process.stdout.write(`${line}\n`);
       },
@@ -137,10 +148,13 @@ async function main(): Promise<void> {
 
 void main().catch((error: unknown) => {
   process.stderr.write(
-    `${JSON.stringify({
-      type: 'fatal_error',
-      errorClass: safeErrorClass(error),
-    })}\n`,
+    `${serializeEvidenceJsonLine(
+      {
+        type: 'fatal_error',
+        errorClass: safeErrorClass(error),
+      },
+      sanitizeOutput,
+    )}\n`,
   );
   process.exitCode = 1;
 });

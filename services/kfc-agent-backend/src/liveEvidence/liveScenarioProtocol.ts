@@ -1,4 +1,9 @@
 import { z } from 'zod';
+import {
+  createEvidenceSanitizer,
+  serializeEvidenceJsonLine,
+  type EvidenceSanitizer,
+} from './evidenceRedaction.js';
 
 const commandSchema = z.discriminatedUnion('type', [
   z.object({ type: z.literal('user'), text: z.string().min(1) }).strict(),
@@ -24,6 +29,7 @@ export async function runLiveScenarioCommandStream(input: {
   session: LiveScenarioProtocolSession;
   lines: AsyncIterable<string>;
   writeLine(line: string): void | Promise<void>;
+  sanitize?: EvidenceSanitizer;
 }): Promise<void> {
   let finished = false;
   let interrupted = false;
@@ -79,10 +85,18 @@ export async function runLiveScenarioCommandStream(input: {
 }
 
 async function emit(
-  input: Pick<Parameters<typeof runLiveScenarioCommandStream>[0], 'writeLine'>,
+  input: Pick<
+    Parameters<typeof runLiveScenarioCommandStream>[0],
+    'writeLine' | 'sanitize'
+  >,
   value: Record<string, unknown>,
 ): Promise<void> {
-  await input.writeLine(JSON.stringify(value));
+  await input.writeLine(
+    serializeEvidenceJsonLine(
+      value,
+      input.sanitize ?? createEvidenceSanitizer(),
+    ),
+  );
 }
 
 function safeErrorClass(error: unknown): string {

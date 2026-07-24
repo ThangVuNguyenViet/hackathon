@@ -1,5 +1,12 @@
 export type EvidenceSanitizer = (value: unknown, key?: string) => unknown;
 
+export function serializeEvidenceJsonLine(
+  value: unknown,
+  sanitize: EvidenceSanitizer,
+): string {
+  return JSON.stringify(sanitize(value));
+}
+
 export function createEvidenceSanitizer(
   configuredSecrets: readonly string[] = [],
 ): EvidenceSanitizer {
@@ -31,9 +38,13 @@ export function createEvidenceSanitizer(
       sanitized = sanitized.split(secret).join('[REDACTED]');
     }
     return sanitized
+      .replace(
+        /\b((?:authorization|cookie|set-cookie)\s*[:=]\s*)[^\r\n]*/giu,
+        '$1[REDACTED]',
+      )
       .replace(/\bBearer\s+[^\s"',}]+/giu, 'Bearer [REDACTED]')
       .replace(
-        /\b((?:password|api[_-]?key|access[_-]?token|page[_-]?access[_-]?token|meta[_-]?(?:app[_-]?secret|page[_-]?access[_-]?token|token)|authorization|x-api-key|x-meta-token)\s*[:=]\s*)(?:"[^"]*"|'[^']*'|[^\s;,}\]]+)/giu,
+        /\b((?:password|secret|client[_-]?secret|api[_-]?key|access[_-]?token|page[_-]?access[_-]?token|meta[_-]?(?:app[_-]?secret|page[_-]?access[_-]?token|token)|x-api-key|x-meta-token)\s*[:=]\s*)(?:"[^"]*"|'[^']*'|[^\s;,}\]]+)/giu,
         '$1[REDACTED]',
       )
       .replace(/\bsk-[A-Za-z0-9_-]{8,}\b/gu, '[REDACTED]');
