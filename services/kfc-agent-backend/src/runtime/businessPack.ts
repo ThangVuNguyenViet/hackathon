@@ -133,7 +133,11 @@ export function scopePackSessionId(
 ): string {
   assertPackRef(packRef);
   if (!externalSessionId.trim()) throw new Error('session_id_invalid');
-  return `pack:${packRef.packId}@${packRef.version}:${externalSessionId}`;
+  return `pack:${JSON.stringify([
+    packRef.packId,
+    packRef.version,
+    externalSessionId,
+  ])}`;
 }
 
 /**
@@ -212,7 +216,7 @@ function samePackRef(left: PackRef, right: PackRef): boolean {
 }
 
 function packRefKey(ref: PackRef): string {
-  return `${ref.packId}@${ref.version}`;
+  return JSON.stringify([ref.packId, ref.version]);
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

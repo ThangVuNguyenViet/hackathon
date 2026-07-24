@@ -11,7 +11,10 @@ import {
   runPvcfcCustomerServiceTurn,
 } from '../../src/businessPacks/registry.js';
 import { runSemanticKernel } from '../../src/runtime/kernel.js';
-import { createPackStateEnvelope } from '../../src/runtime/businessPack.js';
+import {
+  createPackStateEnvelope,
+  scopePackSessionId,
+} from '../../src/runtime/businessPack.js';
 import { DashboardEventBus } from '../../src/dashboard/eventBus.js';
 import { loadGeneratedFixtures } from '../../src/fixtures/loadFixtures.js';
 import { createMockClients } from '../../src/mock/createMockClients.js';
@@ -107,7 +110,10 @@ describe('PVCFC public customer service pack', () => {
 
   it('resumes week-old complete exchanges through rolling summary plus a token-bounded recent window', async () => {
     const store = new MemoryStore();
-    const sessionId = 'pack:pvcfc-customer-service@1.0.0:week-resume';
+    const sessionId = scopePackSessionId(
+      pvcfcCustomerServicePack.ref,
+      'week-resume',
+    );
     const append = (
       role: 'user' | 'assistant',
       text: string,
@@ -220,9 +226,11 @@ describe('PVCFC public customer service pack', () => {
     const output = await runPvcfcCustomerServiceTurn(input);
     expect(output.responseText).toContain('2026-07-21');
 
-    const pvcfcTurns = await store.listTurns(
-      'pack:pvcfc-customer-service@1.0.0:same-external-session',
+    const durablePvcfcSessionId = scopePackSessionId(
+      pvcfcCustomerServicePack.ref,
+      'same-external-session',
     );
+    const pvcfcTurns = await store.listTurns(durablePvcfcSessionId);
     expect(pvcfcTurns.map(({ text }) => text)).toEqual([
       input.text,
       output.responseText,
@@ -241,13 +249,13 @@ describe('PVCFC public customer service pack', () => {
     ).toBeUndefined();
     expect(
       await store.getPackState(
-        'pack:pvcfc-customer-service@1.0.0:same-external-session',
+        durablePvcfcSessionId,
         pvcfcCustomerServicePack.ref,
       ),
     ).toBeDefined();
     expect(
       await store.getPackState(
-        'pack:pvcfc-customer-service@1.0.0:same-external-session',
+        durablePvcfcSessionId,
         { packId: 'kfc-vietnam', version: '1.0.0' },
       ),
     ).toBeUndefined();
@@ -283,7 +291,7 @@ describe('PVCFC public customer service pack', () => {
     expect(await input.store.listTurns('kernel-pvcfc')).toEqual([]);
     expect(
       await input.store.listTurns(
-        'pack:pvcfc-customer-service@1.0.0:kernel-pvcfc',
+        scopePackSessionId(pvcfcCustomerServicePack.ref, 'kernel-pvcfc'),
       ),
     ).toHaveLength(2);
   });

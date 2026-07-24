@@ -1,9 +1,11 @@
 import {
   access,
+  cp,
   mkdtemp,
   mkdir,
   readFile,
   readdir,
+  rm,
   symlink,
   writeFile,
 } from 'node:fs/promises';
@@ -147,5 +149,36 @@ describe('PVCFC production-like public corpus', () => {
 
     await expect(installation).rejects.toThrow('pvcfc_corpus_target_exists');
     expect(await readdir(target)).toEqual([]);
+  });
+
+  it('rejects unpublished, installing, and mismatched-ready corpus trees', async () => {
+    const scratch = await mkdtemp(join(tmpdir(), 'pvcfc-readiness-'));
+
+    const unpublished = join(scratch, 'unpublished');
+    await cp(corpusRoot, unpublished, { recursive: true });
+    await rm(join(unpublished, '.ready.json'));
+    await expect(verifyPvcfcCorpus(unpublished)).rejects.toThrow(
+      'pvcfc_corpus_not_ready',
+    );
+
+    const crashLeft = join(scratch, 'crash-left');
+    await cp(corpusRoot, crashLeft, { recursive: true });
+    await writeFile(
+      join(crashLeft, '.installing.json'),
+      '{"status":"installing","reservationToken":"crashed"}\n',
+    );
+    await expect(verifyPvcfcCorpus(crashLeft)).rejects.toThrow(
+      'pvcfc_corpus_install_incomplete',
+    );
+
+    const mismatched = join(scratch, 'mismatched');
+    await cp(corpusRoot, mismatched, { recursive: true });
+    await writeFile(
+      join(mismatched, '.ready.json'),
+      '{"status":"ready","manifestSha256":"wrong"}\n',
+    );
+    await expect(verifyPvcfcCorpus(mismatched)).rejects.toThrow(
+      'pvcfc_corpus_ready_mismatch',
+    );
   });
 });

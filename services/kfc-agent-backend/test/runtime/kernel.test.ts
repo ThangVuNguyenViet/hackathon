@@ -52,6 +52,66 @@ function fakePack(observation: {
 }
 
 describe('semantic kernel pack isolation', () => {
+  it('keeps delimiter-bearing pack references distinct in the registry', () => {
+    const leftRef = { packId: 'vendor', version: '1@x' };
+    const rightRef = { packId: 'vendor@1', version: 'x' };
+    const left = fakePack({ runCount: 0 });
+    const right = fakePack({ runCount: 0 });
+    const registry = createBusinessPackRegistry([
+      { ...left, ref: leftRef },
+      { ...right, ref: rightRef },
+    ]);
+
+    expect(registry.resolve(registry.createTrustedBinding(leftRef)).ref).toEqual(
+      leftRef,
+    );
+    expect(
+      registry.resolve(registry.createTrustedBinding(rightRef)).ref,
+    ).toEqual(rightRef);
+  });
+
+  it('frames unrestricted pack session components without delimiter collisions', () => {
+    const adversarialTriples = [
+      [
+        { packId: 'vendor', version: '1:x' },
+        'y',
+        { packId: 'vendor', version: '1' },
+        'x:y',
+      ],
+      [
+        { packId: 'a', version: 'b@c' },
+        'd',
+        { packId: 'a@b', version: 'c' },
+        'd',
+      ],
+      [
+        { packId: '供應商:@', version: '版本:"\\' },
+        '會話:👩🏽‍💻',
+        { packId: '供應商', version: '@版本:"\\' },
+        '會話:👩🏽‍💻',
+      ],
+      [
+        { packId: 'café', version: '1' },
+        'é',
+        { packId: 'cafe\u0301', version: '1' },
+        'e\u0301',
+      ],
+    ] as const;
+
+    for (const [leftRef, leftSession, rightRef, rightSession] of adversarialTriples) {
+      const left = scopePackSessionId(leftRef, leftSession);
+      const right = scopePackSessionId(rightRef, rightSession);
+      expect(left).toMatch(/^pack:/u);
+      expect(right).toMatch(/^pack:/u);
+      expect(left).not.toBe(right);
+      expect(JSON.parse(left.slice('pack:'.length))).toEqual([
+        leftRef.packId,
+        leftRef.version,
+        leftSession,
+      ]);
+    }
+  });
+
   it('applies pack-owned session scoping at the trusted kernel boundary', async () => {
     type SessionInput = { sessionId: string };
     const kfcRef = { packId: 'kfc-vietnam', version: '1.0.0' };
@@ -101,7 +161,9 @@ describe('semantic kernel pack isolation', () => {
         binding: registry.createTrustedBinding(pvcfcRef),
         packInput: { sessionId: pvcfcExternalSession },
       }),
-    ).resolves.toBe('pack:pvcfc-customer-service@1.0.0:shared');
+    ).resolves.toBe(
+      'pack:["pvcfc-customer-service","1.0.0","shared"]',
+    );
   });
 
   it('runs createAgent with supplied callbacks inside the active invocation context', async () => {

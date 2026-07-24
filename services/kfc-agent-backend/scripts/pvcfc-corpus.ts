@@ -76,6 +76,37 @@ export async function verifyPvcfcCorpus(root: string): Promise<{
     donorCommit: string | null;
   };
 }> {
+  if (await pathExists(join(root, '.installing.json'))) {
+    throw new Error('pvcfc_corpus_install_incomplete');
+  }
+  const verified = await verifyPvcfcCorpusContent(root);
+  const readyPath = join(root, '.ready.json');
+  if (!(await pathExists(readyPath))) {
+    throw new Error('pvcfc_corpus_not_ready');
+  }
+  const ready = JSON.parse(await readFile(readyPath, 'utf8')) as {
+    status?: unknown;
+    manifestSha256?: unknown;
+  };
+  if (
+    ready.status !== 'ready' ||
+    ready.manifestSha256 !== verified.manifestSha256
+  ) {
+    throw new Error('pvcfc_corpus_ready_mismatch');
+  }
+  return verified;
+}
+
+async function verifyPvcfcCorpusContent(root: string): Promise<{
+  corpusId: string;
+  artifactCount: number;
+  totalBytes: number;
+  manifestSha256: string;
+  custody: {
+    sourceKind: string;
+    donorCommit: string | null;
+  };
+}> {
   const { manifest, manifestSha256, totalBytes } =
     await verifyRawPvcfcCapture(root);
 
@@ -172,7 +203,7 @@ export async function installPvcfcCorpus(input: {
       { flag: 'wx' },
     );
     await writePvcfcPublicKnowledgeIndex(temporary);
-    await verifyPvcfcCorpus(temporary);
+    await verifyPvcfcCorpusContent(temporary);
     try {
       await mkdir(target);
       targetReserved = true;
@@ -212,7 +243,7 @@ export async function installPvcfcCorpus(input: {
       force: false,
       errorOnExist: true,
     });
-    await verifyPvcfcCorpus(target);
+    await verifyPvcfcCorpusContent(target);
     await writeFile(
       stagedReadyMarker,
       `${JSON.stringify(
@@ -230,6 +261,7 @@ export async function installPvcfcCorpus(input: {
     );
     await rm(installingMarker);
     await rename(stagedReadyMarker, join(target, '.ready.json'));
+    await verifyPvcfcCorpus(target);
     await rm(temporary, { recursive: true, force: true });
   } catch (error) {
     await rm(temporary, { recursive: true, force: true });
