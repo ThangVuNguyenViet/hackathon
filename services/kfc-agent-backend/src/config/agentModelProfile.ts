@@ -27,6 +27,14 @@ export type AgentModelTransport =
 export type AgentCredentialEnv =
   'OPENAI_API_KEY' | 'OPENCODE_API_KEY' | 'GOOGLE_API_KEY';
 
+/**
+ * Per-request response budget for ordinary agent turns. This is deliberately
+ * independent of each model's published output capability: support responses
+ * and tool arguments should remain bounded even when a provider advertises a
+ * much larger maximum.
+ */
+export const agentResponseMaxOutputTokens = 4_096;
+
 interface AgentModelProfileBase {
   readonly candidateId: AgentModelCandidateId;
   readonly provider: AgentProvider;
@@ -52,7 +60,7 @@ export type AgentModelProfile =
       readonly provider: 'opencode';
       readonly transport: 'anthropic_messages';
       readonly credentialEnv: 'OPENCODE_API_KEY';
-      readonly maxOutputTokens: number;
+      readonly maxOutputCapabilityTokens: number;
       readonly thinking?: Readonly<{ type: 'disabled' }>;
     })
   | (AgentModelProfileBase & {
@@ -100,7 +108,7 @@ const agentModelProfiles: Readonly<
     profile: 'opencode:qwen3.7-max:anthropic-messages:thinking-disabled',
     transport: 'anthropic_messages',
     credentialEnv: 'OPENCODE_API_KEY',
-    maxOutputTokens: 65_536,
+    maxOutputCapabilityTokens: 65_536,
     thinking: disabledThinking,
   }),
   'minimax-m3': Object.freeze({
@@ -110,7 +118,7 @@ const agentModelProfiles: Readonly<
     profile: 'opencode:minimax-m3:anthropic-messages',
     transport: 'anthropic_messages',
     credentialEnv: 'OPENCODE_API_KEY',
-    maxOutputTokens: 131_072,
+    maxOutputCapabilityTokens: 131_072,
   }),
   'google-gemini-3.1-flash-lite': Object.freeze({
     candidateId: 'google-gemini-3.1-flash-lite',
@@ -165,7 +173,8 @@ export type AgentChatModelFactoryDescriptor =
       credentialEnv: 'OPENCODE_API_KEY';
       baseUrl: string;
       configurableBaseUrl: false;
-      maxOutputTokens: number;
+      maxOutputCapabilityTokens: number;
+      requestMaxOutputTokens: number;
       thinking?: Readonly<{ type: 'disabled' }>;
     }>
   | Readonly<{
@@ -210,7 +219,8 @@ export function describeAgentChatModelFactory(
       credentialEnv: profile.credentialEnv,
       baseUrl: openCodeBaseUrl,
       configurableBaseUrl: false,
-      maxOutputTokens: profile.maxOutputTokens,
+      maxOutputCapabilityTokens: profile.maxOutputCapabilityTokens,
+      requestMaxOutputTokens: agentResponseMaxOutputTokens,
       ...(profile.thinking ? { thinking: profile.thinking } : {}),
     });
   }
@@ -295,7 +305,7 @@ function createAgentChatModel(input: {
       model: descriptor.model,
       temperature: 0,
       maxRetries: 1,
-      maxTokens: descriptor.maxOutputTokens,
+      maxTokens: descriptor.requestMaxOutputTokens,
       ...(descriptor.thinking ? { thinking: descriptor.thinking } : {}),
       clientOptions: { baseURL: descriptor.baseUrl },
     });

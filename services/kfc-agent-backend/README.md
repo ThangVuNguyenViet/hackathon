@@ -48,9 +48,13 @@ the named OpenAI control only.
 
 The OpenAI control uses Responses. DeepSeek uses the OpenAI-compatible chat
 completions transport with thinking disabled. Qwen and MiniMax use the
-Anthropic Messages adapter with protocol-required output ceilings of 65,536
-and 131,072 tokens respectively. The MiniMax value comes from the OpenCode
-model metadata for `opencode-go/minimax-m3` (`@ai-sdk/anthropic`, metadata
+Anthropic Messages adapter. Their published output capabilities remain pinned
+at 65,536 and 131,072 tokens respectively, while ordinary agent requests use a
+provider-neutral 4,096-token response budget. The smaller request budget is
+ample for bounded customer-support replies and tool arguments and avoids
+turning a capability ceiling into an instruction to generate an unusually
+long response. The MiniMax capability value comes from the OpenCode model
+metadata for `opencode-go/minimax-m3` (`@ai-sdk/anthropic`, metadata
 `last_updated` 2026-05-31), locally verified on 2026-07-24. That metadata is
 evidence for the compiled profile only; runtime code does not read the local
 OpenCode cache. Google support remains available but is not in the default

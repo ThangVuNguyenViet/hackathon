@@ -19,9 +19,9 @@ describe('KFC agent model candidates', () => {
     ]);
 
     for (const candidateId of agentModelCandidateIds) {
-      expect(
-        Object.isFrozen(resolveAgentModelProfile({ candidateId })),
-      ).toBe(true);
+      expect(Object.isFrozen(resolveAgentModelProfile({ candidateId }))).toBe(
+        true,
+      );
     }
   });
 
@@ -76,16 +76,14 @@ describe('KFC agent model candidates', () => {
       credentialEnv: 'OPENCODE_API_KEY',
       thinking: { type: 'disabled' },
     });
-    expect(
-      resolveAgentModelProfile({ candidateId: 'qwen3.7-max' }),
-    ).toEqual({
+    expect(resolveAgentModelProfile({ candidateId: 'qwen3.7-max' })).toEqual({
       candidateId: 'qwen3.7-max',
       provider: 'opencode',
       model: 'qwen3.7-max',
       profile: 'opencode:qwen3.7-max:anthropic-messages:thinking-disabled',
       transport: 'anthropic_messages',
       credentialEnv: 'OPENCODE_API_KEY',
-      maxOutputTokens: 65_536,
+      maxOutputCapabilityTokens: 65_536,
       thinking: { type: 'disabled' },
     });
     expect(resolveAgentModelProfile({ candidateId: 'minimax-m3' })).toEqual({
@@ -95,7 +93,7 @@ describe('KFC agent model candidates', () => {
       profile: 'opencode:minimax-m3:anthropic-messages',
       transport: 'anthropic_messages',
       credentialEnv: 'OPENCODE_API_KEY',
-      maxOutputTokens: 131_072,
+      maxOutputCapabilityTokens: 131_072,
     });
   });
 
@@ -154,7 +152,8 @@ describe('createAgentChatModel', () => {
       credentialEnv: 'OPENCODE_API_KEY',
       baseUrl: 'https://opencode.ai/zen/go/v1',
       configurableBaseUrl: false,
-      maxOutputTokens: 65_536,
+      maxOutputCapabilityTokens: 65_536,
+      requestMaxOutputTokens: 4_096,
       thinking: { type: 'disabled' },
     });
     expect(
@@ -168,7 +167,8 @@ describe('createAgentChatModel', () => {
       credentialEnv: 'OPENCODE_API_KEY',
       baseUrl: 'https://opencode.ai/zen/go/v1',
       configurableBaseUrl: false,
-      maxOutputTokens: 131_072,
+      maxOutputCapabilityTokens: 131_072,
+      requestMaxOutputTokens: 4_096,
     });
   });
 
@@ -211,9 +211,9 @@ describe('createAgentChatModel', () => {
       baseURL: 'https://opencode.ai/zen/go/v1',
     });
     expect(qwen.model._llmType()).toBe('anthropic');
-    expect(Reflect.get(qwen.model, 'maxTokens')).toBe(65_536);
+    expect(Reflect.get(qwen.model, 'maxTokens')).toBe(4_096);
     expect(Reflect.get(qwen.model, 'thinking')).toEqual({ type: 'disabled' });
-    expect(Reflect.get(minimax.model, 'maxTokens')).toBe(131_072);
+    expect(Reflect.get(minimax.model, 'maxTokens')).toBe(4_096);
     expect(google.model._llmType()).toBe('google');
     expect(openai.identity).toEqual({
       candidateId: 'openai-gpt-4.1-mini',
@@ -232,9 +232,7 @@ describe('createAgentChatModel', () => {
         }),
         openCodeApiKey: 'wrong-provider',
       }),
-    ).toThrow(
-      'OPENAI_API_KEY is required for candidate openai-gpt-4.1-mini',
-    );
+    ).toThrow('OPENAI_API_KEY is required for candidate openai-gpt-4.1-mini');
     expect(() =>
       createConfiguredAgentChatModel({
         profile: resolveAgentModelProfile({
@@ -242,9 +240,7 @@ describe('createAgentChatModel', () => {
         }),
         openAiApiKey: 'wrong-provider',
       }),
-    ).toThrow(
-      'OPENCODE_API_KEY is required for candidate deepseek-v4-flash',
-    );
+    ).toThrow('OPENCODE_API_KEY is required for candidate deepseek-v4-flash');
     expect(() =>
       createConfiguredAgentChatModel({
         profile: resolveAgentModelProfile({
