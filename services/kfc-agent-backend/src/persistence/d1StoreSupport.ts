@@ -14,6 +14,7 @@ import type {
   AgentRunTurn,
   PendingCustomerTurn,
   SessionAgentState,
+  SessionAgentModelBinding,
 } from '../domain/types.js';
 import type {
   AgentRunPatch,
@@ -223,6 +224,7 @@ export interface SessionAgentStateRow {
   current_run_id: string | null;
   generation: number;
   debounce_deadline_at: string | null;
+  agent_model_binding_json: string | null;
   updated_at: string;
 }
 
@@ -593,6 +595,7 @@ export const schemaStatements = [
     current_run_id TEXT,
     generation INTEGER NOT NULL,
     debounce_deadline_at TEXT,
+    agent_model_binding_json TEXT,
     updated_at TEXT NOT NULL
   )`,
   `CREATE INDEX IF NOT EXISTS session_agent_state_due_idx
@@ -863,6 +866,9 @@ export function sessionAgentStateFromRow(
     currentRunId: row.current_run_id,
     generation: Number(row.generation),
     debounceDeadlineAt: row.debounce_deadline_at,
+    agentModelBinding: sessionAgentModelBindingFromJson(
+      row.agent_model_binding_json,
+    ),
     updatedAt: row.updated_at,
   };
 }
@@ -873,6 +879,52 @@ export function defaultSessionAgentState(sessionId: string): SessionAgentState {
     currentRunId: null,
     generation: 0,
     debounceDeadlineAt: null,
+    agentModelBinding: null,
     updatedAt: new Date().toISOString(),
+  };
+}
+
+export function sessionAgentModelBindingJson(
+  binding: SessionAgentModelBinding,
+): string {
+  return JSON.stringify({
+    candidateId: binding.candidateId,
+    provider: binding.provider,
+    model: binding.model,
+    profile: binding.profile,
+    transport: binding.transport,
+  });
+}
+
+function sessionAgentModelBindingFromJson(
+  value: string | null,
+): SessionAgentModelBinding | null {
+  if (value === null) return null;
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(value);
+  } catch {
+    throw new Error('session_agent_model_binding_invalid');
+  }
+  if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) {
+    throw new Error('session_agent_model_binding_invalid');
+  }
+  const record = parsed as Record<string, unknown>;
+  const keys = ['candidateId', 'provider', 'model', 'profile', 'transport'];
+  if (
+    keys.some(
+      (key) =>
+        typeof record[key] !== 'string' ||
+        (record[key] as string).trim().length === 0,
+    )
+  ) {
+    throw new Error('session_agent_model_binding_invalid');
+  }
+  return {
+    candidateId: record.candidateId as string,
+    provider: record.provider as string,
+    model: record.model as string,
+    profile: record.profile as string,
+    transport: record.transport as string,
   };
 }

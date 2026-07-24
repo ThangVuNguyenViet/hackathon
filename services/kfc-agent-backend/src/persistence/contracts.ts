@@ -7,6 +7,7 @@ import type {
   DashboardEvent,
   PendingCustomerTurn,
   SessionAgentState,
+  SessionAgentModelBinding,
 } from '../domain/types.js';
 import {
   CustomerRunIdempotencyConflictError,
@@ -367,6 +368,12 @@ export interface ClaimSessionAgentRunOwnershipInput {
   updatedAt?: string;
 }
 
+export interface BindSessionAgentModelInput {
+  sessionId: string;
+  binding: SessionAgentModelBinding;
+  updatedAt?: string;
+}
+
 export type ClaimSessionAgentRunOwnershipResult =
   | { status: 'claimed'; state: SessionAgentState }
   | { status: 'stale'; state: SessionAgentState };
@@ -677,6 +684,13 @@ export interface ConversationStore {
   linkAgentRunTurn(input: AgentRunTurn): Promise<AgentRunTurn>;
   listAgentRunTurns(runId: string): Promise<AgentRunTurn[]>;
   getSessionAgentState(sessionId: string): Promise<SessionAgentState>;
+  /**
+   * Atomically pins the first deployment-owned model binding and returns the
+   * existing binding on resume. Callers must reject a returned mismatch.
+   */
+  bindSessionAgentModel(
+    input: BindSessionAgentModelInput,
+  ): Promise<SessionAgentModelBinding>;
   setSessionAgentState(
     input: SessionAgentStateInput,
   ): Promise<SessionAgentState>;

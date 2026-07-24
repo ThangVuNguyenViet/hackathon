@@ -342,6 +342,13 @@ describe('PVCFC public customer service pack', () => {
     const input = {
       ...(await turnInput('same-external-session')),
       store,
+      agentModelIdentity: {
+        candidateId: 'openai-gpt-4.1-mini',
+        provider: 'openai',
+        model: 'gpt-4.1-mini',
+        profile: 'openai:gpt-4.1-mini:responses',
+        transport: 'openai_responses',
+      } as const,
     };
 
     const output = await runPvcfcCustomerServiceTurn(input);
@@ -380,6 +387,14 @@ describe('PVCFC public customer service pack', () => {
         version: '1.0.0',
       }),
     ).toBeUndefined();
+    expect(
+      (await store.getSessionAgentState(durablePvcfcSessionId))
+        .agentModelBinding,
+    ).toEqual(input.agentModelIdentity);
+    expect(
+      (await store.getSessionAgentState('same-external-session'))
+        .agentModelBinding,
+    ).toBeNull();
   });
 
   it('requires server-created pack bindings and resolves both trusted packs', async () => {

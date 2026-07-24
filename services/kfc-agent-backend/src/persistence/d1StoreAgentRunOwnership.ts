@@ -1,7 +1,11 @@
-import type { SessionAgentState } from '../domain/types.js';
+import type {
+  SessionAgentModelBinding,
+  SessionAgentState,
+} from '../domain/types.js';
 import type {
   AdvanceSessionAgentGenerationInput,
   AdvanceSessionAgentGenerationResult,
+  BindSessionAgentModelInput,
   AgentRunPatch,
   ClaimAgentRunExecutionInput,
   ClaimAgentRunExecutionResult,
@@ -21,6 +25,7 @@ import {
   agentRunFromRow,
   defaultSessionAgentState,
   sessionAgentStateFromRow,
+  sessionAgentModelBindingJson,
   type AgentRunRow,
   type D1DatabaseLike,
   type D1Result,
@@ -46,12 +51,14 @@ export async function setD1SessionAgentState(
   await db
     .prepare(
       `INSERT INTO session_agent_state (
-       session_id, current_run_id, generation, debounce_deadline_at, updated_at
-     ) VALUES (?, ?, ?, ?, ?)
+       session_id, current_run_id, generation, debounce_deadline_at,
+       agent_model_binding_json, updated_at
+     ) VALUES (?, ?, ?, ?, ?, ?)
      ON CONFLICT(session_id) DO UPDATE SET
        current_run_id = excluded.current_run_id,
        generation = excluded.generation,
        debounce_deadline_at = excluded.debounce_deadline_at,
+       agent_model_binding_json = excluded.agent_model_binding_json,
        updated_at = excluded.updated_at`,
     )
     .bind(
@@ -59,10 +66,45 @@ export async function setD1SessionAgentState(
       state.currentRunId,
       state.generation,
       state.debounceDeadlineAt,
+      state.agentModelBinding
+        ? sessionAgentModelBindingJson(state.agentModelBinding)
+        : null,
       state.updatedAt,
     )
     .run();
   return state;
+}
+
+export async function bindD1SessionAgentModel(
+  db: D1DatabaseLike,
+  input: BindSessionAgentModelInput,
+): Promise<SessionAgentModelBinding> {
+  const updatedAt = input.updatedAt ?? new Date().toISOString();
+  const bindingJson = sessionAgentModelBindingJson(input.binding);
+  const row = await db
+    .prepare(
+      `INSERT INTO session_agent_state (
+       session_id, current_run_id, generation, debounce_deadline_at,
+       agent_model_binding_json, updated_at
+     ) VALUES (?, NULL, 0, NULL, ?, ?)
+     ON CONFLICT(session_id) DO UPDATE SET
+       agent_model_binding_json =
+         COALESCE(session_agent_state.agent_model_binding_json,
+                  excluded.agent_model_binding_json),
+       updated_at =
+         CASE
+           WHEN session_agent_state.agent_model_binding_json IS NULL
+           THEN excluded.updated_at
+           ELSE session_agent_state.updated_at
+         END
+     RETURNING *`,
+    )
+    .bind(input.sessionId, bindingJson, updatedAt)
+    .first<SessionAgentStateRow>();
+  if (!row) throw new Error('d1_session_agent_model_binding_missing');
+  const binding = sessionAgentStateFromRow(row).agentModelBinding;
+  if (!binding) throw new Error('d1_session_agent_model_binding_missing');
+  return binding;
 }
 
 export async function listDueD1SessionAgentStates(

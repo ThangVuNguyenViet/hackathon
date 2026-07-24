@@ -301,11 +301,24 @@ export interface AgentRunTurn {
   sequence: number;
 }
 
+/**
+ * Deployment-owned model/profile identity pinned to a durable session.
+ * This contains no credential or provider response data.
+ */
+export interface SessionAgentModelBinding {
+  candidateId: string;
+  provider: string;
+  model: string;
+  profile: string;
+  transport: string;
+}
+
 export interface SessionAgentState {
   sessionId: string;
   currentRunId: string | null;
   generation: number;
   debounceDeadlineAt: string | null;
+  agentModelBinding: SessionAgentModelBinding | null;
   updatedAt: string;
 }
 

@@ -14,6 +14,7 @@ import type {
   AgentRunTurn,
   PendingCustomerTurn,
   SessionAgentState,
+  SessionAgentModelBinding,
 } from '../domain/types.js';
 import type {
   AgentRunPatch,
@@ -47,6 +48,7 @@ import type {
   UpdateAgentRunIfExecutionCurrentInput,
   UpdateAgentRunIfExecutionCurrentResult,
 } from './memoryStore.js';
+import type { BindSessionAgentModelInput } from './contracts.js';
 import {
   CustomerRunIdempotencyConflictError,
   CustomerRunSequenceConflictError,
@@ -88,6 +90,7 @@ import {
 } from './d1StoreSupport.js';
 import {
   advanceD1SessionAgentGeneration,
+  bindD1SessionAgentModel,
   claimD1AgentRunExecution,
   claimD1SessionAgentRunOwnership,
   getD1SessionAgentState,
@@ -197,6 +200,12 @@ export class D1StoreAgentOperations extends D1StoreConversationOperations {
 
   async getSessionAgentState(sessionId: string): Promise<SessionAgentState> {
     return getD1SessionAgentState(this.db, sessionId);
+  }
+
+  async bindSessionAgentModel(
+    input: BindSessionAgentModelInput,
+  ): Promise<SessionAgentModelBinding> {
+    return bindD1SessionAgentModel(this.db, input);
   }
 
   async setSessionAgentState(

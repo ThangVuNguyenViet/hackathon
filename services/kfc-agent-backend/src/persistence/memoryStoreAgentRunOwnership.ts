@@ -1,7 +1,12 @@
-import type { AgentRun, SessionAgentState } from '../domain/types.js';
+import type {
+  AgentRun,
+  SessionAgentModelBinding,
+  SessionAgentState,
+} from '../domain/types.js';
 import type {
   AdvanceSessionAgentGenerationInput,
   AdvanceSessionAgentGenerationResult,
+  BindSessionAgentModelInput,
   ClaimAgentRunExecutionInput,
   ClaimAgentRunExecutionResult,
   ClaimSessionAgentRunOwnershipInput,
@@ -37,10 +42,31 @@ export function getMemorySessionAgentState(
     currentRunId: null,
     generation: 0,
     debounceDeadlineAt: null,
+    agentModelBinding: null,
     updatedAt: memoryTimestamp,
   };
   sessionAgentStates.set(sessionId, state);
   return state;
+}
+
+export function bindMemorySessionAgentModel(
+  input: BindSessionAgentModelInput,
+  sessionAgentStates: Map<string, SessionAgentState>,
+): SessionAgentModelBinding {
+  const current = getMemorySessionAgentState(
+    input.sessionId,
+    sessionAgentStates,
+  );
+  if (current.agentModelBinding) {
+    return structuredClone(current.agentModelBinding);
+  }
+  const binding = structuredClone(input.binding);
+  sessionAgentStates.set(input.sessionId, {
+    ...current,
+    agentModelBinding: binding,
+    updatedAt: input.updatedAt ?? memoryTimestamp,
+  });
+  return structuredClone(binding);
 }
 
 export function setMemorySessionAgentState(
@@ -82,7 +108,7 @@ export function advanceMemorySessionAgentGeneration(
 ): AdvanceSessionAgentGenerationResult {
   const current = sessionState(input.sessionId, storage);
   const state: SessionAgentState = {
-    sessionId: input.sessionId,
+    ...current,
     currentRunId: null,
     generation: current.generation + 1,
     debounceDeadlineAt: input.debounceDeadlineAt,

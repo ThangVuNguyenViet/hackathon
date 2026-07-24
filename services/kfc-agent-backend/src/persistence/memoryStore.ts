@@ -6,6 +6,7 @@ import type {
   ConversationTurn,
   DashboardEvent,
   PendingCustomerTurn,
+  SessionAgentModelBinding,
   SessionAgentState,
 } from '../domain/types.js';
 import type {
@@ -35,6 +36,7 @@ import {
   type ClaimAgentRunResult,
   type AgentRunPatch,
   type SessionAgentStateInput,
+  type BindSessionAgentModelInput,
   type AdvanceSessionAgentGenerationInput,
   type AdvanceSessionAgentGenerationResult,
   type ClaimSessionAgentRunOwnershipInput,
@@ -100,6 +102,7 @@ import {
   advanceMemorySessionAgentGeneration,
   claimMemorySessionAgentRunOwnership,
   getMemorySessionAgentState,
+  bindMemorySessionAgentModel,
   listDueMemorySessionAgentStates,
   setMemorySessionAgentState,
   updateMemoryAgentRunIfExecutionCurrent,
@@ -644,6 +647,13 @@ export class MemoryStore
 
   async getSessionAgentState(sessionId: string): Promise<SessionAgentState> {
     return getMemorySessionAgentState(sessionId, this.sessionAgentStates);
+  }
+  async bindSessionAgentModel(
+    input: BindSessionAgentModelInput,
+  ): Promise<SessionAgentModelBinding> {
+    return this.withStoreLock(async () =>
+      bindMemorySessionAgentModel(input, this.sessionAgentStates),
+    );
   }
   async setSessionAgentState(
     input: SessionAgentStateInput,

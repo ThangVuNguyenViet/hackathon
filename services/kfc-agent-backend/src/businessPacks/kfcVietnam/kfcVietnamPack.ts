@@ -69,6 +69,7 @@ import {
   type AssembledConversationContext,
 } from '../../session/conversationContext.js';
 import { langChainConversationSummarizer } from '../../session/langChainConversationSummary.js';
+import { bindConfiguredSessionAgentModel } from '../../persistence/sessionAgentModelBinding.js';
 
 const DEFAULT_CONVERSATION_CONTEXT_TOKEN_BUDGET = 8_192;
 
@@ -839,6 +840,13 @@ export const kfcVietnamPack: BusinessPack<
   }),
   async run(input, invokeModel) {
     if (!input.agentModel) throw new Error('kfc_agent_not_configured');
+    if (input.agentModelIdentity) {
+      await bindConfiguredSessionAgentModel({
+        store: input.store,
+        sessionId: input.sessionId,
+        identity: input.agentModelIdentity,
+      });
+    }
     const tracer = createSafeAgentTracer(
       input.tracer ?? createNoopAgentTracer(),
       (code, error) => {
