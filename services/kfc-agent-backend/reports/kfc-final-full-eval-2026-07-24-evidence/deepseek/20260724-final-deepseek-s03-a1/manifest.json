@@ -1,0 +1,52 @@
+{
+  "schemaVersion": "kfc-live-scenario-manifest-v1",
+  "runId": "20260724-final-deepseek-s03-a1",
+  "attempt": 1,
+  "status": "completed",
+  "startedAt": "2026-07-24T07:47:12.685Z",
+  "correlation": {
+    "externalSessionId": "live-20260724-final-deepseek-s03-a1",
+    "durableSessionId": "live-20260724-final-deepseek-s03-a1",
+    "scenarioId": "03-ton-kho-dia-chi-va-cua-hang",
+    "probeRunId": "20260724-final-deepseek-s03-a1"
+  },
+  "scenario": {
+    "id": "03-ton-kho-dia-chi-va-cua-hang",
+    "title": "03: Tồn kho, địa chỉ, cửa hàng và giờ cao điểm",
+    "goal": "Kiểm tra hết món, ngoài vùng giao, địa chỉ mơ hồ, đổi địa chỉ, hết hàng lúc xác nhận và cửa hàng quá tải.",
+    "preconditions": [
+      "Khách đã đăng nhập và có một địa chỉ đã lưu ở Quận 5, nhưng câu hỏi ban đầu chỉ nêu khu vực Nhà Bè.",
+      "Tồn kho, vùng giao và thời gian phục vụ là dữ liệu động: Burger Tôm không có sẵn lúc đầu, cửa hàng gần địa chỉ đã lưu đang giờ cao điểm và lựa chọn thay thế có thể hết trước khi xác nhận.",
+      "Chưa có đơn hàng nào được tạo nên khách vẫn có thể đổi địa chỉ hoặc chọn phương án khác."
+    ],
+    "risks": [
+      "Inventory, serviceability, and fulfillment capacity can change while an order is being considered.",
+      "Uncertain availability needs a customer decision rather than an unsupported delivery commitment."
+    ],
+    "finalState": "needs_customer_decision",
+    "sourceFile": "03-ton-kho-dia-chi-va-cua-hang.json",
+    "sourcePath": "/Users/vietthangvunguyen/Workspace/hackathon/.worktrees/kfc-kiss-model-agnostic/ai-talent-tracks/fnb/conversations/03-ton-kho-dia-chi-va-cua-hang.json",
+    "sourceSha256": "df730a1482dd57f06dec79447720db60bf918b1cb05b6ad6c931fe0294773032"
+  },
+  "model": {
+    "candidateId": "deepseek-v4-flash",
+    "provider": "opencode",
+    "model": "deepseek-v4-flash",
+    "profile": "opencode:deepseek-v4-flash:chat-completions",
+    "transport": "openai_compatible_chat"
+  },
+  "evidence": {
+    "trace": "trace.jsonl",
+    "transcript": "transcript.md",
+    "preflight": "preflight.json",
+    "reviewPacket": "codex-review-packet.md",
+    "artifactSha256": {
+      "preflight.json": "74796d6891a6d6bef5ce6d39c55c8099c557001b5f1744731db0e13b51044739",
+      "trace.jsonl": "9c96b4a91a01cce18ae70d346a1278bf3b341fe42755ca791e3d4726d14840f1",
+      "transcript.md": "eca74dc8f3308c341a2523becfe99be98eb8c5ab23674bf04e9f196828b17a14",
+      "codex-review-packet.md": "460b9e2b91d4f774376a1ba2501e1d30100121bd921299f5e90bcbf1bf5ba503"
+    }
+  },
+  "completedAt": "2026-07-24T07:51:13.721Z",
+  "finishNote": "Completed at needs_customer_decision: customer declined cart mutation; ETA remained unverified. Inventory assertions are preserved for evaluation."
+}

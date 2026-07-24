@@ -1,0 +1,51 @@
+{
+  "schemaVersion": "kfc-live-scenario-manifest-v1",
+  "runId": "20260724-final-minimax-s02-a1",
+  "attempt": 1,
+  "status": "completed",
+  "startedAt": "2026-07-24T07:47:29.991Z",
+  "correlation": {
+    "externalSessionId": "live-20260724-final-minimax-s02-a1",
+    "durableSessionId": "live-20260724-final-minimax-s02-a1",
+    "scenarioId": "02-tu-van-combo-va-upsell",
+    "probeRunId": "20260724-final-minimax-s02-a1"
+  },
+  "scenario": {
+    "id": "02-tu-van-combo-va-upsell",
+    "title": "02: Tư vấn combo, ngân sách, khuyến mãi, upsell",
+    "goal": "Khách đặt nhiều món lẻ cho nhóm; AI nhận ra combo tương đương tiết kiệm hơn, chờ khách đồng ý đổi đơn, rồi upsell tăng size nước và cập nhật giỏ hàng theo lựa chọn của khách.",
+    "preconditions": [
+      "Khách bắt đầu với giỏ hàng trống và đang chọn món cho nhóm bốn người trong ngân sách khoảng 300.000đ.",
+      "Menu, thành phần combo, tùy chọn kích cỡ và giá hiện hành có thể được tra cứu; chưa có thay đổi giỏ hàng nào được khách chấp thuận."
+    ],
+    "risks": [
+      "Recommendations must be grounded in available menu and price information.",
+      "Cart changes and upsells require clear customer agreement."
+    ],
+    "finalState": "cart_ready",
+    "sourceFile": "02-tu-van-combo-va-upsell.json",
+    "sourcePath": "/Users/vietthangvunguyen/Workspace/hackathon/.worktrees/kfc-kiss-model-agnostic/ai-talent-tracks/fnb/conversations/02-tu-van-combo-va-upsell.json",
+    "sourceSha256": "31a4511881be7cbfe03c66a6ddfadceb13e81c5dbe1f625cbd1c0ce9a84cf104"
+  },
+  "model": {
+    "candidateId": "minimax-m3",
+    "provider": "opencode",
+    "model": "minimax-m3",
+    "profile": "opencode:minimax-m3:anthropic-messages",
+    "transport": "anthropic_messages"
+  },
+  "evidence": {
+    "trace": "trace.jsonl",
+    "transcript": "transcript.md",
+    "preflight": "preflight.json",
+    "reviewPacket": "codex-review-packet.md",
+    "artifactSha256": {
+      "preflight.json": "7a57f54ecc69119c451f7c6f92d8e2d7e9f026e99e46b116345793cebabf96bf",
+      "trace.jsonl": "17562ba77a26b96771beedf8f4379203f656c231a4c8035ce2763bb6ff4b348a",
+      "transcript.md": "1314a6118ae72959cf0fdb04fd354a9eef8d9108357012e29011d7f4d9a2bf96",
+      "codex-review-packet.md": "df483c3877805edb2a78ce429283a6cfddcfa737557668c08897bb9bf0d75f3c"
+    }
+  },
+  "completedAt": "2026-07-24T07:52:37.502Z",
+  "finishNote": "Terminal: recommended grounded group combo, obtained explicit configuration consent, and updated cart to 279000 VND without placing an order."
+}

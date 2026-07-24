@@ -1,0 +1,51 @@
+{
+  "schemaVersion": "kfc-live-scenario-manifest-v1",
+  "runId": "20260724-final-qwen-s09-a2",
+  "attempt": 2,
+  "status": "completed",
+  "startedAt": "2026-07-24T07:56:29.139Z",
+  "correlation": {
+    "externalSessionId": "live-20260724-final-qwen-s09-a2",
+    "durableSessionId": "live-20260724-final-qwen-s09-a2",
+    "scenarioId": "09-phuong-thuc-thanh-toan",
+    "probeRunId": "20260724-final-qwen-s09-a2"
+  },
+  "scenario": {
+    "id": "09-phuong-thuc-thanh-toan",
+    "title": "09: Phương thức thanh toán website/app",
+    "goal": "User hỏi các phương thức thanh toán, bot tra cứu dữ liệu thanh toán được quản trị và trả lời trực tiếp rằng website/app KFC không hỗ trợ MoMo.",
+    "preconditions": [
+      "Khách chỉ đang hỏi thông tin, chưa có giỏ hàng, đơn hàng hoặc giao dịch thanh toán cần thực hiện.",
+      "Danh sách phương thức thanh toán theo kênh website/app có trong dữ liệu nghiệp vụ được quản trị."
+    ],
+    "risks": [
+      "Payment availability must be grounded in governed business data.",
+      "An information request must not create an order or payment action."
+    ],
+    "finalState": "payment_methods_answered",
+    "sourceFile": "09-phuong-thuc-thanh-toan.json",
+    "sourcePath": "/Users/vietthangvunguyen/Workspace/hackathon/.worktrees/kfc-kiss-model-agnostic/ai-talent-tracks/fnb/conversations/09-phuong-thuc-thanh-toan.json",
+    "sourceSha256": "4e9522d497411ff2a138d895e6bceef6579718a8a7c22feeaa5af0a3fb8a6381"
+  },
+  "model": {
+    "candidateId": "qwen3.7-max",
+    "provider": "opencode",
+    "model": "qwen3.7-max",
+    "profile": "opencode:qwen3.7-max:anthropic-messages:thinking-disabled",
+    "transport": "anthropic_messages"
+  },
+  "evidence": {
+    "trace": "trace.jsonl",
+    "transcript": "transcript.md",
+    "preflight": "preflight.json",
+    "reviewPacket": "codex-review-packet.md",
+    "artifactSha256": {
+      "preflight.json": "a7cecfb9d96e36b146c0748fc8069b7c0a5b94fabef345c5557b0dc09b504fb1",
+      "trace.jsonl": "ea298e6bb2eb4779fa5c15e8a38691ad66a1b36e7a0c5df56626acbdd4e76327",
+      "transcript.md": "0819777f41381a0f7b60998eedc43250510a7dac1bb650831ffed88ff766cae8",
+      "codex-review-packet.md": "2f0d61c7abcf4fa49b03a97368d472d676fcbd9b91ad552ae7fa5c2343c8f812"
+    }
+  },
+  "completedAt": "2026-07-24T07:57:33.860Z",
+  "finishNote": "Terminal state: payment-method answer failed because governed data lookup returned no usable result; no transaction or order created."
+}

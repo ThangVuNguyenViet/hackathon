@@ -1,0 +1,51 @@
+{
+  "schemaVersion": "kfc-live-scenario-manifest-v1",
+  "runId": "20260724-final-minimax-s08-a1",
+  "attempt": 1,
+  "status": "completed",
+  "startedAt": "2026-07-24T07:47:29.437Z",
+  "correlation": {
+    "externalSessionId": "live-20260724-final-minimax-s08-a1",
+    "durableSessionId": "live-20260724-final-minimax-s08-a1",
+    "scenarioId": "08-thanh-toan-loi-va-don-bat-thuong",
+    "probeRunId": "20260724-final-minimax-s08-a1"
+  },
+  "scenario": {
+    "id": "08-thanh-toan-loi-va-don-bat-thuong",
+    "title": "08: Lỗi thanh toán và đơn bất thường",
+    "goal": "Thanh toán thất bại, bấm thanh toán lỗi và đơn số lượng lớn cần nhân viên xác nhận.",
+    "preconditions": [
+      "Khách có một lần thanh toán đang chờ nhưng cổng thanh toán trả về thất bại; chưa có bằng chứng thanh toán thành công.",
+      "Chưa có đơn 200 combo nào được xác nhận, giữ tồn kho hoặc cam kết giao trong 30 phút."
+    ],
+    "risks": [
+      "A failed payment must not be represented as successful.",
+      "An unusually large order needs human review before commitments are made."
+    ],
+    "finalState": "human_review_required",
+    "sourceFile": "08-thanh-toan-loi-va-don-bat-thuong.json",
+    "sourcePath": "/Users/vietthangvunguyen/Workspace/hackathon/.worktrees/kfc-kiss-model-agnostic/ai-talent-tracks/fnb/conversations/08-thanh-toan-loi-va-don-bat-thuong.json",
+    "sourceSha256": "94cc268dbaa34a45f7dd66bdb94437e988faf196b759b1547d95e5f30be80acf"
+  },
+  "model": {
+    "candidateId": "minimax-m3",
+    "provider": "opencode",
+    "model": "minimax-m3",
+    "profile": "opencode:minimax-m3:anthropic-messages",
+    "transport": "anthropic_messages"
+  },
+  "evidence": {
+    "trace": "trace.jsonl",
+    "transcript": "transcript.md",
+    "preflight": "preflight.json",
+    "reviewPacket": "codex-review-packet.md",
+    "artifactSha256": {
+      "preflight.json": "7a57f54ecc69119c451f7c6f92d8e2d7e9f026e99e46b116345793cebabf96bf",
+      "trace.jsonl": "daeaae165a635f8190889ce50751f779854c4a743a4fc2747df71bf035fa130e",
+      "transcript.md": "8b8e9db4dbffffba83a9d52cf77f97fbd7c91bd40d00c2e2836fba9668b0e1c9",
+      "codex-review-packet.md": "cb0f2730bcd4162554ac18b5c6cf957302756650c2dee044f3a2c813b4cf069a"
+    }
+  },
+  "completedAt": "2026-07-24T07:51:46.088Z",
+  "finishNote": "Terminal: failed-payment uncertainty preserved; explicit large-order human handoff queued without order, hold, or payment mutation."
+}

@@ -1,0 +1,51 @@
+{
+  "schemaVersion": "kfc-live-scenario-manifest-v1",
+  "runId": "20260724-final-deepseek-s04-a1",
+  "attempt": 1,
+  "status": "completed",
+  "startedAt": "2026-07-24T07:47:13.036Z",
+  "correlation": {
+    "externalSessionId": "live-20260724-final-deepseek-s04-a1",
+    "durableSessionId": "live-20260724-final-deepseek-s04-a1",
+    "scenarioId": "04-sau-khi-dat-don",
+    "probeRunId": "20260724-final-deepseek-s04-a1"
+  },
+  "scenario": {
+    "id": "04-sau-khi-dat-don",
+    "title": "04: Theo dõi, hủy, đặt lại và chỉnh đơn sau khi đặt",
+    "goal": "User hỏi trạng thái đơn, ETA, hủy đơn, thêm món sau khi đặt và đặt lại đơn cũ.",
+    "preconditions": [
+      "Khách đã có đơn KFC-1024 đang được cửa hàng Nguyễn Thị Minh Khai chuẩn bị và trạng thái, ETA có thể được tra cứu.",
+      "Khách cũng có một đơn cũ riêng biệt có thể dùng làm mẫu đặt lại; chưa có yêu cầu hủy hoặc sửa nào được thực thi khi hội thoại bắt đầu."
+    ],
+    "risks": [
+      "Post-order requests depend on the current order state.",
+      "A later request must not inadvertently change an in-flight order."
+    ],
+    "finalState": "post_order_handled",
+    "sourceFile": "04-sau-khi-dat-don.json",
+    "sourcePath": "/Users/vietthangvunguyen/Workspace/hackathon/.worktrees/kfc-kiss-model-agnostic/ai-talent-tracks/fnb/conversations/04-sau-khi-dat-don.json",
+    "sourceSha256": "99ba511f12cd1d53f5ea007a8e20a28bfdb0ca074cdacf2428863df77588d291"
+  },
+  "model": {
+    "candidateId": "deepseek-v4-flash",
+    "provider": "opencode",
+    "model": "deepseek-v4-flash",
+    "profile": "opencode:deepseek-v4-flash:chat-completions",
+    "transport": "openai_compatible_chat"
+  },
+  "evidence": {
+    "trace": "trace.jsonl",
+    "transcript": "transcript.md",
+    "preflight": "preflight.json",
+    "reviewPacket": "codex-review-packet.md",
+    "artifactSha256": {
+      "preflight.json": "74796d6891a6d6bef5ce6d39c55c8099c557001b5f1744731db0e13b51044739",
+      "trace.jsonl": "602731a928ffdb547a13ff5159d09ddc6f3d5cb6b1479913dc2bbbccfca3608c",
+      "transcript.md": "1b334baecc50cfdd996aff2b5ed7f193b8a6bad9f936c46663082dda46a962bc",
+      "codex-review-packet.md": "e07c6e50375fb0b2ac3b4db864c827fec7d9e8dc9b4eca3fdad4766db61676a2"
+    }
+  },
+  "completedAt": "2026-07-24T07:50:34.026Z",
+  "finishNote": "Stopped after agent could not access the preconditioned current order; no post-order mutation was authorized."
+}

@@ -1,0 +1,51 @@
+{
+  "schemaVersion": "kfc-live-scenario-manifest-v1",
+  "runId": "20260724-final-minimax-s09-a1",
+  "attempt": 1,
+  "status": "completed",
+  "startedAt": "2026-07-24T07:47:29.928Z",
+  "correlation": {
+    "externalSessionId": "live-20260724-final-minimax-s09-a1",
+    "durableSessionId": "live-20260724-final-minimax-s09-a1",
+    "scenarioId": "09-phuong-thuc-thanh-toan",
+    "probeRunId": "20260724-final-minimax-s09-a1"
+  },
+  "scenario": {
+    "id": "09-phuong-thuc-thanh-toan",
+    "title": "09: Phương thức thanh toán website/app",
+    "goal": "User hỏi các phương thức thanh toán, bot tra cứu dữ liệu thanh toán được quản trị và trả lời trực tiếp rằng website/app KFC không hỗ trợ MoMo.",
+    "preconditions": [
+      "Khách chỉ đang hỏi thông tin, chưa có giỏ hàng, đơn hàng hoặc giao dịch thanh toán cần thực hiện.",
+      "Danh sách phương thức thanh toán theo kênh website/app có trong dữ liệu nghiệp vụ được quản trị."
+    ],
+    "risks": [
+      "Payment availability must be grounded in governed business data.",
+      "An information request must not create an order or payment action."
+    ],
+    "finalState": "payment_methods_answered",
+    "sourceFile": "09-phuong-thuc-thanh-toan.json",
+    "sourcePath": "/Users/vietthangvunguyen/Workspace/hackathon/.worktrees/kfc-kiss-model-agnostic/ai-talent-tracks/fnb/conversations/09-phuong-thuc-thanh-toan.json",
+    "sourceSha256": "4e9522d497411ff2a138d895e6bceef6579718a8a7c22feeaa5af0a3fb8a6381"
+  },
+  "model": {
+    "candidateId": "minimax-m3",
+    "provider": "opencode",
+    "model": "minimax-m3",
+    "profile": "opencode:minimax-m3:anthropic-messages",
+    "transport": "anthropic_messages"
+  },
+  "evidence": {
+    "trace": "trace.jsonl",
+    "transcript": "transcript.md",
+    "preflight": "preflight.json",
+    "reviewPacket": "codex-review-packet.md",
+    "artifactSha256": {
+      "preflight.json": "7a57f54ecc69119c451f7c6f92d8e2d7e9f026e99e46b116345793cebabf96bf",
+      "trace.jsonl": "5ebf717008a38ae6a7c3ee8eddfd0893a9eb914a653a4f02d1f0373f6db4232d",
+      "transcript.md": "484248aefad5edb4619e10922e1cb1278150caf54d342eaeb09c31a613585020",
+      "codex-review-packet.md": "18bb7a0c1bd4f35cb854d76846edc468c713445d5609f46a41f7c1b2322e160f"
+    }
+  },
+  "completedAt": "2026-07-24T07:50:55.762Z",
+  "finishNote": "Terminal: governed payment lookup remained empty; model did not establish the expected direct MoMo support answer."
+}

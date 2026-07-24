@@ -1,0 +1,51 @@
+{
+  "schemaVersion": "kfc-live-scenario-manifest-v1",
+  "runId": "20260724-final-openai-s02-a1",
+  "attempt": 1,
+  "status": "completed",
+  "startedAt": "2026-07-24T07:47:31.152Z",
+  "correlation": {
+    "externalSessionId": "live-20260724-final-openai-s02-a1",
+    "durableSessionId": "live-20260724-final-openai-s02-a1",
+    "scenarioId": "02-tu-van-combo-va-upsell",
+    "probeRunId": "20260724-final-openai-s02-a1"
+  },
+  "scenario": {
+    "id": "02-tu-van-combo-va-upsell",
+    "title": "02: Tư vấn combo, ngân sách, khuyến mãi, upsell",
+    "goal": "Khách đặt nhiều món lẻ cho nhóm; AI nhận ra combo tương đương tiết kiệm hơn, chờ khách đồng ý đổi đơn, rồi upsell tăng size nước và cập nhật giỏ hàng theo lựa chọn của khách.",
+    "preconditions": [
+      "Khách bắt đầu với giỏ hàng trống và đang chọn món cho nhóm bốn người trong ngân sách khoảng 300.000đ.",
+      "Menu, thành phần combo, tùy chọn kích cỡ và giá hiện hành có thể được tra cứu; chưa có thay đổi giỏ hàng nào được khách chấp thuận."
+    ],
+    "risks": [
+      "Recommendations must be grounded in available menu and price information.",
+      "Cart changes and upsells require clear customer agreement."
+    ],
+    "finalState": "cart_ready",
+    "sourceFile": "02-tu-van-combo-va-upsell.json",
+    "sourcePath": "/Users/vietthangvunguyen/Workspace/hackathon/.worktrees/kfc-kiss-model-agnostic/ai-talent-tracks/fnb/conversations/02-tu-van-combo-va-upsell.json",
+    "sourceSha256": "31a4511881be7cbfe03c66a6ddfadceb13e81c5dbe1f625cbd1c0ce9a84cf104"
+  },
+  "model": {
+    "candidateId": "openai-gpt-4.1-mini",
+    "provider": "openai",
+    "model": "gpt-4.1-mini",
+    "profile": "openai:gpt-4.1-mini:responses",
+    "transport": "openai_responses"
+  },
+  "evidence": {
+    "trace": "trace.jsonl",
+    "transcript": "transcript.md",
+    "preflight": "preflight.json",
+    "reviewPacket": "codex-review-packet.md",
+    "artifactSha256": {
+      "preflight.json": "f818fc794b29f24ee604218ccd41b8fc83e77c920b1375fce9289ecba0312e2e",
+      "trace.jsonl": "47d382ef4de4b5d05f7b107cf59bf43b9deeddb1a65e9053fb05a109ebbeceb2",
+      "transcript.md": "9bdc2751d3fa717f63885e411b793787e355c9b60bc2395018b46a1b523e8715",
+      "codex-review-packet.md": "8515dde2d8dcb92229c6fc6eb8895bb057608b1a73713b48d1d69a6a7bcc30ee"
+    }
+  },
+  "completedAt": "2026-07-24T07:50:37.748Z",
+  "finishNote": "Scenario exercised naturally through recommendation, full-menu/promotion inquiry, singleton-vs-combo comparison, explicit conditional consent, and one clarification after the agent contradicted its own verified recommendation. Agent did not update cart; it unexpectedly queued a human handoff instead. No behavioral retry."
+}

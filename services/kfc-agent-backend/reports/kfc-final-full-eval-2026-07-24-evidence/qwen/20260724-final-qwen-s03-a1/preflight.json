@@ -1,0 +1,18 @@
+{
+  "schemaVersion": "agent-model-capability-preflight-v1",
+  "identity": {
+    "candidateId": "qwen3.7-max",
+    "provider": "opencode",
+    "model": "qwen3.7-max",
+    "profile": "opencode:qwen3.7-max:anthropic-messages:thinking-disabled",
+    "transport": "anthropic_messages"
+  },
+  "ordinaryInvocation": {
+    "passed": true
+  },
+  "typedToolCall": {
+    "passed": false,
+    "failure": "invocation_failed"
+  },
+  "passed": false
+}

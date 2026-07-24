@@ -1,0 +1,51 @@
+{
+  "schemaVersion": "kfc-live-scenario-manifest-v1",
+  "runId": "20260724-final-openai-s05-a1",
+  "attempt": 1,
+  "status": "completed",
+  "startedAt": "2026-07-24T07:47:30.995Z",
+  "correlation": {
+    "externalSessionId": "live-20260724-final-openai-s05-a1",
+    "durableSessionId": "live-20260724-final-openai-s05-a1",
+    "scenarioId": "05-khieu-nai-va-human-handoff",
+    "probeRunId": "20260724-final-openai-s05-a1"
+  },
+  "scenario": {
+    "id": "05-khieu-nai-va-human-handoff",
+    "title": "05: Khiếu nại, feedback và chuyển nhân viên",
+    "goal": "Nhận diện khiếu nại, sai món, thiếu món, feedback sau đơn, user tức giận và yêu cầu gặp nhân viên.",
+    "preconditions": [
+      "Khách đang phản hồi về một đơn vừa nhận; thông tin đơn và kênh chuyển nhân viên có thể được tra cứu nếu cần.",
+      "Chưa có hồ sơ khiếu nại hoặc yêu cầu chuyển nhân viên nào được tạo cho cuộc trao đổi này."
+    ],
+    "risks": [
+      "Complaints need structured capture and appropriate escalation.",
+      "Complaint handling must not be treated as a new-order flow."
+    ],
+    "finalState": "human_handoff_created",
+    "sourceFile": "05-khieu-nai-va-human-handoff.json",
+    "sourcePath": "/Users/vietthangvunguyen/Workspace/hackathon/.worktrees/kfc-kiss-model-agnostic/ai-talent-tracks/fnb/conversations/05-khieu-nai-va-human-handoff.json",
+    "sourceSha256": "34f08c9eaf8af5a15afa77ee49a667ea0b97721615e49579ae22b8a9f52a2c2f"
+  },
+  "model": {
+    "candidateId": "openai-gpt-4.1-mini",
+    "provider": "openai",
+    "model": "gpt-4.1-mini",
+    "profile": "openai:gpt-4.1-mini:responses",
+    "transport": "openai_responses"
+  },
+  "evidence": {
+    "trace": "trace.jsonl",
+    "transcript": "transcript.md",
+    "preflight": "preflight.json",
+    "reviewPacket": "codex-review-packet.md",
+    "artifactSha256": {
+      "preflight.json": "f818fc794b29f24ee604218ccd41b8fc83e77c920b1375fce9289ecba0312e2e",
+      "trace.jsonl": "bc09daa047692369173b936ee676f3a62570b9cc018e4f44123f5e212ffffb19",
+      "transcript.md": "66c059d0fe7db0d4b5dc4dfe430d9151e660af8451ab914e3a4bfb723806a7e4",
+      "codex-review-packet.md": "efaeca617aff267fc8e289deadec58151ad5bde0d2a7c1eabd0146b03a7af618"
+    }
+  },
+  "completedAt": "2026-07-24T07:48:49.819Z",
+  "finishNote": "Scenario completed naturally in two turns: complaint details captured, customer explicitly requested human handoff, agent confirmed queued handoff without inventing an SLA."
+}

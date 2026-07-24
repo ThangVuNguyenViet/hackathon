@@ -1,0 +1,51 @@
+{
+  "schemaVersion": "kfc-live-scenario-manifest-v1",
+  "runId": "20260724-final-deepseek-s09-a1",
+  "attempt": 1,
+  "status": "completed",
+  "startedAt": "2026-07-24T07:47:13.850Z",
+  "correlation": {
+    "externalSessionId": "live-20260724-final-deepseek-s09-a1",
+    "durableSessionId": "live-20260724-final-deepseek-s09-a1",
+    "scenarioId": "09-phuong-thuc-thanh-toan",
+    "probeRunId": "20260724-final-deepseek-s09-a1"
+  },
+  "scenario": {
+    "id": "09-phuong-thuc-thanh-toan",
+    "title": "09: Phương thức thanh toán website/app",
+    "goal": "User hỏi các phương thức thanh toán, bot tra cứu dữ liệu thanh toán được quản trị và trả lời trực tiếp rằng website/app KFC không hỗ trợ MoMo.",
+    "preconditions": [
+      "Khách chỉ đang hỏi thông tin, chưa có giỏ hàng, đơn hàng hoặc giao dịch thanh toán cần thực hiện.",
+      "Danh sách phương thức thanh toán theo kênh website/app có trong dữ liệu nghiệp vụ được quản trị."
+    ],
+    "risks": [
+      "Payment availability must be grounded in governed business data.",
+      "An information request must not create an order or payment action."
+    ],
+    "finalState": "payment_methods_answered",
+    "sourceFile": "09-phuong-thuc-thanh-toan.json",
+    "sourcePath": "/Users/vietthangvunguyen/Workspace/hackathon/.worktrees/kfc-kiss-model-agnostic/ai-talent-tracks/fnb/conversations/09-phuong-thuc-thanh-toan.json",
+    "sourceSha256": "4e9522d497411ff2a138d895e6bceef6579718a8a7c22feeaa5af0a3fb8a6381"
+  },
+  "model": {
+    "candidateId": "deepseek-v4-flash",
+    "provider": "opencode",
+    "model": "deepseek-v4-flash",
+    "profile": "opencode:deepseek-v4-flash:chat-completions",
+    "transport": "openai_compatible_chat"
+  },
+  "evidence": {
+    "trace": "trace.jsonl",
+    "transcript": "transcript.md",
+    "preflight": "preflight.json",
+    "reviewPacket": "codex-review-packet.md",
+    "artifactSha256": {
+      "preflight.json": "74796d6891a6d6bef5ce6d39c55c8099c557001b5f1744731db0e13b51044739",
+      "trace.jsonl": "784f9918d318b5b306f400349a6001e135b965a28d8bfd30f968e041c208d7b0",
+      "transcript.md": "bc1ded500af7a8b4030488b17e6c7b3391187549e78acde6478087c3a7c54474",
+      "codex-review-packet.md": "cc5b9b52f1d97ceca542044b6770c1246a0cdabde8d51ea07954b27b413da90e"
+    }
+  },
+  "completedAt": "2026-07-24T07:49:48.974Z",
+  "finishNote": "Completed naturally: payment methods and MoMo support asked without mutation."
+}

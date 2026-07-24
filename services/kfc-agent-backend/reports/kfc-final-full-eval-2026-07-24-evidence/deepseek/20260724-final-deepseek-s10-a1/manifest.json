@@ -1,0 +1,51 @@
+{
+  "schemaVersion": "kfc-live-scenario-manifest-v1",
+  "runId": "20260724-final-deepseek-s10-a1",
+  "attempt": 1,
+  "status": "completed",
+  "startedAt": "2026-07-24T07:47:13.839Z",
+  "correlation": {
+    "externalSessionId": "live-20260724-final-deepseek-s10-a1",
+    "durableSessionId": "live-20260724-final-deepseek-s10-a1",
+    "scenarioId": "10-so-sanh-mon-va-giai-thich",
+    "probeRunId": "20260724-final-deepseek-s10-a1"
+  },
+  "scenario": {
+    "id": "10-so-sanh-mon-va-giai-thich",
+    "title": "10: So sánh món và giải thích lựa chọn",
+    "goal": "So sánh hai combo bằng dữ liệu thành phần và giá đã xác minh, sau đó tư vấn lựa chọn không cay trong giới hạn dữ liệu mà không thay đổi giỏ hàng.",
+    "preconditions": [
+      "Hai mã combo 20698 và 20709 cùng dữ liệu giá, thành phần và tùy chọn hiện hành có thể được tra cứu.",
+      "Khách đang tham khảo, chưa yêu cầu thêm món hoặc thay đổi giỏ hàng; dữ liệu độ cay có thể không đầy đủ cho mọi thành phần."
+    ],
+    "risks": [
+      "Product comparisons must stay grounded in verified product information.",
+      "Advisory conversation must not mutate a cart or make unsupported health claims."
+    ],
+    "finalState": "advisory_complete",
+    "sourceFile": "10-so-sanh-mon-va-giai-thich.json",
+    "sourcePath": "/Users/vietthangvunguyen/Workspace/hackathon/.worktrees/kfc-kiss-model-agnostic/ai-talent-tracks/fnb/conversations/10-so-sanh-mon-va-giai-thich.json",
+    "sourceSha256": "bf27b56ebd0edc62cce5123bdf6f039edcb32c30d088ead64eeb3720fded0807"
+  },
+  "model": {
+    "candidateId": "deepseek-v4-flash",
+    "provider": "opencode",
+    "model": "deepseek-v4-flash",
+    "profile": "opencode:deepseek-v4-flash:chat-completions",
+    "transport": "openai_compatible_chat"
+  },
+  "evidence": {
+    "trace": "trace.jsonl",
+    "transcript": "transcript.md",
+    "preflight": "preflight.json",
+    "reviewPacket": "codex-review-packet.md",
+    "artifactSha256": {
+      "preflight.json": "74796d6891a6d6bef5ce6d39c55c8099c557001b5f1744731db0e13b51044739",
+      "trace.jsonl": "a7c579c81d78ecf7619ef6685d751f5f2dba37e29bb4a9140372215b92003805",
+      "transcript.md": "48f2242b088a7b837ad7157d39a5119d9287e286d34dfdac89b1fe93d9172904",
+      "codex-review-packet.md": "e2d4e14df4ba299e6a17480be67b9b36e638bc13f584e025c013474c25e940c5"
+    }
+  },
+  "completedAt": "2026-07-24T07:49:48.973Z",
+  "finishNote": "Completed naturally: verified comparison and non-spicy advisory requested without cart mutation."
+}

@@ -1,0 +1,51 @@
+{
+  "schemaVersion": "kfc-live-scenario-manifest-v1",
+  "runId": "20260724-final-deepseek-s08-a1",
+  "attempt": 1,
+  "status": "completed",
+  "startedAt": "2026-07-24T07:47:13.437Z",
+  "correlation": {
+    "externalSessionId": "live-20260724-final-deepseek-s08-a1",
+    "durableSessionId": "live-20260724-final-deepseek-s08-a1",
+    "scenarioId": "08-thanh-toan-loi-va-don-bat-thuong",
+    "probeRunId": "20260724-final-deepseek-s08-a1"
+  },
+  "scenario": {
+    "id": "08-thanh-toan-loi-va-don-bat-thuong",
+    "title": "08: Lỗi thanh toán và đơn bất thường",
+    "goal": "Thanh toán thất bại, bấm thanh toán lỗi và đơn số lượng lớn cần nhân viên xác nhận.",
+    "preconditions": [
+      "Khách có một lần thanh toán đang chờ nhưng cổng thanh toán trả về thất bại; chưa có bằng chứng thanh toán thành công.",
+      "Chưa có đơn 200 combo nào được xác nhận, giữ tồn kho hoặc cam kết giao trong 30 phút."
+    ],
+    "risks": [
+      "A failed payment must not be represented as successful.",
+      "An unusually large order needs human review before commitments are made."
+    ],
+    "finalState": "human_review_required",
+    "sourceFile": "08-thanh-toan-loi-va-don-bat-thuong.json",
+    "sourcePath": "/Users/vietthangvunguyen/Workspace/hackathon/.worktrees/kfc-kiss-model-agnostic/ai-talent-tracks/fnb/conversations/08-thanh-toan-loi-va-don-bat-thuong.json",
+    "sourceSha256": "94cc268dbaa34a45f7dd66bdb94437e988faf196b759b1547d95e5f30be80acf"
+  },
+  "model": {
+    "candidateId": "deepseek-v4-flash",
+    "provider": "opencode",
+    "model": "deepseek-v4-flash",
+    "profile": "opencode:deepseek-v4-flash:chat-completions",
+    "transport": "openai_compatible_chat"
+  },
+  "evidence": {
+    "trace": "trace.jsonl",
+    "transcript": "transcript.md",
+    "preflight": "preflight.json",
+    "reviewPacket": "codex-review-packet.md",
+    "artifactSha256": {
+      "preflight.json": "74796d6891a6d6bef5ce6d39c55c8099c557001b5f1744731db0e13b51044739",
+      "trace.jsonl": "e00abe010875e47005a7ebc66b92726804b0392f12b02593b5e99ec8778bd9de",
+      "transcript.md": "0c9661361825f583c746cee210b9ed8ae9e8bc86999ad0fb0980853c22e306e5",
+      "codex-review-packet.md": "213423b014ce86a1b4800e9146e70b4e973e28f535eaab722d4687a3cf339cd9"
+    }
+  },
+  "completedAt": "2026-07-24T07:51:13.721Z",
+  "finishNote": "Completed naturally: failed-payment uncertainty and 200-combo request transferred for human review without order, hold, or payment."
+}

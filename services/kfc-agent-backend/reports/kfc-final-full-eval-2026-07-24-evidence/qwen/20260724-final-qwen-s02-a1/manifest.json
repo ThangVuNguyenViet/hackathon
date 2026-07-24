@@ -1,0 +1,51 @@
+{
+  "schemaVersion": "kfc-live-scenario-manifest-v1",
+  "runId": "20260724-final-qwen-s02-a1",
+  "attempt": 1,
+  "status": "completed",
+  "startedAt": "2026-07-24T07:47:07.046Z",
+  "correlation": {
+    "externalSessionId": "live-20260724-final-qwen-s02-a1",
+    "durableSessionId": "live-20260724-final-qwen-s02-a1",
+    "scenarioId": "02-tu-van-combo-va-upsell",
+    "probeRunId": "20260724-final-qwen-s02-a1"
+  },
+  "scenario": {
+    "id": "02-tu-van-combo-va-upsell",
+    "title": "02: Tư vấn combo, ngân sách, khuyến mãi, upsell",
+    "goal": "Khách đặt nhiều món lẻ cho nhóm; AI nhận ra combo tương đương tiết kiệm hơn, chờ khách đồng ý đổi đơn, rồi upsell tăng size nước và cập nhật giỏ hàng theo lựa chọn của khách.",
+    "preconditions": [
+      "Khách bắt đầu với giỏ hàng trống và đang chọn món cho nhóm bốn người trong ngân sách khoảng 300.000đ.",
+      "Menu, thành phần combo, tùy chọn kích cỡ và giá hiện hành có thể được tra cứu; chưa có thay đổi giỏ hàng nào được khách chấp thuận."
+    ],
+    "risks": [
+      "Recommendations must be grounded in available menu and price information.",
+      "Cart changes and upsells require clear customer agreement."
+    ],
+    "finalState": "cart_ready",
+    "sourceFile": "02-tu-van-combo-va-upsell.json",
+    "sourcePath": "/Users/vietthangvunguyen/Workspace/hackathon/.worktrees/kfc-kiss-model-agnostic/ai-talent-tracks/fnb/conversations/02-tu-van-combo-va-upsell.json",
+    "sourceSha256": "31a4511881be7cbfe03c66a6ddfadceb13e81c5dbe1f625cbd1c0ce9a84cf104"
+  },
+  "model": {
+    "candidateId": "qwen3.7-max",
+    "provider": "opencode",
+    "model": "qwen3.7-max",
+    "profile": "opencode:qwen3.7-max:anthropic-messages:thinking-disabled",
+    "transport": "anthropic_messages"
+  },
+  "evidence": {
+    "trace": "trace.jsonl",
+    "transcript": "transcript.md",
+    "preflight": "preflight.json",
+    "reviewPacket": "codex-review-packet.md",
+    "artifactSha256": {
+      "preflight.json": "a7cecfb9d96e36b146c0748fc8069b7c0a5b94fabef345c5557b0dc09b504fb1",
+      "trace.jsonl": "02e6b8ae70b44b54aacda367cc880564987b78bd131bdad140749bd850ce1cd2",
+      "transcript.md": "cc7c2a08785387432f53038668fec2887ab14ba8b44997bb01361f55d1dadaca",
+      "codex-review-packet.md": "247ccf56689b7b6e1b34e6def96db8898c8dc5d5f44685f8428d6b9eae7a01d4"
+    }
+  },
+  "completedAt": "2026-07-24T07:50:36.132Z",
+  "finishNote": "Terminal state: cart-ready goal failed because repeated menu lookup errors prevented verified recommendation or cart mutation."
+}

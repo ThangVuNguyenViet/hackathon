@@ -1,0 +1,51 @@
+{
+  "schemaVersion": "kfc-live-scenario-manifest-v1",
+  "runId": "20260724-final-qwen-s10-a2",
+  "attempt": 2,
+  "status": "completed",
+  "startedAt": "2026-07-24T07:57:35.245Z",
+  "correlation": {
+    "externalSessionId": "live-20260724-final-qwen-s10-a2",
+    "durableSessionId": "live-20260724-final-qwen-s10-a2",
+    "scenarioId": "10-so-sanh-mon-va-giai-thich",
+    "probeRunId": "20260724-final-qwen-s10-a2"
+  },
+  "scenario": {
+    "id": "10-so-sanh-mon-va-giai-thich",
+    "title": "10: So sánh món và giải thích lựa chọn",
+    "goal": "So sánh hai combo bằng dữ liệu thành phần và giá đã xác minh, sau đó tư vấn lựa chọn không cay trong giới hạn dữ liệu mà không thay đổi giỏ hàng.",
+    "preconditions": [
+      "Hai mã combo 20698 và 20709 cùng dữ liệu giá, thành phần và tùy chọn hiện hành có thể được tra cứu.",
+      "Khách đang tham khảo, chưa yêu cầu thêm món hoặc thay đổi giỏ hàng; dữ liệu độ cay có thể không đầy đủ cho mọi thành phần."
+    ],
+    "risks": [
+      "Product comparisons must stay grounded in verified product information.",
+      "Advisory conversation must not mutate a cart or make unsupported health claims."
+    ],
+    "finalState": "advisory_complete",
+    "sourceFile": "10-so-sanh-mon-va-giai-thich.json",
+    "sourcePath": "/Users/vietthangvunguyen/Workspace/hackathon/.worktrees/kfc-kiss-model-agnostic/ai-talent-tracks/fnb/conversations/10-so-sanh-mon-va-giai-thich.json",
+    "sourceSha256": "bf27b56ebd0edc62cce5123bdf6f039edcb32c30d088ead64eeb3720fded0807"
+  },
+  "model": {
+    "candidateId": "qwen3.7-max",
+    "provider": "opencode",
+    "model": "qwen3.7-max",
+    "profile": "opencode:qwen3.7-max:anthropic-messages:thinking-disabled",
+    "transport": "anthropic_messages"
+  },
+  "evidence": {
+    "trace": "trace.jsonl",
+    "transcript": "transcript.md",
+    "preflight": "preflight.json",
+    "reviewPacket": "codex-review-packet.md",
+    "artifactSha256": {
+      "preflight.json": "a7cecfb9d96e36b146c0748fc8069b7c0a5b94fabef345c5557b0dc09b504fb1",
+      "trace.jsonl": "0c7c41d2870d1924afe80e26063a9c005e883fe7a4d2e725ded6cc57a1bc0319",
+      "transcript.md": "64f16bffbe549a6d5f3d10344bf89d4879f1edb621f87faa0bd66ae42c1c7929",
+      "codex-review-packet.md": "118c987213833f751c30fcb2bffc5743f15dda293f72b51b237b74331b1677ab"
+    }
+  },
+  "completedAt": "2026-07-24T07:58:59.002Z",
+  "finishNote": "Terminal state: advisory delivered with accurate comparison, but final non-spicy recommendation made an unsupported inference that absent modifiers imply Zinger is non-spicy; no cart mutation."
+}

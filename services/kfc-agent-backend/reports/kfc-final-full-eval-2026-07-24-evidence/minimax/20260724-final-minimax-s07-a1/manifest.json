@@ -1,0 +1,51 @@
+{
+  "schemaVersion": "kfc-live-scenario-manifest-v1",
+  "runId": "20260724-final-minimax-s07-a1",
+  "attempt": 1,
+  "status": "completed",
+  "startedAt": "2026-07-24T07:47:29.817Z",
+  "correlation": {
+    "externalSessionId": "live-20260724-final-minimax-s07-a1",
+    "durableSessionId": "live-20260724-final-minimax-s07-a1",
+    "scenarioId": "07-ca-nhan-hoa-va-loyalty",
+    "probeRunId": "20260724-final-minimax-s07-a1"
+  },
+  "scenario": {
+    "id": "07-ca-nhan-hoa-va-loyalty",
+    "title": "07: Cá nhân hóa, món yêu thích, loyalty và chỉnh giỏ hàng",
+    "goal": "User muốn đặt lại đơn cũ, lấy món hay ăn, kiểm tra điểm thành viên, đổi và dùng voucher có xác nhận, rồi chỉnh giỏ hàng.",
+    "preconditions": [
+      "Khách đã đăng nhập và liên kết tài khoản thành viên; đơn gần nhất, món thường chọn, số dư điểm và ví ưu đãi có thể được đọc từ nguồn nghiệp vụ.",
+      "Giỏ hàng ban đầu trống và chưa có thao tác đổi điểm, dùng voucher hoặc đặt đơn nào được xác nhận."
+    ],
+    "risks": [
+      "Personalized history and loyalty information need authoritative customer state.",
+      "Membership benefits and cart changes require clear customer consent before they take effect."
+    ],
+    "finalState": "cart_updated",
+    "sourceFile": "07-ca-nhan-hoa-va-loyalty.json",
+    "sourcePath": "/Users/vietthangvunguyen/Workspace/hackathon/.worktrees/kfc-kiss-model-agnostic/ai-talent-tracks/fnb/conversations/07-ca-nhan-hoa-va-loyalty.json",
+    "sourceSha256": "7eb24710cd563b9a9c51a09262ada8a0ff32002451bff1852c8813eca15e3fbb"
+  },
+  "model": {
+    "candidateId": "minimax-m3",
+    "provider": "opencode",
+    "model": "minimax-m3",
+    "profile": "opencode:minimax-m3:anthropic-messages",
+    "transport": "anthropic_messages"
+  },
+  "evidence": {
+    "trace": "trace.jsonl",
+    "transcript": "transcript.md",
+    "preflight": "preflight.json",
+    "reviewPacket": "codex-review-packet.md",
+    "artifactSha256": {
+      "preflight.json": "7a57f54ecc69119c451f7c6f92d8e2d7e9f026e99e46b116345793cebabf96bf",
+      "trace.jsonl": "b00a1dc361d0c490c23c849c6f8d3ca794c2520bc6d36feea600945683ad676f",
+      "transcript.md": "4bed9adbf8601a1f8d4981119286e7f522c3ac8ccb6d5fa86ce881b874842f23",
+      "codex-review-packet.md": "f24d891fe15f3e27b0fe1be6e2b71e9be15af6442d39e2d6e65891df7bdf5e14"
+    }
+  },
+  "completedAt": "2026-07-24T07:50:55.763Z",
+  "finishNote": "Terminal: personalized state remained unavailable due authentication; no cart or loyalty mutation."
+}

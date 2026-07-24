@@ -1,0 +1,51 @@
+{
+  "schemaVersion": "kfc-live-scenario-manifest-v1",
+  "runId": "20260724-final-qwen-s01-a1",
+  "attempt": 1,
+  "status": "completed",
+  "startedAt": "2026-07-24T07:47:05.926Z",
+  "correlation": {
+    "externalSessionId": "live-20260724-final-qwen-s01-a1",
+    "durableSessionId": "live-20260724-final-qwen-s01-a1",
+    "scenarioId": "01-dat-mon-ro-rang-giao-hang",
+    "probeRunId": "20260724-final-qwen-s01-a1"
+  },
+  "scenario": {
+    "id": "01-dat-mon-ro-rang-giao-hang",
+    "title": "01: Đặt món rõ ràng, giao hàng, voucher, thanh toán",
+    "goal": "User đặt món rõ ràng, bot hỏi địa chỉ còn thiếu, tính phí giao hàng, áp mã, xác nhận thanh toán, ghi chú giao hàng, ghi nhận hóa đơn và tạo đơn.",
+    "preconditions": [
+      "Khách đang ở một phiên mua hàng mới, chưa có giỏ hàng hoặc đơn hàng đang chờ xác nhận.",
+      "Dữ liệu menu, vùng giao hàng, phí giao hàng, mã ưu đãi và phương thức thanh toán hiện hành có thể được tra cứu từ nguồn nghiệp vụ."
+    ],
+    "risks": [
+      "Order creation requires a clear customer confirmation.",
+      "Delivery, vouchers, payment, invoices, and delivery notes must stay grounded in authoritative business state."
+    ],
+    "finalState": "order_created",
+    "sourceFile": "01-dat-mon-ro-rang-giao-hang.json",
+    "sourcePath": "/Users/vietthangvunguyen/Workspace/hackathon/.worktrees/kfc-kiss-model-agnostic/ai-talent-tracks/fnb/conversations/01-dat-mon-ro-rang-giao-hang.json",
+    "sourceSha256": "30f1b4e717baea5a4bd77fcdb2cec0e64cdf472ae449d1bbd12c1d2b23390b66"
+  },
+  "model": {
+    "candidateId": "qwen3.7-max",
+    "provider": "opencode",
+    "model": "qwen3.7-max",
+    "profile": "opencode:qwen3.7-max:anthropic-messages:thinking-disabled",
+    "transport": "anthropic_messages"
+  },
+  "evidence": {
+    "trace": "trace.jsonl",
+    "transcript": "transcript.md",
+    "preflight": "preflight.json",
+    "reviewPacket": "codex-review-packet.md",
+    "artifactSha256": {
+      "preflight.json": "a7cecfb9d96e36b146c0748fc8069b7c0a5b94fabef345c5557b0dc09b504fb1",
+      "trace.jsonl": "0bd160a76434140108b3f32355c8b41bbac4a1baaf7578409355a44e2cd8c0d2",
+      "transcript.md": "8dc361ef707bc647d04f36a620d95bee49c7d95da33e152b66b2aa10224e0c48",
+      "codex-review-packet.md": "9ff3151476873b7cfc860cbd085a97770af76c17bb8d62b0a69e2ec6ae874d1b"
+    }
+  },
+  "completedAt": "2026-07-24T07:49:26.448Z",
+  "finishNote": "Terminal state: verified human handoff queued after menu lookup failed; no order/payment mutation occurred."
+}

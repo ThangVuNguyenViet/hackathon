@@ -1,0 +1,51 @@
+{
+  "schemaVersion": "kfc-live-scenario-manifest-v1",
+  "runId": "20260724-final-openai-s07-a1",
+  "attempt": 1,
+  "status": "completed",
+  "startedAt": "2026-07-24T07:47:53.059Z",
+  "correlation": {
+    "externalSessionId": "live-20260724-final-openai-s07-a1",
+    "durableSessionId": "live-20260724-final-openai-s07-a1",
+    "scenarioId": "07-ca-nhan-hoa-va-loyalty",
+    "probeRunId": "20260724-final-openai-s07-a1"
+  },
+  "scenario": {
+    "id": "07-ca-nhan-hoa-va-loyalty",
+    "title": "07: Cá nhân hóa, món yêu thích, loyalty và chỉnh giỏ hàng",
+    "goal": "User muốn đặt lại đơn cũ, lấy món hay ăn, kiểm tra điểm thành viên, đổi và dùng voucher có xác nhận, rồi chỉnh giỏ hàng.",
+    "preconditions": [
+      "Khách đã đăng nhập và liên kết tài khoản thành viên; đơn gần nhất, món thường chọn, số dư điểm và ví ưu đãi có thể được đọc từ nguồn nghiệp vụ.",
+      "Giỏ hàng ban đầu trống và chưa có thao tác đổi điểm, dùng voucher hoặc đặt đơn nào được xác nhận."
+    ],
+    "risks": [
+      "Personalized history and loyalty information need authoritative customer state.",
+      "Membership benefits and cart changes require clear customer consent before they take effect."
+    ],
+    "finalState": "cart_updated",
+    "sourceFile": "07-ca-nhan-hoa-va-loyalty.json",
+    "sourcePath": "/Users/vietthangvunguyen/Workspace/hackathon/.worktrees/kfc-kiss-model-agnostic/ai-talent-tracks/fnb/conversations/07-ca-nhan-hoa-va-loyalty.json",
+    "sourceSha256": "7eb24710cd563b9a9c51a09262ada8a0ff32002451bff1852c8813eca15e3fbb"
+  },
+  "model": {
+    "candidateId": "openai-gpt-4.1-mini",
+    "provider": "openai",
+    "model": "gpt-4.1-mini",
+    "profile": "openai:gpt-4.1-mini:responses",
+    "transport": "openai_responses"
+  },
+  "evidence": {
+    "trace": "trace.jsonl",
+    "transcript": "transcript.md",
+    "preflight": "preflight.json",
+    "reviewPacket": "codex-review-packet.md",
+    "artifactSha256": {
+      "preflight.json": "f818fc794b29f24ee604218ccd41b8fc83e77c920b1375fce9289ecba0312e2e",
+      "trace.jsonl": "f94c6b398bb4e57123da7724cf6a009eca5789a81b3fc155d245be9eacaa6a14",
+      "transcript.md": "f2c8f6ec26ef34c43b0953fc9d384e52bdad9e9a3adb20c8774c9a78eac6308b",
+      "codex-review-packet.md": "53e9bc4cb15790b3663ffe388737e0bd157a8c945dcd799925512da0d23ecea1"
+    }
+  },
+  "completedAt": "2026-07-24T07:51:02.857Z",
+  "finishNote": "Final one-shot OpenAI scenario 07. Customer-history, loyalty, voucher, and cart mutations were blocked because the runtime did not expose authenticated linked-customer authority despite the scenario precondition. Agent preserved safety and made no unauthorized mutations; menu lookup succeeded. No behavioral retry."
+}

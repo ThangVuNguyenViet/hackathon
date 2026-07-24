@@ -1,0 +1,50 @@
+{
+  "schemaVersion": "kfc-live-scenario-manifest-v1",
+  "runId": "20260724-final-qwen-s10-a1",
+  "attempt": 1,
+  "status": "preflight_failed",
+  "startedAt": "2026-07-24T07:47:07.329Z",
+  "correlation": {
+    "externalSessionId": "live-20260724-final-qwen-s10-a1",
+    "durableSessionId": "live-20260724-final-qwen-s10-a1",
+    "scenarioId": "10-so-sanh-mon-va-giai-thich",
+    "probeRunId": "20260724-final-qwen-s10-a1"
+  },
+  "scenario": {
+    "id": "10-so-sanh-mon-va-giai-thich",
+    "title": "10: So sánh món và giải thích lựa chọn",
+    "goal": "So sánh hai combo bằng dữ liệu thành phần và giá đã xác minh, sau đó tư vấn lựa chọn không cay trong giới hạn dữ liệu mà không thay đổi giỏ hàng.",
+    "preconditions": [
+      "Hai mã combo 20698 và 20709 cùng dữ liệu giá, thành phần và tùy chọn hiện hành có thể được tra cứu.",
+      "Khách đang tham khảo, chưa yêu cầu thêm món hoặc thay đổi giỏ hàng; dữ liệu độ cay có thể không đầy đủ cho mọi thành phần."
+    ],
+    "risks": [
+      "Product comparisons must stay grounded in verified product information.",
+      "Advisory conversation must not mutate a cart or make unsupported health claims."
+    ],
+    "finalState": "advisory_complete",
+    "sourceFile": "10-so-sanh-mon-va-giai-thich.json",
+    "sourcePath": "/Users/vietthangvunguyen/Workspace/hackathon/.worktrees/kfc-kiss-model-agnostic/ai-talent-tracks/fnb/conversations/10-so-sanh-mon-va-giai-thich.json",
+    "sourceSha256": "bf27b56ebd0edc62cce5123bdf6f039edcb32c30d088ead64eeb3720fded0807"
+  },
+  "model": {
+    "candidateId": "qwen3.7-max",
+    "provider": "opencode",
+    "model": "qwen3.7-max",
+    "profile": "opencode:qwen3.7-max:anthropic-messages:thinking-disabled",
+    "transport": "anthropic_messages"
+  },
+  "evidence": {
+    "trace": "trace.jsonl",
+    "transcript": "transcript.md",
+    "preflight": "preflight.json",
+    "reviewPacket": "codex-review-packet.md",
+    "artifactSha256": {
+      "preflight.json": "c59cf6f9effb0766178c9d3a52f6f7308be166830928bed1efcbd3d403151245",
+      "trace.jsonl": "3f6c9beea9b40c43e437544198b96494304e0e08d375f3d3a1af155b991b31d5",
+      "transcript.md": "a7c4bf0acb9714166c0892f7e3fe82a0257d9408b61a671c11606b7c2f6b276d",
+      "codex-review-packet.md": "9b146be1c11af37bfad276a4274223ecf7b39521f00fc61417d73e9603e66093"
+    }
+  },
+  "completedAt": "2026-07-24T07:47:17.917Z"
+}

@@ -1,0 +1,51 @@
+{
+  "schemaVersion": "kfc-live-scenario-manifest-v1",
+  "runId": "20260724-final-qwen-s05-a1",
+  "attempt": 1,
+  "status": "completed",
+  "startedAt": "2026-07-24T07:47:06.239Z",
+  "correlation": {
+    "externalSessionId": "live-20260724-final-qwen-s05-a1",
+    "durableSessionId": "live-20260724-final-qwen-s05-a1",
+    "scenarioId": "05-khieu-nai-va-human-handoff",
+    "probeRunId": "20260724-final-qwen-s05-a1"
+  },
+  "scenario": {
+    "id": "05-khieu-nai-va-human-handoff",
+    "title": "05: Khiếu nại, feedback và chuyển nhân viên",
+    "goal": "Nhận diện khiếu nại, sai món, thiếu món, feedback sau đơn, user tức giận và yêu cầu gặp nhân viên.",
+    "preconditions": [
+      "Khách đang phản hồi về một đơn vừa nhận; thông tin đơn và kênh chuyển nhân viên có thể được tra cứu nếu cần.",
+      "Chưa có hồ sơ khiếu nại hoặc yêu cầu chuyển nhân viên nào được tạo cho cuộc trao đổi này."
+    ],
+    "risks": [
+      "Complaints need structured capture and appropriate escalation.",
+      "Complaint handling must not be treated as a new-order flow."
+    ],
+    "finalState": "human_handoff_created",
+    "sourceFile": "05-khieu-nai-va-human-handoff.json",
+    "sourcePath": "/Users/vietthangvunguyen/Workspace/hackathon/.worktrees/kfc-kiss-model-agnostic/ai-talent-tracks/fnb/conversations/05-khieu-nai-va-human-handoff.json",
+    "sourceSha256": "34f08c9eaf8af5a15afa77ee49a667ea0b97721615e49579ae22b8a9f52a2c2f"
+  },
+  "model": {
+    "candidateId": "qwen3.7-max",
+    "provider": "opencode",
+    "model": "qwen3.7-max",
+    "profile": "opencode:qwen3.7-max:anthropic-messages:thinking-disabled",
+    "transport": "anthropic_messages"
+  },
+  "evidence": {
+    "trace": "trace.jsonl",
+    "transcript": "transcript.md",
+    "preflight": "preflight.json",
+    "reviewPacket": "codex-review-packet.md",
+    "artifactSha256": {
+      "preflight.json": "a7cecfb9d96e36b146c0748fc8069b7c0a5b94fabef345c5557b0dc09b504fb1",
+      "trace.jsonl": "f8d3b37551d9b2c2a5a0da50d53f4a229b175ba8e55b5fde1ab6a635427d46f2",
+      "transcript.md": "55a1e19921f8e5635be210e4dd5a8235e0fde721a719c26582be9d7c604824fb",
+      "codex-review-packet.md": "7474f0b9cea8d712842ee56c1c252e2c0289d7b359a973daf58ba657c14481ba"
+    }
+  },
+  "completedAt": "2026-07-24T07:50:12.001Z",
+  "finishNote": "Terminal state: complaint details were escalated in a verified queued human handoff; no order/payment mutation."
+}

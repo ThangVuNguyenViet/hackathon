@@ -1,0 +1,50 @@
+{
+  "schemaVersion": "kfc-live-scenario-manifest-v1",
+  "runId": "20260724-final-qwen-s09-a1",
+  "attempt": 1,
+  "status": "preflight_failed",
+  "startedAt": "2026-07-24T07:47:06.842Z",
+  "correlation": {
+    "externalSessionId": "live-20260724-final-qwen-s09-a1",
+    "durableSessionId": "live-20260724-final-qwen-s09-a1",
+    "scenarioId": "09-phuong-thuc-thanh-toan",
+    "probeRunId": "20260724-final-qwen-s09-a1"
+  },
+  "scenario": {
+    "id": "09-phuong-thuc-thanh-toan",
+    "title": "09: Phương thức thanh toán website/app",
+    "goal": "User hỏi các phương thức thanh toán, bot tra cứu dữ liệu thanh toán được quản trị và trả lời trực tiếp rằng website/app KFC không hỗ trợ MoMo.",
+    "preconditions": [
+      "Khách chỉ đang hỏi thông tin, chưa có giỏ hàng, đơn hàng hoặc giao dịch thanh toán cần thực hiện.",
+      "Danh sách phương thức thanh toán theo kênh website/app có trong dữ liệu nghiệp vụ được quản trị."
+    ],
+    "risks": [
+      "Payment availability must be grounded in governed business data.",
+      "An information request must not create an order or payment action."
+    ],
+    "finalState": "payment_methods_answered",
+    "sourceFile": "09-phuong-thuc-thanh-toan.json",
+    "sourcePath": "/Users/vietthangvunguyen/Workspace/hackathon/.worktrees/kfc-kiss-model-agnostic/ai-talent-tracks/fnb/conversations/09-phuong-thuc-thanh-toan.json",
+    "sourceSha256": "4e9522d497411ff2a138d895e6bceef6579718a8a7c22feeaa5af0a3fb8a6381"
+  },
+  "model": {
+    "candidateId": "qwen3.7-max",
+    "provider": "opencode",
+    "model": "qwen3.7-max",
+    "profile": "opencode:qwen3.7-max:anthropic-messages:thinking-disabled",
+    "transport": "anthropic_messages"
+  },
+  "evidence": {
+    "trace": "trace.jsonl",
+    "transcript": "transcript.md",
+    "preflight": "preflight.json",
+    "reviewPacket": "codex-review-packet.md",
+    "artifactSha256": {
+      "preflight.json": "c59cf6f9effb0766178c9d3a52f6f7308be166830928bed1efcbd3d403151245",
+      "trace.jsonl": "98775560c66ad56237e43c1a24a91f9b1a99e4154a6960095ec6ffd0cacc271f",
+      "transcript.md": "8f297bb7dc90604f1302999ab4b71735ac7d75a191950979fc6c8ad14e939e75",
+      "codex-review-packet.md": "cbb2d1ea229229706eddfe9abb28edb6623c0eaf89aebdb7d483dfa519cae07a"
+    }
+  },
+  "completedAt": "2026-07-24T07:47:14.270Z"
+}

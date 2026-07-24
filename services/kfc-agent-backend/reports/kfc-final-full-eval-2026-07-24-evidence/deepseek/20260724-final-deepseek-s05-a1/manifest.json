@@ -1,0 +1,51 @@
+{
+  "schemaVersion": "kfc-live-scenario-manifest-v1",
+  "runId": "20260724-final-deepseek-s05-a1",
+  "attempt": 1,
+  "status": "completed",
+  "startedAt": "2026-07-24T07:47:11.930Z",
+  "correlation": {
+    "externalSessionId": "live-20260724-final-deepseek-s05-a1",
+    "durableSessionId": "live-20260724-final-deepseek-s05-a1",
+    "scenarioId": "05-khieu-nai-va-human-handoff",
+    "probeRunId": "20260724-final-deepseek-s05-a1"
+  },
+  "scenario": {
+    "id": "05-khieu-nai-va-human-handoff",
+    "title": "05: Khiếu nại, feedback và chuyển nhân viên",
+    "goal": "Nhận diện khiếu nại, sai món, thiếu món, feedback sau đơn, user tức giận và yêu cầu gặp nhân viên.",
+    "preconditions": [
+      "Khách đang phản hồi về một đơn vừa nhận; thông tin đơn và kênh chuyển nhân viên có thể được tra cứu nếu cần.",
+      "Chưa có hồ sơ khiếu nại hoặc yêu cầu chuyển nhân viên nào được tạo cho cuộc trao đổi này."
+    ],
+    "risks": [
+      "Complaints need structured capture and appropriate escalation.",
+      "Complaint handling must not be treated as a new-order flow."
+    ],
+    "finalState": "human_handoff_created",
+    "sourceFile": "05-khieu-nai-va-human-handoff.json",
+    "sourcePath": "/Users/vietthangvunguyen/Workspace/hackathon/.worktrees/kfc-kiss-model-agnostic/ai-talent-tracks/fnb/conversations/05-khieu-nai-va-human-handoff.json",
+    "sourceSha256": "34f08c9eaf8af5a15afa77ee49a667ea0b97721615e49579ae22b8a9f52a2c2f"
+  },
+  "model": {
+    "candidateId": "deepseek-v4-flash",
+    "provider": "opencode",
+    "model": "deepseek-v4-flash",
+    "profile": "opencode:deepseek-v4-flash:chat-completions",
+    "transport": "openai_compatible_chat"
+  },
+  "evidence": {
+    "trace": "trace.jsonl",
+    "transcript": "transcript.md",
+    "preflight": "preflight.json",
+    "reviewPacket": "codex-review-packet.md",
+    "artifactSha256": {
+      "preflight.json": "74796d6891a6d6bef5ce6d39c55c8099c557001b5f1744731db0e13b51044739",
+      "trace.jsonl": "35f313a66fcd0b463ea585118dfb46303d8fdd1655bade1c5a0562639045c6bf",
+      "transcript.md": "e62824cc707587f50e686eea6c865d01098106bbe8696727276d0cb79ba29eb1",
+      "codex-review-packet.md": "0b86a5ad5cdd63de115940afde1f43b77babbab60488547a78d89086cbab5d3c"
+    }
+  },
+  "completedAt": "2026-07-24T07:51:13.721Z",
+  "finishNote": "Completed naturally: complaint details captured and human handoff reported queued."
+}

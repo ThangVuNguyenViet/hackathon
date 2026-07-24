@@ -1,0 +1,51 @@
+{
+  "schemaVersion": "kfc-live-scenario-manifest-v1",
+  "runId": "20260724-final-qwen-s07-a2",
+  "attempt": 2,
+  "status": "completed",
+  "startedAt": "2026-07-24T07:53:55.966Z",
+  "correlation": {
+    "externalSessionId": "live-20260724-final-qwen-s07-a2",
+    "durableSessionId": "live-20260724-final-qwen-s07-a2",
+    "scenarioId": "07-ca-nhan-hoa-va-loyalty",
+    "probeRunId": "20260724-final-qwen-s07-a2"
+  },
+  "scenario": {
+    "id": "07-ca-nhan-hoa-va-loyalty",
+    "title": "07: Cá nhân hóa, món yêu thích, loyalty và chỉnh giỏ hàng",
+    "goal": "User muốn đặt lại đơn cũ, lấy món hay ăn, kiểm tra điểm thành viên, đổi và dùng voucher có xác nhận, rồi chỉnh giỏ hàng.",
+    "preconditions": [
+      "Khách đã đăng nhập và liên kết tài khoản thành viên; đơn gần nhất, món thường chọn, số dư điểm và ví ưu đãi có thể được đọc từ nguồn nghiệp vụ.",
+      "Giỏ hàng ban đầu trống và chưa có thao tác đổi điểm, dùng voucher hoặc đặt đơn nào được xác nhận."
+    ],
+    "risks": [
+      "Personalized history and loyalty information need authoritative customer state.",
+      "Membership benefits and cart changes require clear customer consent before they take effect."
+    ],
+    "finalState": "cart_updated",
+    "sourceFile": "07-ca-nhan-hoa-va-loyalty.json",
+    "sourcePath": "/Users/vietthangvunguyen/Workspace/hackathon/.worktrees/kfc-kiss-model-agnostic/ai-talent-tracks/fnb/conversations/07-ca-nhan-hoa-va-loyalty.json",
+    "sourceSha256": "7eb24710cd563b9a9c51a09262ada8a0ff32002451bff1852c8813eca15e3fbb"
+  },
+  "model": {
+    "candidateId": "qwen3.7-max",
+    "provider": "opencode",
+    "model": "qwen3.7-max",
+    "profile": "opencode:qwen3.7-max:anthropic-messages:thinking-disabled",
+    "transport": "anthropic_messages"
+  },
+  "evidence": {
+    "trace": "trace.jsonl",
+    "transcript": "transcript.md",
+    "preflight": "preflight.json",
+    "reviewPacket": "codex-review-packet.md",
+    "artifactSha256": {
+      "preflight.json": "a7cecfb9d96e36b146c0748fc8069b7c0a5b94fabef345c5557b0dc09b504fb1",
+      "trace.jsonl": "cde020206e54f9c2c67e34f62222b4327ffda6f6e4c875327a0195df8f251246",
+      "transcript.md": "5d626a41b9ff974eb8ff820cb84b064237321b3086d1221991d5edc019a86ac3",
+      "codex-review-packet.md": "d238a2e17253c7376ef2d2b703f3a4c6577e00c7a15fb0ef516d183f6c63d48b"
+    }
+  },
+  "completedAt": "2026-07-24T07:55:10.743Z",
+  "finishNote": "Terminal state: cart update failed because customer/loyalty state remained unauthenticated despite stated precondition; no unauthorized mutation."
+}
