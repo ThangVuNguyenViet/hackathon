@@ -285,6 +285,12 @@ describe('KFC OpenAI tools', () => {
     expect(updateCart?.definition.description).toContain(
       'Never reuse an item code from an add-on search',
     );
+    expect(updateCart?.definition.description).toContain(
+      'MUST call searchMenu for that exact item in the same turn',
+    );
+    expect(updateCart?.definition.description).toContain(
+      'Never call updateCart first',
+    );
     expect(updateCart?.definition.description).toContain('quantity 0');
     expect(updateCart?.definition.description).toContain(
       'authoritative current cart',
