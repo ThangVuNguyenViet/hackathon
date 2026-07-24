@@ -44,7 +44,9 @@ function toolOutputText(value: unknown): string {
 describe('KFC Vietnam business pack compatibility', () => {
   it('allows trusted demo turns to switch models while preserving history and provenance', async () => {
     const store = new MemoryStore();
-    const clients = createMockClients(await loadGeneratedFixtures(process.cwd()));
+    const clients = createMockClients(
+      await loadGeneratedFixtures(process.cwd()),
+    );
     const dashboard = new DashboardEventBus();
     const openAi = configuredTestAgent(
       new FakeListChatModel({ responses: ['Phản hồi OpenAI'] }),
@@ -989,8 +991,6 @@ describe('KFC Vietnam business pack compatibility', () => {
       dashboard: new DashboardEventBus(),
       agentModelBinding: configuredTestAgent({} as BaseChatModel),
     };
-    let authoritativeCart: unknown;
-
     const output = await kfcVietnamPack.run(input, async ({ tools }) => {
       const invoke = async (
         name: string,
@@ -1035,9 +1035,9 @@ describe('KFC Vietnam business pack compatibility', () => {
         },
         'search-2',
       );
-      const cartResult = await invoke('updateCart', {}, 'cart-1');
-      authoritativeCart = cartResult.value as
-        Record<string, unknown> | undefined;
+      expect(
+        tools.some((candidate) => candidate.name === 'updateCart'),
+      ).toBe(false);
 
       expect(firstSearch.value).toMatchObject({
         returned: 2,
@@ -1062,7 +1062,12 @@ describe('KFC Vietnam business pack compatibility', () => {
         ],
       },
     ]);
-    expect(output.state.cart).toEqual(authoritativeCart);
+    expect(output.state.cart?.items).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ itemCode: '20751', quantity: 1 }),
+        expect.objectContaining({ itemCode: '20752', quantity: 2 }),
+      ]),
+    );
     expect(
       Object.keys(output.state.verifiedCollections?.searchMenu ?? {}),
     ).toHaveLength(2);
@@ -1179,37 +1184,115 @@ describe('KFC Vietnam business pack compatibility', () => {
     };
 
     await kfcVietnamPack.run(input, async ({ tools }) => {
-      const selected = tools.find(
-        (candidate) => candidate.name === 'updateCart',
-      );
-      if (!selected) throw new Error('Missing updateCart');
-      await expect(
-        selected.invoke({
-          type: 'tool_call',
-          name: 'updateCart',
-          args: {
-            changes: [{ itemCode, quantity: 5, modifiers: [] }],
-          },
-          id: 'trusted-cart-widened',
-        }),
-      ).rejects.toThrow('Received tool input did not match expected schema');
-      const result = JSON.parse(
-        toolOutputText(
-          await selected.invoke({
-            type: 'tool_call',
-            name: 'updateCart',
-            args: {},
-            id: 'trusted-cart-1',
-          }),
-        ),
-      ) as { ok: boolean };
-      expect(result.ok).toBe(true);
+      expect(
+        tools.some((candidate) => candidate.name === 'updateCart'),
+      ).toBe(false);
       return 'Đã cập nhật giỏ.';
     });
 
     expect(applyChanges).toHaveBeenCalledOnce();
     expect(applyChanges.mock.calls[0]?.[1]).toEqual([
       { itemCode, quantity: 1 },
+    ]);
+  });
+
+  it('commits one multi-group modifier draft with one updateCart mutation', async () => {
+    const fixtures = await loadGeneratedFixtures(process.cwd());
+    const menuModifier = fixtures.menuModifiers.find(
+      (candidate) =>
+        candidate.modifierGroups.length >= 2 &&
+        candidate.modifierGroups[0]?.options[0]?.modifierGroups.length,
+    );
+    if (!menuModifier) throw new Error('Expected nested modifier fixture');
+    const baseClients = createMockClients(fixtures);
+    const sessionId = 'session-kfc-atomic-modifier';
+    const context = {
+      signal: new AbortController().signal,
+      deadlineAt: Date.now() + 60_000,
+    };
+    const created = await baseClients.cart.createCart(sessionId, context);
+    if (!created.ok || !created.value) throw new Error('Expected test cart');
+    const seeded = await baseClients.cart.applyChanges(
+      created.value,
+      [{ itemCode: menuModifier.itemCode, quantity: 1 }],
+      context,
+    );
+    if (!seeded.ok || !seeded.value) throw new Error('Expected seeded cart');
+    const store = new MemoryStore();
+    await store.putPackState(
+      sessionId,
+      await createPackStateEnvelope({
+        packRef: kfcVietnamPack.ref,
+        schemaVersion: kfcVietnamPack.stateSchemaVersion,
+        state: {
+          cart: seeded.value,
+          menuModifierOptions: menuModifier,
+        },
+      }),
+    );
+    const firstGroup = menuModifier.modifierGroups[0]!;
+    const firstOption = firstGroup.options[0]!;
+    const nestedGroup = firstOption.modifierGroups[0]!;
+    const secondGroup = menuModifier.modifierGroups[1]!;
+    const selections = [
+      {
+        groupId: firstGroup.groupId,
+        modifierId: firstOption.modifierId,
+      },
+      {
+        groupId: nestedGroup.groupId,
+        modifierId: nestedGroup.options[0]!.modifierId,
+      },
+      {
+        groupId: secondGroup.groupId,
+        modifierId: secondGroup.options[0]!.modifierId,
+      },
+    ];
+    const applyChanges = vi.fn(baseClients.cart.applyChanges);
+    const input = {
+      sessionId,
+      customerId: 'customer-1',
+      channel: 'kfc' as const,
+      text: '',
+      trustedCustomerAction: {
+        source: 'kfc_genui_action' as const,
+        assistantTurnId: 'assistant-turn-atomic-modifier',
+        attachmentId: 'attachment-atomic-modifier',
+        actionDigest: '1'.repeat(64),
+        verifiedRevision: '2'.repeat(64),
+        lifecycle: 'one_shot' as const,
+        command: {
+          kind: 'modifier_batch_selection' as const,
+          itemCode: menuModifier.itemCode,
+          selections,
+        },
+      },
+      clients: {
+        ...baseClients,
+        cart: {
+          ...baseClients.cart,
+          applyChanges,
+        },
+      },
+      store,
+      dashboard: new DashboardEventBus(),
+      agentModelBinding: configuredTestAgent({} as BaseChatModel),
+    };
+
+    await kfcVietnamPack.run(input, async ({ tools }) => {
+      expect(
+        tools.some((candidate) => candidate.name === 'updateCart'),
+      ).toBe(false);
+      return 'Đã áp dụng tùy chọn.';
+    });
+
+    expect(applyChanges).toHaveBeenCalledOnce();
+    expect(applyChanges.mock.calls[0]?.[1]).toEqual([
+      {
+        itemCode: menuModifier.itemCode,
+        quantity: 1,
+        modifiers: selections,
+      },
     ]);
   });
 
@@ -1248,29 +1331,19 @@ describe('KFC Vietnam business pack compatibility', () => {
       agentModelBinding: configuredTestAgent({} as BaseChatModel),
     };
 
-    await kfcVietnamPack.run(input, async ({ tools }) => {
-      const selected = tools.find(
-        (candidate) => candidate.name === 'updateCart',
-      );
-      expect(selected).toBeDefined();
-      const result = JSON.parse(
-        toolOutputText(
-          await selected!.invoke({
-            type: 'tool_call',
-            name: 'updateCart',
-            args: {},
-            id: 'unbound-modifier-1',
-          }),
-        ),
-      ) as { ok: boolean; errorCode?: string };
-      expect(result).toMatchObject({
-        ok: false,
-        errorCode: 'explicit_cart_mutation_required',
-      });
+    const output = await kfcVietnamPack.run(input, async ({ tools }) => {
+      expect(
+        tools.some((candidate) => candidate.name === 'updateCart'),
+      ).toBe(false);
       return 'Không thể áp dụng lựa chọn này vào giỏ hiện tại.';
     });
 
     expect(applyChanges).not.toHaveBeenCalled();
+    expect(output.state.toolTrace).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ toolName: 'updateCart', ok: false }),
+      ]),
+    );
   });
 
   it('rejects a cart write under a trusted non-cart action', async () => {

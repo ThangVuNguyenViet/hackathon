@@ -197,6 +197,65 @@ export const kfcSmartMenuBatchPayloadSchema = z
     });
   });
 
+export const kfcCartDraftPayloadSchema = z
+  .object({
+    items: z
+      .array(
+        z
+          .object({
+            itemCode: z.string().trim().min(1).max(128),
+            quantity: z.number().int().min(0).max(99),
+          })
+          .strict(),
+      )
+      .min(1)
+      .max(100),
+  })
+  .strict()
+  .superRefine((payload, context) => {
+    const seen = new Set<string>();
+    payload.items.forEach((item, index) => {
+      if (seen.has(item.itemCode)) {
+        context.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ['items', index, 'itemCode'],
+          message: 'Item codes must be unique',
+        });
+      }
+      seen.add(item.itemCode);
+    });
+  });
+
+export const kfcModifierDraftPayloadSchema = z
+  .object({
+    itemCode: z.string().trim().min(1).max(128),
+    selections: z
+      .array(
+        z
+          .object({
+            groupId: z.string().trim().min(1).max(128),
+            modifierId: z.string().trim().min(1).max(128),
+          })
+          .strict(),
+      )
+      .min(1)
+      .max(50),
+  })
+  .strict()
+  .superRefine((payload, context) => {
+    const seen = new Set<string>();
+    payload.selections.forEach((selection, index) => {
+      if (seen.has(selection.groupId)) {
+        context.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ['selections', index, 'groupId'],
+          message: 'Modifier groups must be unique',
+        });
+      }
+      seen.add(selection.groupId);
+    });
+  });
+
 export const messengerHistorySyncPayloadSchema = z
   .object({
     limitConversations: z.number().int().positive().optional(),
@@ -346,24 +405,7 @@ export interface ReadinessOptions {
     samplingRate: number;
   };
   commerce?: {
-    mode: 'fixture' | 'gateway';
-    baseUrl?: string;
-    token?: string;
-    fetchImpl?: typeof fetch;
-    timeoutMs?: number;
-    requiredCapabilities?: string[];
-    /**
-     * Capabilities actually wired into this runtime's local provider adapter.
-     * When omitted, compatibility callers are assumed to implement everything
-     * they explicitly require.
-     */
-    implementedCapabilities?: string[];
-  };
-  pos?: {
-    mode: 'disabled' | 'http';
-    baseUrl?: string;
-    token?: string;
-    simulated?: boolean;
+    mode: 'fixture';
   };
   release?: {
     gitSha: string;
@@ -372,7 +414,6 @@ export interface ReadinessOptions {
     dirty: boolean;
   };
   runtime?: {
-    commerceEnvironment?: CommerceEnvironment;
     agent: AgentModelIdentity;
     monitor?: MonitorModelIdentity;
   };
@@ -409,18 +450,6 @@ export interface RouteOptions {
   dashboard?: DashboardEventBus;
   messengerHistorySync?: MessengerHistorySyncCoordinator;
   readiness?: ReadinessOptions;
-  kfcCommerceGateway?: KfcCommerceGatewayClients;
-  kfcCommerceProvider?: Pick<
-    ExternalClients,
-    'cart' | 'inventory' | 'storeLocator' | 'fulfillment'
-  > &
-    Partial<Pick<ExternalClients, 'customer'>>;
-  catalog?: {
-    environment: CommerceEnvironment;
-    sourceUrl: string;
-    fetchImpl?: typeof fetch;
-    fallbackTtlSeconds?: number;
-  };
   lifecycle?: {
     environment: CommerceEnvironment;
     controls: Pick<SandboxLifecycleControls, 'create' | 'get' | 'transition'>;

@@ -105,8 +105,8 @@ export interface WorkerExecutionContext {
 // Timers scheduled after a Worker response may be clamped to one second.
 // D1/SSE delivery already yields between durable event writes, so adding an
 // artificial delay here can exhaust waitUntil before the run is terminal.
-export const WORKER_CUSTOMER_RUN_PACE_MS = 0;
-export const WORKER_CUSTOMER_RUN_MAX_TEXT_EVENTS = 3;
+const WORKER_CUSTOMER_RUN_PACE_MS = 0;
+const WORKER_CUSTOMER_RUN_MAX_TEXT_EVENTS = 3;
 
 function backgroundErrorClass(error: unknown): string {
   const name = error instanceof Error ? error.name : '';
@@ -185,15 +185,6 @@ export interface WorkerEnv {
   ZALO_APP_ID?: string;
   ZALO_APP_SECRET?: string;
   ZALO_API_BASE_URL?: string;
-  KFC_COMMERCE_MODE?: 'fixture' | 'gateway';
-  KFC_COMMERCE_ENVIRONMENT?: 'production' | 'sandbox';
-  KFC_MENU_API_URL?: string;
-  CATALOG_TTL_SECONDS?: string;
-  KFC_COMMERCE_GATEWAY_BASE_URL?: string;
-  KFC_COMMERCE_GATEWAY_TOKEN?: string;
-  KFC_POS_MODE?: 'disabled' | 'http';
-  KFC_POS_BASE_URL?: string;
-  KFC_POS_TOKEN?: string;
   MESSENGER_FETCH?: typeof fetch;
   ZALO_FETCH?: typeof fetch;
   KFC_DEMO_ADMIN_TOKEN?: string;
@@ -273,13 +264,7 @@ export default {
     }
 
     const url = new URL(request.url);
-    if (
-      requiresDemoAdmin(url.pathname) &&
-      !(
-        url.pathname.startsWith('/admin/lifecycle/') &&
-        env.KFC_COMMERCE_ENVIRONMENT !== 'sandbox'
-      )
-    ) {
+    if (requiresDemoAdmin(url.pathname)) {
       const auth = authorizeDemoAdmin(request, env);
       if (!auth.ok) return json({ errorCode: auth.errorCode }, auth.status);
     }

@@ -374,24 +374,9 @@ KfcGenUiAttachment kfcGenUiFixture(KfcGenUiWidgetKind kind) {
       },
       actions: [
         KfcGenUiActionSpec(
-          id: 'customize_item:flavor:hot-spicy',
-          label: 'Gà Giòn Cay',
-          value: 'Gà Giòn Cay',
-          payload: {
-            'itemCode': 'three-chicken',
-            'groupId': 'flavor',
-            'modifierId': 'hot-spicy',
-          },
-        ),
-        KfcGenUiActionSpec(
-          id: 'customize_item:flavor:keep-current',
-          label: 'Giữ lựa chọn hiện tại',
-          value: 'Giữ lựa chọn hiện tại',
-          payload: {
-            'itemCode': 'three-chicken',
-            'groupId': 'flavor',
-            'modifierId': 'keep-current',
-          },
+          id: 'apply_modifiers',
+          label: 'Áp dụng',
+          intent: KfcGenUiActionIntent.primary,
         ),
       ],
     ),
@@ -472,18 +457,11 @@ KfcGenUiAttachment kfcGenUiFixture(KfcGenUiWidgetKind kind) {
         },
       },
       actions: [
+        KfcGenUiActionSpec(id: 'update_cart', label: 'Cập nhật'),
         KfcGenUiActionSpec(
           id: 'continue_to_fulfillment',
-          label: 'Tiếp tục giao hàng',
+          label: 'Cập nhật & tiếp tục',
           intent: KfcGenUiActionIntent.primary,
-        ),
-        KfcGenUiActionSpec(id: 'edit_cart', label: 'Sửa giỏ hàng'),
-        KfcGenUiActionSpec(id: 'update_item_quantity', label: 'Đổi số lượng'),
-        KfcGenUiActionSpec(
-          id: 'remove_item',
-          label: 'Xóa Pepsi',
-          intent: KfcGenUiActionIntent.destructive,
-          value: 'Pepsi lớn',
         ),
       ],
     ),

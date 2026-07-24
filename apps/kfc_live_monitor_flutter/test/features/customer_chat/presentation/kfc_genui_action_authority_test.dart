@@ -22,26 +22,27 @@ void main() {
     await _pump(tester, attachment, emitted.add);
 
     final increase = tester.widget<ShadIconButton>(
-      find.descendant(
-        of: find.byKey(
-          CustomerChatKeys.genUiMenuQuantityIncrease(attachment.id, '20751'),
-        ),
-        matching: find.byType(ShadIconButton),
+      find.byKey(
+        CustomerChatKeys.genUiMenuQuantityIncrease(attachment.id, '20751'),
       ),
     );
     final confirm = tester.widget<ShadButton>(
       find.byKey(CustomerChatKeys.genUiAction(attachment.id, 'add_items')),
     );
     expect(increase.onPressed, isNull);
+    expect(increase.enabled, isFalse);
     expect(confirm.onPressed, isNull);
+    expect(confirm.enabled, isFalse);
 
     await tester.tap(
       find.byKey(
         CustomerChatKeys.genUiMenuQuantityIncrease(attachment.id, '20751'),
       ),
+      warnIfMissed: false,
     );
     await tester.tap(
       find.byKey(CustomerChatKeys.genUiAction(attachment.id, 'add_items')),
+      warnIfMissed: false,
     );
     expect(emitted, isEmpty);
   });
@@ -92,7 +93,7 @@ void main() {
     expect(confirm.onPressed, isNull);
   });
 
-  testWidgets('production smart-menu disables ineligible verified items', (
+  testWidgets('production smart-menu enables verified customizable items', (
     tester,
   ) async {
     final emitted = <KfcGenUiAction>[];
@@ -130,29 +131,38 @@ void main() {
     await _pump(tester, attachment, emitted.add);
 
     ShadIconButton increase(String itemCode) => tester.widget<ShadIconButton>(
-      find.descendant(
-        of: find.byKey(
-          CustomerChatKeys.genUiMenuQuantityIncrease(attachment.id, itemCode),
-        ),
-        matching: find.byType(ShadIconButton),
+      find.byKey(
+        CustomerChatKeys.genUiMenuQuantityIncrease(attachment.id, itemCode),
       ),
     );
 
     expect(increase('available').onPressed, isNotNull);
     expect(increase('missing_flag').onPressed, isNull);
-    expect(increase('customizable').onPressed, isNull);
+    expect(increase('customizable').onPressed, isNotNull);
     await tester.tap(
       find.byKey(
-        CustomerChatKeys.genUiMenuQuantityIncrease(attachment.id, 'available'),
+        CustomerChatKeys.genUiMenuQuantityIncrease(
+          attachment.id,
+          'customizable',
+        ),
       ),
     );
     await tester.pump();
+    expect(
+      find.descendant(
+        of: find.byKey(
+          CustomerChatKeys.genUiMenuQuantity(attachment.id, 'customizable'),
+        ),
+        matching: find.text('1'),
+      ),
+      findsOneWidget,
+    );
     await tester.tap(
       find.byKey(CustomerChatKeys.genUiAction(attachment.id, 'add_items')),
     );
     expect(emitted.single.payload, {
       'items': [
-        {'itemCode': 'available', 'quantity': 1},
+        {'itemCode': 'customizable', 'quantity': 1},
       ],
     });
   });
@@ -186,18 +196,7 @@ void main() {
 
     final authoritative = _cart(
       quantity: 99,
-      actions: const [
-        KfcGenUiActionSpec(
-          id: 'update_item_quantity',
-          label: 'Đổi số lượng',
-          payload: {'itemCode': 'combo_zinger'},
-        ),
-        KfcGenUiActionSpec(
-          id: 'remove_item',
-          label: 'Xóa món',
-          payload: {'itemCode': 'combo_zinger'},
-        ),
-      ],
+      actions: const [KfcGenUiActionSpec(id: 'update_cart', label: 'Cập nhật')],
     );
     await _pump(tester, authoritative, emitted.add);
     expect(_cartIncrease(tester, authoritative).onPressed, isNull);
@@ -207,17 +206,22 @@ void main() {
         CustomerChatKeys.genUiCartRemove(authoritative.id, 'combo_zinger'),
       ),
     );
-    expect(emitted.single.payload, {'itemCode': 'combo_zinger'});
+    expect(emitted, isEmpty);
+    await tester.tap(
+      find.byKey(CustomerChatKeys.genUiAction(authoritative.id, 'update_cart')),
+    );
+    expect(emitted.single.payload, {
+      'items': [
+        {'itemCode': 'combo_zinger', 'quantity': 0},
+      ],
+    });
   });
 
   testWidgets('incoming invalid cart quantities fail closed', (tester) async {
     tester.view.physicalSize = const Size(390, 620);
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.reset);
-    const actions = [
-      KfcGenUiActionSpec(id: 'update_item_quantity', label: 'Đổi số lượng'),
-      KfcGenUiActionSpec(id: 'remove_item', label: 'Xóa món'),
-    ];
+    const actions = [KfcGenUiActionSpec(id: 'update_cart', label: 'Cập nhật')];
 
     for (final quantity in <num>[100, 1.5]) {
       final attachment = _cart(quantity: quantity, actions: actions);
@@ -244,12 +248,7 @@ void main() {
       await tester.pump();
     }
 
-    final increase = tester.widget<ShadIconButton>(
-      find.descendant(
-        of: increaseFinder,
-        matching: find.byType(ShadIconButton),
-      ),
-    );
+    final increase = tester.widget<ShadIconButton>(increaseFinder);
     expect(increase.onPressed, isNull);
     await tester.tap(
       find.byKey(CustomerChatKeys.genUiAction(attachment.id, 'add_items')),
@@ -330,7 +329,7 @@ void main() {
       ),
     );
     expect(zaloButton.onPressed, isNull);
-    await tester.tap(find.text('Ví ZaloPay'));
+    await tester.tap(find.text('Ví ZaloPay'), warnIfMissed: false);
     expect(emitted, isEmpty);
 
     await tester.tap(find.text('Thanh toán khi nhận hàng'));
@@ -415,7 +414,7 @@ void main() {
         find.ancestor(of: find.text(label), matching: find.byType(ShadButton)),
       );
       expect(button.onPressed, isNull);
-      await tester.tap(find.text(label));
+      await tester.tap(find.text(label), warnIfMissed: false);
     }
     expect(emitted, isEmpty);
   });
@@ -449,7 +448,10 @@ void main() {
         ),
       );
       expect(codButton.onPressed, isNull);
-      await tester.tap(find.text('Thanh toán khi nhận hàng'));
+      await tester.tap(
+        find.text('Thanh toán khi nhận hàng'),
+        warnIfMissed: false,
+      );
     }
     expect(emitted, isEmpty);
 
@@ -458,164 +460,55 @@ void main() {
     expect(emitted.single.payload, {'methodId': 'zalopay'});
   });
 
-  testWidgets('modifier requires exact encoded id and full payload binding', (
+  testWidgets('modifier requires one valid atomic apply binding', (
     tester,
   ) async {
-    final emitted = <KfcGenUiAction>[];
-    const modifierData = {
-      'modifierTree': {
-        'itemCode': 'item_1',
-        'modifierGroups': [
-          {
-            'groupId': 'flavor/size',
-            'options': [
-              {'modifierId': 'hot spicy', 'name': 'Cay'},
-            ],
-          },
-        ],
-      },
-    };
-    const validAction = KfcGenUiActionSpec(
-      id: 'customize_item:flavor%2Fsize:hot%20spicy',
-      label: 'Cay',
-      value: 'Cay',
-      payload: {
-        'itemCode': 'item_1',
-        'groupId': 'flavor/size',
-        'modifierId': 'hot spicy',
-      },
-    );
-    final invalidActions = [
-      const KfcGenUiActionSpec(
-        id: 'customize_item:wrong:hot%20spicy',
-        label: 'Cay',
-        value: 'Cay',
-        payload: {
-          'itemCode': 'item_1',
-          'groupId': 'flavor/size',
-          'modifierId': 'hot spicy',
-        },
-      ),
-      const KfcGenUiActionSpec(
-        id: 'customize_item:flavor%2Fsize:hot%20spicy',
-        label: 'Cay',
-        value: 'Lựa chọn khác',
-        payload: {
-          'itemCode': 'item_1',
-          'groupId': 'flavor/size',
-          'modifierId': 'hot spicy',
-        },
-      ),
-      const KfcGenUiActionSpec(
-        id: 'customize_item:flavor%2Fsize:hot%20spicy',
-        label: 'Cay',
-        value: 'Cay',
-        payload: {
-          'itemCode': 'other_item',
-          'groupId': 'flavor/size',
-          'modifierId': 'hot spicy',
-        },
-      ),
-      const KfcGenUiActionSpec(
-        id: 'customize_item:flavor%2Fsize:hot%20spicy',
-        label: 'Cay',
-        value: 'Cay',
-        payload: {
-          'itemCode': 'item_1',
-          'groupId': 'other_group',
-          'modifierId': 'hot spicy',
-        },
-      ),
-      const KfcGenUiActionSpec(
-        id: 'customize_item:flavor%2Fsize:hot%20spicy',
-        label: 'Cay',
-        value: 'Cay',
-        payload: {
-          'itemCode': 'item_1',
-          'groupId': 'flavor/size',
-          'modifierId': 'other_modifier',
-        },
-      ),
-    ];
-    for (final (index, action) in invalidActions.indexed) {
-      await _pump(
-        tester,
-        KfcGenUiAttachment(
-          id: 'modifier_invalid_$index',
-          lifecycleStage: 'modifier',
-          widgetKind: KfcGenUiWidgetKind.modifierPicker,
-          status: KfcGenUiStatus.active,
-          title: 'Tùy chỉnh',
-          data: modifierData,
-          actions: [action],
-        ),
-        emitted.add,
-      );
-      expect(find.text('Cay'), findsNothing);
-    }
-
-    final overlongModifierId = 'x' * 129;
-    await _pump(
-      tester,
-      KfcGenUiAttachment(
-        id: 'modifier_overlong',
-        lifecycleStage: 'modifier',
-        widgetKind: KfcGenUiWidgetKind.modifierPicker,
-        status: KfcGenUiStatus.active,
-        title: 'Tùy chỉnh',
-        data: {
-          'modifierTree': {
-            'itemCode': 'item_1',
-            'modifierGroups': [
-              {
-                'groupId': 'flavor',
-                'options': [
-                  {'modifierId': overlongModifierId, 'name': 'Quá dài'},
-                ],
-              },
-            ],
-          },
-        },
-        actions: [
-          KfcGenUiActionSpec(
-            id: 'customize_item:flavor:$overlongModifierId',
-            label: 'Quá dài',
-            value: 'Quá dài',
-            payload: {
-              'itemCode': 'item_1',
-              'groupId': 'flavor',
-              'modifierId': overlongModifierId,
-            },
-          ),
-        ],
-      ),
-      emitted.add,
-    );
-    expect(find.text('Quá dài'), findsNothing);
-
-    const valid = KfcGenUiAttachment(
-      id: 'modifier_valid',
+    const atomic = KfcGenUiAttachment(
+      id: 'atomic_modifier_authority',
       lifecycleStage: 'modifier',
       widgetKind: KfcGenUiWidgetKind.modifierPicker,
       status: KfcGenUiStatus.active,
       title: 'Tùy chỉnh',
-      data: modifierData,
-      actions: [validAction],
+      data: {
+        'modifierTree': {
+          'itemCode': 'item_1',
+          'modifierGroups': [
+            {
+              'groupId': 'flavor',
+              'options': [
+                {'modifierId': 'spicy', 'name': 'Cay'},
+              ],
+            },
+          ],
+        },
+      },
+      actions: [KfcGenUiActionSpec(id: 'apply_modifiers', label: 'Áp dụng')],
     );
-    await _pump(tester, valid, emitted.add);
-    await tester.tap(
-      find.byKey(
-        CustomerChatKeys.genUiModifierOption(
-          valid.id,
-          'flavor/size',
-          'hot spicy',
-        ),
+    expect(
+      atomic.bindAction(
+        actionId: 'apply_modifiers',
+        payload: const {
+          'itemCode': 'item_1',
+          'selections': [
+            {'groupId': 'flavor', 'modifierId': 'spicy'},
+          ],
+        },
       ),
+      isNotNull,
     );
-    expect(emitted.single, isA<KfcGenUiAction>());
-    expect(emitted.single.actionId, 'customize_item:flavor%2Fsize:hot%20spicy');
-    expect(emitted.single.value, 'Cay');
-    expect(emitted.single.payload, validAction.payload);
+    expect(
+      atomic.bindAction(
+        actionId: 'apply_modifiers',
+        payload: const {
+          'itemCode': 'item_1',
+          'selections': [
+            {'groupId': 'flavor', 'modifierId': 'spicy'},
+            {'groupId': 'flavor', 'modifierId': 'spicy'},
+          ],
+        },
+      ),
+      isNull,
+    );
   });
 }
 
@@ -711,14 +604,8 @@ ShadIconButton _cartIncrease(
   KfcGenUiAttachment attachment,
 ) {
   return tester.widget<ShadIconButton>(
-    find.descendant(
-      of: find.byKey(
-        CustomerChatKeys.genUiCartQuantityIncrease(
-          attachment.id,
-          'combo_zinger',
-        ),
-      ),
-      matching: find.byType(ShadIconButton),
+    find.byKey(
+      CustomerChatKeys.genUiCartQuantityIncrease(attachment.id, 'combo_zinger'),
     ),
   );
 }

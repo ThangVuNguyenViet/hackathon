@@ -1,4 +1,3 @@
-import { fetchCatalogObservation } from './catalog/catalogObservation.js';
 import type { AgentModelIdentity } from './config/agentModelProfile.js';
 import type { MonitorModelIdentity } from './config/monitorModelProfile.js';
 import { loadBundledGeneratedFixtures } from './fixtures/bundledFixtures.js';
@@ -172,49 +171,14 @@ export async function checkWorkerReadiness(
     agent: agentCheck,
     monitor: monitorCheck,
     observability,
+    commerce: {
+      ok: true,
+      configured: true,
+      message: 'Bundled fixture commerce is enabled',
+    },
   };
   if (deep) {
     checks.messengerToken = await checkMessengerToken(env);
-  }
-  let catalogObservation:
-    Awaited<ReturnType<typeof fetchCatalogObservation>> | undefined;
-  if (env.KFC_COMMERCE_MODE === 'gateway' || !env.KFC_COMMERCE_MODE) {
-    checks.commerceGateway = await checkWorkerCommerceGateway(env, deep);
-    const catalogCheck = await runWorkerReadinessCheck(async () => {
-      if (!env.KFC_COMMERCE_ENVIRONMENT || !env.KFC_MENU_API_URL) {
-        return {
-          ok: false,
-          configured: false,
-          message: 'Missing KFC_COMMERCE_ENVIRONMENT or KFC_MENU_API_URL',
-        };
-      }
-      if (!deep) return { ok: true, configured: true };
-      catalogObservation = await fetchCatalogObservation({
-        environment: env.KFC_COMMERCE_ENVIRONMENT,
-        sourceUrl: env.KFC_MENU_API_URL,
-        fallbackTtlSeconds: env.CATALOG_TTL_SECONDS
-          ? Number(env.CATALOG_TTL_SECONDS)
-          : 300,
-      });
-      return { ok: catalogObservation.itemCount > 0, configured: true };
-    });
-    checks.catalog = catalogCheck;
-  }
-  if (deep) {
-    checks.lifecycle =
-      env.KFC_COMMERCE_ENVIRONMENT === 'sandbox'
-        ? await runWorkerReadinessCheck(async () => {
-            await env.DB.prepare(
-              'SELECT instance_id FROM commerce_lifecycle_instances LIMIT 1',
-            ).first();
-            return { ok: true, configured: true };
-          })
-        : {
-            ok: true,
-            configured: false,
-            message:
-              'Lifecycle proof controls are not registered in production',
-          };
   }
   return {
     ok: Object.values(checks).every((check) => check.ok),
@@ -235,23 +199,12 @@ export async function checkWorkerReadiness(
               builtAt: env.RELEASE_BUILT_AT ?? 'unknown',
               dirty: env.RELEASE_DIRTY !== 'false',
             },
-            commerceEnvironment: env.KFC_COMMERCE_ENVIRONMENT ?? null,
-            providerFingerprint:
-              catalogObservation?.providerFingerprint ?? null,
-            catalogObservation: catalogObservation
-              ? {
-                  id: catalogObservation.id,
-                  sha256: catalogObservation.sha256,
-                  observedAt: catalogObservation.observedAt,
-                  expiresAt: catalogObservation.expiresAt ?? null,
-                  itemCount: catalogObservation.itemCount,
-                  modifierTreeCount: catalogObservation.modifierTreeCount,
-                }
-              : null,
+            commerceEnvironment: 'fixture',
+            providerFingerprint: null,
+            catalogObservation: null,
             lifecycle: {
-              provider:
-                env.KFC_COMMERCE_ENVIRONMENT === 'sandbox' ? 'd1' : null,
-              controlsRegistered: env.KFC_COMMERCE_ENVIRONMENT === 'sandbox',
+              provider: null,
+              controlsRegistered: false,
             },
             agentRuntime: {
               runtime: 'simple-model-tool-loop',
@@ -269,54 +222,6 @@ export async function checkWorkerReadiness(
       : {}),
     timestamp: new Date().toISOString(),
   };
-}
-
-export async function checkWorkerCommerceGateway(
-  env: WorkerEnv,
-  deep: boolean,
-) {
-  const baseUrl = env.KFC_COMMERCE_GATEWAY_BASE_URL;
-  const token = env.KFC_COMMERCE_GATEWAY_TOKEN;
-  const environment = env.KFC_COMMERCE_ENVIRONMENT;
-  if (!baseUrl || !token || !environment) {
-    return {
-      ok: false,
-      configured: false,
-      message: 'Missing commerce gateway configuration',
-    };
-  }
-  if (!deep) return { ok: true, configured: true };
-  return runWorkerReadinessCheck(async () => {
-    const response = await fetch(`${baseUrl.replace(/\/$/, '')}/ready`, {
-      headers: { authorization: `Bearer ${token}` },
-    });
-    const payload = (await response.json()) as {
-      ok?: boolean;
-      capabilities?: unknown[];
-    };
-    const capabilities = new Set(
-      (payload.capabilities ?? []).filter(
-        (value): value is string => typeof value === 'string',
-      ),
-    );
-    const missing = ['orders', 'payment', 'handoff_resolution'].filter(
-      (capability) => !capabilities.has(capability),
-    );
-    const missingLocal = ['handoff_resolution'];
-    return {
-      ok:
-        response.ok &&
-        payload.ok === true &&
-        missing.length === 0 &&
-        missingLocal.length === 0,
-      configured: true,
-      message: missing.length
-        ? `Missing gateway capabilities: ${missing.join(', ')}`
-        : missingLocal.length
-          ? `Missing local commerce capabilities: ${missingLocal.join(', ')}`
-          : undefined,
-    };
-  });
 }
 
 export async function runWorkerReadinessCheck(

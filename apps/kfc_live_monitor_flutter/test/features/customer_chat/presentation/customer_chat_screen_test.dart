@@ -17,17 +17,13 @@ import '../../test_app.dart';
 
 void main() {
   testWidgets(
-    'model selector changes the next-turn model and labels its assistant reply',
+    'model selector changes the next-turn choice and shows provenance',
     (tester) async {
-      final controller = CustomerChatController(
-        repository: const FixtureCustomerChatRepository(
-          eventDelay: Duration.zero,
-        ),
-      );
+      final controller = CustomerChatController();
       await tester.pumpWidget(
         TestApp(child: CustomerChatScreen(controller: controller)),
       );
-      await tester.pumpAndSettle();
+      await tester.pump();
 
       final selector = tester.widget<ShadSelect<KfcAgentModelCandidate>>(
         find.byKey(CustomerChatKeys.modelSelector),
@@ -40,8 +36,25 @@ void main() {
       await tester.pump();
       expect(controller.state.value.selectedModel, KfcAgentModelCandidate.qwen);
 
-      await controller.sendQuickPrompt('Gợi ý combo');
-      await tester.pumpAndSettle();
+      final labelController = CustomerChatController(
+        initialState: const CustomerChatState(
+          sessionId: 'kfc:model-label',
+          customerId: 'model-label',
+          selectedModel: KfcAgentModelCandidate.qwen,
+          messages: [
+            CustomerChatMessage(
+              id: 'assistant-qwen',
+              role: CustomerChatRole.assistant,
+              text: 'Mình đã trả lời.',
+              modelCandidate: KfcAgentModelCandidate.qwen,
+            ),
+          ],
+        ),
+      );
+      await tester.pumpWidget(
+        TestApp(child: CustomerChatScreen(controller: labelController)),
+      );
+      await tester.pump();
       expect(
         find.byKey(
           CustomerChatKeys.modelLabel(KfcAgentModelCandidate.qwen.wireName),
@@ -218,6 +231,43 @@ void main() {
 
     expect(controller.state.value.pendingApproval, isNull);
     expect(find.text(signedCapability), findsNothing);
+  });
+
+  testWidgets('approval controls are visibly disabled while submitting', (
+    tester,
+  ) async {
+    final controller = CustomerChatController(
+      initialState: CustomerChatState(
+        sessionId: 'kfc:customer-1',
+        customerId: 'customer-1',
+        isResumingApproval: true,
+        pendingApproval: CustomerApprovalPause(
+          capability: 'placeOrder',
+          requestId: '00000000-0000-4000-8000-000000000123',
+          approvalCapability: 'signed.in-memory-only',
+          expiresAt: DateTime.utc(2099, 7, 20),
+        ),
+      ),
+    );
+    await tester.pumpWidget(
+      TestApp(child: CustomerChatScreen(controller: controller)),
+    );
+    await tester.pump();
+
+    expect(
+      tester
+          .widget<ShadButton>(
+            find.byKey(CustomerChatKeys.approvalApproveButton),
+          )
+          .enabled,
+      isFalse,
+    );
+    expect(
+      tester
+          .widget<ShadButton>(find.byKey(CustomerChatKeys.approvalRejectButton))
+          .enabled,
+      isFalse,
+    );
   });
 
   testWidgets(

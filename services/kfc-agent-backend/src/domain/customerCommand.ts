@@ -18,6 +18,30 @@ const savedAddressRefSchema = z
   })
   .strict();
 
+const nullableAddressFieldSchema = z
+  .string()
+  .trim()
+  .min(1)
+  .max(1_000)
+  .nullable();
+
+export const deliveryAddressUpdateSchema = z
+  .object({
+    recipientName: nullableAddressFieldSchema,
+    phone: nullableAddressFieldSchema,
+    addressLine: nullableAddressFieldSchema,
+    provinceCode: nullableAddressFieldSchema,
+    provinceName: nullableAddressFieldSchema,
+    communeCode: nullableAddressFieldSchema,
+    communeName: nullableAddressFieldSchema,
+    deliveryInstructions: nullableAddressFieldSchema,
+    rawAddress: nullableAddressFieldSchema,
+    legacyDistrictText: nullableAddressFieldSchema,
+  })
+  .strict();
+
+export type DeliveryAddressUpdate = z.infer<typeof deliveryAddressUpdateSchema>;
+
 const cartUpdateCommandSchema = z
   .object({
     kind: z.literal('cart_update'),
@@ -58,12 +82,76 @@ const cartBatchUpdateCommandSchema = z
   })
   .strict();
 
+const cartDraftItemsSchema = z
+  .array(
+    z
+      .object({
+        itemCode: identifierSchema,
+        quantity: z.number().int().min(0).max(99),
+      })
+      .strict(),
+  )
+  .min(1)
+  .max(100)
+  .superRefine((items, context) => {
+    const seen = new Set<string>();
+    items.forEach((item, index) => {
+      if (seen.has(item.itemCode)) {
+        context.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ['items', index, 'itemCode'],
+          message: 'Item codes must be unique',
+        });
+      }
+      seen.add(item.itemCode);
+    });
+  });
+
+const cartDraftCommitCommandSchema = z
+  .object({
+    kind: z.literal('cart_draft_commit'),
+    items: cartDraftItemsSchema,
+    continueToFulfillment: z.boolean(),
+  })
+  .strict();
+
 const modifierSelectionCommandSchema = z
   .object({
     kind: z.literal('modifier_selection'),
     itemCode: identifierSchema,
     groupId: identifierSchema,
     modifierId: identifierSchema,
+  })
+  .strict();
+
+const modifierBatchSelectionCommandSchema = z
+  .object({
+    kind: z.literal('modifier_batch_selection'),
+    itemCode: identifierSchema,
+    selections: z
+      .array(
+        z
+          .object({
+            groupId: identifierSchema,
+            modifierId: identifierSchema,
+          })
+          .strict(),
+      )
+      .min(1)
+      .max(50)
+      .superRefine((selections, context) => {
+        const seen = new Set<string>();
+        selections.forEach((selection, index) => {
+          if (seen.has(selection.groupId)) {
+            context.addIssue({
+              code: z.ZodIssueCode.custom,
+              path: [index, 'groupId'],
+              message: 'Modifier groups must be unique',
+            });
+          }
+          seen.add(selection.groupId);
+        });
+      }),
   })
   .strict();
 
@@ -77,7 +165,9 @@ const acceptFulfillmentCommandSchema = z
 const customerCommandSchema = z.discriminatedUnion('kind', [
   cartUpdateCommandSchema,
   cartBatchUpdateCommandSchema,
+  cartDraftCommitCommandSchema,
   modifierSelectionCommandSchema,
+  modifierBatchSelectionCommandSchema,
   z.object({ kind: z.literal('confirm_order') }).strict(),
   z.object({ kind: z.literal('start_fulfillment') }).strict(),
   acceptFulfillmentCommandSchema,
@@ -92,6 +182,7 @@ const customerCommandSchema = z.discriminatedUnion('kind', [
     .object({
       kind: z.literal('submit_address'),
       value: addressValueSchema.optional(),
+      address: deliveryAddressUpdateSchema.optional(),
     })
     .strict(),
   z
@@ -212,10 +303,39 @@ export function customerCommandFromVerifiedAction(
           }
         : undefined;
     }
+    case 'update_cart':
+    case 'continue_to_fulfillment': {
+      const parsed = z
+        .object({ items: cartDraftItemsSchema })
+        .strict()
+        .safeParse(payload);
+      if (!parsed.success) return undefined;
+      if (
+        action.actionId === 'continue_to_fulfillment' &&
+        !parsed.data.items.some(({ quantity }) => quantity > 0)
+      ) {
+        return undefined;
+      }
+      return {
+        kind: 'cart_draft_commit',
+        items: parsed.data.items,
+        continueToFulfillment: action.actionId === 'continue_to_fulfillment',
+      };
+    }
+    case 'apply_modifiers': {
+      const parsed = z
+        .object({
+          itemCode: identifierSchema,
+          selections: modifierBatchSelectionCommandSchema.shape.selections,
+        })
+        .strict()
+        .safeParse(payload);
+      return parsed.success
+        ? { kind: 'modifier_batch_selection', ...parsed.data }
+        : undefined;
+    }
     case 'confirm_order':
       return commandWithoutPayload(payload, { kind: 'confirm_order' });
-    case 'continue_to_fulfillment':
-      return commandWithoutPayload(payload, { kind: 'start_fulfillment' });
     case 'accept_fulfillment': {
       if (!emptyPayloadSchema.safeParse(payload).success) return undefined;
       const refId = verifiedRefIdSchema.safeParse(action.value);
@@ -245,13 +365,21 @@ export function customerCommandFromVerifiedAction(
     }
     case 'edit_cart':
       return commandWithoutPayload(payload, { kind: 'edit_cart' });
-    case 'submit_address':
+    case 'submit_address': {
+      const structured = deliveryAddressUpdateSchema.safeParse(payload);
+      if (structured.success) {
+        return {
+          kind: 'submit_address',
+          address: structured.data,
+        };
+      }
       return commandWithOptionalValue(
         payload,
         action.value,
         addressValueSchema,
         'submit_address',
       );
+    }
     case 'apply_voucher':
       return commandWithOptionalValue(
         payload,

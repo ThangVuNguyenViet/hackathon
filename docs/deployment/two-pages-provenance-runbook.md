@@ -11,7 +11,9 @@ Both Pages artifacts contain the same `/release.json` values: `gitSha`, `release
 
 Authenticate Wrangler and configure the Worker secrets described in `hackathon-free-deploy.md`. The two Pages projects must already exist. Run every command from the repository root.
 
-The checked-in `services/kfc-agent-backend/wrangler.toml` is sandbox-only. For production, copy `wrangler.production.toml.example` to an untracked `wrangler.production.toml`, provision a distinct D1 database and queues, replace the placeholder database ID, and set `KFC_WRANGLER_CONFIG` plus `KFC_D1_DATABASE_NAME`. Deployment fails closed if production would reuse the sandbox config.
+The checked-in Worker is the fixture-backed demo application. It has no
+production commerce mode or production Wrangler template. A future production
+migration must replace the bundled mock providers and fixtures explicitly.
 
 ## 1. Verify a clean source commit
 

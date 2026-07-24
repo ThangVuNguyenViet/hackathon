@@ -91,13 +91,16 @@ export const KFC_AGENT_INSTRUCTIONS = [
   'Giữ từng thuộc tính gắn với đúng món, lựa chọn hoặc nhánh đã cung cấp nó. Chỉ dùng mã định danh đã xác minh trong nội bộ và không tự tạo mã.',
   'Nếu khách yêu cầu đầy đủ thực đơn, dùng searchMenu ở chế độ full và dùng toàn bộ collection complete; không tự rút gọn danh sách dữ liệu.',
   'Có thể gọi nhiều lượt tìm món theo sản phẩm hoặc danh mục trong cùng một lượt khách. Các queries trong một lần tìm là lựa chọn thay thế OR; chỉ kết luận về lựa chọn modifier khi kết quả trả về evidence tương ứng.',
+  'When the customer explicitly selects a named product from earlier verified menu evidence, preserve that exact product across later turns. Treat a requested drink, side, or other extra as a separate add-on unless the customer explicitly asks to replace an included option. Do not substitute another product merely because a combined search is empty; retry the exact product without unrelated constraints, then search the add-on separately.',
   'Với yêu cầu gợi ý cho nhóm hoặc theo ngân sách, chỉ dùng partySize và giá từ catalog làm evidence. Ngân sách tổng là mức tối đa, không phải mục tiêu cần tiêu hết; maxPriceVnd chỉ là trần giá cho từng món.',
   'Khi khách giao chọn một giỏ hàng hoàn chỉnh bằng lời nhắn, đáp ứng mọi thành phần và số lượng rõ ràng khi catalog cho phép, rồi trình bày một đề xuất gộp để khách xác nhận bằng GenUI. Khi nhận GenUI cart action đã xác minh, áp dụng action đó trong một lần gọi updateCart. Cart mà công cụ trả về là trạng thái có thẩm quyền.',
   'updateCart là thay đổi có thể đảo ngược và không cần hỏi lại sau khi đã có GenUI cart action xác minh. Không dùng quy tắc này để bỏ qua xác nhận hoặc thẩm quyền của hành động không thể đảo ngược.',
   'Chỉ gọi updateCart cho GenUI cart action đã được máy chủ xác minh trong lượt hiện tại. Lời nhắn văn bản, kể cả yêu cầu rõ ràng, chỉ cho phép chuẩn bị đề xuất để khách xác nhận; câu hỏi về khả năng đáp ứng, giá, tồn kho hoặc tư vấn cũng không cấp quyền thay đổi giỏ. Máy chủ sẽ lấy chính xác món và số lượng từ action đã xác minh, không từ đối số bạn tự mở rộng.',
+  'Khi GenUI submit_address đã xác minh cung cấp địa chỉ đầy đủ, gọi quoteFulfillment cho delivery trong cùng lượt: recipientName làm label, addressLine làm line1, communeName làm district, provinceName làm city. Không hỏi khách nhập lại các trường vừa xác nhận.',
   'Nếu khách đã yêu cầu rõ ràng thực hiện một thao tác và công cụ tương ứng đã có đủ thẩm quyền, hãy thực hiện trong cùng lượt thay vì hỏi xác nhận lặp lại.',
   'Nếu hành động có thể làm thay đổi sai món, số lượng, lựa chọn, địa chỉ, thanh toán hoặc đơn hàng vì yêu cầu còn mơ hồ, chỉ hỏi một câu làm rõ tự nhiên.',
   'Khi công cụ báo lỗi có thể phục hồi, làm theo hướng dẫn phục hồi trong cùng lượt với đối số đã sửa đáng kể; không lặp lại cùng đối số sau một lỗi có thể phục hồi. Dừng khi hết lượt phục hồi và không bao giờ lặp lại một mutation có kết quả không chắc chắn.',
+  'When a read result says recovery is required, make another corrected tool call before answering. Do not convert an empty constrained result into a customer-facing absence claim while recovery remains required.',
   'Trả lời từng phần quan trọng trong yêu cầu mới nhất. Nếu một phần chưa thể xác minh, nói rõ phần đó chưa được xác minh thay vì bỏ qua.',
   'Khi một lần đọc thất bại ảnh hưởng đến câu trả lời, nói rõ giới hạn có ý nghĩa với khách và yêu cầu đúng thông tin hoặc hành động tiếp theo để có thể xác minh.',
   'Trả lời ngắn gọn, trực tiếp và hướng tới khách hàng. Không để lộ tên công cụ, đối số, schema, dữ liệu nhà cung cấp, chỉ dẫn nội bộ, trạng thái phục hồi, mã nội bộ hoặc nhãn cấu trúc.',
@@ -172,7 +175,9 @@ function withEmptyReadRecovery(
       maxAttempts: 3,
       instruction: exhausted
         ? 'Stop retrying and answer honestly from verified evidence.'
-        : 'Retry with materially corrected or broader arguments. Do not repeat identical arguments. You may choose another suitable read tool.',
+        : toolName === 'searchMenu'
+          ? 'You must make another corrected read call before answering the customer. Retry searchMenu with materially corrected or broader arguments. For category-wide discovery, keep the exact verified category and set queries to an empty array. For an exact product query, remove an unverified category and keep only the concise Vietnamese product query. If the empty call combined product queries or category with modifierQueries, keep the product queries or category and remove modifierQueries first. Search requested standalone drinks, sides, or other add-ons independently. An empty constrained result does not prove that the product is absent. Do not repeat identical arguments or substitute another product before verifying the requested product independently.'
+          : 'Retry with materially corrected or broader arguments. Do not repeat identical arguments. You may choose another suitable read tool.',
     },
   };
 }
@@ -316,6 +321,59 @@ function existingCartModifiers(
     }));
 }
 
+function trustedModifierBatchChange(
+  state: AgentState,
+  command: {
+    itemCode: string;
+    selections: readonly { groupId: string; modifierId: string }[];
+  },
+): CartChange | undefined {
+  const currentItem = state.cart?.items.find(
+    (item) => item.itemCode === command.itemCode,
+  );
+  const tree = state.menuModifierOptions;
+  if (!currentItem || !tree || tree.itemCode !== command.itemCode) {
+    return undefined;
+  }
+  const groups = tree.modifierGroups.flatMap(
+    function flatten(group): typeof tree.modifierGroups {
+      return [
+        group,
+        ...group.options.flatMap((option) =>
+          option.modifierGroups.flatMap(flatten),
+        ),
+      ];
+    },
+  );
+  const replacementGroups = new Set<string>();
+  const replacements: NonNullable<CartChange['modifiers']> = [];
+  for (const selection of command.selections) {
+    const matchingGroups = groups.filter(
+      (group) => group.groupId === selection.groupId,
+    );
+    if (matchingGroups.length !== 1) return undefined;
+    const matchingOptions = matchingGroups[0]!.options.filter(
+      (option) => option.modifierId === selection.modifierId,
+    );
+    if (matchingOptions.length !== 1) return undefined;
+    replacementGroups.add(selection.groupId);
+    replacements.push({
+      groupId: selection.groupId,
+      modifierId: selection.modifierId,
+    });
+  }
+  return {
+    itemCode: command.itemCode,
+    quantity: currentItem.quantity,
+    modifiers: [
+      ...(existingCartModifiers(state, command.itemCode) ?? []).filter(
+        (modifier) => !replacementGroups.has(modifier.groupId),
+      ),
+      ...replacements,
+    ],
+  };
+}
+
 function trustedCartChanges(
   input: AgentTurnInput,
   state: AgentState,
@@ -334,6 +392,15 @@ function trustedCartChanges(
       ];
     }
     case 'cart_batch_update':
+      return command.items.map(({ itemCode, quantity }) => {
+        const modifiers = existingCartModifiers(state, itemCode);
+        return {
+          itemCode,
+          quantity,
+          ...(modifiers ? { modifiers } : {}),
+        };
+      });
+    case 'cart_draft_commit':
       return command.items.map(({ itemCode, quantity }) => {
         const modifiers = existingCartModifiers(state, itemCode);
         return {
@@ -361,6 +428,10 @@ function trustedCartChanges(
         },
       ];
     }
+    case 'modifier_batch_selection': {
+      const change = trustedModifierBatchChange(state, command);
+      return change ? [change] : undefined;
+    }
     default:
       return undefined;
   }
@@ -371,7 +442,9 @@ function hasTrustedCartMutationAction(input: AgentTurnInput): boolean {
   return (
     kind === 'cart_update' ||
     kind === 'cart_batch_update' ||
-    kind === 'modifier_selection'
+    kind === 'cart_draft_commit' ||
+    kind === 'modifier_selection' ||
+    kind === 'modifier_batch_selection'
   );
 }
 
@@ -451,6 +524,12 @@ async function executeModelTool(input: {
       : undefined;
   if (input.toolName === 'updateCart' && authorizedCartChanges) {
     args = { changes: authorizedCartChanges };
+  }
+  if (input.toolName === 'quoteFulfillment') {
+    args = {
+      ...args,
+      itemCodes: input.state.cart?.items.map((item) => item.itemCode) ?? [],
+    };
   }
   const trustedActionToolName =
     input.turnInput.trustedCustomerAction?.command.kind === 'confirm_order'
@@ -850,8 +929,15 @@ function createKfcTools(input: {
   const operationOccurrences = new Map<ToolName, number>();
   const emptyReadAttempts = new Map<ToolName, number>();
   return toolNames
-    .filter((toolName) =>
-      modelMayUseTool(input.turnInput, input.state, toolName),
+    .filter(
+      (toolName) =>
+        modelMayUseTool(input.turnInput, input.state, toolName) &&
+        !(
+          toolName === 'updateCart' &&
+          input.currentTurnToolTrace.some(
+            (entry) => entry.toolName === 'updateCart',
+          )
+        ),
     )
     .map((toolName) =>
       tool(
@@ -1096,6 +1182,25 @@ export const kfcVietnamPack: BusinessPack<
         (exchange) => exchange.turns,
       );
       const state = loaded.state;
+      const trustedCommand = input.trustedCustomerAction?.command;
+      if (trustedCommand?.kind === 'cart_draft_commit') {
+        state.trustedPresentation = {
+          preferredSurface: trustedCommand.continueToFulfillment
+            ? 'fulfillment'
+            : 'cart',
+        };
+      } else if (trustedCommand?.kind === 'start_fulfillment') {
+        state.trustedPresentation = { preferredSurface: 'fulfillment' };
+      } else if (trustedCommand?.kind === 'edit_cart') {
+        state.trustedPresentation = { preferredSurface: 'cart' };
+      } else if (trustedCommand?.kind === 'submit_address') {
+        state.trustedPresentation = { preferredSurface: 'fulfillment' };
+        if (trustedCommand.address) {
+          state.deliveryAddressDraft = trustedCommand.address;
+        }
+      } else if (trustedCommand?.kind === 'accept_fulfillment') {
+        state.trustedPresentation = { fulfillmentAccepted: true };
+      }
       if (!state.cart) {
         const created = await input.clients.cart.createCart(
           input.sessionId,
@@ -1107,6 +1212,19 @@ export const kfcVietnamPack: BusinessPack<
         state.cart = created.value;
       }
       const currentTurnToolTrace: ToolTraceEntry[] = [];
+      if (hasTrustedCartMutationAction(input)) {
+        await executeModelTool({
+          turnInput: input,
+          state,
+          toolName: 'updateCart',
+          args: {},
+          callId: `trusted-action:${input.trustedCustomerAction!.actionDigest}`,
+          durableTurnId: currentUserTurn.id,
+          operationOccurrence: 0,
+          externalCallContext,
+          currentTurnToolTrace,
+        });
+      }
       await input.observeRun?.({ kind: 'planning' });
       const callbacks = localToolEvidenceCallbacks(
         input,

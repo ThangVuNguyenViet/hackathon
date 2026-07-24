@@ -58,6 +58,7 @@ class PaymentMethodPicker extends StatelessWidget {
                   width: double.infinity,
                   height: 52,
                   mainAxisAlignment: MainAxisAlignment.start,
+                  enabled: action != null,
                   onPressed: action == null ? null : () => onAction(action),
                   leading: Icon(_iconFor(method['category']), size: 20),
                   trailing: action == null

@@ -122,12 +122,14 @@ class GenUiActionButton extends StatelessWidget {
     required this.action,
     required this.onPressed,
     this.height = 40,
+    this.enabled = true,
   });
 
   final KfcGenUiAttachment attachment;
   final KfcGenUiActionSpec action;
   final VoidCallback onPressed;
   final double height;
+  final bool enabled;
 
   @override
   Widget build(BuildContext context) {
@@ -135,18 +137,22 @@ class GenUiActionButton extends StatelessWidget {
         ? KfcGenUiActionIntent.destructive
         : action.intent;
     final isPrimary = intent == KfcGenUiActionIntent.primary;
-    final background = switch (intent) {
+    final enabledBackground = switch (intent) {
       KfcGenUiActionIntent.primary => KfcOpsTokens.primary,
       KfcGenUiActionIntent.destructive => KfcOpsTokens.criticalContainer,
       KfcGenUiActionIntent.recovery => KfcOpsTokens.infoContainer,
       KfcGenUiActionIntent.secondary => KfcOpsTokens.surfaceContainerLowest,
     };
-    final foreground = switch (intent) {
+    final enabledForeground = switch (intent) {
       KfcGenUiActionIntent.primary => KfcOpsTokens.onPrimary,
       KfcGenUiActionIntent.destructive => KfcOpsTokens.critical,
       KfcGenUiActionIntent.recovery => KfcOpsTokens.info,
       KfcGenUiActionIntent.secondary => KfcOpsTokens.onSurface,
     };
+    final background = enabled
+        ? enabledBackground
+        : KfcOpsTokens.surfaceContainerLow;
+    final foreground = enabled ? enabledForeground : KfcOpsTokens.secondary;
     return ShadButton.raw(
       key: CustomerChatKeys.genUiAction(attachment.id, action.id),
       variant: isPrimary
@@ -164,7 +170,7 @@ class GenUiActionButton extends StatelessWidget {
           : KfcOpsTokens.surfaceContainerLow,
       foregroundColor: foreground,
       hoverForegroundColor: foreground,
-      onPressed: onPressed,
+      onPressed: enabled ? onPressed : null,
       child: Text(
         action.label,
         style: TextStyle(

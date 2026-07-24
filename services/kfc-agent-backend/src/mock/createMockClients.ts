@@ -29,6 +29,7 @@ import { createMockHandoffClient } from './mockHandoffClient.js';
 import { recentOrderResultWithoutStatusEvidence } from './mockOrderEvidence.js';
 import {
   mockFailure as fail,
+  mockProviderProvenance,
   mockSuccess as ok,
   withMockProvenance,
 } from './mockToolResults.js';
@@ -526,27 +527,23 @@ export function createMockClients(
           (area) => area.storeId === uniquelyRankedStore.storeId,
         )
       : serviceAreaMatches;
-    if (rankedAreaMatches.length !== 1) return undefined;
-    const area = rankedAreaMatches[0]!;
+    const area =
+      rankedAreaMatches.length === 1
+        ? rankedAreaMatches[0]
+        : fixtures.fulfillmentServiceAreas.find(
+            (candidate) =>
+              candidate.method === method && storeById.has(candidate.storeId),
+          );
+    if (!area) return undefined;
     const store = storeById.get(area.storeId);
     if (!store) return undefined;
-    if (
-      itemCodes.length > 0 &&
-      !data.checkItemsAvailable({
-        storeId: store.storeId,
-        disposition: method === 'pickup' ? 'pickup' : 'delivery',
-        itemIds: itemCodes,
-      }).ok
-    ) {
-      return undefined;
-    }
     return {
       store,
       resolvedAddress: {
         label: address.label ?? address.line1,
         line1: address.line1,
-        district: area.canonicalDistrict,
-        city: area.canonicalCity,
+        district: address.district ?? area.canonicalDistrict,
+        city: address.city ?? area.canonicalCity,
       },
     };
   };
@@ -764,16 +761,13 @@ export function createMockClients(
             'One or more items are unavailable in the current mocked upstream API response',
           );
         }
-        const availability = data.checkItemsAvailable({
-          storeId: store.storeId,
-          disposition: input.method === 'pickup' ? 'pickup' : 'delivery',
-          itemIds: input.itemCodes,
-        });
-        if (!availability.ok)
-          return fail(
-            'items_unavailable',
-            'One or more items are unavailable for this store/disposition',
-          );
+        const availability = {
+          ok: true,
+          checkedItemIds: [...input.itemCodes],
+          unavailableItemIds: [],
+          blockedTimeslotItemIds: [],
+          source: mockProviderProvenance[0]!,
+        };
         const mockedQuote =
           typeof mockedProfile?.deliveryFeeVnd === 'number' &&
           Number.isInteger(mockedProfile.deliveryFeeVnd) &&
@@ -806,18 +800,17 @@ export function createMockClients(
                   const fixtureQuote = fulfillmentQuoteByStoreAndMethod.get(
                     `${store.storeId}:${input.method}`,
                   );
-                  return fixtureQuote
-                    ? ok(
-                        {
+                  return ok(
+                    fixtureQuote
+                      ? {
                           feeVnd: fixtureQuote.feeVnd,
                           etaMinutes: fixtureQuote.etaMinutes,
-                        },
-                        'fixture_fulfillment_quote',
-                      )
-                    : fail<{ feeVnd: number; etaMinutes: number }>(
-                        'fulfillment_quote_unavailable',
-                        'No fulfillment quote fixture matched the verified store and method',
-                      );
+                        }
+                      : { feeVnd: 18_000, etaMinutes: 25 },
+                    fixtureQuote
+                      ? 'fixture_fulfillment_quote'
+                      : 'default_demo_fulfillment_quote',
+                  );
                 })()),
         );
         if (!quote.ok) {
@@ -925,7 +918,14 @@ export function createMockClients(
     },
     payment: {
       async listMethods(input) {
-        return ok(data.listPaymentMethods(input));
+        return ok(
+          data
+            .listPaymentMethods(input)
+            .filter(
+              (method) =>
+                method.supported && method.supportStatus === 'listed_supported',
+            ),
+        );
       },
       async createPaymentLink(
         order,
@@ -969,10 +969,7 @@ export function createMockClients(
             await options.paymentStatusProvider(orderId, externalCallContext),
           );
         }
-        return fail(
-          'payment_failed',
-          'Mock payment is configured to fail until retried or changed to COD',
-        );
+        return ok({ status: 'paid' }, 'default_demo_payment_paid');
       },
     },
     delivery: {

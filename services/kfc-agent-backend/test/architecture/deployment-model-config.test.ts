@@ -40,8 +40,6 @@ function workerEnvFile(lines: readonly string[]) {
       'LANGSMITH_PROJECT=test-project',
       'LANGSMITH_ENDPOINT=https://example.test',
       'META_APP_SECRET=test-meta',
-      'KFC_COMMERCE_MODE=fixture',
-      'KFC_COMMERCE_ENVIRONMENT=sandbox',
       ...lines,
     ].join('\n'),
   );
@@ -90,6 +88,23 @@ describe('deployment model candidate configuration', () => {
     );
     expect(workerSource).not.toContain('--var "KFC_AGENT_PROVIDER:');
     expect(workerSource).not.toContain('--var "KFC_AGENT_MODEL:');
+  });
+
+  it('has no deploy-time commerce, environment, or POS mode controls', () => {
+    const workerSource = readFileSync(workerScript, 'utf8');
+
+    for (const removedControl of [
+      'KFC_COMMERCE_MODE',
+      'KFC_COMMERCE_ENVIRONMENT',
+      'KFC_MENU_API_URL',
+      'KFC_COMMERCE_GATEWAY_BASE_URL',
+      'KFC_COMMERCE_GATEWAY_TOKEN',
+      'KFC_POS_MODE',
+      'KFC_POS_BASE_URL',
+      'KFC_POS_TOKEN',
+    ]) {
+      expect(workerSource).not.toContain(removedControl);
+    }
   });
 
   it('accepts OpenCode candidates during non-deploying preflight without logging keys', () => {

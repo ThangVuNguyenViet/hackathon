@@ -222,6 +222,7 @@ class _SmartMenuPickerState extends State<SmartMenuPicker> {
                     padding: const EdgeInsets.symmetric(horizontal: 12),
                     backgroundColor: KfcOpsTokens.primary,
                     foregroundColor: KfcOpsTokens.onPrimary,
+                    enabled: addItemsAction != null,
                     onPressed: addItemsAction == null
                         ? null
                         : () => widget.onAction(addItemsAction),
@@ -445,8 +446,6 @@ bool _isSelectableMenuItem(
       ? item['available'] == true
       : item['available'] != false;
   return availabilityIsValid &&
-      item['isCustomize'] != true &&
-      item['hasModifiers'] != true &&
       (modifierGroups == null ||
           (modifierGroups is List && modifierGroups.isEmpty));
 }

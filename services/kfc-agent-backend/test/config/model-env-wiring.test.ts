@@ -31,7 +31,6 @@ describe('model candidate environment wiring', () => {
         KFC_AGENT_CANDIDATE: 'deepseek-v4-flash',
         OPENCODE_API_KEY: 'test-opencode',
         OPENAI_BASE_URL: 'https://untrusted.example/v1',
-        KFC_COMMERCE_MODE: 'fixture',
       }),
     );
 
@@ -65,7 +64,6 @@ describe('model candidate environment wiring', () => {
         OPENAI_API_KEY: 'test-openai',
         OPENCODE_API_KEY: 'test-opencode',
         GOOGLE_API_KEY: 'test-google',
-        KFC_COMMERCE_MODE: 'fixture',
       }),
     );
 
@@ -87,7 +85,6 @@ describe('model candidate environment wiring', () => {
         KFC_AGENT_CANDIDATE: 'qwen3.7-max',
         KFC_MONITOR_CANDIDATE: 'minimax-m3',
         OPENCODE_API_KEY: 'test-opencode',
-        KFC_COMMERCE_MODE: 'fixture',
       }),
     );
 

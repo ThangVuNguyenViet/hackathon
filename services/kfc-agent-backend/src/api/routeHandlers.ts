@@ -252,7 +252,14 @@ export function createRouteHandlers(options: RouteOptions = {}): RouteHandlers {
         response.status >= 300 ||
         !isRecord(response.body)
       ) {
-        throw new Error('KFC run execution failed');
+        const errorCode = isRecord(response.body)
+          ? response.body.errorCode
+          : undefined;
+        throw new Error(
+          `KFC run execution failed: ${response.status} ${
+            typeof errorCode === 'string' ? errorCode : 'unknown_error'
+          }`,
+        );
       }
       if (typeof response.body.responseText !== 'string') {
         throw new Error('KFC run response is missing customer text');

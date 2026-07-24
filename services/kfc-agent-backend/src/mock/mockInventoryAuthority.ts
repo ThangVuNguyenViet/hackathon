@@ -2,7 +2,7 @@ import type { ToolResult } from '../domain/types.js';
 import type { GeneratedFixtures } from '../fixtures/schema.js';
 import { digestCommerceAction } from '../ordering/commerceDigest.js';
 import { OrderingDataService } from '../ordering/orderingDataService.js';
-import type { Disposition, SourceProvenance } from '../ordering/types.js';
+import type { Disposition } from '../ordering/types.js';
 import { mockProviderProvenance } from './mockToolResults.js';
 import type { MockedUpstreamApiProfile } from './mockedUpstreamProfile.js';
 
@@ -70,41 +70,13 @@ export function checkMockInventory(
   const unavailableItemCodes = new Set(
     input.profile?.unavailableItemCodes ?? [],
   );
-  const dispositions: Disposition[] = input.disposition
-    ? [input.disposition]
-    : ['pickup', 'delivery'];
-  const unavailable = new Set(unavailableItemCodes);
-  const provenance: SourceProvenance[] = [...mockProviderProvenance];
-  for (const disposition of dispositions) {
-    const availability = input.data.checkItemsAvailable({
-      storeId: input.storeId,
-      disposition,
-      itemIds: input.itemCodes,
-    });
-    for (const itemCode of [
-      ...availability.unavailableItemIds,
-      ...availability.blockedTimeslotItemIds,
-    ]) {
-      unavailable.add(itemCode);
-    }
-    if (
-      !provenance.some(
-        (source) =>
-          source.fixtureMode === availability.source.fixtureMode &&
-          source.sourceFile === availability.source.sourceFile &&
-          source.sourceApi === availability.source.sourceApi,
-      )
-    ) {
-      provenance.push(availability.source);
-    }
-  }
   return {
     ok: true,
     value: Object.fromEntries(
-      input.itemCodes.map((code) => [code, !unavailable.has(code)]),
+      input.itemCodes.map((code) => [code, !unavailableItemCodes.has(code)]),
     ),
     message: 'ok',
-    provenance,
+    provenance: [...mockProviderProvenance],
   };
 }
 

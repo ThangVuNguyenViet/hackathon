@@ -13,9 +13,6 @@ import {
   resolveMonitorModelProfile,
 } from '../config/monitorModelProfile.js';
 import { ModelMonitorJudge } from '../llm/monitorJudge.js';
-import { createKfcCommerceGatewayClients } from '../clients/kfcCommerceGateway.js';
-import { createHttpPosClient } from '../commerce/httpPosClient.js';
-import { createOmsWithPos } from '../commerce/omsWithPos.js';
 import { LangSmithAgentTracer } from '../observability/langsmithAgentTracer.js';
 import { LangSmithShowcaseScenarioSource } from '../showcase/showcase.js';
 
@@ -110,33 +107,6 @@ export function buildServerOptionsFromEnv(env: AppEnv): BuildServerOptions {
       })
     : undefined;
   const langsmithApiKey = optionalValue(env.LANGSMITH_API_KEY);
-  const commerceBaseUrl = optionalValue(env.KFC_COMMERCE_GATEWAY_BASE_URL);
-  const commerceToken = optionalValue(env.KFC_COMMERCE_GATEWAY_TOKEN);
-  const menuApiUrl = optionalValue(env.KFC_MENU_API_URL);
-  const posBaseUrl = optionalValue(env.KFC_POS_BASE_URL);
-  const posToken = optionalValue(env.KFC_POS_TOKEN);
-  if (
-    env.KFC_COMMERCE_MODE === 'gateway' &&
-    (!commerceBaseUrl ||
-      !commerceToken ||
-      !menuApiUrl ||
-      !env.KFC_COMMERCE_ENVIRONMENT)
-  ) {
-    throw new Error(
-      'KFC_COMMERCE_GATEWAY_BASE_URL, KFC_COMMERCE_GATEWAY_TOKEN, KFC_MENU_API_URL, and KFC_COMMERCE_ENVIRONMENT are required in gateway mode',
-    );
-  }
-  const commerceGateway =
-    env.KFC_COMMERCE_MODE === 'gateway' && commerceBaseUrl && commerceToken
-      ? createKfcCommerceGatewayClients({
-          baseUrl: commerceBaseUrl,
-          token: commerceToken,
-        })
-      : undefined;
-  const posClient =
-    env.KFC_POS_MODE === 'http' && posBaseUrl && posToken
-      ? createHttpPosClient({ baseUrl: posBaseUrl, token: posToken })
-      : undefined;
   return {
     demoAdminToken: optionalValue(env.KFC_DEMO_ADMIN_TOKEN),
     messengerVerifyToken: optionalValue(env.MESSENGER_VERIFY_TOKEN),
@@ -172,24 +142,6 @@ export function buildServerOptionsFromEnv(env: AppEnv): BuildServerOptions {
           agent: agentRuntimeIdentity,
         }
       : undefined,
-    kfcCommerceGateway: commerceGateway
-      ? {
-          ...commerceGateway,
-          oms: posClient
-            ? createOmsWithPos({ oms: commerceGateway.oms, pos: posClient })
-            : commerceGateway.oms,
-        }
-      : undefined,
-    catalog:
-      env.KFC_COMMERCE_MODE === 'gateway' &&
-      menuApiUrl &&
-      env.KFC_COMMERCE_ENVIRONMENT
-        ? {
-            sourceUrl: menuApiUrl,
-            environment: env.KFC_COMMERCE_ENVIRONMENT,
-            fallbackTtlSeconds: env.CATALOG_TTL_SECONDS ?? 300,
-          }
-        : undefined,
     readiness: {
       agentConfigured,
       monitorConfigured: monitorJudge !== undefined,
@@ -200,7 +152,6 @@ export function buildServerOptionsFromEnv(env: AppEnv): BuildServerOptions {
         dirty: env.RELEASE_DIRTY !== 'false',
       },
       runtime: {
-        commerceEnvironment: env.KFC_COMMERCE_ENVIRONMENT,
         agent: agentRuntimeIdentity,
         monitor: monitorRuntimeIdentity,
       },
@@ -211,16 +162,7 @@ export function buildServerOptionsFromEnv(env: AppEnv): BuildServerOptions {
         samplingRate: env.LANGSMITH_TRACING_SAMPLING_RATE,
       },
       commerce: {
-        mode: env.KFC_COMMERCE_MODE,
-        baseUrl: commerceBaseUrl,
-        token: commerceToken,
-        requiredCapabilities: ['orders', 'payment', 'handoff_resolution'],
-        implementedCapabilities: ['orders', 'payment'],
-      },
-      pos: {
-        mode: env.KFC_POS_MODE,
-        baseUrl: posBaseUrl,
-        token: posToken,
+        mode: 'fixture',
       },
     },
   };

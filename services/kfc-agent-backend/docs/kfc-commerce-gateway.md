@@ -1,17 +1,11 @@
-# KFC Commerce Gateway
+# Mock Commerce API Contract
 
-The first-party KFC chat supports two commerce modes:
+The demo chatbot has one architecture: bundled fixtures behind mock commerce
+clients. It has no production or gateway runtime mode.
 
-- `fixture`: local development and visual proof. `/ready` reports `production: false`.
-- `gateway`: authenticated OMS and payment requests. `/ready` fails unless the base URL and token are configured.
-
-```dotenv
-KFC_COMMERCE_MODE=gateway
-KFC_COMMERCE_GATEWAY_BASE_URL=https://commerce-gateway.internal
-KFC_COMMERCE_GATEWAY_TOKEN=...
-```
-
-The gateway is an internal adapter contract, not a claim about KFC Vietnam's private API shape. The configured service must expose JSON `ToolResult<T>` responses on:
+The standalone sandbox proof gateway exercises the future adapter boundary. It
+is not a claim about KFC Vietnam's private API shape and is not selectable by
+the deployed chatbot. Its JSON `ToolResult<T>` contract covers:
 
 - `POST /v1/orders/preview`
 - `POST /v1/orders`
@@ -21,12 +15,5 @@ The gateway is an internal adapter contract, not a claim about KFC Vietnam's pri
 - `POST /v1/orders/:orderId/payment-links`
 - `GET /v1/orders/:orderId/payment-status`
 
-Run staging acceptance only against a non-production environment:
-
-```bash
-KFC_STAGING_ACCEPTANCE=1 KFC_STAGING_URL=https://staging.example npx tsx scripts/verify-kfc-staging.ts
-```
-
-The verifier creates a conversation and checks stable identity reuse, message idempotency, dashboard visibility, disabled KFC deeplinks, and disabled KFC human join.
-
-OMS order placement can additionally be coordinated with a POS adapter. See [Mock POS Capability Proof](./mock-pos-proof.md).
+OMS order placement in the proof gateway is coordinated with its mock POS API.
+See [Mock POS Capability Proof](./mock-pos-proof.md).

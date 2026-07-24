@@ -23,12 +23,13 @@ interfaces.
 npm install
 npm run fixtures:build
 npm run build
-KFC_COMMERCE_MODE=fixture npm run dev
+npm run dev
 ```
 
-The backend fixture provider supplies menu, cart, store, fulfillment, order,
-payment, membership, content, and handoff results. In fixture mode, the only
-external AI request is the configured model provider.
+The backend always uses its bundled fixture-backed mock commerce provider.
+The mock POS remains a separate proof API. There is no runtime production,
+gateway, commerce-environment, or POS-mode switch; a future production
+migration must replace the mock providers and fixtures explicitly.
 
 Select one immutable candidate profile with:
 

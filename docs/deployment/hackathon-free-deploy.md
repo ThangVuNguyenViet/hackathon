@@ -32,7 +32,10 @@ D1 stores runtime conversation state only:
 - dashboard events for the live monitor and proof review
 - delivery status evidence for outbound channel replies
 
-Generated fixtures are not the production database. They are bundled read-only mock responses standing in for KFC APIs that are not available in this hackathon environment. In a production integration, menu, store availability, promotions, membership, payment, and OMS facts should come from KFC-owned APIs through adapter clients, while D1 or a later production ledger remains the conversation and webhook reliability store.
+Generated fixtures are bundled read-only mock responses standing in for KFC
+APIs that are not available in this hackathon environment. This application
+has no runtime production switch. A production migration must remove and
+replace the mock providers and fixtures explicitly.
 
 ## Required Cloudflare Setup
 
@@ -212,8 +215,8 @@ curl -s 'http://localhost:8787/webhooks/messenger?hub.mode=subscribe&hub.verify_
 
 ## Backend Deployment Boundary
 
-The KFC backend production path is Cloudflare Workers with D1. There is no
-secondary Node/Postgres deployment path.
+The KFC demo deployment path is Cloudflare Workers with D1. There is no
+secondary Node/Postgres deployment path and no production commerce mode.
 
 ## Cost Controls
 

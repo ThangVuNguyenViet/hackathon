@@ -63,7 +63,7 @@ describe('live scenario CLI arguments', () => {
       configuredSecretValues({
         OPENCODE_API_KEY: first,
         META_PAGE_ACCESS_TOKEN: second,
-        KFC_COMMERCE_GATEWAY_BASE_URL: 'https://example.invalid',
+        LANGSMITH_PROJECT: 'ordinary-project-name',
         EMPTY_SECRET: '  ',
       }),
     ).toEqual([second, first].sort());

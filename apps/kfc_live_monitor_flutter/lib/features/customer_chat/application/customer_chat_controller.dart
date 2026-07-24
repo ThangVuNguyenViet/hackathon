@@ -34,6 +34,7 @@ class CustomerChatController extends BeaconController {
   Future<void>? _activeRunCompletion;
   Timer? _handoffTimer;
   final Set<String> _seenRemoteTurns = {};
+  final Set<String> _pendingOneShotAttachmentIds = {};
   String? _lastRemoteTurnId;
   var _disposed = false;
   var _messageSequence = 0;
@@ -68,9 +69,10 @@ class CustomerChatController extends BeaconController {
     return _runSubmission(_CustomerChatSubmission.text(text));
   }
 
-  Future<void> submitAction(KfcGenUiAction action) {
+  Future<void> submitAction(KfcGenUiAction action) async {
     final attachment = state.value.actionAttachment(action.attachmentId);
     if (!_canSubmit ||
+        _pendingOneShotAttachmentIds.contains(action.attachmentId) ||
         attachment?.authorityMatches(
               sessionId: state.value.sessionId,
               customerId: state.value.customerId,
@@ -79,7 +81,60 @@ class CustomerChatController extends BeaconController {
         attachment?.authorizesAction(action) != true) {
       return Future.value();
     }
-    return _runSubmission(_CustomerChatSubmission.action(action));
+    final isOneShot = attachment!.authority?.actionLifecycle == 'one_shot';
+    if (isOneShot) _pendingOneShotAttachmentIds.add(attachment.id);
+    try {
+      await _runSubmission(_CustomerChatSubmission.action(action));
+      if (isOneShot &&
+          state.value.activeDraft?.terminal == CustomerRunTerminal.completed) {
+        _markAttachmentAnswered(attachment.id, action);
+      }
+    } finally {
+      if (isOneShot) _pendingOneShotAttachmentIds.remove(attachment.id);
+    }
+  }
+
+  void _markAttachmentAnswered(
+    String attachmentId,
+    KfcGenUiAction completedAction,
+  ) {
+    state.value = state.value.copyWith(
+      messages: [
+        for (final message in state.value.messages)
+          if (message.genUi case final attachment?
+              when attachment.id == attachmentId)
+            CustomerChatMessage(
+              id: message.id,
+              role: message.role,
+              text: message.text,
+              genUi: KfcGenUiAttachment(
+                id: attachment.id,
+                lifecycleStage: attachment.lifecycleStage,
+                widgetKind: attachment.widgetKind,
+                status: KfcGenUiStatus.answered,
+                title: attachment.title,
+                summary: attachment.summary,
+                data: {
+                  ...attachment.data,
+                  '_completedAction': {
+                    'actionId': completedAction.actionId,
+                    'payload': completedAction.payload,
+                  },
+                },
+                actions: attachment.actions,
+                selectedAction: completedAction.actionId,
+                expiresAt: attachment.expiresAt,
+                authority: attachment.authority,
+                hasValidAuthorityEncoding: attachment.hasValidAuthorityEncoding,
+                hasValidActionEncoding: attachment.hasValidActionEncoding,
+                interactionFinality: attachment.interactionFinality,
+              ),
+              modelCandidate: message.modelCandidate,
+            )
+          else
+            message,
+      ],
+    );
   }
 
   Future<void> stopActiveRun() {
@@ -435,21 +490,25 @@ class CustomerChatController extends BeaconController {
         : '';
     return switch (action.actionId) {
       'add_item' => 'Thêm $quantityPrefix${action.value ?? 'món này'} vào giỏ',
-      'add_items' => 'Xác nhận các món đã chọn',
-      'customize_item' => 'Tùy chỉnh ${action.value ?? 'combo'}',
-      'continue_to_fulfillment' => 'Tiếp tục giao hàng',
+      'add_items' => _addItemsCustomerText(action),
+      'apply_modifiers' => _modifierDraftCustomerText(action),
+      'update_cart' => _cartDraftCustomerText(action),
+      'continue_to_fulfillment' => _cartDraftCustomerText(
+        action,
+        continueToFulfillment: true,
+      ),
       'edit_cart' => 'Sửa giỏ hàng',
       'remove_item' => 'Xóa ${action.value ?? 'món này'}',
       'update_item_quantity' =>
         'Đổi số lượng ${action.value ?? 'món này'} thành ${quantity ?? 1}',
       'accept_fulfillment' => 'Giao đến địa chỉ này',
-      'submit_address' => 'Tôi muốn đổi địa chỉ',
+      'submit_address' => _addressCustomerText(action),
       'confirm_order' => 'Tôi đặt đơn này',
       'apply_voucher' => 'Áp mã giảm giá',
       'open_payment' =>
-        action.value == null
+        _paymentMethodDisplayName(action.value) == null
             ? 'Tiếp tục thanh toán'
-            : 'Tiếp tục thanh toán bằng ${action.value}',
+            : 'Tiếp tục thanh toán bằng ${_paymentMethodDisplayName(action.value)}',
       'change_payment_method' => 'Đổi phương thức thanh toán',
       'select_payment_method' =>
         'Chọn ${action.value ?? 'phương thức thanh toán'}',
@@ -458,6 +517,189 @@ class CustomerChatController extends BeaconController {
       'send_issue_summary' => 'Gửi tóm tắt lỗi cho nhân viên',
       _ => action.value ?? action.actionId,
     };
+  }
+
+  String _addItemsCustomerText(KfcGenUiAction action) {
+    const fallback = 'Xác nhận các món đã chọn';
+    final catalogItems = state.value
+        .actionAttachment(action.attachmentId)
+        ?.data['items'];
+    final selectedItems = action.payload['items'];
+    if (catalogItems is! List ||
+        selectedItems is! List ||
+        selectedItems.isEmpty) {
+      return fallback;
+    }
+
+    final namesByCode = <String, String>{};
+    final duplicateCodes = <String>{};
+    for (final rawItem in catalogItems) {
+      if (rawItem is! Map) continue;
+      final code = rawItem['code'];
+      final name = rawItem['name'];
+      if (code is! String ||
+          code.isEmpty ||
+          name is! String ||
+          name.trim().isEmpty) {
+        continue;
+      }
+      if (namesByCode.containsKey(code)) duplicateCodes.add(code);
+      namesByCode[code] = name.trim();
+    }
+    for (final code in duplicateCodes) {
+      namesByCode.remove(code);
+    }
+
+    final selections = <String>[];
+    for (final rawSelection in selectedItems) {
+      if (rawSelection is! Map) return fallback;
+      final itemCode = rawSelection['itemCode'];
+      final rawQuantity = rawSelection['quantity'];
+      final quantity = rawQuantity is num && rawQuantity.isFinite
+          ? rawQuantity.toInt()
+          : null;
+      final name = itemCode is String ? namesByCode[itemCode] : null;
+      if (name == null ||
+          quantity == null ||
+          quantity < 1 ||
+          quantity > 99 ||
+          rawQuantity != quantity) {
+        return fallback;
+      }
+      selections.add('$quantity × $name');
+    }
+    return selections.isEmpty
+        ? fallback
+        : 'Thêm vào giỏ: ${selections.join(', ')}';
+  }
+
+  String _cartDraftCustomerText(
+    KfcGenUiAction action, {
+    bool continueToFulfillment = false,
+  }) {
+    final cart = state.value
+        .actionAttachment(action.attachmentId)
+        ?.data['cart'];
+    final cartItems = cart is Map ? cart['items'] : null;
+    final submittedItems = action.payload['items'];
+    final fallback = continueToFulfillment
+        ? 'Cập nhật giỏ và tiếp tục giao hàng'
+        : 'Cập nhật giỏ hàng';
+    if (cartItems is! List || submittedItems is! List) return fallback;
+
+    final namesByCode = <String, String>{};
+    for (final rawItem in cartItems) {
+      if (rawItem is! Map) return fallback;
+      final itemCode = rawItem['itemCode'];
+      final name = rawItem['name'];
+      if (itemCode is! String ||
+          itemCode.isEmpty ||
+          name is! String ||
+          name.trim().isEmpty ||
+          namesByCode.containsKey(itemCode)) {
+        return fallback;
+      }
+      namesByCode[itemCode] = name.trim();
+    }
+
+    final selections = <String>[];
+    for (final rawItem in submittedItems) {
+      if (rawItem is! Map) return fallback;
+      final itemCode = rawItem['itemCode'];
+      final rawQuantity = rawItem['quantity'];
+      final quantity = rawQuantity is num && rawQuantity.isFinite
+          ? rawQuantity.toInt()
+          : null;
+      final name = itemCode is String ? namesByCode[itemCode] : null;
+      if (name == null ||
+          quantity == null ||
+          quantity < 0 ||
+          quantity > 99 ||
+          rawQuantity != quantity) {
+        return fallback;
+      }
+      if (quantity > 0) selections.add('$quantity × $name');
+    }
+    if (selections.isEmpty) return '$fallback: giỏ hàng trống';
+    final prefix = continueToFulfillment
+        ? 'Cập nhật và giao hàng'
+        : 'Cập nhật giỏ';
+    return '$prefix: ${selections.join(', ')}';
+  }
+
+  String _addressCustomerText(KfcGenUiAction action) {
+    final parts =
+        [
+              action.payload['addressLine'],
+              action.payload['communeName'],
+              action.payload['provinceName'],
+            ]
+            .whereType<String>()
+            .map((part) => part.trim())
+            .where((part) => part.isNotEmpty);
+    final address = parts.join(', ');
+    return address.isEmpty
+        ? 'Cập nhật địa chỉ giao hàng'
+        : 'Giao đến: $address';
+  }
+
+  String _modifierDraftCustomerText(KfcGenUiAction action) {
+    const fallback = 'Áp dụng tùy chọn';
+    final tree = state.value
+        .actionAttachment(action.attachmentId)
+        ?.data['modifierTree'];
+    final groups = tree is Map ? tree['modifierGroups'] : null;
+    final selections = action.payload['selections'];
+    if (groups is! List || selections is! List) return fallback;
+    final namesByIdentity = <String, String>{};
+
+    void visitGroups(List<dynamic> nestedGroups) {
+      for (final group in nestedGroups) {
+        if (group is! Map || group['groupId'] is! String) continue;
+        final groupId = group['groupId']! as String;
+        final options = group['options'];
+        if (options is! List) continue;
+        for (final option in options) {
+          if (option is! Map ||
+              option['modifierId'] is! String ||
+              option['name'] is! String) {
+            continue;
+          }
+          namesByIdentity['$groupId\u0000${option['modifierId']}'] =
+              (option['name']! as String).trim();
+          final childGroups = option['modifierGroups'];
+          if (childGroups is List) visitGroups(childGroups);
+        }
+      }
+    }
+
+    visitGroups(groups);
+    final names = <String>[];
+    for (final selection in selections) {
+      if (selection is! Map) return fallback;
+      final groupId = selection['groupId'];
+      final modifierId = selection['modifierId'];
+      final name = namesByIdentity['$groupId\u0000$modifierId'];
+      if (name == null || name.isEmpty) return fallback;
+      names.add(name);
+    }
+    return names.isEmpty ? fallback : '$fallback: ${names.join(', ')}';
+  }
+
+  String? _paymentMethodDisplayName(String? methodId) {
+    if (methodId == null || methodId.isEmpty) return null;
+    for (final message in state.value.messages.reversed) {
+      final methods = message.genUi?.data['methods'];
+      if (methods is! List) continue;
+      for (final method in methods) {
+        if (method is! Map || method['methodId'] != methodId) continue;
+        final displayName = method['displayName'];
+        if (displayName is String && displayName.trim().isNotEmpty) {
+          return displayName.trim();
+        }
+      }
+    }
+    return null;
   }
 }
 

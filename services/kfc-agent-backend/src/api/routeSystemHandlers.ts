@@ -129,8 +129,6 @@ import {
   eventFromMessengerDelivery,
   sendMessengerSenderAction,
   dashboardEventId,
-  checkCommerceGatewayReadiness,
-  checkCatalogReadiness,
   runReadinessCheck,
   checkFixtures,
   checkMessengerConfig,
@@ -254,76 +252,13 @@ export function createSystemRouteHandlers(context: RouteHandlerContext) {
           samplingRate: 0,
         },
       };
-      const commerceEnvironment =
-        options.readiness?.runtime?.commerceEnvironment;
-      const commerceConfig =
-        options.readiness?.commerce ??
-        (commerceEnvironment === 'sandbox' ||
-        commerceEnvironment === 'production'
-          ? undefined
-          : { mode: 'fixture' as const });
-      const commerce = !commerceConfig
-        ? {
-            ok: false,
-            mode: 'unconfigured',
-            configured: false,
-            message: `Missing commerce provider configuration for ${commerceEnvironment}`,
-          }
-        : commerceConfig.mode === 'fixture'
-          ? {
-              ok: true,
-              mode: 'fixture',
-              configured: true,
-              production: false,
-              message:
-                'Fixture commerce is enabled for local development and proof only',
-            }
-          : !commerceConfig.baseUrl || !commerceConfig.token
-            ? await checkCommerceGatewayReadiness(commerceConfig)
-            : !options.kfcCommerceGateway
-              ? {
-                  ok: false,
-                  mode: 'gateway',
-                  configured: false,
-                  message: 'Gateway order and payment clients are required',
-                }
-              : await checkCommerceGatewayReadiness(commerceConfig);
-      const catalog =
-        commerceConfig?.mode === 'gateway'
-          ? await checkCatalogReadiness(options.catalog)
-          : { ok: true, configured: false, required: false };
-      const posConfig = options.readiness?.pos ?? { mode: 'disabled' as const };
-      const pos =
-        posConfig.mode === 'disabled'
-          ? {
-              ok: true,
-              mode: 'disabled',
-              configured: false,
-              simulated: false,
-              message: 'POS integration is disabled',
-            }
-          : !posConfig.baseUrl
-            ? {
-                ok: false,
-                mode: 'http',
-                configured: false,
-                simulated: posConfig.simulated ?? false,
-                message: 'Missing KFC_POS_BASE_URL',
-              }
-            : !posConfig.token
-              ? {
-                  ok: false,
-                  mode: 'http',
-                  configured: false,
-                  simulated: posConfig.simulated ?? false,
-                  message: 'Missing KFC_POS_TOKEN',
-                }
-              : {
-                  ok: true,
-                  mode: 'http',
-                  configured: true,
-                  simulated: posConfig.simulated ?? false,
-                };
+      const commerce = {
+        ok: true,
+        mode: 'fixture',
+        configured: true,
+        production: false,
+        message: 'Bundled fixture-backed mock commerce is enabled',
+      };
       const checks = messengerToken
         ? {
             database,
@@ -335,9 +270,7 @@ export function createSystemRouteHandlers(context: RouteHandlerContext) {
             agent,
             monitor,
             observability,
-            catalog,
             commerce,
-            pos,
           }
         : {
             database,
@@ -348,9 +281,7 @@ export function createSystemRouteHandlers(context: RouteHandlerContext) {
             agent,
             monitor,
             observability,
-            catalog,
             commerce,
-            pos,
           };
       const ok = Object.values(checks).every((check) => check.ok);
 
@@ -367,21 +298,9 @@ export function createSystemRouteHandlers(context: RouteHandlerContext) {
             ? {
                 proof: {
                   deployment: options.readiness?.release ?? null,
-                  commerceEnvironment:
-                    options.readiness?.runtime?.commerceEnvironment ?? null,
-                  providerFingerprint:
-                    catalog.observation?.providerFingerprint ?? null,
-                  catalogObservation: catalog.observation
-                    ? {
-                        id: catalog.observation.id,
-                        sha256: catalog.observation.sha256,
-                        observedAt: catalog.observation.observedAt,
-                        expiresAt: catalog.observation.expiresAt ?? null,
-                        itemCount: catalog.observation.itemCount,
-                        modifierTreeCount:
-                          catalog.observation.modifierTreeCount,
-                      }
-                    : null,
+                  commerceEnvironment: 'fixture',
+                  providerFingerprint: null,
+                  catalogObservation: null,
                   lifecycle: {
                     provider:
                       options.lifecycle?.environment === 'sandbox'

@@ -307,9 +307,20 @@ Map<String, Object?> _actionableCartSnapshot() {
     'status': 'active',
     'title': 'Giỏ hàng',
     'expiresAt': '2099-07-21T00:00:00.000Z',
-    'data': <String, Object?>{},
+    'data': {
+      'cart': {
+        'items': [
+          {
+            'itemCode': 'combo_zinger',
+            'name': 'Combo Zinger',
+            'quantity': 1,
+            'unitPriceVnd': 89000,
+          },
+        ],
+      },
+    },
     'actions': [
-      {'id': 'edit_cart', 'label': 'Sửa giỏ'},
+      {'id': 'update_cart', 'label': 'Cập nhật'},
     ],
     'authority': const {
       'schemaVersion': 'kfc-genui-v1',

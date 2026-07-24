@@ -27,7 +27,7 @@ class GenUiQuantityStepper extends StatelessWidget {
       mainAxisSize: MainAxisSize.min,
       children: [
         _QuantityButton(
-          key: decreaseKey,
+          buttonKey: decreaseKey,
           icon: LucideIcons.minus,
           onPressed: onDecrease,
         ),
@@ -52,7 +52,7 @@ class GenUiQuantityStepper extends StatelessWidget {
           ),
         ),
         _QuantityButton(
-          key: increaseKey,
+          buttonKey: increaseKey,
           icon: LucideIcons.plus,
           onPressed: onIncrease,
         ),
@@ -63,12 +63,13 @@ class GenUiQuantityStepper extends StatelessWidget {
 
 class _QuantityButton extends StatelessWidget {
   const _QuantityButton({
-    super.key,
+    required this.buttonKey,
     required this.icon,
     required this.onPressed,
   });
 
   final IconData icon;
+  final Key buttonKey;
   final VoidCallback? onPressed;
 
   @override
@@ -77,6 +78,7 @@ class _QuantityButton extends StatelessWidget {
       width: 32,
       height: 32,
       child: ShadIconButton.outline(
+        key: buttonKey,
         width: 32,
         height: 32,
         iconSize: 13,
@@ -84,6 +86,7 @@ class _QuantityButton extends StatelessWidget {
         backgroundColor: KfcOpsTokens.surfaceContainerLowest,
         hoverBackgroundColor: KfcOpsTokens.surfaceContainerLow,
         foregroundColor: KfcOpsTokens.onSurface,
+        enabled: onPressed != null,
         onPressed: onPressed,
         icon: Icon(icon),
       ),

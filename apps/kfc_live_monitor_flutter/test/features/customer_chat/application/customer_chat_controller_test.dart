@@ -91,6 +91,346 @@ void main() {
   });
 
   test(
+    'selected menu items are named with quantities in the transcript',
+    () async {
+      const attachment = KfcGenUiAttachment(
+        id: 'named_menu_selection',
+        lifecycleStage: 'menu',
+        widgetKind: KfcGenUiWidgetKind.smartMenuPicker,
+        status: KfcGenUiStatus.active,
+        title: 'Chọn món',
+        data: {
+          'items': [
+            {'code': 'combo_1', 'name': 'Combo Hợp Gu 99K'},
+          ],
+        },
+        actions: [KfcGenUiActionSpec(id: 'add_items', label: 'Xác nhận')],
+      );
+      final controller = CustomerChatController(
+        repository: const FixtureCustomerChatRepository(
+          eventDelay: Duration.zero,
+        ),
+        initialState: const CustomerChatState(
+          sessionId: 'kfc:named_selection',
+          customerId: 'named_selection',
+          messages: [
+            CustomerChatMessage(
+              id: 'menu_turn',
+              role: CustomerChatRole.assistant,
+              text: 'Bạn chọn món nhé.',
+              genUi: attachment,
+            ),
+          ],
+        ),
+      );
+
+      await controller.submitAction(
+        const KfcGenUiAction(
+          attachmentId: 'named_menu_selection',
+          actionId: 'add_items',
+          payload: {
+            'items': [
+              {'itemCode': 'combo_1', 'quantity': 2},
+            ],
+          },
+        ),
+      );
+
+      expect(
+        controller.state.value.messages
+            .where((message) => message.role == CustomerChatRole.customer)
+            .first
+            .text,
+        'Thêm vào giỏ: 2 × Combo Hợp Gu 99K',
+      );
+    },
+  );
+
+  test('atomic cart actions are named with final dish quantities', () async {
+    const attachment = KfcGenUiAttachment(
+      id: 'named_cart_update',
+      lifecycleStage: 'cart',
+      widgetKind: KfcGenUiWidgetKind.cartBuilder,
+      status: KfcGenUiStatus.active,
+      title: 'Giỏ hàng',
+      data: {
+        'cart': {
+          'items': [
+            {
+              'itemCode': 'combo_1',
+              'name': 'Combo Hợp Gu 99K',
+              'quantity': 1,
+              'unitPriceVnd': 99000,
+            },
+            {
+              'itemCode': 'pepsi',
+              'name': 'Pepsi lớn',
+              'quantity': 1,
+              'unitPriceVnd': 19000,
+            },
+          ],
+        },
+      },
+      actions: [KfcGenUiActionSpec(id: 'update_cart', label: 'Cập nhật')],
+    );
+    final controller = CustomerChatController(
+      repository: const FixtureCustomerChatRepository(
+        eventDelay: Duration.zero,
+      ),
+      initialState: const CustomerChatState(
+        sessionId: 'kfc:named_cart',
+        customerId: 'named_cart',
+        messages: [
+          CustomerChatMessage(
+            id: 'cart_turn',
+            role: CustomerChatRole.assistant,
+            text: 'Giỏ hàng của bạn.',
+            genUi: attachment,
+          ),
+        ],
+      ),
+    );
+
+    await controller.submitAction(
+      const KfcGenUiAction(
+        attachmentId: 'named_cart_update',
+        actionId: 'update_cart',
+        payload: {
+          'items': [
+            {'itemCode': 'combo_1', 'quantity': 2},
+            {'itemCode': 'pepsi', 'quantity': 0},
+          ],
+        },
+      ),
+    );
+
+    expect(
+      controller.state.value.messages
+          .where((message) => message.role == CustomerChatRole.customer)
+          .first
+          .text,
+      'Cập nhật giỏ: 2 × Combo Hợp Gu 99K',
+    );
+  });
+
+  test(
+    'structured address actions name the submitted delivery address',
+    () async {
+      const attachment = KfcGenUiAttachment(
+        id: 'address_form',
+        lifecycleStage: 'fulfillment',
+        widgetKind: KfcGenUiWidgetKind.addressFulfillmentCheck,
+        status: KfcGenUiStatus.active,
+        title: 'Kiểm tra giao hàng',
+        data: {'addressDraft': <String, Object?>{}},
+        actions: [
+          KfcGenUiActionSpec(
+            id: 'submit_address',
+            label: 'Nhập địa chỉ giao hàng',
+          ),
+        ],
+      );
+      final controller = CustomerChatController(
+        repository: const FixtureCustomerChatRepository(
+          eventDelay: Duration.zero,
+        ),
+        initialState: const CustomerChatState(
+          sessionId: 'kfc:address_form',
+          customerId: 'address_form',
+          messages: [
+            CustomerChatMessage(
+              id: 'address_turn',
+              role: CustomerChatRole.assistant,
+              text: 'Bạn nhập địa chỉ nhé.',
+              genUi: attachment,
+            ),
+          ],
+        ),
+      );
+
+      await controller.submitAction(
+        const KfcGenUiAction(
+          attachmentId: 'address_form',
+          actionId: 'submit_address',
+          payload: {
+            'recipientName': 'Nguyễn An',
+            'phone': '0909123456',
+            'addressLine': '54/2 Nguyễn Hồng Đào',
+            'communeName': 'Phường Tân Bình',
+            'provinceName': 'Thành phố Hồ Chí Minh',
+            'communeCode': null,
+            'provinceCode': null,
+            'deliveryInstructions': null,
+            'rawAddress': null,
+            'legacyDistrictText': null,
+          },
+        ),
+      );
+
+      expect(
+        controller.state.value.messages
+            .where((message) => message.role == CustomerChatRole.customer)
+            .first
+            .text,
+        'Giao đến: 54/2 Nguyễn Hồng Đào, Phường Tân Bình, '
+        'Thành phố Hồ Chí Minh',
+      );
+    },
+  );
+
+  test('a completed one-shot menu action cannot be submitted twice', () async {
+    final repository = _CountingFixtureRepository();
+    const attachment = KfcGenUiAttachment(
+      id: 'one_shot_menu',
+      lifecycleStage: 'menu',
+      widgetKind: KfcGenUiWidgetKind.smartMenuPicker,
+      status: KfcGenUiStatus.active,
+      title: 'Chọn món',
+      data: {
+        'items': [
+          {
+            'code': 'combo_1',
+            'name': 'Combo Hợp Gu 99K',
+            'priceVnd': 99000,
+            'available': true,
+          },
+        ],
+      },
+      actions: [KfcGenUiActionSpec(id: 'add_items', label: 'Xác nhận')],
+      expiresAt: '2099-07-21T01:00:00.000Z',
+      authority: KfcGenUiAuthority(
+        schemaVersion: 'kfc-genui-v1',
+        sessionId: 'kfc:one_shot',
+        customerId: 'one_shot',
+        verifiedRevision:
+            'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+        actionLifecycle: 'one_shot',
+        issuedAt: '2026-07-21T00:00:00.000Z',
+        expiresAt: '2099-07-21T01:00:00.000Z',
+      ),
+    );
+    final controller = CustomerChatController(
+      repository: repository,
+      initialState: const CustomerChatState(
+        sessionId: 'kfc:one_shot',
+        customerId: 'one_shot',
+        messages: [
+          CustomerChatMessage(
+            id: 'menu_turn',
+            role: CustomerChatRole.assistant,
+            text: 'Bạn chọn món nhé.',
+            genUi: attachment,
+          ),
+        ],
+      ),
+    );
+    const action = KfcGenUiAction(
+      attachmentId: 'one_shot_menu',
+      actionId: 'add_items',
+      payload: {
+        'items': [
+          {'itemCode': 'combo_1', 'quantity': 1},
+        ],
+      },
+    );
+
+    await controller.submitAction(action);
+    await controller.submitAction(action);
+
+    expect(repository.startCount, 1);
+    expect(
+      controller.state.value.actionAttachment('one_shot_menu')?.status,
+      KfcGenUiStatus.answered,
+    );
+    expect(
+      controller.state.value.actionAttachment('one_shot_menu')?.selectedAction,
+      'add_items',
+    );
+  });
+
+  test(
+    'payment transcript uses the verified display name instead of its id',
+    () async {
+      const paymentPicker = KfcGenUiAttachment(
+        id: 'payment_picker',
+        lifecycleStage: 'payment_method',
+        widgetKind: KfcGenUiWidgetKind.paymentMethodPicker,
+        status: KfcGenUiStatus.active,
+        title: 'Chọn phương thức',
+        data: {
+          'methods': [
+            {
+              'methodId': 'zalopay_wallet',
+              'displayName': 'Ví ZaloPay',
+              'supported': true,
+              'supportStatus': 'listed_supported',
+            },
+          ],
+        },
+        actions: [
+          KfcGenUiActionSpec(
+            id: 'select_payment_method',
+            label: 'Chọn phương thức',
+          ),
+        ],
+      );
+      const paymentStatus = KfcGenUiAttachment(
+        id: 'payment_status',
+        lifecycleStage: 'post_order',
+        widgetKind: KfcGenUiWidgetKind.paymentOrderStatus,
+        status: KfcGenUiStatus.active,
+        title: 'Trạng thái đơn hàng',
+        actions: [
+          KfcGenUiActionSpec(
+            id: 'open_payment',
+            label: 'Mở thanh toán',
+            value: 'zalopay_wallet',
+          ),
+        ],
+      );
+      final controller = CustomerChatController(
+        repository: const FixtureCustomerChatRepository(
+          eventDelay: Duration.zero,
+        ),
+        initialState: const CustomerChatState(
+          sessionId: 'kfc:payment_transcript',
+          customerId: 'payment_transcript',
+          messages: [
+            CustomerChatMessage(
+              id: 'payment_picker_turn',
+              role: CustomerChatRole.assistant,
+              text: 'Chọn phương thức.',
+              genUi: paymentPicker,
+            ),
+            CustomerChatMessage(
+              id: 'payment_status_turn',
+              role: CustomerChatRole.assistant,
+              text: 'Mở thanh toán.',
+              genUi: paymentStatus,
+            ),
+          ],
+        ),
+      );
+
+      await controller.submitAction(
+        const KfcGenUiAction(
+          attachmentId: 'payment_status',
+          actionId: 'open_payment',
+          value: 'zalopay_wallet',
+        ),
+      );
+
+      expect(
+        controller.state.value.messages
+            .where((message) => message.role == CustomerChatRole.customer)
+            .first
+            .text,
+        'Tiếp tục thanh toán bằng Ví ZaloPay',
+      );
+    },
+  );
+
+  test(
     'message identities do not collide after a controller restart',
     () async {
       final first = CustomerChatController(
@@ -867,6 +1207,34 @@ class _RecordingStartRepository extends FixtureCustomerChatRepository {
       status: CustomerRunStatus.accepted,
       nextSequence: 1,
       replayed: false,
+    );
+  }
+}
+
+class _CountingFixtureRepository extends FixtureCustomerChatRepository {
+  _CountingFixtureRepository() : super(eventDelay: Duration.zero);
+
+  var startCount = 0;
+
+  @override
+  Future<CustomerRunStartResponse> startRun({
+    required String sessionId,
+    required String customerId,
+    required String clientMessageId,
+    String? text,
+    KfcGenUiAction? action,
+    Map<String, Object?>? metadata,
+    String? candidateId,
+  }) {
+    startCount += 1;
+    return super.startRun(
+      sessionId: sessionId,
+      customerId: customerId,
+      clientMessageId: clientMessageId,
+      text: text,
+      action: action,
+      metadata: metadata,
+      candidateId: candidateId,
     );
   }
 }

@@ -78,17 +78,7 @@ void main() {
       );
       await tester.pump();
       expect(_networkUrl(tester), contains('3-Fried-Chicken.jpg'));
-      expect(actions.single.actionId, 'customize_item:flavor:hot-spicy');
-      expect(actions.single.payload['modifierId'], 'hot-spicy');
-      expect(
-        find.byKey(
-          CustomerChatKeys.genUiAction(
-            fixture.id,
-            'customize_item:flavor:hot-spicy',
-          ),
-        ),
-        findsNothing,
-      );
+      expect(actions, isEmpty);
 
       await tester.tap(
         find.byKey(
@@ -102,11 +92,22 @@ void main() {
       await tester.pump();
       expect(_networkUrl(tester), contains('3-Fried-Chicken.jpg'));
       expect(find.byType(Image), findsOneWidget);
+      expect(actions, isEmpty);
+      await tester.tap(
+        find.byKey(CustomerChatKeys.genUiAction(fixture.id, 'apply_modifiers')),
+      );
+      expect(actions.single.actionId, 'apply_modifiers');
+      expect(actions.single.payload, {
+        'itemCode': 'three-chicken',
+        'selections': [
+          {'groupId': 'flavor', 'modifierId': 'keep-current'},
+        ],
+      });
     },
   );
 
   testWidgets(
-    'modifier renders only options backed by unique trusted backend actions',
+    'modifier renders verified tree options and submits one atomic selection',
     (tester) async {
       final actions = <KfcGenUiAction>[];
       const fixture = KfcGenUiAttachment(
@@ -125,51 +126,20 @@ void main() {
                 'options': [
                   {'modifierId': 'crispy', 'name': 'Gà Giòn Cay'},
                   {'modifierId': 'original', 'name': 'Gà Truyền Thống'},
-                  {'modifierId': 'untrusted', 'name': 'Không được hiển thị'},
+                  {'modifierId': 'other', 'name': 'Lựa chọn khác'},
                 ],
               },
             ],
           },
         },
-        actions: [
-          KfcGenUiActionSpec(
-            id: 'customize_item:flavor:crispy',
-            label: 'Gà Giòn Cay',
-            value: 'Gà Giòn Cay',
-            payload: {
-              'itemCode': '3001',
-              'groupId': 'flavor',
-              'modifierId': 'crispy',
-            },
-          ),
-          KfcGenUiActionSpec(
-            id: 'customize_item:flavor:original',
-            label: 'Gà Truyền Thống',
-            value: 'Gà Truyền Thống',
-            payload: {
-              'itemCode': '3001',
-              'groupId': 'flavor',
-              'modifierId': 'original',
-            },
-          ),
-        ],
+        actions: [KfcGenUiActionSpec(id: 'apply_modifiers', label: 'Áp dụng')],
       );
 
       await _pumpDecision(tester, fixture, actions.add);
 
       expect(find.text('Gà Giòn Cay'), findsOneWidget);
       expect(find.text('Gà Truyền Thống'), findsOneWidget);
-      expect(find.text('Không được hiển thị'), findsNothing);
-      expect(
-        find.byKey(
-          CustomerChatKeys.genUiModifierOption(
-            fixture.id,
-            'flavor',
-            'untrusted',
-          ),
-        ),
-        findsNothing,
-      );
+      expect(find.text('Lựa chọn khác'), findsOneWidget);
 
       await tester.tap(
         find.byKey(
@@ -182,11 +152,16 @@ void main() {
       );
       await tester.pump();
 
-      expect(actions.single.actionId, 'customize_item:flavor:original');
+      expect(actions, isEmpty);
+      await tester.tap(
+        find.byKey(CustomerChatKeys.genUiAction(fixture.id, 'apply_modifiers')),
+      );
+      expect(actions.single.actionId, 'apply_modifiers');
       expect(actions.single.payload, {
         'itemCode': '3001',
-        'groupId': 'flavor',
-        'modifierId': 'original',
+        'selections': [
+          {'groupId': 'flavor', 'modifierId': 'original'},
+        ],
       });
     },
   );

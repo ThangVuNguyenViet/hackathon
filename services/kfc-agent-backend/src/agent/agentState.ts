@@ -7,6 +7,7 @@ import type {
   Order,
 } from '../domain/types.js';
 import type { SelectedPaymentMethodAuthority } from '../domain/opaqueProviderId.js';
+import type { DeliveryAddressUpdate } from '../domain/customerCommand.js';
 import type { VerifiedRef } from '../domain/verifiedRef.js';
 import type {
   GeneratedMenuModifier,
@@ -52,6 +53,8 @@ export interface AgentState {
   address?: Address;
   /** Customer-provided partial fields plus canonical location fields verified by the fulfillment API. */
   addressDraft?: Partial<Address>;
+  /** Turn-local structured address entered through the GenUI form. */
+  deliveryAddressDraft?: DeliveryAddressUpdate;
   orderPreview?: Order;
   order?: Order;
   /** Durable proof that submitted-order status was checked for a cancellation request. */

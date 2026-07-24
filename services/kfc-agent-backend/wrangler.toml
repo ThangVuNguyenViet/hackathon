@@ -5,7 +5,6 @@ compatibility_flags = ["nodejs_compat"]
 
 [vars]
 META_INBOX_URL_TEMPLATE = "https://business.facebook.com/latest/inbox/all?asset_id={pageId}&selected_item_id={externalUserId}"
-KFC_COMMERCE_ENVIRONMENT = "sandbox"
 
 [observability]
 enabled = true

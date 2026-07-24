@@ -697,12 +697,21 @@ void main() {
         ),
         isNotNull,
       );
-      for (final itemCode in [
-        'missing_flag',
-        'unavailable',
-        'customizable',
-        'has_modifiers',
-      ]) {
+      for (final itemCode in ['customizable', 'has_modifiers']) {
+        expect(
+          menu.bindAction(
+            actionId: 'add_items',
+            payload: {
+              'items': [
+                {'itemCode': itemCode, 'quantity': 1},
+              ],
+            },
+          ),
+          isNotNull,
+          reason: itemCode,
+        );
+      }
+      for (final itemCode in ['missing_flag', 'unavailable']) {
         expect(
           menu.bindAction(
             actionId: 'add_items',

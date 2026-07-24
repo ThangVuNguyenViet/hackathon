@@ -35,13 +35,7 @@ Run the mock POS as a standalone service:
 MOCK_POS_PORT=18110 MOCK_POS_TOKEN=local-token npx tsx scripts/start-mock-pos.ts
 ```
 
-Connect the backend in gateway and POS mode:
-
-```dotenv
-KFC_COMMERCE_MODE=gateway
-KFC_COMMERCE_GATEWAY_BASE_URL=https://mock-or-real-oms-gateway.example
-KFC_COMMERCE_GATEWAY_TOKEN=...
-KFC_POS_MODE=http
-KFC_POS_BASE_URL=http://127.0.0.1:18110
-KFC_POS_TOKEN=local-token
-```
+The mock POS is a proof-only API, not a selectable backend runtime mode. The
+demo chatbot always uses its bundled fixture-backed mock commerce provider.
+Production migration must replace the mock provider explicitly rather than
+selecting it through environment variables.

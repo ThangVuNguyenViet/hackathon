@@ -127,8 +127,6 @@ import {
   eventFromMessengerDelivery,
   sendMessengerSenderAction,
   dashboardEventId,
-  checkCommerceGatewayReadiness,
-  checkCatalogReadiness,
   runReadinessCheck,
   checkFixtures,
   checkMessengerConfig,
@@ -147,7 +145,6 @@ export function createRouteCommerceRuntime(input: {
 }) {
   const { options, store, dashboard } = input;
   let clientsPromise: ReturnType<typeof loadGeneratedFixtures> | undefined;
-  const catalogPinLoads = new Map<string, Promise<CatalogObservation>>();
 
   function getFixtures() {
     if (options.fixtures) return Promise.resolve(options.fixtures);
@@ -158,154 +155,10 @@ export function createRouteCommerceRuntime(input: {
   }
 
   async function withConfiguredCommerce(
-    sessionId: string,
+    _sessionId: string,
     clients: ExternalClients,
   ): Promise<ExternalClients> {
-    if (options.readiness?.commerce?.mode !== 'gateway') return clients;
-    if (!options.catalog || !options.kfcCommerceGateway) {
-      throw new Error(
-        'Gateway commerce requires catalog, order, and payment clients',
-      );
-    }
-    const fetchCurrent = (externalCallContext: ExternalCallContext) =>
-      fetchCatalogObservation({
-        ...options.catalog!,
-        fetchImpl: options.catalog!.fetchImpl,
-        externalCallContext,
-      });
-    const loadInitialCatalogPin = async (): Promise<CatalogObservation> => {
-      const configuredTimeoutMs =
-        options.readiness?.commerce?.timeoutMs ?? 3_000;
-      const timeoutMs =
-        Number.isFinite(configuredTimeoutMs) && configuredTimeoutMs > 0
-          ? configuredTimeoutMs
-          : 3_000;
-      const controller = new AbortController();
-      const deadlineAt = Date.now() + timeoutMs;
-      const timeout = setTimeout(() => {
-        controller.abort(
-          new DOMException('Initial catalog pin timed out', 'TimeoutError'),
-        );
-      }, timeoutMs);
-      try {
-        const observation = await fetchCurrent({
-          signal: controller.signal,
-          deadlineAt,
-        });
-        if (controller.signal.aborted) throw controller.signal.reason;
-        return observation;
-      } catch (error) {
-        if (
-          controller.signal.aborted &&
-          controller.signal.reason instanceof Error &&
-          controller.signal.reason.name === 'TimeoutError'
-        ) {
-          throw controller.signal.reason;
-        }
-        throw error;
-      } finally {
-        clearTimeout(timeout);
-      }
-    };
-    const storedProjection = await store.getCatalogPin(sessionId);
-    const storedPin =
-      storedProjection?.observation.environment ===
-        options.catalog!.environment &&
-      storedProjection.observation.sourceUrl ===
-        new URL(options.catalog!.sourceUrl).toString()
-        ? storedProjection.observation
-        : undefined;
-    let pinned = storedPin
-      ? Promise.resolve(storedPin)
-      : catalogPinLoads.get(sessionId);
-    if (!pinned) {
-      pinned = loadInitialCatalogPin()
-        .then(async (observation) => {
-          await store.putCatalogPin({
-            sessionId,
-            observation,
-            updatedAt: new Date().toISOString(),
-          });
-          return observation;
-        })
-        .finally(() => catalogPinLoads.delete(sessionId));
-      catalogPinLoads.set(sessionId, pinned);
-    }
-    const unavailable = async <T>(
-      capability: string,
-    ): Promise<ToolResult<T>> => ({
-      ok: false,
-      errorCode: 'commerce_provider_not_configured',
-      message: `${capability} requires a configured commerce provider`,
-    });
-    const providerCart = options.kfcCommerceProvider?.cart ?? {
-      createCart: () => unavailable('cart'),
-      applyChanges: () => unavailable('cart'),
-      updateCart: () => unavailable('cart'),
-      previewCart: () => unavailable('cart'),
-    };
-    const lifecycle = await options.lifecycle?.activeForSession?.(sessionId);
-    const gateway = lifecycle
-      ? projectLifecycleCommerceClients(options.kfcCommerceGateway, lifecycle)
-      : options.kfcCommerceGateway;
-    const catalogClients = createCatalogObservationClients({
-      sessionId,
-      pinned: await pinned,
-      fetchCurrent,
-      cart: providerCart,
-      oms: gateway.oms,
-    });
-    return {
-      providerCapabilities: {
-        handoffResolution: false,
-      },
-      menu: catalogClients.menu,
-      cart: catalogClients.cart,
-      recommendation: catalogClients.recommendation,
-      promotion: {
-        searchPromotions: () => unavailable('promotions'),
-        explainPromotion: () => unavailable('promotions'),
-        validateVoucher: () => unavailable('promotions'),
-        validateVoucherInput: () => unavailable('promotions'),
-      },
-      membership: {
-        getProfile: () => unavailable('membership'),
-        listRewards: () => unavailable('membership'),
-        listWallet: () => unavailable('membership'),
-        getPointHistory: () => unavailable('membership'),
-        listTools: () => unavailable('membership'),
-        acquireVoucher: () => unavailable('membership'),
-        redeemReward: () => unavailable('membership'),
-      },
-      inventory: options.kfcCommerceProvider?.inventory ?? {
-        checkInventory: () => unavailable('inventory'),
-      },
-      storeLocator: options.kfcCommerceProvider?.storeLocator ?? {
-        assignStore: () => unavailable('store locator'),
-        findStores: () => unavailable('store locator'),
-      },
-      fulfillment: options.kfcCommerceProvider?.fulfillment ?? {
-        quoteFulfillment: () => unavailable('fulfillment'),
-      },
-      content: clients.content,
-      invoice: { collectInvoice: () => unavailable('invoice') },
-      oms: catalogClients.oms,
-      payment: gateway.payment,
-      delivery: { quoteDelivery: () => unavailable('delivery') },
-      customer: options.kfcCommerceProvider?.customer ?? {
-        getSavedAddresses: () => unavailable('customer profile'),
-        getRecentOrder: () => unavailable('customer profile'),
-        getFavoriteItems: () => unavailable('customer profile'),
-      },
-      loyalty: { lookupLoyalty: () => unavailable('loyalty') },
-      handoff: {
-        escalateToHuman: () => unavailable('handoff'),
-        resolveEscalation: () => unavailable('handoff resolution'),
-      },
-      feedback: { recordFeedback: () => unavailable('feedback') },
-      messenger: clients.messenger,
-      zalo: clients.zalo,
-    };
+    return clients;
   }
 
   async function createWebhookClients(
@@ -483,9 +336,8 @@ export function createRouteCommerceRuntime(input: {
     sessionId: string,
     customerId: string,
   ): Promise<CustomerAccessContext | undefined> {
-    const event = await latestKfcProofPreconditions(sessionId);
-    if (event?.authenticated !== true || event.customerId !== customerId)
-      return undefined;
+    const authenticatedAt = new Date();
+    const expiresAt = new Date(authenticatedAt.getTime() + 60 * 60_000);
     return {
       tenantScope: 'kfc-vietnam',
       customerSurface: 'kfc-app-chat',
@@ -498,12 +350,12 @@ export function createRouteCommerceRuntime(input: {
       subjectBindingState: 'verified',
       authenticationEvidence: {
         state: 'verified',
-        method: 'sandbox-proof-control',
+        method: 'first-party-demo-session',
         issuer: 'kfc-agent-backend',
         audience: 'kfc-agent-backend',
-        authenticatedAt: event.createdAt,
-        expiresAt: event.expiresAt,
-        evidenceRef: `sandbox-proof:${event.sessionId}`,
+        authenticatedAt: authenticatedAt.toISOString(),
+        expiresAt: expiresAt.toISOString(),
+        evidenceRef: `first-party-demo:${sessionId}:${customerId}`,
       },
       authorizedScopes: [
         'customer:read',

@@ -76,11 +76,6 @@ done
 LANGSMITH_TRACING_SAMPLING_RATE="${LANGSMITH_TRACING_SAMPLING_RATE:-1}"
 KFC_AGENT_CANDIDATE="${KFC_AGENT_CANDIDATE:-openai-gpt-4.1-mini}"
 KFC_MONITOR_CANDIDATE="${KFC_MONITOR_CANDIDATE:-$KFC_AGENT_CANDIDATE}"
-KFC_COMMERCE_MODE="${KFC_COMMERCE_MODE:-}"
-KFC_COMMERCE_ENVIRONMENT="${KFC_COMMERCE_ENVIRONMENT:-}"
-KFC_MENU_API_URL="${KFC_MENU_API_URL:-}"
-KFC_COMMERCE_GATEWAY_BASE_URL="${KFC_COMMERCE_GATEWAY_BASE_URL:-}"
-KFC_COMMERCE_GATEWAY_TOKEN="${KFC_COMMERCE_GATEWAY_TOKEN:-}"
 KFC_SHOWCASE_DATASET="${KFC_SHOWCASE_DATASET:-kfc-showcase-scenarios-v1}"
 if ! candidate_is_valid "$KFC_AGENT_CANDIDATE"; then
   echo "ERROR: Unknown KFC_AGENT_CANDIDATE: $KFC_AGENT_CANDIDATE" >&2
@@ -100,27 +95,8 @@ if [[ -z "${!monitor_credential_env:-}" ]]; then
   echo "ERROR: $monitor_credential_env must be set for KFC_MONITOR_CANDIDATE=$KFC_MONITOR_CANDIDATE." >&2
   exit 64
 fi
-if [[ "$KFC_COMMERCE_MODE" == "fixture" && "${KFC_COMMERCE_ENVIRONMENT:-}" != "sandbox" ]]; then
-  echo "ERROR: fixture commerce is allowed only in the sandbox environment." >&2
-  exit 64
-elif [[ "$KFC_COMMERCE_MODE" == "gateway" && ( -z "${KFC_COMMERCE_ENVIRONMENT:-}" || -z "${KFC_MENU_API_URL:-}" || -z "${KFC_COMMERCE_GATEWAY_BASE_URL:-}" || -z "${KFC_COMMERCE_GATEWAY_TOKEN:-}" ) ]]; then
-  echo "ERROR: deployed releases require explicit gateway commerce environment, menu API, gateway URL, and token." >&2
-  exit 64
-elif [[ "$KFC_COMMERCE_MODE" != "fixture" && "$KFC_COMMERCE_MODE" != "gateway" ]]; then
-  echo "ERROR: KFC_COMMERCE_MODE must be fixture or gateway." >&2
-  exit 64
-fi
-if [[ "$KFC_COMMERCE_ENVIRONMENT" == "production" ]]; then
-  WRANGLER_CONFIG="${KFC_WRANGLER_CONFIG:-$SERVICE_DIR/wrangler.production.toml}"
-  KFC_D1_DATABASE_NAME="${KFC_D1_DATABASE_NAME:-}"
-  if [[ ! -f "$WRANGLER_CONFIG" || -z "$KFC_D1_DATABASE_NAME" ]] || grep -q 'REPLACE_WITH_DISTINCT_PRODUCTION_D1_DATABASE_ID' "$WRANGLER_CONFIG"; then
-    echo "ERROR: production requires KFC_WRANGLER_CONFIG and KFC_D1_DATABASE_NAME for a distinct provisioned production D1; copy and fill wrangler.production.toml.example first." >&2
-    exit 64
-  fi
-else
-  WRANGLER_CONFIG="${KFC_WRANGLER_CONFIG:-$SERVICE_DIR/wrangler.toml}"
-  KFC_D1_DATABASE_NAME="${KFC_D1_DATABASE_NAME:-kfc-agent-demo}"
-fi
+WRANGLER_CONFIG="${KFC_WRANGLER_CONFIG:-$SERVICE_DIR/wrangler.toml}"
+KFC_D1_DATABASE_NAME="${KFC_D1_DATABASE_NAME:-kfc-agent-demo}"
 export KFC_D1_DATABASE_NAME
 
 if [[ "${KFC_DEPLOY_PREFLIGHT_ONLY:-false}" == "true" ]]; then
@@ -149,7 +125,7 @@ if ! command -v npm >/dev/null 2>&1; then
 fi
 
 echo "Deploying Cloudflare Worker backend: $WORKER_NAME"
-echo "Expected Wrangler secrets: META_APP_SECRET, LANGSMITH_API_KEY, selected provider API keys, KFC_COMMERCE_GATEWAY_TOKEN, optional KFC_DEMO_ADMIN_TOKEN"
+echo "Expected Wrangler secrets: META_APP_SECRET, LANGSMITH_API_KEY, selected provider API keys, optional KFC_DEMO_ADMIN_TOKEN"
 
 build_output_dir="$(mktemp -d)"
 deploy_log="$build_output_dir/wrangler-deploy.log"
@@ -171,9 +147,6 @@ mkdir -p "$(dirname "$DEPLOYMENT_OUTPUT_FILE")"
   if [[ -n "${GOOGLE_API_KEY:-}" ]]; then
     printf '%s' "$GOOGLE_API_KEY" | npx wrangler versions secret put GOOGLE_API_KEY --name "$WORKER_NAME"
   fi
-  if [[ -n "${KFC_COMMERCE_GATEWAY_TOKEN:-}" ]]; then
-    printf '%s' "$KFC_COMMERCE_GATEWAY_TOKEN" | npx wrangler versions secret put KFC_COMMERCE_GATEWAY_TOKEN --name "$WORKER_NAME"
-  fi
   if [[ -n "${KFC_DEMO_ADMIN_TOKEN:-}" ]]; then
     printf '%s' "$KFC_DEMO_ADMIN_TOKEN" | npx wrangler versions secret put KFC_DEMO_ADMIN_TOKEN --name "$WORKER_NAME"
   fi
@@ -187,10 +160,6 @@ mkdir -p "$(dirname "$DEPLOYMENT_OUTPUT_FILE")"
     --var "LANGSMITH_TRACING_SAMPLING_RATE:$LANGSMITH_TRACING_SAMPLING_RATE" \
     --var "KFC_AGENT_CANDIDATE:$KFC_AGENT_CANDIDATE" \
     --var "KFC_MONITOR_CANDIDATE:$KFC_MONITOR_CANDIDATE" \
-    --var "KFC_COMMERCE_MODE:$KFC_COMMERCE_MODE" \
-    --var "KFC_COMMERCE_ENVIRONMENT:$KFC_COMMERCE_ENVIRONMENT" \
-    --var "KFC_MENU_API_URL:$KFC_MENU_API_URL" \
-    --var "KFC_COMMERCE_GATEWAY_BASE_URL:$KFC_COMMERCE_GATEWAY_BASE_URL" \
     --var "KFC_SHOWCASE_DATASET:$KFC_SHOWCASE_DATASET" \
     | tee "$deploy_log"
 )

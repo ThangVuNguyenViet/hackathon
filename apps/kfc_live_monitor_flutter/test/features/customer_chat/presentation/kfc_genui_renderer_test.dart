@@ -50,7 +50,7 @@ void main() {
     expect(actions.single.actionId, 'confirm_order');
   });
 
-  testWidgets('cart controls emit item-specific quantity and removal actions', (
+  testWidgets('cart controls stay local until one atomic update', (
     tester,
   ) async {
     tester.view.physicalSize = const Size(390, 620);
@@ -105,11 +105,92 @@ void main() {
     await tester.tap(
       find.byKey(CustomerChatKeys.genUiCartRemove(fixture.id, 'pepsi_large')),
     );
+    await tester.pump();
 
-    expect(actions[0].actionId, 'update_item_quantity');
-    expect(actions[0].payload, {'itemCode': 'combo_zinger', 'quantity': 2});
-    expect(actions[1].actionId, 'remove_item');
-    expect(actions[1].payload, {'itemCode': 'pepsi_large'});
+    expect(actions, isEmpty);
+    expect(find.text('178.000đ'), findsWidgets);
+    final update = find.byKey(
+      CustomerChatKeys.genUiAction(fixture.id, 'update_cart'),
+    );
+    expect(update, findsOneWidget);
+    await tester.tap(update);
+    await tester.pump();
+
+    expect(actions.single.actionId, 'update_cart');
+    expect(actions.single.payload, {
+      'items': [
+        {'itemCode': 'combo_zinger', 'quantity': 2},
+        {'itemCode': 'pepsi_large', 'quantity': 0},
+      ],
+    });
+  });
+
+  testWidgets('answered menu collapses to the selected dish quantities', (
+    tester,
+  ) async {
+    final source = kfcGenUiFixture(KfcGenUiWidgetKind.smartMenuPicker);
+    final answered = KfcGenUiAttachment(
+      id: source.id,
+      lifecycleStage: source.lifecycleStage,
+      widgetKind: source.widgetKind,
+      status: KfcGenUiStatus.answered,
+      title: source.title,
+      summary: source.summary,
+      data: {
+        ...source.data,
+        '_completedAction': {
+          'actionId': 'add_items',
+          'payload': {
+            'items': [
+              {'itemCode': '20751', 'quantity': 2},
+            ],
+          },
+        },
+      },
+      actions: source.actions,
+      selectedAction: 'add_items',
+    );
+
+    await tester.pumpWidget(
+      TestApp(
+        child: KfcGenUiRenderer(attachment: answered, onAction: (_) {}),
+      ),
+    );
+
+    expect(find.text('Đã hoàn tất · Xác nhận món'), findsOneWidget);
+    expect(find.text('2 × Combo Hợp Gu 99K'), findsOneWidget);
+    expect(
+      find.byKey(CustomerChatKeys.genUiAction(source.id, 'add_items')),
+      findsNothing,
+    );
+    expect(
+      find.byKey(
+        CustomerChatKeys.genUiMenuQuantityIncrease(source.id, '20751'),
+      ),
+      findsNothing,
+    );
+  });
+
+  testWidgets('an older actionable widget collapses to read-only', (
+    tester,
+  ) async {
+    final fixture = kfcGenUiFixture(KfcGenUiWidgetKind.smartMenuPicker);
+
+    await tester.pumpWidget(
+      TestApp(
+        child: KfcGenUiRenderer(
+          attachment: fixture,
+          interactive: false,
+          onAction: (_) {},
+        ),
+      ),
+    );
+
+    expect(find.text('Nội dung trước đó · chỉ xem'), findsWidgets);
+    expect(
+      find.byKey(CustomerChatKeys.genUiAction(fixture.id, 'add_items')),
+      findsNothing,
+    );
   });
 
   testWidgets(
@@ -498,14 +579,11 @@ void main() {
 
       expect(find.text('5/5 món khác nhau đã chọn'), findsOneWidget);
       final sixthIncrease = tester.widget<ShadIconButton>(
-        find.descendant(
-          of: find.byKey(
-            CustomerChatKeys.genUiMenuQuantityIncrease(fixture.id, 'drink_3'),
-          ),
-          matching: find.byType(ShadIconButton),
+        find.byKey(
+          CustomerChatKeys.genUiMenuQuantityIncrease(fixture.id, 'drink_3'),
         ),
       );
-      expect(sixthIncrease.onPressed, isNull);
+      expect(sixthIncrease.enabled, isFalse);
 
       await tester.tap(
         find.byKey(CustomerChatKeys.genUiAction(fixture.id, 'add_items')),

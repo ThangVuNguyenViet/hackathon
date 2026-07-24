@@ -49,6 +49,7 @@ import type {
 import {
   createTrustedCustomerActionEnvelope,
   customerCommandFromVerifiedAction,
+  deliveryAddressUpdateSchema,
 } from '../domain/customerCommand.js';
 import {
   opaqueProviderIdSchema,
@@ -99,7 +100,6 @@ import {
   buildBoundedRecentTurns,
   sessionIdForConversationEvent,
 } from '../session/sessionContext.js';
-import { authorizeCustomerAccess } from '../security/customerAccessContext.js';
 import {
   textOnlyPresentation,
   type ChannelPresentationPlan,
@@ -116,6 +116,8 @@ import {
   kfcChatPayloadSchema,
   kfcGenUiActionPayloadSchema,
   kfcSmartMenuBatchPayloadSchema,
+  kfcCartDraftPayloadSchema,
+  kfcModifierDraftPayloadSchema,
   messengerHistorySyncPayloadSchema,
   staleMessengerRecoveryPayloadSchema,
   sessionControlPayloadSchema,
@@ -139,8 +141,6 @@ import {
   eventFromMessengerDelivery,
   sendMessengerSenderAction,
   dashboardEventId,
-  checkCommerceGatewayReadiness,
-  checkCatalogReadiness,
   runReadinessCheck,
   checkFixtures,
   checkMessengerConfig,
@@ -191,6 +191,13 @@ function hasExactClientActionPayload(
   switch (actionSpec.id) {
     case 'add_items':
       return kfcSmartMenuBatchPayloadSchema.safeParse(payload).success;
+    case 'update_cart':
+    case 'continue_to_fulfillment':
+      return kfcCartDraftPayloadSchema.safeParse(payload).success;
+    case 'apply_modifiers':
+      return kfcModifierDraftPayloadSchema.safeParse(payload).success;
+    case 'submit_address':
+      return deliveryAddressUpdateSchema.safeParse(payload).success;
     case 'add_item':
       return clientItemSelectionSchema.safeParse(payload).success;
     case 'update_item_quantity':
@@ -213,6 +220,57 @@ function hasExactClientActionPayload(
   }
 }
 
+function modifierDraftMatchesTree(
+  draft: z.infer<typeof kfcModifierDraftPayloadSchema>,
+  tree: Record<string, unknown>,
+): boolean {
+  if (draft.itemCode !== tree.itemCode) return false;
+  const selections = new Map(
+    draft.selections.map((selection) => [
+      selection.groupId,
+      selection.modifierId,
+    ]),
+  );
+  const visitedGroups = new Set<string>();
+
+  const visitGroups = (value: unknown): boolean => {
+    if (!Array.isArray(value)) return false;
+    for (const rawGroup of value) {
+      if (!isRecord(rawGroup) || typeof rawGroup.groupId !== 'string') {
+        return false;
+      }
+      const groupId = rawGroup.groupId;
+      if (visitedGroups.has(groupId)) return false;
+      visitedGroups.add(groupId);
+      const min =
+        typeof rawGroup.min === 'number' && Number.isInteger(rawGroup.min)
+          ? rawGroup.min
+          : 0;
+      if (min > 1) return false;
+      const modifierId = selections.get(groupId);
+      if (modifierId === undefined) {
+        if (min > 0) return false;
+        continue;
+      }
+      if (!Array.isArray(rawGroup.options)) return false;
+      const matchingOptions = rawGroup.options.filter(
+        (option) => isRecord(option) && option.modifierId === modifierId,
+      );
+      if (matchingOptions.length !== 1 || !isRecord(matchingOptions[0])) {
+        return false;
+      }
+      const nested = matchingOptions[0].modifierGroups;
+      if (nested !== undefined && !visitGroups(nested)) return false;
+    }
+    return true;
+  };
+
+  return (
+    visitGroups(tree.modifierGroups) &&
+    draft.selections.every((selection) => visitedGroups.has(selection.groupId))
+  );
+}
+
 export function createChatRouteHandlers(context: RouteHandlerContext) {
   const {
     options,
@@ -227,7 +285,6 @@ export function createChatRouteHandlers(context: RouteHandlerContext) {
     createDeliveryClients,
     dashboardProfileForTarget,
     createFirstPartyKfcClients,
-    kfcProofAccessContext,
     latestKfcProofPreconditions,
     kfcAgentResponse,
     deferAiMonitorRefinement,
@@ -335,26 +392,6 @@ export function createChatRouteHandlers(context: RouteHandlerContext) {
         };
       }
 
-      const accessContext = await kfcProofAccessContext(
-        parsed.data.sessionId,
-        parsed.data.customerId,
-      );
-      const access = authorizeCustomerAccess(accessContext, {
-        channel: 'kfc',
-        sessionId: parsed.data.sessionId,
-        customerId: parsed.data.customerId,
-        scope: 'customer:read',
-      });
-      if (!access.allowed) {
-        return {
-          status: access.errorCode === 'authentication_required' ? 401 : 403,
-          body: {
-            errorCode: access.errorCode,
-            message: access.message,
-          },
-        };
-      }
-
       const sourceTurn = (await store.listTurns(parsed.data.sessionId))
         .slice()
         .reverse()
@@ -452,6 +489,62 @@ export function createChatRouteHandlers(context: RouteHandlerContext) {
           return { status: 422, body: { errorCode: 'invalid_action_payload' } };
         }
         trustedPayload = { items: batch.data.items };
+        trustedValue = undefined;
+      } else if (
+        actionSpec.id === 'update_cart' ||
+        actionSpec.id === 'continue_to_fulfillment'
+      ) {
+        if (attachment.widgetKind !== 'cartBuilder') {
+          return { status: 422, body: { errorCode: 'invalid_action_payload' } };
+        }
+        const draft = kfcCartDraftPayloadSchema.safeParse(
+          parsed.data.action.payload,
+        );
+        const cart = isRecord(attachment.data.cart) ? attachment.data.cart : {};
+        const allowedCodes = (Array.isArray(cart.items) ? cart.items : [])
+          .filter(isRecord)
+          .map((item) => item.itemCode)
+          .filter((code): code is string => typeof code === 'string');
+        if (
+          !draft.success ||
+          draft.data.items.length !== allowedCodes.length ||
+          draft.data.items.some(
+            ({ itemCode }) => !allowedCodes.includes(itemCode),
+          ) ||
+          (actionSpec.id === 'continue_to_fulfillment' &&
+            !draft.data.items.some(({ quantity }) => quantity > 0))
+        ) {
+          return { status: 422, body: { errorCode: 'invalid_action_payload' } };
+        }
+        trustedPayload = { items: draft.data.items };
+        trustedValue = undefined;
+      } else if (actionSpec.id === 'apply_modifiers') {
+        const draft = kfcModifierDraftPayloadSchema.safeParse(
+          parsed.data.action.payload,
+        );
+        const tree = isRecord(attachment.data.modifierTree)
+          ? attachment.data.modifierTree
+          : {};
+        if (
+          attachment.widgetKind !== 'modifierPicker' ||
+          !draft.success ||
+          !modifierDraftMatchesTree(draft.data, tree)
+        ) {
+          return { status: 422, body: { errorCode: 'invalid_action_payload' } };
+        }
+        trustedPayload = draft.data;
+        trustedValue = undefined;
+      } else if (actionSpec.id === 'submit_address') {
+        const draft = deliveryAddressUpdateSchema.safeParse(
+          parsed.data.action.payload,
+        );
+        if (
+          attachment.widgetKind !== 'addressFulfillmentCheck' ||
+          !draft.success
+        ) {
+          return { status: 422, body: { errorCode: 'invalid_action_payload' } };
+        }
+        trustedPayload = draft.data;
         trustedValue = undefined;
       } else if (actionSpec.id === 'add_item') {
         const requestedItemCode = parsed.data.action.payload?.itemCode;

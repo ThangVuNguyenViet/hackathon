@@ -36,6 +36,24 @@ describe('portable Direct SDK behavior retained by the KFC LangChain pack', () =
     expect(agentToolDescriptions.searchMenu).toContain(
       'partySize only as catalog-backed ranking evidence',
     );
+    expect(agentToolDescriptions.searchMenu).toContain(
+      'retry the same product or category search without modifierQueries',
+    );
+    expect(agentToolDescriptions.searchMenu).toContain(
+      'does not prove that the product is absent',
+    );
+    expect(agentToolDescriptions.searchMenu).toContain(
+      'leave queries empty for category-wide discovery',
+    );
+    expect(agentToolDescriptions.searchMenu).toContain(
+      'do not translate or invent a category',
+    );
+    expect(agentToolDescriptions.searchMenu).toContain(
+      'omit category for an exact product query',
+    );
+    expect(agentToolDescriptions.searchMenu).toContain(
+      'Always send all six fields',
+    );
 
     expect(KFC_AGENT_INSTRUCTIONS).toContain(
       'Thiếu dữ liệu không chứng minh một điều là có hoặc không có',
@@ -54,6 +72,18 @@ describe('portable Direct SDK behavior retained by the KFC LangChain pack', () =
     );
     expect(KFC_AGENT_INSTRUCTIONS).toContain(
       'lần đọc thất bại ảnh hưởng đến câu trả lời',
+    );
+    expect(KFC_AGENT_INSTRUCTIONS).toContain(
+      'preserve that exact product across later turns',
+    );
+    expect(KFC_AGENT_INSTRUCTIONS).toContain(
+      'Treat a requested drink, side, or other extra as a separate add-on',
+    );
+    expect(KFC_AGENT_INSTRUCTIONS).toContain(
+      'Do not substitute another product merely because a combined search is empty',
+    );
+    expect(KFC_AGENT_INSTRUCTIONS).toContain(
+      'When a read result says recovery is required, make another corrected tool call before answering',
     );
 
     expect(agentToolDescriptions.getModifierOptions).toContain(
@@ -91,6 +121,12 @@ describe('portable Direct SDK behavior retained by the KFC LangChain pack', () =
     );
     expect(agentToolDescriptions.handoff).toContain(
       'preserve relevant customer consent and action-authority constraints',
+    );
+    expect(agentToolDescriptions.handoff).toContain(
+      'Never use handoff merely because a cart proposal still needs GenUI confirmation',
+    );
+    expect(agentToolDescriptions.handoff).toContain(
+      'prepare the verified proposal for customer confirmation instead',
     );
   });
 
@@ -267,7 +303,22 @@ describe('portable Direct SDK behavior retained by the KFC LangChain pack', () =
     const toolMessage = model.calls[1]?.messages.at(-1);
     expect(toolMessage?.content).toContain('"recovery"');
     expect(toolMessage?.content).toContain(
-      '"instruction":"Retry with materially corrected or broader arguments',
+      '"instruction":"You must make another corrected read call before answering the customer. Retry searchMenu with materially corrected or broader arguments',
+    );
+    expect(toolMessage?.content).toContain(
+      'keep the product queries or category and remove modifierQueries',
+    );
+    expect(toolMessage?.content).toContain(
+      'An empty constrained result does not prove that the product is absent',
+    );
+    expect(toolMessage?.content).toContain(
+      'For category-wide discovery, keep the exact verified category and set queries to an empty array',
+    );
+    expect(toolMessage?.content).toContain(
+      'For an exact product query, remove an unverified category',
+    );
+    expect(toolMessage?.content).toContain(
+      'You must make another corrected read call before answering the customer',
     );
     const exhaustedToolMessage = model.calls[3]?.messages.at(-1);
     expect(exhaustedToolMessage?.content).toContain('"required":false');

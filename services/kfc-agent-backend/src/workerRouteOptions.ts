@@ -2,9 +2,7 @@ import type { RouteOptions } from './api/routeHandlerContracts.js';
 import { buildServerOptionsFromEnv } from './api/serverOptions.js';
 import { checkMessengerToken } from './workerReadiness.js';
 import { createWorkerMessengerHistorySync } from './workerMessaging.js';
-import { workerLifecycleOptions } from './workerLifecycle.js';
 import { loadBundledGeneratedFixtures } from './fixtures/bundledFixtures.js';
-import { createMockClients } from './mock/createMockClients.js';
 import type { DashboardEventBus } from './dashboard/eventBus.js';
 import type { D1Store } from './persistence/d1Store.js';
 import type { WorkerEnv } from './worker.js';
@@ -92,17 +90,6 @@ function buildBaseWorkerRouteOptions(
     ZALO_APP_ID: env.ZALO_APP_ID ?? '',
     ZALO_APP_SECRET: env.ZALO_APP_SECRET ?? '',
     ZALO_API_BASE_URL: env.ZALO_API_BASE_URL ?? '',
-    KFC_COMMERCE_MODE: env.KFC_COMMERCE_MODE ?? 'gateway',
-    KFC_COMMERCE_ENVIRONMENT: env.KFC_COMMERCE_ENVIRONMENT,
-    KFC_MENU_API_URL: env.KFC_MENU_API_URL,
-    CATALOG_TTL_SECONDS: env.CATALOG_TTL_SECONDS
-      ? Number(env.CATALOG_TTL_SECONDS)
-      : undefined,
-    KFC_COMMERCE_GATEWAY_BASE_URL: env.KFC_COMMERCE_GATEWAY_BASE_URL ?? '',
-    KFC_COMMERCE_GATEWAY_TOKEN: env.KFC_COMMERCE_GATEWAY_TOKEN ?? '',
-    KFC_POS_MODE: env.KFC_POS_MODE ?? 'disabled',
-    KFC_POS_BASE_URL: env.KFC_POS_BASE_URL ?? '',
-    KFC_POS_TOKEN: env.KFC_POS_TOKEN ?? '',
     KFC_DEMO_ADMIN_TOKEN: env.KFC_DEMO_ADMIN_TOKEN ?? '',
   });
 }
@@ -142,20 +129,12 @@ export function buildWorkerRouteOptions(
   const options = buildBaseWorkerRouteOptions(env, request);
   const deferredAgentTasks: Array<() => Promise<void>> = [];
   const fixtures = loadBundledGeneratedFixtures();
-  const fixtureProvider = createMockClients(fixtures);
 
   const routeOptions: RouteOptions = {
     ...options,
     fixtures,
-    kfcCommerceProvider: options.kfcCommerceProvider ?? {
-      cart: fixtureProvider.cart,
-      inventory: fixtureProvider.inventory,
-      storeLocator: fixtureProvider.storeLocator,
-      fulfillment: fixtureProvider.fulfillment,
-    },
     store,
     dashboard,
-    lifecycle: workerLifecycleOptions(env, store),
     messengerFetchImpl: env.MESSENGER_FETCH ?? fetch,
     zaloFetchImpl: env.ZALO_FETCH ?? fetch,
     defer: (task) => deferredAgentTasks.push(task),

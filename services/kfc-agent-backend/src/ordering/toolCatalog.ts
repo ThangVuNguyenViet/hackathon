@@ -161,7 +161,7 @@ export const toolArgumentSchemas = {
     .object({
       address: fulfillmentAddressInputSchema,
       method: z.enum(['pickup', 'delivery']),
-      itemCodes: z.array(z.string().min(1)).min(1),
+      itemCodes: z.array(z.string().min(1)).optional().default([]),
     })
     .strict(),
   searchPromotions: z
@@ -378,7 +378,7 @@ export const agentToolArgumentSchemas = {
 
 export const agentToolDescriptions: Record<ToolName, string> = {
   searchMenu:
-    'Return the complete available menu for full mode, or every verified match for search mode. Put independent product or identifier alternatives in queries; they use OR semantics. Use category for category-wide discovery, maxPriceVnd only as a per-item ceiling, partySize only as catalog-backed ranking evidence, and modifierQueries for exact selectable-option evidence. Multiple targeted searches may be called in one turn.',
+    'Return the complete available menu for full mode, or every verified match for search mode. Always send all six fields: mode, queries, category, maxPriceVnd, partySize, and modifierQueries; use null for unused nullable fields and [] for unused arrays. Put independent product or identifier alternatives in queries; they use OR semantics. Use the exact category text already returned by the menu and leave queries empty for category-wide discovery; do not translate or invent a category. Use concise Vietnamese product names in queries and omit category for an exact product query unless the exact category is already verified and genuinely needed. Use maxPriceVnd only as a per-item ceiling, partySize only as catalog-backed ranking evidence, and modifierQueries only for selectable options of the searched product. Search a requested standalone drink, side, or other add-on independently instead of putting it in modifierQueries for another product. When a constrained search is empty, retry the same product or category search without modifierQueries or other unrelated constraints before considering alternatives; an empty constrained result does not prove that the product is absent. Multiple targeted searches may be called in one turn.',
   getItemDetails:
     'Return the verified customer-facing name, description, category, base price, and current availability for one previously discovered menu item code. Treat available false as unavailable to order.',
   getModifierOptions:
@@ -393,7 +393,7 @@ export const agentToolDescriptions: Record<ToolName, string> = {
   checkStoreAvailability:
     'Check the exact current cart at one store and one pickup or delivery disposition; cart item codes are injected by the server. This verifies item availability only and does not verify delivery fee or ETA.',
   quoteFulfillment:
-    'Quote pickup or delivery for the exact current cart using either an explicit address or the exact pendingSavedAddressRef from verified model state. For an explicit address, send a real line1 and only administrative fields explicitly supplied in model-visible evidence; use null for a missing district or city so the fulfillment provider can resolve it. Cart item codes are injected by the server.',
+    'Quote pickup or delivery for an explicit address. This may be used before the customer chooses any items to verify the demo delivery address, fee, and ETA. Send a real line1 and only administrative fields explicitly supplied in model-visible evidence; use null for a missing district or city so the fulfillment provider can resolve it. Exact current cart item codes are injected by the server when present.',
   searchPromotions:
     'Return a complete promotion collection for the requested scope. Use a broad unfiltered request for the current catalog when a targeted search is empty; an empty filtered result does not prove that no promotion exists.',
   explainPromotion:
@@ -435,7 +435,7 @@ export const agentToolDescriptions: Record<ToolName, string> = {
   collectInvoice:
     'Collect only invoice fields supplied by the customer without inventing missing values. Ask naturally for required missing information; this does not place or modify the order.',
   handoff:
-    'Queue the current session for a human with structured reasons. Include the business facts the human must verify and preserve relevant customer consent and action-authority constraints, such as support sharing being allowed while ordering or payment remains unauthorized. A successful result means the request is queued and awaiting a human; it does not mean a human accepted or joined, and it does not verify response time. If a handoff is already queued, return that same verified escalation without creating another.',
+    'Queue the current session for a human only when the customer explicitly requests human support or verified provider or policy evidence requires escalation. Include the business facts the human must verify and preserve relevant customer consent and action-authority constraints, such as support sharing being allowed while ordering or payment remains unauthorized. Never use handoff merely because a cart proposal still needs GenUI confirmation; prepare the verified proposal for customer confirmation instead. A successful result means the request is queued and awaiting a human; it does not mean a human accepted or joined, and it does not verify response time. If a handoff is already queued, return that same verified escalation without creating another.',
   resolveHandoff:
     'Withdraw the active human-support escalation when the customer no longer wants it. Do not call this merely because the customer starts another commerce task.',
 };

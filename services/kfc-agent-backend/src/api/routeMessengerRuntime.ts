@@ -130,8 +130,6 @@ import {
   eventFromMessengerDelivery,
   sendMessengerSenderAction,
   dashboardEventId,
-  checkCommerceGatewayReadiness,
-  checkCatalogReadiness,
   runReadinessCheck,
   checkFixtures,
   checkMessengerConfig,
