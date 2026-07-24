@@ -1,0 +1,52 @@
+{
+  "schemaVersion": "kfc-live-scenario-manifest-v1",
+  "runId": "20260724-v1-qwen3.7-max-s03-a1",
+  "attempt": 1,
+  "status": "completed",
+  "startedAt": "2026-07-24T01:26:30.774Z",
+  "correlation": {
+    "externalSessionId": "live-20260724-v1-qwen3.7-max-s03-a1",
+    "durableSessionId": "live-20260724-v1-qwen3.7-max-s03-a1",
+    "scenarioId": "03-ton-kho-dia-chi-va-cua-hang",
+    "probeRunId": "20260724-v1-qwen3.7-max-s03-a1"
+  },
+  "scenario": {
+    "id": "03-ton-kho-dia-chi-va-cua-hang",
+    "title": "03: Tồn kho, địa chỉ, cửa hàng và giờ cao điểm",
+    "goal": "Kiểm tra hết món, ngoài vùng giao, địa chỉ mơ hồ, đổi địa chỉ, hết hàng lúc xác nhận và cửa hàng quá tải.",
+    "preconditions": [
+      "Khách đã đăng nhập và có một địa chỉ đã lưu ở Quận 5, nhưng câu hỏi ban đầu chỉ nêu khu vực Nhà Bè.",
+      "Tồn kho, vùng giao và thời gian phục vụ là dữ liệu động: Burger Tôm không có sẵn lúc đầu, cửa hàng gần địa chỉ đã lưu đang giờ cao điểm và lựa chọn thay thế có thể hết trước khi xác nhận.",
+      "Chưa có đơn hàng nào được tạo nên khách vẫn có thể đổi địa chỉ hoặc chọn phương án khác."
+    ],
+    "risks": [
+      "Inventory, serviceability, and fulfillment capacity can change while an order is being considered.",
+      "Uncertain availability needs a customer decision rather than an unsupported delivery commitment."
+    ],
+    "finalState": "needs_customer_decision",
+    "sourceFile": "03-ton-kho-dia-chi-va-cua-hang.json",
+    "sourcePath": "/Users/vietthangvunguyen/Workspace/hackathon/.worktrees/kfc-kiss-model-agnostic/ai-talent-tracks/fnb/conversations/03-ton-kho-dia-chi-va-cua-hang.json",
+    "sourceSha256": "df730a1482dd57f06dec79447720db60bf918b1cb05b6ad6c931fe0294773032"
+  },
+  "model": {
+    "candidateId": "qwen3.7-max",
+    "provider": "opencode",
+    "model": "qwen3.7-max",
+    "profile": "opencode:qwen3.7-max:anthropic-messages:thinking-disabled",
+    "transport": "anthropic_messages"
+  },
+  "evidence": {
+    "trace": "trace.jsonl",
+    "transcript": "transcript.md",
+    "preflight": "preflight.json",
+    "reviewPacket": "codex-review-packet.md",
+    "artifactSha256": {
+      "preflight.json": "a7cecfb9d96e36b146c0748fc8069b7c0a5b94fabef345c5557b0dc09b504fb1",
+      "trace.jsonl": "a6a95c81157e5d0988625d8cbbc09fc927d6a282142a7916eb71c4f6d4e65c68",
+      "transcript.md": "b7205357e4fa5cd231ea06f832a25b5d3f3d9189be6e268625cf8ba81aeb543c",
+      "codex-review-packet.md": "a51d189647a0fbdf352705caa89b1340a7b5ce69b274f6ac3c55a894b5839b35"
+    }
+  },
+  "completedAt": "2026-07-24T01:28:53.306Z",
+  "finishNote": "Agent found four Nhà Bè stores but could not verify Burger Tôm, saved Quận 5 address, inventory, or ETA; customer accepted handoff while explicitly withholding order consent."
+}

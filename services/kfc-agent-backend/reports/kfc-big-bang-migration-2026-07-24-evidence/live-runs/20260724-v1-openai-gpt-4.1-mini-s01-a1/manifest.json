@@ -1,0 +1,43 @@
+{
+  "schemaVersion": "kfc-live-scenario-manifest-v1",
+  "runId": "20260724-v1-openai-gpt-4.1-mini-s01-a1",
+  "attempt": 1,
+  "status": "ready",
+  "startedAt": "2026-07-24T01:06:40.547Z",
+  "correlation": {
+    "externalSessionId": "live-20260724-v1-openai-gpt-4.1-mini-s01-a1",
+    "durableSessionId": "live-20260724-v1-openai-gpt-4.1-mini-s01-a1",
+    "scenarioId": "01-dat-mon-ro-rang-giao-hang",
+    "probeRunId": "20260724-v1-openai-gpt-4.1-mini-s01-a1"
+  },
+  "scenario": {
+    "id": "01-dat-mon-ro-rang-giao-hang",
+    "title": "01: Đặt món rõ ràng, giao hàng, voucher, thanh toán",
+    "goal": "User đặt món rõ ràng, bot hỏi địa chỉ còn thiếu, tính phí giao hàng, áp mã, xác nhận thanh toán, ghi chú giao hàng, ghi nhận hóa đơn và tạo đơn.",
+    "preconditions": [
+      "Khách đang ở một phiên mua hàng mới, chưa có giỏ hàng hoặc đơn hàng đang chờ xác nhận.",
+      "Dữ liệu menu, vùng giao hàng, phí giao hàng, mã ưu đãi và phương thức thanh toán hiện hành có thể được tra cứu từ nguồn nghiệp vụ."
+    ],
+    "risks": [
+      "Order creation requires a clear customer confirmation.",
+      "Delivery, vouchers, payment, invoices, and delivery notes must stay grounded in authoritative business state."
+    ],
+    "finalState": "order_created",
+    "sourceFile": "01-dat-mon-ro-rang-giao-hang.json",
+    "sourcePath": "/Users/vietthangvunguyen/Workspace/hackathon/.worktrees/kfc-kiss-model-agnostic/ai-talent-tracks/fnb/conversations/01-dat-mon-ro-rang-giao-hang.json",
+    "sourceSha256": "30f1b4e717baea5a4bd77fcdb2cec0e64cdf472ae449d1bbd12c1d2b23390b66"
+  },
+  "model": {
+    "candidateId": "openai-gpt-4.1-mini",
+    "provider": "openai",
+    "model": "gpt-4.1-mini",
+    "profile": "openai:gpt-4.1-mini:responses",
+    "transport": "openai_responses"
+  },
+  "evidence": {
+    "trace": "trace.jsonl",
+    "transcript": "transcript.md",
+    "preflight": "preflight.json",
+    "reviewPacket": "codex-review-packet.md"
+  }
+}

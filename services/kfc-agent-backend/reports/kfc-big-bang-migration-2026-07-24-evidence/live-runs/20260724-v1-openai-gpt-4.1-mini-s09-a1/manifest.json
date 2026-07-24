@@ -1,0 +1,51 @@
+{
+  "schemaVersion": "kfc-live-scenario-manifest-v1",
+  "runId": "20260724-v1-openai-gpt-4.1-mini-s09-a1",
+  "attempt": 1,
+  "status": "completed",
+  "startedAt": "2026-07-24T01:28:36.363Z",
+  "correlation": {
+    "externalSessionId": "live-20260724-v1-openai-gpt-4.1-mini-s09-a1",
+    "durableSessionId": "live-20260724-v1-openai-gpt-4.1-mini-s09-a1",
+    "scenarioId": "09-phuong-thuc-thanh-toan",
+    "probeRunId": "20260724-v1-openai-gpt-4.1-mini-s09-a1"
+  },
+  "scenario": {
+    "id": "09-phuong-thuc-thanh-toan",
+    "title": "09: Phương thức thanh toán website/app",
+    "goal": "User hỏi các phương thức thanh toán, bot tra cứu dữ liệu thanh toán được quản trị và trả lời trực tiếp rằng website/app KFC không hỗ trợ MoMo.",
+    "preconditions": [
+      "Khách chỉ đang hỏi thông tin, chưa có giỏ hàng, đơn hàng hoặc giao dịch thanh toán cần thực hiện.",
+      "Danh sách phương thức thanh toán theo kênh website/app có trong dữ liệu nghiệp vụ được quản trị."
+    ],
+    "risks": [
+      "Payment availability must be grounded in governed business data.",
+      "An information request must not create an order or payment action."
+    ],
+    "finalState": "payment_methods_answered",
+    "sourceFile": "09-phuong-thuc-thanh-toan.json",
+    "sourcePath": "/Users/vietthangvunguyen/Workspace/hackathon/.worktrees/kfc-kiss-model-agnostic/ai-talent-tracks/fnb/conversations/09-phuong-thuc-thanh-toan.json",
+    "sourceSha256": "4e9522d497411ff2a138d895e6bceef6579718a8a7c22feeaa5af0a3fb8a6381"
+  },
+  "model": {
+    "candidateId": "openai-gpt-4.1-mini",
+    "provider": "openai",
+    "model": "gpt-4.1-mini",
+    "profile": "openai:gpt-4.1-mini:responses",
+    "transport": "openai_responses"
+  },
+  "evidence": {
+    "trace": "trace.jsonl",
+    "transcript": "transcript.md",
+    "preflight": "preflight.json",
+    "reviewPacket": "codex-review-packet.md",
+    "artifactSha256": {
+      "preflight.json": "f818fc794b29f24ee604218ccd41b8fc83e77c920b1375fce9289ecba0312e2e",
+      "trace.jsonl": "22f772a4624da4edee1039292ed4b85479101a0b1c447fc2bf0c6d29f15b6714",
+      "transcript.md": "a15feb386a05165cf3d07c3fe0a990410c788c233ea437e513da5c9646624d46",
+      "codex-review-packet.md": "0ca4e4fdd1ab93970bc89aa62110354807e50ac5ac67fcaf345219e562e0b671"
+    }
+  },
+  "completedAt": "2026-07-24T01:29:54.028Z",
+  "finishNote": "Khách hỏi thông tin thanh toán theo kênh và MoMo; trợ lý trả lời trực tiếp, không cần tạo giỏ hàng hay giao dịch."
+}

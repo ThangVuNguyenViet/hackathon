@@ -1,0 +1,50 @@
+{
+  "schemaVersion": "kfc-live-scenario-manifest-v1",
+  "runId": "20260724-v1-qwen3.7-max-s01-a1",
+  "attempt": 1,
+  "status": "preflight_failed",
+  "startedAt": "2026-07-24T01:07:33.251Z",
+  "correlation": {
+    "externalSessionId": "live-20260724-v1-qwen3.7-max-s01-a1",
+    "durableSessionId": "live-20260724-v1-qwen3.7-max-s01-a1",
+    "scenarioId": "01-dat-mon-ro-rang-giao-hang",
+    "probeRunId": "20260724-v1-qwen3.7-max-s01-a1"
+  },
+  "scenario": {
+    "id": "01-dat-mon-ro-rang-giao-hang",
+    "title": "01: Đặt món rõ ràng, giao hàng, voucher, thanh toán",
+    "goal": "User đặt món rõ ràng, bot hỏi địa chỉ còn thiếu, tính phí giao hàng, áp mã, xác nhận thanh toán, ghi chú giao hàng, ghi nhận hóa đơn và tạo đơn.",
+    "preconditions": [
+      "Khách đang ở một phiên mua hàng mới, chưa có giỏ hàng hoặc đơn hàng đang chờ xác nhận.",
+      "Dữ liệu menu, vùng giao hàng, phí giao hàng, mã ưu đãi và phương thức thanh toán hiện hành có thể được tra cứu từ nguồn nghiệp vụ."
+    ],
+    "risks": [
+      "Order creation requires a clear customer confirmation.",
+      "Delivery, vouchers, payment, invoices, and delivery notes must stay grounded in authoritative business state."
+    ],
+    "finalState": "order_created",
+    "sourceFile": "01-dat-mon-ro-rang-giao-hang.json",
+    "sourcePath": "/Users/vietthangvunguyen/Workspace/hackathon/.worktrees/kfc-kiss-model-agnostic/ai-talent-tracks/fnb/conversations/01-dat-mon-ro-rang-giao-hang.json",
+    "sourceSha256": "30f1b4e717baea5a4bd77fcdb2cec0e64cdf472ae449d1bbd12c1d2b23390b66"
+  },
+  "model": {
+    "candidateId": "qwen3.7-max",
+    "provider": "opencode",
+    "model": "qwen3.7-max",
+    "profile": "opencode:qwen3.7-max:anthropic-messages:thinking-disabled",
+    "transport": "anthropic_messages"
+  },
+  "evidence": {
+    "trace": "trace.jsonl",
+    "transcript": "transcript.md",
+    "preflight": "preflight.json",
+    "reviewPacket": "codex-review-packet.md",
+    "artifactSha256": {
+      "preflight.json": "26199b0c285d434c73efe34029c12cebb876a6849197587d973b08f99abbae36",
+      "trace.jsonl": "816ec8bd3a04f362d643a43e076964eff1f7ac86503e5e628a176b6c97b13632",
+      "transcript.md": "4664343ebffa8e915d0f85db1c294db15ab0109450011b9b91a346799e2e4262",
+      "codex-review-packet.md": "58ee0c5111f0b52a1abae2ab07fae17d5dc79a1ca8e7b159954baf34646a6d9e"
+    }
+  },
+  "completedAt": "2026-07-24T01:07:36.238Z"
+}

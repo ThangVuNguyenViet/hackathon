@@ -1,0 +1,51 @@
+{
+  "schemaVersion": "kfc-live-scenario-manifest-v1",
+  "runId": "20260724-v1-minimax-m3-s07-a1",
+  "attempt": 1,
+  "status": "completed",
+  "startedAt": "2026-07-24T01:37:49.456Z",
+  "correlation": {
+    "externalSessionId": "live-20260724-v1-minimax-m3-s07-a1",
+    "durableSessionId": "live-20260724-v1-minimax-m3-s07-a1",
+    "scenarioId": "07-ca-nhan-hoa-va-loyalty",
+    "probeRunId": "20260724-v1-minimax-m3-s07-a1"
+  },
+  "scenario": {
+    "id": "07-ca-nhan-hoa-va-loyalty",
+    "title": "07: Cá nhân hóa, món yêu thích, loyalty và chỉnh giỏ hàng",
+    "goal": "User muốn đặt lại đơn cũ, lấy món hay ăn, kiểm tra điểm thành viên, đổi và dùng voucher có xác nhận, rồi chỉnh giỏ hàng.",
+    "preconditions": [
+      "Khách đã đăng nhập và liên kết tài khoản thành viên; đơn gần nhất, món thường chọn, số dư điểm và ví ưu đãi có thể được đọc từ nguồn nghiệp vụ.",
+      "Giỏ hàng ban đầu trống và chưa có thao tác đổi điểm, dùng voucher hoặc đặt đơn nào được xác nhận."
+    ],
+    "risks": [
+      "Personalized history and loyalty information need authoritative customer state.",
+      "Membership benefits and cart changes require clear customer consent before they take effect."
+    ],
+    "finalState": "cart_updated",
+    "sourceFile": "07-ca-nhan-hoa-va-loyalty.json",
+    "sourcePath": "/Users/vietthangvunguyen/Workspace/hackathon/.worktrees/kfc-kiss-model-agnostic/ai-talent-tracks/fnb/conversations/07-ca-nhan-hoa-va-loyalty.json",
+    "sourceSha256": "7eb24710cd563b9a9c51a09262ada8a0ff32002451bff1852c8813eca15e3fbb"
+  },
+  "model": {
+    "candidateId": "minimax-m3",
+    "provider": "opencode",
+    "model": "minimax-m3",
+    "profile": "opencode:minimax-m3:anthropic-messages",
+    "transport": "anthropic_messages"
+  },
+  "evidence": {
+    "trace": "trace.jsonl",
+    "transcript": "transcript.md",
+    "preflight": "preflight.json",
+    "reviewPacket": "codex-review-packet.md",
+    "artifactSha256": {
+      "preflight.json": "7a57f54ecc69119c451f7c6f92d8e2d7e9f026e99e46b116345793cebabf96bf",
+      "trace.jsonl": "b53796e1698f1960039708432c96bf23434d3d933bf888f036f14bd3d5baae84",
+      "transcript.md": "72e0443ecfd52b61b98101770b40d584c30de555847f339e6ef6039ecdbad807",
+      "codex-review-packet.md": "d72dfb5baaf8cbee22776f326ec2e5df12a6ea84c8e5f28e533f0a2956061be9"
+    }
+  },
+  "completedAt": "2026-07-24T01:42:10.526Z",
+  "finishNote": "Cart was updated only after explicit item and modifier consent, but the personalized history, loyalty balance, and voucher preconditions were not accessible because every account tool returned authentication_required; retain as a scenario failure/partial outcome."
+}

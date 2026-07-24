@@ -1,0 +1,51 @@
+{
+  "schemaVersion": "kfc-live-scenario-manifest-v1",
+  "runId": "20260724-v1-minimax-m3-s10-a1",
+  "attempt": 1,
+  "status": "completed",
+  "startedAt": "2026-07-24T01:32:44.437Z",
+  "correlation": {
+    "externalSessionId": "live-20260724-v1-minimax-m3-s10-a1",
+    "durableSessionId": "live-20260724-v1-minimax-m3-s10-a1",
+    "scenarioId": "10-so-sanh-mon-va-giai-thich",
+    "probeRunId": "20260724-v1-minimax-m3-s10-a1"
+  },
+  "scenario": {
+    "id": "10-so-sanh-mon-va-giai-thich",
+    "title": "10: So sánh món và giải thích lựa chọn",
+    "goal": "So sánh hai combo bằng dữ liệu thành phần và giá đã xác minh, sau đó tư vấn lựa chọn không cay trong giới hạn dữ liệu mà không thay đổi giỏ hàng.",
+    "preconditions": [
+      "Hai mã combo 20698 và 20709 cùng dữ liệu giá, thành phần và tùy chọn hiện hành có thể được tra cứu.",
+      "Khách đang tham khảo, chưa yêu cầu thêm món hoặc thay đổi giỏ hàng; dữ liệu độ cay có thể không đầy đủ cho mọi thành phần."
+    ],
+    "risks": [
+      "Product comparisons must stay grounded in verified product information.",
+      "Advisory conversation must not mutate a cart or make unsupported health claims."
+    ],
+    "finalState": "advisory_complete",
+    "sourceFile": "10-so-sanh-mon-va-giai-thich.json",
+    "sourcePath": "/Users/vietthangvunguyen/Workspace/hackathon/.worktrees/kfc-kiss-model-agnostic/ai-talent-tracks/fnb/conversations/10-so-sanh-mon-va-giai-thich.json",
+    "sourceSha256": "bf27b56ebd0edc62cce5123bdf6f039edcb32c30d088ead64eeb3720fded0807"
+  },
+  "model": {
+    "candidateId": "minimax-m3",
+    "provider": "opencode",
+    "model": "minimax-m3",
+    "profile": "opencode:minimax-m3:anthropic-messages",
+    "transport": "anthropic_messages"
+  },
+  "evidence": {
+    "trace": "trace.jsonl",
+    "transcript": "transcript.md",
+    "preflight": "preflight.json",
+    "reviewPacket": "codex-review-packet.md",
+    "artifactSha256": {
+      "preflight.json": "7a57f54ecc69119c451f7c6f92d8e2d7e9f026e99e46b116345793cebabf96bf",
+      "trace.jsonl": "dfeb897d64b69a34c75200f088b9edc4eb3841ba21be31e5afbd77c5a3ae0de9",
+      "transcript.md": "8429e803bbe355d2336e8d724c280521fc7604060b864fc31cceb8f5d29b0706",
+      "codex-review-packet.md": "1379eea639eb2c88971aa1df2e9de31c332f25dfdfc093e53dc88a761c36bf0d"
+    }
+  },
+  "completedAt": "2026-07-24T01:33:52.726Z",
+  "finishNote": "PARTIAL/FAILED QUALITY: verified prices/components were presented and no cart mutation occurred. Initial answer made unsupported 'an toàn tuyệt đối' and spice claims. After challenge it retracted and exposed catalog limits, but still inferred from product names/common recipe and recommended 20698 partly from absence of spicy keywords, which is not sufficiently governed evidence."
+}

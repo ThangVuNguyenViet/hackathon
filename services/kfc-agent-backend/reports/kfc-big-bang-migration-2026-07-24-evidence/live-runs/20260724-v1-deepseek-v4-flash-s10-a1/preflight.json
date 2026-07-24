@@ -1,0 +1,17 @@
+{
+  "schemaVersion": "agent-model-capability-preflight-v1",
+  "identity": {
+    "candidateId": "deepseek-v4-flash",
+    "provider": "opencode",
+    "model": "deepseek-v4-flash",
+    "profile": "opencode:deepseek-v4-flash:chat-completions",
+    "transport": "openai_compatible_chat"
+  },
+  "ordinaryInvocation": {
+    "passed": true
+  },
+  "typedToolCall": {
+    "passed": true
+  },
+  "passed": true
+}

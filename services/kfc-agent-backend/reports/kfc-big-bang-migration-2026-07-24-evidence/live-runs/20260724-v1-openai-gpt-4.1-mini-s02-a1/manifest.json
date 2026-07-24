@@ -1,0 +1,51 @@
+{
+  "schemaVersion": "kfc-live-scenario-manifest-v1",
+  "runId": "20260724-v1-openai-gpt-4.1-mini-s02-a1",
+  "attempt": 1,
+  "status": "completed",
+  "startedAt": "2026-07-24T01:12:34.105Z",
+  "correlation": {
+    "externalSessionId": "live-20260724-v1-openai-gpt-4.1-mini-s02-a1",
+    "durableSessionId": "live-20260724-v1-openai-gpt-4.1-mini-s02-a1",
+    "scenarioId": "02-tu-van-combo-va-upsell",
+    "probeRunId": "20260724-v1-openai-gpt-4.1-mini-s02-a1"
+  },
+  "scenario": {
+    "id": "02-tu-van-combo-va-upsell",
+    "title": "02: Tư vấn combo, ngân sách, khuyến mãi, upsell",
+    "goal": "Khách đặt nhiều món lẻ cho nhóm; AI nhận ra combo tương đương tiết kiệm hơn, chờ khách đồng ý đổi đơn, rồi upsell tăng size nước và cập nhật giỏ hàng theo lựa chọn của khách.",
+    "preconditions": [
+      "Khách bắt đầu với giỏ hàng trống và đang chọn món cho nhóm bốn người trong ngân sách khoảng 300.000đ.",
+      "Menu, thành phần combo, tùy chọn kích cỡ và giá hiện hành có thể được tra cứu; chưa có thay đổi giỏ hàng nào được khách chấp thuận."
+    ],
+    "risks": [
+      "Recommendations must be grounded in available menu and price information.",
+      "Cart changes and upsells require clear customer agreement."
+    ],
+    "finalState": "cart_ready",
+    "sourceFile": "02-tu-van-combo-va-upsell.json",
+    "sourcePath": "/Users/vietthangvunguyen/Workspace/hackathon/.worktrees/kfc-kiss-model-agnostic/ai-talent-tracks/fnb/conversations/02-tu-van-combo-va-upsell.json",
+    "sourceSha256": "31a4511881be7cbfe03c66a6ddfadceb13e81c5dbe1f625cbd1c0ce9a84cf104"
+  },
+  "model": {
+    "candidateId": "openai-gpt-4.1-mini",
+    "provider": "openai",
+    "model": "gpt-4.1-mini",
+    "profile": "openai:gpt-4.1-mini:responses",
+    "transport": "openai_responses"
+  },
+  "evidence": {
+    "trace": "trace.jsonl",
+    "transcript": "transcript.md",
+    "preflight": "preflight.json",
+    "reviewPacket": "codex-review-packet.md",
+    "artifactSha256": {
+      "preflight.json": "f818fc794b29f24ee604218ccd41b8fc83e77c920b1375fce9289ecba0312e2e",
+      "trace.jsonl": "02ea138e0e8666f168d476997bde47a19599b5ea6a9aa4bde2380f783152e4c5",
+      "transcript.md": "be93bb29acf925b5bfad0c8a7860eba721980e4e5c8ab446e5daa6de11308f98",
+      "codex-review-packet.md": "e11f97c096b5262d59c3c4048424fe504094cdb74fcca9ca0f80a6d6fd0e2c11"
+    }
+  },
+  "completedAt": "2026-07-24T01:17:20.069Z",
+  "finishNote": "Khách nhận tư vấn theo ngân sách, đồng ý rõ ràng trước khi thay đổi giỏ, kiểm tra khả năng tăng cỡ nước, rồi chấp thuận 2 combo nguyên bản; giỏ kết thúc ở 338.000đ. LangSmith xuất trace trả 429 do tenant hết quota nhưng hội thoại và artifact local vẫn hoàn tất."
+}

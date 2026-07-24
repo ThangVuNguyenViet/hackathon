@@ -1,0 +1,2 @@
+{"schemaVersion":"kfc-live-scenario-trace-v1","sequence":1,"at":"2026-07-24T01:06:40.550Z","type":"session_started"}
+{"schemaVersion":"kfc-live-scenario-trace-v1","sequence":2,"at":"2026-07-24T01:06:44.565Z","type":"preflight_completed","passed":true,"ordinaryInvocation":{"passed":true},"typedToolCall":{"passed":true}}

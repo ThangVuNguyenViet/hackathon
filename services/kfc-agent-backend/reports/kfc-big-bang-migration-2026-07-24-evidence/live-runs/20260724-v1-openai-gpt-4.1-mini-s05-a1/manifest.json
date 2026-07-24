@@ -1,0 +1,51 @@
+{
+  "schemaVersion": "kfc-live-scenario-manifest-v1",
+  "runId": "20260724-v1-openai-gpt-4.1-mini-s05-a1",
+  "attempt": 1,
+  "status": "completed",
+  "startedAt": "2026-07-24T01:27:57.021Z",
+  "correlation": {
+    "externalSessionId": "live-20260724-v1-openai-gpt-4.1-mini-s05-a1",
+    "durableSessionId": "live-20260724-v1-openai-gpt-4.1-mini-s05-a1",
+    "scenarioId": "05-khieu-nai-va-human-handoff",
+    "probeRunId": "20260724-v1-openai-gpt-4.1-mini-s05-a1"
+  },
+  "scenario": {
+    "id": "05-khieu-nai-va-human-handoff",
+    "title": "05: Khiếu nại, feedback và chuyển nhân viên",
+    "goal": "Nhận diện khiếu nại, sai món, thiếu món, feedback sau đơn, user tức giận và yêu cầu gặp nhân viên.",
+    "preconditions": [
+      "Khách đang phản hồi về một đơn vừa nhận; thông tin đơn và kênh chuyển nhân viên có thể được tra cứu nếu cần.",
+      "Chưa có hồ sơ khiếu nại hoặc yêu cầu chuyển nhân viên nào được tạo cho cuộc trao đổi này."
+    ],
+    "risks": [
+      "Complaints need structured capture and appropriate escalation.",
+      "Complaint handling must not be treated as a new-order flow."
+    ],
+    "finalState": "human_handoff_created",
+    "sourceFile": "05-khieu-nai-va-human-handoff.json",
+    "sourcePath": "/Users/vietthangvunguyen/Workspace/hackathon/.worktrees/kfc-kiss-model-agnostic/ai-talent-tracks/fnb/conversations/05-khieu-nai-va-human-handoff.json",
+    "sourceSha256": "34f08c9eaf8af5a15afa77ee49a667ea0b97721615e49579ae22b8a9f52a2c2f"
+  },
+  "model": {
+    "candidateId": "openai-gpt-4.1-mini",
+    "provider": "openai",
+    "model": "gpt-4.1-mini",
+    "profile": "openai:gpt-4.1-mini:responses",
+    "transport": "openai_responses"
+  },
+  "evidence": {
+    "trace": "trace.jsonl",
+    "transcript": "transcript.md",
+    "preflight": "preflight.json",
+    "reviewPacket": "codex-review-packet.md",
+    "artifactSha256": {
+      "preflight.json": "f818fc794b29f24ee604218ccd41b8fc83e77c920b1375fce9289ecba0312e2e",
+      "trace.jsonl": "5528cae83661fb0d07726b63a615a0028bf54d2356bb06b3245985211f2b46da",
+      "transcript.md": "3506c126e14f6634c3f1f178ecf131fb978e5ea1de6a32af3f4ae2c903c09759",
+      "codex-review-packet.md": "a6d2a23ef11a9813919cebf91cab9f33e95668e3aa996f581857c0c213b36f61"
+    }
+  },
+  "completedAt": "2026-07-24T01:30:25.791Z",
+  "finishNote": "Khách phản ánh thiếu món/khoai nguội, cung cấp mã đơn và yêu cầu chuyển nhân viên; trợ lý xác nhận handoff nhưng trước đó nói không có quyền tra cứu. LangSmith 429 lặp lại do npm script nạp lại biến môi trường."
+}

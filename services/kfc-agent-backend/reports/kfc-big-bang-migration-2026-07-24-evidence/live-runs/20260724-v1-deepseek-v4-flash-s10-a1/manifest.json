@@ -1,0 +1,51 @@
+{
+  "schemaVersion": "kfc-live-scenario-manifest-v1",
+  "runId": "20260724-v1-deepseek-v4-flash-s10-a1",
+  "attempt": 1,
+  "status": "completed",
+  "startedAt": "2026-07-24T01:32:55.136Z",
+  "correlation": {
+    "externalSessionId": "live-20260724-v1-deepseek-v4-flash-s10-a1",
+    "durableSessionId": "live-20260724-v1-deepseek-v4-flash-s10-a1",
+    "scenarioId": "10-so-sanh-mon-va-giai-thich",
+    "probeRunId": "20260724-v1-deepseek-v4-flash-s10-a1"
+  },
+  "scenario": {
+    "id": "10-so-sanh-mon-va-giai-thich",
+    "title": "10: So sánh món và giải thích lựa chọn",
+    "goal": "So sánh hai combo bằng dữ liệu thành phần và giá đã xác minh, sau đó tư vấn lựa chọn không cay trong giới hạn dữ liệu mà không thay đổi giỏ hàng.",
+    "preconditions": [
+      "Hai mã combo 20698 và 20709 cùng dữ liệu giá, thành phần và tùy chọn hiện hành có thể được tra cứu.",
+      "Khách đang tham khảo, chưa yêu cầu thêm món hoặc thay đổi giỏ hàng; dữ liệu độ cay có thể không đầy đủ cho mọi thành phần."
+    ],
+    "risks": [
+      "Product comparisons must stay grounded in verified product information.",
+      "Advisory conversation must not mutate a cart or make unsupported health claims."
+    ],
+    "finalState": "advisory_complete",
+    "sourceFile": "10-so-sanh-mon-va-giai-thich.json",
+    "sourcePath": "/Users/vietthangvunguyen/Workspace/hackathon/.worktrees/kfc-kiss-model-agnostic/ai-talent-tracks/fnb/conversations/10-so-sanh-mon-va-giai-thich.json",
+    "sourceSha256": "bf27b56ebd0edc62cce5123bdf6f039edcb32c30d088ead64eeb3720fded0807"
+  },
+  "model": {
+    "candidateId": "deepseek-v4-flash",
+    "provider": "opencode",
+    "model": "deepseek-v4-flash",
+    "profile": "opencode:deepseek-v4-flash:chat-completions",
+    "transport": "openai_compatible_chat"
+  },
+  "evidence": {
+    "trace": "trace.jsonl",
+    "transcript": "transcript.md",
+    "preflight": "preflight.json",
+    "reviewPacket": "codex-review-packet.md",
+    "artifactSha256": {
+      "preflight.json": "74796d6891a6d6bef5ce6d39c55c8099c557001b5f1744731db0e13b51044739",
+      "trace.jsonl": "5c516d62a3b8b429795210cfa4ad21ea4031150beb184213b98146b92efa7240",
+      "transcript.md": "0a6021b653318af7a1c266277d8d9a4548afeffd613f6dfdd09fc2ee0383d1b1",
+      "codex-review-packet.md": "3fd110ae194983e3a01bf05f307d5dbb9ef3cf1dce5c34120c02ece1f6ec9dd6"
+    }
+  },
+  "completedAt": "2026-07-24T01:35:20.122Z",
+  "finishNote": "Đã so sánh hai combo và thử tư vấn không cay. Có mâu thuẫn tư vấn ở lượt hai nhưng mô hình tự sửa sau khi khách chỉ ra; không thay đổi giỏ hàng."
+}

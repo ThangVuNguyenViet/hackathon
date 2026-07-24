@@ -1,0 +1,51 @@
+{
+  "schemaVersion": "kfc-live-scenario-manifest-v1",
+  "runId": "20260724-v1-minimax-m3-s09-a1",
+  "attempt": 1,
+  "status": "completed",
+  "startedAt": "2026-07-24T01:30:21.373Z",
+  "correlation": {
+    "externalSessionId": "live-20260724-v1-minimax-m3-s09-a1",
+    "durableSessionId": "live-20260724-v1-minimax-m3-s09-a1",
+    "scenarioId": "09-phuong-thuc-thanh-toan",
+    "probeRunId": "20260724-v1-minimax-m3-s09-a1"
+  },
+  "scenario": {
+    "id": "09-phuong-thuc-thanh-toan",
+    "title": "09: Phương thức thanh toán website/app",
+    "goal": "User hỏi các phương thức thanh toán, bot tra cứu dữ liệu thanh toán được quản trị và trả lời trực tiếp rằng website/app KFC không hỗ trợ MoMo.",
+    "preconditions": [
+      "Khách chỉ đang hỏi thông tin, chưa có giỏ hàng, đơn hàng hoặc giao dịch thanh toán cần thực hiện.",
+      "Danh sách phương thức thanh toán theo kênh website/app có trong dữ liệu nghiệp vụ được quản trị."
+    ],
+    "risks": [
+      "Payment availability must be grounded in governed business data.",
+      "An information request must not create an order or payment action."
+    ],
+    "finalState": "payment_methods_answered",
+    "sourceFile": "09-phuong-thuc-thanh-toan.json",
+    "sourcePath": "/Users/vietthangvunguyen/Workspace/hackathon/.worktrees/kfc-kiss-model-agnostic/ai-talent-tracks/fnb/conversations/09-phuong-thuc-thanh-toan.json",
+    "sourceSha256": "4e9522d497411ff2a138d895e6bceef6579718a8a7c22feeaa5af0a3fb8a6381"
+  },
+  "model": {
+    "candidateId": "minimax-m3",
+    "provider": "opencode",
+    "model": "minimax-m3",
+    "profile": "opencode:minimax-m3:anthropic-messages",
+    "transport": "anthropic_messages"
+  },
+  "evidence": {
+    "trace": "trace.jsonl",
+    "transcript": "transcript.md",
+    "preflight": "preflight.json",
+    "reviewPacket": "codex-review-packet.md",
+    "artifactSha256": {
+      "preflight.json": "7a57f54ecc69119c451f7c6f92d8e2d7e9f026e99e46b116345793cebabf96bf",
+      "trace.jsonl": "b3ac48634fc4eddd7fc7a20644cd19fcc814c4edb96ef12beeb780751dced2a4",
+      "transcript.md": "14cc7ae08e7e089069843be2721dea3f21fd3857e5f9d1a104119ebfc86a8968",
+      "codex-review-packet.md": "7544bf64d25b86c68aec766cc6cdc93244132bb43e29cdd52fe50f0429b4f791"
+    }
+  },
+  "completedAt": "2026-07-24T01:32:08.503Z",
+  "finishNote": "FAILED: initial answer hallucinated MoMo and other methods; after challenge it rechecked but returned no governed data and still did not directly state website/app does not support MoMo. No order/payment mutation observed. LangSmith upload attempts unexpectedly occurred and hit 429 despite requested tracing-disable shell prefix."
+}

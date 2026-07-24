@@ -1,0 +1,51 @@
+{
+  "schemaVersion": "kfc-live-scenario-manifest-v1",
+  "runId": "20260724-v1-openai-gpt-4.1-mini-s10-a1",
+  "attempt": 1,
+  "status": "completed",
+  "startedAt": "2026-07-24T01:30:51.949Z",
+  "correlation": {
+    "externalSessionId": "live-20260724-v1-openai-gpt-4.1-mini-s10-a1",
+    "durableSessionId": "live-20260724-v1-openai-gpt-4.1-mini-s10-a1",
+    "scenarioId": "10-so-sanh-mon-va-giai-thich",
+    "probeRunId": "20260724-v1-openai-gpt-4.1-mini-s10-a1"
+  },
+  "scenario": {
+    "id": "10-so-sanh-mon-va-giai-thich",
+    "title": "10: So sánh món và giải thích lựa chọn",
+    "goal": "So sánh hai combo bằng dữ liệu thành phần và giá đã xác minh, sau đó tư vấn lựa chọn không cay trong giới hạn dữ liệu mà không thay đổi giỏ hàng.",
+    "preconditions": [
+      "Hai mã combo 20698 và 20709 cùng dữ liệu giá, thành phần và tùy chọn hiện hành có thể được tra cứu.",
+      "Khách đang tham khảo, chưa yêu cầu thêm món hoặc thay đổi giỏ hàng; dữ liệu độ cay có thể không đầy đủ cho mọi thành phần."
+    ],
+    "risks": [
+      "Product comparisons must stay grounded in verified product information.",
+      "Advisory conversation must not mutate a cart or make unsupported health claims."
+    ],
+    "finalState": "advisory_complete",
+    "sourceFile": "10-so-sanh-mon-va-giai-thich.json",
+    "sourcePath": "/Users/vietthangvunguyen/Workspace/hackathon/.worktrees/kfc-kiss-model-agnostic/ai-talent-tracks/fnb/conversations/10-so-sanh-mon-va-giai-thich.json",
+    "sourceSha256": "bf27b56ebd0edc62cce5123bdf6f039edcb32c30d088ead64eeb3720fded0807"
+  },
+  "model": {
+    "candidateId": "openai-gpt-4.1-mini",
+    "provider": "openai",
+    "model": "gpt-4.1-mini",
+    "profile": "openai:gpt-4.1-mini:responses",
+    "transport": "openai_responses"
+  },
+  "evidence": {
+    "trace": "trace.jsonl",
+    "transcript": "transcript.md",
+    "preflight": "preflight.json",
+    "reviewPacket": "codex-review-packet.md",
+    "artifactSha256": {
+      "preflight.json": "f818fc794b29f24ee604218ccd41b8fc83e77c920b1375fce9289ecba0312e2e",
+      "trace.jsonl": "1709f8f75d034759e31650f50eeeaffb10fa3973b4320099786c499da1545b51",
+      "transcript.md": "2ca3fcd98d8e5c89944142006d5257a680e9468796b9e7424c1c3900d19c9767",
+      "codex-review-packet.md": "2ee762ecacf12ac10f3e4561a51531e3f357339bab4371089632916ed06b3990"
+    }
+  },
+  "completedAt": "2026-07-24T01:32:45.514Z",
+  "finishNote": "Khách làm rõ yêu cầu tránh cay tuyệt đối; trợ lý giới hạn khuyến nghị theo phần đã xác nhận, không thay đổi giỏ hàng."
+}

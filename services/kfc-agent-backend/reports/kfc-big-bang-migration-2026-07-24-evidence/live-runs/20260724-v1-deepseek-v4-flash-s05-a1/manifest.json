@@ -1,0 +1,51 @@
+{
+  "schemaVersion": "kfc-live-scenario-manifest-v1",
+  "runId": "20260724-v1-deepseek-v4-flash-s05-a1",
+  "attempt": 1,
+  "status": "completed",
+  "startedAt": "2026-07-24T01:29:27.710Z",
+  "correlation": {
+    "externalSessionId": "live-20260724-v1-deepseek-v4-flash-s05-a1",
+    "durableSessionId": "live-20260724-v1-deepseek-v4-flash-s05-a1",
+    "scenarioId": "05-khieu-nai-va-human-handoff",
+    "probeRunId": "20260724-v1-deepseek-v4-flash-s05-a1"
+  },
+  "scenario": {
+    "id": "05-khieu-nai-va-human-handoff",
+    "title": "05: Khiếu nại, feedback và chuyển nhân viên",
+    "goal": "Nhận diện khiếu nại, sai món, thiếu món, feedback sau đơn, user tức giận và yêu cầu gặp nhân viên.",
+    "preconditions": [
+      "Khách đang phản hồi về một đơn vừa nhận; thông tin đơn và kênh chuyển nhân viên có thể được tra cứu nếu cần.",
+      "Chưa có hồ sơ khiếu nại hoặc yêu cầu chuyển nhân viên nào được tạo cho cuộc trao đổi này."
+    ],
+    "risks": [
+      "Complaints need structured capture and appropriate escalation.",
+      "Complaint handling must not be treated as a new-order flow."
+    ],
+    "finalState": "human_handoff_created",
+    "sourceFile": "05-khieu-nai-va-human-handoff.json",
+    "sourcePath": "/Users/vietthangvunguyen/Workspace/hackathon/.worktrees/kfc-kiss-model-agnostic/ai-talent-tracks/fnb/conversations/05-khieu-nai-va-human-handoff.json",
+    "sourceSha256": "34f08c9eaf8af5a15afa77ee49a667ea0b97721615e49579ae22b8a9f52a2c2f"
+  },
+  "model": {
+    "candidateId": "deepseek-v4-flash",
+    "provider": "opencode",
+    "model": "deepseek-v4-flash",
+    "profile": "opencode:deepseek-v4-flash:chat-completions",
+    "transport": "openai_compatible_chat"
+  },
+  "evidence": {
+    "trace": "trace.jsonl",
+    "transcript": "transcript.md",
+    "preflight": "preflight.json",
+    "reviewPacket": "codex-review-packet.md",
+    "artifactSha256": {
+      "preflight.json": "74796d6891a6d6bef5ce6d39c55c8099c557001b5f1744731db0e13b51044739",
+      "trace.jsonl": "8c23bc633bf67bbbe696b26ab9f033938ac4264d21964c98a41b1cc8eac52d7b",
+      "transcript.md": "a2eb63a96a99648c11b5704a210115bbde558368fc3cdc633da90459165d71fb",
+      "codex-review-packet.md": "68beacb363c3e14f54c3eb6564eac53499b3cbd3b1534a5a9bac0ca86046a3cf"
+    }
+  },
+  "completedAt": "2026-07-24T01:31:05.360Z",
+  "finishNote": "Customer explicitly requested escalation after reporting missing chicken and cold fries; the agent stated support was connected."
+}

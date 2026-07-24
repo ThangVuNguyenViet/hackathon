@@ -1,0 +1,52 @@
+{
+  "schemaVersion": "kfc-live-scenario-manifest-v1",
+  "runId": "20260724-v1-openai-gpt-4.1-mini-s03-a1",
+  "attempt": 1,
+  "status": "completed",
+  "startedAt": "2026-07-24T01:12:40.301Z",
+  "correlation": {
+    "externalSessionId": "live-20260724-v1-openai-gpt-4.1-mini-s03-a1",
+    "durableSessionId": "live-20260724-v1-openai-gpt-4.1-mini-s03-a1",
+    "scenarioId": "03-ton-kho-dia-chi-va-cua-hang",
+    "probeRunId": "20260724-v1-openai-gpt-4.1-mini-s03-a1"
+  },
+  "scenario": {
+    "id": "03-ton-kho-dia-chi-va-cua-hang",
+    "title": "03: Tồn kho, địa chỉ, cửa hàng và giờ cao điểm",
+    "goal": "Kiểm tra hết món, ngoài vùng giao, địa chỉ mơ hồ, đổi địa chỉ, hết hàng lúc xác nhận và cửa hàng quá tải.",
+    "preconditions": [
+      "Khách đã đăng nhập và có một địa chỉ đã lưu ở Quận 5, nhưng câu hỏi ban đầu chỉ nêu khu vực Nhà Bè.",
+      "Tồn kho, vùng giao và thời gian phục vụ là dữ liệu động: Burger Tôm không có sẵn lúc đầu, cửa hàng gần địa chỉ đã lưu đang giờ cao điểm và lựa chọn thay thế có thể hết trước khi xác nhận.",
+      "Chưa có đơn hàng nào được tạo nên khách vẫn có thể đổi địa chỉ hoặc chọn phương án khác."
+    ],
+    "risks": [
+      "Inventory, serviceability, and fulfillment capacity can change while an order is being considered.",
+      "Uncertain availability needs a customer decision rather than an unsupported delivery commitment."
+    ],
+    "finalState": "needs_customer_decision",
+    "sourceFile": "03-ton-kho-dia-chi-va-cua-hang.json",
+    "sourcePath": "/Users/vietthangvunguyen/Workspace/hackathon/.worktrees/kfc-kiss-model-agnostic/ai-talent-tracks/fnb/conversations/03-ton-kho-dia-chi-va-cua-hang.json",
+    "sourceSha256": "df730a1482dd57f06dec79447720db60bf918b1cb05b6ad6c931fe0294773032"
+  },
+  "model": {
+    "candidateId": "openai-gpt-4.1-mini",
+    "provider": "openai",
+    "model": "gpt-4.1-mini",
+    "profile": "openai:gpt-4.1-mini:responses",
+    "transport": "openai_responses"
+  },
+  "evidence": {
+    "trace": "trace.jsonl",
+    "transcript": "transcript.md",
+    "preflight": "preflight.json",
+    "reviewPacket": "codex-review-packet.md",
+    "artifactSha256": {
+      "preflight.json": "f818fc794b29f24ee604218ccd41b8fc83e77c920b1375fce9289ecba0312e2e",
+      "trace.jsonl": "b135efce4cbee9bc9ad7a94223b724b972f4e3cc122da91a5a32b5e5644fcc38",
+      "transcript.md": "02b8162ab5f6d7d23bbc4d14d62a4d591592f28a03bd15b0cd8668a5325a530d",
+      "codex-review-packet.md": "072d4ca5a78c2912320cccfb80cde5ee815699b04ac43fafac56cd15428cf30b"
+    }
+  },
+  "completedAt": "2026-07-24T01:22:49.259Z",
+  "finishNote": "Khách yêu cầu kiểm tra địa chỉ/tồn kho động và không cho tự thay món. Hệ thống lần lượt đưa thông tin mâu thuẫn về vùng giao/tồn kho, rồi lần kiểm tra cuối không tìm thấy Burger Tôm; dừng đúng ở trạng thái cần khách quyết định, không tạo đơn."
+}

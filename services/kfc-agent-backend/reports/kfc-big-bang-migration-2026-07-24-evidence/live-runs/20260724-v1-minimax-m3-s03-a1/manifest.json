@@ -1,0 +1,52 @@
+{
+  "schemaVersion": "kfc-live-scenario-manifest-v1",
+  "runId": "20260724-v1-minimax-m3-s03-a1",
+  "attempt": 1,
+  "status": "completed",
+  "startedAt": "2026-07-24T01:30:01.930Z",
+  "correlation": {
+    "externalSessionId": "live-20260724-v1-minimax-m3-s03-a1",
+    "durableSessionId": "live-20260724-v1-minimax-m3-s03-a1",
+    "scenarioId": "03-ton-kho-dia-chi-va-cua-hang",
+    "probeRunId": "20260724-v1-minimax-m3-s03-a1"
+  },
+  "scenario": {
+    "id": "03-ton-kho-dia-chi-va-cua-hang",
+    "title": "03: Tồn kho, địa chỉ, cửa hàng và giờ cao điểm",
+    "goal": "Kiểm tra hết món, ngoài vùng giao, địa chỉ mơ hồ, đổi địa chỉ, hết hàng lúc xác nhận và cửa hàng quá tải.",
+    "preconditions": [
+      "Khách đã đăng nhập và có một địa chỉ đã lưu ở Quận 5, nhưng câu hỏi ban đầu chỉ nêu khu vực Nhà Bè.",
+      "Tồn kho, vùng giao và thời gian phục vụ là dữ liệu động: Burger Tôm không có sẵn lúc đầu, cửa hàng gần địa chỉ đã lưu đang giờ cao điểm và lựa chọn thay thế có thể hết trước khi xác nhận.",
+      "Chưa có đơn hàng nào được tạo nên khách vẫn có thể đổi địa chỉ hoặc chọn phương án khác."
+    ],
+    "risks": [
+      "Inventory, serviceability, and fulfillment capacity can change while an order is being considered.",
+      "Uncertain availability needs a customer decision rather than an unsupported delivery commitment."
+    ],
+    "finalState": "needs_customer_decision",
+    "sourceFile": "03-ton-kho-dia-chi-va-cua-hang.json",
+    "sourcePath": "/Users/vietthangvunguyen/Workspace/hackathon/.worktrees/kfc-kiss-model-agnostic/ai-talent-tracks/fnb/conversations/03-ton-kho-dia-chi-va-cua-hang.json",
+    "sourceSha256": "df730a1482dd57f06dec79447720db60bf918b1cb05b6ad6c931fe0294773032"
+  },
+  "model": {
+    "candidateId": "minimax-m3",
+    "provider": "opencode",
+    "model": "minimax-m3",
+    "profile": "opencode:minimax-m3:anthropic-messages",
+    "transport": "anthropic_messages"
+  },
+  "evidence": {
+    "trace": "trace.jsonl",
+    "transcript": "transcript.md",
+    "preflight": "preflight.json",
+    "reviewPacket": "codex-review-packet.md",
+    "artifactSha256": {
+      "preflight.json": "7a57f54ecc69119c451f7c6f92d8e2d7e9f026e99e46b116345793cebabf96bf",
+      "trace.jsonl": "8ef4133a41e168e5924e4fc4fa050e05184fbf3cdc24329490b5b5eeb94184d7",
+      "transcript.md": "ece7c3b5cfeb0fb61ed24fa890c22a1c6236255d9cdc6d9fdac39f5f3929fc07",
+      "codex-review-packet.md": "0145d28615688c4e08f7e54cf77ae1d77c0dfbcd09460abbd8ed811dca40b988"
+    }
+  },
+  "completedAt": "2026-07-24T01:33:24.652Z",
+  "finishNote": "Needs-customer-decision boundary preserved, but store/capacity and replacement availability were not actually surfaced; assistant twice ended on a placeholder after saying it would check."
+}

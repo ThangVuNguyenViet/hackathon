@@ -1,0 +1,51 @@
+{
+  "schemaVersion": "kfc-live-scenario-manifest-v1",
+  "runId": "20260724-v1-deepseek-v4-flash-s04-a1",
+  "attempt": 1,
+  "status": "completed",
+  "startedAt": "2026-07-24T01:23:22.232Z",
+  "correlation": {
+    "externalSessionId": "live-20260724-v1-deepseek-v4-flash-s04-a1",
+    "durableSessionId": "live-20260724-v1-deepseek-v4-flash-s04-a1",
+    "scenarioId": "04-sau-khi-dat-don",
+    "probeRunId": "20260724-v1-deepseek-v4-flash-s04-a1"
+  },
+  "scenario": {
+    "id": "04-sau-khi-dat-don",
+    "title": "04: Theo dõi, hủy, đặt lại và chỉnh đơn sau khi đặt",
+    "goal": "User hỏi trạng thái đơn, ETA, hủy đơn, thêm món sau khi đặt và đặt lại đơn cũ.",
+    "preconditions": [
+      "Khách đã có đơn KFC-1024 đang được cửa hàng Nguyễn Thị Minh Khai chuẩn bị và trạng thái, ETA có thể được tra cứu.",
+      "Khách cũng có một đơn cũ riêng biệt có thể dùng làm mẫu đặt lại; chưa có yêu cầu hủy hoặc sửa nào được thực thi khi hội thoại bắt đầu."
+    ],
+    "risks": [
+      "Post-order requests depend on the current order state.",
+      "A later request must not inadvertently change an in-flight order."
+    ],
+    "finalState": "post_order_handled",
+    "sourceFile": "04-sau-khi-dat-don.json",
+    "sourcePath": "/Users/vietthangvunguyen/Workspace/hackathon/.worktrees/kfc-kiss-model-agnostic/ai-talent-tracks/fnb/conversations/04-sau-khi-dat-don.json",
+    "sourceSha256": "99ba511f12cd1d53f5ea007a8e20a28bfdb0ca074cdacf2428863df77588d291"
+  },
+  "model": {
+    "candidateId": "deepseek-v4-flash",
+    "provider": "opencode",
+    "model": "deepseek-v4-flash",
+    "profile": "opencode:deepseek-v4-flash:chat-completions",
+    "transport": "openai_compatible_chat"
+  },
+  "evidence": {
+    "trace": "trace.jsonl",
+    "transcript": "transcript.md",
+    "preflight": "preflight.json",
+    "reviewPacket": "codex-review-packet.md",
+    "artifactSha256": {
+      "preflight.json": "74796d6891a6d6bef5ce6d39c55c8099c557001b5f1744731db0e13b51044739",
+      "trace.jsonl": "107333d2b857afad4d13c2697fd3fca118bd69ca040b0c864780850e193cf665",
+      "transcript.md": "c14675767d150933135f979077e6069d056657a90c87f6838c6f49a29be8af05",
+      "codex-review-packet.md": "478c203bbb0d455d7a396d82e57dff47a06fdca325e35261d192e8f8981f0970"
+    }
+  },
+  "completedAt": "2026-07-24T01:28:27.229Z",
+  "finishNote": "Scenario stopped safely because harness session lacked authenticated order authority despite narrative precondition. No cancellation, in-flight modification, or reorder was executed; preserve mismatch for evaluator."
+}

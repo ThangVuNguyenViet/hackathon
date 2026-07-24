@@ -1,0 +1,17 @@
+{
+  "schemaVersion": "agent-model-capability-preflight-v1",
+  "identity": {
+    "candidateId": "minimax-m3",
+    "provider": "opencode",
+    "model": "minimax-m3",
+    "profile": "opencode:minimax-m3:anthropic-messages",
+    "transport": "anthropic_messages"
+  },
+  "ordinaryInvocation": {
+    "passed": true
+  },
+  "typedToolCall": {
+    "passed": true
+  },
+  "passed": true
+}

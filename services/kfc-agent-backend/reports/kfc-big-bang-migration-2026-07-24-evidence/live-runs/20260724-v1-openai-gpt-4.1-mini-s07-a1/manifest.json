@@ -1,0 +1,51 @@
+{
+  "schemaVersion": "kfc-live-scenario-manifest-v1",
+  "runId": "20260724-v1-openai-gpt-4.1-mini-s07-a1",
+  "attempt": 1,
+  "status": "completed",
+  "startedAt": "2026-07-24T01:34:58.746Z",
+  "correlation": {
+    "externalSessionId": "live-20260724-v1-openai-gpt-4.1-mini-s07-a1",
+    "durableSessionId": "live-20260724-v1-openai-gpt-4.1-mini-s07-a1",
+    "scenarioId": "07-ca-nhan-hoa-va-loyalty",
+    "probeRunId": "20260724-v1-openai-gpt-4.1-mini-s07-a1"
+  },
+  "scenario": {
+    "id": "07-ca-nhan-hoa-va-loyalty",
+    "title": "07: Cá nhân hóa, món yêu thích, loyalty và chỉnh giỏ hàng",
+    "goal": "User muốn đặt lại đơn cũ, lấy món hay ăn, kiểm tra điểm thành viên, đổi và dùng voucher có xác nhận, rồi chỉnh giỏ hàng.",
+    "preconditions": [
+      "Khách đã đăng nhập và liên kết tài khoản thành viên; đơn gần nhất, món thường chọn, số dư điểm và ví ưu đãi có thể được đọc từ nguồn nghiệp vụ.",
+      "Giỏ hàng ban đầu trống và chưa có thao tác đổi điểm, dùng voucher hoặc đặt đơn nào được xác nhận."
+    ],
+    "risks": [
+      "Personalized history and loyalty information need authoritative customer state.",
+      "Membership benefits and cart changes require clear customer consent before they take effect."
+    ],
+    "finalState": "cart_updated",
+    "sourceFile": "07-ca-nhan-hoa-va-loyalty.json",
+    "sourcePath": "/Users/vietthangvunguyen/Workspace/hackathon/.worktrees/kfc-kiss-model-agnostic/ai-talent-tracks/fnb/conversations/07-ca-nhan-hoa-va-loyalty.json",
+    "sourceSha256": "7eb24710cd563b9a9c51a09262ada8a0ff32002451bff1852c8813eca15e3fbb"
+  },
+  "model": {
+    "candidateId": "openai-gpt-4.1-mini",
+    "provider": "openai",
+    "model": "gpt-4.1-mini",
+    "profile": "openai:gpt-4.1-mini:responses",
+    "transport": "openai_responses"
+  },
+  "evidence": {
+    "trace": "trace.jsonl",
+    "transcript": "transcript.md",
+    "preflight": "preflight.json",
+    "reviewPacket": "codex-review-packet.md",
+    "artifactSha256": {
+      "preflight.json": "f818fc794b29f24ee604218ccd41b8fc83e77c920b1375fce9289ecba0312e2e",
+      "trace.jsonl": "5a4ed4174095d0dfb2f7fe89832cee044e37e77bde473025a980fc664e773dcf",
+      "transcript.md": "14946c154f67063b4f3fcd02c576e729ba6188ba104e29c5d933cbc9c78f92a0",
+      "codex-review-packet.md": "ab8bbb3763c31332481218612914a0cffb3d90a1f33489dd0217c19d612e471f"
+    }
+  },
+  "completedAt": "2026-07-24T01:39:25.726Z",
+  "finishNote": "Kết quả một phần: agent từ chối truy xuất loyalty vì runtime không xác thực tài khoản dù precondition nói đã đăng nhập; không tự đổi điểm/voucher. Sau đó tìm đúng combo, chỉ thêm sau xác nhận và cập nhật số lượng 1→2, chưa đặt đơn."
+}
