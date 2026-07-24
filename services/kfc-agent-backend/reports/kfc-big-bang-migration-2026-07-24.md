@@ -219,6 +219,9 @@ old topology and test assumptions.
 | Live evidence harness       | `20afeebf`, `aff3ee68`, `8a000b55`                                     | Added interactive subagent evidence capture, terminal lifecycle handling, and envelope-wide redaction.                                                    |
 | Authority repair            | `8ad23223`, `df4ffdd3`, `fe906eea`, `3ebb14ec`                         | Replaced the rejected text-echo guard with trusted typed action binding, tool visibility filtering, and executor defense in depth.                        |
 | Live environment precedence | `c0aae1ca`, `99b5a339`                                                 | Replaced shell sourcing with Node's non-overriding `.env` loader and anchored all live-run paths to the worktree module rather than caller CWD.           |
+| Protected commerce authority | `7189fe4b`, `935142a5`                                                  | Hid irreversible commerce tools without a matching verified action, derived exact inputs server-side, made authority capabilities non-forgeable, and stabilized provider idempotency across crash/retry. |
+| PVCFC publication boundary   | `fe9c8bbb`, `323c72db`                                                  | Replaced model prose with deterministic current-turn public evidence, dated URLs, and an explicit public-only/no-private-action notice. |
+| Session model pin            | `4469ccf3`, `b18bffcf`                                                  | Added atomic Memory/D1 model-profile pinning and required a trusted configured-model capability before either business pack can do transcript, model, or tool work. |
 
 ## Scenario and evidence method
 
@@ -290,6 +293,28 @@ stagnation.
 The v4 result validates the bounded authority repair for the held-out s08
 failure. It does not erase unrelated initial matrix findings or promote every
 candidate to production.
+
+## Whole-branch review remediation
+
+The first whole-branch review rejected the branch for four gaps outside the
+focused cart scenario. All were fixed and independently re-reviewed:
+
+- protected order, payment, voucher, and reward operations now require the
+  matching current verified action, with exact server-derived arguments;
+- the executor accepts only an internal branded action capability bound to the
+  full envelope, session, current run, immutable request identity, digest, and
+  exact arguments;
+- provider mutation identity prefers the immutable action digest over changing
+  model tool-call or run identifiers, with crash/retry coverage;
+- PVCFC can publish only deterministic current-turn public evidence with dated
+  URLs and always discloses that it cannot access or change private business
+  records;
+- each scoped session atomically pins the canonical model/profile/transport
+  identity, and both packs reject missing, loose, contradictory, or drifted
+  model bindings before any transcript, model, or tool work.
+
+The follow-up commerce, PVCFC, and session-binding reviews all returned
+**APPROVED** with no remaining Critical or Important finding.
 
 ## LangSmith and local evidence limitations
 
@@ -398,11 +423,11 @@ evaluation when present.
 | ESLint                          | **PASS** — `npm run lint`, zero warnings                                                                                                                          |
 | TypeScript typecheck            | **PASS** — `npm run typecheck`                                                                                                                                    |
 | Production build                | **PASS** — `npm run build`                                                                                                                                        |
-| Direct Vitest suite             | **PASS** — 39 files, 159 tests                                                                                                                                    |
-| Fresh local D1 migrations       | **PASS** — all 20 migrations through `0022_storage_boundary_cleanup.sql` on a new temporary local store                                                           |
-| Cloudflare Worker dry-run       | **PASS** — `wrangler deploy --dry-run`, 11,398.20 KiB upload / 1,243.25 KiB gzip                                                                                  |
+| Direct Vitest suite             | **PASS** — 42 files, 186 tests                                                                                                                                    |
+| Fresh local D1 migrations       | **PASS** — all 21 migrations through `0023_session_agent_model_binding.sql` on a new temporary local store                                                        |
+| Cloudflare Worker dry-run       | **PASS** — `wrangler deploy --dry-run`, 11,412.67 KiB upload / 1,246.56 KiB gzip                                                                                  |
 | Final capability preflights     | **PASS for the four qualified candidates** — ordinary invocation and typed-tool preflight succeeded before accepted live runs; Google remained excluded for quota |
-| Independent whole-branch review | **PENDING**                                                                                                                                                       |
+| Independent whole-branch review | **PASS after remediation** — protected commerce, PVCFC publication, and session model-pin follow-up reviews approved                                             |
 
 ## Pull request and handoff state
 
@@ -411,11 +436,6 @@ is open and draft, with head `codex/kfc-kiss-model-agnostic` and base
 `codex/test-suite-inventory`. Retargeting to `main` is therefore **pending**.
 No merge or deployment is authorized by this workstream.
 
-The next handoff is mechanical:
-
-1. record exact final-gate outputs above;
-2. resolve any Important/Critical whole-branch review finding;
-3. commit the report/evidence with the coherent final code state;
-4. push the target branch and retarget/update draft PR #69 to `main`;
-5. keep the PR draft until the remaining initial matrix defects and fixture
-   gaps are consciously accepted or assigned.
+The remaining handoff is to push the target branch, retarget/update draft PR
+#69 to `main`, and keep it draft until the remaining initial matrix defects and
+fixture gaps are consciously accepted or assigned.
