@@ -23,6 +23,23 @@ The Streamlit UI is a disposable inspection shell. The pure generation and
 audit functions are deliberately kept outside it so validated contracts can be
 carried into the later implementation plan.
 
+## Demo variants
+
+The browser shell has three deliberately different presentation prototypes.
+Use the fixed arrow switcher, the keyboard left/right arrows, or open a variant
+directly:
+
+- `/?variant=A` — a guided three-step story: simulate context, generate
+  recommendations, then simulate the customer response;
+- `/?variant=B` — a kiosk-theatre layout with the order ticket beside the
+  recommendation stage;
+- `/?variant=C` — a one-screen evidence board with model-visible and oracle
+  details kept in optional drawers.
+
+Start a stakeholder walkthrough with variant A and the
+`Quick lunch · cross-sell accepted` scenario. The scenario is a replay from the
+generated synthetic bundle, not a live production recommendation request.
+
 ## Question this prototype answers
 
 Can a reviewer inspect one reproducible KFC ordering journey and understand:
