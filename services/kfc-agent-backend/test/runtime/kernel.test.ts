@@ -232,6 +232,51 @@ describe('semantic kernel pack isolation', () => {
     expect(observations).not.toContain('tool:inactive');
   });
 
+  it('bounds one semantic run to the Direct SDK donor tool-round budget', async () => {
+    const model = fakeModel();
+    for (let index = 0; index < 13; index += 1) {
+      model.respondWithTools([
+        {
+          name: 'echo',
+          args: { value: `round-${index + 1}` },
+          id: `echo-${index + 1}`,
+        },
+      ]);
+    }
+    model.respond(new AIMessage('must not reach an unbounded final response'));
+    const echo = tool(async ({ value }) => value, {
+      name: 'echo',
+      description: 'Returns the supplied value',
+      schema: z.object({ value: z.string() }),
+    });
+    const pack: BusinessPack<string, string, FakeState> = {
+      ref: fakeRef,
+      stateSchemaVersion: '1',
+      scopeInput: (input) => input,
+      parseState(value) {
+        return value as FakeState;
+      },
+      async run(_input, invokeModel) {
+        return invokeModel({
+          model,
+          systemPrompt: 'Keep calling echo.',
+          messages: [],
+          tools: [echo],
+        });
+      },
+    };
+    const registry = createBusinessPackRegistry([pack]);
+
+    await expect(
+      runSemanticKernel({
+        registry,
+        binding: registry.createTrustedBinding(fakeRef),
+        packInput: 'input',
+      }),
+    ).rejects.toThrow(/model call limit/i);
+    expect(model.callCount).toBe(12);
+  });
+
   it('rejects an untrusted binding before pack or model work', async () => {
     const observation = { runCount: 0 };
     const registry = createBusinessPackRegistry([fakePack(observation)]);

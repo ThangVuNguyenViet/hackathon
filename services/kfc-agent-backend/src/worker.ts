@@ -31,7 +31,10 @@ import {
   createRouteHandlers,
   type HandlerResponse,
 } from './api/routeHandlers.js';
-import type { AgentTracer } from './observability/agentTracing.js';
+import {
+  isAgentTraceFlushTask,
+  type AgentTracer,
+} from './observability/agentTracing.js';
 import { authorizeDemoAdminHeaders } from './security/demoAdminAuth.js';
 import {
   AgentRunCoordinator,
@@ -67,6 +70,7 @@ import {
 import { buildWorkerRouteOptions } from './workerRouteOptions.js';
 import type { MessengerIngressClaim } from './security/messengerIngressClaim.js';
 import { verifyQueuedMessengerIngress } from './workerMessengerIngress.js';
+import { startDeferredWork } from './runtime/deferredWork.js';
 
 export interface QueueBinding<T> {
   send(message: T, options?: { delaySeconds?: number }): Promise<void>;
@@ -115,10 +119,11 @@ export function scheduleAgentBackground(
   tracer?: AgentTracer,
 ): void {
   if (tasks.length === 0 && !tracer) return;
-  const work = (async () => {
+  const traceFlushScheduled = tasks.some(isAgentTraceFlushTask);
+  const work = startDeferredWork(async () => {
     for (const task of tasks) await task();
-    await tracer?.flush();
-  })().catch((error) => {
+    if (!traceFlushScheduled) await tracer?.flush();
+  }).catch((error) => {
     console.error('agent_background_failed', {
       errorClass: backgroundErrorClass(error),
     });

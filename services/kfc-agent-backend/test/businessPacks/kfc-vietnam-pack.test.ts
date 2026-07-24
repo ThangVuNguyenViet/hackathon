@@ -22,6 +22,10 @@ import type {
   AgentTracer,
 } from '../../src/observability/agentTracing.js';
 import { buildVerifiedCollectionSnapshot } from '../../src/ordering/verifiedCollections.js';
+import {
+  scheduleAgentBackground,
+  type WorkerExecutionContext,
+} from '../../src/worker.js';
 import { configuredTestAgent } from '../support/configured-agent-model.js';
 
 function toolOutputText(value: unknown): string {
@@ -660,6 +664,52 @@ describe('KFC Vietnam business pack compatibility', () => {
     } finally {
       diagnostics.mockRestore();
     }
+  });
+
+  it('flushes one completed turn only once at the Worker background boundary', async () => {
+    const deferred: Array<() => Promise<void>> = [];
+    const flush = vi.fn(async () => undefined);
+    const span: AgentTraceSpan = {
+      async startSpan() {
+        return span;
+      },
+      async end() {},
+      async fail() {},
+    };
+    const tracer: AgentTracer = {
+      async startTurn() {
+        return span;
+      },
+      flush,
+    };
+
+    await runAgentTurn({
+      sessionId: 'session-kfc-single-trace-flush',
+      customerId: 'customer-1',
+      channel: 'messenger_mock',
+      text: 'Xin chào',
+      clients: createMockClients(await loadGeneratedFixtures(process.cwd())),
+      store: new MemoryStore(),
+      dashboard: new DashboardEventBus(),
+      agentModelBinding: configuredTestAgent(
+        new FakeListChatModel({ responses: ['Xin chào!'] }),
+      ),
+      tracer,
+      deferTrace(task) {
+        deferred.push(task);
+      },
+    });
+
+    let background: Promise<unknown> | undefined;
+    const context: WorkerExecutionContext = {
+      waitUntil(promise) {
+        background = promise;
+      },
+    };
+    scheduleAgentBackground(context, deferred, tracer);
+    await background;
+
+    expect(flush).toHaveBeenCalledTimes(1);
   });
 
   it('rejects correctly bound malformed KFC state and accepts a valid partial state', async () => {

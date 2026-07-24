@@ -1,6 +1,7 @@
 import type { DashboardEventBus } from '../dashboard/eventBus.js';
 import type { ConversationProfile, ConversationTurn } from '../domain/types.js';
 import type { ConversationStore } from '../persistence/memoryStore.js';
+import { runDetachedWork } from '../runtime/deferredWork.js';
 
 const unsupportedMessengerMessage = '[unsupported Messenger message]';
 const defaultMessagesPerConversation = 20;
@@ -449,7 +450,7 @@ export class MessengerHistorySyncCoordinator {
   }
 
   syncInBackground(options: MessengerHistoryFetchOptions = {}): void {
-    void this.sync(options).catch(() => undefined);
+    runDetachedWork(() => this.sync(options).then(() => undefined));
   }
 }
 

@@ -206,6 +206,9 @@ describe('createAgentChatModel', () => {
 
     expect(openai.model._llmType()).toBe('openai');
     expect(Reflect.get(openai.model, 'useResponsesApi')).toBe(true);
+    expect(Reflect.get(openai.model, 'modelKwargs')).toEqual({
+      parallel_tool_calls: false,
+    });
     expect(deepseek.model._llmType()).toBe('openai');
     expect(Reflect.get(deepseek.model, 'useResponsesApi')).toBe(false);
     expect(Reflect.get(deepseek.model, 'modelKwargs')).toEqual({

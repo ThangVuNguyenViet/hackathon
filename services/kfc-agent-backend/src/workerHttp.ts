@@ -5,6 +5,7 @@ import { D1Store } from './persistence/d1Store.js';
 import type { ConversationStore } from './persistence/memoryStore.js';
 import { authorizeDemoAdminHeaders } from './security/demoAdminAuth.js';
 import type { WorkerEnv, WorkerExecutionContext } from './worker.js';
+import { startDeferredWork } from './runtime/deferredWork.js';
 
 export const ZALO_SITE_VERIFICATION_TOKEN =
   'JUwvDeVE5W07swqXmF5wFpdComBLkX5UCpCm';
@@ -275,7 +276,9 @@ export function scheduleDashboardEvent(
   event: DashboardEvent,
   context?: WorkerExecutionContext,
 ): Promise<void> | void {
-  const work = persistDashboardEvent(env, store, event);
+  const work = startDeferredWork(() =>
+    persistDashboardEvent(env, store, event),
+  );
   if (!context) return work;
   context.waitUntil(work);
 }

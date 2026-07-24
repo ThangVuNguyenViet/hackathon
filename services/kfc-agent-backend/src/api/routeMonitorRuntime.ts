@@ -25,6 +25,7 @@ import type {
 } from '../persistence/memoryStore.js';
 import { buildBoundedRecentTurns } from '../session/sessionContext.js';
 import type { RouteOptions } from './routeHandlerContracts.js';
+import { runDetachedWork } from '../runtime/deferredWork.js';
 import { dashboardEventId } from './routeHandlerSupport.js';
 import { kfcVietnamPack } from '../businessPacks/kfcVietnam/kfcVietnamPack.js';
 
@@ -343,7 +344,15 @@ export function createRouteMonitorRuntime(input: {
   ): void {
     try {
       if (options.defer) options.defer(task);
-      else void task();
+      else
+        runDetachedWork(task, (error) => {
+          onScheduleFailure?.();
+          void recordMonitorFailure(
+            sessionId,
+            error,
+            'Monitor judge scheduling failed',
+          ).catch(() => undefined);
+        });
     } catch (error) {
       onScheduleFailure?.();
       void recordMonitorFailure(

@@ -380,29 +380,29 @@ export const agentToolDescriptions: Record<ToolName, string> = {
   searchMenu:
     'Return the complete available menu for full mode, or every verified match for search mode. Put independent product or identifier alternatives in queries; they use OR semantics. Use category for category-wide discovery, maxPriceVnd only as a per-item ceiling, partySize only as catalog-backed ranking evidence, and modifierQueries for exact selectable-option evidence. Multiple targeted searches may be called in one turn.',
   getItemDetails:
-    'Return verified details, base price, and current availability for one previously discovered menu item code.',
+    'Return the verified customer-facing name, description, category, base price, and current availability for one previously discovered menu item code. Treat available false as unavailable to order.',
   getModifierOptions:
-    'Return verified modifier groups, exact option identifiers, and exact option price deltas for one menu item code. Do not transfer evidence between options or items.',
+    'Return the verified selectable modifier tree, exact option identifiers, and exact option price deltas for one menu item code. Every name, attribute, and price belongs only to its exact option and branch. Do not transfer evidence between options, branches, or items. Missing modifier evidence means unknown, not proof of an ingredient, taste, or allergen property.',
   updateCart:
     'Apply the current verified GenUI cart action. The server derives the authorized item identifiers, quantities, and modifiers from that typed action and ignores wider model-authored changes. Plain-text messages, including explicit requests, can prepare a proposal but do not authorize this tool. Item quantity means menu portions, not pieces described inside the item. Treat the returned cart as authoritative; this permission never extends to irreversible actions.',
   previewCart: 'Return the current verified cart and server-calculated totals.',
   recommendAddOns:
-    'Return verified add-on candidates for the current cart without mutating it.',
+    'Return verified add-on candidates for the current cart without mutating it. If a requested add-on is not returned, that does not prove that item is absent from the full menu; searchMenu can check for a standalone item.',
   findStores:
-    'Return verified stores matching the supplied structured location filters.',
+    'Return verified stores matching the supplied structured location filters. An empty filtered result means only that this query returned no matches; it does not prove that no KFC store exists in the location. A nearby or named store does not verify delivery coverage, fee, ETA, or item serviceability; use quoteFulfillment with complete delivery details for those facts.',
   checkStoreAvailability:
-    'Check the exact current cart at one store and one pickup or delivery disposition; cart item codes are injected by the server.',
+    'Check the exact current cart at one store and one pickup or delivery disposition; cart item codes are injected by the server. This verifies item availability only and does not verify delivery fee or ETA.',
   quoteFulfillment:
     'Quote pickup or delivery for the exact current cart using either an explicit address or the exact pendingSavedAddressRef from verified model state. For an explicit address, send a real line1 and only administrative fields explicitly supplied in model-visible evidence; use null for a missing district or city so the fulfillment provider can resolve it. Cart item codes are injected by the server.',
   searchPromotions:
-    'Return a complete promotion collection for the requested scope.',
+    'Return a complete promotion collection for the requested scope. Use a broad unfiltered request for the current catalog when a targeted search is empty; an empty filtered result does not prove that no promotion exists.',
   explainPromotion:
     'Return verified details and provenance for one promotion offer identifier.',
   validateVoucher:
     'Validate voucher text against the authoritative current cart subtotal.',
   getMembershipProfile: 'Return the authenticated customer membership profile.',
   listMembershipRewards:
-    'Return a complete authenticated reward collection for the requested scope.',
+    'Return a complete authenticated reward collection for the requested scope. Catalog presence alone does not prove that the customer has enough current points; use getMembershipProfile for the verified current balance.',
   listMembershipWallet:
     'Return the authenticated wallet collection for the requested status filter.',
   getMembershipPointHistory:
@@ -410,7 +410,7 @@ export const agentToolDescriptions: Record<ToolName, string> = {
   listMembershipTools:
     'Return authenticated membership capabilities for the requested side-effect class.',
   listPaymentMethods:
-    'Return verified payment methods for the requested filters.',
+    'Return verified payment methods for the requested filters. When the customer names a payment method, query that customer-facing name and use only the exact supported methodId returned by the active collection; never infer support or invent a methodId.',
   getSavedAddresses:
     'Return the authenticated customer saved-address records as read-only evidence for this tool loop.',
   getRecentOrder:
@@ -427,14 +427,15 @@ export const agentToolDescriptions: Record<ToolName, string> = {
     'Preview an order only after a successful fresh availability check for the exact current cart, active store, and pickup or delivery disposition.',
   placeOrder: 'Place the exact order represented by the current order preview.',
   getOrderStatus:
-    'Return status for the authenticated customer current verified order.',
+    'Return status for the authenticated customer current verified order. Describe status, timing, and fulfillment progress only from fields returned by this call.',
   createPaymentLink:
     'Create a payment link using the methodId from the active payment-method collection.',
   checkPaymentStatus:
     'Return payment status for the authenticated customer current verified order.',
   collectInvoice:
-    'Collect available invoice fields without inventing missing values.',
-  handoff: 'Escalate the current session to a human with structured reasons.',
+    'Collect only invoice fields supplied by the customer without inventing missing values. Ask naturally for required missing information; this does not place or modify the order.',
+  handoff:
+    'Queue the current session for a human with structured reasons. Include the business facts the human must verify and preserve relevant customer consent and action-authority constraints, such as support sharing being allowed while ordering or payment remains unauthorized. A successful result means the request is queued and awaiting a human; it does not mean a human accepted or joined, and it does not verify response time. If a handoff is already queued, return that same verified escalation without creating another.',
   resolveHandoff:
     'Withdraw the active human-support escalation when the customer no longer wants it. Do not call this merely because the customer starts another commerce task.',
 };

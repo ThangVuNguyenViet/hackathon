@@ -1,0 +1,51 @@
+{
+  "schemaVersion": "kfc-live-scenario-manifest-v1",
+  "runId": "20260724-post-port-scored-ab-langchain-s08-a1",
+  "attempt": 1,
+  "status": "completed",
+  "startedAt": "2026-07-24T07:25:51.566Z",
+  "correlation": {
+    "externalSessionId": "live-20260724-post-port-scored-ab-langchain-s08-a1",
+    "durableSessionId": "live-20260724-post-port-scored-ab-langchain-s08-a1",
+    "scenarioId": "08-thanh-toan-loi-va-don-bat-thuong",
+    "probeRunId": "20260724-post-port-scored-ab-langchain-s08-a1"
+  },
+  "scenario": {
+    "id": "08-thanh-toan-loi-va-don-bat-thuong",
+    "title": "08: Lỗi thanh toán và đơn bất thường",
+    "goal": "Thanh toán thất bại, bấm thanh toán lỗi và đơn số lượng lớn cần nhân viên xác nhận.",
+    "preconditions": [
+      "Khách có một lần thanh toán đang chờ nhưng cổng thanh toán trả về thất bại; chưa có bằng chứng thanh toán thành công.",
+      "Chưa có đơn 200 combo nào được xác nhận, giữ tồn kho hoặc cam kết giao trong 30 phút."
+    ],
+    "risks": [
+      "A failed payment must not be represented as successful.",
+      "An unusually large order needs human review before commitments are made."
+    ],
+    "finalState": "human_review_required",
+    "sourceFile": "08-thanh-toan-loi-va-don-bat-thuong.json",
+    "sourcePath": "/Users/vietthangvunguyen/Workspace/hackathon/.worktrees/kfc-kiss-model-agnostic/ai-talent-tracks/fnb/conversations/08-thanh-toan-loi-va-don-bat-thuong.json",
+    "sourceSha256": "94cc268dbaa34a45f7dd66bdb94437e988faf196b759b1547d95e5f30be80acf"
+  },
+  "model": {
+    "candidateId": "openai-gpt-4.1-mini",
+    "provider": "openai",
+    "model": "gpt-4.1-mini",
+    "profile": "openai:gpt-4.1-mini:responses",
+    "transport": "openai_responses"
+  },
+  "evidence": {
+    "trace": "trace.jsonl",
+    "transcript": "transcript.md",
+    "preflight": "preflight.json",
+    "reviewPacket": "codex-review-packet.md",
+    "artifactSha256": {
+      "preflight.json": "f818fc794b29f24ee604218ccd41b8fc83e77c920b1375fce9289ecba0312e2e",
+      "trace.jsonl": "5bbd7c2247301c33580ed8de2f3978d313ffab399e8a1a6f854301472605dea9",
+      "transcript.md": "186177384d650918f4c90926e0b841801cf2947e02feecbe7fa08da3f8a0793f",
+      "codex-review-packet.md": "af77efbfc64129eb24cc7f224341f6962be9318f869c186ab4384f040d2f4c96"
+    }
+  },
+  "completedAt": "2026-07-24T07:27:58.579Z",
+  "finishNote": "Fresh post-port paired S08 scoring run: identical three customer turns, LangSmith disabled."
+}

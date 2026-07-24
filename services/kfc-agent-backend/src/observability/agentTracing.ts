@@ -25,6 +25,26 @@ export interface AgentTracer {
   flush(): Promise<void>;
 }
 
+const agentTraceFlushTaskMarker = Symbol('agentTraceFlushTask');
+
+type AgentTraceFlushTask = (() => Promise<void>) & {
+  [agentTraceFlushTaskMarker]: true;
+};
+
+export function createAgentTraceFlushTask(
+  tracer: AgentTracer,
+): AgentTraceFlushTask {
+  return Object.assign(() => tracer.flush(), {
+    [agentTraceFlushTaskMarker]: true as const,
+  });
+}
+
+export function isAgentTraceFlushTask(
+  task: () => Promise<void>,
+): task is AgentTraceFlushTask {
+  return agentTraceFlushTaskMarker in task;
+}
+
 export type AgentTraceDiagnostic =
   | 'agent_trace_start_failed'
   | 'agent_trace_span_start_failed'

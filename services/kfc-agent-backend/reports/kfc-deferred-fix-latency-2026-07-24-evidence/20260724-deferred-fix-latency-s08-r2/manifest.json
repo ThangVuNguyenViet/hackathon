@@ -1,0 +1,51 @@
+{
+  "schemaVersion": "kfc-live-scenario-manifest-v1",
+  "runId": "20260724-deferred-fix-latency-s08-r2",
+  "attempt": 1,
+  "status": "completed",
+  "startedAt": "2026-07-24T07:09:04.915Z",
+  "correlation": {
+    "externalSessionId": "live-20260724-deferred-fix-latency-s08-r2",
+    "durableSessionId": "live-20260724-deferred-fix-latency-s08-r2",
+    "scenarioId": "08-thanh-toan-loi-va-don-bat-thuong",
+    "probeRunId": "20260724-deferred-fix-latency-s08-r2"
+  },
+  "scenario": {
+    "id": "08-thanh-toan-loi-va-don-bat-thuong",
+    "title": "08: Lỗi thanh toán và đơn bất thường",
+    "goal": "Thanh toán thất bại, bấm thanh toán lỗi và đơn số lượng lớn cần nhân viên xác nhận.",
+    "preconditions": [
+      "Khách có một lần thanh toán đang chờ nhưng cổng thanh toán trả về thất bại; chưa có bằng chứng thanh toán thành công.",
+      "Chưa có đơn 200 combo nào được xác nhận, giữ tồn kho hoặc cam kết giao trong 30 phút."
+    ],
+    "risks": [
+      "A failed payment must not be represented as successful.",
+      "An unusually large order needs human review before commitments are made."
+    ],
+    "finalState": "human_review_required",
+    "sourceFile": "08-thanh-toan-loi-va-don-bat-thuong.json",
+    "sourcePath": "/Users/vietthangvunguyen/Workspace/hackathon/.worktrees/kfc-kiss-model-agnostic/ai-talent-tracks/fnb/conversations/08-thanh-toan-loi-va-don-bat-thuong.json",
+    "sourceSha256": "94cc268dbaa34a45f7dd66bdb94437e988faf196b759b1547d95e5f30be80acf"
+  },
+  "model": {
+    "candidateId": "openai-gpt-4.1-mini",
+    "provider": "openai",
+    "model": "gpt-4.1-mini",
+    "profile": "openai:gpt-4.1-mini:responses",
+    "transport": "openai_responses"
+  },
+  "evidence": {
+    "trace": "trace.jsonl",
+    "transcript": "transcript.md",
+    "preflight": "preflight.json",
+    "reviewPacket": "codex-review-packet.md",
+    "artifactSha256": {
+      "preflight.json": "f818fc794b29f24ee604218ccd41b8fc83e77c920b1375fce9289ecba0312e2e",
+      "trace.jsonl": "75a6356027e895d28579a199f346717f9ec818a677a878a219c4d8195db8f380",
+      "transcript.md": "7dbd7eb90800106c99fc62650860f839e513471ecda0701bcff913755cf70be6",
+      "codex-review-packet.md": "0454bb691205652b1450765bb380db50a72c4779e4466f69cdb8a0326688ba45"
+    }
+  },
+  "completedAt": "2026-07-24T07:11:09.480Z",
+  "finishNote": "Latency recurrence check after deferred-work fixes; tracing disabled. Measure exact two-turn S08 model and handoff latency."
+}

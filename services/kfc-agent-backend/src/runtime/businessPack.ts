@@ -2,6 +2,7 @@ import type { BaseChatModel } from '@langchain/core/language_models/chat_models'
 import type { BaseMessage } from '@langchain/core/messages';
 import type { Callbacks } from '@langchain/core/callbacks/manager';
 import type { StructuredToolInterface } from '@langchain/core/tools';
+import type { AnyAgentMiddleware } from 'langchain';
 
 export interface PackRef {
   packId: string;
@@ -24,6 +25,7 @@ export interface BusinessPackInvocation {
   systemPrompt: string;
   messages: BaseMessage[];
   tools: StructuredToolInterface[];
+  middleware?: AnyAgentMiddleware[];
   signal?: AbortSignal;
   runtime?: {
     callbacks?: Callbacks;

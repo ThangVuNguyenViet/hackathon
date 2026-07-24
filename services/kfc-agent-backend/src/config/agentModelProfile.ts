@@ -318,8 +318,15 @@ function createAgentChatModel(input: {
       useResponsesApi: descriptor.useResponsesApi,
       supportsStrictToolCalling: false,
       maxRetries: 1,
-      ...(descriptor.thinking
-        ? { modelKwargs: { thinking: descriptor.thinking } }
+      ...(descriptor.thinking || descriptor.transport === 'openai_responses'
+        ? {
+            modelKwargs: {
+              ...(descriptor.transport === 'openai_responses'
+                ? { parallel_tool_calls: false }
+                : {}),
+              ...(descriptor.thinking ? { thinking: descriptor.thinking } : {}),
+            },
+          }
         : {}),
       configuration: {
         baseURL: descriptor.configurableBaseUrl

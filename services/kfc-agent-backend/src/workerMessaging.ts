@@ -31,6 +31,7 @@ import type {
 import { sendBoundedWorkerQueueMessage } from './workerQueueEnvelope.js';
 import { issueMessengerIngressClaim } from './security/messengerIngressClaim.js';
 import type { ConversationStore } from './persistence/memoryStore.js';
+import { startDeferredWork } from './runtime/deferredWork.js';
 
 export async function enqueueMessengerWebhook(
   request: Request,
@@ -200,7 +201,7 @@ export function scheduleImmediateMessengerTyping(
     graphApiBaseUrl: env.MESSENGER_GRAPH_API_BASE_URL,
     fetchImpl: env.MESSENGER_FETCH ?? fetch,
   });
-  const task = (async () => {
+  const task = startDeferredWork(async () => {
     const seen = await messenger.sendSenderAction(
       event.externalUserId,
       'mark_seen',
@@ -223,7 +224,7 @@ export function scheduleImmediateMessengerTyping(
         message: typing.message,
       });
     }
-  })();
+  });
   if (context) context.waitUntil(task);
   else void task;
 }

@@ -3,6 +3,7 @@ import type {
   MonitorSessionIntelligence,
 } from '../domain/types.js';
 import { parseMonitorSessionIntelligencePayload } from '../monitor/sessionIntelligence.js';
+import { runDetachedWork } from '../runtime/deferredWork.js';
 
 type DashboardEventListener = (event: DashboardEvent) => void;
 
@@ -25,11 +26,13 @@ export class DashboardEventBus {
 
   emitEvent(event: DashboardEvent): void {
     this.events.push(event);
-    try {
-      const persisted = this.options.persistEvent?.(event);
-      if (persisted) void Promise.resolve(persisted).catch(() => undefined);
-    } catch {
-      // Live SSE delivery should not fail because durable event persistence failed.
+    if (this.options.persistEvent) {
+      runDetachedWork(
+        async () => {
+          await this.options.persistEvent?.(event);
+        },
+        () => undefined,
+      );
     }
     for (const listener of this.listeners) {
       listener(event);

@@ -1,0 +1,51 @@
+{
+  "schemaVersion": "kfc-live-scenario-manifest-v1",
+  "runId": "20260724-openai-port-langchain-s08-a2",
+  "attempt": 1,
+  "status": "completed",
+  "startedAt": "2026-07-24T06:39:32.292Z",
+  "correlation": {
+    "externalSessionId": "live-20260724-openai-port-langchain-s08-a2",
+    "durableSessionId": "live-20260724-openai-port-langchain-s08-a2",
+    "scenarioId": "08-thanh-toan-loi-va-don-bat-thuong",
+    "probeRunId": "20260724-openai-port-langchain-s08-a2"
+  },
+  "scenario": {
+    "id": "08-thanh-toan-loi-va-don-bat-thuong",
+    "title": "08: Lỗi thanh toán và đơn bất thường",
+    "goal": "Thanh toán thất bại, bấm thanh toán lỗi và đơn số lượng lớn cần nhân viên xác nhận.",
+    "preconditions": [
+      "Khách có một lần thanh toán đang chờ nhưng cổng thanh toán trả về thất bại; chưa có bằng chứng thanh toán thành công.",
+      "Chưa có đơn 200 combo nào được xác nhận, giữ tồn kho hoặc cam kết giao trong 30 phút."
+    ],
+    "risks": [
+      "A failed payment must not be represented as successful.",
+      "An unusually large order needs human review before commitments are made."
+    ],
+    "finalState": "human_review_required",
+    "sourceFile": "08-thanh-toan-loi-va-don-bat-thuong.json",
+    "sourcePath": "/Users/vietthangvunguyen/Workspace/hackathon/.worktrees/kfc-kiss-model-agnostic/ai-talent-tracks/fnb/conversations/08-thanh-toan-loi-va-don-bat-thuong.json",
+    "sourceSha256": "94cc268dbaa34a45f7dd66bdb94437e988faf196b759b1547d95e5f30be80acf"
+  },
+  "model": {
+    "candidateId": "openai-gpt-4.1-mini",
+    "provider": "openai",
+    "model": "gpt-4.1-mini",
+    "profile": "openai:gpt-4.1-mini:responses",
+    "transport": "openai_responses"
+  },
+  "evidence": {
+    "trace": "trace.jsonl",
+    "transcript": "transcript.md",
+    "preflight": "preflight.json",
+    "reviewPacket": "codex-review-packet.md",
+    "artifactSha256": {
+      "preflight.json": "f818fc794b29f24ee604218ccd41b8fc83e77c920b1375fce9289ecba0312e2e",
+      "trace.jsonl": "b409e471464bf42791d68b81496c647cd77ae7f9bde30065e6de8105c2399773",
+      "transcript.md": "b544c54921c8f948bf57aa85420a9e6fc75de017cf9174e29b3b7f39da3dfb93",
+      "codex-review-packet.md": "49679ce2a75e3eace94295a075d0a1f52c0aea78857e15ab27012786ba9c513d"
+    }
+  },
+  "completedAt": "2026-07-24T06:42:14.901Z",
+  "finishNote": "Post-review rerun after porting material-part completeness and empty-filter evidence boundary. Verify payment limitation is stated, no store-absence overclaim, no mutation, queued-only handoff, and evidence-only recap."
+}

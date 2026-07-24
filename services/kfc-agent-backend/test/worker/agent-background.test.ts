@@ -6,6 +6,27 @@ import {
 } from '../../src/worker.js';
 
 describe('Worker agent background diagnostics', () => {
+  it('registers background work without running its synchronous prefix on the response path', async () => {
+    let background: Promise<unknown> | undefined;
+    let started = false;
+    const context: WorkerExecutionContext = {
+      waitUntil(promise) {
+        background = promise;
+      },
+    };
+
+    scheduleAgentBackground(context, [
+      async () => {
+        started = true;
+      },
+    ]);
+
+    expect(background).toBeDefined();
+    expect(started).toBe(false);
+    await background;
+    expect(started).toBe(true);
+  });
+
   it('never logs trace flush error messages', async () => {
     const privateFailure = 'Authorization: Bearer trace-secret';
     const diagnostics = vi

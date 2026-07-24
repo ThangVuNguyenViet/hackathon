@@ -1,0 +1,17 @@
+{
+  "schemaVersion": "agent-model-capability-preflight-v1",
+  "identity": {
+    "candidateId": "openai-gpt-4.1-mini",
+    "provider": "openai",
+    "model": "gpt-4.1-mini",
+    "profile": "openai:gpt-4.1-mini:responses",
+    "transport": "openai_responses"
+  },
+  "ordinaryInvocation": {
+    "passed": true
+  },
+  "typedToolCall": {
+    "passed": true
+  },
+  "passed": true
+}

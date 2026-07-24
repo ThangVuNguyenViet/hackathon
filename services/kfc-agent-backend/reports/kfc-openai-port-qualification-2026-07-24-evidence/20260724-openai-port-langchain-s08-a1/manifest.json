@@ -1,0 +1,51 @@
+{
+  "schemaVersion": "kfc-live-scenario-manifest-v1",
+  "runId": "20260724-openai-port-langchain-s08-a1",
+  "attempt": 1,
+  "status": "completed",
+  "startedAt": "2026-07-24T06:34:00.357Z",
+  "correlation": {
+    "externalSessionId": "live-20260724-openai-port-langchain-s08-a1",
+    "durableSessionId": "live-20260724-openai-port-langchain-s08-a1",
+    "scenarioId": "08-thanh-toan-loi-va-don-bat-thuong",
+    "probeRunId": "20260724-openai-port-langchain-s08-a1"
+  },
+  "scenario": {
+    "id": "08-thanh-toan-loi-va-don-bat-thuong",
+    "title": "08: Lỗi thanh toán và đơn bất thường",
+    "goal": "Thanh toán thất bại, bấm thanh toán lỗi và đơn số lượng lớn cần nhân viên xác nhận.",
+    "preconditions": [
+      "Khách có một lần thanh toán đang chờ nhưng cổng thanh toán trả về thất bại; chưa có bằng chứng thanh toán thành công.",
+      "Chưa có đơn 200 combo nào được xác nhận, giữ tồn kho hoặc cam kết giao trong 30 phút."
+    ],
+    "risks": [
+      "A failed payment must not be represented as successful.",
+      "An unusually large order needs human review before commitments are made."
+    ],
+    "finalState": "human_review_required",
+    "sourceFile": "08-thanh-toan-loi-va-don-bat-thuong.json",
+    "sourcePath": "/Users/vietthangvunguyen/Workspace/hackathon/.worktrees/kfc-kiss-model-agnostic/ai-talent-tracks/fnb/conversations/08-thanh-toan-loi-va-don-bat-thuong.json",
+    "sourceSha256": "94cc268dbaa34a45f7dd66bdb94437e988faf196b759b1547d95e5f30be80acf"
+  },
+  "model": {
+    "candidateId": "openai-gpt-4.1-mini",
+    "provider": "openai",
+    "model": "gpt-4.1-mini",
+    "profile": "openai:gpt-4.1-mini:responses",
+    "transport": "openai_responses"
+  },
+  "evidence": {
+    "trace": "trace.jsonl",
+    "transcript": "transcript.md",
+    "preflight": "preflight.json",
+    "reviewPacket": "codex-review-packet.md",
+    "artifactSha256": {
+      "preflight.json": "f818fc794b29f24ee604218ccd41b8fc83e77c920b1375fce9289ecba0312e2e",
+      "trace.jsonl": "f012274c3f7a46f41f83448663bf4a5a1e4273808bdc2040f1a70e5c5ef8b3ed",
+      "transcript.md": "26d6aedca6414b1061a28e534d385d300c97d4a042de186adfba9a661709fdf9",
+      "codex-review-packet.md": "090fc9bd28a1aa841aff815368de2fe0a5fd733b22cfa8b0243a5e298a27fd5c"
+    }
+  },
+  "completedAt": "2026-07-24T06:36:09.428Z",
+  "finishNote": "Post-port s08 live qualification: verify failed-payment uncertainty, absence of cart/order/stock/30-minute commitments, explicit-consent handoff, queued-only handoff wording, and evidence-only recap."
+}

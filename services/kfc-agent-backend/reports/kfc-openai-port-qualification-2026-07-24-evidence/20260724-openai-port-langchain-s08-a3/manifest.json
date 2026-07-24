@@ -1,0 +1,51 @@
+{
+  "schemaVersion": "kfc-live-scenario-manifest-v1",
+  "runId": "20260724-openai-port-langchain-s08-a3",
+  "attempt": 1,
+  "status": "completed",
+  "startedAt": "2026-07-24T06:43:57.775Z",
+  "correlation": {
+    "externalSessionId": "live-20260724-openai-port-langchain-s08-a3",
+    "durableSessionId": "live-20260724-openai-port-langchain-s08-a3",
+    "scenarioId": "08-thanh-toan-loi-va-don-bat-thuong",
+    "probeRunId": "20260724-openai-port-langchain-s08-a3"
+  },
+  "scenario": {
+    "id": "08-thanh-toan-loi-va-don-bat-thuong",
+    "title": "08: Lỗi thanh toán và đơn bất thường",
+    "goal": "Thanh toán thất bại, bấm thanh toán lỗi và đơn số lượng lớn cần nhân viên xác nhận.",
+    "preconditions": [
+      "Khách có một lần thanh toán đang chờ nhưng cổng thanh toán trả về thất bại; chưa có bằng chứng thanh toán thành công.",
+      "Chưa có đơn 200 combo nào được xác nhận, giữ tồn kho hoặc cam kết giao trong 30 phút."
+    ],
+    "risks": [
+      "A failed payment must not be represented as successful.",
+      "An unusually large order needs human review before commitments are made."
+    ],
+    "finalState": "human_review_required",
+    "sourceFile": "08-thanh-toan-loi-va-don-bat-thuong.json",
+    "sourcePath": "/Users/vietthangvunguyen/Workspace/hackathon/.worktrees/kfc-kiss-model-agnostic/ai-talent-tracks/fnb/conversations/08-thanh-toan-loi-va-don-bat-thuong.json",
+    "sourceSha256": "94cc268dbaa34a45f7dd66bdb94437e988faf196b759b1547d95e5f30be80acf"
+  },
+  "model": {
+    "candidateId": "openai-gpt-4.1-mini",
+    "provider": "openai",
+    "model": "gpt-4.1-mini",
+    "profile": "openai:gpt-4.1-mini:responses",
+    "transport": "openai_responses"
+  },
+  "evidence": {
+    "trace": "trace.jsonl",
+    "transcript": "transcript.md",
+    "preflight": "preflight.json",
+    "reviewPacket": "codex-review-packet.md",
+    "artifactSha256": {
+      "preflight.json": "f818fc794b29f24ee604218ccd41b8fc83e77c920b1375fce9289ecba0312e2e",
+      "trace.jsonl": "749afe3d9b39166d43b98df3438868736cf8668719122bdf791dde0c7b1e40b7",
+      "transcript.md": "04a4c000563364f04ee3ae50a2f07f08495aa87911ccf6c1d02c909d1108ca48",
+      "codex-review-packet.md": "9595e250077fca13a5827b67d334c06a680775ed3b10150c66861097306f3aa5"
+    }
+  },
+  "completedAt": "2026-07-24T06:46:56.168Z",
+  "finishNote": "Final post-port s08 qualification after preserving customer consent and action-authority constraints in handoff reasons."
+}

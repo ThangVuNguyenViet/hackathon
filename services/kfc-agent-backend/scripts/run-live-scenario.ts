@@ -25,6 +25,7 @@ import { createMockClients } from '../src/mock/createMockClients.js';
 import { LangSmithAgentTracer } from '../src/observability/langsmithAgentTracer.js';
 import { MemoryStore } from '../src/persistence/memoryStore.js';
 import { legacySessionIdOutsidePackNamespace } from '../src/runtime/businessPack.js';
+import { runDetachedWork } from '../src/runtime/deferredWork.js';
 import { loadScenarioScript } from '../src/scenarios/scenarioScript.js';
 
 const { serviceRoot, repoRoot } = resolveLiveScenarioPaths(import.meta.url);
@@ -78,7 +79,6 @@ async function main(): Promise<void> {
     configuredSecrets,
     runPreflight: () => runModelCapabilityPreflight(binding),
     executeTurn: async ({ text, recordToolEvent }) => {
-      const deferredTraceTasks: Array<() => Promise<void>> = [];
       const output = await runAgentTurn({
         sessionId: externalSessionId,
         customerId: 'synthetic-live-role-player',
@@ -91,11 +91,8 @@ async function main(): Promise<void> {
         traceContext,
         tracer,
         recordLocalToolEvidence: recordToolEvent,
-        deferTrace(task) {
-          deferredTraceTasks.push(task);
-        },
+        deferTrace: runDetachedWork,
       });
-      await Promise.allSettled(deferredTraceTasks.map((task) => task()));
       return { responseText: output.responseText };
     },
   });
