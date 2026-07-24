@@ -104,6 +104,11 @@ export interface WorkerExecutionContext {
 export const WORKER_CUSTOMER_RUN_PACE_MS = 0;
 export const WORKER_CUSTOMER_RUN_MAX_TEXT_EVENTS = 3;
 
+function backgroundErrorClass(error: unknown): string {
+  const name = error instanceof Error ? error.name : '';
+  return /^[A-Za-z][A-Za-z0-9]{0,63}$/u.test(name) ? name : 'UnknownError';
+}
+
 export function scheduleAgentBackground(
   context: WorkerExecutionContext | undefined,
   tasks: Array<() => Promise<void>>,
@@ -115,7 +120,7 @@ export function scheduleAgentBackground(
     await tracer?.flush();
   })().catch((error) => {
     console.error('agent_background_failed', {
-      message: error instanceof Error ? error.message : String(error),
+      errorClass: backgroundErrorClass(error),
     });
   });
   if (context) context.waitUntil(work);

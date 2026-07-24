@@ -10,6 +10,7 @@ import type {
 
 export interface LangSmithRunConfig {
   name: string;
+  tracingEnabled?: boolean;
   run_type?: string;
   inputs?: Record<string, unknown>;
   metadata?: Record<string, unknown>;
@@ -286,6 +287,7 @@ export class LangSmithAgentTracer implements AgentTracer {
   ): Promise<AgentTraceSpan> {
     const root = this.createRoot({
       name: input.name,
+      tracingEnabled: true,
       run_type: 'chain',
       inputs: privacySafeLangSmithInputs(input.inputs),
       metadata: privacySafeLangSmithMetadata(input.metadata ?? {}),

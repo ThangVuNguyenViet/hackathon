@@ -1,6 +1,6 @@
 import { readFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it } from 'vitest';
 import {
   LangSmithAgentTracer,
   privacySafeLangSmithInputs,
@@ -33,7 +33,42 @@ class FakeRun implements LangSmithRunLike {
   async patchRun(): Promise<void> {}
 }
 
+const tracingEnvironmentKeys = [
+  'LANGSMITH_TRACING',
+  'LANGSMITH_TRACING_V2',
+  'LANGCHAIN_TRACING',
+  'LANGCHAIN_TRACING_V2',
+] as const;
+const originalTracingEnvironment = Object.fromEntries(
+  tracingEnvironmentKeys.map((key) => [key, process.env[key]]),
+);
+
+afterEach(() => {
+  for (const key of tracingEnvironmentKeys) {
+    const original = originalTracingEnvironment[key];
+    if (original === undefined) delete process.env[key];
+    else process.env[key] = original;
+  }
+});
+
 describe('LangSmith agent tracer boundary', () => {
+  it('creates LangChain callbacks without relying on tracing environment variables', async () => {
+    for (const key of tracingEnvironmentKeys) delete process.env[key];
+    const tracer = new LangSmithAgentTracer({
+      projectName: 'test-project',
+      apiKey: 'test-api-key',
+      apiUrl: 'https://langsmith.invalid',
+      fetchImplementation: async () => new Response('{}', { status: 200 }),
+    });
+
+    const turn = await tracer.startTurn({
+      name: 'kfc_agent_turn',
+      inputs: { messageCharacterCount: 4 },
+    });
+
+    await expect(turn.langchainCallbacks?.()).resolves.toBeDefined();
+  });
+
   it('publishes only allowlisted correlation, tags, and bounded summaries', async () => {
     const roots: FakeRun[] = [];
     const tracer = new LangSmithAgentTracer({

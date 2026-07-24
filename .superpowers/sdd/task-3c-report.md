@@ -102,3 +102,42 @@ files were preserved and not reformatted.
 - No D1 schema or persistence changes.
 - No dashboard read-model changes.
 - No live model, LangSmith network, remote D1, deployment, or qualification run.
+
+## Review Fix Follow-up
+
+- Explicitly set `tracingEnabled: true` on production root `RunTree`
+  configuration. A real `LangSmithAgentTracer` test now unsets all LangSmith
+  and legacy LangChain tracing environment variables and proves
+  `langchainCallbacks()` still returns a callback manager.
+- Replaced `scheduleAgentBackground` error-message logging with a bounded
+  `errorClass`. The Worker regression test makes trace flush throw
+  `Authorization: Bearer trace-secret` and proves the secret never reaches
+  console diagnostics.
+
+Focused RED:
+
+```text
+Test Files  2 failed (2)
+Tests       2 failed | 3 passed (5)
+```
+
+Focused GREEN:
+
+```text
+Test Files  2 passed (2)
+Tests       5 passed (5)
+```
+
+Review-fix verification:
+
+- Scoped Prettier: passed.
+- ESLint: passed.
+- Worker deploy dry-run: passed; no deployment occurred.
+- `git diff --check`: passed.
+- Full Vitest: Task 3C remained green, while the concurrent Task 4/5 tree
+  reported 126/128 passing with unrelated failures in the untracked PVCFC pack
+  and its storage-boundary interaction.
+- Typecheck/build were blocked only by concurrent untracked Task 5
+  `liveEvidence` work (readonly scenario metadata, `BufferSource`, and
+  in-progress local-tool-evidence contract typing). No Task 3C diagnostic was
+  reported.
