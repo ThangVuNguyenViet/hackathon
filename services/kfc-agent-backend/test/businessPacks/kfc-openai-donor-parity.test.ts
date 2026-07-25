@@ -37,22 +37,28 @@ describe('portable Direct SDK behavior retained by the KFC LangChain pack', () =
       'partySize only as catalog-backed ranking evidence',
     );
     expect(agentToolDescriptions.searchMenu).toContain(
-      'retry the same product or category search without modifierQueries',
+      'retain modifierQueries',
     );
     expect(agentToolDescriptions.searchMenu).toContain(
       'does not prove that the product is absent',
     );
     expect(agentToolDescriptions.searchMenu).toContain(
-      'leave queries empty for category-wide discovery',
+      'queries empty for category-wide discovery',
     );
     expect(agentToolDescriptions.searchMenu).toContain(
-      'do not translate or invent a category',
+      'never put a generic category request in queries',
     );
     expect(agentToolDescriptions.searchMenu).toContain(
       'omit category for an exact product query',
     );
     expect(agentToolDescriptions.searchMenu).toContain(
-      'Always send all six fields',
+      'Always send all seven fields',
+    );
+    expect(agentToolDescriptions.searchMenu).toContain(
+      'maxPriceExclusiveVnd',
+    );
+    expect(agentToolDescriptions.searchMenu).toContain(
+      'copy its exact returned customer-facing name',
     );
 
     expect(KFC_AGENT_INSTRUCTIONS).toContain(
@@ -84,6 +90,9 @@ describe('portable Direct SDK behavior retained by the KFC LangChain pack', () =
     );
     expect(KFC_AGENT_INSTRUCTIONS).toContain(
       'When a read result says recovery is required, make another corrected tool call before answering',
+    );
+    expect(KFC_AGENT_INSTRUCTIONS).toContain(
+      'do not answer as if a dropped modifier requirement matched',
     );
 
     expect(agentToolDescriptions.getModifierOptions).toContain(
@@ -210,6 +219,47 @@ describe('portable Direct SDK behavior retained by the KFC LangChain pack', () =
     );
   });
 
+  it('publishes the exact returned variant label instead of a reconstructed synonym', async () => {
+    const fixtures = await loadGeneratedFixtures(process.cwd());
+
+    const output = await kfcVietnamPack.run(
+      {
+        sessionId: 'session-kfc-exact-variant-label',
+        customerId: 'customer-1',
+        channel: 'kfc',
+        text: 'Tìm Pepsi không đường mã 41085',
+        clients: createMockClients(fixtures),
+        store: new MemoryStore(),
+        dashboard: new DashboardEventBus(),
+        agentModelBinding: configuredTestAgent({} as BaseChatModel),
+      },
+      async ({ tools }) => {
+        const search = tools.find(
+          (candidate) => candidate.name === 'searchMenu',
+        );
+        if (!search) throw new Error('Missing searchMenu');
+        await search.invoke({
+          type: 'tool_call',
+          name: 'searchMenu',
+          args: {
+            mode: 'search',
+            queries: ['41085'],
+            category: null,
+            maxPriceVnd: null,
+            maxPriceExclusiveVnd: null,
+            partySize: null,
+            modifierQueries: [],
+          },
+          id: 'exact-variant-search',
+        });
+        return 'Mình tìm thấy Pepsi Không Đường (Lớn).';
+      },
+    );
+
+    expect(output.responseText).toContain('Pepsi Không Đường (Đại)');
+    expect(output.responseText).not.toContain('Pepsi Không Đường (Lớn)');
+  });
+
   it('supplies materially changed recovery after an empty safe read', async () => {
     const fixtures = await loadGeneratedFixtures(process.cwd());
     const baseClients = createMockClients(fixtures);
@@ -252,6 +302,7 @@ describe('portable Direct SDK behavior retained by the KFC LangChain pack', () =
             queries: ['không tồn tại'],
             category: null,
             maxPriceVnd: null,
+            maxPriceExclusiveVnd: null,
             partySize: null,
             modifierQueries: [],
           },
@@ -266,6 +317,7 @@ describe('portable Direct SDK behavior retained by the KFC LangChain pack', () =
             queries: ['vẫn không tồn tại'],
             category: null,
             maxPriceVnd: null,
+            maxPriceExclusiveVnd: null,
             partySize: null,
             modifierQueries: [],
           },
@@ -280,6 +332,7 @@ describe('portable Direct SDK behavior retained by the KFC LangChain pack', () =
             queries: [],
             category: null,
             maxPriceVnd: null,
+            maxPriceExclusiveVnd: null,
             partySize: null,
             modifierQueries: [],
           },
@@ -303,19 +356,19 @@ describe('portable Direct SDK behavior retained by the KFC LangChain pack', () =
     const toolMessage = model.calls[1]?.messages.at(-1);
     expect(toolMessage?.content).toContain('"recovery"');
     expect(toolMessage?.content).toContain(
-      '"instruction":"You must make another corrected read call before answering the customer. Retry searchMenu with materially corrected or broader arguments',
+      '"instruction":"You must make another corrected read call before answering the customer. Retry searchMenu with materially corrected arguments',
     );
     expect(toolMessage?.content).toContain(
-      'keep the product queries or category and remove modifierQueries',
+      'broaden only the product terms while retaining modifierQueries',
     );
     expect(toolMessage?.content).toContain(
       'An empty constrained result does not prove that the product is absent',
     );
     expect(toolMessage?.content).toContain(
-      'For category-wide discovery, keep the exact verified category and set queries to an empty array',
+      'For a category-wide request, use category with an empty queries array',
     );
     expect(toolMessage?.content).toContain(
-      'For an exact product query, remove an unverified category',
+      'An unconstrained exact-product search may verify that the product exists',
     );
     expect(toolMessage?.content).toContain(
       'You must make another corrected read call before answering the customer',

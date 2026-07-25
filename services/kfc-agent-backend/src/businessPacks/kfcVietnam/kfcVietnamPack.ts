@@ -92,7 +92,9 @@ export const KFC_AGENT_INSTRUCTIONS = [
   'Nếu khách yêu cầu đầy đủ thực đơn, dùng searchMenu ở chế độ full và dùng toàn bộ collection complete; không tự rút gọn danh sách dữ liệu.',
   'Có thể gọi nhiều lượt tìm món theo sản phẩm hoặc danh mục trong cùng một lượt khách. Các queries trong một lần tìm là lựa chọn thay thế OR; chỉ kết luận về lựa chọn modifier khi kết quả trả về evidence tương ứng.',
   'When the customer explicitly selects a named product from earlier verified menu evidence, preserve that exact product across later turns. Treat a requested drink, side, or other extra as a separate add-on unless the customer explicitly asks to replace an included option. Do not substitute another product merely because a combined search is empty; retry the exact product without unrelated constraints, then search the add-on separately.',
-  'Với yêu cầu gợi ý cho nhóm hoặc theo ngân sách, chỉ dùng partySize và giá từ catalog làm evidence. Ngân sách tổng là mức tối đa, không phải mục tiêu cần tiêu hết; maxPriceVnd chỉ là trần giá cho từng món.',
+  'Với yêu cầu gợi ý cho nhóm hoặc theo ngân sách, chỉ dùng partySize và giá từ catalog làm evidence. Ngân sách tổng là mức tối đa, không phải mục tiêu cần tiêu hết; maxPriceVnd là trần giá bao gồm cho từng món và maxPriceExclusiveVnd là ranh giới loại trừ cho yêu cầu thấp hơn nghiêm ngặt.',
+  'Copy every returned customer-facing product and variant name character-for-character. Normalized or diacritic-insensitive search is retrieval only and never authorizes reconstructing a name.',
+  'For a requested modifier, retain modifierQueries while broadening product terms. An unconstrained search can verify that a product exists, but do not answer as if a dropped modifier requirement matched; inspect that exact item with getModifierOptions first.',
   'Khi khách giao chọn một giỏ hàng hoàn chỉnh bằng lời nhắn, đáp ứng mọi thành phần và số lượng rõ ràng khi catalog cho phép, rồi trình bày một đề xuất gộp để khách xác nhận bằng GenUI. Khi nhận GenUI cart action đã xác minh, áp dụng action đó trong một lần gọi updateCart. Cart mà công cụ trả về là trạng thái có thẩm quyền.',
   'updateCart là thay đổi có thể đảo ngược và không cần hỏi lại sau khi đã có GenUI cart action xác minh. Không dùng quy tắc này để bỏ qua xác nhận hoặc thẩm quyền của hành động không thể đảo ngược.',
   'Chỉ gọi updateCart cho GenUI cart action đã được máy chủ xác minh trong lượt hiện tại. Lời nhắn văn bản, kể cả yêu cầu rõ ràng, chỉ cho phép chuẩn bị đề xuất để khách xác nhận; câu hỏi về khả năng đáp ứng, giá, tồn kho hoặc tư vấn cũng không cấp quyền thay đổi giỏ. Máy chủ sẽ lấy chính xác món và số lượng từ action đã xác minh, không từ đối số bạn tự mở rộng.',
@@ -176,7 +178,7 @@ function withEmptyReadRecovery(
       instruction: exhausted
         ? 'Stop retrying and answer honestly from verified evidence.'
         : toolName === 'searchMenu'
-          ? 'You must make another corrected read call before answering the customer. Retry searchMenu with materially corrected or broader arguments. For category-wide discovery, keep the exact verified category and set queries to an empty array. For an exact product query, remove an unverified category and keep only the concise Vietnamese product query. If the empty call combined product queries or category with modifierQueries, keep the product queries or category and remove modifierQueries first. Search requested standalone drinks, sides, or other add-ons independently. An empty constrained result does not prove that the product is absent. Do not repeat identical arguments or substitute another product before verifying the requested product independently.'
+          ? 'You must make another corrected read call before answering the customer. Retry searchMenu with materially corrected arguments. For a category-wide request, use category with an empty queries array and retain applicable inclusive or exclusive price constraints. For modifier requirements, broaden only the product terms while retaining modifierQueries. An unconstrained exact-product search may verify that the product exists, but do not answer from it as though the modifier requirement matched; inspect that exact product with getModifierOptions before making the modifier claim. Search requested standalone drinks, sides, or other add-ons independently. An empty constrained result does not prove that the product is absent. Do not repeat identical arguments or substitute another product before verifying the requested product independently.'
           : 'Retry with materially corrected or broader arguments. Do not repeat identical arguments. You may choose another suitable read tool.',
     },
   };
@@ -220,12 +222,41 @@ const kfcTypedRecoveryMiddleware = createMiddleware({
 function verifiedCustomerResponse(
   responseText: string,
   currentTurnToolTrace: ToolTraceEntry[],
+  state: AgentState,
 ): string {
-  return currentTurnToolTrace.some(
-    (entry) => entry.ok && entry.toolName === 'handoff',
-  )
-    ? VERIFIED_QUEUED_HANDOFF_RESPONSE
-    : responseText;
+  if (
+    currentTurnToolTrace.some(
+      (entry) => entry.ok && entry.toolName === 'handoff',
+    )
+  ) {
+    return VERIFIED_QUEUED_HANDOFF_RESPONSE;
+  }
+  const labelsByBase = new Map<string, Set<string>>();
+  for (const name of [
+    ...(state.menuSearchResults ?? []).map((item) => item.name),
+    ...(state.menuItemDetail ? [state.menuItemDetail.name] : []),
+    ...(state.cart?.items ?? []).map((item) => item.name),
+  ]) {
+    const variant = /^(.*\S)\s+\([^()]+\)$/u.exec(name);
+    if (!variant?.[1]) continue;
+    const labels = labelsByBase.get(variant[1]) ?? new Set<string>();
+    labels.add(name);
+    labelsByBase.set(variant[1], labels);
+  }
+  let verified = responseText;
+  for (const [base, labels] of labelsByBase) {
+    if (labels.size !== 1) continue;
+    const [label] = labels;
+    verified = verified.replace(
+      new RegExp(`${escapedRegExp(base)}\\s+\\([^()\\n]+\\)`, 'gu'),
+      label!,
+    );
+  }
+  return verified;
+}
+
+function escapedRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/gu, '\\$&');
 }
 
 function systemPrompt(state: AgentState): string {
@@ -298,6 +329,9 @@ function executionArguments(
       ...(parsed.maxPriceVnd === null
         ? {}
         : { maxPriceVnd: parsed.maxPriceVnd }),
+      ...(parsed.maxPriceExclusiveVnd === null
+        ? {}
+        : { maxPriceExclusiveVnd: parsed.maxPriceExclusiveVnd }),
       ...(parsed.partySize === null ? {} : { partySize: parsed.partySize }),
     };
   }
@@ -1265,6 +1299,7 @@ export const kfcVietnamPack: BusinessPack<
         responseText: verifiedCustomerResponse(
           responseText,
           currentTurnToolTrace,
+          state,
         ),
         packRef: KFC_VIETNAM_PACK_REF,
         packStateSchemaVersion: '1',

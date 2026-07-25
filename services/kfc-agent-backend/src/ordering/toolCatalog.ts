@@ -107,6 +107,7 @@ export const toolArgumentSchemas = {
       queries: z.array(z.string().min(1)).optional().default([]),
       category: z.string().min(1).optional(),
       maxPriceVnd: z.number().int().nonnegative().optional(),
+      maxPriceExclusiveVnd: z.number().int().positive().optional(),
       partySize: z.number().int().positive().optional(),
       modifierQueries: z.array(z.string().min(1)).optional().default([]),
     })
@@ -257,6 +258,7 @@ export const agentToolArgumentSchemas = {
       queries: z.array(z.string().min(1)),
       category: z.string().min(1).nullable(),
       maxPriceVnd: z.number().int().nonnegative().nullable(),
+      maxPriceExclusiveVnd: z.number().int().positive().nullable(),
       partySize: z.number().int().positive().nullable(),
       modifierQueries: z.array(z.string().min(1)),
     })
@@ -378,7 +380,7 @@ export const agentToolArgumentSchemas = {
 
 export const agentToolDescriptions: Record<ToolName, string> = {
   searchMenu:
-    'Return the complete available menu for full mode, or every verified match for search mode. Always send all six fields: mode, queries, category, maxPriceVnd, partySize, and modifierQueries; use null for unused nullable fields and [] for unused arrays. Put independent product or identifier alternatives in queries; they use OR semantics. Use the exact category text already returned by the menu and leave queries empty for category-wide discovery; do not translate or invent a category. Use concise Vietnamese product names in queries and omit category for an exact product query unless the exact category is already verified and genuinely needed. Use maxPriceVnd only as a per-item ceiling, partySize only as catalog-backed ranking evidence, and modifierQueries only for selectable options of the searched product. Search a requested standalone drink, side, or other add-on independently instead of putting it in modifierQueries for another product. When a constrained search is empty, retry the same product or category search without modifierQueries or other unrelated constraints before considering alternatives; an empty constrained result does not prove that the product is absent. Multiple targeted searches may be called in one turn.',
+    'Return the complete available menu for full mode, or every verified match for search mode. Always send all seven fields: mode, queries, category, maxPriceVnd, maxPriceExclusiveVnd, partySize, and modifierQueries; use null for unused nullable fields and [] for unused arrays. Put independent product or identifier alternatives in queries; they use OR semantics. Use normalized customer-facing category wording in category with queries empty for category-wide discovery; never put a generic category request in queries. Use concise Vietnamese product names in queries and omit category for an exact product query unless the exact category is already verified and genuinely needed. Use maxPriceVnd for an inclusive per-item ceiling and maxPriceExclusiveVnd for a strict below-price boundary; never subtract one. Use partySize only as catalog-backed ranking evidence, and use modifierQueries only for selectable options of the searched product. For a modifier requirement, broaden product terms while you retain modifierQueries. An unconstrained exact-product retry can verify that the product exists, but never describe it as satisfying the dropped modifier requirement; call getModifierOptions for that exact item before making the modifier claim. Search a requested standalone drink, side, or other add-on independently instead of putting it in modifierQueries for another product. For every item you present, copy its exact returned customer-facing name character-for-character; normalized or diacritic-insensitive matching never authorizes reconstructing a label. Do not say that you showed the complete menu unless complete is true and scope is all. An empty constrained result does not prove that the product is absent. Multiple targeted searches may be called in one turn.',
   getItemDetails:
     'Return the verified customer-facing name, description, category, base price, and current availability for one previously discovered menu item code. Treat available false as unavailable to order.',
   getModifierOptions:

@@ -106,7 +106,15 @@ export function menuCategoryMatches(
       menuCategoryMatchScore(candidate, categoryQuery),
     ),
   );
-  return score > 0 && score === bestScore;
+  const bestCategoryCount = candidateCategories.filter(
+    (candidate) =>
+      menuCategoryMatchScore(candidate, categoryQuery) === bestScore,
+  ).length;
+  return (
+    score > 0 &&
+    score === bestScore &&
+    (bestScore === 1 || bestCategoryCount === 1)
+  );
 }
 
 export function menuSearchTextScore(
@@ -301,7 +309,10 @@ export function searchMenuCollection(
       (item) =>
         item.available &&
         menuCategoryMatches(item.category, input.category, categories) &&
-        (input.maxPriceVnd === undefined || item.priceVnd <= input.maxPriceVnd),
+        (input.maxPriceVnd === undefined ||
+          item.priceVnd <= input.maxPriceVnd) &&
+        (input.maxPriceExclusiveVnd === undefined ||
+          item.priceVnd < input.maxPriceExclusiveVnd),
     )
     .map((item, providerIndex) => {
       const document = menuItemSearchDocument(item);
@@ -377,6 +388,7 @@ export function searchMenuCollection(
       queries.length === 0 &&
       input.category === undefined &&
       input.maxPriceVnd === undefined &&
+      input.maxPriceExclusiveVnd === undefined &&
       input.partySize === undefined &&
       modifierQueries.length === 0
         ? { scope: 'all' }

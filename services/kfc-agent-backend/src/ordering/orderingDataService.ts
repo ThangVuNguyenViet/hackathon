@@ -341,7 +341,9 @@ export class OrderingDataService {
           item.available &&
           menuCategoryMatches(item.category, input.category, categories) &&
           (input.maxPriceVnd === undefined ||
-            item.priceVnd <= input.maxPriceVnd),
+            item.priceVnd <= input.maxPriceVnd) &&
+          (input.maxPriceExclusiveVnd === undefined ||
+            item.priceVnd < input.maxPriceExclusiveVnd),
       )
       .map((item, fixtureIndex) => {
         const modifier = this.modifierByItemId.get(item.itemId);
@@ -432,6 +434,7 @@ export class OrderingDataService {
         queries.length === 0 &&
         input.category === undefined &&
         input.maxPriceVnd === undefined &&
+        input.maxPriceExclusiveVnd === undefined &&
         input.partySize === undefined &&
         modifierQueries.length === 0
           ? { scope: 'all' }

@@ -169,6 +169,38 @@ describe('OrderingDataService menu search', () => {
     ).toMatch(/4/);
   });
 
+  it('excludes an item priced exactly at a strict below-price boundary', async () => {
+    const fixtures = await loadGeneratedFixtures(process.cwd());
+    const service = new OrderingDataService(fixtures);
+    const boundary = fixtures.menuItems.find(
+      (item) => item.available && item.priceVnd > 0,
+    )!.priceVnd;
+
+    const result = service.searchMenuTool({
+      queries: [],
+      maxPriceExclusiveVnd: boundary,
+    });
+
+    expect(result.items.every((item) => item.priceVnd < boundary)).toBe(true);
+    expect(
+      result.items.some((item) => item.priceVnd === boundary),
+    ).toBe(false);
+  });
+
+  it('rejects an over-specified category instead of dropping its qualifier', async () => {
+    const fixtures = await loadGeneratedFixtures(process.cwd());
+    const service = new OrderingDataService(fixtures);
+
+    const result = service.searchMenuTool({
+      mode: 'search',
+      queries: [],
+      category: 'Combo gà cay',
+      maxPriceVnd: 200_000,
+    });
+
+    expect(result.items).toEqual([]);
+  });
+
   it('returns exact selectable-option evidence for requested modifiers', async () => {
     const fixtures = await loadGeneratedFixtures(process.cwd());
     const service = new OrderingDataService(fixtures);

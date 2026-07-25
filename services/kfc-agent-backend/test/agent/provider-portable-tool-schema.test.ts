@@ -38,6 +38,7 @@ describe('providerPortableToolSchema', () => {
         },
         category: {},
         maxPriceVnd: {},
+        maxPriceExclusiveVnd: {},
         partySize: {},
         modifierQueries: {
           type: 'array',
@@ -49,6 +50,7 @@ describe('providerPortableToolSchema', () => {
         'queries',
         'category',
         'maxPriceVnd',
+        'maxPriceExclusiveVnd',
         'partySize',
         'modifierQueries',
       ],
