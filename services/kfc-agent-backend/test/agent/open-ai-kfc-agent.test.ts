@@ -144,7 +144,14 @@ describe('runResponsesToolLoop', () => {
     expect(requests[1]?.input).toContainEqual(
       expect.objectContaining({
         output: expect.stringContaining(
-          'remove any category that was not copied exactly from current-turn verified evidence',
+          'use category with an empty query for category-wide retrieval',
+        ),
+      }),
+    );
+    expect(requests[1]?.input).toContainEqual(
+      expect.objectContaining({
+        output: expect.stringContaining(
+          'do not answer from an unconstrained product result as though the modifier requirement matched',
         ),
       }),
     );
@@ -717,6 +724,266 @@ describe('OpenAiKfcAgent', () => {
     );
   });
 
+  it('provides the hosted Python tool for model-owned budget arithmetic', async () => {
+    const requests: Array<Record<string, unknown>> = [];
+    const agent = new OpenAiKfcAgent({
+      client: {
+        responses: {
+          create: async (request: Record<string, unknown>) => {
+            requests.push(structuredClone(request));
+            return { output: [], output_text: 'Đã tính xong.' };
+          },
+        },
+      },
+      model: 'gpt-4.1-mini',
+    });
+
+    await agent.respond({
+      sessionId: `kfc:python_${crypto.randomUUID()}`,
+      customerId: 'python_customer',
+      channel: 'messenger',
+      text: 'Chọn món sát ngân sách giúp mình.',
+      externalMessageId: crypto.randomUUID(),
+      metadata: null,
+      store: new MemoryStore(),
+      tools: [],
+    });
+
+    expect(requests[0]?.tools).toContainEqual({
+      type: 'code_interpreter',
+      container: { type: 'auto' },
+    });
+    expect(requests[0]?.instructions).toContain(
+      'Use the Python tool for nontrivial combination arithmetic',
+    );
+  });
+
+  it('reviews a tool-grounded draft once before publishing it', async () => {
+    const requests: Array<Record<string, unknown>> = [];
+    const responses = [
+      {
+        output: [
+          {
+            type: 'function_call',
+            call_id: 'call_drinks',
+            name: 'searchMenu',
+            arguments: '{"category":"Thức Uống","query":""}',
+          },
+        ],
+        output_text: '',
+      },
+      {
+        output: [],
+        output_text: 'Burger Tôm là một món đồ uống.',
+      },
+      {
+        output: [],
+        output_text: 'Mình tìm thấy Pepsi và 7Up trong danh sách đồ uống.',
+      },
+    ];
+
+    const result = await runResponsesToolLoop({
+      client: {
+        responses: {
+          create: async (request: Record<string, unknown>) => {
+            requests.push(structuredClone(request));
+            return responses.shift();
+          },
+        },
+      },
+      model: 'gpt-4.1-mini',
+      instructions: 'You are a KFC assistant.',
+      input: [{ role: 'user', content: 'Cho mình xem đồ uống.' }],
+      tools: [
+        {
+          definition: {
+            type: 'function',
+            name: 'searchMenu',
+            description: 'Search the KFC menu.',
+            parameters: { type: 'object', properties: {} },
+            strict: false,
+          },
+          execute: async () => ({
+            ok: true,
+            value: {
+              total: 2,
+              items: [
+                { code: 'PEPSI', name: 'Pepsi', category: 'Thức Uống' },
+                { code: '7UP', name: '7Up', category: 'Thức Uống' },
+              ],
+            },
+          }),
+        },
+      ],
+      maxToolRounds: 12,
+      reviewToolGroundedResponse: true,
+    });
+
+    expect(requests.map((request) => request.tool_choice)).toEqual([
+      'auto',
+      'auto',
+      'none',
+    ]);
+    expect(requests[2]?.input).toContainEqual(
+      expect.objectContaining({
+        role: 'developer',
+        content: expect.stringContaining(
+          'Review the draft against the exact current-turn tool results',
+        ),
+      }),
+    );
+    expect(requests[2]?.input).toContainEqual(
+      expect.objectContaining({
+        role: 'developer',
+        content: expect.stringContaining('character-for-character'),
+      }),
+    );
+    expect(requests[2]?.input).toContainEqual(
+      expect.objectContaining({
+        role: 'developer',
+        content: expect.stringContaining(
+          'independently reconstruct the answer',
+        ),
+      }),
+    );
+    expect(requests[2]?.input).toContainEqual(
+      expect.objectContaining({
+        role: 'developer',
+        content: expect.stringContaining(
+          'Authoritative customer-facing item labels: [{"code":"PEPSI","name":"Pepsi"},{"code":"7UP","name":"7Up"}]',
+        ),
+      }),
+    );
+    expect(requests[2]?.input).toContainEqual(
+      expect.objectContaining({
+        role: 'developer',
+        content: expect.stringContaining('Burger Tôm là một món đồ uống.'),
+      }),
+    );
+    expect(result.responseText).toBe(
+      'Mình tìm thấy Pepsi và 7Up trong danh sách đồ uống.',
+    );
+  });
+
+  it('preserves the grounded draft when only the optional review is unavailable', async () => {
+    const responses = [
+      {
+        output: [
+          {
+            type: 'function_call',
+            call_id: 'call_drinks',
+            name: 'searchMenu',
+            arguments: '{"category":"Thức Uống","query":""}',
+          },
+        ],
+        output_text: '',
+      },
+      {
+        output: [],
+        output_text: 'Mình tìm thấy Pepsi trong danh sách đồ uống.',
+      },
+      undefined,
+    ];
+
+    const result = await runResponsesToolLoop({
+      client: {
+        responses: {
+          create: async () => responses.shift(),
+        },
+      },
+      model: 'gpt-4.1-mini',
+      instructions: 'You are a KFC assistant.',
+      input: [{ role: 'user', content: 'Cho mình xem đồ uống.' }],
+      tools: [
+        {
+          definition: {
+            type: 'function',
+            name: 'searchMenu',
+            description: 'Search the KFC menu.',
+            parameters: { type: 'object', properties: {} },
+            strict: false,
+          },
+          execute: async () => ({
+            ok: true,
+            value: {
+              total: 1,
+              items: [{ code: 'PEPSI', name: 'Pepsi', category: 'Thức Uống' }],
+            },
+          }),
+        },
+      ],
+      maxToolRounds: 12,
+      reviewToolGroundedResponse: true,
+    });
+
+    expect(result.responseText).toBe(
+      'Mình tìm thấy Pepsi trong danh sách đồ uống.',
+    );
+  });
+
+  it('does not add an optional review model call to Messenger turns', async () => {
+    const requests: Array<Record<string, unknown>> = [];
+    const responses = [
+      {
+        output: [
+          {
+            type: 'function_call',
+            call_id: 'call_menu',
+            name: 'searchMenu',
+            arguments: '{"query":"combo"}',
+          },
+        ],
+        output_text: '',
+      },
+      {
+        output: [],
+        output_text: 'Mình tìm thấy một số combo phù hợp.',
+      },
+    ];
+    const agent = new OpenAiKfcAgent({
+      client: {
+        responses: {
+          create: async (request: Record<string, unknown>) => {
+            requests.push(structuredClone(request));
+            return responses.shift();
+          },
+        },
+      },
+      model: 'gpt-4.1-mini',
+    });
+
+    const result = await agent.respond({
+      sessionId: 'messenger:latency',
+      customerId: 'latency',
+      channel: 'messenger',
+      text: 'Gợi ý combo.',
+      externalMessageId: 'message-latency',
+      metadata: null,
+      store: new MemoryStore(),
+      tools: [
+        {
+          definition: {
+            type: 'function',
+            name: 'searchMenu',
+            description: 'Search menu.',
+            parameters: { type: 'object', properties: {} },
+            strict: false,
+          },
+          execute: async () => ({
+            ok: true,
+            value: {
+              total: 1,
+              items: [{ code: 'COMBO', name: 'Combo', category: 'Combo' }],
+            },
+          }),
+        },
+      ],
+    });
+
+    expect(requests).toHaveLength(2);
+    expect(result.responseText).toBe('Mình tìm thấy một số combo phù hợp.');
+  });
+
   it('keeps global truth, privacy, recovery, and authorization rules in the system prompt', async () => {
     const instructions = await captureDefaultInstructions();
 
@@ -742,6 +1009,9 @@ describe('OpenAiKfcAgent', () => {
     expect(instructions).toContain(
       'Do not reopen or replace an already selected product',
     );
+    expect(instructions).toContain(
+      'reconcile the draft response with the exact current tool results',
+    );
   });
 
   it('finishes delegated reversible plans within the supplied constraints', async () => {
@@ -752,6 +1022,16 @@ describe('OpenAiKfcAgent', () => {
     );
     expect(instructions).toContain('complete verified plan in the same turn');
     expect(instructions).toContain('stated budget as a maximum');
+    expect(instructions).toContain(
+      'keep improving the verified cart while another available item reduces the distance to that target',
+    );
+    expect(instructions).toContain('fall back beyond a preferred category');
+    expect(instructions).toContain(
+      'finish all required information gathering and arithmetic before the first cart mutation',
+    );
+    expect(instructions).toContain(
+      'Do not construct a delegated multi-item plan through incremental cart mutations',
+    );
     expect(instructions).toContain('every explicit component constraint');
     expect(instructions).toContain('final verified cart');
   });
@@ -1007,6 +1287,76 @@ describe('OpenAiKfcAgent', () => {
       (await store.listTurns('kfc:customer_public_text')).at(-1)?.text,
     ).toBe(
       'Món Combo Hợp Gu 99K có thể chọn Gà Giòn Không Cay; đừng chọn mã Gà Giòn Cay.',
+    );
+  });
+
+  it('canonicalizes a changed cart variant to its exact returned item name', async () => {
+    const store = new MemoryStore();
+    let responseIndex = 0;
+    const agent = new OpenAiKfcAgent({
+      client: {
+        responses: {
+          create: async () => {
+            responseIndex += 1;
+            if (responseIndex === 1) {
+              return {
+                output: [
+                  {
+                    type: 'function_call',
+                    call_id: 'call_cart',
+                    name: 'updateCart',
+                    arguments:
+                      '{"changes":[{"itemCode":"41085","orderedMenuItemQuantity":1,"modifiers":null}]}',
+                  },
+                ],
+                output_text: '',
+              };
+            }
+            return {
+              output: [],
+              output_text: 'Mình đã thêm Pepsi Không Đường (Lớn) vào giỏ hàng.',
+            };
+          },
+        },
+      },
+      model: 'gpt-4.1-mini',
+    });
+
+    const result = await agent.respond({
+      sessionId: 'kfc:canonical_cart_variant',
+      customerId: 'canonical_cart_variant',
+      channel: 'kfc',
+      text: 'Thêm Pepsi Không Đường cỡ lớn.',
+      externalMessageId: 'canonical_cart_variant_1',
+      metadata: null,
+      store,
+      tools: [
+        {
+          definition: {
+            type: 'function',
+            name: 'updateCart',
+            description: 'Update the cart.',
+            parameters: { type: 'object', properties: {} },
+            strict: false,
+          },
+          execute: async () => ({
+            ok: true,
+            value: {
+              items: [
+                {
+                  itemCode: '41085',
+                  name: 'Pepsi Không Đường (Đại)',
+                  quantity: 1,
+                },
+              ],
+            },
+          }),
+        },
+      ],
+    });
+
+    expect(result.responseText).toBe(
+      'Mình đã thêm Pepsi Không Đường (Đại) vào giỏ hàng.',
     );
   });
 

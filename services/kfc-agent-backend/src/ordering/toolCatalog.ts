@@ -125,13 +125,29 @@ export const toolArgumentSchemas = {
         .describe(
           'Optional normalized partial or complete fixture category wording selected by the model.',
         ),
+      minPriceVnd: z
+        .number()
+        .int()
+        .nonnegative()
+        .optional()
+        .describe(
+          'Inclusive per-item price floor in VND. Use this with maxPriceVnd to narrow the candidate interval around a remaining aggregate-budget gap; the model still chooses products and quantities.',
+        ),
       maxPriceVnd: z
         .number()
         .int()
         .nonnegative()
         .optional()
         .describe(
-          'Per-item price ceiling in VND. This is not an aggregate cart limit; for a total recommendation budget, combine returned priceVnd values.',
+          'Inclusive per-item price ceiling in VND for wording such as at most or up to. Do not use this for a strict below-price request. This is not an aggregate cart limit; for a total recommendation budget, combine returned priceVnd values.',
+        ),
+      maxPriceExclusiveVnd: z
+        .number()
+        .int()
+        .positive()
+        .optional()
+        .describe(
+          'Exclusive per-item price boundary in VND. For a strict request such as below 30,000 VND, pass 30000 here so every returned item has priceVnd < 30000. Do not subtract one and do not use maxPriceVnd for that request.',
         ),
       partySize: z
         .number()

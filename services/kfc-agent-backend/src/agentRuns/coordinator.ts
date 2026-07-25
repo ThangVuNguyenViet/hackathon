@@ -293,7 +293,7 @@ export class AgentRunCoordinator {
   }
 
   private debounceWindowMs(): number {
-    return this.input.options?.debounceWindowMs ?? 1500;
+    return this.input.options?.debounceWindowMs ?? 500;
   }
 
   private recoveryLimit(): number {

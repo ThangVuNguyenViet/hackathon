@@ -6,7 +6,7 @@ import type {
   MenuItem,
   Order,
   ToolResult,
-} from "../domain/types.js";
+} from '../domain/types.js';
 import type {
   GeneratedMembershipPointHistorySnapshot,
   GeneratedMembershipProfileSnapshot,
@@ -18,20 +18,18 @@ import type {
   GeneratedPromotionVoucherOffer,
 } from '../fixtures/schema.js';
 import type { OfficialSourceAuthority } from '../domain/officialSourceAuthority.js';
-import type {
-  ExactCartAvailabilityObservationV2,
-} from './exactCartAvailabilityAuthority.js';
+import type { ExactCartAvailabilityObservationV2 } from './exactCartAvailabilityAuthority.js';
 
 export type FixtureMode =
-  | "public_crawl_seed"
-  | "authenticated_chrome_seed"
-  | "mock_external_state"
-  | "test_only"
-  | "demo_mock_seed"
-  | "provider_runtime";
-export type Disposition = "pickup" | "delivery";
-export type FulfillmentMethod = "pickup" | "delivery";
-export type ContentKind = "promotion" | "news" | "allergen" | "policy";
+  | 'public_crawl_seed'
+  | 'authenticated_chrome_seed'
+  | 'mock_external_state'
+  | 'test_only'
+  | 'demo_mock_seed'
+  | 'provider_runtime';
+export type Disposition = 'pickup' | 'delivery';
+export type FulfillmentMethod = 'pickup' | 'delivery';
+export type ContentKind = 'promotion' | 'news' | 'allergen' | 'policy';
 
 export type MenuSearchMode = 'search' | 'full';
 
@@ -39,7 +37,9 @@ export interface MenuSearchInput {
   query?: string;
   mode?: MenuSearchMode;
   category?: string;
+  minPriceVnd?: number;
   maxPriceVnd?: number;
+  maxPriceExclusiveVnd?: number;
   partySize?: number;
   modifierQueries?: string[];
 }
@@ -103,8 +103,7 @@ export interface SourceProvenance {
 export type SelectedModifier = CartItemModifier;
 
 export type CollectionScope =
-  | { scope: 'all' }
-  | { scope: 'filtered'; query: string };
+  { scope: 'all' } | { scope: 'filtered'; query: string };
 
 export interface VerifiedCollectionResult<Item> {
   items: Item[];
@@ -164,12 +163,12 @@ export interface FulfillmentState {
 export interface PromotionValidationResult {
   ok: boolean;
   reason:
-    | "validated"
-    | "not_found"
-    | "minimum_not_met"
-    | "expired"
-    | "public_code_not_exposed"
-    | "not_redeemable_publicly";
+    | 'validated'
+    | 'not_found'
+    | 'minimum_not_met'
+    | 'expired'
+    | 'public_code_not_exposed'
+    | 'not_redeemable_publicly';
   publicCode: string;
   discountVnd: number;
   source: SourceProvenance;
@@ -183,7 +182,7 @@ export interface PromotionContext {
 
 export interface MembershipActionResult {
   actionId: string;
-  status: "previewed" | "completed";
+  status: 'previewed' | 'completed';
   requiresUserConfirmation: boolean;
   targetId: string;
   message: string;
@@ -200,8 +199,8 @@ export interface ContentEvidence {
   tags?: string[];
   retrievedAt?: string;
   approvedAt?: string;
-  approvalStatus?: "approved";
-  audience?: "customer_public";
+  approvalStatus?: 'approved';
+  audience?: 'customer_public';
   contentHash?: string;
   /**
    * Explicit authority issued by the reviewed content-ingestion boundary.
@@ -226,7 +225,7 @@ export interface PaymentAttempt {
   orderId?: string;
   /** Exact opaque method identifier returned by the active payment provider. */
   method?: string;
-  status: "pending" | "paid" | "failed";
+  status: 'pending' | 'paid' | 'failed';
   paymentUrl?: string;
 }
 
@@ -242,39 +241,39 @@ export interface HandoffState {
 }
 
 export const TOOL_NAMES = [
-  "searchMenu",
-  "getItemDetails",
-  "getModifierOptions",
-  "updateCart",
-  "previewCart",
-  "recommendAddOns",
-  "findStores",
-  "checkStoreAvailability",
-  "quoteFulfillment",
-  "searchPromotions",
-  "explainPromotion",
-  "validateVoucher",
-  "getMembershipProfile",
-  "listMembershipRewards",
-  "listMembershipWallet",
-  "getMembershipPointHistory",
-  "listMembershipTools",
-  "listPaymentMethods",
-  "getSavedAddresses",
-  "getRecentOrder",
-  "getFavoriteItems",
-  "acquireVoucher",
-  "redeemReward",
-  "searchContentPolicy",
-  "answerAllergenQuestion",
-  "previewOrder",
-  "placeOrder",
-  "getOrderStatus",
-  "createPaymentLink",
-  "checkPaymentStatus",
-  "collectInvoice",
-  "handoff",
-  "resolveHandoff",
+  'searchMenu',
+  'getItemDetails',
+  'getModifierOptions',
+  'updateCart',
+  'previewCart',
+  'recommendAddOns',
+  'findStores',
+  'checkStoreAvailability',
+  'quoteFulfillment',
+  'searchPromotions',
+  'explainPromotion',
+  'validateVoucher',
+  'getMembershipProfile',
+  'listMembershipRewards',
+  'listMembershipWallet',
+  'getMembershipPointHistory',
+  'listMembershipTools',
+  'listPaymentMethods',
+  'getSavedAddresses',
+  'getRecentOrder',
+  'getFavoriteItems',
+  'acquireVoucher',
+  'redeemReward',
+  'searchContentPolicy',
+  'answerAllergenQuestion',
+  'previewOrder',
+  'placeOrder',
+  'getOrderStatus',
+  'createPaymentLink',
+  'checkPaymentStatus',
+  'collectInvoice',
+  'handoff',
+  'resolveHandoff',
 ] as const;
 
 export type ToolName = (typeof TOOL_NAMES)[number];
@@ -303,7 +302,12 @@ export interface ToolResultByName {
   updateCart: Cart;
   previewCart: Cart;
   recommendAddOns: MenuItem[];
-  findStores: Array<{ storeId: string; name: string; address: string; city: string }>;
+  findStores: Array<{
+    storeId: string;
+    name: string;
+    address: string;
+    city: string;
+  }>;
   checkStoreAvailability: Record<string, boolean>;
   quoteFulfillment: FulfillmentState;
   searchPromotions: GeneratedPromotionVoucherOffer[];
@@ -342,10 +346,18 @@ export interface ToolResultByName {
   };
 }
 
-export type AgentToolResultByName = Omit<ToolResultByName, CollectionToolName> & {
+export type AgentToolResultByName = Omit<
+  ToolResultByName,
+  CollectionToolName
+> & {
   searchMenu: VerifiedCollectionResult<MenuItem>;
   recommendAddOns: VerifiedCollectionResult<MenuItem>;
-  findStores: VerifiedCollectionResult<{ storeId: string; name: string; address: string; city: string }>;
+  findStores: VerifiedCollectionResult<{
+    storeId: string;
+    name: string;
+    address: string;
+    city: string;
+  }>;
   searchPromotions: VerifiedCollectionResult<GeneratedPromotionVoucherOffer>;
   listMembershipRewards: VerifiedCollectionResult<GeneratedMembershipRewardOffer>;
   listMembershipWallet: VerifiedCollectionResult<GeneratedMembershipWalletVoucher>;
@@ -358,14 +370,38 @@ export type AgentToolResultByName = Omit<ToolResultByName, CollectionToolName> &
 export interface VerifiedCollectionStore {
   searchMenu?: Record<string, VerifiedCollectionSnapshot<MenuItem>>;
   recommendAddOns?: Record<string, VerifiedCollectionSnapshot<MenuItem>>;
-  findStores?: Record<string, VerifiedCollectionSnapshot<ToolResultByName['findStores'][number]>>;
-  searchPromotions?: Record<string, VerifiedCollectionSnapshot<GeneratedPromotionVoucherOffer>>;
-  listMembershipRewards?: Record<string, VerifiedCollectionSnapshot<GeneratedMembershipRewardOffer>>;
-  listMembershipWallet?: Record<string, VerifiedCollectionSnapshot<GeneratedMembershipWalletVoucher>>;
-  listMembershipTools?: Record<string, VerifiedCollectionSnapshot<GeneratedMembershipToolDefinition>>;
-  listPaymentMethods?: Record<string, VerifiedCollectionSnapshot<GeneratedPaymentMethod>>;
-  searchContentPolicy?: Record<string, VerifiedCollectionSnapshot<ContentEvidence>>;
-  answerAllergenQuestion?: Record<string, VerifiedCollectionSnapshot<ContentEvidence>>;
+  findStores?: Record<
+    string,
+    VerifiedCollectionSnapshot<ToolResultByName['findStores'][number]>
+  >;
+  searchPromotions?: Record<
+    string,
+    VerifiedCollectionSnapshot<GeneratedPromotionVoucherOffer>
+  >;
+  listMembershipRewards?: Record<
+    string,
+    VerifiedCollectionSnapshot<GeneratedMembershipRewardOffer>
+  >;
+  listMembershipWallet?: Record<
+    string,
+    VerifiedCollectionSnapshot<GeneratedMembershipWalletVoucher>
+  >;
+  listMembershipTools?: Record<
+    string,
+    VerifiedCollectionSnapshot<GeneratedMembershipToolDefinition>
+  >;
+  listPaymentMethods?: Record<
+    string,
+    VerifiedCollectionSnapshot<GeneratedPaymentMethod>
+  >;
+  searchContentPolicy?: Record<
+    string,
+    VerifiedCollectionSnapshot<ContentEvidence>
+  >;
+  answerAllergenQuestion?: Record<
+    string,
+    VerifiedCollectionSnapshot<ContentEvidence>
+  >;
 }
 
 export type CommerceApprovalCapability =
@@ -534,11 +570,9 @@ export interface ToolCallFailure {
 }
 
 export type ToolCallResult =
-  | ToolCallFailure
-  | { [Name in ToolName]: ToolCallSuccessFor<Name> }[ToolName];
+  ToolCallFailure | { [Name in ToolName]: ToolCallSuccessFor<Name> }[ToolName];
 
-export type ToolTraceProvenance =
-  Pick<SourceProvenance, 'fixtureMode'> &
+export type ToolTraceProvenance = Pick<SourceProvenance, 'fixtureMode'> &
   Partial<Omit<SourceProvenance, 'fixtureMode'>>;
 
 interface ToolTracePublicationAuditBase {
@@ -553,28 +587,22 @@ interface ToolTracePublicationAuditBase {
   evidenceDigest: string;
   membershipActionOutcome?: Pick<
     MembershipActionResult,
-    | 'actionId'
-    | 'status'
-    | 'requiresUserConfirmation'
-    | 'targetId'
+    'actionId' | 'status' | 'requiresUserConfirmation' | 'targetId'
   >;
 }
 
-export interface ToolTracePublicationAuditV1
-  extends ToolTracePublicationAuditBase {
+export interface ToolTracePublicationAuditV1 extends ToolTracePublicationAuditBase {
   schemaVersion: 'kfc-tool-trace-publication-audit-v1';
 }
 
-export interface ToolTracePublicationAuditV2
-  extends ToolTracePublicationAuditBase {
+export interface ToolTracePublicationAuditV2 extends ToolTracePublicationAuditBase {
   schemaVersion: 'kfc-tool-trace-publication-audit-v2';
   authorityDigest: string;
   currentTurnRevision: string;
 }
 
 export type ToolTracePublicationAudit =
-  | ToolTracePublicationAuditV1
-  | ToolTracePublicationAuditV2;
+  ToolTracePublicationAuditV1 | ToolTracePublicationAuditV2;
 
 export interface ToolTraceEntry {
   toolName: ToolName;
