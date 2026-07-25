@@ -1,0 +1,69 @@
+[
+  {
+    "schemaVersion": "recommendation-policy-v1",
+    "policyId": "poc-local-favorite-discount-boost",
+    "enabled": true,
+    "placement": "local_favorite",
+    "action": "boost_target",
+    "targetIds": ["41172"],
+    "storeIds": [],
+    "startsAt": "2026-01-01T00:00:00Z",
+    "endsAt": "2027-01-01T00:00:00Z",
+    "priority": 20,
+    "boostWeight": 0.65,
+    "reasonCode": "cms_campaign_boost"
+  },
+  {
+    "schemaVersion": "recommendation-policy-v1",
+    "policyId": "poc-for-you-replacement",
+    "enabled": true,
+    "placement": "for_you",
+    "action": "replace_slate",
+    "targetIds": ["20751", "41172"],
+    "storeIds": [],
+    "startsAt": "2026-03-01T00:00:00Z",
+    "endsAt": "2026-05-01T00:00:00Z",
+    "priority": 40,
+    "reasonCode": "cms_single_upsell"
+  },
+  {
+    "schemaVersion": "recommendation-policy-v1",
+    "policyId": "poc-cross-sell-exclusion",
+    "enabled": true,
+    "placement": "smart_cross_sell",
+    "action": "exclude_target",
+    "targetIds": ["20712"],
+    "storeIds": [],
+    "startsAt": "2026-01-01T00:00:00Z",
+    "endsAt": "2027-01-01T00:00:00Z",
+    "priority": 10,
+    "reasonCode": "cms_excluded"
+  },
+  {
+    "schemaVersion": "recommendation-policy-v1",
+    "policyId": "poc-store-suppression",
+    "enabled": true,
+    "placement": "smart_cross_sell",
+    "action": "suppress_placement",
+    "targetIds": [],
+    "storeIds": ["KFCVN0002"],
+    "startsAt": "2026-01-01T00:00:00Z",
+    "endsAt": "2027-01-01T00:00:00Z",
+    "priority": 100,
+    "reasonCode": "cms_store_suppression"
+  },
+  {
+    "schemaVersion": "recommendation-policy-v1",
+    "policyId": "poc-modifier-pin",
+    "enabled": true,
+    "placement": "modifier_upsell",
+    "action": "pin_target",
+    "targetIds": ["70087"],
+    "storeIds": [],
+    "startsAt": "2026-01-01T00:00:00Z",
+    "endsAt": "2027-01-01T00:00:00Z",
+    "priority": 15,
+    "pinPosition": 1,
+    "reasonCode": "cms_modifier_pin"
+  }
+]

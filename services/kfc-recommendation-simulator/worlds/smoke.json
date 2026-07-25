@@ -1,0 +1,35 @@
+{
+  "schemaVersion": "simulator-world-v2",
+  "worldId": "kfc-vn-public-crawl-smoke-v2",
+  "journeyCount": 1000,
+  "customerPoolSize": 250,
+  "identifiedCustomerFraction": 0.4,
+  "worldSeed": 1741,
+  "trafficSeed": 2897,
+  "loggingSeed": 3253,
+  "outcomeSeed": 4001,
+  "horizonDays": 180,
+  "batchJourneys": 100,
+  "heldOutStoreCount": 53,
+  "coldProductCount": 12,
+  "coldModifierCount": 6,
+  "loggingTemperature": 0.75,
+  "loggingPolicyWeights": {
+    "popularity": 0.3,
+    "basket_association": 0.3,
+    "promotion_biased": 0.2,
+    "randomized_exploration": 0.2
+  },
+  "driftPhases": [
+    {
+      "startsAtFraction": 0,
+      "categoryBias": "Combo 1 Người",
+      "promotionResponseDelta": 0
+    },
+    {
+      "startsAtFraction": 0.5,
+      "categoryBias": "Thức Uống & Tráng Miệng",
+      "promotionResponseDelta": 0.35
+    }
+  ]
+}

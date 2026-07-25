@@ -1,0 +1,40 @@
+{
+  "schemaVersion": "simulator-world-v2",
+  "worldId": "kfc-vn-public-crawl-benchmark-seed-01-v2",
+  "journeyCount": 50000,
+  "customerPoolSize": 5000,
+  "identifiedCustomerFraction": 0.4,
+  "worldSeed": 1741,
+  "trafficSeed": 2897,
+  "loggingSeed": 3253,
+  "outcomeSeed": 4001,
+  "horizonDays": 365,
+  "batchJourneys": 250,
+  "heldOutStoreCount": 53,
+  "coldProductCount": 12,
+  "coldModifierCount": 6,
+  "loggingTemperature": 0.75,
+  "loggingPolicyWeights": {
+    "popularity": 0.3,
+    "basket_association": 0.3,
+    "promotion_biased": 0.2,
+    "randomized_exploration": 0.2
+  },
+  "driftPhases": [
+    {
+      "startsAtFraction": 0,
+      "categoryBias": "Combo 1 Người",
+      "promotionResponseDelta": 0
+    },
+    {
+      "startsAtFraction": 0.34,
+      "categoryBias": "Combo Nhóm",
+      "promotionResponseDelta": 0.15
+    },
+    {
+      "startsAtFraction": 0.67,
+      "categoryBias": "Thức Uống & Tráng Miệng",
+      "promotionResponseDelta": 0.35
+    }
+  ]
+}
