@@ -169,7 +169,13 @@ describe('KFC OpenAI tools', () => {
       'narrower product type inside a combined category',
     );
     expect(searchMenu?.definition.description).toContain(
-      'use both category and query',
+      'category result is a candidate set',
+    );
+    expect(searchMenu?.definition.description).toContain(
+      'not proof that every returned item matches',
+    );
+    expect(searchMenu?.definition.description).toContain(
+      'omit unrelated section items',
     );
     expect(searchMenu?.definition.description).toContain(
       'Search a requested standalone drink, side, or other add-on independently',
