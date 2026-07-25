@@ -134,6 +134,63 @@ export type WorkerWebhookJob =
   | ZaloWebhookJob
   | MessengerAgentRunWakeupJob;
 
+async function verifiedMessengerIngressForWakeup(
+  job: MessengerAgentRunWakeupJob,
+  env: WorkerEnv,
+) {
+  const ingressProof =
+    'messengerIngressProof' in job
+      ? job.messengerIngressProof
+      : undefined;
+  return ingressProof &&
+    ingressProof.schemaVersion === 'kfc-messenger-ingress-proof-v1' &&
+    ingressProof.rawBodyBytes.length <= 1_000_000 &&
+    env.META_APP_SECRET
+    ? verifyMessengerGuestCheckoutIngress({
+        rawBody: Uint8Array.from(ingressProof.rawBodyBytes),
+        signatureHeader: ingressProof.signatureHeader,
+        appSecret: env.META_APP_SECRET,
+        pageId: env.META_PAGE_ID ?? '',
+      })
+    : undefined;
+}
+
+async function dispatchMessengerAgentRunWakeup(input: {
+  job: MessengerAgentRunWakeupJob;
+  env: WorkerEnv;
+  coordinator: AgentRunCoordinator;
+  processMessengerAgentRun: ReturnType<
+    typeof createRouteHandlers
+  >['processMessengerAgentRun'];
+  typingAlreadyStarted: boolean;
+}): Promise<void> {
+  const waitMs = Date.parse(input.job.dueAt) - Date.now();
+  if (waitMs > 0) {
+    await new Promise((resolve) =>
+      setTimeout(resolve, Math.min(waitMs, 2_000)),
+    );
+  }
+  const result = await input.coordinator.claimWakeupRun(input.job);
+  const verifiedIngress = await verifiedMessengerIngressForWakeup(
+    input.job,
+    input.env,
+  );
+  if (result.dispatch && result.runId) {
+    await input.processMessengerAgentRun(
+      result.runId,
+      verifiedIngress,
+      { typingAlreadyStarted: input.typingAlreadyStarted },
+    );
+  }
+  console.log('agent_run_wakeup_processed', {
+    sessionId: input.job.sessionId,
+    generation: input.job.generation,
+    claimed: result.claimed,
+    dispatch: result.dispatch,
+    reason: result.reason,
+  });
+}
+
 export interface WorkerEnv {
   DB: D1DatabaseLike;
   KFC_AGENT_PROFILE_MODE?: "production" | "qualification";
@@ -326,7 +383,58 @@ export default {
     }
     if (request.method === "POST" && url.pathname === "/webhooks/messenger") {
       return toResponse(
-        await enqueueMessengerWebhook(request, env, store, context),
+        await enqueueMessengerWebhook(
+          request,
+          env,
+          store,
+          context,
+          env.KFC_AGENT_RUNTIME === 'openai-responses'
+            ? (job, typingReady) => {
+                const fastPath = (async () => {
+                  await typingReady;
+                  const dashboard = new DashboardEventBus({
+                    persistEvent: (event) =>
+                      scheduleDashboardEvent(env, store, event, context),
+                  });
+                  const { routeOptions: options, deferredAgentTasks } =
+                    buildWorkerRouteOptions({
+                      env,
+                      store,
+                      dashboard,
+                      surface: { kind: 'queue' },
+                    });
+                  const handlers = createRouteHandlers(options);
+                  await dispatchMessengerAgentRunWakeup({
+                    job,
+                    env,
+                    coordinator: new AgentRunCoordinator({
+                      store,
+                      dashboard,
+                    }),
+                    processMessengerAgentRun:
+                      handlers.processMessengerAgentRun,
+                    typingAlreadyStarted: true,
+                  });
+                  scheduleAgentBackground(
+                    context,
+                    deferredAgentTasks,
+                    options.agentTracer,
+                  );
+                })().catch((error) => {
+                  console.error('agent_run_fast_path_failed', {
+                    sessionId: job.sessionId,
+                    generation: job.generation,
+                    message:
+                      error instanceof Error
+                        ? error.message
+                        : String(error),
+                  });
+                });
+                if (context) context.waitUntil(fastPath);
+                else void fastPath;
+              }
+            : undefined,
+        ),
       );
     }
     const fastEventsMatch = url.pathname.match(
@@ -631,41 +739,12 @@ export default {
 
     for (const message of batch.messages) {
       if (message.body.channel === "agent_run_wakeup") {
-        const waitMs = Date.parse(message.body.dueAt) - Date.now();
-        if (waitMs > 0) await new Promise((resolve) => setTimeout(resolve, Math.min(waitMs, 2_000)));
-        const coordinator = new AgentRunCoordinator({ store, dashboard });
-        const result = await coordinator.claimWakeupRun(message.body);
-        const ingressProof =
-          'messengerIngressProof' in message.body
-            ? message.body.messengerIngressProof
-            : undefined;
-        const verifiedIngress =
-          ingressProof &&
-          ingressProof.schemaVersion ===
-            'kfc-messenger-ingress-proof-v1' &&
-          ingressProof.rawBodyBytes.length <= 1_000_000 &&
-          env.META_APP_SECRET
-            ? await verifyMessengerGuestCheckoutIngress({
-                rawBody: Uint8Array.from(
-                  ingressProof.rawBodyBytes,
-                ),
-                signatureHeader: ingressProof.signatureHeader,
-                appSecret: env.META_APP_SECRET,
-                pageId: env.META_PAGE_ID ?? '',
-              })
-            : undefined;
-        if (result.dispatch && result.runId) {
-          await handlers.processMessengerAgentRun(
-            result.runId,
-            verifiedIngress,
-          );
-        }
-        console.log("agent_run_wakeup_processed", {
-          sessionId: message.body.sessionId,
-          generation: message.body.generation,
-          claimed: result.claimed,
-          dispatch: result.dispatch,
-          reason: result.reason,
+        await dispatchMessengerAgentRunWakeup({
+          job: message.body,
+          env,
+          coordinator: new AgentRunCoordinator({ store, dashboard }),
+          processMessengerAgentRun: handlers.processMessengerAgentRun,
+          typingAlreadyStarted: true,
         });
         message.ack?.();
         continue;

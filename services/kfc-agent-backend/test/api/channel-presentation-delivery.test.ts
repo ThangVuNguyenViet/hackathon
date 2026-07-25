@@ -513,7 +513,7 @@ describe('channel presentation delivery compatibility', () => {
       status: 'skipped',
       errorCode: 'stale_agent_run',
     });
-    expect(messengerFetchImpl).toHaveBeenCalledTimes(4);
+    expect(messengerFetchImpl).toHaveBeenCalledTimes(3);
     expect(
       messengerFetchImpl.mock.calls
         .filter(([, init]) => typeof init?.body === 'string')
@@ -525,7 +525,7 @@ describe('channel presentation delivery compatibility', () => {
           expect(body.message).toBeUndefined();
           return body.sender_action;
         }),
-    ).toEqual(['mark_seen', 'typing_on', 'typing_off']);
+    ).toEqual(['mark_seen', 'typing_on']);
     await expect(store.getAgentRun('run_stale_1')).resolves.toMatchObject({
       status: 'superseded',
       deliveryStatus: 'suppressed',

@@ -6,6 +6,83 @@ import {
 import { MemoryStore } from '../../src/persistence/memoryStore.js';
 
 describe('runResponsesToolLoop', () => {
+  it('allows the model to request independent tools in one response', async () => {
+    const requests: Array<Record<string, unknown>> = [];
+    const executions: string[] = [];
+    const responses = [
+      {
+        output: [
+          {
+            type: 'function_call',
+            call_id: 'call_menu',
+            name: 'searchMenu',
+            arguments: '{"query":"combo"}',
+          },
+          {
+            type: 'function_call',
+            call_id: 'call_cart',
+            name: 'getCart',
+            arguments: '{}',
+          },
+        ],
+        output_text: '',
+      },
+      {
+        output: [],
+        output_text: 'Mình đã kiểm tra thực đơn và giỏ hàng.',
+      },
+    ];
+    const tool = (name: string) => ({
+      definition: {
+        type: 'function' as const,
+        name,
+        description: name,
+        parameters: {
+          type: 'object',
+          properties: {},
+          additionalProperties: false,
+        },
+        strict: true,
+      },
+      execute: async () => {
+        executions.push(name);
+        return { toolName: name, ok: true, value: {} };
+      },
+    });
+
+    const result = await runResponsesToolLoop({
+      client: {
+        responses: {
+          create: async (request: Record<string, unknown>) => {
+            requests.push(structuredClone(request));
+            return responses.shift();
+          },
+        },
+      },
+      model: 'gpt-4.1-mini',
+      instructions: 'Use tools when useful.',
+      input: [{ role: 'user', content: 'Kiểm tra giúp mình.' }],
+      tools: [tool('searchMenu'), tool('getCart')],
+      maxToolRounds: 4,
+    });
+
+    expect(requests[0]?.parallel_tool_calls).toBe(true);
+    expect(executions).toEqual(['searchMenu', 'getCart']);
+    expect(requests[1]?.input).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          type: 'function_call_output',
+          call_id: 'call_menu',
+        }),
+        expect.objectContaining({
+          type: 'function_call_output',
+          call_id: 'call_cart',
+        }),
+      ]),
+    );
+    expect(result.responseText).toBe('Mình đã kiểm tra thực đơn và giỏ hàng.');
+  });
+
   it('forces a corrected tool call after an empty retriable read result', async () => {
     const requests: Array<Record<string, unknown>> = [];
     const executedArguments: Array<Record<string, unknown>> = [];
@@ -755,6 +832,12 @@ describe('OpenAiKfcAgent', () => {
     });
     expect(requests[0]?.instructions).toContain(
       'Use the Python tool for nontrivial combination arithmetic',
+    );
+    expect(requests[0]?.instructions).toContain(
+      'must use the Python tool before answering',
+    );
+    expect(requests[0]?.instructions).toContain(
+      'Recalculate the complete proposed total',
     );
   });
 

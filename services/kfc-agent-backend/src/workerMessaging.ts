@@ -32,6 +32,10 @@ export async function enqueueMessengerWebhook(
   env: WorkerEnv,
   store: D1Store,
   context?: WorkerExecutionContext,
+  onAgentRunWakeup?: (
+    job: MessengerAgentRunWakeupJob,
+    typingReady: Promise<void>,
+  ) => void,
 ): Promise<HandlerResponse> {
   if (!env.MESSENGER_WEBHOOK_QUEUE) {
     return {
@@ -127,7 +131,11 @@ export async function enqueueMessengerWebhook(
       const humanPaused =
         (await store.getSessionControl(sessionId)).agentMode === "human_paused";
       if (!humanPaused) {
-        scheduleImmediateMessengerTyping(env, event, context);
+        const typingReady = scheduleImmediateMessengerTyping(
+          env,
+          event,
+          context,
+        );
         const coordinator = new AgentRunCoordinator({ store, dashboard });
         const wakeup = await coordinator.recordPendingTurn(event, sessionId);
         const exactIngress = verifiedIngress.find(
@@ -155,6 +163,7 @@ export async function enqueueMessengerWebhook(
           wakeupWithIngress,
           { delaySeconds: 0 },
         );
+        onAgentRunWakeup?.(wakeupWithIngress, typingReady);
         console.log("agent_run_wakeup_queued", {
           rawEventId: event.rawEventId,
           sessionId,
@@ -198,7 +207,7 @@ export function scheduleImmediateMessengerTyping(
   env: WorkerEnv,
   event: ConversationEvent,
   context?: WorkerExecutionContext,
-): void {
+): Promise<void> {
   const messenger = createMessengerClient({
     pageAccessToken: env.META_PAGE_ACCESS_TOKEN,
     graphApiBaseUrl: env.MESSENGER_GRAPH_API_BASE_URL,
@@ -230,6 +239,7 @@ export function scheduleImmediateMessengerTyping(
   })();
   if (context) context.waitUntil(task);
   else void task;
+  return task;
 }
 
 export function staleDeliveryRecoveryOptionsFromUrl(url: URL): {

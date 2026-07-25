@@ -161,6 +161,27 @@ export async function sendMessengerSenderAction(
   return false;
 }
 
+export async function startMessengerRunTyping(input: {
+  messenger: MessengerClient;
+  externalUserId: string;
+  rawEventId: string;
+  alreadyStarted: boolean;
+}): Promise<boolean> {
+  if (input.alreadyStarted) return true;
+  await sendMessengerSenderAction(
+    input.messenger,
+    input.externalUserId,
+    'mark_seen',
+    input.rawEventId,
+  );
+  return sendMessengerSenderAction(
+    input.messenger,
+    input.externalUserId,
+    'typing_on',
+    input.rawEventId,
+  );
+}
+
 export function dashboardEventId(sessionId: string, type: string): string {
   return `dash_${sessionId}_${type}_${Date.now()}_${crypto.randomUUID()}`;
 }
