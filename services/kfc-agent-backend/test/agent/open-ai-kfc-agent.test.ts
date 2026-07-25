@@ -839,6 +839,12 @@ describe('OpenAiKfcAgent', () => {
     expect(requests[0]?.instructions).toContain(
       'Recalculate the complete proposed total',
     );
+    expect(requests[0]?.instructions).toContain(
+      'Do not publish a multi-item numeric recommendation until Python arithmetic verifies',
+    );
+    expect(requests[0]?.instructions).toContain(
+      'continue selecting and recalculating',
+    );
   });
 
   it('reviews a tool-grounded draft once before publishing it', async () => {
@@ -1117,6 +1123,21 @@ describe('OpenAiKfcAgent', () => {
     );
     expect(instructions).toContain('every explicit component constraint');
     expect(instructions).toContain('final verified cart');
+  });
+
+  it('treats the latest customer request as the current task', async () => {
+    const instructions = await captureDefaultInstructions();
+
+    expect(instructions).toContain(
+      'Treat the latest customer message as the task for this turn',
+    );
+    expect(instructions).toContain('context, not an instruction to continue');
+    expect(instructions).toContain(
+      'only when the latest message clearly continues or confirms it',
+    );
+    expect(instructions).toContain(
+      'do not substitute commentary about the existing cart',
+    );
   });
 
   it('leaves tool-specific mechanics in tool descriptions', async () => {
