@@ -92,7 +92,7 @@ export const KFC_AGENT_INSTRUCTIONS = [
   'Nếu khách yêu cầu đầy đủ thực đơn, dùng searchMenu ở chế độ full và dùng toàn bộ collection complete; không tự rút gọn danh sách dữ liệu.',
   'Có thể gọi nhiều lượt tìm món theo sản phẩm hoặc danh mục trong cùng một lượt khách. Các queries trong một lần tìm là lựa chọn thay thế OR; chỉ kết luận về lựa chọn modifier khi kết quả trả về evidence tương ứng.',
   'When the customer explicitly selects a named product from earlier verified menu evidence, preserve that exact product across later turns. Treat a requested drink, side, or other extra as a separate add-on unless the customer explicitly asks to replace an included option. Do not substitute another product merely because a combined search is empty; retry the exact product without unrelated constraints, then search the add-on separately.',
-  'Với yêu cầu gợi ý cho nhóm hoặc theo ngân sách, chỉ dùng partySize và giá từ catalog làm evidence. Ngân sách tổng là mức tối đa, không phải mục tiêu cần tiêu hết; maxPriceVnd là trần giá bao gồm cho từng món và maxPriceExclusiveVnd là ranh giới loại trừ cho yêu cầu thấp hơn nghiêm ngặt.',
+  'Với yêu cầu gợi ý cho nhóm hoặc theo ngân sách, chỉ dùng partySize và giá từ catalog làm evidence. Ngân sách tổng là mức tối đa, không phải trần giá cho từng món; có thể dùng minPriceVnd và maxPriceVnd để thu hẹp khoảng giá ứng viên, còn maxPriceExclusiveVnd là ranh giới loại trừ cho yêu cầu thấp hơn nghiêm ngặt. Tự kết hợp giá và số lượng từ kết quả đã xác minh, thu thập đủ dữ liệu trước khi đề xuất một thay đổi giỏ hoàn chỉnh; không dùng bộ lập kế hoạch tất định.',
   'Copy every returned customer-facing product and variant name character-for-character. Normalized or diacritic-insensitive search is retrieval only and never authorizes reconstructing a name.',
   'For a requested modifier, retain modifierQueries while broadening product terms. An unconstrained search can verify that a product exists, but do not answer as if a dropped modifier requirement matched; inspect that exact item with getModifierOptions first.',
   'Khi khách giao chọn một giỏ hàng hoàn chỉnh bằng lời nhắn, đáp ứng mọi thành phần và số lượng rõ ràng khi catalog cho phép, rồi trình bày một đề xuất gộp để khách xác nhận bằng GenUI. Khi nhận GenUI cart action đã xác minh, áp dụng action đó trong một lần gọi updateCart. Cart mà công cụ trả về là trạng thái có thẩm quyền.',
@@ -326,6 +326,9 @@ function executionArguments(
       queries: parsed.queries,
       modifierQueries: parsed.modifierQueries,
       ...(parsed.category === null ? {} : { category: parsed.category }),
+      ...(parsed.minPriceVnd === null
+        ? {}
+        : { minPriceVnd: parsed.minPriceVnd }),
       ...(parsed.maxPriceVnd === null
         ? {}
         : { maxPriceVnd: parsed.maxPriceVnd }),

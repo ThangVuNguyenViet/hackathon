@@ -187,6 +187,56 @@ describe('OrderingDataService menu search', () => {
     ).toBe(false);
   });
 
+  it('narrows candidates to a model-supplied price interval', async () => {
+    const fixtures = await loadGeneratedFixtures(process.cwd());
+    const service = new OrderingDataService(fixtures);
+    const clients = createMockClients(fixtures);
+
+    const localResult = service.searchMenuTool({
+      queries: [],
+      minPriceVnd: 150_000,
+      maxPriceVnd: 161_000,
+    });
+    const providerResult = await executeToolCall(
+      clients,
+      {
+        toolName: 'searchMenu',
+        arguments: {
+          mode: 'search',
+          queries: [],
+          minPriceVnd: 150_000,
+          maxPriceVnd: 161_000,
+          modifierQueries: [],
+        },
+      },
+      { externalCallContext },
+    );
+
+    expect(localResult.items.length).toBeGreaterThan(0);
+    expect(
+      localResult.items.every(
+        (item) => item.priceVnd >= 150_000 && item.priceVnd <= 161_000,
+      ),
+    ).toBe(true);
+    expect(providerResult).toMatchObject({
+      ok: true,
+      value: {
+        items: expect.arrayContaining([
+          expect.objectContaining({ priceVnd: 159_000 }),
+        ]),
+      },
+    });
+    expect(
+      (
+        providerResult.value as
+          | { items: Array<{ priceVnd: number }> }
+          | undefined
+      )?.items.every(
+        (item) => item.priceVnd >= 150_000 && item.priceVnd <= 161_000,
+      ),
+    ).toBe(true);
+  });
+
   it('rejects an over-specified category instead of dropping its qualifier', async () => {
     const fixtures = await loadGeneratedFixtures(process.cwd());
     const service = new OrderingDataService(fixtures);

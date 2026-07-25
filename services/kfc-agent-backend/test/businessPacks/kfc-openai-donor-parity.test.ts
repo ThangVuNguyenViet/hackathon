@@ -52,8 +52,9 @@ describe('portable Direct SDK behavior retained by the KFC LangChain pack', () =
       'omit category for an exact product query',
     );
     expect(agentToolDescriptions.searchMenu).toContain(
-      'Always send all seven fields',
+      'Always send all eight fields',
     );
+    expect(agentToolDescriptions.searchMenu).toContain('minPriceVnd');
     expect(agentToolDescriptions.searchMenu).toContain(
       'maxPriceExclusiveVnd',
     );
@@ -245,6 +246,7 @@ describe('portable Direct SDK behavior retained by the KFC LangChain pack', () =
             mode: 'search',
             queries: ['41085'],
             category: null,
+            minPriceVnd: null,
             maxPriceVnd: null,
             maxPriceExclusiveVnd: null,
             partySize: null,
@@ -301,6 +303,7 @@ describe('portable Direct SDK behavior retained by the KFC LangChain pack', () =
             mode: 'search',
             queries: ['không tồn tại'],
             category: null,
+            minPriceVnd: null,
             maxPriceVnd: null,
             maxPriceExclusiveVnd: null,
             partySize: null,
@@ -316,6 +319,7 @@ describe('portable Direct SDK behavior retained by the KFC LangChain pack', () =
             mode: 'search',
             queries: ['vẫn không tồn tại'],
             category: null,
+            minPriceVnd: null,
             maxPriceVnd: null,
             maxPriceExclusiveVnd: null,
             partySize: null,
@@ -331,6 +335,7 @@ describe('portable Direct SDK behavior retained by the KFC LangChain pack', () =
             mode: 'full',
             queries: [],
             category: null,
+            minPriceVnd: null,
             maxPriceVnd: null,
             maxPriceExclusiveVnd: null,
             partySize: null,

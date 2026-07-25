@@ -309,6 +309,8 @@ export function searchMenuCollection(
       (item) =>
         item.available &&
         menuCategoryMatches(item.category, input.category, categories) &&
+        (input.minPriceVnd === undefined ||
+          item.priceVnd >= input.minPriceVnd) &&
         (input.maxPriceVnd === undefined ||
           item.priceVnd <= input.maxPriceVnd) &&
         (input.maxPriceExclusiveVnd === undefined ||
