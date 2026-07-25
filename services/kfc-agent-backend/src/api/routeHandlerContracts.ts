@@ -579,6 +579,7 @@ export interface RouteHandlers {
   processMessengerAgentRun(
     runId: string,
     verifiedIngress?: readonly VerifiedMessengerGuestCheckoutIngress[],
+    options?: { typingAlreadyStarted?: boolean },
   ): Promise<MessengerWebhookEventProcessingResult>;
   zaloWebhook(body: unknown): Promise<HandlerResponse>;
   messengerHistorySync(body: unknown): Promise<HandlerResponse>;
