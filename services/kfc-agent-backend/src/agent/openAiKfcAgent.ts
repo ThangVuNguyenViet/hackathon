@@ -365,7 +365,7 @@ export class OpenAiKfcAgent {
       .filter((turn) => turn.role === 'user' || turn.role === 'assistant')
       .map((turn) => ({ role: turn.role, content: turn.text }));
     if (input.verifiedBusinessContext) {
-      history.push({
+      history.unshift({
         role: 'developer',
         content: `Verified current fixture business state; reuse these exact identifiers: ${JSON.stringify(input.verifiedBusinessContext)}`,
       });

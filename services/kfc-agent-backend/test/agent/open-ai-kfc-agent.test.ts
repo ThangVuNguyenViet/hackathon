@@ -1630,12 +1630,12 @@ describe('OpenAiKfcAgent', () => {
     });
 
     expect(requests[0]?.input).toEqual([
-      { role: 'user', content: 'Đặt tiếp đơn này.' },
       {
         role: 'developer',
         content:
           'Verified current fixture business state; reuse these exact identifiers: {"cart":{"items":[{"itemCode":"20706","name":"Combo Gà No 279k","quantity":1}]}}',
       },
+      { role: 'user', content: 'Đặt tiếp đơn này.' },
     ]);
     expect(requests[0]?.instructions).toContain('never invent identifiers');
     expect(requests[0]?.instructions).toContain(
