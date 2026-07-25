@@ -166,6 +166,12 @@ describe('KFC OpenAI tools', () => {
       'Never put a generic category request in query',
     );
     expect(searchMenu?.definition.description).toContain(
+      'narrower product type inside a combined category',
+    );
+    expect(searchMenu?.definition.description).toContain(
+      'use both category and query',
+    );
+    expect(searchMenu?.definition.description).toContain(
       'Search a requested standalone drink, side, or other add-on independently',
     );
     expect(searchMenu?.definition.description).toContain(
