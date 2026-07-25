@@ -795,6 +795,9 @@ describe('OpenAiKfcAgent', () => {
     expect(instructions).toContain('# Actions');
     expect(instructions).toContain('# Customer response');
     expect(instructions).toContain('natural Vietnamese');
+    expect(instructions).toContain(
+      'do not mention other types even as context or optional extras',
+    );
     expect(instructions.length).toBeLessThan(5_000);
     expect(instructions).not.toMatch(
       /[ÀÁẠẢÃÂẦẤẬẨẪĂẰẮẶẲẴÈÉẸẺẼÊỀẾỆỂỄÌÍỊỈĨÒÓỌỎÕÔỒỐỘỔỖƠỜỚỢỞỠÙÚỤỦŨƯỪỨỰỬỮỲÝỴỶỸĐ]/u,
