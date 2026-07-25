@@ -97,7 +97,15 @@ export function menuCategoryMatches(
       menuCategoryMatchScore(candidate, categoryQuery),
     ),
   );
-  return score > 0 && score === bestScore;
+  const bestCategoryCount = candidateCategories.filter(
+    (candidate) =>
+      menuCategoryMatchScore(candidate, categoryQuery) === bestScore,
+  ).length;
+  return (
+    score > 0 &&
+    score === bestScore &&
+    (bestScore === 1 || bestCategoryCount === 1)
+  );
 }
 
 export function menuSearchTextScore(

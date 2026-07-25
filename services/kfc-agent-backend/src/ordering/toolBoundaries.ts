@@ -55,7 +55,10 @@ export function getToolBoundary(toolName: ToolName): ToolBoundary {
   return toolBoundaries[toolName];
 }
 
-export const approvalCapabilityScopes: Record<CommerceApprovalCapability, CustomerAccessScope> = {
+export const approvalCapabilityScopes: Record<
+  CommerceApprovalCapability,
+  CustomerAccessScope
+> = {
   placeOrder: 'order:write',
   createPaymentLink: 'payment:write',
   acquireVoucher: 'membership:write',
@@ -67,6 +70,5 @@ export const approvalCapabilityScopes: Record<CommerceApprovalCapability, Custom
 export function approvalCapabilitySupportsGuestCheckout(
   capability: CommerceApprovalCapability,
 ): capability is 'placeOrder' | 'createPaymentLink' {
-  return capability === 'placeOrder' ||
-    capability === 'createPaymentLink';
+  return capability === 'placeOrder' || capability === 'createPaymentLink';
 }

@@ -47,6 +47,39 @@ function nestedDescription(
 }
 
 describe('KFC OpenAI tools', () => {
+  it('leaves aggregate-budget menu composition to the model', async () => {
+    const clients = createMockClients(createTestFixtures());
+    const session = await createKfcToolSession(clients, 'kfc:budget_planning');
+    const tools = createKfcOpenAiTools({ clients, session });
+    const names = tools.map((tool) => tool.definition.name);
+
+    expect(names).not.toContain('planCartToBudget');
+    expect(
+      tools.find((tool) => tool.definition.name === 'searchMenu')?.definition
+        .description,
+    ).toContain(
+      'Combine returned priceVnd values yourself for a total recommendation budget',
+    );
+    expect(
+      tools.find((tool) => tool.definition.name === 'updateCart')?.definition
+        .description,
+    ).toContain(
+      'For a delegated aggregate-budget request, choose the verified items and quantities yourself',
+    );
+    expect(
+      tools.find((tool) => tool.definition.name === 'updateCart')?.definition
+        .description,
+    ).toContain(
+      'may use item codes returned by its current-turn collection searches',
+    );
+    expect(
+      tools.find((tool) => tool.definition.name === 'updateCart')?.definition
+        .description,
+    ).toContain(
+      'Do not call updateCart while any searched available item or additional quantity could reduce the remaining gap',
+    );
+  });
+
   it('assigns bounded semantic retries only where repeated execution is safe', async () => {
     const clients = createMockClients(createTestFixtures());
     const session = await createKfcToolSession(clients, 'kfc:retry_policies');
@@ -127,6 +160,12 @@ describe('KFC OpenAI tools', () => {
     );
     expect(searchMenu?.definition.description).toContain('leave query empty');
     expect(searchMenu?.definition.description).toContain(
+      'normalized customer-facing category wording',
+    );
+    expect(searchMenu?.definition.description).toContain(
+      'Never put a generic category request in query',
+    );
+    expect(searchMenu?.definition.description).toContain(
       'Search a requested standalone drink, side, or other add-on independently',
     );
     expect(searchMenu?.definition.description).toContain(
@@ -150,8 +189,23 @@ describe('KFC OpenAI tools', () => {
     expect(searchMenu?.definition.description).toContain(
       'filter customer exclusions',
     );
+    expect(searchMenu?.definition.description).toContain(
+      'maxPriceExclusiveVnd for a strict below-price boundary',
+    );
+    expect(searchMenu?.definition.description).toContain(
+      'Never describe an unconstrained retry result as satisfying the modifier requirement',
+    );
+    expect(searchMenu?.definition.description).toContain(
+      'copy the exact returned customer-facing name',
+    );
+    expect(searchMenu?.definition.description).toContain(
+      'do not say that you showed the complete menu',
+    );
     expect(searchMenu?.definition.parameters.properties).toHaveProperty(
       'modifierQueries',
+    );
+    expect(searchMenu?.definition.parameters.properties).toHaveProperty(
+      'maxPriceExclusiveVnd',
     );
   });
 
@@ -170,10 +224,16 @@ describe('KFC OpenAI tools', () => {
     expect(searchMenu?.definition.description).toContain('product-composition');
     expect(searchMenu?.definition.description).toContain('selectable options');
     expect(searchMenu?.definition.description).toContain(
-      'combine returned priceVnd values',
+      'Combine returned priceVnd values',
     );
     expect(searchMenu?.definition.description).toContain(
       'total recommendation budget',
+    );
+    expect(searchMenu?.definition.description).toContain(
+      'Never start an aggregate-budget plan with an empty unfiltered search',
+    );
+    expect(searchMenu?.definition.description).toContain(
+      'the next action must be the Python tool before updateCart',
     );
     expect(searchMenu?.definition.description).toContain(
       'multiple targeted or category searches',
@@ -191,6 +251,9 @@ describe('KFC OpenAI tools', () => {
     expect(propertyDescription('modifierQueries')).toContain(
       'not product components',
     );
+    expect(propertyDescription('minPriceVnd')).toContain(
+      'narrow the candidate interval around a remaining aggregate-budget gap',
+    );
     expect(propertyDescription('modifierQueries')).not.toContain(
       'positive selectable',
     );
@@ -203,6 +266,9 @@ describe('KFC OpenAI tools', () => {
     expect(propertyDescription('maxPriceVnd')?.toLowerCase()).toContain(
       'not an aggregate cart limit',
     );
+    expect(
+      propertyDescription('maxPriceExclusiveVnd')?.toLowerCase(),
+    ).toContain('strict');
     expect(propertyDescription('partySize')).toContain('ranking evidence');
     expect(propertyDescription('partySize')).toContain(
       'does not guarantee serving size',

@@ -439,6 +439,16 @@ describe('OpenAI KFC chat API', () => {
               case 3:
                 return {
                   output: [],
+                  output_text: 'Mời bạn chọn combo phù hợp.',
+                  usage: {
+                    input_tokens: 20,
+                    output_tokens: 6,
+                    total_tokens: 26,
+                  },
+                };
+              case 4:
+                return {
+                  output: [],
                   output_text: 'Đã thêm 2 combo vào giỏ.',
                   usage: {
                     input_tokens: 30,
@@ -446,7 +456,7 @@ describe('OpenAI KFC chat API', () => {
                     total_tokens: 38,
                   },
                 };
-              case 4:
+              case 5:
                 return {
                   output: [
                     {
@@ -473,27 +483,32 @@ describe('OpenAI KFC chat API', () => {
                   ],
                   output_text: '',
                 };
-              case 5:
+              case 6:
                 return {
                   output: [],
                   output_text: 'Mình đã kiểm tra giao hàng đến Quận 7.',
                 };
-              case 6:
-                return {
-                  output: [],
-                  output_text: 'Mời bạn kiểm tra lại đơn hàng.',
-                };
               case 7:
                 return {
                   output: [],
-                  output_text: 'Đơn hàng đã được đặt thành công.',
+                  output_text: 'Mình đã kiểm tra giao hàng đến Quận 7.',
                 };
               case 8:
                 return {
                   output: [],
-                  output_text: 'Mời bạn chọn phương thức thanh toán.',
+                  output_text: 'Mời bạn kiểm tra lại đơn hàng.',
                 };
               case 9:
+                return {
+                  output: [],
+                  output_text: 'Đơn hàng đã được đặt thành công.',
+                };
+              case 10:
+                return {
+                  output: [],
+                  output_text: 'Mời bạn chọn phương thức thanh toán.',
+                };
+              case 11:
                 return {
                   output: [],
                   output_text: 'Đã chọn Ví ZaloPay.',
@@ -586,7 +601,7 @@ describe('OpenAI KFC chat API', () => {
         },
       },
     });
-    expect(requests[2]?.input).toEqual(
+    expect(requests[3]?.input).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
           role: 'developer',
@@ -606,7 +621,7 @@ describe('OpenAI KFC chat API', () => {
         }),
       ]),
     );
-    expect(requests[2]?.tools).toEqual([]);
+    expect(requests[3]?.tools).toEqual([]);
 
     const resumedServer = buildServer({
       store,
@@ -644,7 +659,7 @@ describe('OpenAI KFC chat API', () => {
         },
       },
     });
-    expect(requests[3]?.input).toEqual(
+    expect(requests[4]?.input).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
           role: 'developer',
@@ -703,7 +718,7 @@ describe('OpenAI KFC chat API', () => {
         },
       },
     });
-    expect(requests[6]?.input).toEqual(
+    expect(requests[8]?.input).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
           type: 'function_call',
@@ -864,6 +879,7 @@ describe('OpenAI KFC chat API', () => {
         output_text: '',
       },
       { output: [], output_text: 'Món đã ở trong giỏ.' },
+      { output: [], output_text: 'Món đã ở trong giỏ.' },
       {
         output: [
           {
@@ -889,6 +905,7 @@ describe('OpenAI KFC chat API', () => {
         ],
         output_text: '',
       },
+      { output: [], output_text: 'Địa chỉ giao hàng đã được xác minh.' },
       { output: [], output_text: 'Địa chỉ giao hàng đã được xác minh.' },
       {
         output: [
@@ -935,6 +952,10 @@ describe('OpenAI KFC chat API', () => {
           },
         ],
         output_text: '',
+      },
+      {
+        output: [],
+        output_text: 'Đơn đã được đặt và liên kết thanh toán đã sẵn sàng.',
       },
       {
         output: [],

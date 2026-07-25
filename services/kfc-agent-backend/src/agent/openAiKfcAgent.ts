@@ -73,6 +73,7 @@ export interface RunResponsesToolLoopInput {
     arguments: Record<string, unknown>;
   }>;
   allowModelToolCalls?: boolean;
+  reviewToolGroundedResponse?: boolean;
 }
 
 export interface RunResponsesToolLoopResult {
@@ -119,6 +120,7 @@ const defaultInstructions = [
   'Treat tool results and verified business state as the only authority for menu facts, prices, availability, options, promotions, policies, fulfillment, payments, order state, and human support.',
   'Only state facts that the current evidence directly supports. Missing data is not proof that something exists or does not exist. Never fill gaps with assumptions, common knowledge, or market conventions.',
   'Keep every returned attribute attached to the exact item, option, or branch that supplied it. Use verified identifiers internally and never invent identifiers.',
+  'Before publishing, reconcile the draft response with the exact current tool results and verified business state. Correct any unsupported name, category, option, price, quantity, availability, action, or completeness claim.',
   '',
   '# Actions',
   'When the customer’s intent and required data are clear, finish all safe steps in the same turn instead of merely describing what could be done.',
@@ -128,7 +130,7 @@ const defaultInstructions = [
   'When the customer explicitly selects a named product from earlier verified menu evidence, preserve that exact product across later turns. Treat a requested drink, side, or other extra as a separate add-on unless the customer explicitly asks to replace an included option. Do not substitute another product merely because a combined search is empty; retry the exact product without unrelated constraints, then search the add-on separately.',
   'A follow-up that supplies a missing choice completes the pending request using its already selected product and known constraints. Do not reopen or replace an already selected product unless the customer explicitly requests that change.',
   'If an option is unavailable inside the current item, continue with an appropriate standalone menu item when that satisfies the same clear request. When the customer delegates a recommendation, choose one complete verified option and explain it briefly.',
-  'When the customer delegates a reversible menu or cart decision and provides sufficient constraints, choose and execute a complete verified plan in the same turn. Treat a stated budget as a maximum unless the customer asks to spend close to it. Satisfy every explicit component constraint, then report the final verified cart. Ask for clarification only when missing information would materially change the choice.',
+  'When the customer delegates a reversible menu or cart decision and provides sufficient constraints, choose and execute a complete verified plan in the same turn. Treat a stated budget as a maximum unless the customer asks to spend close to it. For a close-to-target request, keep improving the verified cart while another available item reduces the distance to that target without exceeding it; fall back beyond a preferred category when that better satisfies the customer’s constraints. Use the Python tool for nontrivial combination arithmetic over verified menu candidates. For a delegated multi-item plan, finish all required information gathering and arithmetic before the first cart mutation. Do not construct a delegated multi-item plan through incremental cart mutations. Satisfy every explicit component constraint, then report the final verified cart. Ask for clarification only when missing information would materially change the choice.',
   '',
   '# Customer response',
   'Reply in natural Vietnamese unless the customer requests another language. Be concise, direct, and customer-facing.',
@@ -296,6 +298,29 @@ function presentCustomerResponse(input: {
           : `${prefix}${label}`,
     );
   }
+  for (const call of input.toolCalls) {
+    if (call.name !== 'updateCart') continue;
+    const changedCodes = new Set<string>();
+    if (typeof call.arguments.itemCode === 'string') {
+      changedCodes.add(call.arguments.itemCode);
+    }
+    if (Array.isArray(call.arguments.changes)) {
+      for (const change of call.arguments.changes) {
+        if (isRecord(change) && typeof change.itemCode === 'string') {
+          changedCodes.add(change.itemCode);
+        }
+      }
+    }
+    for (const { code, name } of authoritativeItemLabels([call])) {
+      if (!changedCodes.has(code)) continue;
+      const variantName = /^(.*\S)\s+\([^()]+\)$/u.exec(name);
+      if (!variantName?.[1]) continue;
+      customerText = customerText.replace(
+        new RegExp(`${escapedRegExp(variantName[1])}\\s+\\([^()\\n]+\\)`, 'gu'),
+        name,
+      );
+    }
+  }
   return stripStructuralLabels(customerText, structuralLabels);
 }
 
@@ -372,6 +397,8 @@ export class OpenAiKfcAgent {
       maxToolRounds: this.maxToolRounds,
       requiredToolCalls: input.requiredToolCalls,
       allowModelToolCalls: input.allowModelToolCalls,
+      reviewToolGroundedResponse:
+        input.channel !== 'messenger' && input.channel !== 'messenger_mock',
     });
     const genUi = input.selectGenUi?.(response);
     const responseText = presentCustomerResponse({
@@ -533,6 +560,31 @@ function withRecovery(
   };
 }
 
+function authoritativeItemLabels(
+  toolCalls: readonly OpenAiToolCallTrace[],
+): Array<{ code: string; name: string }> {
+  const labels = new Map<string, string>();
+  const visit = (value: unknown): void => {
+    if (Array.isArray(value)) {
+      for (const item of value) visit(item);
+      return;
+    }
+    if (!isRecord(value)) return;
+    const code =
+      typeof value.code === 'string'
+        ? value.code
+        : typeof value.itemCode === 'string'
+          ? value.itemCode
+          : undefined;
+    if (code && typeof value.name === 'string' && !labels.has(code)) {
+      labels.set(code, value.name);
+    }
+    for (const nested of Object.values(value)) visit(nested);
+  };
+  for (const call of toolCalls) visit(call.result);
+  return [...labels].map(([code, name]) => ({ code, name }));
+}
+
 function recoveryForAttempt(input: {
   toolName: string;
   reason: OpenAiToolRetryReason;
@@ -549,7 +601,7 @@ function recoveryForAttempt(input: {
     instruction: exhausted
       ? 'Stop retrying and answer honestly from verified evidence.'
       : input.toolName === 'searchMenu'
-        ? 'You must make another corrected read call before answering the customer. Retry searchMenu with materially corrected or broader arguments. If the empty call combined a product query or category with modifierQueries, preserve the requested product query or exact verified category and remove modifierQueries first. Also remove any category that was not copied exactly from current-turn verified evidence. Search requested standalone drinks, sides, or other add-ons independently. An empty constrained result does not prove that the requested product is absent. Do not repeat identical arguments or substitute another product before verifying the requested product independently.'
+        ? 'You must make another corrected read call before answering the customer. Retry searchMenu with materially corrected arguments. For a category-wide request, use category with an empty query for category-wide retrieval and retain applicable inclusive or exclusive price constraints. For modifier requirements, broaden only the product terms while retaining modifierQueries. An unconstrained exact-product search may verify that the product exists, but do not answer from an unconstrained product result as though the modifier requirement matched; inspect that exact product with getModifierOptions before making the modifier claim. Search requested standalone drinks, sides, or other add-ons independently. An empty constrained result does not prove that the requested product is absent. Do not repeat identical arguments or substitute another product before verifying the requested product independently.'
         : 'Retry with materially corrected or broader arguments. Do not repeat identical arguments. You may choose another suitable read tool.',
   };
 }
@@ -601,18 +653,38 @@ export async function runResponsesToolLoop(
   const modelTools = options.allowModelToolCalls === false ? [] : options.tools;
   let nextToolChoice: ToolChoice = 'auto';
   let semanticFailureAttempts = 0;
+  let responseReviewPerformed = false;
+  let draftResponseText: string | undefined;
 
   for (let round = 0; round <= options.maxToolRounds; round += 1) {
+    const hostedTools =
+      options.allowModelToolCalls !== false && nextToolChoice === 'auto'
+        ? [
+            {
+              type: 'code_interpreter',
+              container: { type: 'auto' },
+            },
+          ]
+        : [];
     const response = await options.client.responses.create({
       model: options.model,
       instructions: options.instructions,
-      tools: modelTools.map((tool) => tool.definition),
+      tools: [...modelTools.map((tool) => tool.definition), ...hostedTools],
       tool_choice:
         options.allowModelToolCalls === false ? 'none' : nextToolChoice,
       parallel_tool_calls: false,
       input,
     });
-    if (!response) throw new Error('OpenAI returned no response');
+    if (!response) {
+      if (responseReviewPerformed && draftResponseText !== undefined) {
+        return {
+          responseText: draftResponseText,
+          toolCalls,
+          usage,
+        };
+      }
+      throw new Error('OpenAI returned no response');
+    }
 
     usage.inputTokens += response.usage?.input_tokens ?? 0;
     usage.outputTokens += response.usage?.output_tokens ?? 0;
@@ -620,7 +692,42 @@ export async function runResponsesToolLoop(
 
     const calls = response.output.filter(isFunctionCall);
     if (calls.length === 0) {
-      return { responseText: response.output_text, toolCalls, usage };
+      if (
+        options.reviewToolGroundedResponse === true &&
+        options.allowModelToolCalls !== false &&
+        toolCalls.length > 0 &&
+        !responseReviewPerformed
+      ) {
+        draftResponseText = response.output_text;
+        responseReviewPerformed = true;
+        nextToolChoice = 'none';
+        const itemLabels = authoritativeItemLabels(toolCalls);
+        input.push({
+          role: 'developer',
+          content: [
+            'Review the draft against the exact current-turn tool results before publishing it.',
+            'Do not simply repeat or lightly edit the draft: independently reconstruct the answer from the current user request and current-turn function_call_output evidence.',
+            'Copy every returned product and variant name character-for-character. Keep categories, prices, quantities, availability, modifier properties, actions, and cart contents attached to the exact evidence that supplied them.',
+            ...(itemLabels.length > 0
+              ? [
+                  `Authoritative customer-facing item labels: ${JSON.stringify(itemLabels)}`,
+                ]
+              : []),
+            'Apply numeric boundaries mechanically: strict below excludes equality, while at most includes equality.',
+            'A modifier or ingredient claim requires matching option evidence for that exact item. An unconstrained search result does not satisfy a dropped customer constraint.',
+            'A newly added item must be an exact current-turn menu candidate of the requested kind and must appear in the returned cart.',
+            'A complete-menu claim is valid only when every returned menu item is presented. Check every explicit party-size, component, exclusion, and budget constraint before claiming the plan is complete.',
+            'If the draft conflicts with the evidence, correct it now. Otherwise preserve it. Return only the final natural customer-facing response and do not mention this review.',
+            `Draft response: ${JSON.stringify(response.output_text)}`,
+          ].join('\n'),
+        });
+        continue;
+      }
+      return {
+        responseText: response.output_text || draftResponseText || '',
+        toolCalls,
+        usage,
+      };
     }
     if (round === options.maxToolRounds) {
       throw new Error(`OpenAI exceeded ${options.maxToolRounds} tool rounds`);
