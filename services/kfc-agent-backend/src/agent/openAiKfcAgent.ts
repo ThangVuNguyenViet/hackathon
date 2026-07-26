@@ -450,8 +450,7 @@ export class OpenAiKfcAgent {
           .reverse()
           .find(
             (call) =>
-              call.name === requiredCall.name &&
-              call.durationMs === undefined,
+              call.name === requiredCall.name && call.durationMs === undefined,
           );
         if (trustedTrace) {
           trustedTrace.status = trustedStatus;

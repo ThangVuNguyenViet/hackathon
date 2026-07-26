@@ -473,9 +473,7 @@ describe('OpenAiKfcAgent SDK Runner', () => {
     expect(result.responseText).toBe(
       'Đã thêm Combo Hợp Gu 99K với mã Sốt Cay.',
     );
-    expect(result.assistantTurn.text).toBe(
-      result.responseText,
-    );
+    expect(result.assistantTurn.text).toBe(result.responseText);
     const storedAssistant = result.sdkSessionItems.at(-1);
     expect(storedAssistant).toMatchObject({
       role: 'assistant',
@@ -649,7 +647,9 @@ describe('OpenAiKfcAgent SDK Runner', () => {
         expect.objectContaining({ type: 'message', role: 'assistant' }),
       ]),
     );
-    await expect(store.listAgentSessionItems('kfc:runner_test')).resolves.toEqual([]);
+    await expect(
+      store.listAgentSessionItems('kfc:runner_test'),
+    ).resolves.toEqual([]);
     await expect(store.listTurns('kfc:runner_test')).resolves.toHaveLength(1);
   });
 

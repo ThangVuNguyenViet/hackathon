@@ -661,72 +661,71 @@ export function createRouteMessengerRuntime(
             ? { status: 'failed', errorCode: 'kfc_agent_not_configured' }
             : { status: 'skipped', errorCode: 'stale_agent_run' };
         }
-          const directOutput = await runDirectKfcTurn({
-            sessionId: run.sessionId,
-            customerId: run.externalUserId,
-            channel: run.channel,
-            text: run.coalescedInputText,
-            externalMessageId: linkedTurns[0]!.externalMessageId,
-            metadata: null,
-            clients,
-            fence: commitFence,
-            lifecycle: {
-              onRunStart: async () => {
-                typingStarted = await sendMessengerSenderAction(
-                  clients!.messenger,
-                  run.externalUserId,
-                  'typing_on',
-                  linkedTurns[0]!.externalMessageId,
-                );
-              },
-              onRunEnd: async () => {
-                if (!typingStarted) return;
-                await sendMessengerSenderAction(
-                  clients!.messenger,
-                  run.externalUserId,
-                  'typing_off',
-                  linkedTurns[0]!.externalMessageId,
-                );
-                typingStarted = false;
-              },
+        const directOutput = await runDirectKfcTurn({
+          sessionId: run.sessionId,
+          customerId: run.externalUserId,
+          channel: run.channel,
+          text: run.coalescedInputText,
+          externalMessageId: linkedTurns[0]!.externalMessageId,
+          metadata: null,
+          clients,
+          fence: commitFence,
+          lifecycle: {
+            onRunStart: async () => {
+              typingStarted = await sendMessengerSenderAction(
+                clients!.messenger,
+                run.externalUserId,
+                'typing_on',
+                linkedTurns[0]!.externalMessageId,
+              );
             },
+            onRunEnd: async () => {
+              if (!typingStarted) return;
+              await sendMessengerSenderAction(
+                clients!.messenger,
+                run.externalUserId,
+                'typing_off',
+                linkedTurns[0]!.externalMessageId,
+              );
+              typingStarted = false;
+            },
+          },
+        });
+        if (!(await isCurrentRun())) {
+          await suppressRun('run_not_current_before_delivery');
+          return { status: 'skipped', errorCode: 'stale_agent_run' };
+        }
+        if (directOutput.stateCommit === 'stale') {
+          await suppressRun('run_not_current_before_state_commit');
+          return { status: 'skipped', errorCode: 'stale_agent_run' };
+        }
+        presentation = textOnlyPresentation(
+          directOutput.responseText,
+          run.channel,
+        );
+        deliveryAssistantTurnId = directOutput.assistantTurnId;
+        const assistantTurn = (await store.listTurns(run.sessionId)).find(
+          (turn) =>
+            turn.id === deliveryAssistantTurnId &&
+            turn.sessionId === run.sessionId &&
+            turn.channel === run.channel &&
+            turn.role === 'assistant',
+        );
+        if (!assistantTurn) {
+          const failed = await updateExecutingRun({
+            status: 'failed',
+            deliveryStatus: 'failed',
+            errorCode: 'agent_run_assistant_turn_missing',
+            errorMessage: 'Agent run produced no valid durable assistant turn',
+            completedAt: new Date().toISOString(),
           });
-          if (!(await isCurrentRun())) {
-            await suppressRun('run_not_current_before_delivery');
-            return { status: 'skipped', errorCode: 'stale_agent_run' };
-          }
-          if (directOutput.stateCommit === 'stale') {
-            await suppressRun('run_not_current_before_state_commit');
-            return { status: 'skipped', errorCode: 'stale_agent_run' };
-          }
-          presentation = textOnlyPresentation(
-            directOutput.responseText,
-            run.channel,
-          );
-          deliveryAssistantTurnId = directOutput.assistantTurnId;
-          const assistantTurn = (await store.listTurns(run.sessionId)).find(
-            (turn) =>
-              turn.id === deliveryAssistantTurnId &&
-              turn.sessionId === run.sessionId &&
-              turn.channel === run.channel &&
-              turn.role === 'assistant',
-          );
-          if (!assistantTurn) {
-            const failed = await updateExecutingRun({
-              status: 'failed',
-              deliveryStatus: 'failed',
-              errorCode: 'agent_run_assistant_turn_missing',
-              errorMessage:
-                'Agent run produced no valid durable assistant turn',
-              completedAt: new Date().toISOString(),
-            });
-            return failed.status === 'committed'
-              ? {
-                  status: 'failed',
-                  errorCode: 'agent_run_assistant_turn_missing',
-                }
-              : { status: 'skipped', errorCode: 'stale_agent_run' };
-          }
+          return failed.status === 'committed'
+            ? {
+                status: 'failed',
+                errorCode: 'agent_run_assistant_turn_missing',
+              }
+            : { status: 'skipped', errorCode: 'stale_agent_run' };
+        }
       }
       if (!deliveryAssistantTurnId) {
         const failed = await updateExecutingRun({
