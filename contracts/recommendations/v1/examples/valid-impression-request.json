@@ -1,0 +1,15 @@
+{
+  "schemaVersion": "kfc-recommendation-event-v1",
+  "eventId": "event-impression-request-001",
+  "occurredAt": "2026-07-27T09:00:05Z",
+  "assistantTurnId": "assistant-turn-001",
+  "attachmentId": "attachment-001",
+  "renderedActions": [
+    {
+      "actionId": "action-product-001",
+      "position": 1
+    }
+  ],
+  "cartRevision": "cart-revision-001",
+  "actionDigest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+}

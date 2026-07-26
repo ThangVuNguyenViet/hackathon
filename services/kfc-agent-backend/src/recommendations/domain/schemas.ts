@@ -17,6 +17,9 @@ import type {
   RecommendationDecisionRequest,
   RecommendationDecisionResponse,
   RecommendationEvent,
+  RecommendationImpressionRequest,
+  RecommendationOutcomeRequest,
+  RecommendationState,
 } from './contracts.js';
 import { compareCanonicalUtcInstants } from './canonical-instant.js';
 import {
@@ -419,6 +422,111 @@ export const recommendationEventSchema = z
   })
   .strict();
 
+const unique = (values: readonly string[]) =>
+  new Set(values).size === values.length;
+
+const starterPlacementSchema = z.enum(['local_favorite', 'for_you']);
+export const recommendationStageSchema = z.enum([
+  'starter_eligible',
+  'starter_resolved',
+  'modifier_eligible',
+  'modifier_pending',
+  'modifier_resolved',
+  'smart_cross_sell_eligible',
+  'smart_cross_sell_pending',
+  'complete',
+]);
+export const nextEligiblePlacementSchema = z.union([
+  z.literal('starter'),
+  z.literal('modifier_upsell'),
+  z.literal('smart_cross_sell'),
+  z.null(),
+]);
+
+export const pendingRecommendationSchema = z
+  .object({
+    recommendationId: recommendationIdSchema,
+    requestId: recommendationRequestIdSchema,
+    placement: placementSchema,
+    actionIds: z
+      .array(opaqueIdSchema)
+      .min(1)
+      .max(4)
+      .refine(unique, 'Pending recommendation action IDs must be unique'),
+    cartRevision: opaqueIdSchema,
+    traceRef: opaqueIdSchema,
+    decidedAt: instantSchema,
+  })
+  .strict();
+
+const recommendationStateShape = z
+  .object({
+    schemaVersion: z.literal('kfc-recommendation-state-v1'),
+    revision: nonNegativeIntegerSchema,
+    orderFlowId: orderingJourneyIdSchema,
+    stage: recommendationStageSchema,
+    attemptedPlacements: z
+      .array(placementSchema)
+      .refine(unique, 'Attempted placements must be unique'),
+    shownActionIds: z
+      .array(opaqueIdSchema)
+      .refine(unique, 'Shown action IDs must be unique'),
+    rejectedActionIds: z
+      .array(opaqueIdSchema)
+      .refine(unique, 'Rejected action IDs must be unique'),
+    pendingRecommendation: pendingRecommendationSchema.nullable(),
+    recordedOutcomeEventIds: z
+      .array(recommendationEventIdSchema)
+      .refine(unique, 'Recorded outcome event IDs must be unique'),
+    nextEligiblePlacement: nextEligiblePlacementSchema,
+  })
+  .strict();
+
+export const renderedRecommendationActionSchema = z
+  .object({
+    actionId: opaqueIdSchema,
+    position: z.number().int().min(1).max(4),
+  })
+  .strict();
+
+const recommendationImpressionRequestShape = z
+  .object({
+    schemaVersion: z.literal(KFC_RECOMMENDATION_EVENT_VERSION),
+    eventId: recommendationEventIdSchema,
+    occurredAt: instantSchema,
+    assistantTurnId: opaqueIdSchema,
+    attachmentId: opaqueIdSchema,
+    renderedActions: z.array(renderedRecommendationActionSchema).min(1).max(4),
+    cartRevision: opaqueIdSchema,
+    actionDigest: sha256Schema,
+  })
+  .strict();
+
+export const recommendationOutcomeRequestEventTypeSchema = z.enum([
+  'selected',
+  'explicitly_dismissed',
+  'ignored',
+  'superseded',
+  'cart_mutation_succeeded',
+  'cart_mutation_failed',
+  'checkout_completed',
+  'order_abandoned',
+  'order_cancelled',
+]);
+
+const recommendationOutcomeRequestShape = z
+  .object({
+    schemaVersion: z.literal(KFC_RECOMMENDATION_EVENT_VERSION),
+    eventId: recommendationEventIdSchema,
+    eventType: recommendationOutcomeRequestEventTypeSchema,
+    occurredAt: instantSchema,
+    actor: eventActorSchema,
+    actionId: opaqueIdSchema.nullable(),
+    cartRevision: opaqueIdSchema.nullable(),
+    payload: z.record(jsonValueSchema),
+  })
+  .strict();
+
 const bindings = (value: z.infer<typeof commerceSnapshotBindingsSchema>) =>
   [
     ['catalog', value.catalog],
@@ -592,6 +700,159 @@ export const recommendationDecisionResponseSchema =
     }
   });
 
+export const recommendationStateSchema = recommendationStateShape.superRefine(
+  (value, context) => {
+    const pending = value.pendingRecommendation;
+    const pendingIsStarter =
+      pending !== null &&
+      starterPlacementSchema.safeParse(pending.placement).success;
+    const invalidStage = (message: string) =>
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['stage'],
+        message,
+      });
+
+    switch (value.stage) {
+      case 'starter_eligible':
+        if (value.nextEligiblePlacement !== 'starter' || pending !== null) {
+          invalidStage(
+            'Starter eligibility requires the starter next placement and no pending recommendation',
+          );
+        }
+        break;
+      case 'starter_resolved':
+        if (
+          value.nextEligiblePlacement !== null ||
+          (pending !== null && !pendingIsStarter)
+        ) {
+          invalidStage(
+            'Starter resolution allows only a pending starter and no next placement',
+          );
+        }
+        break;
+      case 'modifier_eligible':
+        if (
+          value.nextEligiblePlacement !== 'modifier_upsell' ||
+          (pending !== null && !pendingIsStarter)
+        ) {
+          invalidStage(
+            'Modifier eligibility allows only a pending starter and requires Modifier Upsell next',
+          );
+        }
+        break;
+      case 'modifier_pending':
+        if (
+          value.nextEligiblePlacement !== null ||
+          pending === null ||
+          pending.placement !== 'modifier_upsell'
+        ) {
+          invalidStage(
+            'Modifier pending requires a pending Modifier Upsell and no next placement',
+          );
+        }
+        break;
+      case 'modifier_resolved':
+        if (
+          value.nextEligiblePlacement !== 'smart_cross_sell' ||
+          pending !== null
+        ) {
+          invalidStage(
+            'Modifier resolution requires Smart Cross-sell next and no pending recommendation',
+          );
+        }
+        break;
+      case 'smart_cross_sell_eligible':
+        if (
+          value.nextEligiblePlacement !== 'smart_cross_sell' ||
+          pending !== null
+        ) {
+          invalidStage(
+            'Smart Cross-sell eligibility requires Smart Cross-sell next and no pending recommendation',
+          );
+        }
+        break;
+      case 'smart_cross_sell_pending':
+        if (
+          value.nextEligiblePlacement !== null ||
+          pending === null ||
+          pending.placement !== 'smart_cross_sell'
+        ) {
+          invalidStage(
+            'Smart Cross-sell pending requires a pending Smart Cross-sell and no next placement',
+          );
+        }
+        break;
+      case 'complete':
+        if (value.nextEligiblePlacement !== null || pending !== null) {
+          invalidStage(
+            'Complete state requires no next or pending recommendation',
+          );
+        }
+        break;
+    }
+
+    if (
+      pending !== null &&
+      !value.attemptedPlacements.includes(pending.placement)
+    ) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['pendingRecommendation', 'placement'],
+        message: 'Pending recommendation placement must already be attempted',
+      });
+    }
+  },
+);
+
+export const recommendationImpressionRequestSchema =
+  recommendationImpressionRequestShape.superRefine((value, context) => {
+    const actionIds = value.renderedActions.map((action) => action.actionId);
+    const positions = value.renderedActions.map((action) => action.position);
+    if (!unique(actionIds)) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['renderedActions'],
+        message: 'Rendered action IDs must be unique',
+      });
+    }
+    if (new Set(positions).size !== positions.length) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['renderedActions'],
+        message: 'Rendered action positions must be unique',
+      });
+    }
+  });
+
+export const recommendationOutcomeRequestSchema =
+  recommendationOutcomeRequestShape.superRefine((value, context) => {
+    if (
+      (value.eventType === 'selected' ||
+        value.eventType === 'cart_mutation_succeeded' ||
+        value.eventType === 'cart_mutation_failed') &&
+      value.actionId === null
+    ) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['actionId'],
+        message: 'Selected and mutation outcomes require an action ID',
+      });
+    }
+    if (
+      (value.eventType === 'checkout_completed' ||
+        value.eventType === 'order_abandoned' ||
+        value.eventType === 'order_cancelled') &&
+      value.actionId !== null
+    ) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['actionId'],
+        message: 'Terminal outcomes require a null action ID',
+      });
+    }
+  });
+
 export function parseRecommendationDecisionRequest(
   value: unknown,
 ): RecommendationDecisionRequest {
@@ -606,4 +867,20 @@ export function parseRecommendationDecisionResponse(
 
 export function parseRecommendationEvent(value: unknown): RecommendationEvent {
   return recommendationEventSchema.parse(value);
+}
+
+export function parseRecommendationState(value: unknown): RecommendationState {
+  return recommendationStateSchema.parse(value);
+}
+
+export function parseRecommendationImpressionRequest(
+  value: unknown,
+): RecommendationImpressionRequest {
+  return recommendationImpressionRequestSchema.parse(value);
+}
+
+export function parseRecommendationOutcomeRequest(
+  value: unknown,
+): RecommendationOutcomeRequest {
+  return recommendationOutcomeRequestSchema.parse(value);
 }

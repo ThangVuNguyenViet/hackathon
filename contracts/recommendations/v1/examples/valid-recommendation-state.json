@@ -1,0 +1,12 @@
+{
+  "schemaVersion": "kfc-recommendation-state-v1",
+  "revision": 0,
+  "orderFlowId": "order-flow-001",
+  "stage": "starter_eligible",
+  "attemptedPlacements": [],
+  "shownActionIds": [],
+  "rejectedActionIds": [],
+  "pendingRecommendation": null,
+  "recordedOutcomeEventIds": [],
+  "nextEligiblePlacement": "starter"
+}

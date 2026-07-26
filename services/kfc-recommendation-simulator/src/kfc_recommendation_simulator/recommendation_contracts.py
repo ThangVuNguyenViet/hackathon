@@ -381,6 +381,205 @@ class RecommendationDecisionResponse(ContractModel):
         return self
 
 
+def _validate_finite_json_value(value: object) -> None:
+    if value is None or isinstance(value, (bool, int, str)):
+        return
+    if isinstance(value, float):
+        if not isfinite(value):
+            raise ValueError("Event payload numbers must be finite")
+        return
+    if isinstance(value, list):
+        for item in value:
+            _validate_finite_json_value(item)
+        return
+    if isinstance(value, dict):
+        if not all(isinstance(key, str) for key in value):
+            raise ValueError("Event payload object keys must be strings")
+        for item in value.values():
+            _validate_finite_json_value(item)
+        return
+    raise ValueError("Event payload must contain only JSON values")
+
+
+def _has_unique_values(values: list[str]) -> bool:
+    return len(values) == len(set(values))
+
+
+class PendingRecommendation(ContractModel):
+    recommendation_id: OpaqueId = Field(alias="recommendationId")
+    request_id: OpaqueId = Field(alias="requestId")
+    placement: Placement
+    action_ids: list[OpaqueId] = Field(alias="actionIds", min_length=1, max_length=4)
+    cart_revision: OpaqueId = Field(alias="cartRevision")
+    trace_ref: OpaqueId = Field(alias="traceRef")
+    decided_at: Instant = Field(alias="decidedAt")
+
+    @field_validator("action_ids")
+    @classmethod
+    def validate_unique_action_ids(cls, action_ids: list[str]) -> list[str]:
+        if not _has_unique_values(action_ids):
+            raise ValueError("Pending recommendation action IDs must be unique")
+        return action_ids
+
+
+class RecommendationState(ContractModel):
+    schema_version: Literal["kfc-recommendation-state-v1"] = Field(
+        alias="schemaVersion"
+    )
+    revision: NonNegativeInt
+    order_flow_id: OpaqueId = Field(alias="orderFlowId")
+    stage: Literal[
+        "starter_eligible",
+        "starter_resolved",
+        "modifier_eligible",
+        "modifier_pending",
+        "modifier_resolved",
+        "smart_cross_sell_eligible",
+        "smart_cross_sell_pending",
+        "complete",
+    ]
+    attempted_placements: list[Placement] = Field(alias="attemptedPlacements")
+    shown_action_ids: list[OpaqueId] = Field(alias="shownActionIds")
+    rejected_action_ids: list[OpaqueId] = Field(alias="rejectedActionIds")
+    pending_recommendation: PendingRecommendation | None = Field(
+        alias="pendingRecommendation"
+    )
+    recorded_outcome_event_ids: list[OpaqueId] = Field(alias="recordedOutcomeEventIds")
+    next_eligible_placement: Literal[
+        "starter", "modifier_upsell", "smart_cross_sell"
+    ] | None = Field(alias="nextEligiblePlacement")
+
+    @field_validator(
+        "attempted_placements",
+        "shown_action_ids",
+        "rejected_action_ids",
+        "recorded_outcome_event_ids",
+    )
+    @classmethod
+    def validate_unique_values(cls, values: list[str]) -> list[str]:
+        if not _has_unique_values(values):
+            raise ValueError("Recommendation state arrays must be unique")
+        return values
+
+    @model_validator(mode="after")
+    def validate_cross_field_invariants(self) -> Self:
+        pending = self.pending_recommendation
+        pending_is_starter = (
+            pending is not None
+            and pending.placement in {"local_favorite", "for_you"}
+        )
+
+        if self.stage == "starter_eligible":
+            valid = self.next_eligible_placement == "starter" and pending is None
+        elif self.stage == "starter_resolved":
+            valid = self.next_eligible_placement is None and (
+                pending is None or pending_is_starter
+            )
+        elif self.stage == "modifier_eligible":
+            valid = self.next_eligible_placement == "modifier_upsell" and (
+                pending is None or pending_is_starter
+            )
+        elif self.stage == "modifier_pending":
+            valid = (
+                self.next_eligible_placement is None
+                and pending is not None
+                and pending.placement == "modifier_upsell"
+            )
+        elif self.stage in {"modifier_resolved", "smart_cross_sell_eligible"}:
+            valid = (
+                self.next_eligible_placement == "smart_cross_sell" and pending is None
+            )
+        elif self.stage == "smart_cross_sell_pending":
+            valid = (
+                self.next_eligible_placement is None
+                and pending is not None
+                and pending.placement == "smart_cross_sell"
+            )
+        else:
+            valid = self.next_eligible_placement is None and pending is None
+
+        if not valid:
+            raise ValueError("Recommendation state stage and pending fields conflict")
+        if pending is not None and pending.placement not in self.attempted_placements:
+            raise ValueError("Pending recommendation placement must already be attempted")
+        return self
+
+
+class RenderedRecommendationAction(ContractModel):
+    action_id: OpaqueId = Field(alias="actionId")
+    position: Annotated[JsonInteger, Field(ge=1, le=4)]
+
+
+class RecommendationImpressionRequest(ContractModel):
+    schema_version: Literal["kfc-recommendation-event-v1"] = Field(
+        alias="schemaVersion"
+    )
+    event_id: OpaqueId = Field(alias="eventId")
+    occurred_at: Instant = Field(alias="occurredAt")
+    assistant_turn_id: OpaqueId = Field(alias="assistantTurnId")
+    attachment_id: OpaqueId = Field(alias="attachmentId")
+    rendered_actions: list[RenderedRecommendationAction] = Field(
+        alias="renderedActions", min_length=1, max_length=4
+    )
+    cart_revision: OpaqueId = Field(alias="cartRevision")
+    action_digest: Sha256 = Field(alias="actionDigest")
+
+    @model_validator(mode="after")
+    def validate_unique_rendered_actions(self) -> Self:
+        action_ids = [action.action_id for action in self.rendered_actions]
+        positions = [str(action.position) for action in self.rendered_actions]
+        if not _has_unique_values(action_ids):
+            raise ValueError("Rendered action IDs must be unique")
+        if not _has_unique_values(positions):
+            raise ValueError("Rendered action positions must be unique")
+        return self
+
+
+class RecommendationOutcomeRequest(ContractModel):
+    schema_version: Literal["kfc-recommendation-event-v1"] = Field(
+        alias="schemaVersion"
+    )
+    event_id: OpaqueId = Field(alias="eventId")
+    event_type: Literal[
+        "selected",
+        "explicitly_dismissed",
+        "ignored",
+        "superseded",
+        "cart_mutation_succeeded",
+        "cart_mutation_failed",
+        "checkout_completed",
+        "order_abandoned",
+        "order_cancelled",
+    ] = Field(alias="eventType")
+    occurred_at: Instant = Field(alias="occurredAt")
+    actor: Literal["customer", "agent", "system", "client"]
+    action_id: OpaqueId | None = Field(alias="actionId")
+    cart_revision: OpaqueId | None = Field(alias="cartRevision")
+    payload: dict[str, JsonValue]
+
+    @field_validator("payload", mode="before")
+    @classmethod
+    def validate_finite_json_payload(cls, payload: object) -> object:
+        _validate_finite_json_value(payload)
+        return payload
+
+    @model_validator(mode="after")
+    def validate_action_id_invariants(self) -> Self:
+        if self.event_type in {
+            "selected",
+            "cart_mutation_succeeded",
+            "cart_mutation_failed",
+        } and self.action_id is None:
+            raise ValueError("Selected and mutation outcomes require an action ID")
+        if self.event_type in {
+            "checkout_completed",
+            "order_abandoned",
+            "order_cancelled",
+        } and self.action_id is not None:
+            raise ValueError("Terminal outcomes require a null action ID")
+        return self
+
+
 class RecommendationEvent(ContractModel):
     schema_version: Literal["kfc-recommendation-event-v1"] = Field(alias="schemaVersion")
     event_id: OpaqueId = Field(alias="eventId")
@@ -415,24 +614,5 @@ class RecommendationEvent(ContractModel):
     @field_validator("payload", mode="before")
     @classmethod
     def validate_finite_json_payload(cls, payload: object) -> object:
-        def validate(value: object) -> None:
-            if value is None or isinstance(value, (bool, int, str)):
-                return
-            if isinstance(value, float):
-                if not isfinite(value):
-                    raise ValueError("Event payload numbers must be finite")
-                return
-            if isinstance(value, list):
-                for item in value:
-                    validate(item)
-                return
-            if isinstance(value, dict):
-                if not all(isinstance(key, str) for key in value):
-                    raise ValueError("Event payload object keys must be strings")
-                for item in value.values():
-                    validate(item)
-                return
-            raise ValueError("Event payload must contain only JSON values")
-
-        validate(payload)
+        _validate_finite_json_value(payload)
         return payload

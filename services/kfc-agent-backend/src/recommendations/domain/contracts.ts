@@ -19,6 +19,7 @@ import type {
   merchandisingEffectSchema,
   modifierSelectionSchema,
   moneySchema,
+  nextEligiblePlacementSchema,
   placementSchema,
   primaryOfferSchema,
   recommendationActionSchema,
@@ -26,6 +27,12 @@ import type {
   recommendationDecisionRequestSchema,
   recommendationDecisionResponseSchema,
   recommendationEventSchema,
+  recommendationImpressionRequestSchema,
+  recommendationOutcomeRequestEventTypeSchema,
+  recommendationOutcomeRequestSchema,
+  recommendationStageSchema,
+  recommendationStateSchema,
+  renderedRecommendationActionSchema,
   replaceCartLineActionSchema,
   sha256Schema,
   snapshotBindingSchema,
@@ -70,3 +77,18 @@ export type RecommendationDecisionResponse = z.infer<
   typeof recommendationDecisionResponseSchema
 >;
 export type RecommendationEvent = z.infer<typeof recommendationEventSchema>;
+export type RecommendationStage = z.infer<typeof recommendationStageSchema>;
+export type NextEligiblePlacement = z.infer<typeof nextEligiblePlacementSchema>;
+export type RenderedRecommendationAction = z.infer<
+  typeof renderedRecommendationActionSchema
+>;
+export type RecommendationState = z.infer<typeof recommendationStateSchema>;
+export type RecommendationImpressionRequest = z.infer<
+  typeof recommendationImpressionRequestSchema
+>;
+export type RecommendationOutcomeRequestEventType = z.infer<
+  typeof recommendationOutcomeRequestEventTypeSchema
+>;
+export type RecommendationOutcomeRequest = z.infer<
+  typeof recommendationOutcomeRequestSchema
+>;

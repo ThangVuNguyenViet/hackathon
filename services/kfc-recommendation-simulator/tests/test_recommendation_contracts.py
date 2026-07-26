@@ -13,6 +13,9 @@ from kfc_recommendation_simulator.recommendation_contracts import (
     RecommendationDecisionRequest,
     RecommendationDecisionResponse,
     RecommendationEvent,
+    RecommendationImpressionRequest,
+    RecommendationOutcomeRequest,
+    RecommendationState,
 )
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
@@ -34,6 +37,18 @@ def valid_response() -> dict[str, Any]:
 
 def valid_event() -> dict[str, Any]:
     return copy.deepcopy(read_example("valid-recommendation-event.json"))
+
+
+def valid_state() -> dict[str, Any]:
+    return copy.deepcopy(read_example("valid-recommendation-state.json"))
+
+
+def valid_impression_request() -> dict[str, Any]:
+    return copy.deepcopy(read_example("valid-impression-request.json"))
+
+
+def valid_outcome_request() -> dict[str, Any]:
+    return copy.deepcopy(read_example("valid-outcome-request.json"))
 
 
 def modifier_action(action_id: str = "action-modifier-001") -> dict[str, Any]:
@@ -102,6 +117,18 @@ class RecommendationContractsTest(unittest.TestCase):
         with self.assertRaises(ValidationError):
             RecommendationEvent.model_validate(value)
 
+    def assert_invalid_state(self, value: dict[str, Any]) -> None:
+        with self.assertRaises(ValidationError):
+            RecommendationState.model_validate(value)
+
+    def assert_invalid_impression_request(self, value: dict[str, Any]) -> None:
+        with self.assertRaises(ValidationError):
+            RecommendationImpressionRequest.model_validate(value)
+
+    def assert_invalid_outcome_request(self, value: dict[str, Any]) -> None:
+        with self.assertRaises(ValidationError):
+            RecommendationOutcomeRequest.model_validate(value)
+
     def test_parses_canonical_decision_request(self) -> None:
         parsed = RecommendationDecisionRequest.model_validate(valid_request())
 
@@ -119,6 +146,136 @@ class RecommendationContractsTest(unittest.TestCase):
             RecommendationEvent.model_validate(valid_event()).event_id,
             "event-impression-001",
         )
+
+    def test_parses_canonical_state_and_event_ingress_requests(self) -> None:
+        self.assertEqual(
+            RecommendationState.model_validate(valid_state()).next_eligible_placement,
+            "starter",
+        )
+        self.assertEqual(
+            RecommendationImpressionRequest.model_validate(
+                valid_impression_request()
+            ).assistant_turn_id,
+            "assistant-turn-001",
+        )
+        self.assertEqual(
+            RecommendationOutcomeRequest.model_validate(
+                valid_outcome_request()
+            ).event_type,
+            "selected",
+        )
+
+    def test_state_stage_combinations(self) -> None:
+        cases: tuple[tuple[str, str | None, str | None], ...] = (
+            ("starter_eligible", "starter", None),
+            ("starter_resolved", None, "for_you"),
+            ("modifier_eligible", "modifier_upsell", "for_you"),
+            ("modifier_pending", None, "modifier_upsell"),
+            ("modifier_resolved", "smart_cross_sell", None),
+            ("smart_cross_sell_eligible", "smart_cross_sell", None),
+            ("smart_cross_sell_pending", None, "smart_cross_sell"),
+            ("complete", None, None),
+        )
+        for stage, next_placement, pending_placement in cases:
+            with self.subTest(stage=stage):
+                value = valid_state()
+                value["stage"] = stage
+                value["nextEligiblePlacement"] = next_placement
+                value["attemptedPlacements"] = (
+                    [] if pending_placement is None else [pending_placement]
+                )
+                value["pendingRecommendation"] = (
+                    None
+                    if pending_placement is None
+                    else {
+                        "recommendationId": "recommendation-001",
+                        "requestId": "rec-request-001",
+                        "placement": pending_placement,
+                        "actionIds": ["action-product-001"],
+                        "cartRevision": "cart-revision-001",
+                        "traceRef": "trace-001",
+                        "decidedAt": "2026-07-27T09:00:00Z",
+                    }
+                )
+                RecommendationState.model_validate(value)
+
+    def test_rejects_duplicate_state_and_impression_action_ids(self) -> None:
+        state = valid_state()
+        state["shownActionIds"] = ["action-product-001", "action-product-001"]
+        self.assert_invalid_state(state)
+
+        impression = valid_impression_request()
+        impression["renderedActions"].append(
+            {"actionId": "action-product-001", "position": 2}
+        )
+        self.assert_invalid_impression_request(impression)
+
+    def test_rejects_duplicate_impression_positions_and_invalid_action_digests(
+        self,
+    ) -> None:
+        duplicate_position = valid_impression_request()
+        duplicate_position["renderedActions"].append(
+            {"actionId": "action-product-002", "position": 1}
+        )
+        self.assert_invalid_impression_request(duplicate_position)
+
+        invalid_digest = valid_impression_request()
+        invalid_digest["actionDigest"] = "A"
+        self.assert_invalid_impression_request(invalid_digest)
+
+    def test_rejects_strict_unknown_fields_in_state_and_event_ingress_requests(
+        self,
+    ) -> None:
+        state = valid_state()
+        state["unexpected"] = True
+        self.assert_invalid_state(state)
+
+        impression = valid_impression_request()
+        impression["renderedActions"][0]["unexpected"] = True
+        self.assert_invalid_impression_request(impression)
+
+    def test_rejects_invalid_state_stage_and_next_placement_combinations(self) -> None:
+        value = valid_state()
+        value["nextEligiblePlacement"] = None
+        self.assert_invalid_state(value)
+
+    def test_rejects_pending_placement_outside_attempted_placements(self) -> None:
+        value = valid_state()
+        value["stage"] = "starter_resolved"
+        value["nextEligiblePlacement"] = None
+        value["pendingRecommendation"] = {
+            "recommendationId": "recommendation-001",
+            "requestId": "rec-request-001",
+            "placement": "for_you",
+            "actionIds": ["action-product-001"],
+            "cartRevision": "cart-revision-001",
+            "traceRef": "trace-001",
+            "decidedAt": "2026-07-27T09:00:00Z",
+        }
+        self.assert_invalid_state(value)
+
+    def test_outcome_action_id_refinements(self) -> None:
+        rejected_cases: tuple[tuple[str, str | None], ...] = (
+            ("selected", None),
+            ("cart_mutation_succeeded", None),
+            ("cart_mutation_failed", None),
+            ("checkout_completed", "action-product-001"),
+            ("order_abandoned", "action-product-001"),
+            ("order_cancelled", "action-product-001"),
+        )
+        for event_type, action_id in rejected_cases:
+            with self.subTest(event_type=event_type, action_id=action_id):
+                value = valid_outcome_request()
+                value["eventType"] = event_type
+                value["actionId"] = action_id
+                self.assert_invalid_outcome_request(value)
+
+        for event_type in ("explicitly_dismissed", "ignored", "superseded"):
+            with self.subTest(event_type=event_type):
+                value = valid_outcome_request()
+                value["eventType"] = event_type
+                value["actionId"] = None
+                RecommendationOutcomeRequest.model_validate(value)
 
     def test_instant_conformance_corpus(self) -> None:
         corpus = read_example("instant-conformance.json")

@@ -1,0 +1,12 @@
+{
+  "schemaVersion": "kfc-recommendation-event-v1",
+  "eventId": "event-outcome-001",
+  "eventType": "selected",
+  "occurredAt": "2026-07-27T09:00:10Z",
+  "actor": "customer",
+  "actionId": "action-product-001",
+  "cartRevision": "cart-revision-001",
+  "payload": {
+    "source": "attachment"
+  }
+}

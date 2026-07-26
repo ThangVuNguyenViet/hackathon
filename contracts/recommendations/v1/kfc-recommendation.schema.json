@@ -5,7 +5,10 @@
   "oneOf": [
     { "$ref": "#/$defs/RecommendationDecisionRequest" },
     { "$ref": "#/$defs/RecommendationDecisionResponse" },
-    { "$ref": "#/$defs/RecommendationEvent" }
+    { "$ref": "#/$defs/RecommendationEvent" },
+    { "$ref": "#/$defs/RecommendationState" },
+    { "$ref": "#/$defs/RecommendationImpressionRequest" },
+    { "$ref": "#/$defs/RecommendationOutcomeRequest" }
   ],
   "$defs": {
     "OpaqueId": {
@@ -459,6 +462,420 @@
         "counts": { "$ref": "#/$defs/RecommendationCounts" },
         "traceRef": { "$ref": "#/$defs/OpaqueId" }
       }
+    },
+    "RecommendationStage": {
+      "enum": [
+        "starter_eligible",
+        "starter_resolved",
+        "modifier_eligible",
+        "modifier_pending",
+        "modifier_resolved",
+        "smart_cross_sell_eligible",
+        "smart_cross_sell_pending",
+        "complete"
+      ]
+    },
+    "NextEligiblePlacement": {
+      "enum": ["starter", "modifier_upsell", "smart_cross_sell", null]
+    },
+    "PendingRecommendation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "recommendationId",
+        "requestId",
+        "placement",
+        "actionIds",
+        "cartRevision",
+        "traceRef",
+        "decidedAt"
+      ],
+      "properties": {
+        "recommendationId": { "$ref": "#/$defs/OpaqueId" },
+        "requestId": { "$ref": "#/$defs/OpaqueId" },
+        "placement": { "$ref": "#/$defs/Placement" },
+        "actionIds": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 4,
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/OpaqueId" }
+        },
+        "cartRevision": { "$ref": "#/$defs/OpaqueId" },
+        "traceRef": { "$ref": "#/$defs/OpaqueId" },
+        "decidedAt": { "$ref": "#/$defs/Instant" }
+      }
+    },
+    "RecommendationState": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schemaVersion",
+        "revision",
+        "orderFlowId",
+        "stage",
+        "attemptedPlacements",
+        "shownActionIds",
+        "rejectedActionIds",
+        "pendingRecommendation",
+        "recordedOutcomeEventIds",
+        "nextEligiblePlacement"
+      ],
+      "properties": {
+        "schemaVersion": { "const": "kfc-recommendation-state-v1" },
+        "revision": { "type": "integer", "minimum": 0 },
+        "orderFlowId": { "$ref": "#/$defs/OpaqueId" },
+        "stage": { "$ref": "#/$defs/RecommendationStage" },
+        "attemptedPlacements": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/Placement" }
+        },
+        "shownActionIds": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/OpaqueId" }
+        },
+        "rejectedActionIds": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/OpaqueId" }
+        },
+        "pendingRecommendation": {
+          "anyOf": [
+            { "$ref": "#/$defs/PendingRecommendation" },
+            { "type": "null" }
+          ]
+        },
+        "recordedOutcomeEventIds": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/OpaqueId" }
+        },
+        "nextEligiblePlacement": { "$ref": "#/$defs/NextEligiblePlacement" }
+      },
+      "allOf": [
+        {
+          "if": { "type": "object", "properties": { "stage": { "const": "starter_eligible" } } },
+          "then": {
+            "type": "object",
+            "properties": {
+              "nextEligiblePlacement": { "const": "starter" },
+              "pendingRecommendation": { "type": "null" }
+            }
+          }
+        },
+        {
+          "if": { "type": "object", "properties": { "stage": { "const": "starter_resolved" } } },
+          "then": {
+            "type": "object",
+            "properties": {
+              "nextEligiblePlacement": { "type": "null" },
+              "pendingRecommendation": {
+                "anyOf": [
+                  { "type": "null" },
+                  {
+                    "allOf": [
+                      { "$ref": "#/$defs/PendingRecommendation" },
+                      {
+                        "type": "object",
+                        "properties": {
+                          "placement": { "enum": ["local_favorite", "for_you"] }
+                        }
+                      }
+                    ]
+                  }
+                ]
+              }
+            }
+          }
+        },
+        {
+          "if": { "type": "object", "properties": { "stage": { "const": "modifier_eligible" } } },
+          "then": {
+            "type": "object",
+            "properties": {
+              "nextEligiblePlacement": { "const": "modifier_upsell" },
+              "pendingRecommendation": {
+                "anyOf": [
+                  { "type": "null" },
+                  {
+                    "allOf": [
+                      { "$ref": "#/$defs/PendingRecommendation" },
+                      {
+                        "type": "object",
+                        "properties": {
+                          "placement": { "enum": ["local_favorite", "for_you"] }
+                        }
+                      }
+                    ]
+                  }
+                ]
+              }
+            }
+          }
+        },
+        {
+          "if": { "type": "object", "properties": { "stage": { "const": "modifier_pending" } } },
+          "then": {
+            "type": "object",
+            "properties": {
+              "nextEligiblePlacement": { "type": "null" },
+              "pendingRecommendation": {
+                "allOf": [
+                  { "$ref": "#/$defs/PendingRecommendation" },
+                  { "type": "object", "properties": { "placement": { "const": "modifier_upsell" } } }
+                ]
+              }
+            }
+          }
+        },
+        {
+          "if": { "type": "object", "properties": { "stage": { "const": "modifier_resolved" } } },
+          "then": {
+            "type": "object",
+            "properties": {
+              "nextEligiblePlacement": { "const": "smart_cross_sell" },
+              "pendingRecommendation": { "type": "null" }
+            }
+          }
+        },
+        {
+          "if": { "type": "object", "properties": { "stage": { "const": "smart_cross_sell_eligible" } } },
+          "then": {
+            "type": "object",
+            "properties": {
+              "nextEligiblePlacement": { "const": "smart_cross_sell" },
+              "pendingRecommendation": { "type": "null" }
+            }
+          }
+        },
+        {
+          "if": { "type": "object", "properties": { "stage": { "const": "smart_cross_sell_pending" } } },
+          "then": {
+            "type": "object",
+            "properties": {
+              "nextEligiblePlacement": { "type": "null" },
+              "pendingRecommendation": {
+                "allOf": [
+                  { "$ref": "#/$defs/PendingRecommendation" },
+                  { "type": "object", "properties": { "placement": { "const": "smart_cross_sell" } } }
+                ]
+              }
+            }
+          }
+        },
+        {
+          "if": { "type": "object", "properties": { "stage": { "const": "complete" } } },
+          "then": {
+            "type": "object",
+            "properties": {
+              "nextEligiblePlacement": { "type": "null" },
+              "pendingRecommendation": { "type": "null" }
+            }
+          }
+        },
+        {
+          "if": {
+            "type": "object",
+            "properties": { "pendingRecommendation": { "type": "object" } }
+          },
+          "then": {
+            "type": "object",
+            "properties": {
+              "pendingRecommendation": {
+                "type": "object",
+                "properties": {
+                  "placement": { "enum": { "$data": "/attemptedPlacements" } }
+                }
+              }
+            }
+          }
+        }
+      ]
+    },
+    "RenderedRecommendationAction": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["actionId", "position"],
+      "properties": {
+        "actionId": { "$ref": "#/$defs/OpaqueId" },
+        "position": { "type": "integer", "minimum": 1, "maximum": 4 }
+      }
+    },
+    "RecommendationImpressionRequest": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schemaVersion",
+        "eventId",
+        "occurredAt",
+        "assistantTurnId",
+        "attachmentId",
+        "renderedActions",
+        "cartRevision",
+        "actionDigest"
+      ],
+      "properties": {
+        "schemaVersion": { "const": "kfc-recommendation-event-v1" },
+        "eventId": { "$ref": "#/$defs/OpaqueId" },
+        "occurredAt": { "$ref": "#/$defs/Instant" },
+        "assistantTurnId": { "$ref": "#/$defs/OpaqueId" },
+        "attachmentId": { "$ref": "#/$defs/OpaqueId" },
+        "renderedActions": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 4,
+          "items": { "$ref": "#/$defs/RenderedRecommendationAction" },
+          "allOf": [
+            {
+              "contains": { "type": "object", "properties": { "position": { "const": 1 } } },
+              "minContains": 0,
+              "maxContains": 1
+            },
+            {
+              "contains": { "type": "object", "properties": { "position": { "const": 2 } } },
+              "minContains": 0,
+              "maxContains": 1
+            },
+            {
+              "contains": { "type": "object", "properties": { "position": { "const": 3 } } },
+              "minContains": 0,
+              "maxContains": 1
+            },
+            {
+              "contains": { "type": "object", "properties": { "position": { "const": 4 } } },
+              "minContains": 0,
+              "maxContains": 1
+            }
+          ],
+          "prefixItems": [
+            { "$ref": "#/$defs/RenderedRecommendationAction" },
+            {
+              "allOf": [
+                { "$ref": "#/$defs/RenderedRecommendationAction" },
+                {
+                  "type": "object",
+                  "properties": {
+                    "actionId": {
+                      "not": { "const": { "$data": "/renderedActions/0/actionId" } }
+                    }
+                  }
+                }
+              ]
+            },
+            {
+              "allOf": [
+                { "$ref": "#/$defs/RenderedRecommendationAction" },
+                {
+                  "type": "object",
+                  "properties": {
+                    "actionId": {
+                      "allOf": [
+                        { "not": { "const": { "$data": "/renderedActions/0/actionId" } } },
+                        { "not": { "const": { "$data": "/renderedActions/1/actionId" } } }
+                      ]
+                    }
+                  }
+                }
+              ]
+            },
+            {
+              "allOf": [
+                { "$ref": "#/$defs/RenderedRecommendationAction" },
+                {
+                  "type": "object",
+                  "properties": {
+                    "actionId": {
+                      "allOf": [
+                        { "not": { "const": { "$data": "/renderedActions/0/actionId" } } },
+                        { "not": { "const": { "$data": "/renderedActions/1/actionId" } } },
+                        { "not": { "const": { "$data": "/renderedActions/2/actionId" } } }
+                      ]
+                    }
+                  }
+                }
+              ]
+            }
+          ]
+        },
+        "cartRevision": { "$ref": "#/$defs/OpaqueId" },
+        "actionDigest": { "$ref": "#/$defs/Sha256" }
+      }
+    },
+    "RecommendationOutcomeRequest": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schemaVersion",
+        "eventId",
+        "eventType",
+        "occurredAt",
+        "actor",
+        "actionId",
+        "cartRevision",
+        "payload"
+      ],
+      "properties": {
+        "schemaVersion": { "const": "kfc-recommendation-event-v1" },
+        "eventId": { "$ref": "#/$defs/OpaqueId" },
+        "eventType": {
+          "enum": [
+            "selected",
+            "explicitly_dismissed",
+            "ignored",
+            "superseded",
+            "cart_mutation_succeeded",
+            "cart_mutation_failed",
+            "checkout_completed",
+            "order_abandoned",
+            "order_cancelled"
+          ]
+        },
+        "occurredAt": { "$ref": "#/$defs/Instant" },
+        "actor": { "$ref": "#/$defs/EventActor" },
+        "actionId": {
+          "anyOf": [{ "$ref": "#/$defs/OpaqueId" }, { "type": "null" }]
+        },
+        "cartRevision": {
+          "anyOf": [{ "$ref": "#/$defs/OpaqueId" }, { "type": "null" }]
+        },
+        "payload": {
+          "type": "object",
+          "additionalProperties": false,
+          "patternProperties": {
+            ".*": { "$ref": "#/$defs/JsonValue" }
+          }
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "type": "object",
+            "properties": {
+              "eventType": {
+                "enum": [
+                  "selected",
+                  "cart_mutation_succeeded",
+                  "cart_mutation_failed"
+                ]
+              }
+            }
+          },
+          "then": { "type": "object", "properties": { "actionId": { "$ref": "#/$defs/OpaqueId" } } }
+        },
+        {
+          "if": {
+            "type": "object",
+            "properties": {
+              "eventType": {
+                "enum": ["checkout_completed", "order_abandoned", "order_cancelled"]
+              }
+            }
+          },
+          "then": { "type": "object", "properties": { "actionId": { "type": "null" } } }
+        }
+      ]
     },
     "EventType": {
       "enum": [

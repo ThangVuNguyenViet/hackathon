@@ -11,6 +11,9 @@ import {
   parseRecommendationDecisionRequest,
   parseRecommendationDecisionResponse,
   parseRecommendationEvent,
+  parseRecommendationImpressionRequest,
+  parseRecommendationOutcomeRequest,
+  parseRecommendationState,
 } from '../../src/recommendations/domain/schemas.js';
 
 type SnapshotBindingFixture = {
@@ -113,6 +116,15 @@ const validResponse = await readExample<DecisionResponseFixture>(
 const validEvent = await readExample<unknown>(
   'valid-recommendation-event.json',
 );
+const validState = await readExample<unknown>(
+  'valid-recommendation-state.json',
+);
+const validImpressionRequest = await readExample<unknown>(
+  'valid-impression-request.json',
+);
+const validOutcomeRequest = await readExample<unknown>(
+  'valid-outcome-request.json',
+);
 const instantConformance = await readExample<InstantConformanceCorpus>(
   'instant-conformance.json',
 );
@@ -206,6 +218,145 @@ describe('recommendation domain contracts', () => {
       'event-impression-001',
     );
   });
+
+  it('parses the canonical recommendation state and event ingress requests', () => {
+    expect(parseRecommendationState(validState).nextEligiblePlacement).toBe(
+      'starter',
+    );
+    expect(
+      parseRecommendationImpressionRequest(validImpressionRequest)
+        .assistantTurnId,
+    ).toBe('assistant-turn-001');
+    expect(parseRecommendationOutcomeRequest(validOutcomeRequest).eventType).toBe(
+      'selected',
+    );
+  });
+
+  it.each([
+    ['starter_eligible', 'starter', null],
+    ['starter_resolved', null, 'for_you'],
+    ['modifier_eligible', 'modifier_upsell', 'for_you'],
+    ['modifier_pending', null, 'modifier_upsell'],
+    ['modifier_resolved', 'smart_cross_sell', null],
+    ['smart_cross_sell_eligible', 'smart_cross_sell', null],
+    ['smart_cross_sell_pending', null, 'smart_cross_sell'],
+    ['complete', null, null],
+  ] as const)(
+    'accepts the %s state combination',
+    (stage, nextEligiblePlacement, pendingPlacement) => {
+      const value = structuredClone(validState) as Record<string, unknown>;
+      value.stage = stage;
+      value.nextEligiblePlacement = nextEligiblePlacement;
+      value.attemptedPlacements = pendingPlacement === null ? [] : [pendingPlacement];
+      value.pendingRecommendation =
+        pendingPlacement === null
+          ? null
+          : {
+              recommendationId: 'recommendation-001',
+              requestId: 'rec-request-001',
+              placement: pendingPlacement,
+              actionIds: ['action-product-001'],
+              cartRevision: 'cart-revision-001',
+              traceRef: 'trace-001',
+              decidedAt: '2026-07-27T09:00:00Z',
+            };
+
+      expect(() => parseRecommendationState(value)).not.toThrow();
+    },
+  );
+
+  it('rejects a pending recommendation outside attempted placements', () => {
+    const value = structuredClone(validState) as Record<string, unknown>;
+    value.stage = 'starter_resolved';
+    value.nextEligiblePlacement = null;
+    value.pendingRecommendation = {
+      recommendationId: 'recommendation-001',
+      requestId: 'rec-request-001',
+      placement: 'for_you',
+      actionIds: ['action-product-001'],
+      cartRevision: 'cart-revision-001',
+      traceRef: 'trace-001',
+      decidedAt: '2026-07-27T09:00:00Z',
+    };
+
+    expect(() => parseRecommendationState(value)).toThrow();
+  });
+
+  it('rejects duplicate state and impression action IDs', () => {
+    const state = structuredClone(validState) as Record<string, unknown>;
+    state.shownActionIds = ['action-product-001', 'action-product-001'];
+    expect(() => parseRecommendationState(state)).toThrow();
+
+    const impression = structuredClone(validImpressionRequest) as {
+      renderedActions: Array<{ actionId: string; position: number }>;
+    };
+    impression.renderedActions.push({ actionId: 'action-product-001', position: 2 });
+    expect(() => parseRecommendationImpressionRequest(impression)).toThrow();
+  });
+
+  it('rejects duplicate impression positions and invalid action digests', () => {
+    const duplicatePosition = structuredClone(validImpressionRequest) as {
+      renderedActions: Array<{ actionId: string; position: number }>;
+    };
+    duplicatePosition.renderedActions.push({
+      actionId: 'action-product-002',
+      position: 1,
+    });
+    expect(() => parseRecommendationImpressionRequest(duplicatePosition)).toThrow();
+
+    const invalidDigest = structuredClone(validImpressionRequest) as {
+      actionDigest: string;
+    };
+    invalidDigest.actionDigest = 'A';
+    expect(() => parseRecommendationImpressionRequest(invalidDigest)).toThrow();
+  });
+
+  it('rejects strict unknown fields in state and event ingress requests', () => {
+    const state = structuredClone(validState) as Record<string, unknown>;
+    state.unexpected = true;
+    expect(() => parseRecommendationState(state)).toThrow();
+
+    const impression = structuredClone(validImpressionRequest) as {
+      renderedActions: Array<Record<string, unknown>>;
+    };
+    impression.renderedActions[0]!.unexpected = true;
+    expect(() => parseRecommendationImpressionRequest(impression)).toThrow();
+  });
+
+  it('rejects invalid state stage and next-placement combinations', () => {
+    const value = structuredClone(validState) as Record<string, unknown>;
+    value.nextEligiblePlacement = null;
+
+    expect(() => parseRecommendationState(value)).toThrow();
+  });
+
+  it.each([
+    ['selected', null, true],
+    ['cart_mutation_succeeded', null, true],
+    ['cart_mutation_failed', null, true],
+    ['explicitly_dismissed', null, false],
+    ['ignored', null, false],
+    ['superseded', null, false],
+    ['checkout_completed', 'action-product-001', true],
+    ['order_abandoned', 'action-product-001', true],
+    ['order_cancelled', 'action-product-001', true],
+  ] as const)(
+    'enforces the action ID rule for %s outcomes',
+    (eventType, actionId, shouldReject) => {
+      const value = structuredClone(validOutcomeRequest) as {
+        actionId: string | null;
+        eventType: string;
+      };
+      value.eventType = eventType;
+      value.actionId = actionId;
+
+      if (shouldReject) {
+        expect(() => parseRecommendationOutcomeRequest(value)).toThrow();
+      } else {
+        expect(() => parseRecommendationOutcomeRequest(value)).not.toThrow();
+      }
+    },
+  );
 
   it('rejects a cart revision that is not the request revision', () => {
     const value = structuredClone(validRequest);

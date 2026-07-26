@@ -10,7 +10,10 @@ type JsonObject = { [key: string]: JsonValue };
 type DefinitionName =
   | 'RecommendationDecisionRequest'
   | 'RecommendationDecisionResponse'
-  | 'RecommendationEvent';
+  | 'RecommendationEvent'
+  | 'RecommendationState'
+  | 'RecommendationImpressionRequest'
+  | 'RecommendationOutcomeRequest';
 
 interface InvalidCase {
   name: string;
@@ -144,13 +147,22 @@ describe('recommendation JSON Schema contract', async () => {
   const validEvent = await readObject(
     resolve(examplesDirectory, 'valid-recommendation-event.json'),
   );
+  const validState = await readObject(
+    resolve(examplesDirectory, 'valid-recommendation-state.json'),
+  );
+  const validImpressionRequest = await readObject(
+    resolve(examplesDirectory, 'valid-impression-request.json'),
+  );
+  const validOutcomeRequest = await readObject(
+    resolve(examplesDirectory, 'valid-outcome-request.json'),
+  );
   const invalidCases = await readInvalidCases();
   const instantConformance = (await readJson(
     resolve(examplesDirectory, 'instant-conformance.json'),
   )) as unknown as InstantConformanceCorpus;
   const ajv = new (
     Ajv2020 as unknown as typeof import('ajv/dist/2020.js').Ajv2020
-  )({ allErrors: true, strict: true });
+  )({ $data: true, allErrors: true, strict: true, strictTuples: false });
   (addFormats as unknown as typeof import('ajv-formats').default)(ajv);
   ajv.addSchema(schema);
 
@@ -167,11 +179,23 @@ describe('recommendation JSON Schema contract', async () => {
   const eventValidator = ajv.getSchema(
     `${schemaId}#/$defs/RecommendationEvent`,
   );
+  const stateValidator = ajv.getSchema(
+    `${schemaId}#/$defs/RecommendationState`,
+  );
+  const impressionRequestValidator = ajv.getSchema(
+    `${schemaId}#/$defs/RecommendationImpressionRequest`,
+  );
+  const outcomeRequestValidator = ajv.getSchema(
+    `${schemaId}#/$defs/RecommendationOutcomeRequest`,
+  );
   const instantValidator = ajv.getSchema(`${schemaId}#/$defs/Instant`);
   if (
     requestValidator === undefined ||
     responseValidator === undefined ||
     eventValidator === undefined ||
+    stateValidator === undefined ||
+    impressionRequestValidator === undefined ||
+    outcomeRequestValidator === undefined ||
     instantValidator === undefined
   ) {
     throw new Error('Expected all addressable recommendation schemas');
@@ -185,6 +209,12 @@ describe('recommendation JSON Schema contract', async () => {
         return responseValidator;
       case 'RecommendationEvent':
         return eventValidator;
+      case 'RecommendationState':
+        return stateValidator;
+      case 'RecommendationImpressionRequest':
+        return impressionRequestValidator;
+      case 'RecommendationOutcomeRequest':
+        return outcomeRequestValidator;
     }
   };
 
@@ -192,6 +222,9 @@ describe('recommendation JSON Schema contract', async () => {
     ['RecommendationDecisionRequest', validRequest],
     ['RecommendationDecisionResponse', validResponse],
     ['RecommendationEvent', validEvent],
+    ['RecommendationState', validState],
+    ['RecommendationImpressionRequest', validImpressionRequest],
+    ['RecommendationOutcomeRequest', validOutcomeRequest],
   ] as const)('accepts the canonical %s example', (name, value) => {
     expect(validatorFor(name)(value)).toBe(true);
   });
@@ -199,6 +232,30 @@ describe('recommendation JSON Schema contract', async () => {
   it.each(invalidCases)('rejects $name', (invalidCase) => {
     const value = applyPatch(getSource(invalidCase.source), invalidCase.patch);
     expect(validatorFor(invalidCase.definition)(value)).toBe(false);
+  });
+
+  it.each([
+    'explicitly_dismissed',
+    'ignored',
+    'superseded',
+  ] as const)('allows null action IDs for %s outcomes', (eventType) => {
+    const value = structuredClone(validOutcomeRequest);
+    value.eventType = eventType;
+    value.actionId = null;
+
+    expect(outcomeRequestValidator(value)).toBe(true);
+  });
+
+  it.each([
+    'checkout_completed',
+    'order_abandoned',
+    'order_cancelled',
+  ] as const)('allows null action IDs for terminal %s outcomes', (eventType) => {
+    const value = structuredClone(validOutcomeRequest);
+    value.eventType = eventType;
+    value.actionId = null;
+
+    expect(outcomeRequestValidator(value)).toBe(true);
   });
 
   it.each(instantConformance.accepted)(
@@ -223,6 +280,12 @@ describe('recommendation JSON Schema contract', async () => {
         return validResponse;
       case 'valid-recommendation-event.json':
         return validEvent;
+      case 'valid-recommendation-state.json':
+        return validState;
+      case 'valid-impression-request.json':
+        return validImpressionRequest;
+      case 'valid-outcome-request.json':
+        return validOutcomeRequest;
       default:
         throw new Error(`Unknown example source: ${source}`);
     }

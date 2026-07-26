@@ -59,5 +59,124 @@
         ]
       }
     }
+  },
+  {
+    "name": "unknown recommendation state fields are forbidden",
+    "definition": "RecommendationState",
+    "source": "valid-recommendation-state.json",
+    "patch": { "unexpected": "forbidden" }
+  },
+  {
+    "name": "duplicate attempted placements are forbidden",
+    "definition": "RecommendationState",
+    "source": "valid-recommendation-state.json",
+    "patch": { "attemptedPlacements": ["for_you", "for_you"] }
+  },
+  {
+    "name": "duplicate shown action IDs are forbidden",
+    "definition": "RecommendationState",
+    "source": "valid-recommendation-state.json",
+    "patch": { "shownActionIds": ["action-product-001", "action-product-001"] }
+  },
+  {
+    "name": "starter eligibility requires the starter next placement",
+    "definition": "RecommendationState",
+    "source": "valid-recommendation-state.json",
+    "patch": { "nextEligiblePlacement": null }
+  },
+  {
+    "name": "pending recommendations must have an attempted placement",
+    "definition": "RecommendationState",
+    "source": "valid-recommendation-state.json",
+    "patch": {
+      "stage": "starter_resolved",
+      "nextEligiblePlacement": null,
+      "pendingRecommendation": {
+        "recommendationId": "recommendation-001",
+        "requestId": "rec-request-001",
+        "placement": "for_you",
+        "actionIds": ["action-product-001"],
+        "cartRevision": "cart-revision-001",
+        "traceRef": "trace-001",
+        "decidedAt": "2026-07-27T09:00:00Z"
+      }
+    }
+  },
+  {
+    "name": "pending recommendation action IDs must be unique",
+    "definition": "RecommendationState",
+    "source": "valid-recommendation-state.json",
+    "patch": {
+      "stage": "starter_resolved",
+      "nextEligiblePlacement": null,
+      "attemptedPlacements": ["for_you"],
+      "pendingRecommendation": {
+        "recommendationId": "recommendation-001",
+        "requestId": "rec-request-001",
+        "placement": "for_you",
+        "actionIds": ["action-product-001", "action-product-001"],
+        "cartRevision": "cart-revision-001",
+        "traceRef": "trace-001",
+        "decidedAt": "2026-07-27T09:00:00Z"
+      }
+    }
+  },
+  {
+    "name": "unknown impression fields are forbidden",
+    "definition": "RecommendationImpressionRequest",
+    "source": "valid-impression-request.json",
+    "patch": { "renderedActions": [{ "actionId": "action-product-001", "position": 1, "unexpected": true }] }
+  },
+  {
+    "name": "impression action IDs must be unique",
+    "definition": "RecommendationImpressionRequest",
+    "source": "valid-impression-request.json",
+    "patch": {
+      "renderedActions": [
+        { "actionId": "action-product-001", "position": 1 },
+        { "actionId": "action-product-001", "position": 2 }
+      ]
+    }
+  },
+  {
+    "name": "impression positions must be unique",
+    "definition": "RecommendationImpressionRequest",
+    "source": "valid-impression-request.json",
+    "patch": {
+      "renderedActions": [
+        { "actionId": "action-product-001", "position": 1 },
+        { "actionId": "action-product-002", "position": 1 }
+      ]
+    }
+  },
+  {
+    "name": "impression action digests must be lowercase SHA-256",
+    "definition": "RecommendationImpressionRequest",
+    "source": "valid-impression-request.json",
+    "patch": { "actionDigest": "A" }
+  },
+  {
+    "name": "selected outcomes require action IDs",
+    "definition": "RecommendationOutcomeRequest",
+    "source": "valid-outcome-request.json",
+    "patch": { "actionId": null }
+  },
+  {
+    "name": "successful cart mutation outcomes require action IDs",
+    "definition": "RecommendationOutcomeRequest",
+    "source": "valid-outcome-request.json",
+    "patch": { "eventType": "cart_mutation_succeeded", "actionId": null }
+  },
+  {
+    "name": "failed cart mutation outcomes require action IDs",
+    "definition": "RecommendationOutcomeRequest",
+    "source": "valid-outcome-request.json",
+    "patch": { "eventType": "cart_mutation_failed", "actionId": null }
+  },
+  {
+    "name": "terminal outcomes require null action IDs",
+    "definition": "RecommendationOutcomeRequest",
+    "source": "valid-outcome-request.json",
+    "patch": { "eventType": "checkout_completed" }
   }
 ]
