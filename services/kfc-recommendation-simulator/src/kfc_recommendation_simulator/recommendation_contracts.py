@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import re
 from datetime import datetime
+from math import isfinite
 from typing import Annotated, Literal, Self
 
 from pydantic import (
@@ -12,25 +14,32 @@ from pydantic import (
     ConfigDict,
     Field,
     JsonValue,
-    NonNegativeInt,
     StringConstraints,
     TypeAdapter,
     ValidationError,
+    field_validator,
     model_validator,
 )
 
+# Models are shallow-frozen; callers must treat nested transport collections as read-only.
 OpaqueId = Annotated[
     str, StringConstraints(pattern=r"^[A-Za-z0-9][A-Za-z0-9:_-]{0,127}$")
 ]
 Sha256 = Annotated[str, StringConstraints(pattern=r"^[a-f0-9]{64}$")]
 NonEmptyString = Annotated[str, StringConstraints(min_length=1)]
-PositiveInt = Annotated[int, Field(gt=0)]
+_CANONICAL_UTC_INSTANT_PATTERN = re.compile(
+    r"^[0-9]{4}-(?:0[1-9]|1[0-2])-(?:0[1-9]|[12][0-9]|3[01])"
+    r"T(?:[01][0-9]|2[0-3]):[0-5][0-9]:[0-5][0-9](?:\.[0-9]+)?Z$"
+)
 _INSTANT_ADAPTER = TypeAdapter(AwareDatetime)
 
 
 def _parse_instant(value: object) -> datetime:
-    if not isinstance(value, str):
-        raise ValueError("Instant must be an ISO date-time string")  # noqa: TRY004
+    if (
+        not isinstance(value, str)
+        or _CANONICAL_UTC_INSTANT_PATTERN.fullmatch(value) is None
+    ):
+        raise ValueError("Instant must be an ISO date-time string")
     try:
         return _INSTANT_ADAPTER.validate_python(value)
     except ValidationError as error:
@@ -38,6 +47,21 @@ def _parse_instant(value: object) -> datetime:
 
 
 Instant = Annotated[datetime, BeforeValidator(_parse_instant)]
+
+
+def _parse_json_integer(value: object) -> int:
+    if isinstance(value, bool):
+        raise ValueError("Value must be a JSON integer")  # noqa: TRY004
+    if isinstance(value, int):
+        return value
+    if isinstance(value, float) and isfinite(value) and value.is_integer():
+        return int(value)
+    raise ValueError("Value must be a JSON integer")
+
+
+JsonInteger = Annotated[int, BeforeValidator(_parse_json_integer)]
+NonNegativeInt = Annotated[JsonInteger, Field(ge=0)]
+PositiveInt = Annotated[JsonInteger, Field(gt=0)]
 Placement = Literal[
     "local_favorite", "for_you", "modifier_upsell", "smart_cross_sell"
 ]
@@ -57,6 +81,23 @@ class Money(ContractModel):
 class SnapshotProvenance(ContractModel):
     source: NonEmptyString
     reference: NonEmptyString
+
+
+class SanitySnapshotBinding(ContractModel):
+    snapshot_id: OpaqueId = Field(alias="snapshotId")
+    digest: Sha256
+    contributing_revisions: list[NonEmptyString] = Field(
+        alias="contributingRevisions", min_length=1
+    )
+
+    @field_validator("contributing_revisions")
+    @classmethod
+    def validate_unique_contributing_revisions(
+        cls, revisions: list[str]
+    ) -> list[str]:
+        if len(revisions) != len(set(revisions)):
+            raise ValueError("Contributing revisions must be unique")
+        return revisions
 
 
 class SnapshotBinding(ContractModel):
@@ -231,7 +272,7 @@ class VersionBindings(ContractModel):
     availability: OpaqueId
     promotion: OpaqueId
     eligibility_policy: OpaqueId = Field(alias="eligibilityPolicy")
-    sanity_snapshot: OpaqueId = Field(alias="sanitySnapshot")
+    sanity_snapshot: SanitySnapshotBinding = Field(alias="sanitySnapshot")
     feature_schema: OpaqueId = Field(alias="featureSchema")
     serving_ranker: OpaqueId = Field(alias="servingRanker")
     shadow_model: OpaqueId | None = Field(alias="shadowModel")
@@ -298,14 +339,29 @@ class RecommendationDecisionResponse(ContractModel):
         if any(fact.action_id not in action_ids for fact in self.display_facts):
             raise ValueError("Display facts must reference authoritative offer actions")
 
+        has_replacement_action = any(
+            action.type == "replace_cart_line" for action in actions
+        )
+        is_valid_sanity_replacement = (
+            self.status == "recommended"
+            and self.decision_source == "merchandising_replacement"
+            and len(actions) == 1
+            and actions[0].type == "replace_cart_line"
+        )
+        if has_replacement_action and not is_valid_sanity_replacement:
+            raise ValueError(
+                "A replacement requires one merchandising replacement action"
+            )
         if (
             self.primary_offer is not None
+            and not is_valid_sanity_replacement
             and self.placement == "modifier_upsell"
             and (len(actions) != 1 or actions[0].type != "apply_modifier")
         ):
             raise ValueError("Modifier Upsell requires exactly one modifier action")
         if (
             self.primary_offer is not None
+            and not is_valid_sanity_replacement
             and self.placement in {"local_favorite", "for_you"}
             and (len(actions) != 1 or actions[0].type != "add_product")
         ):
@@ -314,6 +370,7 @@ class RecommendationDecisionResponse(ContractModel):
             )
         if (
             self.primary_offer is not None
+            and not is_valid_sanity_replacement
             and self.placement == "smart_cross_sell"
             and not (
                 3 <= len(actions) <= 4
@@ -354,3 +411,28 @@ class RecommendationEvent(ContractModel):
     cart_revision: OpaqueId | None = Field(alias="cartRevision")
     version_bindings: VersionBindings = Field(alias="versionBindings")
     payload: dict[str, JsonValue]
+
+    @field_validator("payload", mode="before")
+    @classmethod
+    def validate_finite_json_payload(cls, payload: object) -> object:
+        def validate(value: object) -> None:
+            if value is None or isinstance(value, (bool, int, str)):
+                return
+            if isinstance(value, float):
+                if not isfinite(value):
+                    raise ValueError("Event payload numbers must be finite")
+                return
+            if isinstance(value, list):
+                for item in value:
+                    validate(item)
+                return
+            if isinstance(value, dict):
+                if not all(isinstance(key, str) for key in value):
+                    raise ValueError("Event payload object keys must be strings")
+                for item in value.values():
+                    validate(item)
+                return
+            raise ValueError("Event payload must contain only JSON values")
+
+        validate(payload)
+        return payload

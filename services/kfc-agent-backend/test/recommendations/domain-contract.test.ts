@@ -3,6 +3,7 @@ import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import {
+  instantSchema,
   parseRecommendationDecisionRequest,
   parseRecommendationDecisionResponse,
   parseRecommendationEvent,
@@ -72,6 +73,11 @@ type DecisionResponseFixture = {
     potential: number;
   };
   displayFacts: Array<{ actionId: string }>;
+  decisionSource:
+    | 'ranked'
+    | 'merchandising_replacement'
+    | 'fallback'
+    | 'suppressed';
   placement:
     'for_you' | 'local_favorite' | 'modifier_upsell' | 'smart_cross_sell';
   primaryOffer: { actions: RecommendationActionFixture[] } | null;
@@ -81,6 +87,11 @@ type DecisionResponseFixture = {
     | 'suppressed'
     | 'invalid_context'
     | 'ineligible_context';
+};
+
+type InstantConformanceCorpus = {
+  accepted: Array<{ name: string; value: unknown }>;
+  rejected: Array<{ name: string; value: unknown }>;
 };
 
 const repoRoot = fileURLToPath(new URL('../../../../', import.meta.url));
@@ -100,6 +111,9 @@ const validResponse = await readExample<DecisionResponseFixture>(
 );
 const validEvent = await readExample<unknown>(
   'valid-recommendation-event.json',
+);
+const instantConformance = await readExample<InstantConformanceCorpus>(
+  'instant-conformance.json',
 );
 
 const modifierAction = (): ApplyModifierActionFixture => ({
@@ -132,6 +146,12 @@ const replaceCartLineAction = (): ReplaceCartLineActionFixture => ({
   cartRevision: 'cart-revision-001',
 });
 
+const sanitySnapshotBinding = () => ({
+  snapshotId: 'sanity-snapshot-001',
+  digest: 'f'.repeat(64),
+  contributingRevisions: ['sanity-policies-revision-001'],
+});
+
 describe('recommendation domain contracts', () => {
   it('parses the canonical decision request', () => {
     const parsed = parseRecommendationDecisionRequest(validRequest);
@@ -140,27 +160,17 @@ describe('recommendation domain contracts', () => {
     expect(parsed.commerceSnapshotBindings.catalog.complete).toBe(true);
   });
 
-  it.each([
-    ['canonical uppercase', '2026-07-27T09:00:00Z'],
-    ['lowercase t/z', '2026-07-27t09:00:00z'],
-    ['space with offset', '2026-07-27 16:00:00+07:00'],
-    ['numeric offset', '2026-07-27T16:00:00+07:00'],
-  ])('accepts the Ajv date-time lexical form: %s', (_name, decisionTime) => {
-    const value = structuredClone(validRequest);
-    value.decisionTime = decisionTime;
+  it.each(instantConformance.accepted)(
+    'accepts canonical Instant: $name',
+    ({ value }) => {
+      expect(instantSchema.parse(value)).toBe(value);
+    },
+  );
 
-    expect(parseRecommendationDecisionRequest(value).decisionTime).toBe(
-      decisionTime,
-    );
-  });
-
-  it.each(['2026-07-27T09:00:00', 1_753_608_000_000] as const)(
-    'rejects a timezone-free or non-string decision time: %s',
-    (decisionTime) => {
-      const value: { decisionTime: unknown } = structuredClone(validRequest);
-      value.decisionTime = decisionTime;
-
-      expect(() => parseRecommendationDecisionRequest(value)).toThrow();
+  it.each(instantConformance.rejected)(
+    'rejects non-canonical Instant: $name',
+    ({ value }) => {
+      expect(() => instantSchema.parse(value)).toThrow();
     },
   );
 
@@ -252,6 +262,77 @@ describe('recommendation domain contracts', () => {
   it('rejects display facts for actions outside the authoritative offer', () => {
     const value = structuredClone(validResponse);
     value.displayFacts[0].actionId = 'action-not-offered';
+
+    expect(() => parseRecommendationDecisionResponse(value)).toThrow();
+  });
+
+  it('parses a complete Sanity merchandising replacement response', () => {
+    const value = structuredClone(validResponse);
+    const action = replaceCartLineAction();
+    value.decisionSource = 'merchandising_replacement';
+    value.primaryOffer = { actions: [action] };
+    value.displayFacts[0].actionId = action.actionId;
+
+    const parsed = parseRecommendationDecisionResponse(value);
+
+    expect(parsed.decisionSource).toBe('merchandising_replacement');
+    expect(parsed.primaryOffer?.actions[0]?.type).toBe('replace_cart_line');
+  });
+
+  it.each(['ranked', 'fallback', 'suppressed'] as const)(
+    'rejects a replacement action from %s',
+    (decisionSource) => {
+      const value = structuredClone(validResponse);
+      const action = replaceCartLineAction();
+      value.decisionSource = decisionSource;
+      value.primaryOffer = { actions: [action] };
+      value.displayFacts[0].actionId = action.actionId;
+
+      expect(() => parseRecommendationDecisionResponse(value)).toThrow();
+    },
+  );
+
+  it('rejects a merchandising replacement mixed with another action', () => {
+    const value = structuredClone(validResponse);
+    const action = replaceCartLineAction();
+    value.decisionSource = 'merchandising_replacement';
+    value.primaryOffer = {
+      actions: [action, productAction('action-product-002')],
+    };
+    value.displayFacts[0].actionId = action.actionId;
+    value.counts.displayed = 2;
+
+    expect(() => parseRecommendationDecisionResponse(value)).toThrow();
+  });
+
+  it('keeps normal placement rules for a non-replacement merchandising response', () => {
+    const value = structuredClone(validResponse);
+    value.decisionSource = 'merchandising_replacement';
+
+    expect(parseRecommendationDecisionResponse(value).placement).toBe(
+      'for_you',
+    );
+  });
+
+  it('requires a strict Sanity snapshot binding', () => {
+    const value = structuredClone(validResponse) as unknown as {
+      versionBindings: { sanitySnapshot: unknown };
+    };
+    value.versionBindings.sanitySnapshot = sanitySnapshotBinding();
+
+    expect(() => parseRecommendationDecisionResponse(value)).not.toThrow();
+
+    value.versionBindings.sanitySnapshot = 'sanity-snapshot-001';
+    expect(() => parseRecommendationDecisionResponse(value)).toThrow();
+  });
+
+  it('rejects duplicate Sanity snapshot contributing revisions', () => {
+    const value = structuredClone(validResponse) as unknown as {
+      versionBindings: { sanitySnapshot: unknown };
+    };
+    const binding = sanitySnapshotBinding();
+    binding.contributingRevisions.push('sanity-policies-revision-001');
+    value.versionBindings.sanitySnapshot = binding;
 
     expect(() => parseRecommendationDecisionResponse(value)).toThrow();
   });

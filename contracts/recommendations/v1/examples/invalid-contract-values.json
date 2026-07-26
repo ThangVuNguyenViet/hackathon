@@ -24,5 +24,40 @@
     "patch": {
       "primaryOffer.actions": ["copy:0", "copy:0", "copy:0", "copy:0", "copy:0"]
     }
+  },
+  {
+    "name": "scalar Sanity snapshot is forbidden",
+    "definition": "RecommendationDecisionResponse",
+    "source": "valid-decision-response.json",
+    "patch": {
+      "versionBindings.sanitySnapshot": "sanity-snapshot-001"
+    }
+  },
+  {
+    "name": "empty Sanity contributing revisions are forbidden",
+    "definition": "RecommendationDecisionResponse",
+    "source": "valid-decision-response.json",
+    "patch": {
+      "versionBindings.sanitySnapshot": {
+        "snapshotId": "sanity-snapshot-001",
+        "digest": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+        "contributingRevisions": []
+      }
+    }
+  },
+  {
+    "name": "duplicate Sanity contributing revisions are forbidden",
+    "definition": "RecommendationEvent",
+    "source": "valid-recommendation-event.json",
+    "patch": {
+      "versionBindings.sanitySnapshot": {
+        "snapshotId": "sanity-snapshot-001",
+        "digest": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+        "contributingRevisions": [
+          "sanity-policies-revision-001",
+          "sanity-policies-revision-001"
+        ]
+      }
+    }
   }
 ]

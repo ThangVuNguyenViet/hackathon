@@ -19,7 +19,11 @@
     "availability": "availability-snapshot-001",
     "promotion": "promotion-snapshot-001",
     "eligibilityPolicy": "kfc-recommendation-policy-v1",
-    "sanitySnapshot": "sanity-snapshot-001",
+    "sanitySnapshot": {
+      "snapshotId": "sanity-snapshot-001",
+      "digest": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+      "contributingRevisions": ["sanity-policies-revision-001"]
+    },
     "featureSchema": "for-you-feature-schema-v1",
     "servingRanker": "for-you-affinity-v1",
     "shadowModel": null,

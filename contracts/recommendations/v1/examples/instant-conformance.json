@@ -1,0 +1,78 @@
+{
+  "accepted": [
+    {
+      "name": "whole seconds",
+      "value": "2026-07-27T09:00:00Z"
+    },
+    {
+      "name": "single fractional digit",
+      "value": "2026-07-27T09:00:00.1Z"
+    },
+    {
+      "name": "multiple fractional digits",
+      "value": "2026-07-27T09:00:00.123456789Z"
+    },
+    {
+      "name": "valid leap day",
+      "value": "2024-02-29T23:59:59Z"
+    }
+  ],
+  "rejected": [
+    {
+      "name": "lowercase separator",
+      "value": "2026-07-27t09:00:00Z"
+    },
+    {
+      "name": "lowercase UTC marker",
+      "value": "2026-07-27T09:00:00z"
+    },
+    {
+      "name": "space separator",
+      "value": "2026-07-27 09:00:00Z"
+    },
+    {
+      "name": "zero numeric offset",
+      "value": "2026-07-27T09:00:00+00:00"
+    },
+    {
+      "name": "nonzero numeric offset",
+      "value": "2026-07-27T16:00:00+07:00"
+    },
+    {
+      "name": "missing seconds",
+      "value": "2026-07-27T09:00Z"
+    },
+    {
+      "name": "comma fraction separator",
+      "value": "2026-07-27T09:00:00,1Z"
+    },
+    {
+      "name": "empty fraction",
+      "value": "2026-07-27T09:00:00.Z"
+    },
+    {
+      "name": "leap second",
+      "value": "2026-12-31T23:59:60Z"
+    },
+    {
+      "name": "timezone-free",
+      "value": "2026-07-27T09:00:00"
+    },
+    {
+      "name": "invalid calendar date",
+      "value": "2026-02-29T09:00:00Z"
+    },
+    {
+      "name": "number",
+      "value": 1785142800
+    },
+    {
+      "name": "boolean",
+      "value": true
+    },
+    {
+      "name": "null",
+      "value": null
+    }
+  ]
+}

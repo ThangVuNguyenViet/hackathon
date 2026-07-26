@@ -32,6 +32,8 @@ type StringFormatDefinition = {
 const ajvDateTimeFormat = (addFormats as unknown as FormatsPlugin).get(
   'date-time',
 );
+const canonicalUtcInstantPattern =
+  /^[0-9]{4}-(?:0[1-9]|1[0-2])-(?:0[1-9]|[12][0-9]|3[01])T(?:[01][0-9]|2[0-3]):[0-5][0-9]:[0-5][0-9](?:\.[0-9]+)?Z$/u;
 
 function isStringFormatValidator(
   format: Format,
@@ -73,6 +75,7 @@ function acceptsAjvStringFormat(format: Format, value: string): boolean {
 
 export const instantSchema = z
   .string()
+  .regex(canonicalUtcInstantPattern, 'Must use canonical ISO-8601 UTC form')
   .refine(
     (value) => acceptsAjvStringFormat(ajvDateTimeFormat, value),
     'Must use the JSON Schema date-time format',
@@ -92,6 +95,20 @@ export const snapshotProvenanceSchema = z
   .object({
     source: z.string().min(1),
     reference: z.string().min(1),
+  })
+  .strict();
+
+export const sanitySnapshotBindingSchema = z
+  .object({
+    snapshotId: opaqueIdSchema,
+    digest: sha256Schema,
+    contributingRevisions: z
+      .array(z.string().min(1))
+      .min(1)
+      .refine(
+        (revisions) => new Set(revisions).size === revisions.length,
+        'Contributing revisions must be unique',
+      ),
   })
   .strict();
 
@@ -290,7 +307,7 @@ export const versionBindingsSchema = z
     availability: opaqueIdSchema,
     promotion: opaqueIdSchema,
     eligibilityPolicy: opaqueIdSchema,
-    sanitySnapshot: opaqueIdSchema,
+    sanitySnapshot: sanitySnapshotBindingSchema,
     featureSchema: opaqueIdSchema,
     servingRanker: opaqueIdSchema,
     shadowModel: opaqueIdSchema.nullable(),
@@ -396,6 +413,15 @@ const bindings = (value: z.infer<typeof commerceSnapshotBindingsSchema>) =>
     ['promotion', value.promotion],
   ] as const;
 
+const canonicalInstantEpoch = (value: string): number | null => {
+  const parsedInstant = instantSchema.safeParse(value);
+  if (!parsedInstant.success) {
+    return null;
+  }
+  const epoch = Date.parse(parsedInstant.data);
+  return Number.isFinite(epoch) ? epoch : null;
+};
+
 export const recommendationDecisionRequestSchema =
   recommendationDecisionRequestShape.superRefine((value, context) => {
     if (value.cart.revision !== value.cartRevision) {
@@ -420,19 +446,25 @@ export const recommendationDecisionRequestSchema =
       });
     }
 
-    const decisionTime = Date.parse(value.decisionTime);
+    const decisionTime = canonicalInstantEpoch(value.decisionTime);
+    if (decisionTime === null) {
+      return;
+    }
     for (const [name, binding] of snapshotBindings) {
-      if (
-        Date.parse(binding.effectiveAt) > decisionTime ||
-        decisionTime >= Date.parse(binding.expiresAt)
-      ) {
+      const effectiveAt = canonicalInstantEpoch(binding.effectiveAt);
+      const expiresAt = canonicalInstantEpoch(binding.expiresAt);
+      const observedAt = canonicalInstantEpoch(binding.observedAt);
+      if (effectiveAt === null || expiresAt === null || observedAt === null) {
+        continue;
+      }
+      if (effectiveAt > decisionTime || decisionTime >= expiresAt) {
         context.addIssue({
           code: z.ZodIssueCode.custom,
           path: ['commerceSnapshotBindings', name],
           message: 'Snapshot must be effective at the decision time',
         });
       }
-      if (Date.parse(binding.observedAt) > decisionTime) {
+      if (observedAt > decisionTime) {
         context.addIssue({
           code: z.ZodIssueCode.custom,
           path: ['commerceSnapshotBindings', name, 'observedAt'],
@@ -490,8 +522,24 @@ export const recommendationDecisionResponseSchema =
     }
 
     const actions = value.primaryOffer?.actions ?? [];
+    const hasReplacementAction = actions.some(
+      (action) => action.type === 'replace_cart_line',
+    );
+    const isValidSanityReplacement =
+      value.status === 'recommended' &&
+      value.decisionSource === 'merchandising_replacement' &&
+      actions.length === 1 &&
+      actions[0]?.type === 'replace_cart_line';
+    if (hasReplacementAction && !isValidSanityReplacement) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['primaryOffer', 'actions'],
+        message: 'A replacement requires one merchandising replacement action',
+      });
+    }
     if (
       value.primaryOffer !== null &&
+      !isValidSanityReplacement &&
       value.placement === 'modifier_upsell' &&
       (actions.length !== 1 || actions[0]?.type !== 'apply_modifier')
     ) {
@@ -503,6 +551,7 @@ export const recommendationDecisionResponseSchema =
     }
     if (
       value.primaryOffer !== null &&
+      !isValidSanityReplacement &&
       (value.placement === 'local_favorite' || value.placement === 'for_you') &&
       (actions.length !== 1 || actions[0]?.type !== 'add_product')
     ) {
@@ -515,6 +564,7 @@ export const recommendationDecisionResponseSchema =
     }
     if (
       value.primaryOffer !== null &&
+      !isValidSanityReplacement &&
       value.placement === 'smart_cross_sell' &&
       !(
         actions.length >= 3 &&

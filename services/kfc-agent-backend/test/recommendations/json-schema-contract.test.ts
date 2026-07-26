@@ -19,6 +19,16 @@ interface InvalidCase {
   patch: Record<string, JsonValue>;
 }
 
+interface InstantConformanceCase {
+  name: string;
+  value: JsonValue;
+}
+
+interface InstantConformanceCorpus {
+  accepted: InstantConformanceCase[];
+  rejected: InstantConformanceCase[];
+}
+
 const repoRoot = fileURLToPath(new URL('../../../../', import.meta.url));
 const contractDirectory = resolve(repoRoot, 'contracts/recommendations/v1');
 const examplesDirectory = resolve(contractDirectory, 'examples');
@@ -135,6 +145,9 @@ describe('recommendation JSON Schema contract', async () => {
     resolve(examplesDirectory, 'valid-recommendation-event.json'),
   );
   const invalidCases = await readInvalidCases();
+  const instantConformance = (await readJson(
+    resolve(examplesDirectory, 'instant-conformance.json'),
+  )) as unknown as InstantConformanceCorpus;
   const ajv = new (
     Ajv2020 as unknown as typeof import('ajv/dist/2020.js').Ajv2020
   )({ allErrors: true, strict: true });
@@ -154,10 +167,12 @@ describe('recommendation JSON Schema contract', async () => {
   const eventValidator = ajv.getSchema(
     `${schemaId}#/$defs/RecommendationEvent`,
   );
+  const instantValidator = ajv.getSchema(`${schemaId}#/$defs/Instant`);
   if (
     requestValidator === undefined ||
     responseValidator === undefined ||
-    eventValidator === undefined
+    eventValidator === undefined ||
+    instantValidator === undefined
   ) {
     throw new Error('Expected all addressable recommendation schemas');
   }
@@ -185,6 +200,20 @@ describe('recommendation JSON Schema contract', async () => {
     const value = applyPatch(getSource(invalidCase.source), invalidCase.patch);
     expect(validatorFor(invalidCase.definition)(value)).toBe(false);
   });
+
+  it.each(instantConformance.accepted)(
+    'accepts canonical Instant: $name',
+    ({ value }) => {
+      expect(instantValidator(value)).toBe(true);
+    },
+  );
+
+  it.each(instantConformance.rejected)(
+    'rejects non-canonical Instant: $name',
+    ({ value }) => {
+      expect(instantValidator(value)).toBe(false);
+    },
+  );
 
   function getSource(source: string): JsonObject {
     switch (source) {

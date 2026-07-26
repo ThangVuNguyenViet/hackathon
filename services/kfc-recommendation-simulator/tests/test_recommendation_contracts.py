@@ -6,9 +6,10 @@ import unittest
 from pathlib import Path
 from typing import Any
 
-from pydantic import ValidationError
+from pydantic import TypeAdapter, ValidationError
 
 from kfc_recommendation_simulator.recommendation_contracts import (
+    Instant,
     RecommendationDecisionRequest,
     RecommendationDecisionResponse,
     RecommendationEvent,
@@ -80,6 +81,14 @@ def display_fact(action_id: str) -> dict[str, Any]:
     }
 
 
+def sanity_snapshot_binding() -> dict[str, Any]:
+    return {
+        "snapshotId": "sanity-snapshot-001",
+        "digest": "f" * 64,
+        "contributingRevisions": ["sanity-policies-revision-001"],
+    }
+
+
 class RecommendationContractsTest(unittest.TestCase):
     def assert_invalid_request(self, value: dict[str, Any]) -> None:
         with self.assertRaises(ValidationError):
@@ -111,34 +120,22 @@ class RecommendationContractsTest(unittest.TestCase):
             "event-impression-001",
         )
 
-    def test_parses_json_schema_accepted_instant_lexical_forms(self) -> None:
-        for instant in (
-            "2026-07-27t09:00:00z",
-            "2026-07-27 09:00:00+00:00",
-            "2026-07-27T16:00:00+07:00",
-        ):
-            with self.subTest(instant=instant):
-                value = valid_request()
-                value["decisionTime"] = instant
+    def test_instant_conformance_corpus(self) -> None:
+        corpus = read_example("instant-conformance.json")
+        adapter = TypeAdapter(Instant)
 
-                parsed = RecommendationDecisionRequest.model_validate(value)
-                self.assertIsNotNone(parsed.decision_time.tzinfo)
-                self.assertIsNotNone(parsed.decision_time.utcoffset())
+        for case in corpus["accepted"]:
+            with self.subTest(category="accepted", name=case["name"]):
+                parsed = adapter.validate_python(case["value"])
+                self.assertIsNotNone(parsed.tzinfo)
+                self.assertIsNotNone(parsed.utcoffset())
 
-    def test_rejects_non_string_instants(self) -> None:
-        request = valid_request()
-        request["decisionTime"] = 1785142800
-        self.assert_invalid_request(request)
-
-        event = valid_event()
-        event["occurredAt"] = 1785142805
-        self.assert_invalid_event(event)
-
-    def test_rejects_instants_without_a_timezone(self) -> None:
-        value = valid_request()
-        value["decisionTime"] = "2026-07-27T09:00:00"
-
-        self.assert_invalid_request(value)
+        for case in corpus["rejected"]:
+            with (
+                self.subTest(category="rejected", name=case["name"]),
+                self.assertRaises(ValidationError),
+            ):
+                adapter.validate_python(case["value"])
 
     def test_rejects_coerced_json_transport_primitives(self) -> None:
         request_cases: tuple[tuple[str, str, Any], ...] = (
@@ -164,6 +161,63 @@ class RecommendationContractsTest(unittest.TestCase):
         response = valid_response()
         response["counts"]["potential"] = "8"
         self.assert_invalid_response(response)
+
+    def test_accepts_integral_json_numbers_for_integer_fields(self) -> None:
+        request = valid_request()
+        request["cart"]["subtotal"]["amount"] = 89000.0
+        request["cart"]["lines"][0]["quantity"] = 1.0
+        parsed_request = RecommendationDecisionRequest.model_validate(request)
+        self.assertEqual(parsed_request.cart.subtotal.amount, 89000)
+        self.assertIsInstance(parsed_request.cart.subtotal.amount, int)
+        self.assertEqual(parsed_request.cart.lines[0].quantity, 1)
+
+        response = valid_response()
+        for name in ("potential", "eligible", "ineligible", "scored", "displayed"):
+            response["counts"][name] = float(response["counts"][name])
+        parsed_response = RecommendationDecisionResponse.model_validate(response)
+        self.assertEqual(parsed_response.counts.potential, 8)
+        self.assertIsInstance(parsed_response.counts.potential, int)
+
+    def test_rejects_non_json_integer_values(self) -> None:
+        for value in (
+            "89000",
+            True,
+            89000.5,
+            float("nan"),
+            float("inf"),
+            float("-inf"),
+        ):
+            with self.subTest(value=value):
+                request = valid_request()
+                request["cart"]["subtotal"]["amount"] = value
+                self.assert_invalid_request(request)
+
+        request = valid_request()
+        request["cart"]["lines"][0]["quantity"] = 0.0
+        self.assert_invalid_request(request)
+
+    def test_event_payload_rejects_nested_non_finite_numbers(self) -> None:
+        for value in (float("nan"), float("inf"), float("-inf")):
+            with self.subTest(value=value):
+                event = valid_event()
+                event["payload"] = {"outer": [{"inner": value}]}
+                self.assert_invalid_event(event)
+
+    def test_event_payload_accepts_recursive_json_values(self) -> None:
+        event = valid_event()
+        event["payload"] = {
+            "null": None,
+            "boolean": True,
+            "integer": 1,
+            "number": 1.5,
+            "string": "value",
+            "array": [None, False, 2, 2.5, "nested"],
+            "object": {"nested": "value"},
+        }
+
+        parsed = RecommendationEvent.model_validate(event)
+
+        self.assertEqual(parsed.payload["object"], {"nested": "value"})
 
     def test_rejects_unknown_properties(self) -> None:
         value = valid_request()
@@ -257,6 +311,75 @@ class RecommendationContractsTest(unittest.TestCase):
     def test_rejects_display_facts_for_actions_outside_authoritative_offer(self) -> None:
         value = valid_response()
         value["displayFacts"][0]["actionId"] = "action-not-offered"
+
+        self.assert_invalid_response(value)
+
+    def test_parses_complete_sanity_merchandising_replacement_response(self) -> None:
+        value = valid_response()
+        action = replace_cart_line_action()
+        value["decisionSource"] = "merchandising_replacement"
+        value["primaryOffer"] = {"actions": [action]}
+        value["displayFacts"] = [display_fact(action["actionId"])]
+
+        parsed = RecommendationDecisionResponse.model_validate(value)
+
+        self.assertEqual(parsed.decision_source, "merchandising_replacement")
+        self.assertEqual(parsed.primary_offer.actions[0].type, "replace_cart_line")
+
+    def test_replacement_action_requires_merchandising_replacement_source(self) -> None:
+        for decision_source in ("ranked", "fallback", "suppressed"):
+            with self.subTest(decision_source=decision_source):
+                value = valid_response()
+                action = replace_cart_line_action()
+                value["decisionSource"] = decision_source
+                value["primaryOffer"] = {"actions": [action]}
+                value["displayFacts"] = [display_fact(action["actionId"])]
+
+                self.assert_invalid_response(value)
+
+    def test_merchandising_replacement_rejects_mixed_actions(self) -> None:
+        value = valid_response()
+        replacement = replace_cart_line_action()
+        value["decisionSource"] = "merchandising_replacement"
+        value["primaryOffer"] = {
+            "actions": [replacement, product_action("action-product-002")]
+        }
+        value["displayFacts"] = [
+            display_fact(replacement["actionId"]),
+            display_fact("action-product-002"),
+        ]
+        value["counts"]["displayed"] = 2
+
+        self.assert_invalid_response(value)
+
+    def test_non_replacement_merchandising_response_uses_normal_placement_rules(
+        self,
+    ) -> None:
+        value = valid_response()
+        value["decisionSource"] = "merchandising_replacement"
+
+        self.assertEqual(
+            RecommendationDecisionResponse.model_validate(value).placement, "for_you"
+        )
+
+    def test_requires_strict_sanity_snapshot_binding(self) -> None:
+        value = valid_response()
+        value["versionBindings"]["sanitySnapshot"] = sanity_snapshot_binding()
+
+        parsed = RecommendationDecisionResponse.model_validate(value)
+        self.assertEqual(
+            parsed.version_bindings.sanity_snapshot.snapshot_id,
+            "sanity-snapshot-001",
+        )
+
+        value["versionBindings"]["sanitySnapshot"] = "sanity-snapshot-001"
+        self.assert_invalid_response(value)
+
+    def test_rejects_duplicate_sanity_snapshot_contributing_revisions(self) -> None:
+        value = valid_response()
+        binding = sanity_snapshot_binding()
+        binding["contributingRevisions"].append("sanity-policies-revision-001")
+        value["versionBindings"]["sanitySnapshot"] = binding
 
         self.assert_invalid_response(value)
 
