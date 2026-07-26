@@ -104,13 +104,17 @@ function outcome(input: {
   placement: RecommendationEvent['placement'];
   eventType: RecommendationEvent['eventType'];
   actionId?: string | null;
+  recommendationId?: string | null;
+  requestId?: string;
+  cartRevision?: string | null;
 }): RecommendationEvent {
   return parseRecommendationEvent({
     schemaVersion: 'kfc-recommendation-event-v1',
     eventId: input.eventId,
     eventType: input.eventType,
-    recommendationId: `recommendation-${input.placement}-001`,
-    requestId: `request-${input.placement}-001`,
+    recommendationId:
+      input.recommendationId ?? `recommendation-${input.placement}-001`,
+    requestId: input.requestId ?? `request-${input.placement}-001`,
     orderFlowId: 'order-flow-001',
     sessionId: 'session-001',
     placement: input.placement,
@@ -118,10 +122,48 @@ function outcome(input: {
     recordedAt: '2026-07-27T09:00:11Z',
     actor: 'client',
     actionId: input.actionId ?? `action-${input.placement}-001`,
-    cartRevision: 'cart-revision-001',
+    cartRevision: input.cartRevision ?? 'cart-revision-001',
     versionBindings,
     payload: {},
   });
+}
+
+function modifierPending() {
+  const modifierEligible = applyRecommendationOutcome(
+    applyRecommendationDecision(
+      initialRecommendationState('order-flow-001'),
+      decision({ placement: 'for_you' }),
+      '2026-07-27T09:00:00Z',
+    ),
+    outcome({
+      eventId: 'event-starter-mutation-001',
+      placement: 'for_you',
+      eventType: 'cart_mutation_succeeded',
+    }),
+    ['action-for_you-001'],
+  );
+  return applyRecommendationDecision(
+    modifierEligible,
+    decision({ placement: 'modifier_upsell' }),
+    '2026-07-27T09:01:00Z',
+  );
+}
+
+function smartEligible() {
+  return {
+    ...initialRecommendationState('order-flow-001'),
+    revision: 3,
+    stage: 'smart_cross_sell_eligible' as const,
+    nextEligiblePlacement: 'smart_cross_sell' as const,
+  };
+}
+
+function smartPending() {
+  return applyRecommendationDecision(
+    smartEligible(),
+    decision({ placement: 'smart_cross_sell' }),
+    '2026-07-27T09:02:00Z',
+  );
 }
 
 describe('durable recommendation state machine', () => {
@@ -193,7 +235,7 @@ describe('durable recommendation state machine', () => {
       revision: 2,
       stage: 'modifier_eligible',
       nextEligiblePlacement: 'modifier_upsell',
-      pendingRecommendation: { placement: 'local_favorite' },
+      pendingRecommendation: null,
     });
   });
 
@@ -226,24 +268,7 @@ describe('durable recommendation state machine', () => {
   });
 
   it('moves a dismissed modifier to Smart Cross-sell eligibility and rejects its displayed actions', () => {
-    const modifierEligible = applyRecommendationOutcome(
-      applyRecommendationDecision(
-        initialRecommendationState('order-flow-001'),
-        decision({ placement: 'for_you' }),
-        '2026-07-27T09:00:00Z',
-      ),
-      outcome({
-        eventId: 'event-starter-mutation-001',
-        placement: 'for_you',
-        eventType: 'cart_mutation_succeeded',
-      }),
-      ['action-for_you-001'],
-    );
-    const modifier = applyRecommendationDecision(
-      modifierEligible,
-      decision({ placement: 'modifier_upsell' }),
-      '2026-07-27T09:01:00Z',
-    );
+    const modifier = modifierPending();
     const next = applyRecommendationOutcome(
       modifier,
       outcome({
@@ -264,23 +289,14 @@ describe('durable recommendation state machine', () => {
   });
 
   it('moves an ignored Smart Cross-sell recommendation to complete without rejection', () => {
-    const smartEligible = {
-      ...initialRecommendationState('order-flow-001'),
-      revision: 3,
-      stage: 'smart_cross_sell_eligible' as const,
-      nextEligiblePlacement: 'smart_cross_sell' as const,
-    };
-    const smart = applyRecommendationDecision(
-      smartEligible,
-      decision({ placement: 'smart_cross_sell' }),
-      '2026-07-27T09:02:00Z',
-    );
+    const smart = smartPending();
     const next = applyRecommendationOutcome(
       smart,
       outcome({
         eventId: 'event-smart-ignored-001',
         placement: 'smart_cross_sell',
         eventType: 'ignored',
+        actionId: 'action-smart-001',
       }),
       ['action-smart-001', 'action-smart-002', 'action-smart-003'],
     );
@@ -331,6 +347,206 @@ describe('durable recommendation state machine', () => {
         ['action-for_you-001'],
       ),
     ).toEqual(dismissed);
+  });
+
+  it('does not advance a starter on selection before cart mutation succeeds', () => {
+    const starter = applyRecommendationDecision(
+      initialRecommendationState('order-flow-001'),
+      decision({ placement: 'for_you' }),
+      '2026-07-27T09:00:00Z',
+    );
+    const next = applyRecommendationOutcome(
+      starter,
+      outcome({
+        eventId: 'event-starter-selected-001',
+        placement: 'for_you',
+        eventType: 'selected',
+      }),
+      ['action-for_you-001'],
+    );
+
+    expect(next).toMatchObject({
+      revision: 2,
+      stage: 'starter_resolved',
+      pendingRecommendation: { placement: 'for_you' },
+    });
+  });
+
+  it('moves a selected modifier to Smart Cross-sell eligibility', () => {
+    const next = applyRecommendationOutcome(
+      modifierPending(),
+      outcome({
+        eventId: 'event-modifier-selected-001',
+        placement: 'modifier_upsell',
+        eventType: 'selected',
+      }),
+      ['action-modifier_upsell-001'],
+    );
+
+    expect(next.stage).toBe('smart_cross_sell_eligible');
+  });
+
+  it('moves an ignored modifier to Smart Cross-sell eligibility', () => {
+    const next = applyRecommendationOutcome(
+      modifierPending(),
+      outcome({
+        eventId: 'event-modifier-ignored-001',
+        placement: 'modifier_upsell',
+        eventType: 'ignored',
+      }),
+      ['action-modifier_upsell-001'],
+    );
+
+    expect(next.stage).toBe('smart_cross_sell_eligible');
+  });
+
+  it('moves a superseded modifier to Smart Cross-sell eligibility', () => {
+    const next = applyRecommendationOutcome(
+      modifierPending(),
+      outcome({
+        eventId: 'event-modifier-superseded-001',
+        placement: 'modifier_upsell',
+        eventType: 'superseded',
+      }),
+      ['action-modifier_upsell-001'],
+    );
+
+    expect(next.stage).toBe('smart_cross_sell_eligible');
+  });
+
+  it('moves an empty Smart Cross-sell decision to complete', () => {
+    const next = applyRecommendationDecision(
+      smartEligible(),
+      decision({ placement: 'smart_cross_sell', status: 'empty' }),
+      '2026-07-27T09:02:00Z',
+    );
+
+    expect(next.stage).toBe('complete');
+  });
+
+  it('moves a suppressed Smart Cross-sell decision to complete', () => {
+    const next = applyRecommendationDecision(
+      smartEligible(),
+      decision({ placement: 'smart_cross_sell', status: 'suppressed' }),
+      '2026-07-27T09:02:00Z',
+    );
+
+    expect(next.stage).toBe('complete');
+  });
+
+  it('moves a selected Smart Cross-sell recommendation to complete', () => {
+    const next = applyRecommendationOutcome(
+      smartPending(),
+      outcome({
+        eventId: 'event-smart-selected-001',
+        placement: 'smart_cross_sell',
+        eventType: 'selected',
+        actionId: 'action-smart-001',
+      }),
+      ['action-smart-001', 'action-smart-002', 'action-smart-003'],
+    );
+
+    expect(next.stage).toBe('complete');
+  });
+
+  it('moves a dismissed Smart Cross-sell recommendation to complete', () => {
+    const next = applyRecommendationOutcome(
+      smartPending(),
+      outcome({
+        eventId: 'event-smart-dismissed-001',
+        placement: 'smart_cross_sell',
+        eventType: 'explicitly_dismissed',
+        actionId: 'action-smart-001',
+      }),
+      ['action-smart-001', 'action-smart-002', 'action-smart-003'],
+    );
+
+    expect(next.stage).toBe('complete');
+  });
+
+  it('moves a superseded Smart Cross-sell recommendation to complete', () => {
+    const next = applyRecommendationOutcome(
+      smartPending(),
+      outcome({
+        eventId: 'event-smart-superseded-001',
+        placement: 'smart_cross_sell',
+        eventType: 'superseded',
+        actionId: 'action-smart-001',
+      }),
+      ['action-smart-001', 'action-smart-002', 'action-smart-003'],
+    );
+
+    expect(next.stage).toBe('complete');
+  });
+
+  it('rejects outcomes whose request, action, or non-mutation cart revision does not match the pending decision', () => {
+    const pending = applyRecommendationDecision(
+      initialRecommendationState('order-flow-001'),
+      decision({ placement: 'for_you' }),
+      '2026-07-27T09:00:00Z',
+    );
+    const before = structuredClone(pending);
+
+    expect(() =>
+      applyRecommendationOutcome(
+        pending,
+        outcome({
+          eventId: 'event-wrong-request-001',
+          placement: 'for_you',
+          eventType: 'ignored',
+          requestId: 'request-other-001',
+        }),
+        ['action-for_you-001'],
+      ),
+    ).toThrow('recommendation_outcome_not_pending');
+    expect(() =>
+      applyRecommendationOutcome(
+        pending,
+        outcome({
+          eventId: 'event-wrong-action-001',
+          placement: 'for_you',
+          eventType: 'selected',
+          actionId: 'action-other-001',
+        }),
+        ['action-for_you-001'],
+      ),
+    ).toThrow('recommendation_outcome_not_pending');
+    expect(() =>
+      applyRecommendationOutcome(
+        pending,
+        outcome({
+          eventId: 'event-wrong-cart-001',
+          placement: 'for_you',
+          eventType: 'ignored',
+          cartRevision: 'cart-revision-other-001',
+        }),
+        ['action-for_you-001'],
+      ),
+    ).toThrow('recommendation_outcome_not_pending');
+    expect(pending).toEqual(before);
+  });
+
+  it('increments revision once for a new outcome and never mutates input state', () => {
+    const pending = applyRecommendationDecision(
+      initialRecommendationState('order-flow-001'),
+      decision({ placement: 'for_you' }),
+      '2026-07-27T09:00:00Z',
+    );
+    const before = structuredClone(pending);
+    const event = outcome({
+      eventId: 'event-exactly-once-001',
+      placement: 'for_you',
+      eventType: 'ignored',
+    });
+    const first = applyRecommendationOutcome(pending, event, [
+      'action-for_you-001',
+    ]);
+
+    expect(first.revision).toBe(pending.revision + 1);
+    expect(
+      applyRecommendationOutcome(first, event, ['action-for_you-001']),
+    ).toEqual(first);
+    expect(pending).toEqual(before);
   });
 
   it('keeps completed proactive state unchanged for customer-requested decisions', () => {

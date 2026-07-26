@@ -127,15 +127,34 @@ function isOutcomeEvent(event: RecommendationEvent): boolean {
   ].includes(event.eventType);
 }
 
-function eventMatchesPending(
+function pendingForOutcome(
   state: RecommendationState,
   event: RecommendationEvent,
-): boolean {
-  return (
-    state.pendingRecommendation !== null &&
-    state.pendingRecommendation.placement === event.placement &&
-    state.pendingRecommendation.recommendationId === event.recommendationId
-  );
+): NonNullable<RecommendationState['pendingRecommendation']> {
+  const pending = state.pendingRecommendation;
+  const actionRequired = [
+    'selected',
+    'cart_mutation_succeeded',
+    'cart_mutation_failed',
+  ].includes(event.eventType);
+  const mutationOutcome = [
+    'cart_mutation_succeeded',
+    'cart_mutation_failed',
+  ].includes(event.eventType);
+  if (
+    pending === null ||
+    pending.placement !== event.placement ||
+    pending.recommendationId !== event.recommendationId ||
+    pending.requestId !== event.requestId ||
+    (actionRequired && event.actionId === null) ||
+    (event.actionId !== null && !pending.actionIds.includes(event.actionId)) ||
+    (!mutationOutcome &&
+      event.cartRevision !== null &&
+      event.cartRevision !== pending.cartRevision)
+  ) {
+    throw new Error('recommendation_outcome_not_pending');
+  }
+  return pending;
 }
 
 export function initialRecommendationState(
@@ -266,6 +285,7 @@ export function applyRecommendationOutcome(
     throw new Error('recommendation_outcome_event_invalid');
   }
   if (current.recordedOutcomeEventIds.includes(outcome.eventId)) return current;
+  pendingForOutcome(current, outcome);
 
   const rejectedActionIds =
     outcome.eventType === 'explicitly_dismissed'
@@ -281,7 +301,6 @@ export function applyRecommendationOutcome(
     rejectedActionIds,
   });
 
-  if (!eventMatchesPending(current, outcome)) return next;
   const clearsPending = [
     'explicitly_dismissed',
     'ignored',
@@ -293,6 +312,7 @@ export function applyRecommendationOutcome(
       return parseRecommendationState({
         ...next,
         stage: 'modifier_eligible',
+        pendingRecommendation: null,
         nextEligiblePlacement: 'modifier_upsell',
       });
     }

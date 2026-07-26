@@ -57,4 +57,18 @@ describe('verified state projection', () => {
       }),
     ).resolves.toEqual({});
   });
+
+  it('does not recover business state from a legacy event bag', async () => {
+    const store = new MemoryStore();
+
+    await expect(
+      loadVerifiedStateProjection({
+        store,
+        sessionId: 'session-a',
+        packRef: kfcRef,
+        schemaVersion: '1',
+        parseState,
+      }),
+    ).resolves.toBeUndefined();
+  });
 });
