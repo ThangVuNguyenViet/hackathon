@@ -35,6 +35,7 @@ import {
   validatePackStateEnvelope,
   type PackRef,
 } from '../runtime/businessPack.js';
+import { parseRecommendationState } from '../recommendations/domain/schemas.js';
 
 export function repriceCartWithDeliveryFee(
   state: AgentState,
@@ -411,6 +412,9 @@ export function buildVerifiedStateSnapshot(
     paymentMethodEvidence: state.paymentMethodEvidence,
     invoiceRequest: state.invoiceRequest,
     handoff: state.handoff,
+    recommendationState: state.recommendationState
+      ? parseRecommendationState(state.recommendationState)
+      : undefined,
     toolTrace: (state.toolTrace ?? []).map((trace) =>
       verifiedStateToolTraceForPersistence(trace),
     ),

@@ -1,0 +1,323 @@
+import type {
+  Placement,
+  RecommendationDecisionResponse,
+  RecommendationEvent,
+  RecommendationState,
+} from '../domain/contracts.js';
+import {
+  parseRecommendationDecisionResponse,
+  parseRecommendationEvent,
+  parseRecommendationState,
+} from '../domain/schemas.js';
+import type { RecommendationDecisionContext } from '../eligibility/types.js';
+import type { RecommendationRequestKind } from './types.js';
+
+type Flow = RecommendationDecisionContext['flow'];
+
+const starterPlacement = (placement: Placement): boolean =>
+  placement === 'local_favorite' || placement === 'for_you';
+
+function parsedState(state: RecommendationState): RecommendationState {
+  return parseRecommendationState(structuredClone(state));
+}
+
+function transition(
+  state: RecommendationState,
+  changes: Omit<Partial<RecommendationState>, 'revision'>,
+): RecommendationState {
+  return parseRecommendationState({
+    ...state,
+    ...changes,
+    revision: state.revision + 1,
+  });
+}
+
+function readyStageFor(
+  state: RecommendationState,
+  placement: Placement,
+): Flow['stage'] {
+  if (
+    state.stage === 'starter_eligible' &&
+    state.nextEligiblePlacement === 'starter' &&
+    starterPlacement(placement)
+  ) {
+    return 'starter_ready';
+  }
+  if (
+    state.stage === 'modifier_eligible' &&
+    state.nextEligiblePlacement === 'modifier_upsell' &&
+    placement === 'modifier_upsell'
+  ) {
+    return 'modifier_ready';
+  }
+  if (
+    (state.stage === 'modifier_resolved' ||
+      state.stage === 'smart_cross_sell_eligible') &&
+    state.nextEligiblePlacement === 'smart_cross_sell' &&
+    placement === 'smart_cross_sell'
+  ) {
+    return 'smart_cross_sell_ready';
+  }
+  return 'complete';
+}
+
+function assertOrderFlow(
+  state: RecommendationState,
+  orderFlowId: string,
+): void {
+  if (state.orderFlowId !== orderFlowId) {
+    throw new Error('recommendation_order_flow_mismatch');
+  }
+}
+
+function pendingFor(
+  response: RecommendationDecisionResponse,
+  decisionTime: string,
+): RecommendationState['pendingRecommendation'] {
+  if (response.status !== 'recommended' || !response.primaryOffer) return null;
+  return {
+    recommendationId: response.recommendationId,
+    requestId: response.requestId,
+    placement: response.placement,
+    actionIds: response.primaryOffer.actions.map((action) => action.actionId),
+    cartRevision: response.primaryOffer.actions[0]!.cartRevision,
+    traceRef: response.traceRef,
+    decidedAt: decisionTime,
+  };
+}
+
+function attemptsWith(
+  attemptedPlacements: RecommendationState['attemptedPlacements'],
+  placement: Placement,
+): RecommendationState['attemptedPlacements'] {
+  return [...attemptedPlacements, placement];
+}
+
+function appendUnique<T extends string>(
+  existing: readonly T[],
+  values: readonly T[],
+): T[] {
+  return [...new Set([...existing, ...values])];
+}
+
+function renderedActionIds(event: RecommendationEvent): string[] {
+  const payloadActionIds = event.payload.renderedActionIds;
+  const fromPayload = Array.isArray(payloadActionIds)
+    ? payloadActionIds.filter(
+        (value): value is string => typeof value === 'string',
+      )
+    : [];
+  return appendUnique(
+    fromPayload,
+    event.actionId === null ? [] : [event.actionId],
+  );
+}
+
+function isOutcomeEvent(event: RecommendationEvent): boolean {
+  return [
+    'selected',
+    'explicitly_dismissed',
+    'ignored',
+    'superseded',
+    'cart_mutation_succeeded',
+    'cart_mutation_failed',
+    'checkout_completed',
+    'order_abandoned',
+    'order_cancelled',
+  ].includes(event.eventType);
+}
+
+function eventMatchesPending(
+  state: RecommendationState,
+  event: RecommendationEvent,
+): boolean {
+  return (
+    state.pendingRecommendation !== null &&
+    state.pendingRecommendation.placement === event.placement &&
+    state.pendingRecommendation.recommendationId === event.recommendationId
+  );
+}
+
+export function initialRecommendationState(
+  orderFlowId: string,
+): RecommendationState {
+  return parseRecommendationState({
+    schemaVersion: 'kfc-recommendation-state-v1',
+    revision: 0,
+    orderFlowId,
+    stage: 'starter_eligible',
+    attemptedPlacements: [],
+    shownActionIds: [],
+    rejectedActionIds: [],
+    pendingRecommendation: null,
+    recordedOutcomeEventIds: [],
+    nextEligiblePlacement: 'starter',
+  });
+}
+
+export function flowForDecision(
+  state: RecommendationState,
+  placement: Placement,
+  requestKind: RecommendationRequestKind,
+): Flow {
+  const current = parsedState(state);
+  const alreadyAttempted = current.attemptedPlacements.includes(placement);
+  return {
+    stage:
+      requestKind === 'proactive' && alreadyAttempted
+        ? 'complete'
+        : readyStageFor(current, placement),
+    attemptedPlacements: [...current.attemptedPlacements],
+    previouslyShownActionIds: [...current.shownActionIds],
+    rejectedActionIds: [...current.rejectedActionIds],
+  };
+}
+
+export function applyRecommendationDecision(
+  state: RecommendationState,
+  response: RecommendationDecisionResponse,
+  decisionTime: string,
+): RecommendationState {
+  const current = parsedState(state);
+  const decision = parseRecommendationDecisionResponse(response);
+  assertOrderFlow(current, decision.orderFlowId);
+
+  if (current.stage === 'complete') return current;
+  if (
+    current.attemptedPlacements.includes(decision.placement) ||
+    readyStageFor(current, decision.placement) === 'complete'
+  ) {
+    throw new Error('recommendation_decision_not_eligible');
+  }
+
+  const attemptedPlacements = attemptsWith(
+    current.attemptedPlacements,
+    decision.placement,
+  );
+  const pendingRecommendation = pendingFor(decision, decisionTime);
+
+  if (starterPlacement(decision.placement)) {
+    return transition(current, {
+      stage: 'starter_resolved',
+      attemptedPlacements,
+      pendingRecommendation,
+      nextEligiblePlacement: null,
+    });
+  }
+  if (decision.placement === 'modifier_upsell') {
+    if (decision.status === 'recommended') {
+      return transition(current, {
+        stage: 'modifier_pending',
+        attemptedPlacements,
+        pendingRecommendation,
+        nextEligiblePlacement: null,
+      });
+    }
+    return transition(current, {
+      stage: 'smart_cross_sell_eligible',
+      attemptedPlacements,
+      pendingRecommendation: null,
+      nextEligiblePlacement: 'smart_cross_sell',
+    });
+  }
+  if (decision.status === 'recommended') {
+    return transition(current, {
+      stage: 'smart_cross_sell_pending',
+      attemptedPlacements,
+      pendingRecommendation,
+      nextEligiblePlacement: null,
+    });
+  }
+  return transition(current, {
+    stage: 'complete',
+    attemptedPlacements,
+    pendingRecommendation: null,
+    nextEligiblePlacement: null,
+  });
+}
+
+export function applyRecommendationImpression(
+  state: RecommendationState,
+  event: RecommendationEvent,
+): RecommendationState {
+  const current = parsedState(state);
+  const impression = parseRecommendationEvent(event);
+  assertOrderFlow(current, impression.orderFlowId);
+  if (impression.eventType !== 'impression_rendered') {
+    throw new Error('recommendation_impression_event_invalid');
+  }
+  const shownActionIds = appendUnique(
+    current.shownActionIds,
+    renderedActionIds(impression),
+  );
+  if (shownActionIds.length === current.shownActionIds.length) return current;
+  return transition(current, { shownActionIds });
+}
+
+export function applyRecommendationOutcome(
+  state: RecommendationState,
+  event: RecommendationEvent,
+  displayedActionIds: readonly string[],
+): RecommendationState {
+  const current = parsedState(state);
+  const outcome = parseRecommendationEvent(event);
+  assertOrderFlow(current, outcome.orderFlowId);
+  if (!isOutcomeEvent(outcome)) {
+    throw new Error('recommendation_outcome_event_invalid');
+  }
+  if (current.recordedOutcomeEventIds.includes(outcome.eventId)) return current;
+
+  const rejectedActionIds =
+    outcome.eventType === 'explicitly_dismissed'
+      ? appendUnique(
+          current.rejectedActionIds,
+          displayedActionIds as readonly (typeof current.rejectedActionIds)[number][],
+        )
+      : [...current.rejectedActionIds];
+  const next = transition(current, {
+    recordedOutcomeEventIds: appendUnique(current.recordedOutcomeEventIds, [
+      outcome.eventId,
+    ]),
+    rejectedActionIds,
+  });
+
+  if (!eventMatchesPending(current, outcome)) return next;
+  const clearsPending = [
+    'explicitly_dismissed',
+    'ignored',
+    'superseded',
+  ].includes(outcome.eventType);
+
+  if (starterPlacement(outcome.placement)) {
+    if (outcome.eventType === 'cart_mutation_succeeded') {
+      return parseRecommendationState({
+        ...next,
+        stage: 'modifier_eligible',
+        nextEligiblePlacement: 'modifier_upsell',
+      });
+    }
+    if (clearsPending)
+      return parseRecommendationState({ ...next, pendingRecommendation: null });
+    return next;
+  }
+  if (outcome.placement === 'modifier_upsell') {
+    if (clearsPending || outcome.eventType === 'selected') {
+      return parseRecommendationState({
+        ...next,
+        stage: 'smart_cross_sell_eligible',
+        pendingRecommendation: null,
+        nextEligiblePlacement: 'smart_cross_sell',
+      });
+    }
+    return next;
+  }
+  if (clearsPending || outcome.eventType === 'selected') {
+    return parseRecommendationState({
+      ...next,
+      stage: 'complete',
+      pendingRecommendation: null,
+      nextEligiblePlacement: null,
+    });
+  }
+  return next;
+}

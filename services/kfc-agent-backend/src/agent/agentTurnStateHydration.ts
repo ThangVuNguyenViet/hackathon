@@ -71,6 +71,7 @@ export function assembleLoadedTurnState(input: {
       paymentMethodEvidence: prior.paymentMethodEvidence,
       invoiceRequest: prior.invoiceRequest,
       handoff: prior.handoff,
+      recommendationState: prior.recommendationState,
       toolTrace: prior.toolTrace ?? [],
     }),
     customerTurnCount: countCustomerTurns(semanticTurns),

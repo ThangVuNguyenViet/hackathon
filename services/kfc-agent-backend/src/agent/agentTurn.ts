@@ -156,5 +156,6 @@ export type VerifiedStateSnapshot = Pick<
   | 'paymentMethodEvidence'
   | 'invoiceRequest'
   | 'handoff'
+  | 'recommendationState'
   | 'toolTrace'
 >;

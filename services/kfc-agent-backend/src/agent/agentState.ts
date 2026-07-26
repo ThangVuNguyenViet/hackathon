@@ -29,6 +29,7 @@ import type {
   VerifiedCollectionStore,
 } from '../ordering/types.js';
 import type { ExactCartAvailabilityObservationV2 } from '../ordering/exactCartAvailabilityAuthority.js';
+import type { RecommendationState } from '../recommendations/domain/contracts.js';
 
 export interface RetrievedEvidence {
   eventId: string;
@@ -91,5 +92,7 @@ export interface AgentState {
   paymentMethodEvidence?: GeneratedPaymentMethod[];
   invoiceRequest?: InvoiceRequest;
   handoff?: HandoffState;
+  /** Pack-owned durable progression for recommendation decisions. */
+  recommendationState?: RecommendationState;
   toolTrace?: ToolTraceEntry[];
 }

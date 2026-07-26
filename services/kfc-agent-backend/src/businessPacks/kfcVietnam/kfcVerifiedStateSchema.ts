@@ -14,6 +14,7 @@ import {
 import { exactCartAvailabilityObservationV2Schema } from '../../ordering/exactCartAvailabilityAuthority.js';
 import { resolvedFulfillmentAddressSchema } from '../../ordering/toolCatalog.js';
 import { TOOL_NAMES } from '../../ordering/types.js';
+import { recommendationStateSchema } from '../../recommendations/domain/schemas.js';
 
 const nonBlankStringSchema = z.string().min(1);
 const nonNegativeIntegerSchema = z.number().int().nonnegative();
@@ -484,6 +485,7 @@ export const kfcVerifiedStateSnapshotSchema = z
       .optional(),
     invoiceRequest: invoiceRequestSchema.optional(),
     handoff: handoffStateSchema.optional(),
+    recommendationState: recommendationStateSchema.optional(),
     toolTrace: z.array(toolTraceEntrySchema).optional(),
   })
   .strict();
