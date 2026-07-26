@@ -2,7 +2,7 @@ import { fakeModel } from '@langchain/core/testing';
 import { MemorySaver } from '@langchain/langgraph';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { OpenAiKfcAgent } from '../../src/agent/openAiKfcAgent.js';
-import type { OpenAIClient } from '@kfc/openai-agents-runtime';
+import { user, type OpenAIClient } from '@kfc/openai-agents-runtime';
 import { createRouteHandlers } from '../../src/api/routeHandlers.js';
 import { agentRunExecutionFence } from '../../src/persistence/agentRunExecutionLease.js';
 import { MemoryStore } from '../../src/persistence/memoryStore.js';
@@ -420,6 +420,10 @@ describe('channel presentation delivery compatibility', () => {
     );
     expect(traceEvent?.payload).toMatchObject({
       schemaVersion: 'openai-redacted-tool-trace-v1',
+      run: {
+        status: 'success',
+        latencyMs: expect.any(Number),
+      },
       calls: [
         {
           index: 0,
@@ -496,19 +500,21 @@ describe('channel presentation delivery compatibility', () => {
       debounceDeadlineAt: '2026-07-11T00:00:01.000Z',
     });
 
-    const appendTurn = store.appendTurn.bind(store);
-    vi.spyOn(store, 'appendTurn').mockImplementation(async (input) => {
-      const result = await appendTurn(input);
-      if (input.role === 'assistant') {
+    await store.addAgentSessionItems('messenger:stale_user', [
+      user('prior durable history'),
+    ]);
+    const commit = store.commitAssistantTurnIfRunCurrent.bind(store);
+    vi.spyOn(store, 'commitAssistantTurnIfRunCurrent').mockImplementation(
+      async (input) => {
         await store.setSessionAgentState({
           sessionId: 'messenger:stale_user',
           currentRunId: 'run_newer',
           generation: 2,
           debounceDeadlineAt: '2026-07-11T00:00:02.000Z',
         });
-      }
-      return result;
-    });
+        return commit(input);
+      },
+    );
     const handlers = createRouteHandlers({
       store,
       fixtures: createTestFixtures(),
@@ -541,6 +547,21 @@ describe('channel presentation delivery compatibility', () => {
       status: 'superseded',
       deliveryStatus: 'suppressed',
     });
+    expect(
+      (await store.listTurns('messenger:stale_user')).filter(
+        (turn) => turn.role === 'assistant',
+      ),
+    ).toEqual([]);
+    await expect(
+      store.listAgentSessionItems('messenger:stale_user'),
+    ).resolves.toEqual([user('prior durable history')]);
+    expect(
+      (await store.listEvents('messenger:stale_user')).filter(
+        (event) =>
+          event.sourceType === 'graph:verified_state' ||
+          event.sourceType === 'openai:tool_trace',
+      ),
+    ).toEqual([]);
     expect(
       handlers.dashboard
         .getEvents('messenger:stale_user')

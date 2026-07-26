@@ -745,17 +745,7 @@ describe("Cloudflare Worker backend", () => {
       messengerWebhookRequest(payload),
       workerEnv,
     );
-    expect(
-      messengerFetch.mock.calls.map((call) =>
-        JSON.parse(String(call[1]?.body ?? "{}")) as {
-          sender_action?: string | undefined;
-        },
-      ),
-    ).toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({ sender_action: "typing_on" }),
-      ]),
-    );
+    expect(messengerFetch).not.toHaveBeenCalled();
     const second = await worker.fetch(
       messengerWebhookRequest(payload),
       workerEnv,

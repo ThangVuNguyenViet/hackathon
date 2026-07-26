@@ -13,14 +13,19 @@ import {
 } from '@kfc/openai-agents-runtime';
 import type { Channel, ConversationTurnMetadata } from '../domain/types.js';
 import type { KfcGenUiAttachment } from '../genui/kfcGenUi.js';
-import type { ConversationStore } from '../persistence/contracts.js';
-import { buildBoundedRecentTurns } from '../session/sessionContext.js';
+import type {
+  AppendConversationTurnInput,
+  ConversationStore,
+} from '../persistence/contracts.js';
 import type { KfcOpenAiAgentRunContext } from './kfcOpenAiTools.js';
+import { BufferedConversationStoreAgentSession } from './bufferedConversationStoreAgentSession.js';
 
 export interface OpenAiToolCallTrace {
   name: string;
   arguments: Record<string, unknown>;
   result: unknown;
+  status?: 'success' | 'error';
+  durationMs?: number;
 }
 
 export interface OpenAiUsage {
@@ -34,6 +39,20 @@ export interface OpenAiKfcAgentOptions {
   model: string;
   instructions?: string;
   maxToolRounds?: number;
+}
+
+export interface OpenAiKfcAgentLifecycleObserver {
+  onRunStart?(): Promise<void> | void;
+  onToolEnd?(event: {
+    name: string;
+    status: 'success' | 'error';
+    durationMs: number;
+  }): Promise<void> | void;
+  onRunEnd?(event: {
+    status: 'success' | 'error';
+    latencyMs: number;
+    usage?: OpenAiUsage;
+  }): Promise<void> | void;
 }
 
 export interface OpenAiKfcAgentExecutionResult {
@@ -60,12 +79,15 @@ export interface OpenAiKfcAgentTurnInput {
   selectGenUi?: (
     result: OpenAiKfcAgentExecutionResult,
   ) => KfcGenUiAttachment | undefined;
+  lifecycle?: OpenAiKfcAgentLifecycleObserver;
 }
 
 export interface OpenAiKfcAgentTurnResult extends OpenAiKfcAgentExecutionResult {
   userTurnId: string;
   assistantTurnId: string;
   genUi?: KfcGenUiAttachment;
+  assistantTurn: AppendConversationTurnInput;
+  sdkSessionItems: AgentInputItem[];
 }
 
 const defaultInstructions = [
@@ -120,7 +142,10 @@ function recordCustomerIdentifiers(
   ) {
     structuralLabels.add(value.name.trim());
   }
-  for (const [identifierKey, labelKey] of customerAdministrativeIdentifierLabels) {
+  for (const [
+    identifierKey,
+    labelKey,
+  ] of customerAdministrativeIdentifierLabels) {
     const identifier = value[identifierKey];
     const label = value[labelKey];
     if (
@@ -163,7 +188,11 @@ function escapedRegExp(value: string): string {
   return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
-function isCurrencyOccurrence(source: string, start: number, length: number): boolean {
+function isCurrencyOccurrence(
+  source: string,
+  start: number,
+  length: number,
+): boolean {
   const before = source.slice(0, start);
   const after = source.slice(start + length);
   const currency = '(?:VND|VNĐ|đ|₫)';
@@ -178,7 +207,9 @@ function stripStructuralLabels(
   structuralLabels: ReadonlySet<string>,
 ): string {
   let result = customerText;
-  const labels = [...structuralLabels].sort((left, right) => right.length - left.length);
+  const labels = [...structuralLabels].sort(
+    (left, right) => right.length - left.length,
+  );
   for (const label of labels) {
     const pattern = new RegExp(
       `(^|[^\\p{L}\\p{N}_])${escapedRegExp(label)}(?=$|[^\\p{L}\\p{N}_])`,
@@ -195,19 +226,28 @@ function presentCustomerResponse(input: {
   toolCalls: OpenAiToolCallTrace[];
 }): string {
   const successfulHandoff = input.toolCalls.some(
-    (call) => call.name === 'handoff' && isRecord(call.result) && call.result.ok === true,
+    (call) =>
+      call.name === 'handoff' &&
+      isRecord(call.result) &&
+      call.result.ok === true,
   );
   if (successfulHandoff) {
     return 'Yêu cầu gặp nhân viên của bạn đã được ghi nhận và đang chờ nhân viên tiếp nhận. Hiện chưa có thời gian phản hồi được xác minh.';
   }
   const identifiers = new Map<string, string>();
   const structuralLabels = new Set<string>();
-  recordCustomerIdentifiers(input.verifiedBusinessContext, identifiers, structuralLabels);
+  recordCustomerIdentifiers(
+    input.verifiedBusinessContext,
+    identifiers,
+    structuralLabels,
+  );
   for (const call of input.toolCalls) {
     recordCustomerIdentifiers(call.result, identifiers, structuralLabels);
   }
   let customerText = input.responseText;
-  const entries = [...identifiers.entries()].sort(([left], [right]) => right.length - left.length);
+  const entries = [...identifiers.entries()].sort(
+    ([left], [right]) => right.length - left.length,
+  );
   for (const [identifier, label] of entries) {
     const pattern = new RegExp(
       `(^|[^\\p{L}\\p{N}_])(${escapedRegExp(identifier)})(?=$|[^\\p{L}\\p{N}_])`,
@@ -215,21 +255,19 @@ function presentCustomerResponse(input: {
     );
     customerText = customerText.replace(
       pattern,
-      (match: string, prefix: string, _matchedIdentifier: string, offset: number, source: string) =>
+      (
+        match: string,
+        prefix: string,
+        _matchedIdentifier: string,
+        offset: number,
+        source: string,
+      ) =>
         isCurrencyOccurrence(source, offset + prefix.length, identifier.length)
           ? match
           : `${prefix}${label}`,
     );
   }
   return stripStructuralLabels(customerText, structuralLabels);
-}
-
-function toAgentInput(history: Array<Record<string, unknown>>): AgentInputItem[] {
-  return history.map((item) =>
-    item.role === 'assistant'
-      ? assistant(String(item.content ?? ''))
-      : user(String(item.content ?? '')),
-  );
 }
 
 export class OpenAiKfcAgent {
@@ -246,7 +284,9 @@ export class OpenAiKfcAgent {
       modelProvider: new OpenAIProvider({
         openAIClient: options.client,
       }),
-      tracingDisabled: true,
+      tracingDisabled:
+        process.env.OPENAI_AGENTS_TRACING_DISABLED === 'true' ||
+        process.env.NODE_ENV === 'test',
       traceIncludeSensitiveData: false,
       toolExecution: { maxFunctionToolConcurrency: 1 },
       modelSettings: {
@@ -262,6 +302,44 @@ export class OpenAiKfcAgent {
         },
       },
     });
+    this.runner.on('agent_tool_start', (runContext, _agent, _tool, details) => {
+      const context = runContext.context as KfcOpenAiAgentRunContext;
+      if ('callId' in details.toolCall) {
+        context.toolStartedAt?.set(details.toolCall.callId, Date.now());
+      }
+    });
+    this.runner.on(
+      'agent_tool_end',
+      (runContext, _agent, tool_, result, details) => {
+        const context = runContext.context as KfcOpenAiAgentRunContext;
+        const callId =
+          'callId' in details.toolCall ? details.toolCall.callId : undefined;
+        const startedAt =
+          (callId ? context.toolStartedAt?.get(callId) : undefined) ??
+          Date.now();
+        if (callId) context.toolStartedAt?.delete(callId);
+        const durationMs = Math.max(0, Date.now() - startedAt);
+        let status: 'success' | 'error' = 'success';
+        try {
+          const value = JSON.parse(result) as unknown;
+          if (isRecord(value) && value.ok === false) status = 'error';
+        } catch {
+          // Non-JSON tool output is still a completed SDK tool call.
+        }
+        const trace = [...context.toolCalls]
+          .reverse()
+          .find((call) => call.name === tool_.name);
+        if (trace) {
+          trace.status = status;
+          trace.durationMs = durationMs;
+        }
+        void context.lifecycle?.onToolEnd?.({
+          name: tool_.name,
+          status,
+          durationMs,
+        });
+      },
+    );
   }
 
   private createSdkAgent(input: OpenAiKfcAgentTurnInput) {
@@ -269,35 +347,36 @@ export class OpenAiKfcAgent {
       name: 'KFC Vietnam ordering assistant',
       model: this.model,
       instructions: (runContext) =>
-        [this.instructions, ...runContext.context.developerMessages].join('\n\n'),
-      tools:
-        input.allowModelToolCalls === false
-          ? []
-          : input.tools,
+        [this.instructions, ...runContext.context.developerMessages].join(
+          '\n\n',
+        ),
+      tools: input.allowModelToolCalls === false ? [] : input.tools,
       toolUseBehavior: 'run_llm_again',
       resetToolChoice: true,
     });
   }
 
-  async respond(input: OpenAiKfcAgentTurnInput): Promise<OpenAiKfcAgentTurnResult> {
+  async respond(
+    input: OpenAiKfcAgentTurnInput,
+  ): Promise<OpenAiKfcAgentTurnResult> {
     const existingUserTurn = input.externalMessageId
-      ? await input.store.findTurnByExternalMessage(input.sessionId, input.externalMessageId)
+      ? await input.store.findTurnByExternalMessage(
+          input.sessionId,
+          input.externalMessageId,
+        )
       : undefined;
-    const userTurn = existingUserTurn ?? (await input.store.appendTurn({
-      sessionId: input.sessionId,
-      channel: input.channel,
-      role: 'user',
-      text: input.text,
-      externalMessageId: input.externalMessageId,
-      externalUserId: input.customerId,
-      deliveryStatus: 'received',
-      metadata: input.metadata,
-    }));
-    const history: Array<Record<string, unknown>> = buildBoundedRecentTurns(
-      await input.store.listTurns(input.sessionId),
-    )
-      .filter((turn) => turn.role === 'user' || turn.role === 'assistant')
-      .map((turn) => ({ role: turn.role, content: turn.text }));
+    const userTurn =
+      existingUserTurn ??
+      (await input.store.appendTurn({
+        sessionId: input.sessionId,
+        channel: input.channel,
+        role: 'user',
+        text: input.text,
+        externalMessageId: input.externalMessageId,
+        externalUserId: input.customerId,
+        deliveryStatus: 'received',
+        metadata: input.metadata,
+      }));
     const developerMessages: string[] = [];
     if (input.verifiedBusinessContext) {
       developerMessages.push(
@@ -316,69 +395,176 @@ export class OpenAiKfcAgent {
           input.metadata.customerCommand.kind === 'submit_address'
             ? 'Handle the verified structured address update and describe only its resulting draft, missing fields, serviceability, or quote.'
             : '',
-        ].filter(Boolean).join(' '),
+        ]
+          .filter(Boolean)
+          .join(' '),
       );
     }
 
     const runContext = {
       toolCalls: [] as OpenAiToolCallTrace[],
       developerMessages,
+      toolStartedAt: new Map<string, number>(),
+      lifecycle: input.lifecycle,
     };
-    for (const requiredCall of input.requiredToolCalls ?? []) {
-      const trustedTool = input.tools.find((tool) => tool.name === requiredCall.name);
-      if (!trustedTool) {
-        throw new Error(`Required customer action requested unknown tool: ${requiredCall.name}`);
+    const session = new BufferedConversationStoreAgentSession(
+      input.store,
+      input.sessionId,
+    );
+    const runStartedAt = Date.now();
+    await input.lifecycle?.onRunStart?.();
+    let completedUsage: OpenAiUsage | undefined;
+    let runStatus: 'success' | 'error' = 'error';
+    try {
+      const trustedItems: AgentInputItem[] = [];
+      for (const requiredCall of input.requiredToolCalls ?? []) {
+        const trustedTool = input.tools.find(
+          (tool) => tool.name === requiredCall.name,
+        );
+        if (!trustedTool) {
+          throw new Error(
+            `Required customer action requested unknown tool: ${requiredCall.name}`,
+          );
+        }
+        const callId = `trusted_${crypto.randomUUID()}`;
+        const toolStartedAt = Date.now();
+        let result: unknown;
+        try {
+          result = await invokeFunctionTool({
+            tool: trustedTool,
+            runContext: new RunContext(runContext),
+            input: JSON.stringify(requiredCall.arguments),
+          });
+        } catch (error) {
+          await input.lifecycle?.onToolEnd?.({
+            name: requiredCall.name,
+            status: 'error',
+            durationMs: Math.max(0, Date.now() - toolStartedAt),
+          });
+          throw error;
+        }
+        const trustedStatus =
+          isRecord(result) && result.ok === false ? 'error' : 'success';
+        const trustedDurationMs = Math.max(0, Date.now() - toolStartedAt);
+        const trustedTrace = [...runContext.toolCalls]
+          .reverse()
+          .find(
+            (call) =>
+              call.name === requiredCall.name &&
+              call.durationMs === undefined,
+          );
+        if (trustedTrace) {
+          trustedTrace.status = trustedStatus;
+          trustedTrace.durationMs = trustedDurationMs;
+        }
+        await input.lifecycle?.onToolEnd?.({
+          name: requiredCall.name,
+          status: trustedStatus,
+          durationMs: trustedDurationMs,
+        });
+        trustedItems.push(
+          {
+            type: 'function_call',
+            callId,
+            name: requiredCall.name,
+            arguments: JSON.stringify(requiredCall.arguments),
+            status: 'completed',
+          },
+          {
+            type: 'function_call_result',
+            callId,
+            name: requiredCall.name,
+            status: 'completed',
+            output: {
+              type: 'text',
+              text: JSON.stringify(result),
+            },
+          },
+        );
+        developerMessages.push(
+          `Verified trusted KFC action result: ${JSON.stringify(result)}`,
+        );
       }
-      const result = await invokeFunctionTool({
-        tool: trustedTool,
-        runContext: new RunContext(runContext),
-        input: JSON.stringify(requiredCall.arguments),
-      });
-      developerMessages.push(
-        `Verified trusted KFC action result: ${JSON.stringify(result)}`,
-      );
-    }
 
-    const runResult = await this.runner.run(this.createSdkAgent(input), toAgentInput(history), {
-      context: runContext,
-      maxTurns: this.maxToolRounds,
-    });
-    const execution: OpenAiKfcAgentExecutionResult = {
-      responseText: typeof runResult.finalOutput === 'string' ? runResult.finalOutput : '',
-      toolCalls: runContext.toolCalls,
-      usage: {
-        inputTokens: runResult.runContext.usage.inputTokens,
-        outputTokens: runResult.runContext.usage.outputTokens,
-        totalTokens: runResult.runContext.usage.totalTokens,
-      },
-    };
-    const genUi = input.selectGenUi?.(execution);
-    const responseText = presentCustomerResponse({
-      responseText: execution.responseText,
-      verifiedBusinessContext: input.verifiedBusinessContext,
-      toolCalls: execution.toolCalls,
-    });
-    const assistantMetadata = {
-      ...(input.metadata?.release ? { release: input.metadata.release } : {}),
-      ...(input.metadata?.responseProfile ? { responseProfile: input.metadata.responseProfile } : {}),
-      ...(genUi ? { genUi } : {}),
-    };
-    const assistantTurn = await input.store.appendTurn({
-      sessionId: input.sessionId,
-      channel: input.channel,
-      role: 'assistant',
-      text: responseText,
-      externalMessageId: null,
-      externalUserId: input.customerId,
-      deliveryStatus: 'pending',
-      metadata: Object.keys(assistantMetadata).length > 0 ? assistantMetadata : null,
-    });
-    return {
-      ...execution,
-      responseText,
-      userTurnId: userTurn.id,
-      assistantTurnId: assistantTurn.id,
-      ...(genUi ? { genUi } : {}),
-    };
+      const runResult = await this.runner.run(
+        this.createSdkAgent(input),
+        trustedItems.length > 0
+          ? [user(input.text), ...trustedItems]
+          : input.text,
+        {
+          context: runContext,
+          maxTurns: this.maxToolRounds,
+          session,
+        },
+      );
+      const execution: OpenAiKfcAgentExecutionResult = {
+        responseText:
+          typeof runResult.finalOutput === 'string'
+            ? runResult.finalOutput
+            : '',
+        toolCalls: runContext.toolCalls,
+        usage: {
+          inputTokens: runResult.runContext.usage.inputTokens,
+          outputTokens: runResult.runContext.usage.outputTokens,
+          totalTokens: runResult.runContext.usage.totalTokens,
+        },
+      };
+      completedUsage = execution.usage;
+      const genUi = input.selectGenUi?.(execution);
+      const responseText = presentCustomerResponse({
+        responseText: execution.responseText,
+        verifiedBusinessContext: input.verifiedBusinessContext,
+        toolCalls: execution.toolCalls,
+      });
+      if (responseText !== execution.responseText) {
+        const rawAssistant = await session.popItem();
+        if (
+          rawAssistant &&
+          'role' in rawAssistant &&
+          rawAssistant.role === 'assistant'
+        ) {
+          await session.addItems([assistant(responseText)]);
+        } else if (rawAssistant) {
+          await session.addItems([rawAssistant, assistant(responseText)]);
+        }
+      }
+      const assistantMetadata = {
+        ...(input.metadata?.release ? { release: input.metadata.release } : {}),
+        ...(input.metadata?.responseProfile
+          ? { responseProfile: input.metadata.responseProfile }
+          : {}),
+        ...(genUi ? { genUi } : {}),
+      };
+      const assistantTurn: AppendConversationTurnInput = {
+        id: `turn_${crypto.randomUUID()}`,
+        sessionId: input.sessionId,
+        channel: input.channel,
+        role: 'assistant',
+        text: responseText,
+        externalMessageId: null,
+        externalUserId: input.customerId,
+        deliveryStatus: 'pending',
+        metadata:
+          Object.keys(assistantMetadata).length > 0 ? assistantMetadata : null,
+      };
+      runStatus = 'success';
+      return {
+        ...execution,
+        responseText,
+        userTurnId: userTurn.id,
+        assistantTurnId: assistantTurn.id!,
+        assistantTurn,
+        sdkSessionItems: session.pendingItems(),
+        ...(genUi ? { genUi } : {}),
+      };
+    } finally {
+      await input.lifecycle?.onRunEnd?.({
+        status: runStatus,
+        latencyMs: Math.max(0, Date.now() - runStartedAt),
+        ...(runStatus === 'success' && completedUsage
+          ? { usage: completedUsage }
+          : {}),
+      });
+    }
   }
 }

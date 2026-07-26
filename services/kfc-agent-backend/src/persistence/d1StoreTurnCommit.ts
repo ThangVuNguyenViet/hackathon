@@ -1,4 +1,6 @@
 import type {
+  CommitAssistantTurnInput,
+  CommitAssistantTurnResult,
   CommitAssistantTurnIfRunCurrentInput,
   CommitAssistantTurnIfRunCurrentResult,
   RunCommitFence,
@@ -23,6 +25,31 @@ export async function commitD1AssistantTurnIfRunCurrent(input: {
   db: D1DatabaseLike;
   operation: CommitAssistantTurnIfRunCurrentInput;
 }): Promise<CommitAssistantTurnIfRunCurrentResult> {
+  return commitD1AssistantTurnOperation({
+    ...input,
+    eligibility: assistantTurnEligibility(input.operation),
+  });
+}
+
+export async function commitD1AssistantTurn(input: {
+  db: D1DatabaseLike;
+  operation: CommitAssistantTurnInput;
+}): Promise<CommitAssistantTurnResult> {
+  const result = await commitD1AssistantTurnOperation({
+    ...input,
+    eligibility: { sql: '1 = 1', bindings: [] },
+  });
+  if (result.status === 'stale') {
+    throw new Error('d1_unfenced_agent_turn_commit_stale');
+  }
+  return result;
+}
+
+async function commitD1AssistantTurnOperation(input: {
+  db: D1DatabaseLike;
+  operation: CommitAssistantTurnInput | CommitAssistantTurnIfRunCurrentInput;
+  eligibility: D1RunCommitPredicate;
+}): Promise<CommitAssistantTurnIfRunCurrentResult> {
   if (!input.db.batch) {
     throw new Error('d1_atomic_agent_turn_commit_unavailable');
   }
@@ -31,7 +58,7 @@ export async function commitD1AssistantTurnIfRunCurrent(input: {
   const requiredResultIndexes: number[] = [];
 
   if (prepared.verifiedRefs.length > 0) {
-    const eligible = assistantTurnEligibility(input.operation);
+    const eligible = input.eligibility;
     statements.push(
       input.db.prepare(
         `INSERT OR IGNORE INTO confirmation_pause_sessions
@@ -49,7 +76,7 @@ export async function commitD1AssistantTurnIfRunCurrent(input: {
         ...values.slice(0, 4),
         ...values.slice(5),
       ];
-      const current = assistantTurnEligibility(input.operation);
+      const current = input.eligibility;
       requiredResultIndexes.push(statements.length);
       statements.push(
         input.db.prepare(
@@ -77,20 +104,42 @@ export async function commitD1AssistantTurnIfRunCurrent(input: {
   statements.push(eventStatement(
     input.db,
     prepared.stateEvent,
-    assistantTurnEligibility(input.operation),
+    input.eligibility,
   ));
   requiredResultIndexes.push(statements.length);
   statements.push(turnStatement(
     input.db,
     prepared.turn,
-    assistantTurnEligibility(input.operation),
+    input.eligibility,
   ));
   requiredResultIndexes.push(statements.length);
   statements.push(eventStatement(
     input.db,
     prepared.turnEvent,
-    assistantTurnEligibility(input.operation),
+    input.eligibility,
   ));
+  if (prepared.auditEvent) {
+    requiredResultIndexes.push(statements.length);
+    statements.push(eventStatement(
+      input.db,
+      prepared.auditEvent,
+      input.eligibility,
+    ));
+  }
+  for (const item of prepared.sdkSessionItems) {
+    requiredResultIndexes.push(statements.length);
+    statements.push(
+      input.db.prepare(
+        `INSERT INTO agent_session_items (session_id, item_json)
+         SELECT ?, ?
+         WHERE ${input.eligibility.sql}`,
+      ).bind(
+        prepared.turn.sessionId,
+        JSON.stringify(item),
+        ...input.eligibility.bindings,
+      ),
+    );
+  }
 
   const results = await input.db.batch(statements);
   const changes = requiredResultIndexes.map(

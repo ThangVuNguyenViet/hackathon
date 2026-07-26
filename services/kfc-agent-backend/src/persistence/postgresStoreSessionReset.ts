@@ -138,6 +138,8 @@ export async function resetPostgresSession(input: {
        ), deleted_deliveries AS (
          DELETE FROM webhook_deliveries
          WHERE session_id = $1
+       ), deleted_agent_session_items AS (
+         DELETE FROM agent_session_items WHERE session_id = $1
        ), deleted_turns AS (
          DELETE FROM conversation_turns WHERE session_id = $1
        ), deleted_events AS (

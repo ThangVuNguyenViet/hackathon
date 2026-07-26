@@ -4,18 +4,6 @@ import { fileURLToPath } from 'node:url';
 import { z } from 'zod';
 import type { BaseCheckpointSaver } from '@langchain/langgraph';
 import { AgentRunCoordinator } from '../agentRuns/coordinator.js';
-import { createAgentTurnExternalCallScope } from '../agent/agentExternalCallScope.js';
-import {
-  createKfcOpenAiTools,
-  createKfcOpenAiAgentsTools,
-  createKfcToolSession,
-  verifiedKfcToolSessionContext,
-  type KfcToolSession,
-} from '../agent/kfcOpenAiTools.js';
-import {
-  hydrateKfcOpenAiToolSession,
-  persistKfcOpenAiToolSession,
-} from '../agent/kfcOpenAiToolSessionLifecycle.js';
 import type {
   ChannelMediaDeliveryResult,
   ExternalClients,
@@ -195,11 +183,8 @@ export function createRouteMessengerRuntime(
     pauseIfHumanJoined,
     latestUnansweredCustomerTurn,
     replyToLatestUnansweredCustomerTurn,
+    runDirectKfcTurn,
   } = input;
-  const openAiToolSessions = new Map<
-    string,
-    { clients: ExternalClients; session: KfcToolSession }
-  >();
   async function processMessengerEventInternal(
     event: ConversationEvent,
   ): Promise<MessengerWebhookEventProcessingResult> {
@@ -581,12 +566,6 @@ export function createRouteMessengerRuntime(
           'mark_seen',
           linkedTurns[0]!.externalMessageId,
         );
-        typingStarted = await sendMessengerSenderAction(
-          clients.messenger,
-          run.externalUserId,
-          'typing_on',
-          linkedTurns[0]!.externalMessageId,
-        );
       }
       const runGuard = {
         isCurrent: isCurrentRun,
@@ -670,7 +649,7 @@ export function createRouteMessengerRuntime(
         presentation = textOnlyPresentation(assistantTurn.text, run.channel);
         deliveryAssistantTurnId = assistantTurn.id;
       } else {
-        if (!options.openAiAgent) {
+        if (!options.openAiAgent || !runDirectKfcTurn) {
           const failed = await updateExecutingRun({
             status: 'failed',
             deliveryStatus: 'failed',
@@ -682,64 +661,41 @@ export function createRouteMessengerRuntime(
             ? { status: 'failed', errorCode: 'kfc_agent_not_configured' }
             : { status: 'skipped', errorCode: 'stale_agent_run' };
         }
-        const externalCalls = createAgentTurnExternalCallScope(120_000);
-        try {
-          let toolRuntime = openAiToolSessions.get(run.sessionId);
-          if (!toolRuntime) {
-            const freshSession = await createKfcToolSession(
-              clients,
-              run.sessionId,
-              run.externalUserId,
-              run.channel,
-              externalCalls.context,
-            );
-            toolRuntime = {
-              clients,
-              session: await hydrateKfcOpenAiToolSession({
-                store,
-                sessionId: run.sessionId,
-                freshSession,
-              }),
-            };
-            openAiToolSessions.set(run.sessionId, toolRuntime);
-          } else {
-            toolRuntime.session.externalCallContext = externalCalls.context;
-          }
-          const directOutput = await options.openAiAgent.respond({
+          const directOutput = await runDirectKfcTurn({
             sessionId: run.sessionId,
             customerId: run.externalUserId,
             channel: run.channel,
             text: run.coalescedInputText,
             externalMessageId: linkedTurns[0]!.externalMessageId,
             metadata: null,
-            store,
-            verifiedBusinessContext: verifiedKfcToolSessionContext(
-              toolRuntime.session,
-            ),
-            tools: createKfcOpenAiAgentsTools(createKfcOpenAiTools({
-              clients: toolRuntime.clients,
-              session: toolRuntime.session,
-              fixtures: await getFixtures(),
-              accessContext: await kfcProofAccessContext(
-                run.sessionId,
-                run.externalUserId,
-              ),
-            })),
+            clients,
+            fence: commitFence,
+            lifecycle: {
+              onRunStart: async () => {
+                typingStarted = await sendMessengerSenderAction(
+                  clients!.messenger,
+                  run.externalUserId,
+                  'typing_on',
+                  linkedTurns[0]!.externalMessageId,
+                );
+              },
+              onRunEnd: async () => {
+                if (!typingStarted) return;
+                await sendMessengerSenderAction(
+                  clients!.messenger,
+                  run.externalUserId,
+                  'typing_off',
+                  linkedTurns[0]!.externalMessageId,
+                );
+                typingStarted = false;
+              },
+            },
           });
           if (!(await isCurrentRun())) {
             await suppressRun('run_not_current_before_delivery');
             return { status: 'skipped', errorCode: 'stale_agent_run' };
           }
-          const stateCommit = await persistKfcOpenAiToolSession({
-            store,
-            sessionId: run.sessionId,
-            session: toolRuntime.session,
-            latestUserMessage: run.coalescedInputText,
-            toolCalls: directOutput.toolCalls,
-            assistantTurnId: directOutput.assistantTurnId,
-            fence: commitFence,
-          });
-          if (stateCommit === 'stale') {
+          if (directOutput.stateCommit === 'stale') {
             await suppressRun('run_not_current_before_state_commit');
             return { status: 'skipped', errorCode: 'stale_agent_run' };
           }
@@ -771,9 +727,6 @@ export function createRouteMessengerRuntime(
                 }
               : { status: 'skipped', errorCode: 'stale_agent_run' };
           }
-        } finally {
-          externalCalls.dispose();
-        }
       }
       if (!deliveryAssistantTurnId) {
         const failed = await updateExecutingRun({

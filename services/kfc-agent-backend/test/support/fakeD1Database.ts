@@ -1,5 +1,6 @@
 type Row = Record<string, unknown>;
 type TableName =
+  | 'agent_session_items'
   | 'conversation_turns'
   | 'conversation_profiles'
   | 'conversation_events'
@@ -32,6 +33,7 @@ interface QueryResult<T = Row> {
 export class FakeD1Database {
   readonly calls = { batch: 0, run: 0, first: 0, all: 0 };
   readonly tables = {
+    agent_session_items: [] as Row[],
     conversation_turns: [] as Row[],
     conversation_profiles: [] as Row[],
     conversation_events: [] as Row[],
@@ -55,6 +57,7 @@ export class FakeD1Database {
     verified_refs: [] as Row[],
     irreversible_operations: [] as Row[],
   };
+  private batchTail: Promise<void> = Promise.resolve();
   private readonly schemas = new Map<TableName, Set<string>>();
   beforeConfirmationPauseUpdate?: (
     kind: 'expire' | 'reject' | 'complete',
@@ -69,6 +72,12 @@ export class FakeD1Database {
 
   async batch(statements: FakeD1PreparedStatement[]): Promise<QueryResult[]> {
     this.calls.batch += 1;
+    let releaseBatch!: () => void;
+    const previousBatch = this.batchTail;
+    this.batchTail = new Promise<void>((resolve) => {
+      releaseBatch = resolve;
+    });
+    await previousBatch;
     const snapshot = Object.fromEntries(
       Object.entries(this.tables).map(([name, rows]) => [
         name,
@@ -90,6 +99,8 @@ export class FakeD1Database {
         );
       }
       throw error;
+    } finally {
+      releaseBatch();
     }
   }
 
@@ -171,6 +182,24 @@ class FakeD1PreparedStatement {
     if (normalized.startsWith('ALTER TABLE')) {
       this.handleAlterTable(normalized);
       return ok();
+    }
+    if (normalized.startsWith('INSERT INTO agent_session_items')) {
+      if (
+        normalized.includes(' WHERE ') &&
+        !this.runCommitEligibilityIsCurrent(normalized, 2)
+      ) {
+        return ok(0);
+      }
+      const id = this.db.tables.agent_session_items.reduce(
+        (highest, row) => Math.max(highest, Number(row.id)),
+        0,
+      ) + 1;
+      this.db.tables.agent_session_items.push({
+        id,
+        session_id: this.values[0],
+        item_json: this.values[1],
+      });
+      return ok(1);
     }
     if (
       normalized.startsWith(
@@ -1450,6 +1479,25 @@ class FakeD1PreparedStatement {
       }
       return ok(row ? 1 : 0);
     }
+    if (
+      normalized.startsWith('DELETE FROM agent_session_items') &&
+      normalized.includes('RETURNING item_json')
+    ) {
+      const sessionId = this.values[0];
+      const index = this.db.tables.agent_session_items.reduce(
+        (latestIndex, row, currentIndex, rows) => {
+          if (row.session_id !== sessionId) return latestIndex;
+          if (latestIndex < 0) return currentIndex;
+          return Number(row.id) > Number(rows[latestIndex]?.id)
+            ? currentIndex
+            : latestIndex;
+        },
+        -1,
+      );
+      if (index < 0) return { ...ok(0), results: [] };
+      const [removed] = this.db.tables.agent_session_items.splice(index, 1);
+      return { ...ok(1), results: [{ item_json: removed?.item_json }] };
+    }
     if (normalized.startsWith('DELETE FROM ')) {
       this.handleDelete(normalized);
       return ok();
@@ -2135,6 +2183,10 @@ class FakeD1PreparedStatement {
       (
         normalized.startsWith('UPDATE ') &&
         normalized.includes(' RETURNING ')
+      ) ||
+      (
+        normalized.startsWith('DELETE FROM agent_session_items') &&
+        normalized.includes(' RETURNING ')
       )
     ) {
       const result = await this.run();
@@ -2151,6 +2203,18 @@ class FakeD1PreparedStatement {
 
   private async selectRows<T>(): Promise<T[]> {
     const normalized = normalizeSql(this.query);
+    if (normalized.includes('FROM agent_session_items')) {
+      const sessionId = this.values[0];
+      let rows = this.db.tables.agent_session_items
+        .filter((row) => row.session_id === sessionId)
+        .sort((left, right) => Number(left.id) - Number(right.id));
+      if (normalized.includes('ORDER BY id DESC LIMIT ?')) {
+        rows = rows.slice().reverse().slice(0, Number(this.values[1])).reverse();
+      }
+      // Fake query rows are projected to the caller-requested D1 result type.
+      // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion
+      return rows.map((row) => ({ item_json: row.item_json })) as T[];
+    }
     if (normalized.startsWith('PRAGMA table_info(')) {
       const table = normalized.match(/^PRAGMA table_info\(([^)]+)\)$/)?.[1] as TableName | undefined;
       if (!table || !this.db.hasTable(table)) return [];

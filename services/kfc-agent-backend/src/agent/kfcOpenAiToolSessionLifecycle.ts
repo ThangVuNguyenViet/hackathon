@@ -51,6 +51,12 @@ async function redactedToolCalls(
     toolCalls.map(async (call, index) => ({
       index,
       name: call.name,
+      status:
+        call.status ??
+        (isRecord(call.result) && call.result.ok === false
+          ? 'error'
+          : 'success'),
+      ...(call.durationMs === undefined ? {} : { durationMs: call.durationMs }),
       arguments: {
         redacted: true,
         keys: Object.keys(call.arguments).sort(),
@@ -81,23 +87,29 @@ export async function persistKfcOpenAiToolSession(input: {
   assistantTurnId: string;
   customerCommand?: CustomerCommand;
   fence?: RunCommitFence;
+  runMetrics?: {
+    status: 'success' | 'error';
+    latencyMs: number;
+    usage?: {
+      inputTokens: number;
+      outputTokens: number;
+      totalTokens: number;
+    };
+  };
 }): Promise<'committed' | 'stale'> {
-  const verifiedState = projectKfcOpenAiGenUiState({
-    session: input.session,
-    latestUserMessage: input.latestUserMessage,
-    toolCalls: input.toolCalls,
-    customerCommand: input.customerCommand,
-  }).state;
+  const publication = await prepareKfcOpenAiToolSessionPublication(input);
+  const { verifiedState } = publication;
+  const tracePayload = publication.auditPayload;
   if (!input.fence) {
     await input.store.appendEvent(input.sessionId, 'graph:verified_state', {
       verifiedState,
     });
-    if (input.toolCalls.length > 0) {
-      await input.store.appendEvent(input.sessionId, 'openai:tool_trace', {
-        schemaVersion: 'openai-redacted-tool-trace-v1',
-        assistantTurnId: input.assistantTurnId,
-        calls: await redactedToolCalls(input.toolCalls),
-      });
+    if (tracePayload) {
+      await input.store.appendEvent(
+        input.sessionId,
+        'openai:tool_trace',
+        tracePayload,
+      );
     }
     return 'committed';
   }
@@ -107,18 +119,49 @@ export async function persistKfcOpenAiToolSession(input: {
     payload: { verifiedState },
     fence: input.fence,
   });
-  if (result.status === 'stale' || input.toolCalls.length === 0) {
-    return result.status;
-  }
+  if (result.status === 'stale' || !tracePayload) return result.status;
   await input.store.appendEventIfRunCurrent({
     sessionId: input.sessionId,
     sourceType: 'openai:tool_trace',
-    payload: {
-      schemaVersion: 'openai-redacted-tool-trace-v1',
-      assistantTurnId: input.assistantTurnId,
-      calls: await redactedToolCalls(input.toolCalls),
-    },
+    payload: tracePayload,
     fence: input.fence,
   });
   return 'committed';
+}
+
+export async function prepareKfcOpenAiToolSessionPublication(input: {
+  session: KfcToolSession;
+  latestUserMessage: string;
+  toolCalls: OpenAiToolCallTrace[];
+  assistantTurnId: string;
+  customerCommand?: CustomerCommand;
+  runMetrics?: {
+    status: 'success' | 'error';
+    latencyMs: number;
+    usage?: {
+      inputTokens: number;
+      outputTokens: number;
+      totalTokens: number;
+    };
+  };
+}): Promise<{
+  verifiedState: Record<string, unknown>;
+  auditPayload?: Record<string, unknown>;
+}> {
+  const verifiedState = projectKfcOpenAiGenUiState({
+    session: input.session,
+    latestUserMessage: input.latestUserMessage,
+    toolCalls: input.toolCalls,
+    customerCommand: input.customerCommand,
+  }).state as unknown as Record<string, unknown>;
+  const auditPayload =
+    input.toolCalls.length > 0 || input.runMetrics
+      ? {
+        schemaVersion: 'openai-redacted-tool-trace-v1',
+        assistantTurnId: input.assistantTurnId,
+        ...(input.runMetrics ? { run: input.runMetrics } : {}),
+        calls: await redactedToolCalls(input.toolCalls),
+        }
+      : undefined;
+  return { verifiedState, ...(auditPayload ? { auditPayload } : {}) };
 }

@@ -1,6 +1,6 @@
 import { AgentRunCoordinator } from './agentRuns/coordinator.js';
 import type { ConversationEvent } from './channels/conversationEvent.js';
-import { createMessengerClient, normalizeMessengerWebhook } from './channels/messenger.js';
+import { normalizeMessengerWebhook } from './channels/messenger.js';
 import { createMessengerHistoryClient, MessengerHistorySyncCoordinator, MessengerHistorySyncService } from './channels/messengerHistory.js';
 import { normalizeZaloWebhook } from './channels/zalo.js';
 import { DashboardEventBus } from './dashboard/eventBus.js';
@@ -127,7 +127,6 @@ export async function enqueueMessengerWebhook(
       const humanPaused =
         (await store.getSessionControl(sessionId)).agentMode === "human_paused";
       if (!humanPaused) {
-        scheduleImmediateMessengerTyping(env, event, context);
         const coordinator = new AgentRunCoordinator({ store, dashboard });
         const wakeup = await coordinator.recordPendingTurn(event, sessionId);
         const exactIngress = verifiedIngress.find(
@@ -192,44 +191,6 @@ export async function enqueueMessengerWebhook(
   }
 
   return { status: 200, body: stats };
-}
-
-export function scheduleImmediateMessengerTyping(
-  env: WorkerEnv,
-  event: ConversationEvent,
-  context?: WorkerExecutionContext,
-): void {
-  const messenger = createMessengerClient({
-    pageAccessToken: env.META_PAGE_ACCESS_TOKEN,
-    graphApiBaseUrl: env.MESSENGER_GRAPH_API_BASE_URL,
-    fetchImpl: workerMessengerFetch(env),
-  });
-  const task = (async () => {
-    const seen = await messenger.sendSenderAction(
-      event.externalUserId,
-      "mark_seen",
-    );
-    if (!seen.ok) {
-      console.warn("messenger_immediate_mark_seen_failed", {
-        rawEventId: event.rawEventId,
-        errorCode: seen.errorCode,
-        message: seen.message,
-      });
-    }
-    const typing = await messenger.sendSenderAction(
-      event.externalUserId,
-      "typing_on",
-    );
-    if (!typing.ok) {
-      console.warn("messenger_immediate_typing_failed", {
-        rawEventId: event.rawEventId,
-        errorCode: typing.errorCode,
-        message: typing.message,
-      });
-    }
-  })();
-  if (context) context.waitUntil(task);
-  else void task;
 }
 
 export function staleDeliveryRecoveryOptionsFromUrl(url: URL): {

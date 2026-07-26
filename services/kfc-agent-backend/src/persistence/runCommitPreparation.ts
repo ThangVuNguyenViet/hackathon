@@ -4,19 +4,23 @@ import {
 } from '../domain/verifiedRef.js';
 import type { ConversationTurn } from '../domain/types.js';
 import type {
+  CommitAssistantTurnInput,
   CommitAssistantTurnIfRunCurrentInput,
   StoredEvent,
 } from './contracts.js';
+import type { AgentInputItem } from '@kfc/openai-agents-runtime';
 
 export interface PreparedAssistantTurnCommit {
   stateEvent: StoredEvent;
   turnEvent: StoredEvent;
   turn: ConversationTurn;
   verifiedRefs: VerifiedRefRecord[];
+  sdkSessionItems: AgentInputItem[];
+  auditEvent?: StoredEvent;
 }
 
 export function prepareAssistantTurnCommit(
-  input: CommitAssistantTurnIfRunCurrentInput,
+  input: CommitAssistantTurnInput | CommitAssistantTurnIfRunCurrentInput,
   now = new Date(),
 ): PreparedAssistantTurnCommit {
   if (
@@ -41,7 +45,7 @@ export function prepareAssistantTurnCommit(
   const turn: ConversationTurn = {
     ...structuredClone(input.assistantTurn),
     metadata: structuredClone(input.assistantTurn.metadata ?? null),
-    id: `turn_${crypto.randomUUID()}`,
+    id: input.assistantTurn.id ?? `turn_${crypto.randomUUID()}`,
     createdAt,
   };
   const stateEvent: StoredEvent = {
@@ -65,5 +69,21 @@ export function prepareAssistantTurnCommit(
     },
     createdAt: now.toISOString(),
   };
-  return { stateEvent, turnEvent, turn, verifiedRefs };
+  const auditEvent = input.auditEvent
+    ? {
+        id: `event_${crypto.randomUUID()}`,
+        sessionId: input.auditEvent.sessionId,
+        sourceType: input.auditEvent.sourceType,
+        payload: structuredClone(input.auditEvent.payload),
+        createdAt: now.toISOString(),
+      }
+    : undefined;
+  return {
+    stateEvent,
+    turnEvent,
+    turn,
+    verifiedRefs,
+    sdkSessionItems: [...structuredClone(input.sdkSessionItems ?? [])],
+    ...(auditEvent ? { auditEvent } : {}),
+  };
 }

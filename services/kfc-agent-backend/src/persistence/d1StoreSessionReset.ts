@@ -179,6 +179,10 @@ export async function resetD1Session(input: {
          AND ${resetFenceSql}`,
     ).bind(input.sessionId, input.sessionId, nextGeneration),
     input.db.prepare(
+      `DELETE FROM agent_session_items
+       WHERE session_id = ? AND ${resetFenceSql}`,
+    ).bind(input.sessionId, input.sessionId, nextGeneration),
+    input.db.prepare(
       `DELETE FROM conversation_turns
        WHERE session_id = ? AND ${resetFenceSql}`,
     ).bind(input.sessionId, input.sessionId, nextGeneration),

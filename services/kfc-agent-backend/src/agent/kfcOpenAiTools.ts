@@ -48,6 +48,7 @@ import {
   selectedPaymentMethodAuthority,
 } from '../ordering/paymentMethodAuthority.js';
 import type {
+  OpenAiKfcAgentLifecycleObserver,
   OpenAiToolCallTrace,
 } from './openAiKfcAgent.js';
 
@@ -71,6 +72,8 @@ export interface KfcCanonicalTool {
 export interface KfcOpenAiAgentRunContext {
   toolCalls: OpenAiToolCallTrace[];
   developerMessages: string[];
+  toolStartedAt?: Map<string, number>;
+  lifecycle?: OpenAiKfcAgentLifecycleObserver;
 }
 
 function safeSdkToolFailure(errorCode: 'invalid_tool_input' | 'tool_execution_failed' | 'tool_timed_out') {

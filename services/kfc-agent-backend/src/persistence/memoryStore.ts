@@ -7,6 +7,7 @@ import type {
   PendingCustomerTurn,
   SessionAgentState,
 } from '../domain/types.js';
+import type { AgentInputItem } from '@kfc/openai-agents-runtime';
 import type {
   CustomerRun,
   CustomerRunEvent,
@@ -62,6 +63,8 @@ import {
   type AppendEventIfRunCurrentInput,
   type AppendEventIfRunCurrentResult,
   type IsRunCommitFenceCurrentInput,
+  type CommitAssistantTurnInput,
+  type CommitAssistantTurnResult,
   type CommitAssistantTurnIfRunCurrentInput,
   type CommitAssistantTurnIfRunCurrentResult,
   type CommitConfirmationPauseIfRunCurrentInput,
@@ -109,6 +112,7 @@ import { reserveMemoryWebhookDelivery } from './memoryStoreNonAgentTextDelivery.
 import { appendMemoryConversationTurn } from './memoryStoreTurnOperations.js';
 import {
   appendMemoryEventIfRunCurrent,
+  commitMemoryAssistantTurn,
   commitMemoryAssistantTurnIfRunCurrent,
   memoryRunCommitFenceIsCurrent,
   memoryVerifiedRefFenceIsCurrent,
@@ -148,6 +152,7 @@ export class MemoryStore
   private readonly customerRunRequestIndex = new Map<string, string>();
   private readonly customerRunEvents: CustomerRunEvent[] = [];
   private readonly events: StoredEvent[] = [];
+  private readonly agentSessionItems = new Map<string, AgentInputItem[]>();
   private readonly turns: ConversationTurn[] = [];
   private readonly profiles = new Map<string, ConversationProfile>();
   private readonly webhookDeliveries = new Map<string, WebhookDelivery>();
@@ -220,8 +225,40 @@ export class MemoryStore
         sessionResetHook: this.sessionResetHook,
       });
       this.clearOrphanedAgentRunTextDeliveries();
+      this.agentSessionItems.delete(sessionId);
       return control;
     });
+  }
+
+  async listAgentSessionItems(
+    sessionId: string,
+    limit?: number,
+  ): Promise<AgentInputItem[]> {
+    const items = this.agentSessionItems.get(sessionId) ?? [];
+    const selected =
+      limit === undefined ? items : items.slice(Math.max(0, items.length - limit));
+    return structuredClone(selected);
+  }
+
+  async addAgentSessionItems(
+    sessionId: string,
+    items: AgentInputItem[],
+  ): Promise<void> {
+    if (items.length === 0) return;
+    const existing = this.agentSessionItems.get(sessionId) ?? [];
+    existing.push(...structuredClone(items));
+    this.agentSessionItems.set(sessionId, existing);
+  }
+
+  async popAgentSessionItem(
+    sessionId: string,
+  ): Promise<AgentInputItem | undefined> {
+    const item = this.agentSessionItems.get(sessionId)?.pop();
+    return item === undefined ? undefined : structuredClone(item);
+  }
+
+  async clearAgentSessionItems(sessionId: string): Promise<void> {
+    this.agentSessionItems.delete(sessionId);
   }
 
   async reserveIrreversibleOperation(
@@ -819,6 +856,21 @@ export class MemoryStore
         verifiedRefs: this.verifiedRefs,
         turns: this.turns,
         events: this.events,
+        agentSessionItems: this.agentSessionItems,
+      }),
+    );
+  }
+  async commitAssistantTurn(
+    input: CommitAssistantTurnInput,
+  ): Promise<CommitAssistantTurnResult> {
+    return this.withConfirmationPauseLock(async () =>
+      commitMemoryAssistantTurn({
+        operation: input,
+        confirmationPauseGenerations: this.confirmationPauseGenerations,
+        verifiedRefs: this.verifiedRefs,
+        turns: this.turns,
+        events: this.events,
+        agentSessionItems: this.agentSessionItems,
       }),
     );
   }
