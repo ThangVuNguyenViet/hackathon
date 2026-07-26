@@ -115,6 +115,7 @@ class RecommendationContractsTest(unittest.TestCase):
         for instant in (
             "2026-07-27t09:00:00z",
             "2026-07-27 09:00:00+00:00",
+            "2026-07-27T16:00:00+07:00",
         ):
             with self.subTest(instant=instant):
                 value = valid_request()
