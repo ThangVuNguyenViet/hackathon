@@ -58,7 +58,7 @@ describe('verified state projection', () => {
     ).resolves.toEqual({});
   });
 
-  it('does not recover business state from a legacy event bag', async () => {
+  it('returns undefined when no pack state exists', async () => {
     const store = new MemoryStore();
 
     await expect(
