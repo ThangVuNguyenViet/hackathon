@@ -48,6 +48,7 @@ EXAMINATION_PROBABILITY = {
     Placement.MODIFIER_UPSELL: 0.80,
     Placement.SMART_CROSS_SELL: 0.70,
 }
+SMART_CROSS_POSITION_EXAMINATION = (0.90, 0.78, 0.66, 0.54)
 MODEL_TABLES = (
     "journeys",
     "requests",
@@ -117,6 +118,23 @@ def _softmax(values: np.ndarray, temperature: float) -> np.ndarray:
     return exp / np.sum(exp)
 
 
+def _slate_compatible(
+    candidate: dict[str, Any],
+    selected: list[dict[str, Any]],
+    position: int,
+) -> bool:
+    if any(
+        existing["candidate_id"] == candidate["candidate_id"]
+        or existing["product_code"] == candidate["product_code"]
+        for existing in selected
+    ):
+        return False
+    categories = Counter(existing["category"] for existing in selected)
+    if categories[candidate["category"]] >= 2:
+        return False
+    return position < 4 or candidate["category"] not in categories
+
+
 def _stable_subset(
     values: Iterable[str], count: int, seed: int, namespace: str
 ) -> frozenset[str]:
@@ -169,19 +187,19 @@ def load_inputs(config: WorldConfig, paths: InputPaths) -> LoadedInputs:
         held_out_store_ids=_stable_subset(
             (str(store["storeId"]) for store in stores),
             config.held_out_store_count,
-            config.world_seed,
+            config.split_seed,
             "held-out-store",
         ),
         cold_product_ids=_stable_subset(
             (str(item["itemId"]) for item in menu),
             config.cold_product_count,
-            config.world_seed,
+            config.split_seed,
             "cold-product",
         ),
         cold_modifier_ids=_stable_subset(
             all_modifier_ids,
             config.cold_modifier_count,
-            config.world_seed,
+            config.split_seed,
             "cold-modifier",
         ),
     )
@@ -217,6 +235,7 @@ def _product_candidates(
                 "target_id": item_id,
                 "name": str(item["name"]),
                 "category": str(item["category"]),
+                "product_code": str(item["productCode"]),
                 "price_delta_vnd": int(item["priceVnd"]),
                 "discount_vnd": discount_vnd,
                 "action_kind": "add_product",
@@ -248,6 +267,7 @@ def _modifier_candidates(
                 "target_id": option_id,
                 "name": str(option["name"]),
                 "category": "modifier",
+                "product_code": option_id,
                 "price_delta_vnd": int(option["priceDeltaVnd"]),
                 "discount_vnd": 0,
                 "action_kind": "apply_modifier",
@@ -464,7 +484,7 @@ def iter_simulation(
             current_placement: Placement,
             candidates: list[dict[str, Any]],
             stage_index: int,
-        ) -> dict[str, Any] | None:
+        ) -> list[dict[str, Any]]:
             nonlocal cart_subtotal, latest_cart_item_id
             request_id = f"{journey_id}:{stage_index}:{current_placement.value}"
             cart_anchor = latest_cart_item_id or "empty-cart"
@@ -481,6 +501,9 @@ def iter_simulation(
                     "cart_item_ids": list(cart_item_ids),
                     "cart_subtotal_vnd": cart_subtotal,
                     "prior_completed_orders": history.completed_orders,
+                    "feature_store_local_hour": occurred_at.hour,
+                    "feature_store_local_day_of_week": occurred_at.weekday(),
+                    "feature_time_window": occurred_at.strftime("%Y-%m"),
                 }
             )
             policy = policy_names[
@@ -509,11 +532,30 @@ def iter_simulation(
                         "target_id": candidate["target_id"],
                         "name": candidate["name"],
                         "category": candidate["category"],
+                        "product_code": candidate["product_code"],
                         "action_kind": candidate["action_kind"],
                         "modifier_path": candidate["modifier_path"],
                         "feature_price_delta_vnd": candidate["price_delta_vnd"],
                         "feature_discount_vnd": candidate["discount_vnd"],
+                        "feature_discount_ratio": candidate["discount_vnd"]
+                        / max(
+                            candidate["price_delta_vnd"] + candidate["discount_vnd"],
+                            1,
+                        ),
+                        "feature_basket_association_score": stable_unit(
+                            config.logging_seed,
+                            "association",
+                            cart_anchor,
+                            candidate["candidate_id"],
+                        )
+                        * 2
+                        - 1,
+                        "feature_cart_anchor": cart_anchor,
+                        "feature_store_id": store_id,
                         "feature_mission": mission,
+                        "feature_store_local_hour": occurred_at.hour,
+                        "feature_store_local_day_of_week": occurred_at.weekday(),
+                        "feature_time_window": occurred_at.strftime("%Y-%m"),
                         "feature_party_size": party_size,
                         "feature_budget_vnd": budget_vnd,
                         "feature_cart_subtotal_vnd": cart_subtotal,
@@ -586,7 +628,12 @@ def iter_simulation(
                         * 0.35,
                     ),
                 )
-                attention_probability = EXAMINATION_PROBABILITY[current_placement]
+                position_examination = (
+                    SMART_CROSS_POSITION_EXAMINATION
+                    if current_placement is Placement.SMART_CROSS_SELL
+                    else (EXAMINATION_PROBABILITY[current_placement],)
+                )
+                attention_probability = position_examination[0]
                 acceptance_probability = _sigmoid(hidden["total_utility"] - 0.30)
                 mutation_probability = 0.995
                 expected_value = (
@@ -609,6 +656,15 @@ def iter_simulation(
                         "cart_mutation_probability": mutation_probability,
                         "checkout_probability_if_selected": checkout_probability,
                         "expected_net_merchandise_value_vnd": expected_value,
+                        "attention_probability_by_position": list(position_examination),
+                        "expected_net_value_by_position_vnd": [
+                            probability
+                            * acceptance_probability
+                            * mutation_probability
+                            * checkout_probability
+                            * max(candidate["price_delta_vnd"], 0)
+                            for probability in position_examination
+                        ],
                         "common_random_draw": stable_unit(
                             config.outcome_seed,
                             journey_id,
@@ -647,13 +703,15 @@ def iter_simulation(
                         "placement": current_placement.value,
                         "status": "empty",
                         "decision_source": "fallback",
-                        "selected_candidate_id": "",
+                        "selected_candidate_ids": [],
+                        "slate_size": 0,
                         "reason_code": "no_eligible_candidates",
                         "logging_policy": policy.value,
-                        "action_propensity": 0.0,
+                        "joint_action_propensity": 0.0,
+                        "policy_modified": False,
                     }
                 )
-                return None
+                return []
 
             chosen_scores = scores_by_policy[policy]
             pre_ranked = sorted(
@@ -719,9 +777,10 @@ def iter_simulation(
                 for candidate in eligible
                 if candidate["target_id"] not in excluded
             ]
-            selected: dict[str, Any] | None = None
+            selected: list[dict[str, Any]] = []
+            selection_probabilities: list[tuple[float, float]] = []
             source = "ranked"
-            propensity = 0.0
+            policy_modified = False
             for terminal in (
                 applied
                 for applied in policies
@@ -744,34 +803,49 @@ def iter_simulation(
                             "placement": current_placement.value,
                             "status": "suppressed",
                             "decision_source": "suppressed",
-                            "selected_candidate_id": "",
+                            "selected_candidate_ids": [],
+                            "slate_size": 0,
                             "reason_code": "cms_suppressed",
                             "logging_policy": policy.value,
-                            "action_propensity": 0.0,
+                            "joint_action_propensity": 0.0,
+                            "policy_modified": True,
                         }
                     )
-                    return None
+                    return []
+                replacement_size = (
+                    config.smart_cross_sell_max_size
+                    if current_placement is Placement.SMART_CROSS_SELL
+                    else 1
+                )
                 for target in terminal.get("targetIds", []):
-                    selected = next(
+                    replacement = next(
                         (
                             candidate
                             for candidate in eligible
                             if candidate["target_id"] == target
+                            and _slate_compatible(
+                                candidate, selected, len(selected) + 1
+                            )
                         ),
                         None,
                     )
-                    if selected is not None:
+                    if replacement is not None:
+                        selected.append(replacement)
+                        selection_probabilities.append((1.0, 1.0))
+                    if len(selected) >= replacement_size:
                         break
-                if selected is not None:
+                if selected:
                     source = "merchandising_replacement"
-                    propensity = 1.0
+                    policy_modified = True
                     rows["policy_effects"].append(
                         {
                             "request_id": request_id,
                             "policy_id": str(terminal["policyId"]),
                             "effect": "replaced",
-                            "candidate_id": selected["candidate_id"],
-                            "detail": selected["target_id"],
+                            "candidate_id": selected[0]["candidate_id"],
+                            "detail": ",".join(
+                                candidate["target_id"] for candidate in selected
+                            ),
                         }
                     )
                     break
@@ -780,8 +854,8 @@ def iter_simulation(
                 (applied for applied in policies if applied["action"] == "pin_target"),
                 None,
             )
-            if selected is None and pin is not None:
-                selected = next(
+            if not selected and pin is not None:
+                pinned = next(
                     (
                         candidate
                         for candidate in eligible
@@ -789,14 +863,16 @@ def iter_simulation(
                     ),
                     None,
                 )
-                if selected is not None:
-                    propensity = 1.0
+                if pinned is not None:
+                    selected.append(pinned)
+                    selection_probabilities.append((1.0, 1.0))
+                    policy_modified = True
                     rows["policy_effects"].append(
                         {
                             "request_id": request_id,
                             "policy_id": str(pin["policyId"]),
                             "effect": "pinned",
-                            "candidate_id": selected["candidate_id"],
+                            "candidate_id": pinned["candidate_id"],
                             "detail": "position_1",
                         }
                     )
@@ -812,6 +888,7 @@ def iter_simulation(
                     )
             for candidate in eligible:
                 if candidate["target_id"] in boosts:
+                    policy_modified = True
                     rows["policy_effects"].append(
                         {
                             "request_id": request_id,
@@ -828,42 +905,80 @@ def iter_simulation(
                         }
                     )
 
-            if selected is None and eligible:
-                candidate_ids = [candidate["candidate_id"] for candidate in eligible]
-                probabilities_by_policy: dict[LoggingPolicy, np.ndarray] = {}
-                for candidate_policy in policy_names:
-                    values = np.asarray(
-                        [
-                            scores_by_policy[candidate_policy][candidate_id]
-                            + boosts.get(
-                                next(
-                                    candidate["target_id"]
-                                    for candidate in eligible
-                                    if candidate["candidate_id"] == candidate_id
-                                ),
-                                0.0,
-                            )
-                            for candidate_id in candidate_ids
-                        ],
-                        dtype=np.float64,
-                    )
-                    probabilities_by_policy[candidate_policy] = _softmax(
-                        values, config.logging_temperature
-                    )
-                chosen_probabilities = probabilities_by_policy[policy]
-                selected_index = int(
-                    logging_rng.choice(len(eligible), p=chosen_probabilities)
+            if source != "merchandising_replacement":
+                target_size = (
+                    config.smart_cross_sell_max_size
+                    if current_placement is Placement.SMART_CROSS_SELL
+                    else 1
                 )
-                selected = eligible[selected_index]
-                propensity = float(
-                    sum(
+                prefix_likelihood = {
+                    candidate_policy: 1.0 for candidate_policy in policy_names
+                }
+                joint_propensity = 1.0
+                while len(selected) < target_size:
+                    position = len(selected) + 1
+                    pool = [
+                        candidate
+                        for candidate in eligible
+                        if _slate_compatible(candidate, selected, position)
+                        and (
+                            position <= config.smart_cross_sell_default_size
+                            or (
+                                current_placement is Placement.SMART_CROSS_SELL
+                                and candidate["category"]
+                                not in {existing["category"] for existing in selected}
+                                and candidate["price_delta_vnd"]
+                                <= max(budget_vnd - cart_subtotal, 0)
+                            )
+                        )
+                    ]
+                    if not pool:
+                        break
+                    probabilities_by_policy: dict[LoggingPolicy, np.ndarray] = {}
+                    for candidate_policy in policy_names:
+                        values = np.asarray(
+                            [
+                                scores_by_policy[candidate_policy][
+                                    candidate["candidate_id"]
+                                ]
+                                + boosts.get(candidate["target_id"], 0.0)
+                                for candidate in pool
+                            ],
+                            dtype=np.float64,
+                        )
+                        probabilities_by_policy[candidate_policy] = _softmax(
+                            values, config.logging_temperature
+                        )
+                    chosen_probabilities = probabilities_by_policy[policy]
+                    selected_index = int(
+                        logging_rng.choice(len(pool), p=chosen_probabilities)
+                    )
+                    selected_candidate = pool[selected_index]
+                    denominator = sum(
                         config.logging_policy_weights[candidate_policy]
-                        * probabilities_by_policy[candidate_policy][selected_index]
+                        * prefix_likelihood[candidate_policy]
                         for candidate_policy in policy_names
                     )
-                )
+                    numerator = sum(
+                        config.logging_policy_weights[candidate_policy]
+                        * prefix_likelihood[candidate_policy]
+                        * float(
+                            probabilities_by_policy[candidate_policy][selected_index]
+                        )
+                        for candidate_policy in policy_names
+                    )
+                    conditional_propensity = numerator / denominator
+                    joint_propensity *= conditional_propensity
+                    selected.append(selected_candidate)
+                    selection_probabilities.append(
+                        (conditional_propensity, joint_propensity)
+                    )
+                    for candidate_policy in policy_names:
+                        prefix_likelihood[candidate_policy] *= float(
+                            probabilities_by_policy[candidate_policy][selected_index]
+                        )
 
-            if selected is None:
+            if not selected:
                 rows["decisions"].append(
                     {
                         "recommendation_id": f"recommendation:{request_id}",
@@ -871,15 +986,18 @@ def iter_simulation(
                         "placement": current_placement.value,
                         "status": "empty",
                         "decision_source": "fallback",
-                        "selected_candidate_id": "",
+                        "selected_candidate_ids": [],
+                        "slate_size": 0,
                         "reason_code": "no_candidate_after_policy",
                         "logging_policy": policy.value,
-                        "action_propensity": 0.0,
+                        "joint_action_propensity": 0.0,
+                        "policy_modified": policy_modified,
                     }
                 )
-                return None
+                return []
 
             recommendation_id = f"recommendation:{request_id}"
+            final_joint_propensity = selection_probabilities[-1][1]
             rows["decisions"].append(
                 {
                     "recommendation_id": recommendation_id,
@@ -887,10 +1005,14 @@ def iter_simulation(
                     "placement": current_placement.value,
                     "status": "recommended",
                     "decision_source": source,
-                    "selected_candidate_id": selected["candidate_id"],
+                    "selected_candidate_ids": [
+                        candidate["candidate_id"] for candidate in selected
+                    ],
+                    "slate_size": len(selected),
                     "reason_code": f"{current_placement.value}_candidate",
                     "logging_policy": policy.value,
-                    "action_propensity": propensity,
+                    "joint_action_propensity": final_joint_propensity,
+                    "policy_modified": policy_modified,
                 }
             )
             exposure_probability = EXAMINATION_PROBABILITY[current_placement]
@@ -904,95 +1026,148 @@ def iter_simulation(
                 < exposure_probability
             )
             if not rendered:
-                return None
-            impression_id = f"impression:{request_id}"
-            rows["impressions"].append(
-                {
-                    "impression_id": impression_id,
-                    "recommendation_id": recommendation_id,
-                    "request_id": request_id,
-                    "journey_id": journey_id,
-                    "placement": current_placement.value,
-                    "candidate_id": selected["candidate_id"],
-                    "position": 1,
-                    "logging_policy": policy.value,
-                    "action_propensity": propensity,
-                    "examination_probability": exposure_probability,
-                }
-            )
-            hidden = hidden_by_candidate[selected["candidate_id"]]
-            acceptance_probability = _sigmoid(hidden["total_utility"] - 0.30)
-            accepted = (
-                stable_unit(
-                    config.outcome_seed,
-                    journey_id,
-                    current_placement.value,
-                    selected["candidate_id"],
+                return []
+            slate_id = f"slate:{request_id}"
+            examined_and_accepted: dict[str, tuple[bool, bool]] = {}
+            for position, (
+                selected_candidate,
+                (conditional_propensity, joint_prefix_propensity),
+            ) in enumerate(zip(selected, selection_probabilities, strict=True), 1):
+                impression_id = f"impression:{request_id}:{position}"
+                examination_probability = (
+                    SMART_CROSS_POSITION_EXAMINATION[position - 1]
+                    if current_placement is Placement.SMART_CROSS_SELL
+                    else exposure_probability
                 )
-                < acceptance_probability
-            )
-            mutation_succeeded = accepted and (
-                stable_unit(
-                    config.outcome_seed,
-                    journey_id,
-                    current_placement.value,
-                    "mutation",
+                rows["impressions"].append(
+                    {
+                        "impression_id": impression_id,
+                        "slate_id": slate_id,
+                        "recommendation_id": recommendation_id,
+                        "request_id": request_id,
+                        "journey_id": journey_id,
+                        "placement": current_placement.value,
+                        "candidate_id": selected_candidate["candidate_id"],
+                        "position": position,
+                        "slate_size": len(selected),
+                        "logging_policy": policy.value,
+                        "action_propensity": conditional_propensity,
+                        "joint_prefix_propensity": joint_prefix_propensity,
+                        "examination_probability": examination_probability,
+                        "decision_source": source,
+                        "policy_modified": policy_modified,
+                    }
                 )
-                < 0.995
-            )
-            if accepted:
-                outcome_kind = (
-                    "selected" if mutation_succeeded else "cart_mutation_failed"
-                )
-            else:
-                outcome_kind = (
-                    "explicitly_dismissed"
-                    if stable_unit(
+                examined = (
+                    stable_unit(
                         config.outcome_seed,
                         journey_id,
                         current_placement.value,
-                        "dismiss",
+                        selected_candidate["candidate_id"],
+                        "examine",
                     )
-                    < 0.55
-                    else "ignored"
+                    < examination_probability
                 )
-            gross_delta = (
-                max(0, int(selected["price_delta_vnd"])) if mutation_succeeded else 0
+                hidden = hidden_by_candidate[selected_candidate["candidate_id"]]
+                accepted = examined and (
+                    stable_unit(
+                        config.outcome_seed,
+                        journey_id,
+                        current_placement.value,
+                        selected_candidate["candidate_id"],
+                        "accept",
+                    )
+                    < _sigmoid(hidden["total_utility"] - 0.30)
+                )
+                examined_and_accepted[selected_candidate["candidate_id"]] = (
+                    examined,
+                    accepted,
+                )
+
+            any_accepted = any(
+                accepted for _, accepted in examined_and_accepted.values()
             )
-            rows["outcomes"].append(
-                {
-                    "outcome_id": f"outcome:{request_id}",
-                    "impression_id": impression_id,
-                    "recommendation_id": recommendation_id,
-                    "request_id": request_id,
-                    "journey_id": journey_id,
-                    "placement": current_placement.value,
-                    "outcome_kind": outcome_kind,
-                    "selected_candidate_id": (
-                        selected["candidate_id"] if accepted else ""
-                    ),
-                    "basket_mutation_succeeded": mutation_succeeded,
-                    "gross_incremental_value_vnd": gross_delta,
-                }
+            dismissed = (
+                not any_accepted
+                and stable_unit(
+                    config.outcome_seed,
+                    journey_id,
+                    current_placement.value,
+                    "dismiss",
+                )
+                < 0.55
             )
-            if not mutation_succeeded:
-                return None
-            if selected["action_kind"] == "add_product":
-                cart_item_ids.append(selected["target_id"])
-                latest_cart_item_id = selected["target_id"]
-            cart_subtotal += gross_delta
-            rows["carts_checkouts"].append(
-                {
-                    "journey_id": journey_id,
-                    "event_kind": "recommendation_cart_mutation",
-                    "placement": current_placement.value,
-                    "candidate_id": selected["candidate_id"],
-                    "cart_item_ids": list(cart_item_ids),
-                    "cart_subtotal_vnd": cart_subtotal,
-                    "checked_out": False,
-                }
-            )
-            return selected
+            mutated: list[dict[str, Any]] = []
+            for position, selected_candidate in enumerate(selected, 1):
+                impression_id = f"impression:{request_id}:{position}"
+                examined, accepted = examined_and_accepted[
+                    selected_candidate["candidate_id"]
+                ]
+                mutation_succeeded = accepted and (
+                    stable_unit(
+                        config.outcome_seed,
+                        journey_id,
+                        current_placement.value,
+                        selected_candidate["candidate_id"],
+                        "mutation",
+                    )
+                    < 0.995
+                )
+                if accepted:
+                    outcome_kind = (
+                        "selected" if mutation_succeeded else "cart_mutation_failed"
+                    )
+                elif dismissed:
+                    outcome_kind = "explicitly_dismissed"
+                elif any_accepted:
+                    outcome_kind = "not_selected"
+                else:
+                    outcome_kind = "ignored"
+                gross_delta = (
+                    max(0, int(selected_candidate["price_delta_vnd"]))
+                    if mutation_succeeded
+                    else 0
+                )
+                rows["outcomes"].append(
+                    {
+                        "outcome_id": f"outcome:{request_id}:{position}",
+                        "impression_id": impression_id,
+                        "slate_id": slate_id,
+                        "recommendation_id": recommendation_id,
+                        "request_id": request_id,
+                        "journey_id": journey_id,
+                        "placement": current_placement.value,
+                        "candidate_id": selected_candidate["candidate_id"],
+                        "position": position,
+                        "outcome_kind": outcome_kind,
+                        "was_examined": examined,
+                        "customer_selected": accepted,
+                        "basket_mutation_succeeded": mutation_succeeded,
+                        "gross_incremental_value_vnd": gross_delta,
+                        "checked_out": False,
+                        "survived_checkout": False,
+                        "net_incremental_value_vnd": 0,
+                    }
+                )
+                if not mutation_succeeded:
+                    continue
+                mutated.append(selected_candidate)
+                if selected_candidate["action_kind"] == "add_product":
+                    cart_item_ids.append(selected_candidate["target_id"])
+                    latest_cart_item_id = selected_candidate["target_id"]
+                cart_subtotal += gross_delta
+                rows["carts_checkouts"].append(
+                    {
+                        "journey_id": journey_id,
+                        "event_kind": "recommendation_cart_mutation",
+                        "placement": current_placement.value,
+                        "candidate_id": selected_candidate["candidate_id"],
+                        "cart_item_ids": list(cart_item_ids),
+                        "cart_subtotal_vnd": cart_subtotal,
+                        "checked_out": False,
+                    }
+                )
+            return mutated
 
         starter = run_placement(
             placement,
@@ -1026,8 +1201,8 @@ def iter_simulation(
                     "checked_out": False,
                 }
             )
-        elif starter is not None:
-            latest_cart_item_id = starter["target_id"]
+        elif starter:
+            latest_cart_item_id = starter[0]["target_id"]
 
         run_placement(
             Placement.MODIFIER_UPSELL,
@@ -1061,6 +1236,15 @@ def iter_simulation(
                 "checked_out": checked_out,
             }
         )
+        for outcome in rows["outcomes"]:
+            survived_checkout = bool(
+                checked_out and outcome["basket_mutation_succeeded"]
+            )
+            outcome["checked_out"] = checked_out
+            outcome["survived_checkout"] = survived_checkout
+            outcome["net_incremental_value_vnd"] = (
+                outcome["gross_incremental_value_vnd"] if survived_checkout else 0
+            )
         if checked_out:
             for item_id in cart_item_ids:
                 menu_item = loaded.menu_by_id[item_id]

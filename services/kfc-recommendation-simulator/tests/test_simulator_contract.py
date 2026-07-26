@@ -13,6 +13,11 @@ from kfc_recommendation_simulator.artifacts import (
     audit_bundle,
     generate_bundle,
 )
+from kfc_recommendation_simulator.benchmark_data import (
+    BundleData,
+    load_candidate_rows,
+    load_impression_rows,
+)
 from kfc_recommendation_simulator.models import InputPaths, WorldConfig
 from kfc_recommendation_simulator.simulator import load_inputs
 
@@ -27,7 +32,7 @@ class SimulatorContractTest(unittest.TestCase):
         raw = json.loads(
             (cls.package_root / "worlds/smoke.json").read_text(encoding="utf-8")
         )
-        raw["journeyCount"] = 300
+        raw["journeyCount"] = 1000
         raw["customerPoolSize"] = 30
         raw["batchJourneys"] = 50
         cls.config = cls.root / "contract.json"
@@ -117,6 +122,71 @@ class SimulatorContractTest(unittest.TestCase):
         }
         self.assertGreater(len(randomized), 5)
 
+    def test_smart_cross_sell_uses_ordered_three_or_four_item_slates(self) -> None:
+        decisions = [
+            row
+            for row in self.read("decisions")
+            if row["placement"] == "smart_cross_sell" and row["status"] == "recommended"
+        ]
+        self.assertTrue(decisions)
+        for decision in decisions:
+            self.assertIn(decision["slate_size"], (3, 4))
+            self.assertEqual(
+                decision["slate_size"], len(decision["selected_candidate_ids"])
+            )
+            self.assertEqual(
+                len(decision["selected_candidate_ids"]),
+                len(set(decision["selected_candidate_ids"])),
+            )
+
+        candidates = {
+            (row["request_id"], row["candidate_id"]): row
+            for row in self.read("candidates")
+        }
+        impressions_by_slate: dict[str, list[dict]] = {}
+        for impression in self.read("impressions"):
+            if impression["placement"] == "smart_cross_sell":
+                impressions_by_slate.setdefault(impression["slate_id"], []).append(
+                    impression
+                )
+        self.assertTrue(impressions_by_slate)
+        for impressions in impressions_by_slate.values():
+            impressions.sort(key=lambda row: row["position"])
+            self.assertEqual(
+                list(range(1, len(impressions) + 1)),
+                [row["position"] for row in impressions],
+            )
+            self.assertLessEqual(len(impressions), 4)
+            categories = [
+                candidates[(row["request_id"], row["candidate_id"])]["category"]
+                for row in impressions
+            ]
+            self.assertTrue(
+                all(categories.count(category) <= 2 for category in categories)
+            )
+            if len(categories) == 4:
+                self.assertNotIn(categories[3], categories[:3])
+
+    def test_slate_outcomes_allow_multiple_adds_without_unshown_negatives(self) -> None:
+        impressions = {row["impression_id"]: row for row in self.read("impressions")}
+        outcomes = self.read("outcomes")
+        self.assertEqual(set(impressions), {row["impression_id"] for row in outcomes})
+        selected_by_slate: dict[str, int] = {}
+        for outcome in outcomes:
+            self.assertIn(outcome["impression_id"], impressions)
+            if (
+                outcome["placement"] == "smart_cross_sell"
+                and outcome["basket_mutation_succeeded"]
+            ):
+                selected_by_slate[outcome["slate_id"]] = (
+                    selected_by_slate.get(outcome["slate_id"], 0) + 1
+                )
+            if outcome["survived_checkout"]:
+                self.assertTrue(outcome["checked_out"])
+                if outcome["placement"] == "smart_cross_sell":
+                    self.assertGreater(outcome["net_incremental_value_vnd"], 0)
+        self.assertTrue(any(count > 1 for count in selected_by_slate.values()))
+
     def test_store_eligibility_and_sanity_effects_are_present(self) -> None:
         eligibility = self.read("eligibility_decisions")
         self.assertTrue(
@@ -178,6 +248,33 @@ class SimulatorContractTest(unittest.TestCase):
             self.assertTrue(0 <= row["cart_mutation_probability"] <= 1)
             self.assertTrue(0 <= row["checkout_probability_if_selected"] <= 1)
             self.assertGreaterEqual(row["expected_net_merchandise_value_vnd"], 0)
+
+    def test_benchmark_loader_keeps_logged_and_eligible_contracts_separate(
+        self,
+    ) -> None:
+        bundle = BundleData(1, self.first, 1000)
+        impressions = load_impression_rows(bundle, split="validation")
+        candidates = load_candidate_rows(bundle, split="validation")
+        self.assertGreater(len(impressions), 0)
+        self.assertGreater(len(candidates), len(impressions))
+        self.assertFalse(impressions.duplicated(["request_id", "candidate_id"]).any())
+        self.assertTrue(
+            {
+                "action_propensity",
+                "success",
+                "reward_vnd",
+                "held_out_store",
+                "cold_product",
+            }
+            <= set(impressions.columns)
+        )
+        self.assertTrue(
+            {
+                "expected_net_merchandise_value_vnd",
+                "expected_net_value_by_position_vnd",
+            }
+            <= set(candidates.columns)
+        )
 
 
 if __name__ == "__main__":

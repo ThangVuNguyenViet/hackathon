@@ -31,7 +31,7 @@ class DriftPhase(StrictModel):
 
 
 class WorldConfig(StrictModel):
-    schema_version: str = Field(alias="schemaVersion", pattern=r"^simulator-world-v2$")
+    schema_version: str = Field(alias="schemaVersion", pattern=r"^simulator-world-v3$")
     world_id: str = Field(alias="worldId", min_length=1)
     journey_count: int = Field(alias="journeyCount", ge=1, le=1_000_000)
     customer_pool_size: int = Field(alias="customerPoolSize", ge=1)
@@ -42,12 +42,17 @@ class WorldConfig(StrictModel):
     traffic_seed: int = Field(alias="trafficSeed", ge=0)
     logging_seed: int = Field(alias="loggingSeed", ge=0)
     outcome_seed: int = Field(alias="outcomeSeed", ge=0)
+    split_seed: int = Field(alias="splitSeed", ge=0)
     horizon_days: int = Field(alias="horizonDays", ge=1)
     batch_journeys: int = Field(alias="batchJourneys", ge=1, le=10_000)
     held_out_store_count: int = Field(alias="heldOutStoreCount", ge=1)
     cold_product_count: int = Field(alias="coldProductCount", ge=1)
     cold_modifier_count: int = Field(alias="coldModifierCount", ge=1)
     logging_temperature: float = Field(alias="loggingTemperature", gt=0)
+    smart_cross_sell_default_size: int = Field(
+        alias="smartCrossSellDefaultSize", ge=1, le=4
+    )
+    smart_cross_sell_max_size: int = Field(alias="smartCrossSellMaxSize", ge=1, le=4)
     logging_policy_weights: dict[LoggingPolicy, float] = Field(
         alias="loggingPolicyWeights"
     )
@@ -62,6 +67,10 @@ class WorldConfig(StrictModel):
             raise ValueError("logging policy weights must be positive")
         if abs(total - 1.0) > 1e-9:
             raise ValueError("logging policy weights must sum to 1")
+        if self.smart_cross_sell_default_size > self.smart_cross_sell_max_size:
+            raise ValueError(
+                "smartCrossSellDefaultSize cannot exceed smartCrossSellMaxSize"
+            )
         starts = [phase.starts_at_fraction for phase in self.drift_phases]
         if starts[0] != 0 or starts != sorted(set(starts)):
             raise ValueError(
