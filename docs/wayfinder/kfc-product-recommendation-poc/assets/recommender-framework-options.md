@@ -4,6 +4,13 @@
 
 **Decision supported:** Choose the model families and maintained frameworks to benchmark for the KFC product-recommendation POC.
 
+**Final status:** This options research was followed by the accepted evaluation
+contract and empirical qualification. The canonical implementation choices now
+live in
+[`implementation-ready-specification.md`](../implementation-ready-specification.md).
+The executed neural challenger is native Keras 3; the serving choices remain the
+qualified deterministic baselines.
+
 **POC facts used for this decision:**
 
 - roughly 120 products, so every eligible candidate can be scored;
@@ -23,11 +30,13 @@ Use a **common candidate-feature table and evaluation harness**, then benchmark:
 1. deterministic contextual-popularity and basket-association baselines;
 2. `XGBRanker(objective="rank:ndcg")` as the primary learned baseline;
 3. LightGBM `LGBMRanker(objective="lambdarank")` as the direct tree challenger;
-4. a compact TensorFlow Recommenders context-and-candidate neural scorer as the neural challenger;
+4. a compact native Keras 3 context-and-candidate scorer as the neural challenger;
 5. frozen `intfloat/multilingual-e5-small` catalog embeddings as an ablation, not as the recommender;
 6. Vowpal Wabbit `--cb_explore_adf` in a separate simulated contextual-bandit experiment.
 
-Do **not** build candidate retrieval or approximate nearest-neighbor infrastructure. TensorFlow Recommenders describes retrieval as narrowing millions of candidates before ranking; this POC has only about 120 catalog products and fewer eligible modifiers, so complete scoring is both simpler and exact. [TFRS retrieval task](https://www.tensorflow.org/recommenders/api_docs/python/tfrs/tasks/Retrieval)
+Do **not** build candidate retrieval or approximate nearest-neighbor
+infrastructure. This POC has only about 120 catalog products and fewer eligible
+modifiers, so complete scoring is both simpler and exact.
 
 The provisional implementation favorite is **XGBoost**, not because it is guaranteed to win, but because its maintained learning-to-rank implementation exposes grouped LambdaMART training, NDCG objectives, deterministic GPU computation, pair-construction controls, and an explicit position-debiasing option for click/impression data. The benchmark, not preference, chooses the final POC model. [XGBoost learning-to-rank guide](https://xgboost.readthedocs.io/en/stable/tutorials/learning_to_rank.html)
 
@@ -62,7 +71,7 @@ Do not fine-tune a transformer on synthetic baskets initially. With only about 1
 |---|---|---|---|---|
 | **XGBoost `XGBRanker`** | Grouped LambdaMART with `rank:ndcg`, `rank:map`, and `rank:pairwise`; supports graded relevance, position-debiased LambdaMART, top-k pair construction, and relevance-score output. | Active; upstream release history shows v3.3.0 on 2026-06-17. Apache-2.0. [Repository/releases](https://github.com/dmlc/xgboost/releases), [license](https://github.com/dmlc/xgboost#license) | Excellent fit for mixed tabular, categorical, price, affinity, and compact embedding-derived features. Query groups map naturally to recommendation requests. | **Primary learned baseline.** |
 | **LightGBM `LGBMRanker`** | `lambdarank` and `rank_xendcg`; query-group input; NDCG-at-k evaluation; native categorical-feature handling. | Active; upstream release history shows v4.7.0 on 2026-07-18. MIT. [Repository/releases](https://github.com/lightgbm-org/LightGBM/releases), [license](https://github.com/lightgbm-org/LightGBM/blob/master/LICENSE) | Equally plausible tree ranker and may be faster or more accurate on this dataset. Its API accepts group sizes and `eval_at`. [LGBMRanker API](https://lightgbm.readthedocs.io/en/latest/pythonapi/lightgbm.LGBMRanker.html), [ranking parameters](https://lightgbm.readthedocs.io/en/stable/Parameters.html) | **Required tree challenger.** |
-| **TensorFlow Recommenders (TFRS)** | Context-aware neural retrieval and ranking, multitask objectives, listwise examples, and Keras composition. [Overview](https://www.tensorflow.org/recommenders), [context-features tutorial](https://www.tensorflow.org/recommenders/examples/context_features), [ranking tutorial](https://www.tensorflow.org/recommenders/examples/basic_ranking) | Active again; v0.7.7 was released in 2026. Apache-2.0. Its current changelog and requirements explicitly add `tf-keras` and use the legacy-Keras switch, so the benchmark environment must pin and exercise the full dependency set. [Releases](https://github.com/tensorflow/recommenders/releases), [changelog](https://github.com/tensorflow/recommenders/blob/main/CHANGELOG.md), [requirements](https://github.com/tensorflow/recommenders/blob/main/requirements.txt), [license](https://github.com/tensorflow/recommenders/blob/main/LICENSE) | Suitable for a compact context-plus-candidate scorer. Retrieval/two-tower indexing is unnecessary at 120 products. | **Required neural challenger, in a pinned environment.** |
+| **Native Keras 3** | Functional models, categorical embeddings, numerical features, weighted binary objectives, calibration-ready predictions, and `.keras` serialization. [Keras 3](https://keras.io/keras_3/), [training API](https://keras.io/api/models/model_training_apis/), [model saving](https://keras.io/api/models/model_saving_apis/model_saving_and_loading/) | Maintained directly as Keras 3 without an additional recommendation framework or compatibility runtime. | Suitable for the compact context-plus-candidate scorer used by this POC. Retrieval/two-tower indexing is unnecessary at 120 products. | **Required neural challenger.** |
 | **RecBole** | Broad offline research suite with general, sequential, context-aware, and knowledge-based algorithms plus standardized evaluation. [Repository](https://github.com/RUCAIBox/RecBole), [model guide](https://recbole.io/docs/user_guide/model_intro.html) | Latest release v1.2.1 is from 2025-02-23. The LICENSE file is MIT, but the README also states that its data and code may only be used for academic purposes; that inconsistency requires clarification before commercial reuse. [Releases](https://github.com/RUCAIBox/RecBole/releases), [license file](https://github.com/RUCAIBox/RecBole/blob/master/LICENSE), [README statement](https://github.com/RUCAIBox/RecBole#license) | Useful for later offline algorithm exploration, especially if longer session sequences or stable customer IDs become available. Unique anonymous sessions provide little reusable user-embedding signal, and its serving shape does not match the POC API directly. | **Optional research harness; not the serving core or required first benchmark.** |
 | **TorchRec** | Large sparse embedding tables, sharding, distributed training/inference, quantization, and DLRM-scale components. [Repository](https://github.com/meta-pytorch/torchrec), [official tutorial](https://docs.pytorch.org/tutorials/intermediate/torchrec_intro_tutorial.html) | Actively maintained; BSD-3-Clause. [Releases](https://github.com/meta-pytorch/torchrec/releases), [license](https://github.com/meta-pytorch/torchrec/blob/main/LICENSE) | Solves a scale problem this POC does not have and brings PyTorch/FBGEMM/CUDA version coupling. | **Do not use for this POC.** |
 | **Sentence Transformers + multilingual E5** | Maintained library for embedding, similarity, retrieval, and optional fine-tuning; multilingual E5 supplies compact multilingual catalog vectors. | Sentence Transformers is active and Apache-2.0; `multilingual-e5-small` is MIT. [Sentence Transformers releases](https://github.com/huggingface/sentence-transformers/releases), [library license](https://github.com/huggingface/sentence-transformers/blob/main/LICENSE), [model card](https://huggingface.co/intfloat/multilingual-e5-small) | Strong cold-start feature provider. It is not a behavioral recommendation policy. | **Use frozen embeddings as an ablation.** |
@@ -89,7 +98,7 @@ All models receive the **same eligible candidates, feature snapshot, splits, and
 |---|---|---|
 | M1 | XGBoost `rank:ndcg`, grouped by recommendation request | Graded utility: `0` rejected/not chosen; positive grades derived from accepted incremental basket value using fixed train-set quantile bins. |
 | M2 | LightGBM `lambdarank`, grouped identically | Same rows, grades, cutoffs, and hyperparameter budget as M1. |
-| M3 | TFRS compact neural scorer: categorical embeddings + normalized numerical features + candidate/catalog vector + two-to-three-layer MLP | Binary acceptance plus an auxiliary incremental-value head; final expected-value score is calibrated acceptance probability × valid incremental value. |
+| M3 | Native Keras 3 compact scorer: categorical embeddings + normalized numerical features + candidate/catalog vector + two-to-three-layer MLP | Weighted binary acceptance; final expected-value score is calibrated acceptance probability × valid incremental value. |
 | M4 | XGBoost binary acceptance model × valid incremental value | Separates probability calibration from value and checks whether graded LambdaMART is actually necessary. |
 
 Run M1–M4 both **without** and **with** frozen E5-derived features. Do not give one family a larger tuning budget. Use seeded Bayesian/random search over a declared, bounded space and select hyperparameters on validation data only.
@@ -125,10 +134,12 @@ The oracle track proves simulator/model consistency. The logged track proves tha
 
 Use all of the following, with complete anonymous sessions kept together:
 
-1. **Forward temporal split:** earliest 70% train, next 15% validation, final 15% test.
-2. **Held-out-store split:** deterministically hold out 20% of synthetic stores from model fitting; tune only on the remaining stores. Evaluate whether catalog/context features generalize where store-specific history is missing.
-3. **Cold-product split:** withhold interaction history for a deterministic 15% of products while retaining their catalog records; introduce them in validation/test.
-4. **Placement-specific reports:** Smart Cross-sell and Modifier Upsell get separate results; do not average them into a single score that can hide a failure.
+1. **Forward temporal split:** earliest 60% train, next 20% validation, final 20% untouched test.
+2. **Held-out-store split:** deterministically hold out 53 stores (20% of the 265-store fixture) from model fitting. Evaluate whether catalog/context features generalize where store-specific history is missing.
+3. **Cold-product split:** withhold interaction history for 12 category-stratified products while retaining their catalog records; introduce them in validation/test.
+4. **Cold-modifier split:** withhold interaction history for six modifiers while retaining their catalog records and eligibility evidence.
+5. **Customer-history slices:** report returning customers and customer cold start separately for For You.
+6. **Placement-specific reports:** Smart Cross-sell and Modifier Upsell get separate results; do not average them into a single score that can hide a failure.
 
 Fit popularity, association rules, encoders, scalers, calibration, value-grade quantiles, and any dimensionality reduction on the training partition only.
 
@@ -136,13 +147,13 @@ Fit popularity, association rules, encoders, scalers, calibration, value-grade q
 
 Primary metrics:
 
-- `NDCG@3` per request;
+- `NDCG@5` per request;
 - simulator-known expected incremental AOV per eligible session, relative to B2/B3/B4 as appropriate;
 - accepted recommendation / attach rate.
 
 Required guardrails:
 
-- `Recall@3` and `MRR@3`;
+- top-1 hit rate and `Recall@5`;
 - item coverage and category coverage;
 - intra-list category diversity and recommendation concentration/Gini;
 - Brier score and expected calibration error for models that emit acceptance probabilities;
@@ -155,12 +166,12 @@ Report paired 95% confidence intervals using a session-level block bootstrap. Re
 
 A learned model qualifies only if, on both the temporal and held-out-store tests:
 
-1. its `NDCG@3` confidence interval is superior to the strongest applicable deterministic baseline;
-2. simulated incremental AOV is positive versus that same baseline;
+1. the lower bound of the paired 95% confidence interval is above zero for simulated expected incremental AOV improvement;
+2. `NDCG@5` also improves;
 3. it does not materially reduce accepted/attach rate;
 4. it stays within predeclared coverage, diversity, and calibration guardrails;
 5. invalid recommendations remain zero after validation;
-6. the result repeats across at least five fixed simulator seeds.
+6. the result survives temporal and held-out-store evaluation across all ten fixed simulator/training seeds.
 
 If no learned model clears all gates, ship the strongest baseline in the POC and report the learned models as negative evidence. Do not select a neural model merely because it is more sophisticated.
 
@@ -219,7 +230,7 @@ The benchmark should emit one comparable report table per placement and split, p
 
 - **Default ranker to implement first:** XGBoost LambdaMART.
 - **Required direct challenger:** LightGBM LambdaRank.
-- **Required neural challenger:** compact TFRS context-and-candidate scorer, dependency-pinned.
+- **Required neural challenger:** compact native Keras 3 context-and-candidate scorer.
 - **Cold-start feature:** frozen `intfloat/multilingual-e5-small`, revision-pinned and ablated.
 - **Dedicated recommender framework:** RecBole may be used later as an offline laboratory; it is not the POC serving core.
 - **Bandit:** Vowpal Wabbit ADF, simulated only.
