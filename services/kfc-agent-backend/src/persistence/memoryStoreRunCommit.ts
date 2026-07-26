@@ -138,9 +138,12 @@ export function commitMemoryAssistantTurnIfRunCurrent(input: {
   input.turns.push(prepared.turn);
   input.events.push(prepared.turnEvent);
   if (prepared.auditEvent) input.events.push(prepared.auditEvent);
-  const sessionItems =
-    input.agentSessionItems.get(prepared.turn.sessionId) ?? [];
-  sessionItems.push(...structuredClone(prepared.sdkSessionItems));
+  const sessionItems = prepared.sdkSessionMutation.mode === 'replace'
+    ? []
+    : input.agentSessionItems.get(prepared.turn.sessionId) ?? [];
+  sessionItems.push(
+    ...structuredClone(prepared.sdkSessionMutation.items),
+  );
   input.agentSessionItems.set(prepared.turn.sessionId, sessionItems);
   return {
     status: 'committed',
@@ -178,9 +181,12 @@ export function commitMemoryAssistantTurn(input: {
   input.turns.push(prepared.turn);
   input.events.push(prepared.turnEvent);
   if (prepared.auditEvent) input.events.push(prepared.auditEvent);
-  const sessionItems =
-    input.agentSessionItems.get(prepared.turn.sessionId) ?? [];
-  sessionItems.push(...structuredClone(prepared.sdkSessionItems));
+  const sessionItems = prepared.sdkSessionMutation.mode === 'replace'
+    ? []
+    : input.agentSessionItems.get(prepared.turn.sessionId) ?? [];
+  sessionItems.push(
+    ...structuredClone(prepared.sdkSessionMutation.items),
+  );
   input.agentSessionItems.set(prepared.turn.sessionId, sessionItems);
   return { status: 'committed', ...structuredClone(prepared) };
 }

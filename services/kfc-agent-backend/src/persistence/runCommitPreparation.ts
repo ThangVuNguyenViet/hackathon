@@ -4,6 +4,7 @@ import {
 } from '../domain/verifiedRef.js';
 import type { ConversationTurn } from '../domain/types.js';
 import type {
+  AgentSessionItemsMutation,
   CommitAssistantTurnInput,
   CommitAssistantTurnIfRunCurrentInput,
   StoredEvent,
@@ -15,7 +16,7 @@ export interface PreparedAssistantTurnCommit {
   turnEvent: StoredEvent;
   turn: ConversationTurn;
   verifiedRefs: VerifiedRefRecord[];
-  sdkSessionItems: AgentInputItem[];
+  sdkSessionMutation: AgentSessionItemsMutation;
   auditEvent?: StoredEvent;
 }
 
@@ -83,7 +84,12 @@ export function prepareAssistantTurnCommit(
     turnEvent,
     turn,
     verifiedRefs,
-    sdkSessionItems: [...structuredClone(input.sdkSessionItems ?? [])],
+    sdkSessionMutation: {
+      mode: input.sdkSessionMutation?.mode ?? 'append',
+      items: [
+        ...structuredClone(input.sdkSessionMutation?.items ?? []),
+      ],
+    },
     ...(auditEvent ? { auditEvent } : {}),
   };
 }

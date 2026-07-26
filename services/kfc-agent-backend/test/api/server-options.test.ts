@@ -6,6 +6,42 @@ import { ModelMonitorJudge } from '../../src/llm/monitorJudge.js';
 import { OpenAiKfcAgent } from '../../src/agent/openAiKfcAgent.js';
 
 describe('buildServerOptionsFromEnv', () => {
+  it('configures SDK compaction explicitly for the direct runtime', () => {
+    const options = buildServerOptionsFromEnv(loadEnv({
+      PORT: '18090',
+      KFC_AGENT_RUNTIME: 'openai-responses',
+      KFC_AGENT_PROVIDER: 'openai',
+      KFC_AGENT_MODEL: 'gpt-4.1-mini',
+      OPENAI_API_KEY: 'test-openai-key',
+      KFC_AGENT_COMPACTION_ENABLED: 'true',
+      KFC_AGENT_COMPACTION_THRESHOLD_BYTES: '131072',
+      KFC_AGENT_COMPACTION_MODEL: 'gpt-4.1-mini',
+      KFC_COMMERCE_MODE: 'fixture',
+    } as NodeJS.ProcessEnv));
+
+    expect(Reflect.get(options.openAiAgent!, 'compaction')).toEqual({
+      enabled: true,
+      thresholdBytes: 131072,
+      model: 'gpt-4.1-mini',
+    });
+  });
+
+  it('enables verified SDK compaction by default with a conservative threshold', () => {
+    const options = buildServerOptionsFromEnv(loadEnv({
+      PORT: '18090',
+      KFC_AGENT_RUNTIME: 'openai-responses',
+      KFC_AGENT_PROVIDER: 'openai',
+      KFC_AGENT_MODEL: 'gpt-4.1-mini',
+      OPENAI_API_KEY: 'test-openai-key',
+      KFC_COMMERCE_MODE: 'fixture',
+    } as NodeJS.ProcessEnv));
+
+    expect(Reflect.get(options.openAiAgent!, 'compaction')).toEqual({
+      enabled: true,
+      thresholdBytes: 196608,
+    });
+  });
+
   it('exposes release, runtime, graph, and version bindings only in deep readiness proof metadata', async () => {
     const options = buildServerOptionsFromEnv(loadEnv({ PORT: '18090', KFC_COMMERCE_MODE: 'fixture', RELEASE_GIT_SHA: 'release-1', RELEASE_DEPLOYMENT_ID: 'deployment-1', RELEASE_BUILT_AT: '2026-07-15T00:00:00Z', RELEASE_DIRTY: 'false' } as NodeJS.ProcessEnv));
     const server = buildServer(options);

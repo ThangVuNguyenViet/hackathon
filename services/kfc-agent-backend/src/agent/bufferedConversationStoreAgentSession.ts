@@ -1,8 +1,12 @@
 import type { AgentInputItem, Session } from '@kfc/openai-agents-runtime';
-import type { ConversationStore } from '../persistence/contracts.js';
+import type {
+  AgentSessionItemsMutation,
+  ConversationStore,
+} from '../persistence/contracts.js';
 
 export class BufferedConversationStoreAgentSession implements Session {
   private readonly pending: AgentInputItem[] = [];
+  private replacesDurableHistory = false;
 
   constructor(
     private readonly store: ConversationStore,
@@ -14,7 +18,9 @@ export class BufferedConversationStoreAgentSession implements Session {
   }
 
   async getItems(limit?: number): Promise<AgentInputItem[]> {
-    const durable = await this.store.listAgentSessionItems(this.sessionId);
+    const durable = this.replacesDurableHistory
+      ? []
+      : await this.store.listAgentSessionItems(this.sessionId);
     const items = [...durable, ...structuredClone(this.pending)];
     return limit === undefined ? items : items.slice(-limit);
   }
@@ -30,9 +36,13 @@ export class BufferedConversationStoreAgentSession implements Session {
 
   async clearSession(): Promise<void> {
     this.pending.splice(0);
+    this.replacesDurableHistory = true;
   }
 
-  pendingItems(): AgentInputItem[] {
-    return structuredClone(this.pending);
+  pendingMutation(): AgentSessionItemsMutation {
+    return {
+      mode: this.replacesDurableHistory ? 'replace' : 'append',
+      items: structuredClone(this.pending),
+    };
   }
 }

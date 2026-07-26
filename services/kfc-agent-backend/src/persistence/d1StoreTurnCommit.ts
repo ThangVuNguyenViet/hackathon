@@ -126,7 +126,22 @@ async function commitD1AssistantTurnOperation(input: {
       input.eligibility,
     ));
   }
-  for (const item of prepared.sdkSessionItems) {
+  if (prepared.sdkSessionMutation.mode === 'replace') {
+    statements.push(
+      input.db.prepare(
+        `DELETE FROM agent_session_items
+         WHERE session_id = ?
+           AND EXISTS (
+             SELECT 1
+             WHERE ${input.eligibility.sql}
+           )`,
+      ).bind(
+        prepared.turn.sessionId,
+        ...input.eligibility.bindings,
+      ),
+    );
+  }
+  for (const item of prepared.sdkSessionMutation.items) {
     requiredResultIndexes.push(statements.length);
     statements.push(
       input.db.prepare(

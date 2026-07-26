@@ -134,7 +134,7 @@ export interface CommitAssistantTurnInput {
     payload: Record<string, unknown>;
   };
   assistantTurn: AppendConversationTurnInput;
-  sdkSessionItems?: readonly AgentInputItem[];
+  sdkSessionMutation?: AgentSessionItemsMutation;
   auditEvent?: {
     sessionId: string;
     sourceType: string;
@@ -146,6 +146,11 @@ export interface CommitAssistantTurnInput {
    * them.
    */
   verifiedRefs?: readonly VerifiedRefRecord[];
+}
+
+export interface AgentSessionItemsMutation {
+  mode: 'append' | 'replace';
+  items: readonly AgentInputItem[];
 }
 
 export interface CommitAssistantTurnIfRunCurrentInput

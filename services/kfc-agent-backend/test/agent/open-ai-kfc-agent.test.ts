@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import { OpenAiKfcAgent } from '../../src/agent/openAiKfcAgent.js';
+import type { OpenAiCompactionEvent } from '../../src/agent/observedOpenAiResponsesCompactionSession.js';
 import {
   assistant,
   user,
@@ -113,6 +114,130 @@ function createTurn(
 }
 
 describe('OpenAiKfcAgent SDK Runner', () => {
+  it('uses SDK compaction to publish replacement history and redacted metrics', async () => {
+    const compactionRequests: Array<Record<string, unknown>> = [];
+    const compactionEvents: OpenAiCompactionEvent[] = [];
+    const client = sequencedClient([
+      assistantMessage('Mình vẫn nhớ yêu cầu của bạn.'),
+    ]);
+    Object.assign(client.responses, {
+      compact: async (request: Record<string, unknown>) => {
+        compactionRequests.push(structuredClone(request));
+        return {
+          id: 'cmp_response_1',
+          object: 'response.compaction',
+          created_at: 0,
+          output: [
+            {
+              id: 'cmp_1',
+              type: 'compaction',
+              encrypted_content: 'opaque-compacted-context',
+            },
+          ],
+          usage: {
+            input_tokens: 20,
+            output_tokens: 5,
+            total_tokens: 25,
+          },
+        };
+      },
+    });
+    const agent = new OpenAiKfcAgent({
+      client,
+      model: 'gpt-4.1-mini',
+      compaction: {
+        enabled: true,
+        thresholdBytes: 1,
+      },
+    });
+
+    const result = await agent.respond(
+      createTurn({
+        lifecycle: {
+          onCompactionEnd: (event) => {
+            compactionEvents.push(event);
+          },
+        },
+      }),
+    );
+
+    expect(compactionRequests).toEqual([
+      expect.objectContaining({
+        model: 'gpt-4.1-mini',
+        input: expect.any(Array),
+      }),
+    ]);
+    expect(result.sdkSessionMutation).toEqual({
+      mode: 'replace',
+      items: [
+        {
+          id: 'cmp_1',
+          type: 'compaction',
+          encrypted_content: 'opaque-compacted-context',
+        },
+      ],
+    });
+    expect(compactionEvents).toEqual([
+      expect.objectContaining({
+        status: 'success',
+        latencyMs: expect.any(Number),
+        beforeItems: 2,
+        afterItems: 1,
+        beforeBytes: expect.any(Number),
+        afterBytes: expect.any(Number),
+        usage: {
+          inputTokens: 20,
+          outputTokens: 5,
+          totalTokens: 25,
+        },
+      }),
+    ]);
+    expect(compactionEvents[0]).not.toHaveProperty('items');
+  });
+
+  it('keeps the completed customer turn when best-effort compaction fails', async () => {
+    const compactionEvents: OpenAiCompactionEvent[] = [];
+    const client = sequencedClient([
+      assistantMessage('Mình vẫn tiếp tục được.'),
+    ]);
+    Object.assign(client.responses, {
+      compact: async () => {
+        throw new Error('synthetic compaction outage');
+      },
+    });
+    const agent = new OpenAiKfcAgent({
+      client,
+      model: 'gpt-4.1-mini',
+      compaction: { enabled: true, thresholdBytes: 1 },
+    });
+
+    const result = await agent.respond(
+      createTurn({
+        lifecycle: {
+          onCompactionEnd: (event) => {
+            compactionEvents.push(event);
+          },
+        },
+      }),
+    );
+
+    expect(result.responseText).toBe('Mình vẫn tiếp tục được.');
+    expect(result.sdkSessionMutation).toMatchObject({
+      mode: 'append',
+      items: [
+        expect.objectContaining({ role: 'user' }),
+        expect.objectContaining({ role: 'assistant' }),
+      ],
+    });
+    expect(compactionEvents).toEqual([
+      expect.objectContaining({
+        status: 'error',
+        beforeItems: 2,
+        beforeBytes: expect.any(Number),
+      }),
+    ]);
+  });
+
   it('continues from an SDK function result to a customer response', async () => {
     const executed: Array<Record<string, unknown>> = [];
     const agent = new OpenAiKfcAgent({
@@ -303,18 +428,21 @@ describe('OpenAiKfcAgent SDK Runner', () => {
     expect(requests[0]?.instructions).toContain(
       'Verified trusted KFC action result',
     );
-    expect(result.sdkSessionItems).toEqual([
-      expect.objectContaining({ type: 'message', role: 'user' }),
-      expect.objectContaining({
-        type: 'function_call',
-        name: 'updateCart',
-      }),
-      expect.objectContaining({
-        type: 'function_call_result',
-        name: 'updateCart',
-      }),
-      expect.objectContaining({ type: 'message', role: 'assistant' }),
-    ]);
+    expect(result.sdkSessionMutation).toEqual({
+      mode: 'append',
+      items: [
+        expect.objectContaining({ type: 'message', role: 'user' }),
+        expect.objectContaining({
+          type: 'function_call',
+          name: 'updateCart',
+        }),
+        expect.objectContaining({
+          type: 'function_call_result',
+          name: 'updateCart',
+        }),
+        expect.objectContaining({ type: 'message', role: 'assistant' }),
+      ],
+    });
     expect(lifecycleEvents).toEqual([
       {
         name: 'updateCart',
@@ -502,7 +630,7 @@ describe('OpenAiKfcAgent SDK Runner', () => {
       'Đã thêm Combo Hợp Gu 99K với mã Sốt Cay.',
     );
     expect(result.assistantTurn.text).toBe(result.responseText);
-    const storedAssistant = result.sdkSessionItems.at(-1);
+    const storedAssistant = result.sdkSessionMutation.items.at(-1);
     expect(storedAssistant).toMatchObject({
       role: 'assistant',
       content: [
@@ -667,14 +795,15 @@ describe('OpenAiKfcAgent SDK Runner', () => {
       }),
     );
 
-    expect(result.sdkSessionItems).toEqual(
-      expect.arrayContaining([
+    expect(result.sdkSessionMutation).toEqual({
+      mode: 'append',
+      items: expect.arrayContaining([
         expect.objectContaining({ type: 'message', role: 'user' }),
         expect.objectContaining({ type: 'function_call' }),
         expect.objectContaining({ type: 'function_call_result' }),
         expect.objectContaining({ type: 'message', role: 'assistant' }),
       ]),
-    );
+    });
     await expect(
       store.listAgentSessionItems('kfc:runner_test'),
     ).resolves.toEqual([]);

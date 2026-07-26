@@ -47,6 +47,77 @@ function functionCall(name: string, arguments_: Record<string, unknown>) {
 }
 
 describe('KfcDirectTurnService', () => {
+  it('persists redacted SDK compaction metrics with the assistant turn', async () => {
+    const fixtures = createTestFixtures();
+    const clients = createMockClients(fixtures);
+    // Minimal provider double for the SDK Runner boundary.
+    // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion
+    const client = {
+      responses: {
+        create: async () => assistantMessage('Mình đã ghi nhớ ngữ cảnh.'),
+        compact: async () => ({
+          id: 'cmp_response_1',
+          object: 'response.compaction',
+          created_at: 0,
+          output: [
+            {
+              id: 'cmp_1',
+              type: 'compaction',
+              encrypted_content: 'private-opaque-context',
+            },
+          ],
+          usage: {
+            input_tokens: 20,
+            output_tokens: 5,
+            total_tokens: 25,
+          },
+        }),
+      },
+    } as unknown as OpenAIClient;
+    const store = new MemoryStore();
+    const service = new KfcDirectTurnService({
+      store,
+      openAiAgent: new OpenAiKfcAgent({
+        client,
+        model: 'gpt-4.1-mini',
+        compaction: { enabled: true, thresholdBytes: 1 },
+      }),
+      getFixtures: async () => fixtures,
+      createClients: async () => clients,
+      getAccessContext: async () => undefined,
+    });
+
+    await service.run({
+      sessionId: 'kfc:compaction-metrics',
+      customerId: 'compaction-metrics',
+      channel: 'kfc',
+      text: 'Tiếp tục cuộc trò chuyện.',
+      externalMessageId: 'web-compaction-1',
+      metadata: null,
+    });
+
+    const trace = (await store.listEvents('kfc:compaction-metrics')).find(
+      (event) => event.sourceType === 'openai:tool_trace',
+    );
+    expect(trace?.payload).toMatchObject({
+      schemaVersion: 'openai-redacted-tool-trace-v1',
+      compaction: {
+        status: 'success',
+        latencyMs: expect.any(Number),
+        beforeItems: 2,
+        afterItems: 1,
+        beforeBytes: expect.any(Number),
+        afterBytes: expect.any(Number),
+        usage: {
+          inputTokens: 20,
+          outputTokens: 5,
+          totalTokens: 25,
+        },
+      },
+    });
+    expect(JSON.stringify(trace)).not.toContain('private-opaque-context');
+  });
+
   it('shares durable SDK history and verified cart state across web and Messenger', async () => {
     const fixtures = createTestFixtures();
     const clients = createMockClients(fixtures);
@@ -65,6 +136,8 @@ describe('KfcDirectTurnService', () => {
       assistantMessage('Giỏ hàng vẫn còn món đã chọn.'),
     ];
     const openAiAgent = new OpenAiKfcAgent({
+      // Minimal provider double for the SDK Runner boundary.
+      // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion
       client: {
         responses: {
           create: async (request: Record<string, unknown>) => {
@@ -74,8 +147,6 @@ describe('KfcDirectTurnService', () => {
             return response;
           },
         },
-        // Minimal provider double for the SDK Runner boundary.
-        // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion
       } as unknown as OpenAIClient,
       model: 'gpt-4.1-mini',
     });

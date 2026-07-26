@@ -13,6 +13,17 @@ const appEnvSchema = z.object({
     .enum(["stategraph", "openai-responses"])
     .default("stategraph"),
   KFC_AGENT_MODEL: z.string().optional().default(""),
+  KFC_AGENT_COMPACTION_ENABLED: z
+    .enum(["true", "false"])
+    .transform((value) => value === "true")
+    .default("true"),
+  KFC_AGENT_COMPACTION_THRESHOLD_BYTES: z.coerce
+    .number()
+    .int()
+    .min(16_384)
+    .max(4_194_304)
+    .default(196_608),
+  KFC_AGENT_COMPACTION_MODEL: z.string().optional().default(""),
   KFC_MONITOR_PROVIDER: z.enum(["openai", "google"]).optional(),
   KFC_MONITOR_MODEL: z.string().optional().default(""),
   KFC_CONFIRMATION_SIGNING_KEY_ID: z.string().default("primary"),

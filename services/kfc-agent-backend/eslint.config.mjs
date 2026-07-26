@@ -1,7 +1,15 @@
 import tseslint from 'typescript-eslint';
 
 export default tseslint.config(
-  { ignores: ['artifacts/**', 'dist/**', 'node_modules/**', '.wrangler/**'] },
+  {
+    ignores: [
+      'artifacts/**',
+      '.artifacts/**',
+      'dist/**',
+      'node_modules/**',
+      '.wrangler/**',
+    ],
+  },
   {
     files: ['**/*.ts'],
     plugins: {

@@ -1,7 +1,7 @@
 import { user, type AgentInputItem } from '@kfc/openai-agents-runtime';
 import type { QueryResult } from 'pg';
 import { describe, expect, it, vi } from 'vitest';
-import { ConversationStoreAgentSession } from '../../src/agent/conversationStoreAgentSession.js';
+import { BufferedConversationStoreAgentSession } from '../../src/agent/bufferedConversationStoreAgentSession.js';
 import { D1Store } from '../../src/persistence/d1Store.js';
 import { MemoryStore } from '../../src/persistence/memoryStore.js';
 import { PostgresStore } from '../../src/persistence/postgresStore.js';
@@ -13,18 +13,27 @@ function items(): AgentInputItem[] {
   return [user('first'), user('second'), user('third')];
 }
 
-describe('ConversationStoreAgentSession', () => {
-  it('implements all five Session operations with recent limits in chronological order', async () => {
+describe('Agents SDK session persistence', () => {
+  it('publishes an append mutation until SDK compaction replaces the buffered history', async () => {
     const store = new MemoryStore();
-    const session = new ConversationStoreAgentSession(store, sessionId);
+    await store.addAgentSessionItems(sessionId, [user('durable')]);
+    const session = new BufferedConversationStoreAgentSession(store, sessionId);
 
-    await expect(session.getSessionId()).resolves.toBe(sessionId);
-    await session.addItems(items());
-    await expect(session.getItems(2)).resolves.toEqual(items().slice(1));
-    await expect(session.popItem()).resolves.toEqual(items()[2]);
-    await expect(session.getItems()).resolves.toEqual(items().slice(0, 2));
+    await session.addItems([user('new turn')]);
+    expect(session.pendingMutation()).toEqual({
+      mode: 'append',
+      items: [user('new turn')],
+    });
     await session.clearSession();
-    await expect(session.getItems()).resolves.toEqual([]);
+    await session.addItems([user('compacted context')]);
+
+    await expect(session.getItems()).resolves.toEqual([
+      user('compacted context'),
+    ]);
+    expect(session.pendingMutation()).toEqual({
+      mode: 'replace',
+      items: [user('compacted context')],
+    });
   });
 
   it('keeps SDK session items separate from customer-visible turns and clears only the requested session', async () => {

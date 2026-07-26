@@ -99,6 +99,9 @@ describe('direct Agents SDK live scenarios', () => {
       "process.env.RUN_LIVE_DIRECT_AGENT_SCENARIOS === '1'",
     );
     expect(scriptSource).toContain('KFC_DIRECT_LIVE_SCENARIO_IDS');
+    expect(scriptSource).toContain(
+      'KFC_DIRECT_LIVE_COMPACTION_THRESHOLD_BYTES',
+    );
     expect(packageSource).toContain('[ ! -f ../../.env ] || . ../../.env');
     expect(packageSource).toContain('"test:live:direct-agents-sdk"');
   });
@@ -121,6 +124,7 @@ describe('direct Agents SDK live scenarios', () => {
         'one-turn-checkout-progression',
         'modifier-preservation-through-checkout',
         'genui-selection-and-cart-actions',
+        'sdk-compaction-continuity',
       ]),
     );
     expect(
@@ -144,33 +148,52 @@ describe('direct Agents SDK live scenarios', () => {
       observations: ['Review whether the corrected category call recovered.'],
     };
     const service = {
-      run: async () => ({
-        responseText: 'Mình tìm thấy Pepsi.',
-        toolCalls: [
-          {
-            name: 'searchMenu',
-            arguments: { query: 'đồ uống', category: 'Thức Uống' },
-            result: {
-              ok: true,
-              value: { mode: 'search', total: 0, items: [] },
-            },
-            status: 'success' as const,
-            durationMs: 12,
+      run: async (input: Parameters<DirectAgentTurnService['run']>[0]) => {
+        await input.lifecycle?.onCompactionEnd?.({
+          status: 'success',
+          latencyMs: 18,
+          beforeItems: 12,
+          beforeBytes: 5_120,
+          afterItems: 2,
+          afterBytes: 1_024,
+          usage: {
+            inputTokens: 120,
+            outputTokens: 20,
+            totalTokens: 140,
           },
-          {
-            name: 'searchMenu',
-            arguments: { category: 'Thức Uống' },
-            result: {
-              ok: true,
-              value: { mode: 'search', total: 3, items: [{ code: 'safe' }] },
+        });
+        return {
+          responseText: 'Mình tìm thấy Pepsi.',
+          toolCalls: [
+            {
+              name: 'searchMenu',
+              arguments: { query: 'đồ uống', category: 'Thức Uống' },
+              result: {
+                ok: true,
+                value: { mode: 'search', total: 0, items: [] },
+              },
+              status: 'success' as const,
+              durationMs: 12,
             },
-            status: 'success' as const,
-            durationMs: 9,
-          },
-        ],
-        usage: { inputTokens: 20, outputTokens: 8, totalTokens: 28 },
-        genUi: genUiAttachment('smartMenuPicker'),
-      }),
+            {
+              name: 'searchMenu',
+              arguments: { category: 'Thức Uống' },
+              result: {
+                ok: true,
+                value: {
+                  mode: 'search',
+                  total: 3,
+                  items: [{ code: 'safe' }],
+                },
+              },
+              status: 'success' as const,
+              durationMs: 9,
+            },
+          ],
+          usage: { inputTokens: 20, outputTokens: 8, totalTokens: 28 },
+          genUi: genUiAttachment('smartMenuPicker'),
+        };
+      },
     };
 
     const artifact = await runDirectAgentScenario({
@@ -189,6 +212,19 @@ describe('direct Agents SDK live scenarios', () => {
         latencyMs: 45,
         usage: { inputTokens: 20, outputTokens: 8, totalTokens: 28 },
         genUiKind: 'smartMenuPicker',
+        compaction: {
+          status: 'success',
+          latencyMs: 18,
+          beforeItems: 12,
+          beforeBytes: 5_120,
+          afterItems: 2,
+          afterBytes: 1_024,
+          usage: {
+            inputTokens: 120,
+            outputTokens: 20,
+            totalTokens: 140,
+          },
+        },
         observations: ['Review whether the corrected category call recovered.'],
         toolCalls: [
           expect.objectContaining({
@@ -472,6 +508,7 @@ describe('direct Agents SDK live scenarios', () => {
               usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 },
               latencyMs: 15,
               genUiKind: null,
+              compaction: null,
               observations: [],
             },
           ],

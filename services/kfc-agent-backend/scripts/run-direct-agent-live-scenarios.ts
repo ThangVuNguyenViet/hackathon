@@ -59,6 +59,17 @@ const fixtures = await loadGeneratedFixtures(backendRoot);
 const store = new MemoryStore();
 const clientBySession = new Map<string, ReturnType<typeof createMockClients>>();
 const model = process.env.KFC_AGENT_MODEL?.trim() || 'gpt-4.1-mini';
+const configuredCompactionThreshold = Number(
+  process.env.KFC_DIRECT_LIVE_COMPACTION_THRESHOLD_BYTES ?? '196608',
+);
+if (
+  !Number.isInteger(configuredCompactionThreshold) ||
+  configuredCompactionThreshold <= 0
+) {
+  throw new Error(
+    'KFC_DIRECT_LIVE_COMPACTION_THRESHOLD_BYTES must be a positive integer',
+  );
+}
 const openAiClient = new OpenAI({
   apiKey,
   ...(process.env.OPENAI_BASE_URL?.trim()
@@ -70,6 +81,10 @@ const openAiAgent = new OpenAiKfcAgent({
   // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion
   client: openAiClient as unknown as OpenAIClient,
   model,
+  compaction: {
+    enabled: true,
+    thresholdBytes: configuredCompactionThreshold,
+  },
 });
 
 function fixtureAccessContext(

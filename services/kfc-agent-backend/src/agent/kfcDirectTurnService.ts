@@ -28,6 +28,7 @@ import {
   type OpenAiKfcAgentLifecycleObserver,
   type OpenAiKfcAgentTurnResult,
 } from './openAiKfcAgent.js';
+import type { OpenAiCompactionEvent } from './observedOpenAiResponsesCompactionSession.js';
 
 export interface PreparedDirectKfcTurn {
   requiredToolCalls?: Array<{
@@ -110,6 +111,7 @@ export class KfcDirectTurnService {
             };
           }
         | undefined;
+      let compactionMetrics: OpenAiCompactionEvent | undefined;
       let directOutput: OpenAiKfcAgentTurnResult;
       try {
         directOutput = await this.options.openAiAgent.respond({
@@ -137,6 +139,10 @@ export class KfcDirectTurnService {
           lifecycle: {
             onRunStart: input.lifecycle?.onRunStart,
             onToolEnd: input.lifecycle?.onToolEnd,
+            onCompactionEnd: async (event) => {
+              compactionMetrics = event;
+              await input.lifecycle?.onCompactionEnd?.(event);
+            },
             onRunEnd: async (event) => {
               runMetrics = event;
               await input.lifecycle?.onRunEnd?.(event);
@@ -156,6 +162,7 @@ export class KfcDirectTurnService {
             status: 'error' as const,
             latencyMs: Math.max(0, Date.now() - serviceStartedAt),
           },
+          ...(compactionMetrics ? { compaction: compactionMetrics } : {}),
           calls: [],
         };
         if (input.fence) {
@@ -181,6 +188,7 @@ export class KfcDirectTurnService {
         assistantTurnId: directOutput.assistantTurnId,
         customerCommand: input.metadata?.customerCommand,
         runMetrics,
+        compactionMetrics,
       });
       const commitInput = {
         stateEvent: {
@@ -189,7 +197,7 @@ export class KfcDirectTurnService {
           payload: { verifiedState: publication.verifiedState },
         },
         assistantTurn: directOutput.assistantTurn,
-        sdkSessionItems: directOutput.sdkSessionItems,
+        sdkSessionMutation: directOutput.sdkSessionMutation,
         ...(publication.auditPayload
           ? {
               auditEvent: {

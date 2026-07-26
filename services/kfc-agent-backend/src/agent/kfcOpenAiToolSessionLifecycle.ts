@@ -11,6 +11,7 @@ import {
   type KfcToolSession,
 } from './kfcOpenAiTools.js';
 import type { OpenAiToolCallTrace } from './openAiKfcAgent.js';
+import type { OpenAiCompactionEvent } from './observedOpenAiResponsesCompactionSession.js';
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
@@ -96,6 +97,7 @@ export async function persistKfcOpenAiToolSession(input: {
       totalTokens: number;
     };
   };
+  compactionMetrics?: OpenAiCompactionEvent;
 }): Promise<'committed' | 'stale'> {
   const publication = await prepareKfcOpenAiToolSessionPublication(input);
   const { verifiedState } = publication;
@@ -144,6 +146,7 @@ export async function prepareKfcOpenAiToolSessionPublication(input: {
       totalTokens: number;
     };
   };
+  compactionMetrics?: OpenAiCompactionEvent;
 }): Promise<{
   verifiedState: Record<string, unknown>;
   auditPayload?: Record<string, unknown>;
@@ -155,11 +158,14 @@ export async function prepareKfcOpenAiToolSessionPublication(input: {
     customerCommand: input.customerCommand,
   }).state as unknown as Record<string, unknown>;
   const auditPayload =
-    input.toolCalls.length > 0 || input.runMetrics
+    input.toolCalls.length > 0 || input.runMetrics || input.compactionMetrics
       ? {
           schemaVersion: 'openai-redacted-tool-trace-v1',
           assistantTurnId: input.assistantTurnId,
           ...(input.runMetrics ? { run: input.runMetrics } : {}),
+          ...(input.compactionMetrics
+            ? { compaction: input.compactionMetrics }
+            : {}),
           calls: await redactedToolCalls(input.toolCalls),
         }
       : undefined;

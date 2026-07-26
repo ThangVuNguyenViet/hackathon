@@ -14,11 +14,16 @@ import {
 import type { Channel, ConversationTurnMetadata } from '../domain/types.js';
 import type { KfcGenUiAttachment } from '../genui/kfcGenUi.js';
 import type {
+  AgentSessionItemsMutation,
   AppendConversationTurnInput,
   ConversationStore,
 } from '../persistence/contracts.js';
 import type { KfcOpenAiAgentRunContext } from './kfcOpenAiTools.js';
 import { BufferedConversationStoreAgentSession } from './bufferedConversationStoreAgentSession.js';
+import {
+  ObservedOpenAiResponsesCompactionSession,
+  type OpenAiCompactionEvent,
+} from './observedOpenAiResponsesCompactionSession.js';
 
 export interface OpenAiToolCallTrace {
   name: string;
@@ -38,7 +43,12 @@ export interface OpenAiKfcAgentOptions {
   client: OpenAIClient;
   model: string;
   instructions?: string;
-  maxToolRounds?: number;
+  maxTurns?: number;
+  compaction?: {
+    enabled: boolean;
+    thresholdBytes: number;
+    model?: string;
+  };
 }
 
 export interface OpenAiKfcAgentLifecycleObserver {
@@ -48,6 +58,7 @@ export interface OpenAiKfcAgentLifecycleObserver {
     status: 'success' | 'error';
     durationMs: number;
   }): Promise<void> | void;
+  onCompactionEnd?(event: OpenAiCompactionEvent): Promise<void> | void;
   onRunEnd?(event: {
     status: 'success' | 'error';
     latencyMs: number;
@@ -87,7 +98,7 @@ export interface OpenAiKfcAgentTurnResult extends OpenAiKfcAgentExecutionResult 
   assistantTurnId: string;
   genUi?: KfcGenUiAttachment;
   assistantTurn: AppendConversationTurnInput;
-  sdkSessionItems: AgentInputItem[];
+  sdkSessionMutation: AgentSessionItemsMutation;
 }
 
 const defaultInstructions = [
@@ -278,13 +289,17 @@ function presentCustomerResponse(input: {
 export class OpenAiKfcAgent {
   private readonly model: string;
   private readonly instructions: string;
-  private readonly maxToolRounds: number;
+  private readonly maxTurns: number;
+  private readonly client: OpenAIClient;
+  private readonly compaction: OpenAiKfcAgentOptions['compaction'];
   private readonly runner: Runner;
 
   constructor(options: OpenAiKfcAgentOptions) {
     this.model = options.model || 'gpt-4.1-mini';
     this.instructions = options.instructions ?? defaultInstructions;
-    this.maxToolRounds = options.maxToolRounds ?? 12;
+    this.maxTurns = options.maxTurns ?? 12;
+    this.client = options.client;
+    this.compaction = options.compaction;
     this.runner = new Runner({
       modelProvider: new OpenAIProvider({
         openAIClient: options.client,
@@ -412,10 +427,20 @@ export class OpenAiKfcAgent {
       toolStartedAt: new Map<string, number>(),
       lifecycle: input.lifecycle,
     };
-    const session = new BufferedConversationStoreAgentSession(
+    const bufferedSession = new BufferedConversationStoreAgentSession(
       input.store,
       input.sessionId,
     );
+    const session =
+      this.compaction?.enabled === true
+        ? new ObservedOpenAiResponsesCompactionSession({
+            client: this.client,
+            underlyingSession: bufferedSession,
+            model: this.compaction.model ?? this.model,
+            thresholdBytes: this.compaction.thresholdBytes,
+            onCompactionEnd: input.lifecycle?.onCompactionEnd,
+          })
+        : bufferedSession;
     const runStartedAt = Date.now();
     await input.lifecycle?.onRunStart?.();
     let completedUsage: OpenAiUsage | undefined;
@@ -497,7 +522,7 @@ export class OpenAiKfcAgent {
           : input.text,
         {
           context: runContext,
-          maxTurns: this.maxToolRounds,
+          maxTurns: this.maxTurns,
           session,
         },
       );
@@ -558,7 +583,7 @@ export class OpenAiKfcAgent {
         userTurnId: userTurn.id,
         assistantTurnId: assistantTurn.id!,
         assistantTurn,
-        sdkSessionItems: session.pendingItems(),
+        sdkSessionMutation: bufferedSession.pendingMutation(),
         ...(genUi ? { genUi } : {}),
       };
     } finally {

@@ -6,6 +6,7 @@ import type {
   OpenAiToolCallTrace,
   OpenAiUsage,
 } from '../agent/openAiKfcAgent.js';
+import type { OpenAiCompactionEvent } from '../agent/observedOpenAiResponsesCompactionSession.js';
 import type { CustomerCommand } from '../domain/customerCommand.js';
 import type { KfcGenUiAttachment } from '../genui/kfcGenUi.js';
 import {
@@ -26,7 +27,8 @@ export type DirectAgentRegressionCoverage =
   | 'free-form-delivery-address'
   | 'one-turn-checkout-progression'
   | 'modifier-preservation-through-checkout'
-  | 'genui-selection-and-cart-actions';
+  | 'genui-selection-and-cart-actions'
+  | 'sdk-compaction-continuity';
 
 export type DirectAgentScenarioTurn =
   | {
@@ -93,6 +95,7 @@ export interface DirectAgentTurnEvidence {
   usage: OpenAiUsage;
   latencyMs: number;
   genUiKind: KfcGenUiAttachment['widgetKind'] | null;
+  compaction: OpenAiCompactionEvent | null;
   observations: string[];
 }
 
@@ -425,6 +428,41 @@ export const DIRECT_AGENT_MANUAL_REGRESSION_BANK: DirectAgentScenario[] = [
       'Verify that trusted selection and cart quantity actions execute through the same SDK tool validation path and return updated GenUI.',
     ],
   },
+  {
+    id: 'regression-sdk-compaction-continuity',
+    title: 'Long conversation across SDK compaction',
+    source: 'manual-regression',
+    coverage: 'sdk-compaction-continuity',
+    turns: [
+      { kind: 'customer', text: 'Cho mình xem các combo hiện có.' },
+      {
+        kind: 'customer',
+        text: 'Chọn giúp mình một combo có gà không cay và thêm vào giỏ.',
+      },
+      {
+        kind: 'customer',
+        text: 'Nếu combo chưa có nước thì thêm riêng một ly 7Up vừa.',
+      },
+      { kind: 'customer', text: 'Cho mình xem ưu đãi đang dùng được.' },
+      { kind: 'customer', text: 'Giỏ hàng hiện tại của mình có gì?' },
+      {
+        kind: 'customer',
+        text: 'Giao đến 54/2 Nguyễn Hồng Đào, phường 14, quận Tân Bình, TP.HCM.',
+      },
+      {
+        kind: 'customer',
+        text: 'Người nhận là Minh, số điện thoại 0900000000.',
+      },
+      {
+        kind: 'customer',
+        text: 'Cho mình xem lại toàn bộ món, tùy chọn và thông tin giao hàng trước khi xác nhận.',
+      },
+    ],
+    referenceAssistantTurns: [],
+    observations: [
+      'Force SDK compaction during this replay and verify that the exact selected items, modifiers, cart quantities, address and checkout progress survive it.',
+    ],
+  },
 ];
 
 function record(value: unknown): Record<string, unknown> | undefined {
@@ -588,6 +626,7 @@ export async function runDirectAgentScenario(input: {
   let selectedItemCode: string | undefined;
   for (const [offset, turn] of input.scenario.turns.entries()) {
     const startedAt = clock();
+    let compaction: OpenAiCompactionEvent | null = null;
     const trustedAction =
       turn.kind === 'trusted_action'
         ? resolveDirectAgentTrustedCartAction({
@@ -608,6 +647,11 @@ export async function runDirectAgentScenario(input: {
         ...(trustedAction
           ? { customerCommand: trustedAction.customerCommand }
           : {}),
+      },
+      lifecycle: {
+        onCompactionEnd: (event) => {
+          compaction = structuredClone(event);
+        },
       },
       ...(trustedAction
         ? {
@@ -637,6 +681,7 @@ export async function runDirectAgentScenario(input: {
       usage: structuredClone(result.usage),
       latencyMs: Math.max(0, clock() - startedAt),
       genUiKind: result.genUi?.widgetKind ?? null,
+      compaction,
       observations: [...input.scenario.observations],
     });
     latestGenUi = result.genUi;
@@ -713,6 +758,13 @@ export function renderDirectAgentTranscriptMarkdown(
         `- Latency: ${turn.latencyMs} ms`,
         `- Usage: ${turn.usage.inputTokens} input / ${turn.usage.outputTokens} output / ${turn.usage.totalTokens} total tokens`,
         `- GenUI: ${turn.genUiKind ?? 'none'}`,
+        `- Compaction: ${
+          turn.compaction
+            ? `${turn.compaction.status}, ${turn.compaction.beforeItems} → ${
+                turn.compaction.afterItems ?? 'unknown'
+              } items, ${turn.compaction.latencyMs} ms`
+            : 'none'
+        }`,
         '',
         '**Tool calls:**',
         '',
@@ -798,5 +850,6 @@ export function redactedDirectScenarioProgress(
     usage: turn.usage,
     latencyMs: turn.latencyMs,
     genUiKind: turn.genUiKind,
+    compaction: turn.compaction,
   };
 }

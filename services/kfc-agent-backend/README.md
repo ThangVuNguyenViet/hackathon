@@ -56,6 +56,25 @@ customer prose with keyword matching. The asynchronous monitor remains
 non-authoritative and does not block publication.
 `OPENAI_BASE_URL` is optional for the OpenAI adapter.
 
+### Agents SDK conversation context
+
+The direct OpenAI runtime keeps three different durable records:
+
+- `agent_session_items` is model context managed through the Agents SDK
+  `Session` contract. The SDK compaction session may atomically replace this
+  history after it reaches `KFC_AGENT_COMPACTION_THRESHOLD_BYTES`.
+- `conversation_turns` is the complete customer-visible transcript. Compaction
+  does not summarize or delete it.
+- Verified cart, address, reward, voucher, fulfillment, and order state remains
+  structured application state and is never sourced from a compacted summary.
+
+`KFC_AGENT_COMPACTION_ENABLED` defaults to `true`. Compaction failures are
+best-effort: they are recorded as redacted metrics while the completed turn is
+published with its uncompacted session items. A session reset removes both SDK
+history and customer-visible turns. No time-based transcript deletion is
+performed; adding one requires a separately approved customer-data retention
+period rather than reusing the compaction threshold.
+
 ## LangSmith Studio
 
 PR #52 targets one explicitly authored LangGraph `StateGraph` (using the graph

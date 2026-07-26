@@ -1498,6 +1498,20 @@ class FakeD1PreparedStatement {
       const [removed] = this.db.tables.agent_session_items.splice(index, 1);
       return { ...ok(1), results: [{ item_json: removed?.item_json }] };
     }
+    if (
+      normalized.startsWith('DELETE FROM agent_session_items') &&
+      normalized.includes('AND EXISTS ( SELECT 1 WHERE')
+    ) {
+      if (!this.runCommitEligibilityIsCurrent(normalized, 1)) {
+        return ok(0);
+      }
+      const before = this.db.tables.agent_session_items.length;
+      this.db.tables.agent_session_items =
+        this.db.tables.agent_session_items.filter(
+          (row) => row.session_id !== this.values[0],
+        );
+      return ok(before - this.db.tables.agent_session_items.length);
+    }
     if (normalized.startsWith('DELETE FROM ')) {
       this.handleDelete(normalized);
       return ok();
