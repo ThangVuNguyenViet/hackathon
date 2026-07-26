@@ -82,20 +82,24 @@ const binding = (name: string) => ({
   provenance: { source: 'test', reference: name },
 });
 
-const candidate = (id: string, score: number): RankedCandidate => ({
+const candidate = (
+  targetId: string,
+  score: number,
+  actionId = `product:${targetId}`,
+): RankedCandidate => ({
   candidate: {
     action: recommendationActionSchema.parse({
       type: 'add_product',
-      actionId: id,
-      sellableItemId: id,
+      actionId,
+      sellableItemId: targetId,
       quantity: 1,
       priceImpact: { amount: 50000, currency: 'VND' },
       cartRevision: 'merch-cart-revision-001',
     }),
-    targetId: id,
-    sellableItemId: id,
-    categoryId: id === '41091' ? 'modifier' : 'chicken',
-    name: `Candidate ${id}`,
+    targetId,
+    sellableItemId: targetId,
+    categoryId: targetId === '41091' ? 'modifier' : 'chicken',
+    name: `Candidate ${targetId}`,
     imageUrl: null,
     basePriceVnd: 50000,
     activeDiscountRatio: 0,
@@ -261,15 +265,53 @@ describe('merchandising policy snapshots', () => {
     ]);
   });
 
+  it('orders matching policies by priority before the remaining sort keys', () => {
+    expect(
+      applicableMerchandisingPolicies(
+        context(),
+        policies(
+          { policyId: 'policy-lower-priority', priority: 10 },
+          { policyId: 'policy-higher-priority', priority: 20 },
+        ),
+        ['chicken'],
+      ).map((entry) => entry.policyId),
+    ).toEqual(['policy-higher-priority', 'policy-lower-priority']);
+  });
+
+  it('orders equally specific, equally prioritized policies by latest start time', () => {
+    expect(
+      applicableMerchandisingPolicies(
+        context(),
+        policies(
+          {
+            policyId: 'policy-earlier',
+            startsAt: '2026-02-01T00:00:00Z',
+          },
+          {
+            policyId: 'policy-later',
+            startsAt: '2026-03-01T00:00:00Z',
+          },
+        ),
+        ['chicken'],
+      ).map((entry) => entry.policyId),
+    ).toEqual(['policy-later', 'policy-earlier']);
+  });
+
   it('excludes first, suppresses over replacement, skips invalid replacement, boosts once, pins, and never resurrects', () => {
-    const ranked = [candidate('20712', 10), candidate('20732', 4), candidate('20751', 3), candidate('41091', 1)];
+    const ranked = [
+      candidate('20712', 10),
+      candidate('20732', 4),
+      candidate('20751', 3),
+      candidate('20748', 2),
+      candidate('41091', 1, 'modifier:line-20732:41091'),
+    ];
     const resolved = resolveMerchandisingPolicies({
       context: context(),
       rankedCandidates: ranked,
       policies: policies(
         { action: 'exclude_target', targetIds: ['20712'], boostWeight: null },
         { action: 'replace_slate', targetIds: ['20751', 'does-not-exist'], boostWeight: null, priority: 90 },
-        { action: 'replace_slate', targetIds: ['20751', '20732'], boostWeight: null, priority: 80 },
+        { action: 'replace_slate', targetIds: ['20751', '20732', '20748'], boostWeight: null, priority: 80 },
         { action: 'boost_target', targetIds: ['20732'], boostWeight: 0.1, priority: 70 },
         { action: 'boost_target', targetIds: ['20732'], boostWeight: 0.9, priority: 60 },
         { action: 'pin_target', targetIds: ['41091'], boostWeight: null, pinPosition: 1, priority: 50 },
@@ -278,10 +320,22 @@ describe('merchandising policy snapshots', () => {
     });
 
     expect(resolved.suppressed).toBe(false);
-    expect(resolved.replacement?.map((entry) => entry.candidate.action.actionId)).toEqual(['20751', '20732']);
-    expect(resolved.rankedCandidates.map((entry) => entry.candidate.action.actionId)).toEqual(['20732', '20751']);
-    expect(resolved.rankedCandidates.find((entry) => entry.candidate.action.actionId === '20732')?.score).toBe(4.9);
+    expect(resolved.replacement?.map((entry) => entry.candidate.action.actionId)).toEqual(['product:20751', 'product:20732', 'product:20748']);
+    expect(resolved.rankedCandidates.map((entry) => entry.candidate.action.actionId)).toEqual(['product:20732', 'product:20751', 'product:20748']);
+    expect(resolved.rankedCandidates.find((entry) => entry.candidate.targetId === '20732')?.score).toBe(4.9);
     expect(resolved.rankedCandidates.map((entry) => entry.candidate.action.actionId)).not.toContain('does-not-exist');
+    expect(resolved.effects).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ action: 'exclude_target', targetActionId: 'product:20712' }),
+        expect.objectContaining({ action: 'replace_slate', targetActionId: 'product:20751' }),
+        expect.objectContaining({ action: 'boost_target', targetActionId: 'product:20732' }),
+      ]),
+    );
+    expect(
+      resolved.effects
+        .filter((effect) => effect.action === 'replace_slate')
+        .map((effect) => effect.targetActionId),
+    ).toEqual(['product:20751', 'product:20732', 'product:20748']);
 
     const suppressed = resolveMerchandisingPolicies({
       context: context({ request: { ...context().request, storeId: 'KFCVN0036' } }),
@@ -305,6 +359,56 @@ describe('merchandising policy snapshots', () => {
       }),
       cartCategoryIds: ['chicken'],
     });
-    expect(pinned.rankedCandidates[0]?.candidate.action.actionId).toBe('41091');
+    expect(pinned.rankedCandidates[0]?.candidate.action.actionId).toBe(
+      'modifier:line-20732:41091',
+    );
+    expect(pinned.effects).toEqual([
+      expect.objectContaining({
+        action: 'pin_target',
+        targetActionId: 'modifier:line-20732:41091',
+      }),
+    ]);
+  });
+
+  it('skips an invalid-size smart cross-sell replacement atomically', () => {
+    const ranked = [
+      candidate('20732', 4, '20732'),
+      candidate('20751', 3, '20751'),
+      candidate('20748', 2, '20748'),
+    ];
+    const result = resolveMerchandisingPolicies({
+      context: context(),
+      rankedCandidates: ranked,
+      policies: policies({
+        action: 'replace_slate',
+        targetIds: ['20751', '20732'],
+        boostWeight: null,
+      }),
+      cartCategoryIds: ['chicken'],
+    });
+
+    expect(result.replacement).toBeNull();
+    expect(result.rankedCandidates.map((entry) => entry.candidate.action.actionId)).toEqual([
+      '20732',
+      '20751',
+      '20748',
+    ]);
+  });
+
+  it('excludes by target ID without resurrecting the action and records its real action ID', () => {
+    const result = resolveMerchandisingPolicies({
+      context: context(),
+      rankedCandidates: [candidate('20712', 10), candidate('20732', 4)],
+      policies: policies(
+        { action: 'exclude_target', targetIds: ['20712'], boostWeight: null },
+        { action: 'boost_target', targetIds: ['20712'], boostWeight: 1 },
+      ),
+      cartCategoryIds: ['chicken'],
+    });
+
+    expect(result.rankedCandidates.map((entry) => entry.candidate.action.actionId)).toEqual(['product:20732']);
+    expect(result.effects).toEqual([
+      expect.objectContaining({ action: 'exclude_target', targetActionId: 'product:20712' }),
+    ]);
   });
 });

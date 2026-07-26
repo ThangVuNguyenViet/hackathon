@@ -178,6 +178,20 @@ export const placementSchema = z.enum([
   'smart_cross_sell',
 ]);
 
+export function placementAcceptsActionCount(
+  placement: z.infer<typeof placementSchema>,
+  actionCount: number,
+): boolean {
+  switch (placement) {
+    case 'local_favorite':
+    case 'for_you':
+    case 'modifier_upsell':
+      return actionCount === 1;
+    case 'smart_cross_sell':
+      return actionCount >= 3 && actionCount <= 4;
+  }
+}
+
 export const decisionStatusSchema = z.enum([
   'recommended',
   'empty',
@@ -541,7 +555,8 @@ export const recommendationDecisionResponseSchema =
       value.primaryOffer !== null &&
       !isValidSanityReplacement &&
       value.placement === 'modifier_upsell' &&
-      (actions.length !== 1 || actions[0]?.type !== 'apply_modifier')
+      (!placementAcceptsActionCount(value.placement, actions.length) ||
+        actions[0]?.type !== 'apply_modifier')
     ) {
       context.addIssue({
         code: z.ZodIssueCode.custom,
@@ -553,7 +568,8 @@ export const recommendationDecisionResponseSchema =
       value.primaryOffer !== null &&
       !isValidSanityReplacement &&
       (value.placement === 'local_favorite' || value.placement === 'for_you') &&
-      (actions.length !== 1 || actions[0]?.type !== 'add_product')
+      (!placementAcceptsActionCount(value.placement, actions.length) ||
+        actions[0]?.type !== 'add_product')
     ) {
       context.addIssue({
         code: z.ZodIssueCode.custom,
@@ -567,8 +583,7 @@ export const recommendationDecisionResponseSchema =
       !isValidSanityReplacement &&
       value.placement === 'smart_cross_sell' &&
       !(
-        actions.length >= 3 &&
-        actions.length <= 4 &&
+        placementAcceptsActionCount(value.placement, actions.length) &&
         actions.every((action) => action.type === 'add_product')
       )
     ) {

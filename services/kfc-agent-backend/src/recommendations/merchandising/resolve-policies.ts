@@ -2,6 +2,7 @@ import type {
   CustomerReasonCode,
   MerchandisingEffect,
 } from '../domain/contracts.js';
+import { placementAcceptsActionCount } from '../domain/schemas.js';
 import type { RecommendationDecisionContext } from '../eligibility/types.js';
 import type { RankedCandidate } from '../ranking/types.js';
 import {
@@ -85,18 +86,17 @@ export function resolveMerchandisingPolicies(
       .flatMap((policy) => policy.targetIds),
   );
   const available = input.rankedCandidates.filter(
-    (entry) => !excluded.has(entry.candidate.action.actionId),
+    (entry) => !excluded.has(entry.candidate.targetId),
   );
   for (const policy of applicable.filter(
     (entry) => entry.action === 'exclude_target',
   )) {
     for (const targetId of policy.targetIds) {
-      if (
-        input.rankedCandidates.some(
-          (entry) => entry.candidate.action.actionId === targetId,
-        )
-      ) {
-        addEffect(policy, targetId);
+      const target = input.rankedCandidates.find(
+        (entry) => entry.candidate.targetId === targetId,
+      );
+      if (target) {
+        addEffect(policy, target.candidate.action.actionId);
       }
     }
   }
@@ -117,18 +117,26 @@ export function resolveMerchandisingPolicies(
 
   const replacementPolicy = applicable.find((policy) => {
     if (policy.action !== 'replace_slate') return false;
-    return policy.targetIds.every((targetId) =>
-      available.some((entry) => entry.candidate.action.actionId === targetId),
+    return (
+      placementAcceptsActionCount(
+        input.context.request.placement,
+        policy.targetIds.length,
+      ) &&
+      policy.targetIds.every((targetId) =>
+        available.some((entry) => entry.candidate.targetId === targetId),
+      )
     );
   });
   const replacement = replacementPolicy
     ? replacementPolicy.targetIds.map((targetId) =>
-        available.find(
-          (entry) => entry.candidate.action.actionId === targetId,
-        )!,
+        available.find((entry) => entry.candidate.targetId === targetId)!,
       )
     : null;
-  if (replacementPolicy) addEffect(replacementPolicy, null);
+  if (replacementPolicy && replacement) {
+    for (const entry of replacement) {
+      addEffect(replacementPolicy, entry.candidate.action.actionId);
+    }
+  }
 
   const slate = replacement ?? available;
   const boosted = applyStrongestBoosts(slate, applicable, addEffect);
@@ -222,7 +230,7 @@ function applyStrongestBoosts(
     }
   }
   return slate.map((entry) => {
-    const policy = strongestByTarget.get(entry.candidate.action.actionId);
+    const policy = strongestByTarget.get(entry.candidate.targetId);
     if (!policy) return entry;
     addEffect(policy, entry.candidate.action.actionId);
     return { ...entry, score: entry.score + policy.boostWeight! };
@@ -245,7 +253,7 @@ function applyPins(
     if (policy.action !== 'pin_target') continue;
     for (const targetId of policy.targetIds) {
       const index = result.findIndex(
-        (entry) => entry.candidate.action.actionId === targetId,
+        (entry) => entry.candidate.targetId === targetId,
       );
       if (index < 0) continue;
       const [entry] = result.splice(index, 1);
@@ -254,7 +262,7 @@ function applyPins(
         0,
         entry!,
       );
-      addEffect(policy, targetId);
+      addEffect(policy, entry!.candidate.action.actionId);
     }
   }
   return result;
