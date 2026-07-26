@@ -140,6 +140,30 @@ describe('recommendation domain contracts', () => {
     expect(parsed.commerceSnapshotBindings.catalog.complete).toBe(true);
   });
 
+  it.each([
+    ['canonical uppercase', '2026-07-27T09:00:00Z'],
+    ['lowercase t/z', '2026-07-27t09:00:00z'],
+    ['space with offset', '2026-07-27 16:00:00+07:00'],
+    ['numeric offset', '2026-07-27T16:00:00+07:00'],
+  ])('accepts the Ajv date-time lexical form: %s', (_name, decisionTime) => {
+    const value = structuredClone(validRequest);
+    value.decisionTime = decisionTime;
+
+    expect(parseRecommendationDecisionRequest(value).decisionTime).toBe(
+      decisionTime,
+    );
+  });
+
+  it.each(['2026-07-27T09:00:00', 1_753_608_000_000] as const)(
+    'rejects a timezone-free or non-string decision time: %s',
+    (decisionTime) => {
+      const value: { decisionTime: unknown } = structuredClone(validRequest);
+      value.decisionTime = decisionTime;
+
+      expect(() => parseRecommendationDecisionRequest(value)).toThrow();
+    },
+  );
+
   it('parses the canonical decision response and event', () => {
     expect(
       parseRecommendationDecisionResponse(validResponse).recommendationId,

@@ -1,3 +1,6 @@
+import type { Format } from 'ajv';
+import addFormats from 'ajv-formats';
+import type { FormatsPlugin } from 'ajv-formats';
 import { z } from 'zod';
 import {
   cartLineIdSchema,
@@ -21,7 +24,59 @@ import {
   KFC_RECOMMENDATION_POLICY_VERSION,
 } from './versions.js';
 
-export const instantSchema = z.string().datetime({ offset: true });
+type StringFormatValidator = (value: string) => boolean;
+type StringFormatDefinition = {
+  validate: RegExp | StringFormatValidator;
+};
+
+const ajvDateTimeFormat = (addFormats as unknown as FormatsPlugin).get(
+  'date-time',
+);
+
+function isStringFormatValidator(
+  format: Format,
+): format is StringFormatValidator {
+  return typeof format === 'function';
+}
+
+function isStringFormatDefinition(
+  format: Format,
+): format is StringFormatDefinition {
+  return (
+    typeof format === 'object' &&
+    format !== null &&
+    'validate' in format &&
+    (typeof format.validate === 'function' || format.validate instanceof RegExp)
+  );
+}
+
+function acceptsAjvStringFormat(format: Format, value: string): boolean {
+  if (isStringFormatValidator(format)) {
+    return format(value);
+  }
+  if (format instanceof RegExp) {
+    format.lastIndex = 0;
+    return format.test(value);
+  }
+  if (isStringFormatDefinition(format)) {
+    const { validate } = format;
+    if (typeof validate === 'function') {
+      return validate(value) === true;
+    }
+    if (validate instanceof RegExp) {
+      validate.lastIndex = 0;
+      return validate.test(value);
+    }
+  }
+  return false;
+}
+
+export const instantSchema = z
+  .string()
+  .refine(
+    (value) => acceptsAjvStringFormat(ajvDateTimeFormat, value),
+    'Must use the JSON Schema date-time format',
+  );
 export const sha256Schema = z.string().regex(/^[a-f0-9]{64}$/u);
 const nonNegativeIntegerSchema = z.number().int().nonnegative();
 const positiveIntegerSchema = z.number().int().positive();
