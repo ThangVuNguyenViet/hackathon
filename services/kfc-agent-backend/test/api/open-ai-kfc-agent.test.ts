@@ -64,7 +64,9 @@ function sdkResponse(response: Record<string, unknown>) {
   };
 }
 
-function sdkTestClient(client: { responses: { create: (request: Record<string, unknown>) => Promise<unknown> } }): OpenAIClient {
+function sdkTestClient(client: {
+  responses: { create: (request: Record<string, unknown>) => Promise<unknown> };
+}): OpenAIClient {
   return client as unknown as OpenAIClient;
 }
 
@@ -224,7 +226,9 @@ describe('OpenAI KFC chat API', () => {
     expect(requests.at(-1)?.instructions).toContain(
       'Verified GenUI customer action:',
     );
-    expect(requests.at(-1)?.instructions).toContain('"recipientName":"Nguyễn An"');
+    expect(requests.at(-1)?.instructions).toContain(
+      '"recipientName":"Nguyễn An"',
+    );
     expect(requests.at(-1)?.tools).toEqual([]);
 
     const quotedResponse = await resumedServer.inject({
@@ -292,11 +296,12 @@ describe('OpenAI KFC chat API', () => {
     const openAiAgent = new OpenAiKfcAgent({
       client: sdkTestClient({
         responses: {
-          create: async () => sdkResponse({
-            output: [],
-            output_text: 'Mình sẽ giúp bạn chọn món thật đơn giản.',
-            usage: { input_tokens: 10, output_tokens: 8, total_tokens: 18 },
-          }),
+          create: async () =>
+            sdkResponse({
+              output: [],
+              output_text: 'Mình sẽ giúp bạn chọn món thật đơn giản.',
+              usage: { input_tokens: 10, output_tokens: 8, total_tokens: 18 },
+            }),
         },
       }),
       model: 'gpt-4.1-mini',

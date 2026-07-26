@@ -200,7 +200,7 @@ describe('KFC OpenAI Agents SDK tools', () => {
         return { ok: false, errorCode: 'agent_tool_execution_cancelled' };
       },
     };
-    for (let attempt = 0; attempt < 4; attempt += 1) {
+    for (let attempt = 0; attempt < 20; attempt += 1) {
       const context = new RunContext<KfcOpenAiAgentRunContext>({
         toolCalls: [],
         developerMessages: [],

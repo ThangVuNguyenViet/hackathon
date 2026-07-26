@@ -157,10 +157,10 @@ export async function prepareKfcOpenAiToolSessionPublication(input: {
   const auditPayload =
     input.toolCalls.length > 0 || input.runMetrics
       ? {
-        schemaVersion: 'openai-redacted-tool-trace-v1',
-        assistantTurnId: input.assistantTurnId,
-        ...(input.runMetrics ? { run: input.runMetrics } : {}),
-        calls: await redactedToolCalls(input.toolCalls),
+          schemaVersion: 'openai-redacted-tool-trace-v1',
+          assistantTurnId: input.assistantTurnId,
+          ...(input.runMetrics ? { run: input.runMetrics } : {}),
+          calls: await redactedToolCalls(input.toolCalls),
         }
       : undefined;
   return { verifiedState, ...(auditPayload ? { auditPayload } : {}) };

@@ -817,11 +817,16 @@ describe('KFC OpenAI tools', () => {
     const clients = createMockClients(fixtures);
     const provider = clients.oms.placeOrder.bind(clients.oms);
     const identities: string[] = [];
+    const seenContexts: Array<{ aborted: boolean; deadlineAt: number }> = [];
     let calls = 0;
     clients.oms.placeOrder = async (input, context, identity) => {
       calls += 1;
       identities.push(identity.idempotencyKey);
       await new Promise((resolve) => setTimeout(resolve, 20));
+      seenContexts.push({
+        aborted: context.signal.aborted,
+        deadlineAt: context.deadlineAt,
+      });
       return provider(input, context, identity);
     };
     const session = await createKfcToolSession(clients, 'kfc:factory_timeout');
@@ -861,6 +866,9 @@ describe('KFC OpenAI tools', () => {
     expect(result).toMatchObject({ toolName: 'placeOrder', ok: true });
     expect(calls).toBe(1);
     expect(identities[0]).toContain('kfc:factory_timeout:placeOrder:');
+    expect(seenContexts).toEqual([
+      { aborted: false, deadlineAt: session.externalCallContext.deadlineAt },
+    ]);
     expect(session.order).toBeDefined();
     expect(context.context.toolCalls).toEqual([
       expect.objectContaining({
@@ -873,8 +881,11 @@ describe('KFC OpenAI tools', () => {
   it('aborts a cooperative factory read without committing late session state', async () => {
     const fixtures = createTestFixtures();
     const clients = createMockClients(fixtures);
+    const originalSearch = clients.menu.searchMenu.bind(clients.menu);
     let observedAbort = false;
+    let providerStarted = false;
     clients.menu.searchMenu = async (_input, context) => {
+      providerStarted = true;
       await new Promise<void>((resolve) => {
         context.signal.addEventListener(
           'abort',
@@ -885,11 +896,7 @@ describe('KFC OpenAI tools', () => {
           { once: true },
         );
       });
-      return {
-        ok: true,
-        value: { items: [], total: 0 },
-        message: 'late',
-      } as never;
+      return originalSearch(_input, context);
     };
     const session = await createKfcToolSession(
       clients,
@@ -899,7 +906,7 @@ describe('KFC OpenAI tools', () => {
       createKfcOpenAiTools({ clients, session, fixtures }).filter(
         (tool) => tool.definition.name === 'searchMenu',
       ),
-      { timeoutMs: 1 },
+      { timeoutMs: 50 },
     );
     const context = new RunContext<KfcOpenAiAgentRunContext>({
       toolCalls: [],
@@ -912,7 +919,7 @@ describe('KFC OpenAI tools', () => {
       input: '{"query":"gà"}',
     });
     expect(result).toMatchObject({ errorCode: 'tool_timed_out' });
-    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(providerStarted).toBe(true);
     expect(observedAbort).toBe(true);
     expect(session.toolCallSequence).toBe(beforeSequence);
     expect(context.context.toolCalls).toEqual([

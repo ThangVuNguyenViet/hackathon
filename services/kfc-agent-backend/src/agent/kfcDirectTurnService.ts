@@ -144,11 +144,7 @@ export class KfcDirectTurnService {
           },
           ...(input.selectGenUi
             ? {
-                selectGenUi: (result) =>
-                  input.selectGenUi?.(
-                    result,
-                    session,
-                  ),
+                selectGenUi: (result) => input.selectGenUi?.(result, session),
               }
             : {}),
         });
@@ -210,8 +206,7 @@ export class KfcDirectTurnService {
             fence: input.fence,
           })
         : await this.options.store.commitAssistantTurn(commitInput);
-      const stateCommit =
-        commit.status === 'stale' ? 'stale' : 'committed';
+      const stateCommit = commit.status === 'stale' ? 'stale' : 'committed';
       return { ...directOutput, session, stateCommit };
     } finally {
       externalCalls.dispose();

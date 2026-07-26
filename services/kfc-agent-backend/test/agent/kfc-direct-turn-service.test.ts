@@ -74,8 +74,8 @@ describe('KfcDirectTurnService', () => {
             return response;
           },
         },
-      // Minimal provider double for the SDK Runner boundary.
-      // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion
+        // Minimal provider double for the SDK Runner boundary.
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion
       } as unknown as OpenAIClient,
       model: 'gpt-4.1-mini',
     });

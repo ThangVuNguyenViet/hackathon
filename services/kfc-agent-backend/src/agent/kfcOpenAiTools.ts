@@ -201,10 +201,15 @@ export function createKfcOpenAiAgentsTools(
         );
         let timeoutId: ReturnType<typeof setTimeout> | undefined;
         try {
-          const execution = canonicalTool.execute(argumentsForExecution, {
-            signal: abortController.signal,
-            deadlineAt: localDeadlineAt,
-          });
+          const execution = canonicalTool.execute(
+            argumentsForExecution,
+            sideEffect === 'irreversible'
+              ? undefined
+              : {
+                  signal: abortController.signal,
+                  deadlineAt: localDeadlineAt,
+                },
+          );
           if (sideEffect === 'irreversible') {
             const result = await execution;
             trace.result = result;
@@ -221,8 +226,7 @@ export function createKfcOpenAiAgentsTools(
           if (
             result === timedOut ||
             (isRecord(result) &&
-              result.errorCode === 'agent_tool_execution_cancelled' &&
-              Date.now() >= localDeadlineAt)
+              result.errorCode === 'agent_tool_execution_cancelled')
           ) {
             abortController.abort();
             const safe = safeSdkToolFailure('tool_timed_out');
