@@ -111,6 +111,19 @@ class RecommendationContractsTest(unittest.TestCase):
             "event-impression-001",
         )
 
+    def test_parses_json_schema_accepted_instant_lexical_forms(self) -> None:
+        for instant in (
+            "2026-07-27t09:00:00z",
+            "2026-07-27 09:00:00+00:00",
+        ):
+            with self.subTest(instant=instant):
+                value = valid_request()
+                value["decisionTime"] = instant
+
+                parsed = RecommendationDecisionRequest.model_validate(value)
+                self.assertIsNotNone(parsed.decision_time.tzinfo)
+                self.assertIsNotNone(parsed.decision_time.utcoffset())
+
     def test_rejects_non_string_instants(self) -> None:
         request = valid_request()
         request["decisionTime"] = 1785142800
@@ -119,6 +132,12 @@ class RecommendationContractsTest(unittest.TestCase):
         event = valid_event()
         event["occurredAt"] = 1785142805
         self.assert_invalid_event(event)
+
+    def test_rejects_instants_without_a_timezone(self) -> None:
+        value = valid_request()
+        value["decisionTime"] = "2026-07-27T09:00:00"
+
+        self.assert_invalid_request(value)
 
     def test_rejects_coerced_json_transport_primitives(self) -> None:
         request_cases: tuple[tuple[str, str, Any], ...] = (

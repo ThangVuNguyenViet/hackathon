@@ -6,6 +6,7 @@ from datetime import datetime
 from typing import Annotated, Literal, Self
 
 from pydantic import (
+    AwareDatetime,
     BaseModel,
     BeforeValidator,
     ConfigDict,
@@ -13,6 +14,8 @@ from pydantic import (
     JsonValue,
     NonNegativeInt,
     StringConstraints,
+    TypeAdapter,
+    ValidationError,
     model_validator,
 )
 
@@ -22,18 +25,16 @@ OpaqueId = Annotated[
 Sha256 = Annotated[str, StringConstraints(pattern=r"^[a-f0-9]{64}$")]
 NonEmptyString = Annotated[str, StringConstraints(min_length=1)]
 PositiveInt = Annotated[int, Field(gt=0)]
+_INSTANT_ADAPTER = TypeAdapter(AwareDatetime)
 
 
 def _parse_instant(value: object) -> datetime:
     if not isinstance(value, str):
         raise ValueError("Instant must be an ISO date-time string")  # noqa: TRY004
     try:
-        parsed = datetime.fromisoformat(value)
-    except ValueError as error:
+        return _INSTANT_ADAPTER.validate_python(value)
+    except ValidationError as error:
         raise ValueError("Instant must be an ISO date-time string") from error
-    if parsed.tzinfo is None or parsed.utcoffset() is None:
-        raise ValueError("Instant must be timezone-aware")
-    return parsed
 
 
 Instant = Annotated[datetime, BeforeValidator(_parse_instant)]
