@@ -210,7 +210,7 @@ describe('direct OpenAI delivery address flow', () => {
       legacyDistrictText: 'Quận Tân Bình',
     };
     session.deliveryAddressStatus = 'incomplete';
-    session.deliveryAddressMissingFields = ['provinceName', 'communeName'];
+    session.deliveryAddressMissingFields = ['addressLine'];
 
     const result = await quoteFulfillment.execute({
       method: 'delivery',
@@ -253,8 +253,8 @@ describe('direct OpenAI delivery address flow', () => {
     );
   });
 
-  it('keeps a complete unsupported address separate from an incomplete address', async () => {
-    const { quoteFulfillment } = await addressTool('kfc:address_unsupported');
+  it('quotes any complete customer address without administrative validation', async () => {
+    const { quoteFulfillment } = await addressTool('kfc:address_unrestricted');
 
     const result = await quoteFulfillment.execute({
       method: 'delivery',
@@ -263,8 +263,8 @@ describe('direct OpenAI delivery address flow', () => {
         recipientName: 'Nguyễn An',
         phone: '0901234567',
         addressLine: '1 Tràng Tiền',
-        communeName: 'Hoàn Kiếm',
-        provinceName: 'Hà Nội',
+        communeName: 'Khu vực khách nhập',
+        provinceName: 'Địa phương khách nhập',
         rawAddress: 'Nguyễn An, 0901234567, 1 Tràng Tiền, Hoàn Kiếm, Hà Nội',
       },
     });
@@ -273,8 +273,48 @@ describe('direct OpenAI delivery address flow', () => {
       ok: true,
       toolName: 'quoteFulfillment',
       value: {
-        status: 'unsupported',
+        status: 'quoted',
         missingFields: [],
+        addressDraft: {
+          recipientName: 'Nguyễn An',
+          phone: '0901234567',
+          addressLine: '1 Tràng Tiền',
+          communeName: 'Khu vực khách nhập',
+          provinceName: 'Địa phương khách nhập',
+        },
+        fulfillment: {
+          method: 'delivery',
+          feeVnd: expect.any(Number),
+        },
+      },
+    });
+  });
+
+  it('quotes a free-form address without requiring province or commune fields', async () => {
+    const { quoteFulfillment } = await addressTool('kfc:address_free_form');
+
+    const result = await quoteFulfillment.execute({
+      method: 'delivery',
+      address: {
+        ...emptyAddressUpdate,
+        recipientName: 'Nguyễn An',
+        phone: '0901234567',
+        addressLine: 'Hẻm cạnh trường tiểu học, căn nhà cửa xanh',
+        rawAddress:
+          'Nguyễn An, 0901234567, hẻm cạnh trường tiểu học, căn nhà cửa xanh',
+      },
+    });
+
+    expect(result).toMatchObject({
+      ok: true,
+      toolName: 'quoteFulfillment',
+      value: {
+        status: 'quoted',
+        missingFields: [],
+        fulfillment: {
+          method: 'delivery',
+          feeVnd: expect.any(Number),
+        },
       },
     });
   });

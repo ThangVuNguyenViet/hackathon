@@ -76,7 +76,9 @@ export interface KfcOpenAiAgentRunContext {
   lifecycle?: OpenAiKfcAgentLifecycleObserver;
 }
 
-function safeSdkToolFailure(errorCode: 'invalid_tool_input' | 'tool_execution_failed' | 'tool_timed_out') {
+function safeSdkToolFailure(
+  errorCode: 'invalid_tool_input' | 'tool_execution_failed' | 'tool_timed_out',
+) {
   return {
     ok: false,
     errorCode,
@@ -96,18 +98,24 @@ function canonicalArgumentSchema(name: string): z.ZodTypeAny | undefined {
   if (name === 'acquireVoucher' || name === 'redeemReward') {
     return (agentToolArgumentSchemas as Record<string, z.ZodTypeAny>)[name];
   }
-  return (toolArgumentSchemas as Record<string, z.ZodTypeAny>)[name]
-    ?? (agentToolArgumentSchemas as Record<string, z.ZodTypeAny>)[name];
+  return (
+    (toolArgumentSchemas as Record<string, z.ZodTypeAny>)[name] ??
+    (agentToolArgumentSchemas as Record<string, z.ZodTypeAny>)[name]
+  );
 }
 
-function isKfcRunContext(value: unknown): value is RunContext<KfcOpenAiAgentRunContext> {
-  return typeof value === 'object'
-    && value !== null
-    && 'context' in value
-    && typeof value.context === 'object'
-    && value.context !== null
-    && 'toolCalls' in value.context
-    && Array.isArray(value.context.toolCalls);
+function isKfcRunContext(
+  value: unknown,
+): value is RunContext<KfcOpenAiAgentRunContext> {
+  return (
+    typeof value === 'object' &&
+    value !== null &&
+    'context' in value &&
+    typeof value.context === 'object' &&
+    value.context !== null &&
+    'toolCalls' in value.context &&
+    Array.isArray(value.context.toolCalls)
+  );
 }
 
 function recordSafeSdkFailure(input: {
@@ -147,14 +155,15 @@ export function createKfcOpenAiAgentsTools(
       // provider boundary and parse the exact Zod schema before execution.
       parameters: canonicalTool.definition.parameters as never,
       strict: true,
-      errorFunction: (runContext, error) => recordSafeSdkFailure({
-        runContext,
-        toolName: canonicalTool.definition.name,
-        errorCode:
-          error instanceof Error && error.name === 'InvalidToolInputError'
-            ? 'invalid_tool_input'
-            : 'tool_execution_failed',
-      }),
+      errorFunction: (runContext, error) =>
+        recordSafeSdkFailure({
+          runContext,
+          toolName: canonicalTool.definition.name,
+          errorCode:
+            error instanceof Error && error.name === 'InvalidToolInputError'
+              ? 'invalid_tool_input'
+              : 'tool_execution_failed',
+        }),
       async execute(
         arguments_,
         runContext?: RunContext<KfcOpenAiAgentRunContext>,
@@ -165,8 +174,9 @@ export function createKfcOpenAiAgentsTools(
         if (!isSdkToolArguments(arguments_)) {
           throw new Error('Tool arguments must be a JSON object');
         }
-        const validation = canonicalArgumentSchema(canonicalTool.definition.name)
-          ?.safeParse(arguments_);
+        const validation = canonicalArgumentSchema(
+          canonicalTool.definition.name,
+        )?.safeParse(arguments_);
         if (validation && !validation.success) {
           const result = safeSdkToolFailure('invalid_tool_input');
           runContext.context.toolCalls.push({
@@ -183,6 +193,7 @@ export function createKfcOpenAiAgentsTools(
         };
         runContext.context.toolCalls.push(trace);
         const abortController = new AbortController();
+        const localDeadlineAt = Date.now() + (options.timeoutMs ?? 120_000);
         const argumentsForExecution = validation?.data ?? arguments_;
         const sideEffect = classifyToolSideEffect(
           canonicalTool.definition.name,
@@ -190,13 +201,10 @@ export function createKfcOpenAiAgentsTools(
         );
         let timeoutId: ReturnType<typeof setTimeout> | undefined;
         try {
-          const execution = canonicalTool.execute(
-            argumentsForExecution,
-            {
-              signal: abortController.signal,
-              deadlineAt: Date.now() + (options.timeoutMs ?? 120_000),
-            },
-          );
+          const execution = canonicalTool.execute(argumentsForExecution, {
+            signal: abortController.signal,
+            deadlineAt: localDeadlineAt,
+          });
           if (sideEffect === 'irreversible') {
             const result = await execution;
             trace.result = result;
@@ -210,7 +218,12 @@ export function createKfcOpenAiAgentsTools(
             );
           });
           const result = await Promise.race([execution, timeout]);
-          if (result === timedOut) {
+          if (
+            result === timedOut ||
+            (isRecord(result) &&
+              result.errorCode === 'agent_tool_execution_cancelled' &&
+              Date.now() >= localDeadlineAt)
+          ) {
             abortController.abort();
             const safe = safeSdkToolFailure('tool_timed_out');
             trace.result = safe;
@@ -386,7 +399,7 @@ const descriptions: Record<ToolName, string> = {
   checkStoreAvailability:
     'Check whether the current cart items are available at one exact store for pickup or delivery. This verifies item availability only; it does not verify delivery fee or ETA.',
   quoteFulfillment:
-    'Merge customer-supplied delivery details into the current address draft and, when complete, quote the exact current cart. Call this whenever the customer supplies or corrects any delivery address, recipient, phone, or delivery-instruction field, including an incomplete address. Extract fields from natural language into address; use null for fields not supplied in the current message and do not invent administrative codes. The backend retains prior fields and returns status incomplete with missingFields, unsupported for a complete address outside coverage, or quoted with a verified fulfillment quote. Ask naturally for missing fields and preserve known fields. Only a successful quoted result verifies serviceability, delivery fee, ETA, store, and cart availability. This tool does not place or confirm an order.',
+    'Merge customer-supplied delivery details into the current address draft and, when complete, quote the exact current cart. Call this whenever the customer supplies or corrects any delivery address, recipient, phone, or delivery-instruction field, including an incomplete address. Extract fields from natural language into address; use null for fields not supplied in the current message and do not invent administrative codes. Recipient name, phone, and the customer’s free-form address line are sufficient; province and commune are optional, and this mock accepts every supplied address. The backend retains prior fields and returns status incomplete only for missing required customer details, or quoted with a fulfillment quote. Ask naturally for missing fields and preserve known fields. Only a successful quoted result verifies serviceability, delivery fee, ETA, store, and cart availability. This tool does not place or confirm an order.',
   searchPromotions:
     'Search the current verified promotion and voucher catalog. Use an empty query for a broad listing or a concise Vietnamese term for a targeted search. An empty filtered result does not prove that no promotion exists; broaden the query or list the current catalog when appropriate.',
   explainPromotion: 'Explain one promotion using its offer ID.',
@@ -535,15 +548,27 @@ const directUpdateCartJsonSchema = {
 
 const directUpdateCartArgumentsSchema = z
   .object({
-    changes: z.array(z.object({
-      itemCode: z.string().min(1),
-      orderedMenuItemQuantity: z.number().int().nonnegative(),
-      modifiers: z.array(z.object({
-        groupId: z.string().min(1),
-        modifierId: z.string().min(1),
-        quantityPerPortion: z.number().int().positive().nullable(),
-      }).strict()).nullable(),
-    }).strict()).min(1),
+    changes: z
+      .array(
+        z
+          .object({
+            itemCode: z.string().min(1),
+            orderedMenuItemQuantity: z.number().int().nonnegative(),
+            modifiers: z
+              .array(
+                z
+                  .object({
+                    groupId: z.string().min(1),
+                    modifierId: z.string().min(1),
+                    quantityPerPortion: z.number().int().positive().nullable(),
+                  })
+                  .strict(),
+              )
+              .nullable(),
+          })
+          .strict(),
+      )
+      .min(1),
   })
   .strict();
 
@@ -843,11 +868,6 @@ function resolveAdministrativeDraft(input: {
                 administrativeKey(draft.communeName!)),
         )
       : undefined);
-  const invalidFields: DeliveryAddressRequiredField[] = [];
-  if (draft.provinceName && !province) invalidFields.push('provinceName');
-  if (draft.communeName && (!commune || !province)) {
-    invalidFields.push('communeName');
-  }
   if (province) {
     draft.provinceCode = province.code;
     draft.provinceName = province.fullName;
@@ -858,7 +878,7 @@ function resolveAdministrativeDraft(input: {
   }
   return {
     draft,
-    invalidFields,
+    invalidFields: [],
     options: {
       provinces: administrativeDivisions.provinces.map(
         ({ code, fullName }) => ({ code, name: fullName }),
@@ -932,9 +952,7 @@ async function executeDirectQuoteFulfillment(input: {
     input.session.fulfillment = undefined;
   }
   const missingFields = [
-    ...new Set([
-      ...missingDeliveryAddressFields(addressDraft),
-    ]),
+    ...new Set([...missingDeliveryAddressFields(addressDraft)]),
   ];
   if (missingFields.length > 0) {
     input.session.deliveryAddressStatus = 'incomplete';
@@ -1374,7 +1392,10 @@ export function createKfcOpenAiTools(
           { toolName: 'getMembershipProfile', arguments: {} },
           profileContext,
         );
-        const result = rewardCatalogWithEligibility(legacyResult, profileResult);
+        const result = rewardCatalogWithEligibility(
+          legacyResult,
+          profileResult,
+        );
         commit();
         return result;
       }

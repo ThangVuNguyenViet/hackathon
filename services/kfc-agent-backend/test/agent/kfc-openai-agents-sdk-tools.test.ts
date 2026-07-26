@@ -1,4 +1,8 @@
-import { RunContext, invokeFunctionTool, type OpenAIClient } from '@kfc/openai-agents-runtime';
+import {
+  RunContext,
+  invokeFunctionTool,
+  type OpenAIClient,
+} from '@kfc/openai-agents-runtime';
 import { describe, expect, it, vi } from 'vitest';
 import {
   createKfcOpenAiAgentsTools,
@@ -32,16 +36,20 @@ describe('KFC OpenAI Agents SDK tools', () => {
       { changes: 'wrong_type' },
       { changes: [], RAW_SECRET: 'RAW_SECRET' },
     ]) {
-      await expect(invokeFunctionTool({
-        tool: updateCart!,
-        runContext: context,
-        input: JSON.stringify(input),
-      })).resolves.toBeDefined();
+      await expect(
+        invokeFunctionTool({
+          tool: updateCart!,
+          runContext: context,
+          input: JSON.stringify(input),
+        }),
+      ).resolves.toBeDefined();
     }
 
     expect(executed).not.toHaveBeenCalled();
     expect(context.context.toolCalls).toHaveLength(3);
-    expect(JSON.stringify(context.context.toolCalls)).not.toContain('RAW_SECRET');
+    expect(JSON.stringify(context.context.toolCalls)).not.toContain(
+      'RAW_SECRET',
+    );
     expect(context.context.toolCalls).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
@@ -112,7 +120,9 @@ describe('KFC OpenAI Agents SDK tools', () => {
       toolCalls: [],
       developerMessages: [],
     });
-    const [updateCart] = createKfcOpenAiAgentsTools([slowTool], { timeoutMs: 1 });
+    const [updateCart] = createKfcOpenAiAgentsTools([slowTool], {
+      timeoutMs: 1,
+    });
 
     const result = await invokeFunctionTool({
       tool: updateCart!,
@@ -124,36 +134,86 @@ describe('KFC OpenAI Agents SDK tools', () => {
 
     expect(JSON.stringify(result)).not.toContain(rawSecret);
     expect(JSON.stringify(context.context.toolCalls)).not.toContain(rawSecret);
-    expect(context.context.toolCalls).toEqual(
-      [expect.objectContaining({
+    expect(context.context.toolCalls).toEqual([
+      expect.objectContaining({
         name: 'updateCart',
         result: expect.objectContaining({ errorCode: 'tool_timed_out' }),
-      })],
-    );
+      }),
+    ]);
     await new Promise((resolve) => setTimeout(resolve, 70));
     expect(context.context.toolCalls).toHaveLength(1);
-    expect(context.context.toolCalls[0]?.result).toMatchObject({ errorCode: 'tool_timed_out' });
+    expect(context.context.toolCalls[0]?.result).toMatchObject({
+      errorCode: 'tool_timed_out',
+    });
     expect(authoritativeState).toEqual({ completed: false });
   });
 
   it('lets an irreversible provider action finish instead of reporting a false timeout', async () => {
     const effect = vi.fn();
     const placeOrder: KfcCanonicalTool = {
-      definition: { type: 'function', name: 'placeOrder', description: 'Place order.', parameters: { type: 'object' }, strict: true },
+      definition: {
+        type: 'function',
+        name: 'placeOrder',
+        description: 'Place order.',
+        parameters: { type: 'object' },
+        strict: true,
+      },
       execute: async () => {
         await new Promise((resolve) => setTimeout(resolve, 20));
         effect();
         return { toolName: 'placeOrder', ok: true, value: { id: 'order_1' } };
       },
     };
-    const context = new RunContext<KfcOpenAiAgentRunContext>({ toolCalls: [], developerMessages: [] });
-    const [sdkTool] = createKfcOpenAiAgentsTools([placeOrder], { timeoutMs: 1 });
-    const result = await invokeFunctionTool({ tool: sdkTool!, runContext: context, input: '{}' });
+    const context = new RunContext<KfcOpenAiAgentRunContext>({
+      toolCalls: [],
+      developerMessages: [],
+    });
+    const [sdkTool] = createKfcOpenAiAgentsTools([placeOrder], {
+      timeoutMs: 1,
+    });
+    const result = await invokeFunctionTool({
+      tool: sdkTool!,
+      runContext: context,
+      input: '{}',
+    });
     expect(result).toMatchObject({ toolName: 'placeOrder', ok: true });
     expect(effect).toHaveBeenCalledTimes(1);
     expect(context.context.toolCalls).toEqual([
-      expect.objectContaining({ name: 'placeOrder', result: expect.objectContaining({ ok: true }) }),
+      expect.objectContaining({
+        name: 'placeOrder',
+        result: expect.objectContaining({ ok: true }),
+      }),
     ]);
+  });
+
+  it('normalizes repeated local-deadline cancellation results to safe timeouts', async () => {
+    const read: KfcCanonicalTool = {
+      definition: {
+        type: 'function',
+        name: 'searchMenu',
+        description: 'Read.',
+        parameters: { type: 'object' },
+        strict: true,
+      },
+      execute: async () => {
+        await new Promise((resolve) => setTimeout(resolve, 1));
+        return { ok: false, errorCode: 'agent_tool_execution_cancelled' };
+      },
+    };
+    for (let attempt = 0; attempt < 4; attempt += 1) {
+      const context = new RunContext<KfcOpenAiAgentRunContext>({
+        toolCalls: [],
+        developerMessages: [],
+      });
+      const [tool] = createKfcOpenAiAgentsTools([read], { timeoutMs: 1 });
+      const result = await invokeFunctionTool({
+        tool: tool!,
+        runContext: context,
+        input: '{"query":"gà"}',
+      });
+      expect(result).toMatchObject({ errorCode: 'tool_timed_out' });
+      expect(context.context.toolCalls).toHaveLength(1);
+    }
   });
 
   it('runs a trusted KFC action through the SDK with per-turn evidence', async () => {
@@ -204,7 +264,9 @@ describe('KFC OpenAI Agents SDK tools', () => {
     expect(context.context.toolCalls).toEqual([
       expect.objectContaining({
         name: 'updateCart',
-        arguments: { changes: [{ itemCode: '20751', quantity: 1, modifiers: [] }] },
+        arguments: {
+          changes: [{ itemCode: '20751', quantity: 1, modifiers: [] }],
+        },
       }),
     ]);
   });
@@ -224,9 +286,7 @@ describe('KFC OpenAI Agents SDK tools', () => {
                 type: 'message',
                 role: 'assistant',
                 status: 'completed',
-                content: [
-                  { type: 'output_text', text: 'Mình sẽ hỗ trợ bạn.' },
-                ],
+                content: [{ type: 'output_text', text: 'Mình sẽ hỗ trợ bạn.' }],
               },
             ],
             output_text: 'Mình sẽ hỗ trợ bạn.',
