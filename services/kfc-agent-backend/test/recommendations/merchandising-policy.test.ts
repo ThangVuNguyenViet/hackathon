@@ -395,6 +395,36 @@ describe('merchandising policy snapshots', () => {
     ]);
   });
 
+  it('skips an otherwise valid-size Smart Cross-sell replacement with a missing eligible target', () => {
+    const ranked = [
+      candidate('20732', 4),
+      candidate('20751', 3),
+      candidate('20748', 2),
+    ];
+    const result = resolveMerchandisingPolicies({
+      context: context(),
+      rankedCandidates: ranked,
+      policies: policies({
+        action: 'replace_slate',
+        targetIds: ['20751', '20732', 'does-not-exist'],
+        boostWeight: null,
+      }),
+      cartCategoryIds: ['chicken'],
+    });
+
+    expect(result.replacement).toBeNull();
+    expect(result.rankedCandidates.map((entry) => entry.candidate.action.actionId)).toEqual([
+      'product:20732',
+      'product:20751',
+      'product:20748',
+    ]);
+    expect(result.effects).not.toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ action: 'replace_slate' }),
+      ]),
+    );
+  });
+
   it('excludes by target ID without resurrecting the action and records its real action ID', () => {
     const result = resolveMerchandisingPolicies({
       context: context(),
