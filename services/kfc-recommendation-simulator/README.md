@@ -10,6 +10,15 @@ now contains the pure Python generator/auditor and the Smart Cross-sell and
 Modifier Upsell ranker benchmarks. MLflow provides the local technical
 inspection surface.
 
+## Platform contract
+
+`../../contracts/recommendations/v1/kfc-recommendation.schema.json` is the
+cross-language transport authority. The Python Pydantic projection validates
+the same checked-in examples as the TypeScript/Zod projection and adds the same
+cross-field invariants. Model code receives only already-eligible
+request-candidate rows; it does not own API, eligibility, merchandising, state,
+or basket effects.
+
 ## Provenance
 
 - KISS branch base:
