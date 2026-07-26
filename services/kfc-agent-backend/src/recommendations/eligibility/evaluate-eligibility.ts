@@ -169,19 +169,17 @@ function evaluatePlacement(
   }
 }
 
-function evaluateProduct(
+function evaluateGeneratedItem(
   input: EligibilityEvaluationInput,
-  candidate: PotentialRecommendationCandidate,
+  sellableItemId: string,
   reasons: Set<Exclude<EligibilityReasonCode, 'eligible'>>,
   bindings: string[],
 ): void {
   const item = input.commerceFacts.menuItems.find(
-    (entry) => entry.itemId === candidate.sellableItemId,
+    (entry) => entry.itemId === sellableItemId,
   );
   if (!item || !item.available) reasons.add('catalog_unavailable');
-  bindings.push(
-    `catalog-item:${candidate.sellableItemId}:${item?.available ?? false}`,
-  );
+  bindings.push(`catalog-item:${sellableItemId}:${item?.available ?? false}`);
 
   const availability = input.commerceFacts.storeAvailability.find(
     (entry) => entry.storeId === input.context.request.storeId,
@@ -192,19 +190,28 @@ function evaluateProduct(
     input.context.storeTimezone,
   );
   const isExcluded =
-    disposition?.excludedItemIds.includes(candidate.sellableItemId) ?? false;
+    disposition?.excludedItemIds.includes(sellableItemId) ?? false;
   const isTimeslotBlocked =
     disposition?.timeslotExclusions.some(
       (exclusion) =>
-        exclusion.itemId === candidate.sellableItemId &&
+        exclusion.itemId === sellableItemId &&
         exclusion.repeatDays.includes(weekday),
     ) ?? false;
   bindings.push(
-    `availability:${input.context.request.storeId}:${input.context.request.fulfilmentMode}:${candidate.sellableItemId}:${isExcluded}:${isTimeslotBlocked}`,
+    `availability:${input.context.request.storeId}:${input.context.request.fulfilmentMode}:${sellableItemId}:${isExcluded}:${isTimeslotBlocked}`,
   );
   if (!disposition || isExcluded || isTimeslotBlocked)
     reasons.add('store_unavailable');
   if (!item || item.priceVnd <= 0) reasons.add('non_sellable_product');
+}
+
+function evaluateProduct(
+  input: EligibilityEvaluationInput,
+  candidate: PotentialRecommendationCandidate,
+  reasons: Set<Exclude<EligibilityReasonCode, 'eligible'>>,
+  bindings: string[],
+): void {
+  evaluateGeneratedItem(input, candidate.sellableItemId, reasons, bindings);
 
   if (
     input.context.request.cart.lines.some(
@@ -266,6 +273,7 @@ function evaluateModifier(
   bindings.push(
     `parent-line:${parentLine.lineId}:${parentLine.sellableItemId}`,
   );
+  evaluateGeneratedItem(input, parentLine.sellableItemId, reasons, bindings);
   const modifierRoot = input.commerceFacts.menuModifiers.find(
     (modifier) => modifier.itemId === parentLine.sellableItemId,
   );

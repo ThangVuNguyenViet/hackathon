@@ -502,6 +502,54 @@ describe('recommendation eligibility', () => {
     });
   });
 
+  it('propagates a real modifier parent timeslot block without product-only reasons', async () => {
+    const request = parseRecommendationDecisionRequest({
+      ...makeContext().request,
+      placement: 'modifier_upsell',
+      cart: {
+        ...makeContext().request.cart,
+        lines: [
+          {
+            lineId: 'line-20701',
+            sellableItemId: '20701',
+            quantity: 1,
+            unitPrice: { amount: 79000, currency: 'VND' },
+            modifiers: [],
+          },
+        ],
+      },
+    });
+    const context = makeContext({
+      request,
+      flow: {
+        stage: 'modifier_ready',
+        attemptedPlacements: [],
+        previouslyShownActionIds: ['modifier:line-20701:1:41042'],
+        rejectedActionIds: ['modifier:line-20701:1:41042'],
+      },
+      parentCartLineId: 'line-20701',
+      verifiedDietaryEvidence: {
+        evidenceId: 'dietary-evidence-parent-20701',
+        excludedSellableItemIds: ['20701'],
+      },
+    });
+
+    const decision = await decisionFor(context, 'modifier:line-20701:1:41042');
+
+    expect(decision.reasonCodes).toEqual([
+      'store_unavailable',
+      'no_positive_price_modifier',
+    ]);
+    expect(decision.reasonCodes).not.toEqual(
+      expect.arrayContaining([
+        'already_in_cart',
+        'previously_shown',
+        'previously_rejected',
+        'verified_dietary_exclusion',
+      ]),
+    );
+  });
+
   it('changes the eligibility digest when an evidence binding changes', async () => {
     const original = await createEligibilityDecision({
       actionId: 'product:20751',
