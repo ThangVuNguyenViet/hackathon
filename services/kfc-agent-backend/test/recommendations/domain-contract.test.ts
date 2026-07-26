@@ -50,8 +50,19 @@ type ApplyModifierActionFixture = {
   type: 'apply_modifier';
 };
 
+type ReplaceCartLineActionFixture = {
+  actionId: string;
+  cartRevision: string;
+  priceImpact: { amount: number; currency: string };
+  replacedCartLineId: string;
+  replacement: AddProductActionFixture;
+  type: 'replace_cart_line';
+};
+
 type RecommendationActionFixture =
-  AddProductActionFixture | ApplyModifierActionFixture;
+  | AddProductActionFixture
+  | ApplyModifierActionFixture
+  | ReplaceCartLineActionFixture;
 
 type DecisionResponseFixture = {
   counts: {
@@ -112,6 +123,15 @@ const productAction = (actionId: string): AddProductActionFixture => ({
   cartRevision: 'cart-revision-001',
 });
 
+const replaceCartLineAction = (): ReplaceCartLineActionFixture => ({
+  type: 'replace_cart_line',
+  actionId: 'action-replace-001',
+  replacedCartLineId: 'cart-line-001',
+  replacement: productAction('action-replacement-product-001'),
+  priceImpact: { amount: 0, currency: 'VND' },
+  cartRevision: 'cart-revision-001',
+});
+
 describe('recommendation domain contracts', () => {
   it('parses the canonical decision request', () => {
     const parsed = parseRecommendationDecisionRequest(validRequest);
@@ -168,6 +188,8 @@ describe('recommendation domain contracts', () => {
   it('requires a primary offer for a recommended response', () => {
     const value = structuredClone(validResponse);
     value.primaryOffer = null;
+    value.displayFacts = [];
+    value.counts.displayed = 0;
 
     expect(() => parseRecommendationDecisionResponse(value)).toThrow();
   });
@@ -232,6 +254,13 @@ describe('recommendation domain contracts', () => {
     expect(() => parseRecommendationDecisionResponse(value)).toThrow();
   });
 
+  it('rejects a product action for Modifier Upsell', () => {
+    const value = structuredClone(validResponse);
+    value.placement = 'modifier_upsell';
+
+    expect(() => parseRecommendationDecisionResponse(value)).toThrow();
+  });
+
   it.each(['for_you', 'local_favorite'] as const)(
     'requires exactly one product action for %s',
     (placement) => {
@@ -239,6 +268,32 @@ describe('recommendation domain contracts', () => {
       value.placement = placement;
       value.primaryOffer?.actions.push(productAction('action-product-002'));
       value.counts.displayed = 2;
+
+      expect(() => parseRecommendationDecisionResponse(value)).toThrow();
+    },
+  );
+
+  it.each(['for_you', 'local_favorite'] as const)(
+    'rejects a modifier action for %s',
+    (placement) => {
+      const value = structuredClone(validResponse);
+      const action = modifierAction();
+      value.placement = placement;
+      value.primaryOffer = { actions: [action] };
+      value.displayFacts[0].actionId = action.actionId;
+
+      expect(() => parseRecommendationDecisionResponse(value)).toThrow();
+    },
+  );
+
+  it.each(['for_you', 'local_favorite'] as const)(
+    'rejects a replacement action for %s',
+    (placement) => {
+      const value = structuredClone(validResponse);
+      const action = replaceCartLineAction();
+      value.placement = placement;
+      value.primaryOffer = { actions: [action] };
+      value.displayFacts[0].actionId = action.actionId;
 
       expect(() => parseRecommendationDecisionResponse(value)).toThrow();
     },
@@ -271,6 +326,36 @@ describe('recommendation domain contracts', () => {
   it('requires three or four product actions for Smart Cross-sell', () => {
     const value = structuredClone(validResponse);
     value.placement = 'smart_cross_sell';
+
+    expect(() => parseRecommendationDecisionResponse(value)).toThrow();
+  });
+
+  it('rejects a non-product action in Smart Cross-sell', () => {
+    const value = structuredClone(validResponse);
+    const modifier = modifierAction();
+    value.placement = 'smart_cross_sell';
+    value.primaryOffer = {
+      actions: [
+        productAction('action-product-001'),
+        productAction('action-product-002'),
+        modifier,
+      ],
+    };
+    value.displayFacts = [
+      {
+        ...structuredClone(value.displayFacts[0]),
+        actionId: 'action-product-001',
+      },
+      {
+        ...structuredClone(value.displayFacts[0]),
+        actionId: 'action-product-002',
+      },
+      {
+        ...structuredClone(value.displayFacts[0]),
+        actionId: modifier.actionId,
+      },
+    ];
+    value.counts.displayed = 3;
 
     expect(() => parseRecommendationDecisionResponse(value)).toThrow();
   });
