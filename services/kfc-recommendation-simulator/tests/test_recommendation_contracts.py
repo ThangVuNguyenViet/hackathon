@@ -104,6 +104,18 @@ def sanity_snapshot_binding() -> dict[str, Any]:
     }
 
 
+def pending_recommendation(placement: str) -> dict[str, Any]:
+    return {
+        "recommendationId": "recommendation-001",
+        "requestId": "rec-request-001",
+        "placement": placement,
+        "actionIds": ["action-product-001"],
+        "cartRevision": "cart-revision-001",
+        "traceRef": "trace-001",
+        "decidedAt": "2026-07-27T09:00:00Z",
+    }
+
+
 class RecommendationContractsTest(unittest.TestCase):
     def assert_invalid_request(self, value: dict[str, Any]) -> None:
         with self.assertRaises(ValidationError):
@@ -234,9 +246,80 @@ class RecommendationContractsTest(unittest.TestCase):
         impression["renderedActions"][0]["unexpected"] = True
         self.assert_invalid_impression_request(impression)
 
-    def test_rejects_invalid_state_stage_and_next_placement_combinations(self) -> None:
+    def test_rejects_invalid_state_stage_next_and_pending_combinations(self) -> None:
+        cases: tuple[tuple[str, str | None, str | None], ...] = (
+            ("starter_eligible", None, None),
+            ("starter_resolved", "starter", None),
+            ("modifier_eligible", "starter", None),
+            ("modifier_pending", None, None),
+            ("modifier_resolved", None, None),
+            ("smart_cross_sell_eligible", None, None),
+            ("smart_cross_sell_pending", None, None),
+            ("complete", None, "for_you"),
+            ("complete", "starter", None),
+        )
+        for stage, next_placement, pending_placement in cases:
+            with self.subTest(stage=stage, pending_placement=pending_placement):
+                value = valid_state()
+                value["stage"] = stage
+                value["nextEligiblePlacement"] = next_placement
+                value["attemptedPlacements"] = (
+                    [] if pending_placement is None else [pending_placement]
+                )
+                value["pendingRecommendation"] = (
+                    None
+                    if pending_placement is None
+                    else pending_recommendation(pending_placement)
+                )
+                self.assert_invalid_state(value)
+
+    def test_rejects_stage_incompatible_pending_recommendations(self) -> None:
+        cases: tuple[tuple[str, str | None, str], ...] = (
+            ("starter_eligible", "starter", "for_you"),
+            ("starter_resolved", None, "modifier_upsell"),
+            ("modifier_eligible", "modifier_upsell", "modifier_upsell"),
+            ("modifier_pending", None, "for_you"),
+            ("modifier_resolved", "smart_cross_sell", "for_you"),
+            ("smart_cross_sell_eligible", "smart_cross_sell", "for_you"),
+            ("smart_cross_sell_pending", None, "modifier_upsell"),
+        )
+        for stage, next_placement, pending_placement in cases:
+            with self.subTest(stage=stage, pending_placement=pending_placement):
+                value = valid_state()
+                value["stage"] = stage
+                value["nextEligiblePlacement"] = next_placement
+                value["attemptedPlacements"] = [pending_placement]
+                value["pendingRecommendation"] = pending_recommendation(pending_placement)
+                self.assert_invalid_state(value)
+
+    def test_rejects_client_authored_impression_recorded_at(self) -> None:
+        value = valid_impression_request()
+        value["recordedAt"] = "2026-07-27T09:00:06Z"
+
+        self.assert_invalid_impression_request(value)
+
+    def test_rejects_client_authored_outcome_fields(self) -> None:
+        cases: tuple[tuple[str, Any], ...] = (
+            ("recordedAt", "2026-07-27T09:00:06Z"),
+            ("stage", "complete"),
+            ("evidence", {"server": "only"}),
+        )
+        for field, field_value in cases:
+            with self.subTest(field=field):
+                value = valid_outcome_request()
+                value[field] = field_value
+                self.assert_invalid_outcome_request(value)
+
+    def test_rejects_client_authored_pending_recommendation_evidence(self) -> None:
         value = valid_state()
+        value["stage"] = "starter_resolved"
         value["nextEligiblePlacement"] = None
+        value["attemptedPlacements"] = ["for_you"]
+        value["pendingRecommendation"] = {
+            **pending_recommendation("for_you"),
+            "evidence": {"server": "only"},
+        }
+
         self.assert_invalid_state(value)
 
     def test_rejects_pending_placement_outside_attempted_placements(self) -> None:

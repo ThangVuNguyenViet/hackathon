@@ -167,5 +167,170 @@
     "definition": "RecommendationOutcomeRequest",
     "source": "valid-outcome-request.json",
     "patch": { "eventType": "checkout_completed" }
+  },
+  {
+    "name": "starter resolved cannot expose another placement",
+    "definition": "RecommendationState",
+    "source": "valid-recommendation-state.json",
+    "patch": { "stage": "starter_resolved", "nextEligiblePlacement": "starter", "attemptedPlacements": [], "pendingRecommendation": null }
+  },
+  {
+    "name": "starter eligibility cannot hold a pending recommendation",
+    "definition": "RecommendationState",
+    "source": "valid-recommendation-state.json",
+    "patch": {
+      "stage": "starter_eligible",
+      "nextEligiblePlacement": "starter",
+      "attemptedPlacements": ["for_you"],
+      "pendingRecommendation": { "recommendationId": "recommendation-001", "requestId": "rec-request-001", "placement": "for_you", "actionIds": ["action-product-001"], "cartRevision": "cart-revision-001", "traceRef": "trace-001", "decidedAt": "2026-07-27T09:00:00Z" }
+    }
+  },
+  {
+    "name": "starter resolved only holds starter recommendations",
+    "definition": "RecommendationState",
+    "source": "valid-recommendation-state.json",
+    "patch": {
+      "stage": "starter_resolved",
+      "nextEligiblePlacement": null,
+      "attemptedPlacements": ["modifier_upsell"],
+      "pendingRecommendation": { "recommendationId": "recommendation-001", "requestId": "rec-request-001", "placement": "modifier_upsell", "actionIds": ["action-product-001"], "cartRevision": "cart-revision-001", "traceRef": "trace-001", "decidedAt": "2026-07-27T09:00:00Z" }
+    }
+  },
+  {
+    "name": "modifier eligibility requires the modifier next placement",
+    "definition": "RecommendationState",
+    "source": "valid-recommendation-state.json",
+    "patch": { "stage": "modifier_eligible", "nextEligiblePlacement": "starter", "attemptedPlacements": [], "pendingRecommendation": null }
+  },
+  {
+    "name": "modifier eligibility cannot hold a pending recommendation",
+    "definition": "RecommendationState",
+    "source": "valid-recommendation-state.json",
+    "patch": {
+      "stage": "modifier_eligible",
+      "nextEligiblePlacement": "modifier_upsell",
+      "attemptedPlacements": ["modifier_upsell"],
+      "pendingRecommendation": { "recommendationId": "recommendation-001", "requestId": "rec-request-001", "placement": "modifier_upsell", "actionIds": ["action-product-001"], "cartRevision": "cart-revision-001", "traceRef": "trace-001", "decidedAt": "2026-07-27T09:00:00Z" }
+    }
+  },
+  {
+    "name": "modifier pending requires a modifier recommendation",
+    "definition": "RecommendationState",
+    "source": "valid-recommendation-state.json",
+    "patch": { "stage": "modifier_pending", "nextEligiblePlacement": null, "attemptedPlacements": [], "pendingRecommendation": null }
+  },
+  {
+    "name": "modifier pending cannot hold another placement",
+    "definition": "RecommendationState",
+    "source": "valid-recommendation-state.json",
+    "patch": {
+      "stage": "modifier_pending",
+      "nextEligiblePlacement": null,
+      "attemptedPlacements": ["for_you"],
+      "pendingRecommendation": { "recommendationId": "recommendation-001", "requestId": "rec-request-001", "placement": "for_you", "actionIds": ["action-product-001"], "cartRevision": "cart-revision-001", "traceRef": "trace-001", "decidedAt": "2026-07-27T09:00:00Z" }
+    }
+  },
+  {
+    "name": "modifier resolved requires the Smart Cross-sell next placement",
+    "definition": "RecommendationState",
+    "source": "valid-recommendation-state.json",
+    "patch": { "stage": "modifier_resolved", "nextEligiblePlacement": null, "attemptedPlacements": [], "pendingRecommendation": null }
+  },
+  {
+    "name": "modifier resolved cannot hold a pending recommendation",
+    "definition": "RecommendationState",
+    "source": "valid-recommendation-state.json",
+    "patch": {
+      "stage": "modifier_resolved",
+      "nextEligiblePlacement": "smart_cross_sell",
+      "attemptedPlacements": ["for_you"],
+      "pendingRecommendation": { "recommendationId": "recommendation-001", "requestId": "rec-request-001", "placement": "for_you", "actionIds": ["action-product-001"], "cartRevision": "cart-revision-001", "traceRef": "trace-001", "decidedAt": "2026-07-27T09:00:00Z" }
+    }
+  },
+  {
+    "name": "Smart Cross-sell eligibility requires its next placement",
+    "definition": "RecommendationState",
+    "source": "valid-recommendation-state.json",
+    "patch": { "stage": "smart_cross_sell_eligible", "nextEligiblePlacement": null, "attemptedPlacements": [], "pendingRecommendation": null }
+  },
+  {
+    "name": "Smart Cross-sell eligibility cannot hold a pending recommendation",
+    "definition": "RecommendationState",
+    "source": "valid-recommendation-state.json",
+    "patch": {
+      "stage": "smart_cross_sell_eligible",
+      "nextEligiblePlacement": "smart_cross_sell",
+      "attemptedPlacements": ["for_you"],
+      "pendingRecommendation": { "recommendationId": "recommendation-001", "requestId": "rec-request-001", "placement": "for_you", "actionIds": ["action-product-001"], "cartRevision": "cart-revision-001", "traceRef": "trace-001", "decidedAt": "2026-07-27T09:00:00Z" }
+    }
+  },
+  {
+    "name": "Smart Cross-sell pending requires a cross-sell recommendation",
+    "definition": "RecommendationState",
+    "source": "valid-recommendation-state.json",
+    "patch": { "stage": "smart_cross_sell_pending", "nextEligiblePlacement": null, "attemptedPlacements": [], "pendingRecommendation": null }
+  },
+  {
+    "name": "Smart Cross-sell pending cannot hold another placement",
+    "definition": "RecommendationState",
+    "source": "valid-recommendation-state.json",
+    "patch": {
+      "stage": "smart_cross_sell_pending",
+      "nextEligiblePlacement": null,
+      "attemptedPlacements": ["modifier_upsell"],
+      "pendingRecommendation": { "recommendationId": "recommendation-001", "requestId": "rec-request-001", "placement": "modifier_upsell", "actionIds": ["action-product-001"], "cartRevision": "cart-revision-001", "traceRef": "trace-001", "decidedAt": "2026-07-27T09:00:00Z" }
+    }
+  },
+  {
+    "name": "complete cannot hold a pending recommendation",
+    "definition": "RecommendationState",
+    "source": "valid-recommendation-state.json",
+    "patch": {
+      "stage": "complete",
+      "nextEligiblePlacement": null,
+      "attemptedPlacements": ["for_you"],
+      "pendingRecommendation": { "recommendationId": "recommendation-001", "requestId": "rec-request-001", "placement": "for_you", "actionIds": ["action-product-001"], "cartRevision": "cart-revision-001", "traceRef": "trace-001", "decidedAt": "2026-07-27T09:00:00Z" }
+    }
+  },
+  {
+    "name": "complete cannot expose a next placement",
+    "definition": "RecommendationState",
+    "source": "valid-recommendation-state.json",
+    "patch": { "stage": "complete", "nextEligiblePlacement": "starter", "attemptedPlacements": [], "pendingRecommendation": null }
+  },
+  {
+    "name": "clients cannot author impression recordedAt",
+    "definition": "RecommendationImpressionRequest",
+    "source": "valid-impression-request.json",
+    "patch": { "recordedAt": "2026-07-27T09:00:06Z" }
+  },
+  {
+    "name": "clients cannot author outcome recordedAt",
+    "definition": "RecommendationOutcomeRequest",
+    "source": "valid-outcome-request.json",
+    "patch": { "recordedAt": "2026-07-27T09:00:06Z" }
+  },
+  {
+    "name": "clients cannot author outcome stage",
+    "definition": "RecommendationOutcomeRequest",
+    "source": "valid-outcome-request.json",
+    "patch": { "stage": "complete" }
+  },
+  {
+    "name": "clients cannot author outcome evidence",
+    "definition": "RecommendationOutcomeRequest",
+    "source": "valid-outcome-request.json",
+    "patch": { "evidence": { "server": "only" } }
+  },
+  {
+    "name": "clients cannot author pending recommendation evidence",
+    "definition": "RecommendationState",
+    "source": "valid-recommendation-state.json",
+    "patch": {
+      "stage": "starter_resolved",
+      "nextEligiblePlacement": null,
+      "attemptedPlacements": ["for_you"],
+      "pendingRecommendation": { "recommendationId": "recommendation-001", "requestId": "rec-request-001", "placement": "for_you", "actionIds": ["action-product-001"], "cartRevision": "cart-revision-001", "traceRef": "trace-001", "decidedAt": "2026-07-27T09:00:00Z", "evidence": { "server": "only" } }
+    }
   }
 ]

@@ -165,6 +165,16 @@ const sanitySnapshotBinding = () => ({
   contributingRevisions: ['sanity-policies-revision-001'],
 });
 
+const pendingRecommendation = (placement: string) => ({
+  recommendationId: 'recommendation-001',
+  requestId: 'rec-request-001',
+  placement,
+  actionIds: ['action-product-001'],
+  cartRevision: 'cart-revision-001',
+  traceRef: 'trace-001',
+  decidedAt: '2026-07-27T09:00:00Z',
+});
+
 describe('recommendation domain contracts', () => {
   it('parses the canonical decision request', () => {
     const parsed = parseRecommendationDecisionRequest(validRequest);
@@ -323,9 +333,78 @@ describe('recommendation domain contracts', () => {
     expect(() => parseRecommendationImpressionRequest(impression)).toThrow();
   });
 
-  it('rejects invalid state stage and next-placement combinations', () => {
+  it.each([
+    ['starter_eligible', null, null],
+    ['starter_resolved', 'starter', null],
+    ['modifier_eligible', 'starter', null],
+    ['modifier_pending', null, null],
+    ['modifier_resolved', null, null],
+    ['smart_cross_sell_eligible', null, null],
+    ['smart_cross_sell_pending', null, null],
+    ['complete', null, 'for_you'],
+    ['complete', 'starter', null],
+  ] as const)(
+    'rejects invalid %s state next/pending combination',
+    (stage, nextEligiblePlacement, pendingPlacement) => {
+      const value = structuredClone(validState) as Record<string, unknown>;
+      value.stage = stage;
+      value.nextEligiblePlacement = nextEligiblePlacement;
+      value.attemptedPlacements = pendingPlacement === null ? [] : [pendingPlacement];
+      value.pendingRecommendation =
+        pendingPlacement === null ? null : pendingRecommendation(pendingPlacement);
+
+      expect(() => parseRecommendationState(value)).toThrow();
+    },
+  );
+
+  it.each([
+    ['starter_eligible', 'starter', 'for_you'],
+    ['starter_resolved', null, 'modifier_upsell'],
+    ['modifier_eligible', 'modifier_upsell', 'modifier_upsell'],
+    ['modifier_pending', null, 'for_you'],
+    ['modifier_resolved', 'smart_cross_sell', 'for_you'],
+    ['smart_cross_sell_eligible', 'smart_cross_sell', 'for_you'],
+    ['smart_cross_sell_pending', null, 'modifier_upsell'],
+  ] as const)(
+    'rejects a %s state with the wrong pending placement',
+    (stage, nextEligiblePlacement, pendingPlacement) => {
+      const value = structuredClone(validState) as Record<string, unknown>;
+      value.stage = stage;
+      value.nextEligiblePlacement = nextEligiblePlacement;
+      value.attemptedPlacements = [pendingPlacement];
+      value.pendingRecommendation = pendingRecommendation(pendingPlacement);
+
+      expect(() => parseRecommendationState(value)).toThrow();
+    },
+  );
+
+  it('rejects a client-authored impression recordedAt field', () => {
+    const value = structuredClone(validImpressionRequest) as Record<string, unknown>;
+    value.recordedAt = '2026-07-27T09:00:06Z';
+
+    expect(() => parseRecommendationImpressionRequest(value)).toThrow();
+  });
+
+  it.each([
+      ['recordedAt', '2026-07-27T09:00:06Z'],
+      ['stage', 'complete'],
+      ['evidence', { server: 'only' }],
+    ] as const)('rejects a client-authored outcome %s field', (field, fieldValue) => {
+      const value = structuredClone(validOutcomeRequest) as Record<string, unknown>;
+      value[field] = fieldValue;
+
+      expect(() => parseRecommendationOutcomeRequest(value)).toThrow();
+    });
+
+  it('rejects client-authored pending recommendation evidence', () => {
     const value = structuredClone(validState) as Record<string, unknown>;
+    value.stage = 'starter_resolved';
     value.nextEligiblePlacement = null;
+    value.attemptedPlacements = ['for_you'];
+    value.pendingRecommendation = {
+      ...pendingRecommendation('for_you'),
+      evidence: { server: 'only' },
+    };
 
     expect(() => parseRecommendationState(value)).toThrow();
   });
