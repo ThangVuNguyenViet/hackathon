@@ -346,6 +346,72 @@ describe('deterministic recommendation rankers', () => {
     expect(result.featureSummary.popularityReasonCode).toBe('popular_here');
   });
 
+  it('uses a finite clamped step for a valid zero-width For You range', () => {
+    const entry = candidate('20751');
+    const zeroContext = makeContext({
+      request: parseRecommendationDecisionRequest({
+        ...makeContext().request,
+        placement: 'for_you',
+        verifiedCustomerRef: 'customer-001',
+      }),
+      customerHistory: {
+        verifiedCustomerRef: 'customer-001',
+        completedOrders: [
+          {
+            orderId: 'half-life-order',
+            completedAt: '2026-04-28T09:00:00Z',
+            lines: [{ sellableItemId: '20751', categoryId: 'chicken', quantity: 1 }],
+          },
+        ],
+      },
+    });
+    const zeroWidthStatistics = {
+      ...withStatistics([
+        {
+          ...rankingStatistics.productStatistics[0],
+          globalOrderCount: 0,
+          storeOrderCounts: {},
+          storeDaypartOrderCounts: {},
+          storeCalendarDayTypeDaypartOrderCounts: {},
+        },
+      ]),
+      normalization: {
+        ...rankingStatistics.normalization,
+        exactItemAffinity: { min: 0.5, max: 0.5 },
+        categoryAffinity: { min: 0.5, max: 0.5 },
+      },
+    };
+
+    const [atStep] = new ForYouAffinityRanker().rank(
+      rankerInput([entry], {
+        context: zeroContext,
+        rankingStatistics: zeroWidthStatistics,
+      }),
+    );
+    const [aboveStep] = new ForYouAffinityRanker().rank(
+      rankerInput([entry], {
+        context: {
+          ...zeroContext,
+          customerHistory: {
+            ...zeroContext.customerHistory!,
+            completedOrders: [
+              {
+                ...zeroContext.customerHistory!.completedOrders[0],
+                lines: [{ sellableItemId: '20751', categoryId: 'chicken', quantity: 2 }],
+              },
+            ],
+          },
+        },
+        rankingStatistics: zeroWidthStatistics,
+      }),
+    );
+
+    expect(atStep.score).toBe(0);
+    expect(Number.isFinite(atStep.score)).toBe(true);
+    expect(aboveStep.score).toBe(0.8);
+    expect(Number.isFinite(aboveStep.score)).toBe(true);
+  });
+
   it('orders modifier upsells by price impact with action-ID ties', () => {
     const entries = [
       candidate('modifier-b', {

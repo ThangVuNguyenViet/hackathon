@@ -7,6 +7,7 @@ import type { PlacementRanker, RankedCandidate, RankerInput } from './types.js';
 const MILLISECONDS_PER_DAY = 24 * 60 * 60 * 1000;
 
 function normalize(value: number, range: { min: number; max: number }): number {
+  if (range.min === range.max) return value <= range.min ? 0 : 1;
   return Math.min(
     1,
     Math.max(0, (value - range.min) / (range.max - range.min)),
