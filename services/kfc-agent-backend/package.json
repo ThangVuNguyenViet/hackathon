@@ -13,7 +13,7 @@
     "format:check": "node scripts/run-format-gate.mjs --check",
     "lint": "eslint .",
     "lint:strict": "node scripts/check-eslint-warning-budget.mjs",
-    "test:ci": "vitest run",
+    "test:ci": "vitest run --config vitest.ci.config.ts",
     "check": "npm run format:check && npm run lint && npm run lint:strict && npm run check:agent-sdk-boundaries && npm run typecheck && npm run test:ci",
     "check:agent-sdk-boundaries": "node scripts/check-direct-agent-sdk-boundaries.mjs",
     "check:architecture": "node ../../scripts/check-source-file-size.mjs",

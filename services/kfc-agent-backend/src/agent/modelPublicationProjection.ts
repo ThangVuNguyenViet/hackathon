@@ -18,9 +18,7 @@ import type {
   ResponseClaimEvidence,
   ResponseClaimKind,
 } from './responseEvidenceContracts.js';
-import {
-  responseEvidenceContractForTool,
-} from './responseEvidenceContracts.js';
+import { responseEvidenceContractForTool } from './responseEvidenceContracts.js';
 import {
   projectAddress,
   projectCart,
@@ -79,20 +77,17 @@ export type ToolExecutionOutcome = 'success' | 'error';
 
 const issuedCurrentTurnEvidence = new WeakSet<object>();
 const issuedPublicationBundles = new WeakSet<object>();
-const publicationBundleAuthorities =
-  new WeakMap<object, ModelPublicationAuthority>();
-const publicationBundleUserTurnWindowDigests =
-  new WeakMap<object, string>();
+const publicationBundleAuthorities = new WeakMap<
+  object,
+  ModelPublicationAuthority
+>();
+const publicationBundleUserTurnWindowDigests = new WeakMap<object, string>();
 
 function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' &&
-    value !== null &&
-    !Array.isArray(value);
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
-function modelVisibleUserTurnWindow(
-  turns: readonly ConversationTurn[],
-) {
+function modelVisibleUserTurnWindow(turns: readonly ConversationTurn[]) {
   return turns
     .filter((turn) => turn.role === 'user')
     .map((turn) => ({
@@ -123,9 +118,7 @@ export interface CurrentTurnResponseEvidence {
 
 export interface ModelPublicationEvidence extends ResponseClaimEvidence {
   publicationAuthority:
-    | 'verified_state'
-    | 'current_turn_execution'
-    | 'current_turn_authenticated';
+    'verified_state' | 'current_turn_execution' | 'current_turn_authenticated';
   privateData: boolean;
 }
 
@@ -139,8 +132,7 @@ export interface ModelPublicationBundle {
 }
 
 export interface CheckpointSafeToolEvidenceReceipt {
-  schemaVersion:
-    typeof CHECKPOINT_SAFE_TOOL_EVIDENCE_RECEIPT_SCHEMA_VERSION;
+  schemaVersion: typeof CHECKPOINT_SAFE_TOOL_EVIDENCE_RECEIPT_SCHEMA_VERSION;
   evidenceId: string;
   evidenceDigest: string;
   toolCallId: string;
@@ -150,11 +142,7 @@ export interface CheckpointSafeToolEvidenceReceipt {
 }
 
 function deepFreeze<Value>(value: Value): Value {
-  if (
-    typeof value !== 'object' ||
-    value === null ||
-    Object.isFrozen(value)
-  ) {
+  if (typeof value !== 'object' || value === null || Object.isFrozen(value)) {
     return value;
   }
   for (const child of Object.values(value)) deepFreeze(child);
@@ -193,13 +181,16 @@ function hasOfficialContentAuthority(
   ) {
     return false;
   }
-  return (state.toolTrace ?? []).some((entry) =>
-    entry.ok &&
-    entry.provenance.some((source) =>
-      sameOfficialSourceAuthority(
-        content.officialAuthority,
-        source.officialAuthority,
-      )));
+  return (state.toolTrace ?? []).some(
+    (entry) =>
+      entry.ok &&
+      entry.provenance.some((source) =>
+        sameOfficialSourceAuthority(
+          content.officialAuthority,
+          source.officialAuthority,
+        ),
+      ),
+  );
 }
 
 function addEvidence(
@@ -227,8 +218,7 @@ function addEvidence(
     ),
     value: input.value,
     officialSource: input.officialSource ?? false,
-    publicationAuthority:
-      input.publicationAuthority ?? 'verified_state',
+    publicationAuthority: input.publicationAuthority ?? 'verified_state',
     privateData: input.privateData ?? false,
   });
 }
@@ -262,11 +252,9 @@ function addActiveCollectionEvidence(
       : undefined;
     const projectedItems =
       typeof projectedResult === 'object' &&
-        projectedResult !== null &&
-        !Array.isArray(projectedResult) &&
-        Array.isArray(
-          (projectedResult as Record<string, unknown>).items,
-        )
+      projectedResult !== null &&
+      !Array.isArray(projectedResult) &&
+      Array.isArray((projectedResult as Record<string, unknown>).items)
         ? (projectedResult as { items: unknown[] }).items
         : undefined;
     if (
@@ -306,8 +294,14 @@ function publicationEvidence(
   addEvidence(evidence, {
     evidenceId: 'order_preview',
     claimKinds: [
-      'product', 'modifier', 'price', 'payment', 'fulfillment', 'status',
-      'delivery', 'order_id',
+      'product',
+      'modifier',
+      'price',
+      'payment',
+      'fulfillment',
+      'status',
+      'delivery',
+      'order_id',
     ],
     value: modelState.orderPreview,
     privateData: true,
@@ -315,8 +309,14 @@ function publicationEvidence(
   addEvidence(evidence, {
     evidenceId: 'order',
     claimKinds: [
-      'product', 'modifier', 'price', 'payment', 'fulfillment', 'status',
-      'delivery', 'order_id',
+      'product',
+      'modifier',
+      'price',
+      'payment',
+      'fulfillment',
+      'status',
+      'delivery',
+      'order_id',
     ],
     value: modelState.order,
     privateData: true,
@@ -401,8 +401,8 @@ function publicationEvidence(
       requiredLimitations: contract.requiredLimitations,
       value:
         entry.toolName === 'getSavedAddresses' &&
-          entry.executionOutcome === 'success' &&
-          Array.isArray(entry.value)
+        entry.executionOutcome === 'success' &&
+        Array.isArray(entry.value)
           ? {
               savedAddressCount: entry.value.length,
               privateAddressWithheld: true,
@@ -422,10 +422,12 @@ export async function buildModelPublicationBundle(input: {
   authority: ModelPublicationAuthority;
   currentTurnEvidence?: readonly CurrentTurnResponseEvidence[];
 }): Promise<ModelPublicationBundle> {
-  if (!await validateModelPublicationAuthority({
-    authority: input.authority,
-    state: input.state,
-  })) {
+  if (
+    !(await validateModelPublicationAuthority({
+      authority: input.authority,
+      state: input.state,
+    }))
+  ) {
     throw new Error('model_publication_authority_invalid');
   }
   const currentTurnEvidence = input.currentTurnEvidence ?? [];
@@ -434,7 +436,7 @@ export async function buildModelPublicationBundle(input: {
   const toolCallIds = new Set<string>();
   for (const entry of currentTurnEvidence) {
     if (
-      !await currentTurnEvidenceIsValid(entry, input.authority) ||
+      !(await currentTurnEvidenceIsValid(entry, input.authority)) ||
       evidenceIds.has(entry.evidenceId) ||
       evidenceDigests.has(entry.digest) ||
       toolCallIds.has(entry.toolCallId)
@@ -453,8 +455,7 @@ export async function buildModelPublicationBundle(input: {
     currentUserMessageDigest,
     authorityDigest: input.authority.authorityDigest,
     currentTurnRevision: input.authority.currentTurnRevision,
-    authorizedScopes:
-      modelPublicationAuthorizedScopes(input.authority),
+    authorizedScopes: modelPublicationAuthorizedScopes(input.authority),
   });
   const evidence = publicationEvidence(
     input.state,
@@ -478,10 +479,12 @@ export async function buildModelPublicationBundle(input: {
     ...digestInput,
     projectionDigest: await stateRevision(digestInput),
   });
-  if (!await validateModelPublicationAuthority({
-    authority: input.authority,
-    state: input.state,
-  })) {
+  if (
+    !(await validateModelPublicationAuthority({
+      authority: input.authority,
+      state: input.state,
+    }))
+  ) {
     throw new Error('model_publication_authority_invalid');
   }
   issuedPublicationBundles.add(bundle);
@@ -609,10 +612,8 @@ function authorityAllowsResponseEvidence(
 ): boolean {
   return (
     authorityHasScopes(authority, contract.requiredScopes) ||
-    (
-      contract.currentSessionCheckout &&
-      authorityAllowsCurrentSessionCheckoutEvidence(authority)
-    )
+    (contract.currentSessionCheckout &&
+      authorityAllowsCurrentSessionCheckoutEvidence(authority))
   );
 }
 
@@ -625,16 +626,13 @@ async function currentTurnEvidenceIsValid(
   const expectedPrivate = contract.privateData;
   if (
     !issuedCurrentTurnEvidence.has(evidence) ||
-    evidence.schemaVersion !==
-      CURRENT_TURN_RESPONSE_EVIDENCE_SCHEMA_VERSION ||
+    evidence.schemaVersion !== CURRENT_TURN_RESPONSE_EVIDENCE_SCHEMA_VERSION ||
     evidence.authorityDigest !== authority.authorityDigest ||
     evidence.currentTurnRevision !== authority.currentTurnRevision ||
     evidence.toolCallId.length === 0 ||
     evidence.privateData !== expectedPrivate ||
-    (
-      evidence.executionOutcome !== 'success' &&
-      evidence.executionOutcome !== 'error'
-    ) ||
+    (evidence.executionOutcome !== 'success' &&
+      evidence.executionOutcome !== 'error') ||
     JSON.stringify(evidence.claimKinds) !== JSON.stringify(claimKinds) ||
     !authorityAllowsResponseEvidence(authority, contract)
   ) {
@@ -681,17 +679,16 @@ export async function buildCurrentTurnResponseEvidence(input: {
   }
   const { result, toolCallId } = input.execution;
   const contract = responseEvidenceContractForTool(result.toolName);
-  if (
-    !authorityAllowsResponseEvidence(input.authority, contract)
-  ) {
+  if (!authorityAllowsResponseEvidence(input.authority, contract)) {
     return undefined;
   }
   const value = projectCurrentToolValue(result);
   if (value === undefined) return undefined;
   const claimKinds = contract.claimKinds;
   const privateData = contract.privateData;
-  const executionOutcome: ToolExecutionOutcome =
-    result.ok ? 'success' : 'error';
+  const executionOutcome: ToolExecutionOutcome = result.ok
+    ? 'success'
+    : 'error';
   const digest = await currentTurnResponseEvidenceDigest({
     authorityDigest: input.authority.authorityDigest,
     currentTurnRevision: input.authority.currentTurnRevision,
@@ -738,23 +735,20 @@ export function checkpointSafeToolEvidenceReceipt(
 
 function checkpointMembershipActionOutcome(
   value: unknown,
-): Pick<
-  MembershipActionResult,
-  'actionId' | 'status' | 'requiresUserConfirmation' | 'targetId'
-> | undefined {
-  if (
-    !isRecord(value)
-  ) {
+):
+  | Pick<
+      MembershipActionResult,
+      'actionId' | 'status' | 'requiresUserConfirmation' | 'targetId'
+    >
+  | undefined {
+  if (!isRecord(value)) {
     return undefined;
   }
   if (
     Object.keys(value).sort().join(',') !==
       'actionId,requiresUserConfirmation,status,targetId' ||
     typeof value.actionId !== 'string' ||
-    (
-      value.status !== 'previewed' &&
-      value.status !== 'completed'
-    ) ||
+    (value.status !== 'previewed' && value.status !== 'completed') ||
     typeof value.requiresUserConfirmation !== 'boolean' ||
     typeof value.targetId !== 'string'
   ) {
@@ -862,7 +856,7 @@ export async function publicationBundleMatchesUserTurnWindow(
   const issuedDigest = publicationBundleUserTurnWindowDigests.get(bundle);
   return (
     issuedDigest !== undefined &&
-    issuedDigest === await stateRevision(modelVisibleUserTurnWindow(turns))
+    issuedDigest === (await stateRevision(modelVisibleUserTurnWindow(turns)))
   );
 }
 

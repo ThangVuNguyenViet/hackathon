@@ -129,6 +129,7 @@ import {
 import {
   eventFromMessengerDelivery,
   sendMessengerSenderAction,
+  startMessengerRunTyping,
   dashboardEventId,
   checkCommerceGatewayReadiness,
   checkCatalogReadiness,
@@ -373,6 +374,7 @@ export function createRouteMessengerRuntime(
   async function processMessengerAgentRunInternal(
     runId: string,
     _verifiedIngress?: readonly VerifiedMessengerGuestCheckoutIngress[],
+    runOptions?: { typingAlreadyStarted?: boolean },
   ): Promise<MessengerWebhookEventProcessingResult> {
     const storedRun = await store.getAgentRun(runId);
     if (!storedRun)
@@ -560,12 +562,12 @@ export function createRouteMessengerRuntime(
             profileUpdatedAt: new Date().toISOString(),
           });
         }
-        await sendMessengerSenderAction(
-          clients.messenger,
-          run.externalUserId,
-          'mark_seen',
-          linkedTurns[0]!.externalMessageId,
-        );
+        typingStarted = await startMessengerRunTyping({
+          messenger: clients.messenger,
+          externalUserId: run.externalUserId,
+          rawEventId: linkedTurns[0]!.externalMessageId,
+          alreadyStarted: runOptions?.typingAlreadyStarted === true,
+        });
       }
       const runGuard = {
         isCurrent: isCurrentRun,
@@ -670,26 +672,6 @@ export function createRouteMessengerRuntime(
           metadata: null,
           clients,
           fence: commitFence,
-          lifecycle: {
-            onRunStart: async () => {
-              typingStarted = await sendMessengerSenderAction(
-                clients!.messenger,
-                run.externalUserId,
-                'typing_on',
-                linkedTurns[0]!.externalMessageId,
-              );
-            },
-            onRunEnd: async () => {
-              if (!typingStarted) return;
-              await sendMessengerSenderAction(
-                clients!.messenger,
-                run.externalUserId,
-                'typing_off',
-                linkedTurns[0]!.externalMessageId,
-              );
-              typingStarted = false;
-            },
-          },
         });
         if (!(await isCurrentRun())) {
           await suppressRun('run_not_current_before_delivery');
@@ -874,12 +856,18 @@ export function createRouteMessengerRuntime(
       };
     } finally {
       if (typingStarted && clients) {
-        await sendMessengerSenderAction(
-          clients.messenger,
-          run.externalUserId,
-          'typing_off',
-          linkedTurns[0]?.externalMessageId,
-        );
+        const state = await store.getSessionAgentState(run.sessionId);
+        if (
+          state.currentRunId === run.id &&
+          state.generation === run.generation
+        ) {
+          await sendMessengerSenderAction(
+            clients.messenger,
+            run.externalUserId,
+            'typing_off',
+            linkedTurns[0]?.externalMessageId,
+          );
+        }
       }
     }
   }
@@ -891,6 +879,4 @@ export function createRouteMessengerRuntime(
   };
 }
 
-export type RouteMessengerRuntime = ReturnType<
-  typeof createRouteMessengerRuntime
->;
+export type RouteMessengerRuntime = ReturnType<typeof createRouteMessengerRuntime>;

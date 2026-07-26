@@ -560,11 +560,10 @@ describe("tool executor", () => {
           mutationIdentity("confirmed-acquire-voucher"),
       },
     );
-    expect(confirmedAcquire.ok).toBe(true);
-    expect(confirmedAcquire.value).toMatchObject({
-      status: "completed",
-      targetId: "reward-discount-10k",
-    });
+    expect(confirmedAcquire.ok).toBe(false);
+    expect(confirmedAcquire.errorCode).toBe(
+      "membership_points_insufficient",
+    );
     expect(acquireVoucher).toHaveBeenCalledOnce();
   });
 

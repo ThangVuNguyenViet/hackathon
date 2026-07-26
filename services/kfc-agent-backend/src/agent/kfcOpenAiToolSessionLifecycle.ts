@@ -137,12 +137,13 @@ export async function prepareKfcOpenAiToolSessionPublication(input: {
   verifiedState: Record<string, unknown>;
   auditPayload?: Record<string, unknown>;
 }> {
-  const verifiedState = projectKfcOpenAiGenUiState({
+  const projectedState = projectKfcOpenAiGenUiState({
     session: input.session,
     latestUserMessage: input.latestUserMessage,
     toolCalls: input.toolCalls,
     customerCommand: input.customerCommand,
-  }).state as unknown as Record<string, unknown>;
+  }).state;
+  const verifiedState = Object.fromEntries(Object.entries(projectedState));
   const auditPayload =
     input.toolCalls.length > 0 || input.runMetrics || input.compactionMetrics
       ? {

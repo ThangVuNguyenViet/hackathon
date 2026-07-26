@@ -1131,7 +1131,12 @@ function reduceToolResult(
             parsed.data.address.label !== null &&
             parsed.data.address.district !== null &&
             parsed.data.address.city !== null
-          ? (parsed.data.address as Address)
+          ? {
+              label: parsed.data.address.label,
+              line1: parsed.data.address.line1,
+              district: parsed.data.address.district,
+              city: parsed.data.address.city,
+            }
           : session.address;
       const cart = {
         ...session.cart,

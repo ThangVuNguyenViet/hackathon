@@ -387,8 +387,12 @@ export class OrderingDataService {
       (item) =>
         item.available &&
         menuCategoryMatches(item.category, input.category, categories) &&
+        (input.minPriceVnd === undefined ||
+          item.priceVnd >= input.minPriceVnd) &&
         (input.maxPriceVnd === undefined ||
-          item.priceVnd <= input.maxPriceVnd),
+          item.priceVnd <= input.maxPriceVnd) &&
+        (input.maxPriceExclusiveVnd === undefined ||
+          item.priceVnd < input.maxPriceExclusiveVnd),
     );
     const searchCandidates = filtered.map((item, fixtureIndex) => {
       const modifier = this.modifierByItemId.get(item.itemId);

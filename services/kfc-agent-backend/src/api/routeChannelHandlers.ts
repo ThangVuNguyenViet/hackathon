@@ -221,8 +221,13 @@ export function createChannelRouteHandlers(context: RouteHandlerContext) {
     async processMessengerAgentRun(
       runId: string,
       verifiedIngress?: readonly VerifiedMessengerGuestCheckoutIngress[],
+      runOptions?: { typingAlreadyStarted?: boolean },
     ) {
-      return processMessengerAgentRunInternal(runId, verifiedIngress);
+      return processMessengerAgentRunInternal(
+        runId,
+        verifiedIngress,
+        runOptions,
+      );
     },
     async zaloWebhook(body: unknown) {
       const events = normalizeZaloWebhook(body, options.zaloOaId);

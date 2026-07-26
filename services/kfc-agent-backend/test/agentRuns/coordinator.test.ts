@@ -1,9 +1,28 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { AgentRunCoordinator } from '../../src/agentRuns/coordinator.js';
 import { agentRunExecutionFence } from '../../src/persistence/agentRunExecutionLease.js';
 import { MemoryStore } from '../../src/persistence/memoryStore.js';
 
 describe('AgentRunCoordinator', () => {
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it('uses a short default debounce window for channel turns', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-07-25T00:00:00.000Z'));
+    const coordinator = new AgentRunCoordinator({
+      store: new MemoryStore(),
+    });
+
+    const wakeup = await coordinator.recordPendingTurn(
+      messengerEvent('message-default-debounce'),
+      'messenger:default-debounce',
+    );
+
+    expect(wakeup.dueAt).toBe('2026-07-25T00:00:00.500Z');
+  });
+
   it('lets only one worker claim a session generation', async () => {
     const store = new MemoryStore();
     const coordinator = new AgentRunCoordinator({

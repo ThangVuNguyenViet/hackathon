@@ -79,6 +79,7 @@ vi.mock("../../src/api/serverOptions.js", async (importOriginal) => {
 
 afterEach(() => {
   workerResponseFixture.modelCandidate = undefined;
+  vi.unstubAllGlobals();
 });
 
 describe("Cloudflare Worker backend", () => {
@@ -701,7 +702,38 @@ describe("Cloudflare Worker backend", () => {
   });
 
   it("enqueues one Messenger wakeup job and processes the latest run", async () => {
-    workerResponseFixture.modelCandidate = "Mình đã cập nhật Combo 99K vào giỏ.";
+    const openAiFetch = vi.fn(async () =>
+      Response.json({
+        id: "resp_messenger_fast_path",
+        object: "response",
+        created_at: 1_784_073_600,
+        status: "completed",
+        model: "gpt-4.1-mini",
+        output: [
+          {
+            id: "msg_messenger_fast_path",
+            type: "message",
+            status: "completed",
+            role: "assistant",
+            content: [
+              {
+                type: "output_text",
+                text: "Mình đã kiểm tra yêu cầu của bạn.",
+                annotations: [],
+              },
+            ],
+          },
+        ],
+        usage: {
+          input_tokens: 1,
+          output_tokens: 1,
+          total_tokens: 2,
+          input_tokens_details: { cached_tokens: 0 },
+          output_tokens_details: { reasoning_tokens: 0 },
+        },
+      }),
+    );
+    vi.stubGlobal("fetch", openAiFetch);
     const queue = new FakeQueue();
     const db = new FakeD1Database();
     const messengerFetch = vi.fn(
@@ -736,20 +768,32 @@ describe("Cloudflare Worker backend", () => {
     );
     const workerEnv = env({
       DB: db,
+      KFC_AGENT_RUNTIME: "openai-responses",
+      KFC_AGENT_PROVIDER: "openai",
+      KFC_AGENT_MODEL: "gpt-4.1-mini",
+      OPENAI_API_KEY: "openai_test_key",
+      OPENAI_BASE_URL: "https://openai.local/v1",
       MESSENGER_WEBHOOK_QUEUE: queue,
       MESSENGER_FETCH: messengerFetch as typeof fetch,
     });
+    const backgroundWork: Promise<unknown>[] = [];
+    const executionContext = {
+      waitUntil: (promise: Promise<unknown>) => backgroundWork.push(promise),
+    };
     const payload = messengerPayload();
 
     const first = await worker.fetch(
       messengerWebhookRequest(payload),
       workerEnv,
+      executionContext,
     );
     expect(messengerFetch).not.toHaveBeenCalled();
     const second = await worker.fetch(
       messengerWebhookRequest(payload),
       workerEnv,
     );
+    await Promise.all([...backgroundWork]);
+    await Promise.all([...backgroundWork]);
     const turnsBeforeQueue = await worker.fetch(
       adminRequest(
         "https://worker.local/dashboard/sessions/messenger%3Apsid_1/turns",
@@ -791,7 +835,12 @@ describe("Cloudflare Worker backend", () => {
       failed: 0,
     });
     expect(queue.send).toHaveBeenCalledTimes(1);
-    expect(await turnsBeforeQueue.json()).toMatchObject({ turns: [] });
+    expect(await turnsBeforeQueue.json()).toMatchObject({
+      turns: expect.arrayContaining([
+        expect.objectContaining({ role: "user" }),
+        expect.objectContaining({ role: "assistant" }),
+      ]),
+    });
     expect(ack).toHaveBeenCalledTimes(1);
     expect(await turns.json()).toMatchObject({
       turns: expect.arrayContaining([
@@ -799,15 +848,14 @@ describe("Cloudflare Worker backend", () => {
         expect.objectContaining({ role: "assistant" }),
       ]),
     });
-    expect(
-      messengerFetch.mock.calls.map(
-        (call) =>
-          JSON.parse(String(call[1]?.body ?? "{}")) as {
-            message?: { text?: string };
-            sender_action?: string;
-          },
-      ),
-    ).toEqual(
+    const messengerBodies = messengerFetch.mock.calls.map(
+      (call) =>
+        JSON.parse(String(call[1]?.body ?? "{}")) as {
+          message?: { text?: string };
+          sender_action?: string;
+        },
+    );
+    expect(messengerBodies).toEqual(
       expect.arrayContaining([
         expect.objectContaining({ sender_action: "mark_seen" }),
         expect.objectContaining({ sender_action: "typing_on" }),
@@ -817,10 +865,15 @@ describe("Cloudflare Worker backend", () => {
         }),
       ]),
     );
+    const senderActions = messengerBodies
+      .map((body) => body.sender_action)
+      .filter((action): action is string => Boolean(action));
+    expect(senderActions.filter((action) => action === "mark_seen")).toHaveLength(1);
+    expect(senderActions.filter((action) => action === "typing_on")).toHaveLength(1);
+    expect(senderActions.filter((action) => action === "typing_off")).toHaveLength(1);
     expect(stream.status).toBe(501);
 
     queue.messages.length = 0;
-    workerResponseFixture.modelCandidate = "Mình có thể gợi ý món phù hợp với ngân sách 180.000đ cho hai người.";
     await worker.fetch(
       messengerWebhookRequest(
         messengerPayload(

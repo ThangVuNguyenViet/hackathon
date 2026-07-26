@@ -596,6 +596,16 @@ describe('OpenAiKfcAgent SDK Runner', () => {
       'Do not stop at a proposal or ask for another confirmation',
     );
     expect(requests[0]?.instructions).toContain('qualitative party size');
+    expect(requests[0]?.instructions).toContain(
+      'latest customer message as the task for this turn',
+    );
+    expect(requests[0]?.instructions).toContain(
+      'preserve that selection unless the customer requests replacement',
+    );
+    expect(requests[0]?.instructions).toContain(
+      'broad category result as a candidate set',
+    );
+    expect(requests[0]?.instructions).toContain('Honor explicit output scope');
   });
 
   it('sanitizes verified identifiers before persisting the customer response', async () => {

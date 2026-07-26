@@ -1,5 +1,9 @@
 import type { CustomerCommand } from '../domain/customerCommand.js';
-import type { MenuItem } from '../domain/types.js';
+import {
+  deliveryAddressRequiredFields,
+  type DeliveryAddressRequiredField,
+  type MenuItem,
+} from '../domain/types.js';
 import type {
   AgentGraphState,
   TrustedPresentationDirective,
@@ -320,21 +324,13 @@ export function projectKfcOpenAiGenUiState(input: SelectKfcOpenAiGenUiInput): {
           state.deliveryAddressMissingFields = Array.isArray(
             value.missingFields,
           )
-            ? (value.missingFields.filter(
-                (
-                  field,
-                ): field is
-                  | 'recipientName'
-                  | 'phone'
-                  | 'addressLine'
-                  | 'provinceName'
-                  | 'communeName' =>
-                  field === 'recipientName' ||
-                  field === 'phone' ||
-                  field === 'addressLine' ||
-                  field === 'provinceName' ||
-                  field === 'communeName',
-              ) as AgentGraphState['deliveryAddressMissingFields'])
+            ? value.missingFields.filter(
+                (field): field is DeliveryAddressRequiredField =>
+                  typeof field === 'string' &&
+                  deliveryAddressRequiredFields.some(
+                    (requiredField) => requiredField === field,
+                  ),
+              )
             : [];
         }
         break;
