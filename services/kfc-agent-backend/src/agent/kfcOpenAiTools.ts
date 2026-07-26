@@ -1,4 +1,9 @@
 import { createHash } from 'node:crypto';
+import {
+  RunContext,
+  tool,
+  type FunctionTool,
+} from '@kfc/openai-agents-runtime';
 import { z } from 'zod';
 import { zodToJsonSchema } from 'zod-to-json-schema';
 import type {
@@ -24,6 +29,7 @@ import {
   toolNames,
 } from '../ordering/toolCatalog.js';
 import {
+  classifyToolSideEffect,
   executeToolCall,
   type ExecutorContext,
 } from '../ordering/toolExecutor.js';
@@ -42,9 +48,184 @@ import {
   selectedPaymentMethodAuthority,
 } from '../ordering/paymentMethodAuthority.js';
 import type {
-  OpenAiFunctionTool,
-  OpenAiToolRetryPolicy,
+  OpenAiToolCallTrace,
 } from './openAiKfcAgent.js';
+
+export interface KfcCanonicalToolDefinition {
+  type: 'function';
+  name: ToolName;
+  description: string;
+  parameters: Record<string, unknown>;
+  strict: boolean;
+}
+
+/** Domain executor contract, adapted once into the official SDK tool surface. */
+export interface KfcCanonicalTool {
+  definition: KfcCanonicalToolDefinition;
+  execute(
+    arguments_: Record<string, unknown>,
+    options?: { signal: AbortSignal; deadlineAt: number },
+  ): Promise<unknown>;
+}
+
+export interface KfcOpenAiAgentRunContext {
+  toolCalls: OpenAiToolCallTrace[];
+  developerMessages: string[];
+}
+
+function safeSdkToolFailure(errorCode: 'invalid_tool_input' | 'tool_execution_failed' | 'tool_timed_out') {
+  return {
+    ok: false,
+    errorCode,
+    message: 'The requested action could not be completed safely.',
+  };
+}
+
+function canonicalArgumentSchema(name: string): z.ZodTypeAny | undefined {
+  if (name === 'updateCart') {
+    return z.union([
+      directUpdateCartArgumentsSchema,
+      (agentToolArgumentSchemas as Record<string, z.ZodTypeAny>).updateCart,
+      (toolArgumentSchemas as Record<string, z.ZodTypeAny>).updateCart,
+    ]);
+  }
+  if (name === 'quoteFulfillment') return directQuoteFulfillmentArgumentsSchema;
+  if (name === 'acquireVoucher' || name === 'redeemReward') {
+    return (agentToolArgumentSchemas as Record<string, z.ZodTypeAny>)[name];
+  }
+  return (toolArgumentSchemas as Record<string, z.ZodTypeAny>)[name]
+    ?? (agentToolArgumentSchemas as Record<string, z.ZodTypeAny>)[name];
+}
+
+function isKfcRunContext(value: unknown): value is RunContext<KfcOpenAiAgentRunContext> {
+  return typeof value === 'object'
+    && value !== null
+    && 'context' in value
+    && typeof value.context === 'object'
+    && value.context !== null
+    && 'toolCalls' in value.context
+    && Array.isArray(value.context.toolCalls);
+}
+
+function recordSafeSdkFailure(input: {
+  runContext: unknown;
+  toolName: string;
+  errorCode: 'invalid_tool_input' | 'tool_execution_failed' | 'tool_timed_out';
+}): string {
+  const result = safeSdkToolFailure(input.errorCode);
+  if (isKfcRunContext(input.runContext)) {
+    input.runContext.context.toolCalls.push({
+      name: input.toolName,
+      arguments: {},
+      result,
+    });
+  }
+  return JSON.stringify(result);
+}
+
+function isSdkToolArguments(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+/**
+ * Converts the canonical KFC tool contract into official Agents SDK function
+ * tools. Executors and evidence remain per-turn state on RunContext.
+ */
+export function createKfcOpenAiAgentsTools(
+  tools: readonly KfcCanonicalTool[],
+  options: { timeoutMs?: number } = {},
+): FunctionTool<KfcOpenAiAgentRunContext>[] {
+  return tools.map((canonicalTool) =>
+    tool({
+      name: canonicalTool.definition.name,
+      description: canonicalTool.definition.description,
+      // SDK 0.13.5's strict-schema converter throws DataCloneError for some
+      // legacy Zod 3 unions/defaults. Keep the canonical JSON Schema at the
+      // provider boundary and parse the exact Zod schema before execution.
+      parameters: canonicalTool.definition.parameters as never,
+      strict: true,
+      errorFunction: (runContext, error) => recordSafeSdkFailure({
+        runContext,
+        toolName: canonicalTool.definition.name,
+        errorCode:
+          error instanceof Error && error.name === 'InvalidToolInputError'
+            ? 'invalid_tool_input'
+            : 'tool_execution_failed',
+      }),
+      async execute(
+        arguments_,
+        runContext?: RunContext<KfcOpenAiAgentRunContext>,
+      ) {
+        if (!runContext) {
+          throw new Error('KFC tool is missing its run context');
+        }
+        if (!isSdkToolArguments(arguments_)) {
+          throw new Error('Tool arguments must be a JSON object');
+        }
+        const validation = canonicalArgumentSchema(canonicalTool.definition.name)
+          ?.safeParse(arguments_);
+        if (validation && !validation.success) {
+          const result = safeSdkToolFailure('invalid_tool_input');
+          runContext.context.toolCalls.push({
+            name: canonicalTool.definition.name,
+            arguments: {},
+            result,
+          });
+          return result;
+        }
+        const trace: OpenAiToolCallTrace = {
+          name: canonicalTool.definition.name,
+          arguments: validation?.data ?? arguments_,
+          result: undefined,
+        };
+        runContext.context.toolCalls.push(trace);
+        const abortController = new AbortController();
+        const argumentsForExecution = validation?.data ?? arguments_;
+        const sideEffect = classifyToolSideEffect(
+          canonicalTool.definition.name,
+          argumentsForExecution,
+        );
+        let timeoutId: ReturnType<typeof setTimeout> | undefined;
+        try {
+          const execution = canonicalTool.execute(
+            argumentsForExecution,
+            {
+              signal: abortController.signal,
+              deadlineAt: Date.now() + (options.timeoutMs ?? 120_000),
+            },
+          );
+          if (sideEffect === 'irreversible') {
+            const result = await execution;
+            trace.result = result;
+            return result;
+          }
+          const timedOut = Symbol('kfc_tool_timed_out');
+          const timeout = new Promise<typeof timedOut>((resolve) => {
+            timeoutId = setTimeout(
+              () => resolve(timedOut),
+              options.timeoutMs ?? 120_000,
+            );
+          });
+          const result = await Promise.race([execution, timeout]);
+          if (result === timedOut) {
+            abortController.abort();
+            const safe = safeSdkToolFailure('tool_timed_out');
+            trace.result = safe;
+            return safe;
+          }
+          trace.result = result;
+          return result;
+        } catch {
+          const result = safeSdkToolFailure('tool_execution_failed');
+          trace.result = result;
+          return result;
+        } finally {
+          if (timeoutId) clearTimeout(timeoutId);
+        }
+      },
+    }),
+  );
+}
 
 export interface KfcToolSession {
   sessionId: string;
@@ -280,30 +461,6 @@ const retryableReadTools = new Set<ToolName>([
   'checkPaymentStatus',
 ]);
 
-function retryPolicyFor(toolName: ToolName): OpenAiToolRetryPolicy {
-  if (retryableEmptyReadTools.has(toolName)) {
-    return {
-      maxAttempts: 3,
-      retryOn: [
-        'empty_result',
-        'tool_error',
-        'invalid_arguments',
-        'invalid_result',
-      ],
-    };
-  }
-  if (retryableReadTools.has(toolName)) {
-    return {
-      maxAttempts: 3,
-      retryOn: ['tool_error', 'invalid_arguments', 'invalid_result'],
-    };
-  }
-  return {
-    maxAttempts: 3,
-    retryOn: ['invalid_arguments'],
-  };
-}
-
 function retryGuidance(toolName: ToolName): string {
   if (retryableEmptyReadTools.has(toolName)) {
     return ' If the result is empty, errored, or invalid, follow its recovery instruction and retry with materially corrected or broader arguments; do not repeat identical arguments. Stop after three total attempts.';
@@ -372,6 +529,20 @@ const directUpdateCartJsonSchema = {
   required: ['changes'],
   additionalProperties: false,
 } as const;
+
+const directUpdateCartArgumentsSchema = z
+  .object({
+    changes: z.array(z.object({
+      itemCode: z.string().min(1),
+      orderedMenuItemQuantity: z.number().int().nonnegative(),
+      modifiers: z.array(z.object({
+        groupId: z.string().min(1),
+        modifierId: z.string().min(1),
+        quantityPerPortion: z.number().int().positive().nullable(),
+      }).strict()).nullable(),
+    }).strict()).min(1),
+  })
+  .strict();
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
@@ -760,7 +931,6 @@ async function executeDirectQuoteFulfillment(input: {
   const missingFields = [
     ...new Set([
       ...missingDeliveryAddressFields(addressDraft),
-      ...administrative.invalidFields,
     ]),
   ];
   if (missingFields.length > 0) {
@@ -1055,9 +1225,8 @@ function membershipToolsWithRuntimeCapability(result: ToolCallResult): unknown {
 
 export function createKfcOpenAiTools(
   input: CreateKfcOpenAiToolsInput,
-): OpenAiFunctionTool[] {
+): KfcCanonicalTool[] {
   return toolNames.map((toolName) => ({
-    retryPolicy: retryPolicyFor(toolName),
     definition: {
       type: 'function',
       name: toolName,
@@ -1065,30 +1234,52 @@ export function createKfcOpenAiTools(
       parameters: jsonSchemaFor(toolName),
       strict: toolName === 'quoteFulfillment' || toolName === 'updateCart',
     },
-    async execute(arguments_: Record<string, unknown>) {
+    async execute(arguments_: Record<string, unknown>, options) {
+      // Mutate a private session snapshot. A late non-cancellable provider
+      // promise is quarantined after the SDK timeout wins.
+      const session = structuredClone(input.session);
+      const originalExternalCallContext = input.session.externalCallContext;
+      session.externalCallContext = {
+        signal: AbortSignal.any([
+          input.session.externalCallContext.signal,
+          options?.signal ?? input.session.externalCallContext.signal,
+        ]),
+        deadlineAt: Math.min(
+          input.session.externalCallContext.deadlineAt,
+          options?.deadlineAt ?? input.session.externalCallContext.deadlineAt,
+        ),
+      };
+      const commit = () => {
+        if (!options?.signal.aborted) {
+          Object.assign(input.session, session);
+          input.session.externalCallContext = originalExternalCallContext;
+        }
+      };
       if (toolName === 'quoteFulfillment') {
-        return executeDirectQuoteFulfillment({
+        const result = await executeDirectQuoteFulfillment({
           clients: input.clients,
-          session: input.session,
+          session,
           accessContext: input.accessContext,
           arguments: arguments_,
           fixtures: input.fixtures,
         });
+        commit();
+        return result;
       }
-      if (toolName === 'handoff' && input.session.handoff) {
+      if (toolName === 'handoff' && session.handoff) {
         return {
           toolName: 'handoff',
           ok: true,
-          value: { escalationId: input.session.handoff.escalationId },
+          value: { escalationId: session.handoff.escalationId },
           message: 'Human-support request is already queued',
           provenance: [],
         } satisfies ToolCallResult;
       }
-      if (toolName === 'placeOrder' && input.session.order) {
+      if (toolName === 'placeOrder' && session.order) {
         return {
           toolName: 'placeOrder',
           ok: true,
-          value: input.session.order,
+          value: session.order,
           message: 'Current verified order already exists',
           provenance: [],
         } satisfies ToolCallResult;
@@ -1110,8 +1301,8 @@ export function createKfcOpenAiTools(
         const authority = parsed.success
           ? activeSupportedPaymentMethod(
               {
-                activeCollectionKeys: input.session.activeCollectionKeys,
-                verifiedCollections: input.session.verifiedCollections,
+                activeCollectionKeys: session.activeCollectionKeys,
+                verifiedCollections: session.verifiedCollections,
               },
               parsed.data.methodId,
             )
@@ -1126,11 +1317,11 @@ export function createKfcOpenAiTools(
             provenance: [],
           } satisfies ToolCallResult;
         }
-        input.session.selectedPaymentMethod =
+        session.selectedPaymentMethod =
           selectedPaymentMethodAuthority(authority);
       }
       const context = executionContext(
-        input.session,
+        session,
         input.accessContext,
         toolName,
         effectiveArguments,
@@ -1155,21 +1346,22 @@ export function createKfcOpenAiTools(
               : { scope: 'all' },
         });
         if (result.ok && result.verifiedCollection) {
-          input.session.activeCollectionKeys = {
-            ...input.session.activeCollectionKeys,
+          session.activeCollectionKeys = {
+            ...session.activeCollectionKeys,
             listPaymentMethods: result.verifiedCollection.key,
           };
-          input.session.verifiedCollections = replaceVerifiedCollection(
-            input.session.verifiedCollections,
+          session.verifiedCollections = replaceVerifiedCollection(
+            session.verifiedCollections,
             'listPaymentMethods',
             result.verifiedCollection,
           );
         }
+        commit();
         return result;
       }
       if (toolName === 'listMembershipRewards') {
         const profileContext = executionContext(
-          input.session,
+          session,
           input.accessContext,
           'getMembershipProfile',
           {},
@@ -1179,15 +1371,22 @@ export function createKfcOpenAiTools(
           { toolName: 'getMembershipProfile', arguments: {} },
           profileContext,
         );
-        return rewardCatalogWithEligibility(legacyResult, profileResult);
+        const result = rewardCatalogWithEligibility(legacyResult, profileResult);
+        commit();
+        return result;
       }
       if (toolName === 'listMembershipWallet') {
-        return walletWithRuntimeCapability(legacyResult);
+        const result = walletWithRuntimeCapability(legacyResult);
+        commit();
+        return result;
       }
       if (toolName === 'listMembershipTools') {
-        return membershipToolsWithRuntimeCapability(legacyResult);
+        const result = membershipToolsWithRuntimeCapability(legacyResult);
+        commit();
+        return result;
       }
-      applyResult(input.session, legacyResult, effectiveArguments);
+      applyResult(session, legacyResult, effectiveArguments);
+      commit();
       return legacyResult;
     },
   }));

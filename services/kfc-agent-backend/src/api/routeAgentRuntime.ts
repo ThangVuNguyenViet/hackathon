@@ -5,6 +5,7 @@ import { z } from 'zod';
 import type { BaseCheckpointSaver } from '@langchain/langgraph';
 import {
   createKfcOpenAiTools,
+  createKfcOpenAiAgentsTools,
   createKfcToolSession,
   verifiedKfcToolSessionContext,
   type KfcToolSession,
@@ -504,12 +505,12 @@ export function createRouteAgentRuntime(
                 customerCommand: input.trustedCustomerAction.command,
               }
             : trustedMetadata;
-          const directTools = createKfcOpenAiTools({
+          const directTools = createKfcOpenAiAgentsTools(createKfcOpenAiTools({
             clients: toolRuntime.clients,
             session: toolRuntime.session,
             accessContext,
             fixtures: await getFixtures(),
-          });
+          }));
           let requiredToolCalls:
             | Array<{ name: string; arguments: Record<string, unknown> }>
             | undefined;

@@ -1,8 +1,11 @@
 import { describe, expect, it } from 'vitest';
+import { RunContext, invokeFunctionTool } from '@kfc/openai-agents-runtime';
 import {
+  createKfcOpenAiAgentsTools,
   createKfcOpenAiTools,
   createKfcToolSession,
   hydrateKfcToolSession,
+  type KfcOpenAiAgentRunContext,
   verifiedKfcToolSessionContext,
 } from '../../src/agent/kfcOpenAiTools.js';
 import { createMockClients } from '../../src/mock/createMockClients.js';
@@ -47,39 +50,10 @@ function nestedDescription(
 }
 
 describe('KFC OpenAI tools', () => {
-  it('assigns bounded semantic retries only where repeated execution is safe', async () => {
+  it('keeps domain recovery guidance beside the affected tool contracts', async () => {
     const clients = createMockClients(createTestFixtures());
     const session = await createKfcToolSession(clients, 'kfc:retry_policies');
     const tools = createKfcOpenAiTools({ clients, session });
-    const policy = (toolName: string) =>
-      tools.find((tool) => tool.definition.name === toolName)?.retryPolicy;
-
-    expect(policy('searchMenu')).toEqual({
-      maxAttempts: 3,
-      retryOn: [
-        'empty_result',
-        'tool_error',
-        'invalid_arguments',
-        'invalid_result',
-      ],
-    });
-    expect(policy('listPaymentMethods')?.retryOn).toContain('empty_result');
-    expect(policy('getModifierOptions')?.retryOn).toEqual([
-      'tool_error',
-      'invalid_arguments',
-      'invalid_result',
-    ]);
-    expect(policy('getRecentOrder')?.retryOn).not.toContain('empty_result');
-    expect(policy('quoteFulfillment')?.retryOn).toEqual(['invalid_arguments']);
-    for (const toolName of [
-      'updateCart',
-      'placeOrder',
-      'createPaymentLink',
-      'handoff',
-    ]) {
-      expect(policy(toolName)?.retryOn).toEqual(['invalid_arguments']);
-    }
-
     expect(
       tools.find((tool) => tool.definition.name === 'searchMenu')?.definition
         .description,
@@ -838,5 +812,96 @@ describe('KFC OpenAI tools', () => {
       toolName: 'createPaymentLink',
       value: { orderId: session.order?.id, status: 'pending' },
     });
+  });
+
+  it('keeps an irreversible factory OMS call on its provider-owned outcome path', async () => {
+    const fixtures = createTestFixtures();
+    const clients = createMockClients(fixtures);
+    const provider = clients.oms.placeOrder.bind(clients.oms);
+    const identities: string[] = [];
+    let calls = 0;
+    clients.oms.placeOrder = async (input, context, identity) => {
+      calls += 1;
+      identities.push(identity.idempotencyKey);
+      await new Promise((resolve) => setTimeout(resolve, 20));
+      return provider(input, context, identity);
+    };
+    const session = await createKfcToolSession(clients, 'kfc:factory_timeout');
+    const canonical = createKfcOpenAiTools({ clients, session, fixtures });
+    const direct = (name: string, args: Record<string, unknown>) =>
+      canonical.find((tool) => tool.definition.name === name)!.execute(args);
+    await direct('updateCart', { itemCode: '20751', quantity: 1 });
+    await direct('quoteFulfillment', { method: 'delivery', address: {
+      recipientName: 'Nguyễn An', phone: '0901234567', addressLine: '60 Phạm Văn Nghị',
+      provinceCode: null, provinceName: 'Hồ Chí Minh', communeCode: null,
+      communeName: 'Phường Tân Hưng', deliveryInstructions: null, rawAddress: null, legacyDistrictText: 'Quận 7',
+    } });
+    await direct('previewOrder', {});
+    const [placeOrder] = createKfcOpenAiAgentsTools(
+      canonical.filter((tool) => tool.definition.name === 'placeOrder'),
+      { timeoutMs: 1 },
+    );
+    const context = new RunContext<KfcOpenAiAgentRunContext>({ toolCalls: [], developerMessages: [] });
+    const result = await invokeFunctionTool({ tool: placeOrder!, runContext: context, input: '{}' });
+    expect(result).toMatchObject({ toolName: 'placeOrder', ok: true });
+    expect(calls).toBe(1);
+    expect(identities[0]).toContain('kfc:factory_timeout:placeOrder:');
+    expect(session.order).toBeDefined();
+    expect(context.context.toolCalls).toEqual([
+      expect.objectContaining({ name: 'placeOrder', result: expect.objectContaining({ ok: true }) }),
+    ]);
+  });
+
+  it('aborts a cooperative factory read without committing late session state', async () => {
+    const fixtures = createTestFixtures();
+    const clients = createMockClients(fixtures);
+    let observedAbort = false;
+    clients.menu.searchMenu = async (_input, context) => {
+      await new Promise<void>((resolve) => {
+        context.signal.addEventListener('abort', () => {
+          observedAbort = true;
+          resolve();
+        }, { once: true });
+      });
+      return { ok: true, value: { items: [], total: 0 }, message: 'late' } as never;
+    };
+    const session = await createKfcToolSession(clients, 'kfc:factory_read_timeout');
+    const [searchMenu] = createKfcOpenAiAgentsTools(
+      createKfcOpenAiTools({ clients, session, fixtures }).filter((tool) => tool.definition.name === 'searchMenu'),
+      { timeoutMs: 1 },
+    );
+    const context = new RunContext<KfcOpenAiAgentRunContext>({ toolCalls: [], developerMessages: [] });
+    const beforeSequence = session.toolCallSequence;
+    const result = await invokeFunctionTool({ tool: searchMenu!, runContext: context, input: '{"query":"gà"}' });
+    expect(result).toMatchObject({ errorCode: 'tool_timed_out' });
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(observedAbort).toBe(true);
+    expect(session.toolCallSequence).toBe(beforeSequence);
+    expect(context.context.toolCalls).toEqual([
+      expect.objectContaining({ name: 'searchMenu', result: expect.objectContaining({ errorCode: 'tool_timed_out' }) }),
+    ]);
+  });
+
+  it('preserves the original session call context after a successful SDK read', async () => {
+    const fixtures = createTestFixtures();
+    const clients = createMockClients(fixtures);
+    const session = await createKfcToolSession(clients, 'kfc:context_preserved');
+    const original = session.externalCallContext;
+    let previewContext: unknown;
+    const preview = clients.cart.previewCart.bind(clients.cart);
+    clients.cart.previewCart = async (cart, context) => {
+      previewContext = context;
+      return preview(cart, context);
+    };
+    const canonical = createKfcOpenAiTools({ clients, session, fixtures });
+    const [search] = createKfcOpenAiAgentsTools(
+      canonical.filter((tool) => tool.definition.name === 'searchMenu'), { timeoutMs: 50 },
+    );
+    const context = new RunContext<KfcOpenAiAgentRunContext>({ toolCalls: [], developerMessages: [] });
+    await expect(invokeFunctionTool({ tool: search!, runContext: context, input: '{"query":"gà"}' })).resolves.toMatchObject({ ok: true });
+    expect(session.externalCallContext).toBe(original);
+    await canonical.find((tool) => tool.definition.name === 'previewCart')!.execute({});
+    expect(previewContext).toMatchObject({ deadlineAt: original.deadlineAt });
+    expect(session.externalCallContext).toBe(original);
   });
 });

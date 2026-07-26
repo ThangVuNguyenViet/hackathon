@@ -6,6 +6,7 @@ import catalogPayload from "../../fixtures/catalog-baselines/kfcvn-generic-menu@
 import { loadBundledGeneratedFixtures } from "../../src/fixtures/bundledFixtures.js";
 import { createMockClients } from "../../src/mock/createMockClients.js";
 import { OpenAiKfcAgent } from "../../src/agent/openAiKfcAgent.js";
+import type { OpenAIClient } from "@kfc/openai-agents-runtime";
 
 describe("health route", () => {
   it("returns service status without external dependencies", async () => {
@@ -47,7 +48,7 @@ describe("health route", () => {
             output_text: "",
           }),
         },
-      },
+      } as unknown as OpenAIClient,
       model: "gpt-4.1-mini",
     });
     const server = buildServer({

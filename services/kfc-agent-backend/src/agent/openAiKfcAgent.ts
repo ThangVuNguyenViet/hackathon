@@ -1,29 +1,21 @@
+import {
+  Agent,
+  invokeFunctionTool,
+  OpenAIProvider,
+  retryPolicies,
+  RunContext,
+  Runner,
+  assistant,
+  user,
+  type AgentInputItem,
+  type OpenAIClient,
+  type FunctionTool,
+} from '@kfc/openai-agents-runtime';
 import type { Channel, ConversationTurnMetadata } from '../domain/types.js';
 import type { KfcGenUiAttachment } from '../genui/kfcGenUi.js';
 import type { ConversationStore } from '../persistence/contracts.js';
 import { buildBoundedRecentTurns } from '../session/sessionContext.js';
-
-export interface OpenAiFunctionToolDefinition {
-  type: 'function';
-  name: string;
-  description: string;
-  parameters: Record<string, unknown>;
-  strict: boolean;
-}
-
-export type OpenAiToolRetryReason =
-  'empty_result' | 'tool_error' | 'invalid_arguments' | 'invalid_result';
-
-export interface OpenAiToolRetryPolicy {
-  maxAttempts: number;
-  retryOn: readonly OpenAiToolRetryReason[];
-}
-
-export interface OpenAiFunctionTool {
-  definition: OpenAiFunctionToolDefinition;
-  execute(arguments_: Record<string, unknown>): Promise<unknown>;
-  retryPolicy?: OpenAiToolRetryPolicy;
-}
+import type { KfcOpenAiAgentRunContext } from './kfcOpenAiTools.js';
 
 export interface OpenAiToolCallTrace {
   name: string;
@@ -37,55 +29,17 @@ export interface OpenAiUsage {
   totalTokens: number;
 }
 
-interface FunctionCallItem {
-  type: 'function_call';
-  call_id: string;
-  name: string;
-  arguments: string;
-  [key: string]: unknown;
-}
-
-interface ResponseLike {
-  output: Array<Record<string, unknown>>;
-  output_text: string;
-  usage?: {
-    input_tokens?: number;
-    output_tokens?: number;
-    total_tokens?: number;
-  } | null;
-}
-
-export interface ResponsesClientLike {
-  responses: {
-    create(request: Record<string, unknown>): Promise<ResponseLike | undefined>;
-  };
-}
-
-export interface RunResponsesToolLoopInput {
-  client: ResponsesClientLike;
-  model: string;
-  instructions: string;
-  input: Array<Record<string, unknown>>;
-  tools: OpenAiFunctionTool[];
-  maxToolRounds: number;
-  requiredToolCalls?: Array<{
-    name: string;
-    arguments: Record<string, unknown>;
-  }>;
-  allowModelToolCalls?: boolean;
-}
-
-export interface RunResponsesToolLoopResult {
-  responseText: string;
-  toolCalls: OpenAiToolCallTrace[];
-  usage: OpenAiUsage;
-}
-
 export interface OpenAiKfcAgentOptions {
-  client: ResponsesClientLike;
+  client: OpenAIClient;
   model: string;
   instructions?: string;
   maxToolRounds?: number;
+}
+
+export interface OpenAiKfcAgentExecutionResult {
+  responseText: string;
+  toolCalls: OpenAiToolCallTrace[];
+  usage: OpenAiUsage;
 }
 
 export interface OpenAiKfcAgentTurnInput {
@@ -96,16 +50,19 @@ export interface OpenAiKfcAgentTurnInput {
   externalMessageId: string | null;
   metadata: ConversationTurnMetadata | null;
   store: ConversationStore;
-  tools: OpenAiFunctionTool[];
-  requiredToolCalls?: RunResponsesToolLoopInput['requiredToolCalls'];
+  tools: FunctionTool<KfcOpenAiAgentRunContext>[];
+  requiredToolCalls?: Array<{
+    name: string;
+    arguments: Record<string, unknown>;
+  }>;
   allowModelToolCalls?: boolean;
   verifiedBusinessContext?: Record<string, unknown>;
   selectGenUi?: (
-    result: RunResponsesToolLoopResult,
+    result: OpenAiKfcAgentExecutionResult,
   ) => KfcGenUiAttachment | undefined;
 }
 
-export interface OpenAiKfcAgentTurnResult extends RunResponsesToolLoopResult {
+export interface OpenAiKfcAgentTurnResult extends OpenAiKfcAgentExecutionResult {
   userTurnId: string;
   assistantTurnId: string;
   genUi?: KfcGenUiAttachment;
@@ -135,7 +92,6 @@ const defaultInstructions = [
 ].join('\n');
 
 const customerIdentifierKeys = new Set(['code', 'itemCode', 'modifierId']);
-
 const customerAdministrativeIdentifierLabels = [
   ['communeCode', 'communeName'],
 ] as const;
@@ -156,7 +112,6 @@ function recordCustomerIdentifiers(
     return;
   }
   if (!isRecord(value)) return;
-
   if (
     typeof value.groupId === 'string' &&
     Array.isArray(value.options) &&
@@ -165,11 +120,7 @@ function recordCustomerIdentifiers(
   ) {
     structuralLabels.add(value.name.trim());
   }
-
-  for (const [
-    identifierKey,
-    labelKey,
-  ] of customerAdministrativeIdentifierLabels) {
+  for (const [identifierKey, labelKey] of customerAdministrativeIdentifierLabels) {
     const identifier = value[identifierKey];
     const label = value[labelKey];
     if (
@@ -182,7 +133,6 @@ function recordCustomerIdentifiers(
       identifiers.set(identifier, label.trim());
     }
   }
-
   const label =
     typeof value.name === 'string' && value.name.trim().length > 0
       ? value.name.trim()
@@ -213,11 +163,7 @@ function escapedRegExp(value: string): string {
   return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
-function isCurrencyOccurrence(
-  source: string,
-  start: number,
-  length: number,
-): boolean {
+function isCurrencyOccurrence(source: string, start: number, length: number): boolean {
   const before = source.slice(0, start);
   const after = source.slice(start + length);
   const currency = '(?:VND|VNĐ|đ|₫)';
@@ -232,9 +178,7 @@ function stripStructuralLabels(
   structuralLabels: ReadonlySet<string>,
 ): string {
   let result = customerText;
-  const labels = [...structuralLabels].sort(
-    (left, right) => right.length - left.length,
-  );
+  const labels = [...structuralLabels].sort((left, right) => right.length - left.length);
   for (const label of labels) {
     const pattern = new RegExp(
       `(^|[^\\p{L}\\p{N}_])${escapedRegExp(label)}(?=$|[^\\p{L}\\p{N}_])`,
@@ -251,30 +195,19 @@ function presentCustomerResponse(input: {
   toolCalls: OpenAiToolCallTrace[];
 }): string {
   const successfulHandoff = input.toolCalls.some(
-    (call) =>
-      call.name === 'handoff' &&
-      isRecord(call.result) &&
-      call.result.ok === true,
+    (call) => call.name === 'handoff' && isRecord(call.result) && call.result.ok === true,
   );
   if (successfulHandoff) {
     return 'Yêu cầu gặp nhân viên của bạn đã được ghi nhận và đang chờ nhân viên tiếp nhận. Hiện chưa có thời gian phản hồi được xác minh.';
   }
-
   const identifiers = new Map<string, string>();
   const structuralLabels = new Set<string>();
-  recordCustomerIdentifiers(
-    input.verifiedBusinessContext,
-    identifiers,
-    structuralLabels,
-  );
+  recordCustomerIdentifiers(input.verifiedBusinessContext, identifiers, structuralLabels);
   for (const call of input.toolCalls) {
     recordCustomerIdentifiers(call.result, identifiers, structuralLabels);
   }
-
   let customerText = input.responseText;
-  const entries = [...identifiers.entries()].sort(
-    ([left], [right]) => right.length - left.length,
-  );
+  const entries = [...identifiers.entries()].sort(([left], [right]) => right.length - left.length);
   for (const [identifier, label] of entries) {
     const pattern = new RegExp(
       `(^|[^\\p{L}\\p{N}_])(${escapedRegExp(identifier)})(?=$|[^\\p{L}\\p{N}_])`,
@@ -282,13 +215,7 @@ function presentCustomerResponse(input: {
     );
     customerText = customerText.replace(
       pattern,
-      (
-        match: string,
-        prefix: string,
-        _matchedIdentifier: string,
-        offset: number,
-        source: string,
-      ) =>
+      (match: string, prefix: string, _matchedIdentifier: string, offset: number, source: string) =>
         isCurrencyOccurrence(source, offset + prefix.length, identifier.length)
           ? match
           : `${prefix}${label}`,
@@ -297,91 +224,143 @@ function presentCustomerResponse(input: {
   return stripStructuralLabels(customerText, structuralLabels);
 }
 
+function toAgentInput(history: Array<Record<string, unknown>>): AgentInputItem[] {
+  return history.map((item) =>
+    item.role === 'assistant'
+      ? assistant(String(item.content ?? ''))
+      : user(String(item.content ?? '')),
+  );
+}
+
 export class OpenAiKfcAgent {
-  private readonly client: ResponsesClientLike;
   private readonly model: string;
   private readonly instructions: string;
   private readonly maxToolRounds: number;
+  private readonly runner: Runner;
 
   constructor(options: OpenAiKfcAgentOptions) {
-    this.client = options.client;
-    this.model = options.model;
+    this.model = options.model || 'gpt-4.1-mini';
     this.instructions = options.instructions ?? defaultInstructions;
     this.maxToolRounds = options.maxToolRounds ?? 12;
+    this.runner = new Runner({
+      modelProvider: new OpenAIProvider({
+        openAIClient: options.client,
+      }),
+      tracingDisabled: true,
+      traceIncludeSensitiveData: false,
+      toolExecution: { maxFunctionToolConcurrency: 1 },
+      modelSettings: {
+        parallelToolCalls: true,
+        retry: {
+          maxRetries: 2,
+          backoff: { initialDelayMs: 250, maxDelayMs: 1_000, jitter: true },
+          policy: retryPolicies.any(
+            retryPolicies.networkError(),
+            retryPolicies.providerSuggested(),
+            retryPolicies.httpStatus([408, 409, 429, 500, 502, 503, 504]),
+          ),
+        },
+      },
+    });
   }
 
-  async respond(
-    input: OpenAiKfcAgentTurnInput,
-  ): Promise<OpenAiKfcAgentTurnResult> {
+  private createSdkAgent(input: OpenAiKfcAgentTurnInput) {
+    return new Agent<KfcOpenAiAgentRunContext>({
+      name: 'KFC Vietnam ordering assistant',
+      model: this.model,
+      instructions: (runContext) =>
+        [this.instructions, ...runContext.context.developerMessages].join('\n\n'),
+      tools:
+        input.allowModelToolCalls === false
+          ? []
+          : input.tools,
+      toolUseBehavior: 'run_llm_again',
+      resetToolChoice: true,
+    });
+  }
+
+  async respond(input: OpenAiKfcAgentTurnInput): Promise<OpenAiKfcAgentTurnResult> {
     const existingUserTurn = input.externalMessageId
-      ? await input.store.findTurnByExternalMessage(
-          input.sessionId,
-          input.externalMessageId,
-        )
+      ? await input.store.findTurnByExternalMessage(input.sessionId, input.externalMessageId)
       : undefined;
-    const userTurn =
-      existingUserTurn ??
-      (await input.store.appendTurn({
-        sessionId: input.sessionId,
-        channel: input.channel,
-        role: 'user',
-        text: input.text,
-        externalMessageId: input.externalMessageId,
-        externalUserId: input.customerId,
-        deliveryStatus: 'received',
-        metadata: input.metadata,
-      }));
+    const userTurn = existingUserTurn ?? (await input.store.appendTurn({
+      sessionId: input.sessionId,
+      channel: input.channel,
+      role: 'user',
+      text: input.text,
+      externalMessageId: input.externalMessageId,
+      externalUserId: input.customerId,
+      deliveryStatus: 'received',
+      metadata: input.metadata,
+    }));
     const history: Array<Record<string, unknown>> = buildBoundedRecentTurns(
       await input.store.listTurns(input.sessionId),
     )
       .filter((turn) => turn.role === 'user' || turn.role === 'assistant')
       .map((turn) => ({ role: turn.role, content: turn.text }));
+    const developerMessages: string[] = [];
     if (input.verifiedBusinessContext) {
-      history.push({
-        role: 'developer',
-        content: `Verified current fixture business state; reuse these exact identifiers: ${JSON.stringify(input.verifiedBusinessContext)}`,
-      });
+      developerMessages.push(
+        `Verified current fixture business state; reuse these exact identifiers: ${JSON.stringify(input.verifiedBusinessContext)}`,
+      );
     }
     if (input.metadata?.customerCommand) {
-      history.push({
-        role: 'developer',
-        content: `Verified GenUI customer action: ${JSON.stringify(input.metadata.customerCommand)}`,
-      });
-      history.push({
-        role: 'developer',
-        content: [
+      developerMessages.push(
+        `Verified GenUI customer action: ${JSON.stringify(input.metadata.customerCommand)}`,
+      );
+      developerMessages.push(
+        [
           'The structured GenUI action is already verified and is the only action to handle in this turn.',
           'Report only the supplied verified state and exact tool result.',
           'Do not claim that an order was placed, paid, or is being processed unless the verified result explicitly says so.',
           input.metadata.customerCommand.kind === 'submit_address'
             ? 'Handle the verified structured address update and describe only its resulting draft, missing fields, serviceability, or quote.'
             : '',
-        ]
-          .filter(Boolean)
-          .join(' '),
-      });
+        ].filter(Boolean).join(' '),
+      );
     }
-    const response = await runResponsesToolLoop({
-      client: this.client,
-      model: this.model,
-      instructions: this.instructions,
-      input: history,
-      tools: input.tools,
-      maxToolRounds: this.maxToolRounds,
-      requiredToolCalls: input.requiredToolCalls,
-      allowModelToolCalls: input.allowModelToolCalls,
+
+    const runContext = {
+      toolCalls: [] as OpenAiToolCallTrace[],
+      developerMessages,
+    };
+    for (const requiredCall of input.requiredToolCalls ?? []) {
+      const trustedTool = input.tools.find((tool) => tool.name === requiredCall.name);
+      if (!trustedTool) {
+        throw new Error(`Required customer action requested unknown tool: ${requiredCall.name}`);
+      }
+      const result = await invokeFunctionTool({
+        tool: trustedTool,
+        runContext: new RunContext(runContext),
+        input: JSON.stringify(requiredCall.arguments),
+      });
+      developerMessages.push(
+        `Verified trusted KFC action result: ${JSON.stringify(result)}`,
+      );
+    }
+
+    const runResult = await this.runner.run(this.createSdkAgent(input), toAgentInput(history), {
+      context: runContext,
+      maxTurns: this.maxToolRounds,
     });
-    const genUi = input.selectGenUi?.(response);
+    const execution: OpenAiKfcAgentExecutionResult = {
+      responseText: typeof runResult.finalOutput === 'string' ? runResult.finalOutput : '',
+      toolCalls: runContext.toolCalls,
+      usage: {
+        inputTokens: runResult.runContext.usage.inputTokens,
+        outputTokens: runResult.runContext.usage.outputTokens,
+        totalTokens: runResult.runContext.usage.totalTokens,
+      },
+    };
+    const genUi = input.selectGenUi?.(execution);
     const responseText = presentCustomerResponse({
-      responseText: response.responseText,
+      responseText: execution.responseText,
       verifiedBusinessContext: input.verifiedBusinessContext,
-      toolCalls: response.toolCalls,
+      toolCalls: execution.toolCalls,
     });
     const assistantMetadata = {
       ...(input.metadata?.release ? { release: input.metadata.release } : {}),
-      ...(input.metadata?.responseProfile
-        ? { responseProfile: input.metadata.responseProfile }
-        : {}),
+      ...(input.metadata?.responseProfile ? { responseProfile: input.metadata.responseProfile } : {}),
       ...(genUi ? { genUi } : {}),
     };
     const assistantTurn = await input.store.appendTurn({
@@ -392,285 +371,14 @@ export class OpenAiKfcAgent {
       externalMessageId: null,
       externalUserId: input.customerId,
       deliveryStatus: 'pending',
-      metadata:
-        Object.keys(assistantMetadata).length > 0 ? assistantMetadata : null,
+      metadata: Object.keys(assistantMetadata).length > 0 ? assistantMetadata : null,
     });
     return {
-      ...response,
+      ...execution,
       responseText,
       userTurnId: userTurn.id,
       assistantTurnId: assistantTurn.id,
       ...(genUi ? { genUi } : {}),
     };
   }
-}
-
-function isFunctionCall(
-  item: Record<string, unknown>,
-): item is FunctionCallItem {
-  return (
-    item.type === 'function_call' &&
-    typeof item.call_id === 'string' &&
-    typeof item.name === 'string' &&
-    typeof item.arguments === 'string'
-  );
-}
-
-type ToolChoice = 'auto' | 'required' | 'none';
-
-interface ToolRecovery {
-  required: boolean;
-  exhausted?: true;
-  reason: OpenAiToolRetryReason;
-  attempt: number;
-  maxAttempts: number;
-  instruction: string;
-}
-
-function toolErrorCode(result: unknown): string | undefined {
-  if (!isRecord(result) || result.ok !== false) return undefined;
-  return typeof result.errorCode === 'string' ? result.errorCode : undefined;
-}
-
-function isInvalidArgumentsResult(result: unknown): boolean {
-  const errorCode = toolErrorCode(result);
-  return (
-    errorCode === 'invalid_arguments' ||
-    errorCode === 'invalid_tool_arguments' ||
-    errorCode === 'unverified_payment_method'
-  );
-}
-
-function resultPayload(result: unknown): unknown {
-  return isRecord(result) && result.ok === true && 'value' in result
-    ? result.value
-    : result;
-}
-
-function isEmptyToolResult(result: unknown): boolean {
-  const payload = resultPayload(result);
-  if (Array.isArray(payload)) return payload.length === 0;
-  if (!isRecord(payload)) return false;
-  if (Array.isArray(payload.items)) return payload.items.length === 0;
-  return payload.total === 0;
-}
-
-function isInvalidToolResult(result: unknown): boolean {
-  const payload = resultPayload(result);
-  if (payload === undefined) return true;
-  return isRecord(payload) && Object.keys(payload).length === 0;
-}
-
-function retryReasonForResult(
-  tool: OpenAiFunctionTool,
-  result: unknown,
-): OpenAiToolRetryReason | undefined {
-  const retryOn = tool.retryPolicy?.retryOn ?? [];
-  if (
-    isInvalidArgumentsResult(result) &&
-    retryOn.includes('invalid_arguments')
-  ) {
-    return 'invalid_arguments';
-  }
-  if (
-    isRecord(result) &&
-    result.ok === false &&
-    retryOn.includes('tool_error')
-  ) {
-    return 'tool_error';
-  }
-  if (isEmptyToolResult(result) && retryOn.includes('empty_result')) {
-    return 'empty_result';
-  }
-  if (isInvalidToolResult(result) && retryOn.includes('invalid_result')) {
-    return 'invalid_result';
-  }
-  return undefined;
-}
-
-function retryReasonForThrownError(
-  tool: OpenAiFunctionTool,
-  error: unknown,
-): OpenAiToolRetryReason | undefined {
-  const retryOn = tool.retryPolicy?.retryOn ?? [];
-  const errorName =
-    isRecord(error) && typeof error.name === 'string' ? error.name : '';
-  if (
-    (errorName === 'ZodError' || error instanceof SyntaxError) &&
-    retryOn.includes('invalid_arguments')
-  ) {
-    return 'invalid_arguments';
-  }
-  return retryOn.includes('tool_error') ? 'tool_error' : undefined;
-}
-
-function toolFailureResult(
-  reason: OpenAiToolRetryReason,
-  error: unknown,
-): Record<string, unknown> {
-  const message =
-    error instanceof Error && error.message.trim().length > 0
-      ? error.message
-      : reason === 'invalid_arguments'
-        ? 'Tool arguments were invalid'
-        : 'Tool execution failed';
-  return {
-    ok: false,
-    errorCode: reason,
-    message,
-  };
-}
-
-function withRecovery(
-  result: unknown,
-  recovery: ToolRecovery,
-): Record<string, unknown> {
-  return {
-    ...(isRecord(result) ? result : { result }),
-    recovery,
-  };
-}
-
-function recoveryForAttempt(input: {
-  reason: OpenAiToolRetryReason;
-  attempt: number;
-  maxAttempts: number;
-}): ToolRecovery {
-  const exhausted = input.attempt >= input.maxAttempts;
-  return {
-    required: !exhausted,
-    ...(exhausted ? { exhausted: true as const } : {}),
-    reason: input.reason,
-    attempt: input.attempt,
-    maxAttempts: input.maxAttempts,
-    instruction: exhausted
-      ? 'Stop retrying and answer honestly from verified evidence.'
-      : 'Retry with materially corrected or broader arguments. Do not repeat identical arguments. You may choose another suitable read tool.',
-  };
-}
-
-export async function runResponsesToolLoop(
-  options: RunResponsesToolLoopInput,
-): Promise<RunResponsesToolLoopResult> {
-  const input = structuredClone(options.input);
-  const toolsByName = new Map(
-    options.tools.map((tool) => [tool.definition.name, tool]),
-  );
-  const toolCalls: OpenAiToolCallTrace[] = [];
-  const usage: OpenAiUsage = {
-    inputTokens: 0,
-    outputTokens: 0,
-    totalTokens: 0,
-  };
-  for (const [index, requiredCall] of (
-    options.requiredToolCalls ?? []
-  ).entries()) {
-    const tool = toolsByName.get(requiredCall.name);
-    if (!tool) {
-      throw new Error(
-        `Required customer action requested unknown tool: ${requiredCall.name}`,
-      );
-    }
-    const callId = `trusted_customer_action_${index + 1}`;
-    const result = await tool.execute(requiredCall.arguments);
-    toolCalls.push({
-      name: requiredCall.name,
-      arguments: requiredCall.arguments,
-      result,
-    });
-    input.push(
-      {
-        type: 'function_call',
-        call_id: callId,
-        name: requiredCall.name,
-        arguments: JSON.stringify(requiredCall.arguments),
-      },
-      {
-        type: 'function_call_output',
-        call_id: callId,
-        output: JSON.stringify(result),
-      },
-    );
-  }
-
-  const modelTools = options.allowModelToolCalls === false ? [] : options.tools;
-  let nextToolChoice: ToolChoice = 'auto';
-  let semanticFailureAttempts = 0;
-
-  for (let round = 0; round <= options.maxToolRounds; round += 1) {
-    const response = await options.client.responses.create({
-      model: options.model,
-      instructions: options.instructions,
-      tools: modelTools.map((tool) => tool.definition),
-      tool_choice:
-        options.allowModelToolCalls === false ? 'none' : nextToolChoice,
-      parallel_tool_calls: false,
-      input,
-    });
-    if (!response) throw new Error('OpenAI returned no response');
-
-    usage.inputTokens += response.usage?.input_tokens ?? 0;
-    usage.outputTokens += response.usage?.output_tokens ?? 0;
-    usage.totalTokens += response.usage?.total_tokens ?? 0;
-
-    const calls = response.output.filter(isFunctionCall);
-    if (calls.length === 0) {
-      return { responseText: response.output_text, toolCalls, usage };
-    }
-    if (round === options.maxToolRounds) {
-      throw new Error(`OpenAI exceeded ${options.maxToolRounds} tool rounds`);
-    }
-
-    input.push(...response.output);
-    nextToolChoice = 'auto';
-    for (const call of calls) {
-      const tool = toolsByName.get(call.name);
-      if (!tool) throw new Error(`OpenAI requested unknown tool: ${call.name}`);
-      let arguments_: Record<string, unknown> = {};
-      let result: unknown;
-      let retryReason: OpenAiToolRetryReason | undefined;
-      try {
-        const parsedArguments: unknown = JSON.parse(call.arguments);
-        if (!isRecord(parsedArguments)) {
-          throw new SyntaxError('Tool arguments must be a JSON object');
-        }
-        arguments_ = parsedArguments;
-      } catch (error) {
-        retryReason = tool.retryPolicy?.retryOn.includes('invalid_arguments')
-          ? 'invalid_arguments'
-          : undefined;
-        result = toolFailureResult('invalid_arguments', error);
-      }
-      if (result === undefined) {
-        try {
-          result = await tool.execute(arguments_);
-          retryReason = retryReasonForResult(tool, result);
-        } catch (error) {
-          retryReason = retryReasonForThrownError(tool, error);
-          result = toolFailureResult(retryReason ?? 'tool_error', error);
-        }
-      }
-
-      if (retryReason && tool.retryPolicy) {
-        semanticFailureAttempts += 1;
-        const maxAttempts = Math.min(tool.retryPolicy.maxAttempts, 3);
-        const recovery = recoveryForAttempt({
-          reason: retryReason,
-          attempt: semanticFailureAttempts,
-          maxAttempts,
-        });
-        result = withRecovery(result, recovery);
-        nextToolChoice = recovery.exhausted ? 'none' : 'required';
-      }
-
-      toolCalls.push({ name: call.name, arguments: arguments_, result });
-      input.push({
-        type: 'function_call_output',
-        call_id: call.call_id,
-        output: JSON.stringify(result),
-      });
-    }
-  }
-
-  throw new Error('OpenAI tool loop ended unexpectedly');
 }

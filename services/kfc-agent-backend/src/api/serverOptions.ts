@@ -4,7 +4,6 @@ import type { AppEnv } from "../config/env.js";
 import OpenAI from 'openai';
 import {
   OpenAiKfcAgent,
-  type ResponsesClientLike,
 } from '../agent/openAiKfcAgent.js';
 import {
   createConfirmationApprovalKeyRing,
@@ -189,7 +188,10 @@ export function buildServerOptionsFromEnv(
     confirmationApprovalKeyRing: confirmationApprovalKeyRing(env),
     openAiAgent: directOpenAiClient
       ? new OpenAiKfcAgent({
-          client: directOpenAiClient as unknown as ResponsesClientLike,
+          // The local SDK package owns an isolated OpenAI 6.49 dependency;
+          // its class has a private nominal field, so the shared root client
+          // cannot be structurally assigned despite the compatible API.
+          client: directOpenAiClient as unknown as import('@kfc/openai-agents-runtime').OpenAIClient,
           model:
             agentIdentity.provider === 'openai'
               ? agentIdentity.model

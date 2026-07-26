@@ -7,6 +7,7 @@ import { AgentRunCoordinator } from '../agentRuns/coordinator.js';
 import { createAgentTurnExternalCallScope } from '../agent/agentExternalCallScope.js';
 import {
   createKfcOpenAiTools,
+  createKfcOpenAiAgentsTools,
   createKfcToolSession,
   verifiedKfcToolSessionContext,
   type KfcToolSession,
@@ -715,7 +716,7 @@ export function createRouteMessengerRuntime(
             verifiedBusinessContext: verifiedKfcToolSessionContext(
               toolRuntime.session,
             ),
-            tools: createKfcOpenAiTools({
+            tools: createKfcOpenAiAgentsTools(createKfcOpenAiTools({
               clients: toolRuntime.clients,
               session: toolRuntime.session,
               fixtures: await getFixtures(),
@@ -723,7 +724,7 @@ export function createRouteMessengerRuntime(
                 run.sessionId,
                 run.externalUserId,
               ),
-            }),
+            })),
           });
           if (!(await isCurrentRun())) {
             await suppressRun('run_not_current_before_delivery');
