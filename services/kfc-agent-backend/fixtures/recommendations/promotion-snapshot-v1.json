@@ -1,0 +1,16 @@
+{
+  "schemaVersion": "recommendation-promotion-facts-v1",
+  "snapshotId": "promotion-facts-poc-001",
+  "sourceRevision": "normalized-promotion-fixture-001",
+  "observedAt": "2026-07-26T00:00:00Z",
+  "effectiveAt": "2026-01-01T00:00:00Z",
+  "expiresAt": "2027-01-01T00:00:00Z",
+  "complete": true,
+  "commerceEnvironment": "kfc-vietnam-demo",
+  "promotions": [
+    { "promotionId": "poc-discount-20732", "sellableItemId": "20732", "startsAt": "2026-01-01T00:00:00Z", "endsAt": "2027-01-01T00:00:00Z", "originalPriceVnd": 239000, "promotionalPriceVnd": 189000, "includedStoreIds": [], "excludedStoreIds": [], "fulfilmentModes": ["pickup", "delivery"] },
+    { "promotionId": "poc-discount-20748", "sellableItemId": "20748", "startsAt": "2026-01-01T00:00:00Z", "endsAt": "2027-01-01T00:00:00Z", "originalPriceVnd": 404000, "promotionalPriceVnd": 269000, "includedStoreIds": [], "excludedStoreIds": [], "fulfilmentModes": ["pickup", "delivery"] },
+    { "promotionId": "poc-expired-discount-41172", "sellableItemId": "41172", "startsAt": "2026-01-01T00:00:00Z", "endsAt": "2026-06-01T00:00:00Z", "originalPriceVnd": 179000, "promotionalPriceVnd": 159000, "includedStoreIds": [], "excludedStoreIds": [], "fulfilmentModes": ["pickup", "delivery"] }
+  ],
+  "provenance": { "source": "checked-in-normalized-poc-fixture", "reference": "promotion-facts-poc-001" }
+}
