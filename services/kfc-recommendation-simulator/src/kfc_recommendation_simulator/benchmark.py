@@ -45,8 +45,8 @@ from .rankers import (
     ProbabilityCalibrator,
     Ranker,
     expected_calibration_error,
+    fit_keras,
     fit_lightgbm,
-    fit_tfrs,
     fit_xgboost,
     load_ranker,
     select_calibrator,
@@ -74,8 +74,8 @@ class BenchmarkProfile:
     seeds: tuple[int, ...]
     journey_count: int
     tree_trials: int
-    tfrs_trials: int
-    tfrs_epochs: int
+    keras_trials: int
+    keras_epochs: int
     qualification: bool
 
 
@@ -669,9 +669,9 @@ def _objective(
             "dropout": trial.suggest_float("dropout", 0.0, 0.3),
             "l2": trial.suggest_float("l2", 1e-7, 1e-3, log=True),
             "batch_size": trial.suggest_categorical("batch_size", [512, 1024, 2048]),
-            "epochs": profile.tfrs_epochs,
+            "epochs": profile.keras_epochs,
         }
-        ranker = fit_tfrs(
+        ranker = fit_keras(
             train,
             validation,
             schema=schema,
@@ -680,7 +680,7 @@ def _objective(
         )
     probabilities = ranker.predict_probability(validation)
     score = float(brier_score_loss(validation["success"], probabilities))
-    if model_name == "tfrs":
+    if model_name == "keras":
         import tensorflow as tf
 
         tf.keras.backend.clear_session()
@@ -707,8 +707,8 @@ def _fit_candidate(
             train, validation, schema=schema, params=params, propensity_clip=clip
         )
     else:
-        params["epochs"] = profile.tfrs_epochs
-        ranker = fit_tfrs(
+        params["epochs"] = profile.keras_epochs
+        ranker = fit_keras(
             train, validation, schema=schema, params=params, propensity_clip=clip
         )
     raw = ranker.predict_probability(validation)
@@ -1160,7 +1160,7 @@ def run_tune_model_stage(
     bundles = _bundle_references(profile, output_dir)[:3]
     train, validation = _main_training_frames(profile, bundles)
     schema = FeatureSchema.fit(train)
-    trials = profile.tfrs_trials if model_name == "tfrs" else profile.tree_trials
+    trials = profile.keras_trials if model_name == "keras" else profile.tree_trials
     study = optuna.create_study(
         direction="minimize",
         sampler=optuna.samplers.TPESampler(seed=2026),
@@ -1456,7 +1456,7 @@ def _assemble_core_result(
     output_dir: Path,
 ) -> dict[str, Any]:
     bundles = _bundle_references(profile, output_dir)
-    candidate_names = ("lightgbm", "xgboost", "tfrs", "lightgbm_embeddings")
+    candidate_names = ("lightgbm", "xgboost", "keras", "lightgbm_embeddings")
     validation_results = {
         name: json.loads(
             (output_dir / "validation" / f"{name}.json").read_text(encoding="utf-8")
@@ -1676,7 +1676,7 @@ def run_benchmark(
             ),
             output_dir=output_dir,
         )
-    for model_name in ("lightgbm", "xgboost", "tfrs"):
+    for model_name in ("lightgbm", "xgboost", "keras"):
         run_isolated_stage(
             IsolatedStage(
                 f"tune-{model_name}",
@@ -1704,7 +1704,7 @@ def run_benchmark(
     for candidate_name in (
         "lightgbm",
         "xgboost",
-        "tfrs",
+        "keras",
         "lightgbm_embeddings",
     ):
         run_isolated_stage(
@@ -1733,7 +1733,7 @@ def run_benchmark(
     for candidate_name in (
         "lightgbm",
         "xgboost",
-        "tfrs",
+        "keras",
         "lightgbm_embeddings",
     ):
         run_isolated_stage(
@@ -1749,7 +1749,7 @@ def run_benchmark(
         name: json.loads(
             (output_dir / "validation" / f"{name}.json").read_text(encoding="utf-8")
         )
-        for name in ("lightgbm", "xgboost", "tfrs", "lightgbm_embeddings")
+        for name in ("lightgbm", "xgboost", "keras", "lightgbm_embeddings")
     }
     winner_name = max(
         validation_results,

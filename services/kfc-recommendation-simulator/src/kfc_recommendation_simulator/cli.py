@@ -6,6 +6,7 @@ from pathlib import Path
 
 from .artifacts import audit_bundle, generate_bundle
 from .benchmark import run_benchmark
+from .modifier_benchmark import run_modifier_benchmark
 
 
 def _package_root() -> Path:
@@ -34,7 +35,13 @@ def main() -> None:
         choices=("smoke", "qualification"),
         default="smoke",
     )
+    benchmark.add_argument(
+        "--placement",
+        choices=("smart-cross-sell", "modifier-upsell"),
+        default="smart-cross-sell",
+    )
     benchmark.add_argument("--output", type=Path)
+    benchmark.add_argument("--dataset-root", type=Path)
 
     args = parser.parse_args()
     if args.command == "generate":
@@ -56,19 +63,35 @@ def main() -> None:
         result = audit_bundle(args.bundle.resolve())
         print(json.dumps(result, indent=2, ensure_ascii=False))
     else:
+        placement = args.placement.replace("-", "_")
         output = (
             args.output
             or _repo_root()
             / ".artifacts"
             / "kfc-recommendation-simulator"
-            / f"smart-cross-sell-{args.profile}"
+            / f"{args.placement}-{args.profile}"
         )
-        result = run_benchmark(
-            profile_name=args.profile,
-            package_root=_package_root(),
-            repo_root=_repo_root(),
-            output_dir=output.resolve(),
-        )
+        if placement == "modifier_upsell":
+            result = run_modifier_benchmark(
+                profile_name=args.profile,
+                package_root=_package_root(),
+                repo_root=_repo_root(),
+                output_dir=output.resolve(),
+                dataset_root=(
+                    args.dataset_root.resolve()
+                    if args.dataset_root is not None
+                    else None
+                ),
+            )
+        else:
+            if args.dataset_root is not None:
+                parser.error("--dataset-root is currently modifier-upsell only")
+            result = run_benchmark(
+                profile_name=args.profile,
+                package_root=_package_root(),
+                repo_root=_repo_root(),
+                output_dir=output.resolve(),
+            )
         print(json.dumps(result, indent=2, ensure_ascii=False))
 
 

@@ -36,6 +36,39 @@ NUMERIC_FEATURES = (
     "feature_store_local_day_of_week",
 )
 FEATURE_COLUMNS = (*CATEGORICAL_FEATURES, *NUMERIC_FEATURES)
+DERIVED_FEATURE_EXPRESSIONS = (
+    "c.modifier_path",
+    (
+        "greatest(c.feature_budget_vnd - c.feature_cart_subtotal_vnd, 0)"
+        " as feature_remaining_budget_vnd"
+    ),
+    (
+        "c.feature_price_delta_vnd"
+        " / greatest(c.feature_budget_vnd - c.feature_cart_subtotal_vnd, 1)"
+        " as feature_price_to_remaining_budget_ratio"
+    ),
+)
+
+
+@dataclass(frozen=True)
+class PlacementDataContract:
+    placement: str
+    cold_column: str
+    positive_price_only: bool
+
+
+PLACEMENT_CONTRACTS = {
+    "smart_cross_sell": PlacementDataContract(
+        "smart_cross_sell",
+        "cold_product",
+        False,
+    ),
+    "modifier_upsell": PlacementDataContract(
+        "modifier_upsell",
+        "cold_modifier",
+        True,
+    ),
+}
 
 
 @dataclass(frozen=True)
@@ -64,7 +97,9 @@ def load_impression_rows(
     *,
     split: str,
     tuning_sample: bool = False,
+    placement: str = "smart_cross_sell",
 ) -> pd.DataFrame:
+    contract = PLACEMENT_CONTRACTS[placement]
     bounds = {
         "train": (0.0, 0.6),
         "validation": (0.6, 0.8),
@@ -79,6 +114,7 @@ def load_impression_rows(
           c.journey_id,
           c.name,
           {", ".join(f"c.{column}" for column in FEATURE_COLUMNS)},
+          {", ".join(DERIVED_FEATURE_EXPRESSIONS)},
           i.position,
           i.slate_size,
           i.action_propensity,
@@ -89,7 +125,8 @@ def load_impression_rows(
           o.survived_checkout,
           o.net_incremental_value_vnd,
           e.held_out_store,
-          e.cold_product
+          e.{contract.cold_column} as cold_candidate,
+          e.{contract.cold_column} as cold_product
         from read_parquet('{_parquet(bundle, "model-visible", "impressions")}') i
         join read_parquet('{_parquet(bundle, "model-visible", "outcomes")}') o
           on o.impression_id = i.impression_id
@@ -99,9 +136,10 @@ def load_impression_rows(
         join read_parquet('{_parquet(bundle, "evaluation", "evaluation_slices")}') e
           on e.request_id = i.request_id
           and e.candidate_id = i.candidate_id
-        where i.placement = 'smart_cross_sell'
+        where i.placement = '{contract.placement}'
           and i.decision_source = 'ranked'
           and not i.policy_modified
+          {"and c.feature_price_delta_vnd > 0" if contract.positive_price_only else ""}
           and {_fraction_expression()} >= ?
           and {_fraction_expression()} < ?
           {sample_clause}
@@ -126,7 +164,9 @@ def load_candidate_rows(
     tuning_sample: bool = False,
     request_shard: tuple[int, int] | None = None,
     cache_dir: Path | None = None,
+    placement: str = "smart_cross_sell",
 ) -> pd.DataFrame:
+    contract = PLACEMENT_CONTRACTS[placement]
     if cache_dir is not None:
         parquet_glob = (
             cache_dir / f"evaluation_shard={request_shard[0]}" / "*.parquet"
@@ -163,8 +203,10 @@ def load_candidate_rows(
           c.target_id,
           c.name,
           {", ".join(f"c.{column}" for column in FEATURE_COLUMNS)},
+          {", ".join(DERIVED_FEATURE_EXPRESSIONS)},
           e.held_out_store,
-          e.cold_product,
+          e.{contract.cold_column} as cold_candidate,
+          e.{contract.cold_column} as cold_product,
           p.expected_net_merchandise_value_vnd,
           p.expected_net_value_by_position_vnd
         from read_parquet('{_parquet(bundle, "model-visible", "candidates")}') c
@@ -175,8 +217,9 @@ def load_candidate_rows(
           using (request_id, candidate_id)
         join read_parquet('{_parquet(bundle, "oracle", "potential_outcomes")}') p
           using (request_id, candidate_id)
-        where c.placement = 'smart_cross_sell'
+        where c.placement = '{contract.placement}'
           and eligibility.eligible
+          {"and c.feature_price_delta_vnd > 0" if contract.positive_price_only else ""}
           and {_fraction_expression()} >= ?
           and {_fraction_expression()} < ?
           {sample_clause}
@@ -197,12 +240,17 @@ def _cache_contract(
     *,
     split: str,
     shard_count: int,
+    placement: str,
 ) -> dict[str, int | str]:
+    contract = PLACEMENT_CONTRACTS[placement]
     return {
         "seed": bundle.seed,
         "journeyCount": bundle.journey_count,
         "split": split,
         "shardCount": shard_count,
+        "placement": contract.placement,
+        "coldColumn": contract.cold_column,
+        "positivePriceOnly": str(contract.positive_price_only).lower(),
     }
 
 
@@ -212,10 +260,17 @@ def _materialize_candidate_cache_in_process(
     split: str,
     cache_root: Path,
     shard_count: int,
+    placement: str,
 ) -> Path:
+    contract = PLACEMENT_CONTRACTS[placement]
     cache_dir = cache_root / f"seed-{bundle.seed:02d}" / split
     marker = cache_dir / "_complete.json"
-    expected = _cache_contract(bundle, split=split, shard_count=shard_count)
+    expected = _cache_contract(
+        bundle,
+        split=split,
+        shard_count=shard_count,
+        placement=placement,
+    )
     if marker.is_file() and json.loads(marker.read_text(encoding="utf-8")) == expected:
         return cache_dir
 
@@ -238,8 +293,10 @@ def _materialize_candidate_cache_in_process(
             c.target_id,
             c.name,
             {", ".join(f"c.{column}" for column in FEATURE_COLUMNS)},
+            {", ".join(DERIVED_FEATURE_EXPRESSIONS)},
             e.held_out_store,
-            e.cold_product,
+            e.{contract.cold_column} as cold_candidate,
+            e.{contract.cold_column} as cold_product,
             p.expected_net_merchandise_value_vnd,
             p.expected_net_value_by_position_vnd,
             hash(c.request_id) % {shard_count} as evaluation_shard
@@ -253,8 +310,9 @@ def _materialize_candidate_cache_in_process(
           join read_parquet(
             '{_parquet(bundle, "oracle", "potential_outcomes")}'
           ) p using (request_id, candidate_id)
-          where c.placement = 'smart_cross_sell'
+          where c.placement = '{contract.placement}'
             and eligibility.eligible
+            {"and c.feature_price_delta_vnd > 0" if contract.positive_price_only else ""}
             and {_fraction_expression()} >= ?
             and {_fraction_expression()} < ?
         ) to '{destination}' (
@@ -289,10 +347,16 @@ def materialize_candidate_cache(
     split: str,
     cache_root: Path,
     shard_count: int,
+    placement: str = "smart_cross_sell",
 ) -> Path:
     cache_dir = cache_root / f"seed-{bundle.seed:02d}" / split
     marker = cache_dir / "_complete.json"
-    expected = _cache_contract(bundle, split=split, shard_count=shard_count)
+    expected = _cache_contract(
+        bundle,
+        split=split,
+        shard_count=shard_count,
+        placement=placement,
+    )
     if marker.is_file() and json.loads(marker.read_text(encoding="utf-8")) == expected:
         return cache_dir
     subprocess.run(
@@ -307,6 +371,7 @@ def materialize_candidate_cache(
             split,
             str(cache_root.resolve()),
             str(shard_count),
+            placement,
         ],
         check=True,
     )
@@ -315,21 +380,27 @@ def materialize_candidate_cache(
     return cache_dir
 
 
-def load_catalog_rows(bundle: BundleData) -> pd.DataFrame:
+def load_catalog_rows(
+    bundle: BundleData,
+    *,
+    placement: str = "smart_cross_sell",
+) -> pd.DataFrame:
+    contract = PLACEMENT_CONTRACTS[placement]
     query = f"""
         select distinct candidate_id, name, category
         from read_parquet('{_parquet(bundle, "model-visible", "candidates")}')
-        where placement = 'smart_cross_sell'
+        where placement = '{contract.placement}'
+          {"and feature_price_delta_vnd > 0" if contract.positive_price_only else ""}
         order by candidate_id
     """
     return duckdb.connect(config={"threads": 1}).execute(query).fetch_df()
 
 
 def _main() -> None:
-    if len(sys.argv) != 8 or sys.argv[1] != "materialize-candidate-cache":
+    if len(sys.argv) != 9 or sys.argv[1] != "materialize-candidate-cache":
         raise SystemExit(
             "usage: benchmark_data materialize-candidate-cache "
-            "SEED JOURNEY_COUNT BUNDLE_DIR SPLIT CACHE_ROOT SHARD_COUNT"
+            "SEED JOURNEY_COUNT BUNDLE_DIR SPLIT CACHE_ROOT SHARD_COUNT PLACEMENT"
         )
     _materialize_candidate_cache_in_process(
         BundleData(
@@ -340,6 +411,7 @@ def _main() -> None:
         split=sys.argv[5],
         cache_root=Path(sys.argv[6]),
         shard_count=int(sys.argv[7]),
+        placement=sys.argv[8],
     )
 
 

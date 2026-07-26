@@ -6,8 +6,9 @@
 > recommendation service.
 
 The original Streamlit inspection shell was retired after review. This package
-now contains the pure Python generator/auditor and the Smart Cross-sell ranker
-benchmark. MLflow provides the local technical inspection surface.
+now contains the pure Python generator/auditor and the Smart Cross-sell and
+Modifier Upsell ranker benchmarks. MLflow provides the local technical
+inspection surface.
 
 ## Provenance
 
@@ -30,7 +31,9 @@ Can one reproducible synthetic world model:
 5. counterfactual potential outcomes that are physically unavailable to model
    features; and
 6. a three-item-default, four-item-maximum Smart Cross-sell slate whose learned
-   ranker can beat deterministic baselines on untouched journeys?
+   ranker can beat deterministic baselines on untouched journeys; and
+7. a single, positive-price, parent/path-compatible Modifier Upsell action
+   whose learned ranker can beat deterministic baselines on untouched journeys?
 
 ## Run
 
@@ -45,7 +48,7 @@ uv run python -m unittest discover -s tests -v
 Run the three-seed development smoke benchmark:
 
 ```bash
-TF_USE_LEGACY_KERAS=1 uv run kfc-rec-sim benchmark \
+uv run kfc-rec-sim benchmark \
   --profile smoke \
   --output ../../.artifacts/kfc-recommendation-simulator/smart-cross-sell-smoke
 ```
@@ -54,10 +57,23 @@ Run the held-out qualification benchmark (ten independent 50,000-journey
 seeds):
 
 ```bash
-TF_USE_LEGACY_KERAS=1 uv run kfc-rec-sim benchmark \
+uv run kfc-rec-sim benchmark \
   --profile qualification \
   --output ../../.artifacts/kfc-recommendation-simulator/smart-cross-sell-qualification
 ```
+
+Run the Modifier Upsell qualification over its own generated bundles:
+
+```bash
+uv run kfc-rec-sim benchmark \
+  --placement modifier-upsell \
+  --profile qualification \
+  --output ../../.artifacts/kfc-recommendation-simulator/modifier-upsell-qualification
+```
+
+`--dataset-root <audited-datasets>` may reuse immutable generated seed bundles
+without copying them. Placement-specific caches, models, explanations, MLflow
+runs, and reports still live under the selected output.
 
 Generated bundles contain:
 
@@ -84,8 +100,9 @@ Cold-slice membership is evaluation-only. Latent preferences and potential
 outcomes remain oracle-only.
 
 The ranker benchmark compares popularity, basket-association, promotion, and
-blended deterministic baselines with LightGBM, XGBoost, compact TensorFlow
-Recommenders, and a pinned multilingual-embedding LightGBM ablation. It writes:
+blended deterministic baselines with LightGBM, XGBoost, a compact native
+Keras 3 scorer, and—where eligible cold-start evidence exists—a pinned
+multilingual-embedding LightGBM ablation. It writes:
 
 ```text
 benchmark-result.json
@@ -132,6 +149,41 @@ validation winner, but retained the deterministic blend for serving:
 - The promotion gate therefore returned `retain_baseline`.
 - All 21 isolated stages stayed below the 1,600 MiB ceiling; the measured
   maximum was 974.2 MiB, and a completed qualification resumed in 2.32 seconds.
+
+These are synthetic-world ranker-recovery results, not evidence of real KFC
+conversion or AOV lift.
+
+## Modifier Upsell qualification result
+
+Modifier Upsell differs from product cross-sell:
+
+- Deterministic eligibility admits only compatible, non-default,
+  positive-price modifier actions. Free substitutions remain ordinary item
+  configuration.
+- The ranker returns one atomic `apply_modifier` action bound to the exact
+  parent cart item and modifier path.
+- Modifier-specific features include the parent item, modifier path and option,
+  price delta, remaining budget, parent-option affinity, customer history, and
+  store/global usage.
+- The label is the exact modifier applied and retained through checkout; the
+  score is calibrated success probability multiplied by price delta.
+- Parent popularity, parent association, incremental value, and their blend
+  replace product promotion and slate-diversity baselines.
+
+The ten-seed, 50,000-journey qualification selected the modern Keras scorer as
+the learned validation winner, but retained the deterministic incremental-value
+baseline for serving:
+
+- Learned untouched-test expected incremental AOV was ₫2,176 versus ₫2,132 for
+  the baseline.
+- The paired mean delta was only ₫44, with a 95% interval from −₫20 to ₫106;
+  the required positive lower confidence bound was not met.
+- NDCG@5 improved by 0.0069, every output remained one compatible action, and
+  invalid modifier output stayed zero.
+- No embedding ablation was claimed: all six fixture cold modifiers are
+  zero-price substitutions and therefore outside proactive upsell eligibility.
+- All 17 isolated stages stayed below the 1,600 MiB ceiling; the measured
+  maximum was 938.2 MiB, and a completed qualification resumed in 2.43 seconds.
 
 These are synthetic-world ranker-recovery results, not evidence of real KFC
 conversion or AOV lift.

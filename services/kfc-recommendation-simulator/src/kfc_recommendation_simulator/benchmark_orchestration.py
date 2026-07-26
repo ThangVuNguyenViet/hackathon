@@ -136,10 +136,10 @@ def run_isolated_stage(
         return "reused"
     environment = {
         **os.environ,
-        "TF_USE_LEGACY_KERAS": "1",
         "TF_DETERMINISTIC_OPS": "1",
         "TF_NUM_INTRAOP_THREADS": "1",
         "TF_NUM_INTEROP_THREADS": "1",
+        "USE_TF": "0",
         "OMP_NUM_THREADS": "1",
         "OPENBLAS_NUM_THREADS": "1",
         "MKL_NUM_THREADS": "1",

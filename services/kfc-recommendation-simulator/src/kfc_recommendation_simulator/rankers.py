@@ -54,19 +54,23 @@ class FeatureSchema:
     vocabularies: dict[str, list[str]]
     numeric_means: dict[str, float]
     numeric_scales: dict[str, float]
+    categorical_features: tuple[str, ...] = CATEGORICAL_FEATURES
     numeric_features: tuple[str, ...] = NUMERIC_FEATURES
+    schema_version: str = "smart-cross-sell-feature-schema-v1"
 
     @classmethod
     def fit(
         cls,
         frame: pd.DataFrame,
         *,
+        categorical_features: tuple[str, ...] = CATEGORICAL_FEATURES,
         extra_numeric_features: tuple[str, ...] = (),
+        schema_version: str = "smart-cross-sell-feature-schema-v1",
     ) -> FeatureSchema:
         numeric_features = (*NUMERIC_FEATURES, *extra_numeric_features)
         vocabularies = {
             column: sorted(frame[column].fillna("__missing__").astype(str).unique())
-            for column in CATEGORICAL_FEATURES
+            for column in categorical_features
         }
         numeric = _numeric_frame(frame, numeric_features)
         means = {column: float(numeric[column].mean()) for column in numeric_features}
@@ -74,20 +78,27 @@ class FeatureSchema:
             column: max(float(numeric[column].std(ddof=0)), 1e-6)
             for column in numeric_features
         }
-        return cls(vocabularies, means, scales, numeric_features)
+        return cls(
+            vocabularies=vocabularies,
+            numeric_means=means,
+            numeric_scales=scales,
+            categorical_features=categorical_features,
+            numeric_features=numeric_features,
+            schema_version=schema_version,
+        )
 
     def tree_frame(self, frame: pd.DataFrame) -> pd.DataFrame:
         transformed = _numeric_frame(frame, self.numeric_features)
-        for column in CATEGORICAL_FEATURES:
+        for column in self.categorical_features:
             transformed[column] = pd.Categorical(
                 frame[column].fillna("__missing__").astype(str),
                 categories=self.vocabularies[column],
             )
-        return transformed[[*CATEGORICAL_FEATURES, *self.numeric_features]]
+        return transformed[[*self.categorical_features, *self.numeric_features]]
 
     def tensor_inputs(self, frame: pd.DataFrame) -> dict[str, np.ndarray]:
         inputs: dict[str, np.ndarray] = {}
-        for column in CATEGORICAL_FEATURES:
+        for column in self.categorical_features:
             lookup = {
                 value: index + 1
                 for index, value in enumerate(self.vocabularies[column])
@@ -115,8 +126,8 @@ class FeatureSchema:
         path.write_text(
             json.dumps(
                 {
-                    "schemaVersion": "smart-cross-sell-feature-schema-v1",
-                    "categoricalFeatures": list(CATEGORICAL_FEATURES),
+                    "schemaVersion": self.schema_version,
+                    "categoricalFeatures": list(self.categorical_features),
                     "numericFeatures": list(self.numeric_features),
                     "vocabularies": self.vocabularies,
                     "numericMeans": self.numeric_means,
@@ -137,7 +148,9 @@ class FeatureSchema:
             vocabularies=payload["vocabularies"],
             numeric_means=payload["numericMeans"],
             numeric_scales=payload["numericScales"],
+            categorical_features=tuple(payload["categoricalFeatures"]),
             numeric_features=tuple(payload["numericFeatures"]),
+            schema_version=payload["schemaVersion"],
         )
 
 
@@ -211,7 +224,7 @@ class LightGBMArtifactRanker:
 
 
 @dataclass
-class TFRSRanker:
+class KerasRanker:
     name: str
     scorer: Any
     schema: FeatureSchema
@@ -272,13 +285,10 @@ def load_ranker(directory: Path, name: str) -> Ranker:
         model = xgb.XGBClassifier()
         model.load_model(directory / "model.xgboost.json")
         return TreeRanker(name, model, schema)
-    if name == "tfrs":
-        import os
-
-        os.environ.setdefault("TF_USE_LEGACY_KERAS", "1")
+    if name == "keras":
         import tensorflow as tf
 
-        return TFRSRanker(
+        return KerasRanker(
             name,
             tf.keras.models.load_model(directory / "model.keras", compile=False),
             schema,
@@ -340,8 +350,9 @@ def fit_lightgbm(
         schema.tree_frame(train),
         train["success"].to_numpy(),
         sample_weight=inverse_propensity_weights(train, propensity_clip),
-        categorical_feature=list(CATEGORICAL_FEATURES),
-        eval_set=[(schema.tree_frame(validation), validation["success"].to_numpy())],
+        categorical_feature=list(schema.categorical_features),
+        eval_X=schema.tree_frame(validation),
+        eval_y=validation["success"].to_numpy(),
         eval_sample_weight=[inverse_propensity_weights(validation, propensity_clip)],
         callbacks=[lgb.early_stopping(30, verbose=False)],
     )
@@ -381,31 +392,27 @@ def fit_xgboost(
     return TreeRanker("xgboost", model, schema)
 
 
-def fit_tfrs(
+def fit_keras(
     train: pd.DataFrame,
     validation: pd.DataFrame,
     *,
     schema: FeatureSchema,
     params: dict[str, Any],
     propensity_clip: float,
-) -> TFRSRanker:
+) -> KerasRanker:
     import os
 
-    # tensorflow-recommenders 0.7.x uses the Keras 2 compatibility package
-    # when paired with TensorFlow 2.16+.
-    os.environ.setdefault("TF_USE_LEGACY_KERAS", "1")
     os.environ.setdefault("TF_DETERMINISTIC_OPS", "1")
     os.environ.setdefault("TF_NUM_INTRAOP_THREADS", "1")
     os.environ.setdefault("TF_NUM_INTEROP_THREADS", "1")
     import tensorflow as tf
-    import tensorflow_recommenders as tfrs
 
     tf.keras.utils.set_random_seed(2026)
     tf.config.experimental.enable_op_determinism()
     inputs: dict[str, Any] = {}
     encoded = []
     embedding_dimension = int(params["embedding_dimension"])
-    for column in CATEGORICAL_FEATURES:
+    for column in schema.categorical_features:
         input_layer = tf.keras.Input(shape=(), dtype=tf.int32, name=column)
         inputs[column] = input_layer
         vocabulary_size = len(schema.vocabularies[column]) + 1
@@ -431,57 +438,24 @@ def fit_tfrs(
         )(hidden)
         hidden = tf.keras.layers.Dropout(params["dropout"])(hidden)
     output = tf.keras.layers.Dense(1, activation="sigmoid")(hidden)
-    scorer = tf.keras.Model(inputs=inputs, outputs=output, name="compact_tfrs_scorer")
-
-    class WeightedRankingModel(tfrs.Model):
-        def __init__(self) -> None:
-            super().__init__()
-            self.scorer = scorer
-            self.task = tfrs.tasks.Ranking(loss=tf.keras.losses.BinaryCrossentropy())
-
-        def call(self, features: dict[str, Any]) -> Any:
-            return self.scorer(
-                {
-                    key: value
-                    for key, value in features.items()
-                    if not key.startswith("_")
-                }
-            )
-
-        def compute_loss(self, features: dict[str, Any], training: bool = False) -> Any:
-            predictions = self(features)
-            return self.task(
-                labels=features["_label"],
-                predictions=predictions,
-                sample_weight=features["_weight"],
-                compute_metrics=not training,
-            )
-
-    def dataset(frame: pd.DataFrame, shuffle: bool) -> Any:
-        values = schema.tensor_inputs(frame)
-        values["_label"] = frame["success"].to_numpy(dtype="float32").reshape(-1, 1)
-        values["_weight"] = inverse_propensity_weights(frame, propensity_clip).astype(
-            "float32"
-        )
-        result = tf.data.Dataset.from_tensor_slices(values)
-        options = tf.data.Options()
-        options.experimental_deterministic = True
-        result = result.with_options(options)
-        if shuffle:
-            result = result.shuffle(
-                min(len(frame), 100_000),
-                seed=2026,
-                reshuffle_each_iteration=True,
-            )
-        return result.batch(int(params["batch_size"])).prefetch(tf.data.AUTOTUNE)
-
-    model = WeightedRankingModel()
-    model.compile(
-        optimizer=tf.keras.optimizers.Adam(learning_rate=params["learning_rate"])
+    scorer = tf.keras.Model(inputs=inputs, outputs=output, name="compact_keras_scorer")
+    scorer.compile(
+        optimizer=tf.keras.optimizers.Adam(learning_rate=params["learning_rate"]),
+        loss=tf.keras.losses.BinaryCrossentropy(),
     )
-    model.fit(
-        dataset(train, True),
-        validation_data=dataset(validation, False),
+    scorer.fit(
+        schema.tensor_inputs(train),
+        train["success"].to_numpy(dtype="float32").reshape(-1, 1),
+        sample_weight=inverse_propensity_weights(train, propensity_clip).astype(
+            "float32"
+        ),
+        validation_data=(
+            schema.tensor_inputs(validation),
+            validation["success"].to_numpy(dtype="float32").reshape(-1, 1),
+            inverse_propensity_weights(validation, propensity_clip).astype("float32"),
+        ),
+        batch_size=int(params["batch_size"]),
+        shuffle=True,
         epochs=int(params["epochs"]),
         verbose=0,
         callbacks=[
@@ -492,4 +466,4 @@ def fit_tfrs(
             )
         ],
     )
-    return TFRSRanker("tfrs", scorer, schema)
+    return KerasRanker("keras", scorer, schema)
