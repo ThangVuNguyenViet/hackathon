@@ -188,6 +188,12 @@ export const toolArgumentSchemas = {
       .strict(),
     z
       .object({
+        mode: z
+          .enum(['patch', 'replace'])
+          .default('patch')
+          .describe(
+            'patch changes only the listed item codes; replace treats positive-quantity changes as the complete desired cart and removes all unlisted current items.',
+          ),
         changes: z
           .array(
             z
@@ -343,6 +349,7 @@ export const agentToolArgumentSchemas = {
   getModifierOptions: z.object({ code: z.string().min(1) }).strict(),
   updateCart: z
     .object({
+      mode: z.enum(['patch', 'replace']).default('patch'),
       changes: z
         .array(
           z

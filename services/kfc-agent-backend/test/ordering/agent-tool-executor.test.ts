@@ -1560,6 +1560,10 @@ describe("provider-neutral agent commerce executor", () => {
         throw new Error("approval binding missing");
 
       const approved = await approvalContext(pending.approvalBinding);
+      const expectedProviderOutcome =
+        toolName === "acquireVoucher"
+          ? { ok: false, errorCode: "membership_points_insufficient" }
+          : { ok: true };
       await expect(
         executeAgentToolCall(clients, request, {
           state: currentState,
@@ -1567,7 +1571,7 @@ describe("provider-neutral agent commerce executor", () => {
           approval: approved,
           runGuard: currentRunGuard(),
         }),
-      ).resolves.toMatchObject({ ok: true });
+      ).resolves.toMatchObject(expectedProviderOutcome);
       await expect(
         executeAgentToolCall(clients, request, {
           state: currentState,
@@ -1575,7 +1579,7 @@ describe("provider-neutral agent commerce executor", () => {
           approval: approved,
           runGuard: currentRunGuard(),
         }),
-      ).resolves.toMatchObject({ ok: true });
+      ).resolves.toMatchObject(expectedProviderOutcome);
     },
   );
 

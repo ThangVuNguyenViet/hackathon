@@ -51,9 +51,10 @@ function nestedDescription(
 
 describe('KFC OpenAI tools', () => {
   it('keeps domain recovery guidance beside the affected tool contracts', async () => {
-    const clients = createMockClients(createTestFixtures());
+    const fixtures = createTestFixtures();
+    const clients = createMockClients(fixtures);
     const session = await createKfcToolSession(clients, 'kfc:retry_policies');
-    const tools = createKfcOpenAiTools({ clients, session });
+    const tools = createKfcOpenAiTools({ clients, session, fixtures });
     expect(
       tools.find((tool) => tool.definition.name === 'searchMenu')?.definition
         .description,
@@ -66,6 +67,23 @@ describe('KFC OpenAI tools', () => {
       tools.find((tool) => tool.definition.name === 'updateCart')?.definition
         .description,
     ).toContain('Never retry after an uncertain execution error');
+
+    const emptySearch = await tools
+      .find((tool) => tool.definition.name === 'searchMenu')!
+      .execute({
+        mode: 'search',
+        query: 'definitely-not-in-the-menu',
+      });
+    expect(emptySearch).toMatchObject({
+      ok: true,
+      value: { total: 0, items: [] },
+      recovery: {
+        reason: 'empty_result',
+        retry: true,
+        instruction: expect.stringContaining('drop constraints'),
+        availableCategories: ['Ưu Đãi'],
+      },
+    });
   });
 
   it('teaches the model to supply intent rather than relying on backend intent parsing', async () => {
@@ -133,6 +151,21 @@ describe('KFC OpenAI tools', () => {
     );
     expect(searchMenu?.definition.description).toContain(
       'standalone requested component',
+    );
+    expect(searchMenu?.definition.description).toContain(
+      'one exact category label',
+    );
+    expect(searchMenu?.definition.description).toContain(
+      'do not combine unrelated category concepts',
+    );
+    expect(searchMenu?.definition.description).toContain(
+      'packaged product components',
+    );
+    expect(searchMenu?.definition.description).toContain(
+      'reject candidates whose returned description',
+    );
+    expect(searchMenu?.definition.description).toContain(
+      'call updateCart before replying',
     );
     expect(propertyDescription('query')).toContain('composition');
     expect(propertyDescription('query')).toContain(
@@ -224,6 +257,9 @@ describe('KFC OpenAI tools', () => {
     expect(updateCart?.definition.description).toContain(
       'authoritative current cart',
     );
+    expect(updateCart?.definition.description).toContain(
+      'Do not merely present the plan',
+    );
     expect(quantityDescription).toContain('named menu item');
     expect(quantityDescription).toContain('not the pieces inside');
     expect(modifierQuantityDescription).toContain('per menu portion');
@@ -272,6 +308,85 @@ describe('KFC OpenAI tools', () => {
     expect(session.cart.items[0]?.description).toBe(
       '3 Miếng Gà Rán + 1 Burger Tôm',
     );
+  });
+
+  it('distinguishes additive cart edits from complete cart replacement', async () => {
+    const fixtures = createTestFixtures();
+    fixtures.menuItems.push({
+      ...fixtures.menuItems[0]!,
+      code: '20752',
+      itemId: '20752',
+      posItemId: '20752',
+      productCode: 'SECOND',
+      name: 'Combo thứ hai',
+      description: 'Món fixture thứ hai',
+    });
+    const clients = createMockClients(fixtures);
+    const session = await createKfcToolSession(
+      clients,
+      'kfc:model_facing_cart_edit_mode',
+    );
+    const updateCart = createKfcOpenAiTools({ clients, session }).find(
+      (tool) => tool.definition.name === 'updateCart',
+    )!;
+
+    expect(updateCart.definition.parameters).toMatchObject({
+      required: ['mode', 'changes'],
+      properties: {
+        mode: {
+          enum: ['patch', 'replace'],
+        },
+      },
+    });
+    expect(updateCart.definition.description).toContain(
+      'complete desired cart',
+    );
+
+    await updateCart.execute({
+      mode: 'patch',
+      changes: [
+        {
+          itemCode: '20751',
+          orderedMenuItemQuantity: 1,
+          modifiers: [],
+        },
+      ],
+    });
+    await updateCart.execute({
+      mode: 'patch',
+      changes: [
+        {
+          itemCode: '20752',
+          orderedMenuItemQuantity: 1,
+          modifiers: [],
+        },
+      ],
+    });
+    expect(session.cart.items.map(({ itemCode }) => itemCode)).toEqual([
+      '20751',
+      '20752',
+    ]);
+
+    const replaced = await updateCart.execute({
+      mode: 'replace',
+      changes: [
+        {
+          itemCode: '20752',
+          orderedMenuItemQuantity: 2,
+          modifiers: [],
+        },
+      ],
+    });
+
+    expect(replaced).toMatchObject({
+      ok: true,
+      value: {
+        items: [{ itemCode: '20752', quantity: 2 }],
+      },
+    });
+    expect(session.cart.items).toEqual([
+      expect.objectContaining({ itemCode: '20752', quantity: 2 }),
+    ]);
   });
 
   it('scopes every returned modifier fact to its exact option and branch', async () => {
@@ -644,13 +759,9 @@ describe('KFC OpenAI tools', () => {
     await expect(
       acquireVoucher!.execute({ rewardId: 'reward-discount-10k' }),
     ).resolves.toMatchObject({
-      ok: true,
+      ok: false,
       toolName: 'acquireVoucher',
-      value: {
-        status: 'completed',
-        requiresUserConfirmation: false,
-        targetId: 'reward-discount-10k',
-      },
+      errorCode: 'membership_points_insufficient',
     });
     await expect(
       redeemReward!.execute({
@@ -666,9 +777,6 @@ describe('KFC OpenAI tools', () => {
         targetId: 'wallet-new-member-25k',
       },
     });
-    expect(
-      await acquireVoucher!.execute({ rewardId: 'reward-discount-10k' }),
-    ).not.toHaveProperty('value.customerMessage');
     expect(
       await redeemReward!.execute({
         voucherId: 'wallet-new-member-25k',

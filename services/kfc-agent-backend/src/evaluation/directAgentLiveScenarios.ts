@@ -19,6 +19,7 @@ export type DirectAgentRegressionCoverage =
   | 'standalone-drink-fallback'
   | 'delegated-budget-500k'
   | 'delegated-budget-1m'
+  | 'delegated-cart-replacement'
   | 'non-spicy-and-modifier-query'
   | 'multi-turn-cart-preservation'
   | 'reward-and-voucher-execution'
@@ -257,6 +258,30 @@ export const DIRECT_AGENT_MANUAL_REGRESSION_BANK: DirectAgentScenario[] = [
     ],
   },
   {
+    id: 'regression-delegated-cart-replacement',
+    title: 'Delegated complete cart replacement',
+    source: 'manual-regression',
+    coverage: 'delegated-cart-replacement',
+    turns: [
+      {
+        kind: 'customer',
+        text: 'Thêm một Combo Hợp Gu 99K vào giỏ giúp mình.',
+      },
+      {
+        kind: 'customer',
+        text: 'Đổi toàn bộ giỏ sang các món khác cho 4 người, tối đa 500.000đ, có gà rán và nước. Bạn tự chọn và cập nhật luôn.',
+      },
+      {
+        kind: 'customer',
+        text: 'Cho mình xem lại toàn bộ giỏ hiện tại.',
+      },
+    ],
+    referenceAssistantTurns: [],
+    observations: [
+      'Verify that a delegated full replacement uses updateCart mode replace, removes every old unlisted line, and reports only the returned authoritative cart.',
+    ],
+  },
+  {
     id: 'regression-non-spicy-modifiers',
     title: 'Non-spicy and modifier queries',
     source: 'manual-regression',
@@ -282,7 +307,10 @@ export const DIRECT_AGENT_MANUAL_REGRESSION_BANK: DirectAgentScenario[] = [
     source: 'manual-regression',
     coverage: 'multi-turn-cart-preservation',
     turns: [
-      { kind: 'customer', text: 'Thêm một combo gà cho mình.' },
+      {
+        kind: 'customer',
+        text: 'Thêm một Combo Hợp Gu 99K vào giỏ cho mình.',
+      },
       { kind: 'customer', text: 'Cho mình xem các ưu đãi hiện có.' },
       { kind: 'customer', text: 'Giỏ hàng của mình hiện có gì?' },
     ],
@@ -308,7 +336,7 @@ export const DIRECT_AGENT_MANUAL_REGRESSION_BANK: DirectAgentScenario[] = [
     ],
     referenceAssistantTurns: [],
     observations: [
-      'Verify that fixture-backed reward and voucher mutations execute with exact eligible identifiers and remain reflected in state.',
+      'Verify that the zero-point reward acquisition is rejected as ineligible while the exact active wallet voucher can still be redeemed.',
     ],
   },
   {
@@ -341,7 +369,7 @@ export const DIRECT_AGENT_MANUAL_REGRESSION_BANK: DirectAgentScenario[] = [
     ],
     referenceAssistantTurns: [],
     observations: [
-      'Evaluate whether the SDK loop completes every safe reversible step in one turn and reaches the final explicit-confirmation step.',
+      'Evaluate whether the SDK loop completes every safe reversible step in one turn, does not invent a missing recipient name, and reaches the final explicit-confirmation step without claiming the order was placed.',
     ],
   },
   {
@@ -530,6 +558,7 @@ export function resolveDirectAgentTrustedCartAction(input: {
       {
         name: 'updateCart',
         arguments: {
+          mode: 'patch',
           changes: [
             {
               itemCode,

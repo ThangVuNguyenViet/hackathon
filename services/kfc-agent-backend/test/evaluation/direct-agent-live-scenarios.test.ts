@@ -98,6 +98,7 @@ describe('direct Agents SDK live scenarios', () => {
     expect(scriptSource).toContain(
       "process.env.RUN_LIVE_DIRECT_AGENT_SCENARIOS === '1'",
     );
+    expect(scriptSource).toContain('KFC_DIRECT_LIVE_SCENARIO_IDS');
     expect(packageSource).toContain('[ ! -f ../../.env ] || . ../../.env');
     expect(packageSource).toContain('"test:live:direct-agents-sdk"');
   });
@@ -112,6 +113,7 @@ describe('direct Agents SDK live scenarios', () => {
         'standalone-drink-fallback',
         'delegated-budget-500k',
         'delegated-budget-1m',
+        'delegated-cart-replacement',
         'non-spicy-and-modifier-query',
         'multi-turn-cart-preservation',
         'reward-and-voucher-execution',
@@ -345,6 +347,7 @@ describe('direct Agents SDK live scenarios', () => {
         {
           name: 'updateCart',
           arguments: {
+            mode: 'patch',
             changes: [
               {
                 itemCode: 'fixture-dynamic-code',

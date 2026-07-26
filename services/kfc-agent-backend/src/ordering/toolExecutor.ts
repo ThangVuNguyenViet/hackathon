@@ -434,7 +434,24 @@ export async function executeToolCall(
         "changes" in args
           ? await clients.cart.applyChanges(
               cart,
-              args.changes,
+              args.mode === "replace"
+                ? [
+                    ...cart.items
+                      .filter(
+                        (item) =>
+                          !args.changes.some(
+                            (change) =>
+                              change.itemCode === item.itemCode &&
+                              change.quantity > 0,
+                          ),
+                      )
+                      .map((item) => ({
+                        itemCode: item.itemCode,
+                        quantity: 0,
+                      })),
+                    ...args.changes,
+                  ]
+                : args.changes,
               context.externalCallContext,
             )
           : await clients.cart.updateCart(

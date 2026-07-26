@@ -288,6 +288,7 @@ describe('OpenAiKfcAgent SDK Runner', () => {
 
     expect(executed).toEqual([
       {
+        mode: 'patch',
         changes: [
           {
             itemCode: '20751',
@@ -441,6 +442,33 @@ describe('OpenAiKfcAgent SDK Runner', () => {
       (await store.listTurns('kfc:runner_test')).map((turn) => turn.role),
     ).toEqual(['user']);
     expect(result.assistantTurn.role).toBe('assistant');
+  });
+
+  it('instructs the model to report only verified completed effects and exact mutation results', async () => {
+    const requests: Array<Record<string, unknown>> = [];
+    const agent = new OpenAiKfcAgent({
+      client: sequencedClient(
+        [assistantMessage('Mình chưa thay đổi giỏ hàng.')],
+        requests,
+      ),
+      model: 'gpt-4.1-mini',
+    });
+
+    await agent.respond(createTurn());
+
+    expect(requests[0]?.instructions).toContain(
+      'only when a successful mutation result',
+    );
+    expect(requests[0]?.instructions).toContain(
+      'exact quantities and totals from the latest verified result',
+    );
+    expect(requests[0]?.instructions).toContain(
+      'Never invent placeholder customer',
+    );
+    expect(requests[0]?.instructions).toContain(
+      'Do not stop at a proposal or ask for another confirmation',
+    );
+    expect(requests[0]?.instructions).toContain('qualitative party size');
   });
 
   it('sanitizes verified identifiers before persisting the customer response', async () => {

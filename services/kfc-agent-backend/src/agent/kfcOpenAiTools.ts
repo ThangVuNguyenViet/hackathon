@@ -275,7 +275,7 @@ export interface CreateKfcOpenAiToolsInput {
   accessContext?: CustomerAccessContext;
   fixtures?: Pick<
     GeneratedFixtures,
-    'administrativeDivisions' | 'administrativeLegacyMappings'
+    'administrativeDivisions' | 'administrativeLegacyMappings' | 'menuItems'
   >;
 }
 
@@ -388,13 +388,13 @@ export function verifiedKfcToolSessionContext(
 
 const descriptions: Record<ToolName, string> = {
   searchMenu:
-    'Search verified menu items and selectable options deterministically in one searchMenu call in the same user turn. Put concise product or product-composition terms in query. For a category-wide request, put the category wording in category and leave query empty; retrieve the category first and filter customer exclusions from the returned candidates. Put each required selectable choice in modifierQueries using wording exposed by the selectable option. Keep negation when it is part of the desired option name, such as "không cay"; for an omitted optional add-on, use the target wording, such as "phô mai". Example: "gà không cay, không phô mai" can use query "gà" and modifierQueries ["không cay", "phô mai"]. Product components named in an item or description belong in query, not modifierQueries. Keep search terms in Vietnamese because the catalog is Vietnamese. Put category, partySize, and maxPriceVnd in their structured arguments. partySize is ranking evidence, and maxPriceVnd is a per-item ceiling; combine returned priceVnd values yourself for a total recommendation budget. Each candidate returns availability and compact matchedModifiers evidence; available false means the item cannot currently be ordered. Absence of a match does not prove absence of an ingredient or property; only claim all requested selectable choices matched when matchesAllModifierQueries is true. An exact item-name query ranks the top exact candidate above similarly named combos; use that top exact candidate and call getItemDetails rather than substituting another item. Use mode "full" only for the complete menu. When an exact item code is already known or the full option tree is needed, call getModifierOptions directly.',
+    'Search verified menu items and selectable options deterministically in one searchMenu call in the same user turn. Put concise product or product-composition terms in query. For a category-wide request, put the exact category wording already exposed by menu evidence in category and leave query empty; retrieve the category first and filter customer exclusions from the returned candidates. When the customer asks you to choose one item and the request is sufficiently clear, use the returned candidates to choose and continue in the same turn instead of asking whether they want details. Put each required selectable choice in modifierQueries using wording exposed by the selectable option. Keep negation when it is part of the desired option name, such as "không cay"; for an omitted optional add-on, use the target wording, such as "phô mai". Example: "gà không cay, không phô mai" can use query "gà" and modifierQueries ["không cay", "phô mai"]. Product components named in an item or description belong in query, not modifierQueries. Keep search terms in Vietnamese because the catalog is Vietnamese. Put category, partySize, and maxPriceVnd in their structured arguments. partySize is ranking evidence, and maxPriceVnd is a per-item ceiling; combine returned priceVnd values yourself for a total recommendation budget. Each candidate returns availability and compact matchedModifiers evidence; available false means the item cannot currently be ordered. Absence of a match does not prove absence of an ingredient or property; only claim all requested selectable choices matched when matchesAllModifierQueries is true. An exact item-name query ranks the top exact candidate above similarly named combos; use that top exact candidate and call getItemDetails rather than substituting another item. Use mode "full" only for the complete menu. When an exact item code is already known or the full option tree is needed, call getModifierOptions directly.',
   getItemDetails:
     'Get verified name, description, category, base price, and current availability for one KFC menu item code. Treat available false as unavailable to order.',
   getModifierOptions:
     'Get the verified selectable modifier tree for one menu item code; call this before answering any exact modifier-price question. Every name, attribute, and price belongs only to its exact option and branch. Do not transfer a property to sibling options, the whole item, or another item. Quote an exact modifier price only from its returned priceDeltaVnd; do not infer a modifier price from the item price or conversation. Missing attribute or modifier data means unknown; absence of a modifier choice does not prove an ingredient, taste, or allergen property.',
   updateCart:
-    'Add, update, or remove one or more items in the current cart. This is a reversible cart edit: when the customer explicitly asks to choose and add an item, execute it without another confirmation. orderedMenuItemQuantity is how many times the customer is purchasing the named menu item, never the number of pieces described inside that item. If the customer says one portion of a menu item that contains two pieces, orderedMenuItemQuantity is 1; if both pieces use the same verified option, quantityPerPortion can be 2. Modifier quantities are per ordered menu item and must use exact verified identifiers and pricing from getModifierOptions.',
+    'Add, update, remove, or replace one or more items in the current cart. This is a reversible cart edit: when the customer explicitly asks to choose and add an item, execute it without another confirmation. Use mode "patch" when changing only the listed item codes while preserving all other cart lines. Use mode "replace" when changes describe the complete desired cart; every current cart item not listed with a positive quantity is removed atomically. orderedMenuItemQuantity is how many times the customer is purchasing the named menu item, never the number of pieces described inside that item. If the customer says one portion of a menu item that contains two pieces, orderedMenuItemQuantity is 1; if both pieces use the same verified option, quantityPerPortion can be 2. Modifier quantities are per ordered menu item and must use exact verified identifiers and pricing from getModifierOptions.',
   previewCart: 'Read the current cart with verified prices and totals.',
   recommendAddOns:
     'Return verified add-on candidates for the current cart without changing it. Use this for a general add-on request; if the customer asks for a specific add-on and no candidate is returned, that does not mean the item is absent from the full menu, so search the menu for a standalone item.',
@@ -403,7 +403,7 @@ const descriptions: Record<ToolName, string> = {
   checkStoreAvailability:
     'Check whether the current cart items are available at one exact store for pickup or delivery. This verifies item availability only; it does not verify delivery fee or ETA.',
   quoteFulfillment:
-    'Merge customer-supplied delivery details into the current address draft and, when complete, quote the exact current cart. Call this whenever the customer supplies or corrects any delivery address, recipient, phone, or delivery-instruction field, including an incomplete address. Extract fields from natural language into address; use null for fields not supplied in the current message and do not invent administrative codes. Recipient name, phone, and the customer’s free-form address line are sufficient; province and commune are optional, and this mock accepts every supplied address. The backend retains prior fields and returns status incomplete only for missing required customer details, or quoted with a fulfillment quote. Ask naturally for missing fields and preserve known fields. Only a successful quoted result verifies serviceability, delivery fee, ETA, store, and cart availability. This tool does not place or confirm an order.',
+    'Merge customer-supplied delivery details into the current address draft and, when complete, quote the exact current cart. Call this whenever the customer supplies or corrects any delivery address, recipient, phone, or delivery-instruction field, including an incomplete address. Extract fields from natural language into address; use null for every field not supplied in the current message. Never send placeholders such as a generic recipient, an example phone number, an invented address, or invented administrative codes. Recipient name, phone, and the customer’s free-form address line are sufficient; province and commune are optional, and this mock accepts every supplied address. The backend retains prior fields and returns status incomplete only for missing required customer details, or quoted with a fulfillment quote. Ask naturally for missing fields and preserve known fields. Only a successful quoted result verifies serviceability, delivery fee, ETA, store, and cart availability. This tool does not place or confirm an order.',
   searchPromotions:
     'Search the current verified promotion and voucher catalog. Use an empty query for a broad listing or a concise Vietnamese term for a targeted search. An empty filtered result does not prove that no promotion exists; broaden the query or list the current catalog when appropriate.',
   explainPromotion: 'Explain one promotion using its offer ID.',
@@ -449,9 +449,9 @@ const descriptions: Record<ToolName, string> = {
 
 const planningGuidance: Partial<Record<ToolName, string>> = {
   searchMenu:
-    ' A multi-item plan may use multiple targeted or category searches in the same user turn. If a requested component is not included in a suitable combo, search for a standalone requested component instead of treating the combo result as the whole menu.',
+    ' The category argument represents one exact category label, so do not combine unrelated category concepts into it. Customer exclusions about packaged product components are selection criteria, not modifierQueries: search the positive product terms, then reject candidates whose returned description includes an excluded component. When the customer delegates a clear choice to add, select a suitable available candidate and call updateCart before replying. A multi-item plan may use multiple targeted or category searches in the same user turn. If a requested component is not included in a suitable combo, search for a standalone requested component instead of treating the combo result as the whole menu.',
   updateCart:
-    ' For a delegated complete cart plan, apply all additions, quantity changes, and removals in one multi-change call; use quantity 0 for unwanted existing lines when rebalancing the cart. Treat the returned cart as the authoritative current cart. If it does not satisfy the customer’s explicit constraints, make a corrected update in the same user turn.',
+    ' For a delegated complete cart plan, apply all additions, quantity changes, and removals in one multi-change call; use quantity 0 for unwanted existing lines when rebalancing the cart. Do not merely present the plan or ask for another confirmation when the customer already authorized this reversible choice. Treat the returned cart as the authoritative current cart. If it does not satisfy the customer’s explicit constraints, make a corrected update in the same user turn.',
 };
 
 const retryableEmptyReadTools = new Set<ToolName>([
@@ -491,9 +491,53 @@ function retryGuidance(toolName: ToolName): string {
   return ' If arguments are rejected before execution, correct them. Never retry after an uncertain execution error.';
 }
 
+function emptyReadItemCount(result: unknown): number | undefined {
+  if (!isRecord(result) || result.ok !== true) return undefined;
+  if (Array.isArray(result.value)) return result.value.length;
+  if (!isRecord(result.value)) return undefined;
+  if (typeof result.value.total === 'number') return result.value.total;
+  return Array.isArray(result.value.items)
+    ? result.value.items.length
+    : undefined;
+}
+
+function withEmptyReadRecovery(
+  toolName: ToolName,
+  result: unknown,
+  availableCategories: readonly string[] = [],
+): unknown {
+  if (
+    !retryableEmptyReadTools.has(toolName) ||
+    emptyReadItemCount(result) !== 0 ||
+    !isRecord(result)
+  ) {
+    return result;
+  }
+  return {
+    ...result,
+    recovery: {
+      reason: 'empty_result',
+      retry: true,
+      instruction:
+        toolName === 'searchMenu'
+          ? 'Before replying to the customer, retry in this turn with materially broader arguments: drop constraints one at a time; for category browsing use the exact category wording already exposed by menu evidence and leave query empty, or omit category and use a concise product query. Request the full menu only when that matches the customer intent. Do not repeat identical arguments.'
+          : 'Before replying to the customer, retry in this turn with materially broader arguments: drop constraints one at a time or use the tool’s unfiltered listing form when available. Do not repeat identical arguments.',
+      ...(toolName === 'searchMenu' && availableCategories.length > 0
+        ? { availableCategories }
+        : {}),
+    },
+  };
+}
+
 const directUpdateCartJsonSchema = {
   type: 'object',
   properties: {
+    mode: {
+      type: 'string',
+      enum: ['patch', 'replace'],
+      description:
+        'Use patch to preserve unlisted cart lines. Use replace when changes are the complete desired cart and every unlisted current item must be removed.',
+    },
     changes: {
       type: 'array',
       minItems: 1,
@@ -546,12 +590,15 @@ const directUpdateCartJsonSchema = {
       },
     },
   },
-  required: ['changes'],
+  required: ['mode', 'changes'],
   additionalProperties: false,
 } as const;
 
 const directUpdateCartArgumentsSchema = z
   .object({
+    // Trusted GenUI actions created before mode was exposed remain patch edits.
+    // The provider-facing JSON Schema still requires the model to choose.
+    mode: z.enum(['patch', 'replace']).default('patch'),
     changes: z
       .array(
         z
@@ -609,6 +656,9 @@ function canonicalUpdateCartArguments(
   );
   if (!modelFacing) return arguments_;
   return {
+    ...(arguments_.mode === 'replace'
+      ? { mode: 'replace' }
+      : { mode: 'patch' }),
     changes: arguments_.changes.map((change) => {
       if (!isRecord(change)) return change;
       return {
@@ -1251,6 +1301,9 @@ function membershipToolsWithRuntimeCapability(result: ToolCallResult): unknown {
 export function createKfcOpenAiTools(
   input: CreateKfcOpenAiToolsInput,
 ): KfcCanonicalTool[] {
+  const availableMenuCategories = [
+    ...new Set(input.fixtures?.menuItems.map(({ category }) => category) ?? []),
+  ];
   return toolNames.map((toolName) => ({
     definition: {
       type: 'function',
@@ -1382,7 +1435,7 @@ export function createKfcOpenAiTools(
           );
         }
         commit();
-        return result;
+        return withEmptyReadRecovery(toolName, result, availableMenuCategories);
       }
       if (toolName === 'listMembershipRewards') {
         const profileContext = executionContext(
@@ -1401,21 +1454,25 @@ export function createKfcOpenAiTools(
           profileResult,
         );
         commit();
-        return result;
+        return withEmptyReadRecovery(toolName, result, availableMenuCategories);
       }
       if (toolName === 'listMembershipWallet') {
         const result = walletWithRuntimeCapability(legacyResult);
         commit();
-        return result;
+        return withEmptyReadRecovery(toolName, result, availableMenuCategories);
       }
       if (toolName === 'listMembershipTools') {
         const result = membershipToolsWithRuntimeCapability(legacyResult);
         commit();
-        return result;
+        return withEmptyReadRecovery(toolName, result, availableMenuCategories);
       }
       applyResult(session, legacyResult, effectiveArguments);
       commit();
-      return legacyResult;
+      return withEmptyReadRecovery(
+        toolName,
+        legacyResult,
+        availableMenuCategories,
+      );
     },
   }));
 }

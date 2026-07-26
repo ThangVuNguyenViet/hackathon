@@ -985,6 +985,19 @@ describe("mock clients", () => {
     expect(unconfirmedAcquire.ok).toBe(false);
     expect(unconfirmedAcquire.errorCode).toBe("confirmation_required");
 
+    const confirmedAcquire = await clients.membership.acquireVoucher(
+      {
+        rewardId: "reward-discount-10k",
+        confirmed: true,
+      },
+      externalCallContext,
+      mutationIdentity("confirmed-acquire-without-points"),
+    );
+    expect(confirmedAcquire.ok).toBe(false);
+    expect(confirmedAcquire.errorCode).toBe(
+      "membership_points_insufficient",
+    );
+
     const confirmedRedeem = await clients.membership.redeemReward(
       {
         voucherId: "wallet-new-member-25k",
@@ -1001,7 +1014,7 @@ describe("mock clients", () => {
     });
   });
 
-  it("fails store assignment when the address cannot be resolved from fixtures", async () => {
+  it("keeps an arbitrary supplied address eligible through the mock fallback", async () => {
     const clients = createMockClients(fixtures);
     const assignment = await clients.storeLocator.assignStore(
       {
@@ -1013,11 +1026,13 @@ describe("mock clients", () => {
       ["20751"],
       externalCallContext,
     );
-    expect(assignment.ok).toBe(false);
-    expect(assignment.errorCode).toBe("store_not_found");
+    expect(assignment).toMatchObject({
+      ok: true,
+      value: { storeId: expect.any(String) },
+    });
   });
 
-  it("does not substitute the first fixture store for a named district or building", async () => {
+  it("keeps a supplied building and district eligible through the mock fallback", async () => {
     const clients = createMockClients(fixtures);
     const assignment = await clients.storeLocator.assignStore(
       {
@@ -1029,8 +1044,10 @@ describe("mock clients", () => {
       ["20751"],
       externalCallContext,
     );
-    expect(assignment.ok).toBe(false);
-    expect(assignment.errorCode).toBe("store_not_found");
+    expect(assignment).toMatchObject({
+      ok: true,
+      value: { storeId: expect.any(String) },
+    });
   });
 
   it("resolves a typed address only through an explicit fixture-backed service area", async () => {

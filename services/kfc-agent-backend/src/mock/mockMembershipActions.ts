@@ -52,6 +52,20 @@ export function createMockMembershipActions(
         'A canonical provider mutation identity is required',
       );
     }
+    const reward = data
+      .listMembershipRewards()
+      .find(({ rewardId }) => rewardId === input.rewardId);
+    const points = data.getMembershipProfile()?.points;
+    if (
+      reward &&
+      typeof reward.pointsCost === 'number' &&
+      (points ?? 0) < reward.pointsCost
+    ) {
+      return fail(
+        'membership_points_insufficient',
+        `Current membership points are insufficient for "${reward.name}".`,
+      );
+    }
     return mutationReplay.run(mutationIdentity, async () => {
       const result = data.acquireMembershipVoucher(input);
       return result
