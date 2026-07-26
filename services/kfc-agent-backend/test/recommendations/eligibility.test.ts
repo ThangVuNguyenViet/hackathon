@@ -142,6 +142,57 @@ const decisionFor = async (
   return decision!;
 };
 
+const modifierGuardContext = (): RecommendationDecisionContext => {
+  const base = makeContext();
+  const request = parseRecommendationDecisionRequest({
+    ...base.request,
+    placement: 'modifier_upsell',
+    cart: {
+      ...base.request.cart,
+      lines: [
+        {
+          lineId: 'line-20752',
+          sellableItemId: '20752',
+          quantity: 1,
+          unitPrice: { amount: 129000, currency: 'VND' },
+          modifiers: [
+            {
+              groupPath: ['2'],
+              optionId: '41089',
+              quantity: 1,
+              priceImpact: { amount: 0, currency: 'VND' },
+            },
+          ],
+        },
+      ],
+    },
+  });
+  return makeContext({
+    request,
+    flow: {
+      stage: 'modifier_ready',
+      attemptedPlacements: [],
+      previouslyShownActionIds: [],
+      rejectedActionIds: [],
+    },
+    parentCartLineId: 'line-20752',
+  });
+};
+
+const positiveModifierCandidate = (
+  context: RecommendationDecisionContext,
+) => {
+  const candidate = candidatesFor(context).find(
+    (entry) =>
+      entry.action.actionId === 'modifier:line-20752:3:41102',
+  );
+  expect(candidate?.action.type).toBe('apply_modifier');
+  if (!candidate || candidate.action.type !== 'apply_modifier') {
+    throw new Error('Expected positive modifier candidate');
+  }
+  return candidate;
+};
+
 describe('recommendation eligibility', () => {
   it('enumerates every product before Local Favorite hard filtering', async () => {
     const context = makeContext();
@@ -398,40 +449,8 @@ describe('recommendation eligibility', () => {
     ).resolves.toMatchObject({ reasonCodes: ['zero_history_required'] });
   });
 
-  it('recursively enumerates 20752 modifiers and records price/capacity/parent guards', async () => {
-    const request = parseRecommendationDecisionRequest({
-      ...makeContext().request,
-      placement: 'modifier_upsell',
-      cart: {
-        ...makeContext().request.cart,
-        lines: [
-          {
-            lineId: 'line-20752',
-            sellableItemId: '20752',
-            quantity: 1,
-            unitPrice: { amount: 129000, currency: 'VND' },
-            modifiers: [
-              {
-                groupPath: ['2'],
-                optionId: '41089',
-                quantity: 1,
-                priceImpact: { amount: 0, currency: 'VND' },
-              },
-            ],
-          },
-        ],
-      },
-    });
-    const context = makeContext({
-      request,
-      flow: {
-        stage: 'modifier_ready',
-        attemptedPlacements: [],
-        previouslyShownActionIds: [],
-        rejectedActionIds: [],
-      },
-      parentCartLineId: 'line-20752',
-    });
+  it('recursively enumerates real 20752 modifier paths', () => {
+    const context = modifierGuardContext();
     const candidates = candidatesFor(context);
 
     expect(candidates).toContainEqual(
@@ -452,6 +471,11 @@ describe('recommendation eligibility', () => {
         }),
       }),
     );
+  });
+
+  it('records modifier group capacity and positive-price eligibility independently', async () => {
+    const context = modifierGuardContext();
+
     await expect(
       decisionFor(context, 'modifier:line-20752:2:41091'),
     ).resolves.toMatchObject({ reasonCodes: ['modifier_group_at_capacity'] });
@@ -463,40 +487,40 @@ describe('recommendation eligibility', () => {
     ).resolves.toMatchObject({
       reasonCodes: ['modifier_group_at_capacity', 'no_positive_price_modifier'],
     });
+  });
 
-    const positiveCandidate = candidates.find(
-      (candidate) =>
-        candidate.action.actionId === 'modifier:line-20752:3:41102',
-    );
-    expect(positiveCandidate?.action.type).toBe('apply_modifier');
-    if (
-      !positiveCandidate ||
-      positiveCandidate.action.type !== 'apply_modifier'
-    ) {
-      throw new Error('Expected positive modifier candidate');
-    }
+  it('requires the authoritative parent cart line for a modifier', async () => {
+    const context = modifierGuardContext();
+    const candidate = positiveModifierCandidate(context);
     const missingParent = makeContext({
       ...context,
       parentCartLineId: 'line-other',
     });
     const [missingParentDecision] = await evaluateEligibility({
       context: missingParent,
-      candidates: [positiveCandidate],
+      candidates: [candidate],
       commerceFacts,
     });
+
     expect(missingParentDecision).toMatchObject({
       reasonCodes: ['parent_cart_line_required'],
     });
+  });
+
+  it('rejects modifier candidate metadata that mismatches its parent line', async () => {
+    const context = modifierGuardContext();
+    const candidate = positiveModifierCandidate(context);
     const [mismatchDecision] = await evaluateEligibility({
       context,
       candidates: [
         {
-          ...positiveCandidate,
+          ...candidate,
           parentCartLineId: 'line-other',
         },
       ],
       commerceFacts,
     });
+
     expect(mismatchDecision).toMatchObject({
       reasonCodes: ['modifier_parent_mismatch'],
     });

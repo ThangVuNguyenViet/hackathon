@@ -79,6 +79,20 @@ export function resolveMerchandisingPolicies(
       reasonCodes.push(policy.reasonCode);
   };
 
+  const suppression = applicable.find(
+    (policy) => policy.action === 'suppress_placement',
+  );
+  if (suppression) {
+    addEffect(suppression, null);
+    return {
+      suppressed: true,
+      replacement: null,
+      rankedCandidates: [],
+      effects,
+      reasonCodes,
+    };
+  }
+
   const excluded = new Set(
     applicable
       .filter((policy) => policy.action === 'exclude_target')
@@ -98,20 +112,6 @@ export function resolveMerchandisingPolicies(
         addEffect(policy, target.candidate.action.actionId);
       }
     }
-  }
-
-  const suppression = applicable.find(
-    (policy) => policy.action === 'suppress_placement',
-  );
-  if (suppression) {
-    addEffect(suppression, null);
-    return {
-      suppressed: true,
-      replacement: null,
-      rankedCandidates: [],
-      effects,
-      reasonCodes,
-    };
   }
 
   const replacementPolicy = applicable.find((policy) => {
@@ -138,8 +138,21 @@ export function resolveMerchandisingPolicies(
   }
 
   const slate = replacement ?? available;
+  const hasAppliedBoost = applicable.some(
+    (policy) =>
+      policy.action === 'boost_target' &&
+      policy.boostWeight! > 0 &&
+      policy.targetIds.some((targetId) =>
+        slate.some((entry) => entry.candidate.targetId === targetId),
+      ),
+  );
   const boosted = applyStrongestBoosts(slate, applicable, addEffect);
-  const rankedCandidates = applyPins(boosted, applicable, addEffect);
+  const rankedCandidates = applyPins(
+    boosted,
+    applicable,
+    addEffect,
+    replacement === null || hasAppliedBoost,
+  );
   return {
     suppressed: false,
     replacement,
@@ -223,7 +236,7 @@ function applyStrongestBoosts(
 ): RankedCandidate[] {
   const strongestByTarget = new Map<string, RecommendationPolicy>();
   for (const policy of policies) {
-    if (policy.action !== 'boost_target') continue;
+    if (policy.action !== 'boost_target' || policy.boostWeight! <= 0) continue;
     for (const targetId of policy.targetIds) {
       const existing = strongestByTarget.get(targetId);
       if (!existing || policy.boostWeight! > existing.boostWeight!) {
@@ -243,14 +256,18 @@ function applyPins(
   slate: readonly RankedCandidate[],
   policies: readonly RecommendationPolicy[],
   addEffect: (policy: RecommendationPolicy, targetActionId: string) => void,
+  sortByScore: boolean,
 ): RankedCandidate[] {
-  const result = [...slate].sort(
-    (left, right) =>
-      right.score - left.score ||
-      left.candidate.action.actionId.localeCompare(
-        right.candidate.action.actionId,
-      ),
-  );
+  const result = [...slate];
+  if (sortByScore) {
+    result.sort(
+      (left, right) =>
+        right.score - left.score ||
+        left.candidate.action.actionId.localeCompare(
+          right.candidate.action.actionId,
+        ),
+    );
+  }
   for (const policy of policies) {
     if (policy.action !== 'pin_target') continue;
     for (const targetId of policy.targetIds) {

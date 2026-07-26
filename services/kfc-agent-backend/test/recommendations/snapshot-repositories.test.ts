@@ -55,14 +55,78 @@ describe('bundled recommendation fact repositories', () => {
           'KFCVN0002:weekday:lunch': 18,
         },
       },
-      { sellableItemId: '20732', globalOrderCount: 100, storeOrderCounts: { KFCVN0002: 44 }, storeDaypartOrderCounts: { 'KFCVN0002:lunch': 20 }, storeCalendarDayTypeDaypartOrderCounts: { 'KFCVN0002:weekday:lunch': 15 } },
-      { sellableItemId: '20748', globalOrderCount: 88, storeOrderCounts: { KFCVN0002: 36 }, storeDaypartOrderCounts: { 'KFCVN0002:lunch': 16 }, storeCalendarDayTypeDaypartOrderCounts: { 'KFCVN0002:weekday:lunch': 12 } },
-      { sellableItemId: '41127', globalOrderCount: 72, storeOrderCounts: { KFCVN0002: 26 }, storeDaypartOrderCounts: { 'KFCVN0002:lunch': 14 }, storeCalendarDayTypeDaypartOrderCounts: { 'KFCVN0002:weekday:lunch': 10 } },
-      { sellableItemId: '20687', globalOrderCount: 68, storeOrderCounts: { KFCVN0002: 24 }, storeDaypartOrderCounts: { 'KFCVN0002:lunch': 12 }, storeCalendarDayTypeDaypartOrderCounts: { 'KFCVN0002:weekday:lunch': 9 } },
-      { sellableItemId: '41035', globalOrderCount: 90, storeOrderCounts: { KFCVN0002: 34 }, storeDaypartOrderCounts: { 'KFCVN0002:lunch': 18 }, storeCalendarDayTypeDaypartOrderCounts: { 'KFCVN0002:weekday:lunch': 13 } },
-      { sellableItemId: '41042', globalOrderCount: 64, storeOrderCounts: { KFCVN0002: 22 }, storeDaypartOrderCounts: { 'KFCVN0002:lunch': 11 }, storeCalendarDayTypeDaypartOrderCounts: { 'KFCVN0002:weekday:lunch': 8 } },
-      { sellableItemId: '41052', globalOrderCount: 58, storeOrderCounts: { KFCVN0002: 20 }, storeDaypartOrderCounts: { 'KFCVN0002:lunch': 10 }, storeCalendarDayTypeDaypartOrderCounts: { 'KFCVN0002:weekday:lunch': 7 } },
-      { sellableItemId: '41072', globalOrderCount: 52, storeOrderCounts: { KFCVN0002: 18 }, storeDaypartOrderCounts: { 'KFCVN0002:lunch': 9 }, storeCalendarDayTypeDaypartOrderCounts: { 'KFCVN0002:weekday:lunch': 6 } },
+      {
+        sellableItemId: '20732',
+        globalOrderCount: 100,
+        storeOrderCounts: { KFCVN0002: 44 },
+        storeDaypartOrderCounts: { 'KFCVN0002:lunch': 20 },
+        storeCalendarDayTypeDaypartOrderCounts: {
+          'KFCVN0002:weekday:lunch': 15,
+        },
+      },
+      {
+        sellableItemId: '20748',
+        globalOrderCount: 88,
+        storeOrderCounts: { KFCVN0002: 36 },
+        storeDaypartOrderCounts: { 'KFCVN0002:lunch': 16 },
+        storeCalendarDayTypeDaypartOrderCounts: {
+          'KFCVN0002:weekday:lunch': 12,
+        },
+      },
+      {
+        sellableItemId: '41127',
+        globalOrderCount: 72,
+        storeOrderCounts: { KFCVN0002: 26 },
+        storeDaypartOrderCounts: { 'KFCVN0002:lunch': 14 },
+        storeCalendarDayTypeDaypartOrderCounts: {
+          'KFCVN0002:weekday:lunch': 10,
+        },
+      },
+      {
+        sellableItemId: '20687',
+        globalOrderCount: 68,
+        storeOrderCounts: { KFCVN0002: 24 },
+        storeDaypartOrderCounts: { 'KFCVN0002:lunch': 12 },
+        storeCalendarDayTypeDaypartOrderCounts: {
+          'KFCVN0002:weekday:lunch': 9,
+        },
+      },
+      {
+        sellableItemId: '41035',
+        globalOrderCount: 90,
+        storeOrderCounts: { KFCVN0002: 34 },
+        storeDaypartOrderCounts: { 'KFCVN0002:lunch': 18 },
+        storeCalendarDayTypeDaypartOrderCounts: {
+          'KFCVN0002:weekday:lunch': 13,
+        },
+      },
+      {
+        sellableItemId: '41042',
+        globalOrderCount: 64,
+        storeOrderCounts: { KFCVN0002: 22 },
+        storeDaypartOrderCounts: { 'KFCVN0002:lunch': 11 },
+        storeCalendarDayTypeDaypartOrderCounts: {
+          'KFCVN0002:weekday:lunch': 8,
+        },
+      },
+      {
+        sellableItemId: '41052',
+        globalOrderCount: 58,
+        storeOrderCounts: { KFCVN0002: 20 },
+        storeDaypartOrderCounts: { 'KFCVN0002:lunch': 10 },
+        storeCalendarDayTypeDaypartOrderCounts: {
+          'KFCVN0002:weekday:lunch': 7,
+        },
+      },
+      {
+        sellableItemId: '41072',
+        globalOrderCount: 52,
+        storeOrderCounts: { KFCVN0002: 18 },
+        storeDaypartOrderCounts: { 'KFCVN0002:lunch': 9 },
+        storeCalendarDayTypeDaypartOrderCounts: {
+          'KFCVN0002:weekday:lunch': 6,
+        },
+      },
     ]);
   });
 

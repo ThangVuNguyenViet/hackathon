@@ -28,6 +28,7 @@ import {
 import { composeSmartCrossSellSlate } from '../ranking/smart-cross-blend.js';
 import type { RankedCandidate } from '../ranking/types.js';
 import type {
+  CommerceFactsSnapshot,
   PromotionFactsSnapshot,
   RankingStatisticsSnapshot,
 } from '../snapshots/types.js';
@@ -141,13 +142,10 @@ function allSnapshotsComplete(input: {
 
 function cartCategoryIds(
   context: RecommendationDecisionContext,
-  candidates: readonly PotentialRecommendationCandidate[],
+  commerceFacts: CommerceFactsSnapshot,
 ): string[] {
   const itemCategories = new Map(
-    candidates.map((candidate) => [
-      candidate.sellableItemId,
-      candidate.categoryId,
-    ]),
+    commerceFacts.menuItems.map((item) => [item.itemId, item.categoryId]),
   );
   return [
     ...new Set(
@@ -434,7 +432,7 @@ export class PureRecommendationDecisionEngine implements RecommendationDecisionE
       context,
       rankedCandidates: eligiblePrePolicyRanking,
       policies: merchandising.snapshot.policies,
-      cartCategoryIds: cartCategoryIds(context, potentialCandidates),
+      cartCategoryIds: cartCategoryIds(context, commerceFacts),
     });
 
     if (merchandisingResolution.suppressed) {

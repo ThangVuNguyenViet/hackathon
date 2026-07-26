@@ -321,6 +321,41 @@ describe('deterministic recommendation rankers', () => {
     expect(result.featureSummary.contextualPopularity).toBe(0);
   });
 
+  it('uses only matches_your_history for positive category affinity without exact-item affinity', () => {
+    const entry = candidate('20751');
+    const [result] = new ForYouAffinityRanker().rank(
+      rankerInput([entry], {
+        context: makeContext({
+          request: parseRecommendationDecisionRequest({
+            ...makeContext().request,
+            placement: 'for_you',
+            verifiedCustomerRef: 'customer-001',
+          }),
+          customerHistory: {
+            verifiedCustomerRef: 'customer-001',
+            completedOrders: [
+              {
+                orderId: 'same-category-order',
+                completedAt: '2026-04-28T09:00:00Z',
+                lines: [
+                  {
+                    sellableItemId: 'different-chicken-item',
+                    categoryId: 'chicken',
+                    quantity: 1,
+                  },
+                ],
+              },
+            ],
+          },
+        }),
+      }),
+    );
+
+    expect(result.featureSummary.exactAffinityTotal).toBe(0);
+    expect(result.featureSummary.categoryAffinityTotal).toBeCloseTo(0.5, 12);
+    expect(result.reasonCodes).toEqual(['matches_your_history']);
+  });
+
   it('clamps fixed For You normalization and does not duplicate popularity as a customer reason', () => {
     const entry = candidate('20751');
     const [result] = new ForYouAffinityRanker().rank(
@@ -568,7 +603,7 @@ describe('deterministic recommendation rankers', () => {
     ]);
   });
 
-  it('enforces unique products, category cap, running budget, eligible decisions, and placement versions', () => {
+  it('enforces unique products, category caps, and the running slate budget', () => {
     const duplicate = slateCandidate('duplicate', 10, 'chicken', 30, 'shared');
     const ranked = [
       duplicate,
@@ -583,8 +618,11 @@ describe('deterministic recommendation rankers', () => {
         (entry) => entry.candidate.action.actionId,
       ),
     ).toEqual(['product:duplicate', 'product:two', 'product:five']);
+  });
 
+  it('maps each placement to its serving ranker version', () => {
     const repository = new RankerRepository();
+
     expect(repository.forPlacement('local_favorite').version).toBe(
       'contextual-popularity-v1',
     );
@@ -597,8 +635,11 @@ describe('deterministic recommendation rankers', () => {
     expect(repository.forPlacement('smart_cross_sell').version).toBe(
       'smart-cross-blend-v1',
     );
+  });
 
+  it('rejects a candidate without an eligible decision before ranking', () => {
     const ineligible = candidate('20751');
+
     expect(() =>
       new ContextualPopularityRanker().rank(
         rankerInput([ineligible], {

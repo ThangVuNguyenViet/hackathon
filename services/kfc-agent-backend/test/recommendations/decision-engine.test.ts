@@ -103,6 +103,16 @@ async function decide(
   return result;
 }
 
+async function expectInvalidContext(
+  context: RecommendationDecisionContext,
+  engine = bundledEngine,
+) {
+  const result = await decide(context, engine);
+  expect(result.response.status).toBe('invalid_context');
+  expect(result.technical.emptyReason).toBe('invalid_context');
+  expect(result.technical.potentialCandidates).toEqual([]);
+}
+
 function forYouContext(historyItemId = '20751'): RecommendationDecisionContext {
   const base = makeContext();
   return makeContext({
@@ -258,6 +268,37 @@ async function customSmartPolicyRepository() {
   );
 }
 
+async function modifierCartCategoryPolicyRepository() {
+  const local =
+    await new LocalMerchandisingPolicyRepository().loadPublishedSnapshot();
+  const base = local.snapshot.policies.find(
+    (policy) => policy.policyId === 'modifier-pin-41091',
+  )!;
+  return new FixedPolicyRepository(
+    merchandisingPolicySnapshotSchema.parse({
+      ...local.snapshot,
+      policies: [
+        {
+          ...base,
+          policyId: 'modifier-pin-41102-with-required-cart-category',
+          targetIds: ['41102'],
+          priority: 20,
+          requiredCartCategoryIds: ['20010'],
+        },
+        {
+          ...base,
+          policyId: 'modifier-suppress-with-excluded-cart-category',
+          action: 'suppress_placement',
+          targetIds: [],
+          priority: 100,
+          excludedCartCategoryIds: ['20010'],
+          pinPosition: null,
+        },
+      ],
+    }),
+  );
+}
+
 describe('pure recommendation decision engine', () => {
   it('recommends one real anonymous Local Favorite with complete evidence', async () => {
     const result = await decide(makeContext());
@@ -403,6 +444,51 @@ describe('pure recommendation decision engine', () => {
     ]);
   });
 
+  it('applies modifier policies against categories from every typed cart line', async () => {
+    const context = modifierContext();
+    context.request = parseRecommendationDecisionRequest({
+      ...context.request,
+      cart: {
+        ...context.request.cart,
+        subtotal: { amount: 179_000, currency: 'VND' },
+        lines: [
+          ...context.request.cart.lines,
+          {
+            lineId: 'line-41127',
+            sellableItemId: '41127',
+            quantity: 1,
+            unitPrice: { amount: 50_000, currency: 'VND' },
+            modifiers: [],
+          },
+        ],
+      },
+    });
+    const engine = engineWith({
+      merchandisingPolicyRepository:
+        await modifierCartCategoryPolicyRepository(),
+    });
+
+    const result = await decide(context, engine);
+
+    expect(result.response).toMatchObject({
+      status: 'recommended',
+      primaryOffer: {
+        actions: [
+          {
+            actionId: 'modifier:line-20752:2:41102',
+            optionId: '41102',
+          },
+        ],
+      },
+      merchandisingEffects: [
+        expect.objectContaining({
+          policyId: 'modifier-pin-41102-with-required-cart-category',
+          action: 'pin_target',
+        }),
+      ],
+    });
+  });
+
   it('composes a policy-adjusted Smart Cross-sell slate of three or four with at most two per category', async () => {
     const engine = engineWith({
       merchandisingPolicyRepository: await customSmartPolicyRepository(),
@@ -522,19 +608,33 @@ describe('pure recommendation decision engine', () => {
     expect(suppressed.technical.emptyReason).toBe('merchandising_suppressed');
   });
 
-  it('rejects incomplete, mixed-environment, and expired authoritative snapshots', async () => {
-    const incompleteCommerce = structuredClone(makeContext());
-    incompleteCommerce.request.commerceSnapshotBindings.catalog.complete = false;
-    const mixedCommerce = structuredClone(makeContext());
-    mixedCommerce.request.commerceSnapshotBindings.availability.commerceEnvironment =
-      'other-environment' as never;
-    const expiredCommerce = structuredClone(makeContext());
-    expiredCommerce.request.commerceSnapshotBindings.store.expiresAt =
-      expiredCommerce.request.decisionTime;
+  it('rejects an incomplete commerce binding', async () => {
+    const context = structuredClone(makeContext());
+    context.request.commerceSnapshotBindings.catalog.complete = false;
 
+    await expectInvalidContext(context);
+  });
+
+  it('rejects a commerce binding from another environment', async () => {
+    const context = structuredClone(makeContext());
+    context.request.commerceSnapshotBindings.availability.commerceEnvironment =
+      'other-environment' as never;
+
+    await expectInvalidContext(context);
+  });
+
+  it('rejects a commerce binding expired at decision time', async () => {
+    const context = structuredClone(makeContext());
+    context.request.commerceSnapshotBindings.store.expiresAt =
+      context.request.decisionTime;
+
+    await expectInvalidContext(context);
+  });
+
+  it('rejects an incomplete ranking snapshot', async () => {
     const ranking = new BundledRankingStatisticsRepository().load();
-    const promotion = new BundledPromotionFactsRepository().load();
-    const invalidEngines = [
+    await expectInvalidContext(
+      makeContext(),
       engineWith({
         rankingStatisticsRepository: {
           load: (): RankingStatisticsSnapshot => ({
@@ -543,6 +643,13 @@ describe('pure recommendation decision engine', () => {
           }),
         },
       }),
+    );
+  });
+
+  it('rejects a ranking snapshot from another environment', async () => {
+    const ranking = new BundledRankingStatisticsRepository().load();
+    await expectInvalidContext(
+      makeContext(),
       engineWith({
         rankingStatisticsRepository: {
           load: (): RankingStatisticsSnapshot => ({
@@ -551,6 +658,13 @@ describe('pure recommendation decision engine', () => {
           }),
         },
       }),
+    );
+  });
+
+  it('rejects a ranking snapshot not yet effective at decision time', async () => {
+    const ranking = new BundledRankingStatisticsRepository().load();
+    await expectInvalidContext(
+      makeContext(),
       engineWith({
         rankingStatisticsRepository: {
           load: (): RankingStatisticsSnapshot => ({
@@ -559,6 +673,13 @@ describe('pure recommendation decision engine', () => {
           }),
         },
       }),
+    );
+  });
+
+  it('rejects an incomplete promotion snapshot', async () => {
+    const promotion = new BundledPromotionFactsRepository().load();
+    await expectInvalidContext(
+      makeContext(),
       engineWith({
         promotionFactsRepository: {
           load: (): PromotionFactsSnapshot => ({
@@ -567,6 +688,13 @@ describe('pure recommendation decision engine', () => {
           }),
         },
       }),
+    );
+  });
+
+  it('rejects a promotion snapshot expired at decision time', async () => {
+    const promotion = new BundledPromotionFactsRepository().load();
+    await expectInvalidContext(
+      makeContext(),
       engineWith({
         promotionFactsRepository: {
           load: (): PromotionFactsSnapshot => ({
@@ -575,6 +703,13 @@ describe('pure recommendation decision engine', () => {
           }),
         },
       }),
+    );
+  });
+
+  it('rejects a promotion snapshot from another environment', async () => {
+    const promotion = new BundledPromotionFactsRepository().load();
+    await expectInvalidContext(
+      makeContext(),
       engineWith({
         promotionFactsRepository: {
           load: (): PromotionFactsSnapshot => ({
@@ -583,41 +718,36 @@ describe('pure recommendation decision engine', () => {
           }),
         },
       }),
-    ];
+    );
+  });
 
-    for (const context of [
-      incompleteCommerce,
-      mixedCommerce,
-      expiredCommerce,
-    ]) {
-      const result = await decide(context);
-      expect(result.response.status).toBe('invalid_context');
-      expect(result.technical.emptyReason).toBe('invalid_context');
-      expect(result.technical.potentialCandidates).toEqual([]);
-    }
-    for (const engine of invalidEngines) {
-      const result = await decide(makeContext(), engine);
-      expect(result.response.status).toBe('invalid_context');
-      expect(result.technical.emptyReason).toBe('invalid_context');
-    }
-
+  it('rejects an incomplete merchandising snapshot', async () => {
     const sanity =
       await new LocalMerchandisingPolicyRepository().loadPublishedSnapshot();
-    for (const repository of [
-      new FixedPolicyRepository(sanity.snapshot, false),
-      new FixedPolicyRepository({
-        ...sanity.snapshot,
-        commerceEnvironment: 'other-environment' as never,
-        policies: [],
+    await expectInvalidContext(
+      makeContext(),
+      engineWith({
+        merchandisingPolicyRepository: new FixedPolicyRepository(
+          sanity.snapshot,
+          false,
+        ),
       }),
-    ]) {
-      const result = await decide(
-        makeContext(),
-        engineWith({ merchandisingPolicyRepository: repository }),
-      );
-      expect(result.response.status).toBe('invalid_context');
-      expect(result.technical.emptyReason).toBe('invalid_context');
-    }
+    );
+  });
+
+  it('rejects a merchandising snapshot from another environment', async () => {
+    const sanity =
+      await new LocalMerchandisingPolicyRepository().loadPublishedSnapshot();
+    await expectInvalidContext(
+      makeContext(),
+      engineWith({
+        merchandisingPolicyRepository: new FixedPolicyRepository({
+          ...sanity.snapshot,
+          commerceEnvironment: 'other-environment' as never,
+          policies: [],
+        }),
+      }),
+    );
   });
 
   it('never lets policy resurrect unavailable, cart, or dietary candidates', async () => {

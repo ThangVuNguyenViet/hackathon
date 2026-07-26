@@ -335,31 +335,79 @@ describe('merchandising policy snapshots', () => {
     ).toEqual(['policy-later', 'policy-earlier']);
   });
 
-  it('excludes first, suppresses over replacement, skips invalid replacement, boosts once, pins, and never resurrects', () => {
-    const ranked = [
-      candidate('20712', 10),
-      candidate('20732', 4),
-      candidate('20751', 3),
-      candidate('20748', 2),
-      candidate('41091', 1, 'modifier:line-20732:41091'),
-    ];
-    const resolved = resolveMerchandisingPolicies({
+  it('omits exclusion effects superseded by a winning suppression', () => {
+    const result = resolveMerchandisingPolicies({
       context: context(),
-      rankedCandidates: ranked,
+      rankedCandidates: [candidate('20712', 10), candidate('20732', 4)],
       policies: policies(
         { action: 'exclude_target', targetIds: ['20712'], boostWeight: null },
         {
-          action: 'replace_slate',
-          targetIds: ['20751', 'does-not-exist'],
+          action: 'suppress_placement',
+          targetIds: [],
           boostWeight: null,
-          priority: 90,
+          priority: 1,
         },
+      ),
+      cartCategoryIds: ['chicken'],
+    });
+
+    expect(result.effects).toEqual([
+      expect.objectContaining({
+        action: 'suppress_placement',
+        targetActionId: null,
+      }),
+    ]);
+  });
+
+  it('ignores a zero-weight boost with no score or order change', () => {
+    const ranked = [candidate('20732', 4), candidate('20751', 3)];
+    const result = resolveMerchandisingPolicies({
+      context: context(),
+      rankedCandidates: ranked,
+      policies: policies({
+        action: 'boost_target',
+        targetIds: ['20732'],
+        boostWeight: 0,
+      }),
+      cartCategoryIds: ['chicken'],
+    });
+
+    expect(result.rankedCandidates).toEqual(ranked);
+    expect(result.effects).toEqual([]);
+    expect(result.reasonCodes).toEqual([]);
+  });
+
+  it('uses suppression instead of an otherwise valid replacement', () => {
+    const result = resolveMerchandisingPolicies({
+      context: context(),
+      rankedCandidates: [candidate('20732', 4)],
+      policies: policies(
+        { action: 'replace_slate', targetIds: ['20732'], boostWeight: null },
         {
-          action: 'replace_slate',
-          targetIds: ['20751', '20732', '20748'],
+          action: 'suppress_placement',
+          targetIds: [],
           boostWeight: null,
-          priority: 80,
+          priority: 1,
         },
+      ),
+      cartCategoryIds: ['chicken'],
+    });
+
+    expect(result).toMatchObject({
+      suppressed: true,
+      replacement: null,
+      rankedCandidates: [],
+    });
+    expect(result.effects).toEqual([
+      expect.objectContaining({ action: 'suppress_placement' }),
+    ]);
+  });
+
+  it('applies only the strongest positive boost for a target', () => {
+    const result = resolveMerchandisingPolicies({
+      context: context(),
+      rankedCandidates: [candidate('20732', 4), candidate('20751', 3)],
+      policies: policies(
         {
           action: 'boost_target',
           targetIds: ['20732'],
@@ -372,103 +420,28 @@ describe('merchandising policy snapshots', () => {
           boostWeight: 0.9,
           priority: 60,
         },
-        {
-          action: 'pin_target',
-          targetIds: ['41091'],
-          boostWeight: null,
-          pinPosition: 1,
-          priority: 50,
-        },
       ),
       cartCategoryIds: ['chicken'],
     });
 
-    expect(resolved.suppressed).toBe(false);
-    expect(
-      resolved.replacement?.map((entry) => entry.candidate.action.actionId),
-    ).toEqual(['product:20751', 'product:20732', 'product:20748']);
-    expect(
-      resolved.rankedCandidates.map((entry) => entry.candidate.action.actionId),
-    ).toEqual(['product:20732', 'product:20751', 'product:20748']);
-    expect(
-      resolved.rankedCandidates.find(
-        (entry) => entry.candidate.targetId === '20732',
-      )?.score,
-    ).toBe(4.9);
-    expect(
-      resolved.rankedCandidates.map((entry) => entry.candidate.action.actionId),
-    ).not.toContain('does-not-exist');
-    expect(resolved.effects).toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({
-          action: 'exclude_target',
-          targetActionId: 'product:20712',
-        }),
-        expect.objectContaining({
-          action: 'replace_slate',
-          targetActionId: 'product:20751',
-        }),
-        expect.objectContaining({
-          action: 'boost_target',
-          targetActionId: 'product:20732',
-        }),
-      ]),
-    );
-    expect(
-      resolved.effects
-        .filter((effect) => effect.action === 'replace_slate')
-        .map((effect) => effect.targetActionId),
-    ).toEqual(['product:20751', 'product:20732', 'product:20748']);
-
-    const suppressed = resolveMerchandisingPolicies({
-      context: context({
-        request: { ...context().request, storeId: 'KFCVN0036' },
-      }),
-      rankedCandidates: ranked,
-      policies: policies(
-        { action: 'replace_slate', targetIds: ['20732'], boostWeight: null },
-        {
-          action: 'suppress_placement',
-          targetIds: [],
-          boostWeight: null,
-          priority: 1,
-          includedStoreIds: ['KFCVN0036'],
-        },
-      ),
-      cartCategoryIds: ['chicken'],
+    expect(result.rankedCandidates[0]).toMatchObject({
+      candidate: { targetId: '20732' },
+      score: 4.9,
     });
-    expect(suppressed).toMatchObject({
-      suppressed: true,
-      replacement: null,
-      rankedCandidates: [],
-    });
-
-    const pinned = resolveMerchandisingPolicies({
-      context: context(),
-      rankedCandidates: ranked,
-      policies: policies({
-        action: 'pin_target',
-        targetIds: ['41091'],
-        boostWeight: null,
-        pinPosition: 1,
-      }),
-      cartCategoryIds: ['chicken'],
-    });
-    expect(pinned.rankedCandidates[0]?.candidate.action.actionId).toBe(
-      'modifier:line-20732:41091',
-    );
-    expect(pinned.effects).toEqual([
+    expect(result.effects).toEqual([
       expect.objectContaining({
-        action: 'pin_target',
-        targetActionId: 'modifier:line-20732:41091',
+        action: 'boost_target',
+        targetActionId: 'product:20732',
       }),
     ]);
+  });
 
-    const alreadyPinned = resolveMerchandisingPolicies({
+  it('moves a pinned target and records the material pin effect', () => {
+    const result = resolveMerchandisingPolicies({
       context: context(),
       rankedCandidates: [
-        candidate('41091', 10, 'modifier:line-20732:41091'),
         candidate('20732', 4),
+        candidate('41091', 1, 'modifier:line-20732:41091'),
       ],
       policies: policies({
         action: 'pin_target',
@@ -478,12 +451,37 @@ describe('merchandising policy snapshots', () => {
       }),
       cartCategoryIds: ['chicken'],
     });
-    expect(
-      alreadyPinned.rankedCandidates.map(
-        (entry) => entry.candidate.action.actionId,
-      ),
-    ).toEqual(['modifier:line-20732:41091', 'product:20732']);
-    expect(alreadyPinned.effects).toEqual([]);
+
+    expect(result.rankedCandidates[0]?.candidate.action.actionId).toBe(
+      'modifier:line-20732:41091',
+    );
+    expect(result.effects).toEqual([
+      expect.objectContaining({
+        action: 'pin_target',
+        targetActionId: 'modifier:line-20732:41091',
+      }),
+    ]);
+  });
+
+  it('omits a pin effect when the target is already in position', () => {
+    const ranked = [
+      candidate('41091', 10, 'modifier:line-20732:41091'),
+      candidate('20732', 4),
+    ];
+    const result = resolveMerchandisingPolicies({
+      context: context(),
+      rankedCandidates: ranked,
+      policies: policies({
+        action: 'pin_target',
+        targetIds: ['41091'],
+        boostWeight: null,
+        pinPosition: 1,
+      }),
+      cartCategoryIds: ['chicken'],
+    });
+
+    expect(result.rankedCandidates).toEqual(ranked);
+    expect(result.effects).toEqual([]);
   });
 
   it('skips an invalid-size smart cross-sell replacement atomically', () => {
@@ -507,6 +505,30 @@ describe('merchandising policy snapshots', () => {
     expect(
       result.rankedCandidates.map((entry) => entry.candidate.action.actionId),
     ).toEqual(['20732', '20751', '20748']);
+  });
+
+  it('preserves ordered Smart Cross-sell replacement targets as the baseline', () => {
+    const result = resolveMerchandisingPolicies({
+      context: context(),
+      rankedCandidates: [
+        candidate('20732', 10),
+        candidate('20748', 5),
+        candidate('20751', 1),
+      ],
+      policies: policies({
+        action: 'replace_slate',
+        targetIds: ['20751', '20748', '20732'],
+        boostWeight: null,
+      }),
+      cartCategoryIds: ['chicken'],
+    });
+
+    expect(
+      result.rankedCandidates.map((entry) => entry.candidate.targetId),
+    ).toEqual(['20751', '20748', '20732']);
+    expect(
+      result.effects.map((effect) => effect.targetActionId),
+    ).toEqual(['product:20751', 'product:20748', 'product:20732']);
   });
 
   it('skips an otherwise valid-size Smart Cross-sell replacement with a missing eligible target', () => {
