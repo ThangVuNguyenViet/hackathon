@@ -53,7 +53,10 @@ const context = (
       promotion: binding('promotion'),
     },
     eligibilityPolicyVersion: 'kfc-recommendation-policy-v1',
-    experimentProfile: { profileId: 'merch-experiment-001', outputMode: 'baseline' },
+    experimentProfile: {
+      profileId: 'merch-experiment-001',
+      outputMode: 'baseline',
+    },
   }),
   storeTimezone: 'Asia/Ho_Chi_Minh',
   verifiedCohorts: ['gold'],
@@ -154,7 +157,8 @@ const policies = (...entries: Record<string, unknown>[]) =>
 
 describe('merchandising policy snapshots', () => {
   it('strictly parses the bundled policy fixture and rejects invalid action fields', async () => {
-    const loaded = await new LocalMerchandisingPolicyRepository().loadPublishedSnapshot();
+    const loaded =
+      await new LocalMerchandisingPolicyRepository().loadPublishedSnapshot();
 
     expect(loaded.snapshot).toMatchObject({
       schemaVersion: 'kfc-recommendation-policy-snapshot-v1',
@@ -170,9 +174,16 @@ describe('merchandising policy snapshots', () => {
       policy({ action: 'exclude_target', boostWeight: 0.1 }),
       policy({ action: 'pin_target', boostWeight: 0.1, pinPosition: 1 }),
       policy({ action: 'boost_target', pinPosition: 1 }),
-      policy({ action: 'suppress_placement', targetIds: ['20732'], boostWeight: null }),
+      policy({
+        action: 'suppress_placement',
+        targetIds: ['20732'],
+        boostWeight: null,
+      }),
       policy({ action: 'replace_slate', targetIds: [], boostWeight: null }),
-      policy({ minimumBasketSubtotalVnd: 200000, maximumBasketSubtotalVnd: 100000 }),
+      policy({
+        minimumBasketSubtotalVnd: 200000,
+        maximumBasketSubtotalVnd: 100000,
+      }),
       policy({ includedStoreIds: ['KFCVN0002', 'KFCVN0002'] }),
     ]) {
       expect(recommendationPolicySchema.safeParse(invalid).success).toBe(false);
@@ -186,12 +197,17 @@ describe('merchandising policy snapshots', () => {
   });
 
   it('loads all Sanity documents atomically through the injected published client', async () => {
-    const local = await new LocalMerchandisingPolicyRepository().loadPublishedSnapshot();
+    const local =
+      await new LocalMerchandisingPolicyRepository().loadPublishedSnapshot();
     const fake = {
       fetch: async () =>
         [...local.snapshot.policies]
           .reverse()
-          .map((entry, index) => ({ ...entry, _id: entry.policyId, _rev: `rev-${index + 1}` })),
+          .map((entry, index) => ({
+            ...entry,
+            _id: entry.policyId,
+            _rev: `rev-${index + 1}`,
+          })),
     };
     const live = await new SanityMerchandisingPolicyRepository(
       fake as never,
@@ -212,7 +228,11 @@ describe('merchandising policy snapshots', () => {
       'rev-1',
     ]);
 
-    const invalidClient = { fetch: async () => [{ ...policy(), _id: 'policy-001', _rev: 'rev-1', unexpected: true }] };
+    const invalidClient = {
+      fetch: async () => [
+        { ...policy(), _id: 'policy-001', _rev: 'rev-1', unexpected: true },
+      ],
+    };
     await expect(
       new SanityMerchandisingPolicyRepository(
         invalidClient as never,
@@ -237,16 +257,38 @@ describe('merchandising policy snapshots', () => {
         verifiedCohorts: ['gold'],
         startsAt: '2026-02-01T00:00:00Z',
       },
-      { policyId: 'policy-b', priority: 20, includedStoreIds: ['KFCVN0002'], startsAt: '2026-03-01T00:00:00Z' },
-      { policyId: 'policy-a', priority: 20, includedStoreIds: ['KFCVN0002'], startsAt: '2026-03-01T00:00:00Z' },
+      {
+        policyId: 'policy-b',
+        priority: 20,
+        includedStoreIds: ['KFCVN0002'],
+        startsAt: '2026-03-01T00:00:00Z',
+      },
+      {
+        policyId: 'policy-a',
+        priority: 20,
+        includedStoreIds: ['KFCVN0002'],
+        startsAt: '2026-03-01T00:00:00Z',
+      },
       { policyId: 'policy-disabled', enabled: false },
-      { policyId: 'policy-other-environment', environment: 'another-environment' },
+      {
+        policyId: 'policy-other-environment',
+        environment: 'another-environment',
+      },
       { policyId: 'policy-excluded-store', excludedStoreIds: ['KFCVN0002'] },
       { policyId: 'policy-delivery', fulfilmentModes: ['delivery'] },
       { policyId: 'policy-missing-product', requiredCartProductIds: ['20751'] },
-      { policyId: 'policy-excluded-product', excludedCartProductIds: ['20732'] },
-      { policyId: 'policy-missing-category', requiredCartCategoryIds: ['burger'] },
-      { policyId: 'policy-excluded-category', excludedCartCategoryIds: ['chicken'] },
+      {
+        policyId: 'policy-excluded-product',
+        excludedCartProductIds: ['20732'],
+      },
+      {
+        policyId: 'policy-missing-category',
+        requiredCartCategoryIds: ['burger'],
+      },
+      {
+        policyId: 'policy-excluded-category',
+        excludedCartCategoryIds: ['chicken'],
+      },
       { policyId: 'policy-cohort', verifiedCohorts: ['silver'] },
       { policyId: 'policy-min', minimumBasketSubtotalVnd: 200000 },
       { policyId: 'policy-max', maximumBasketSubtotalVnd: 100000 },
@@ -258,11 +300,7 @@ describe('merchandising policy snapshots', () => {
       applicableMerchandisingPolicies(context(), applicable, ['chicken']).map(
         (entry) => entry.policyId,
       ),
-    ).toEqual([
-      'policy-c',
-      'policy-a',
-      'policy-b',
-    ]);
+    ).toEqual(['policy-c', 'policy-a', 'policy-b']);
   });
 
   it('orders matching policies by priority before the remaining sort keys', () => {
@@ -310,25 +348,70 @@ describe('merchandising policy snapshots', () => {
       rankedCandidates: ranked,
       policies: policies(
         { action: 'exclude_target', targetIds: ['20712'], boostWeight: null },
-        { action: 'replace_slate', targetIds: ['20751', 'does-not-exist'], boostWeight: null, priority: 90 },
-        { action: 'replace_slate', targetIds: ['20751', '20732', '20748'], boostWeight: null, priority: 80 },
-        { action: 'boost_target', targetIds: ['20732'], boostWeight: 0.1, priority: 70 },
-        { action: 'boost_target', targetIds: ['20732'], boostWeight: 0.9, priority: 60 },
-        { action: 'pin_target', targetIds: ['41091'], boostWeight: null, pinPosition: 1, priority: 50 },
+        {
+          action: 'replace_slate',
+          targetIds: ['20751', 'does-not-exist'],
+          boostWeight: null,
+          priority: 90,
+        },
+        {
+          action: 'replace_slate',
+          targetIds: ['20751', '20732', '20748'],
+          boostWeight: null,
+          priority: 80,
+        },
+        {
+          action: 'boost_target',
+          targetIds: ['20732'],
+          boostWeight: 0.1,
+          priority: 70,
+        },
+        {
+          action: 'boost_target',
+          targetIds: ['20732'],
+          boostWeight: 0.9,
+          priority: 60,
+        },
+        {
+          action: 'pin_target',
+          targetIds: ['41091'],
+          boostWeight: null,
+          pinPosition: 1,
+          priority: 50,
+        },
       ),
       cartCategoryIds: ['chicken'],
     });
 
     expect(resolved.suppressed).toBe(false);
-    expect(resolved.replacement?.map((entry) => entry.candidate.action.actionId)).toEqual(['product:20751', 'product:20732', 'product:20748']);
-    expect(resolved.rankedCandidates.map((entry) => entry.candidate.action.actionId)).toEqual(['product:20732', 'product:20751', 'product:20748']);
-    expect(resolved.rankedCandidates.find((entry) => entry.candidate.targetId === '20732')?.score).toBe(4.9);
-    expect(resolved.rankedCandidates.map((entry) => entry.candidate.action.actionId)).not.toContain('does-not-exist');
+    expect(
+      resolved.replacement?.map((entry) => entry.candidate.action.actionId),
+    ).toEqual(['product:20751', 'product:20732', 'product:20748']);
+    expect(
+      resolved.rankedCandidates.map((entry) => entry.candidate.action.actionId),
+    ).toEqual(['product:20732', 'product:20751', 'product:20748']);
+    expect(
+      resolved.rankedCandidates.find(
+        (entry) => entry.candidate.targetId === '20732',
+      )?.score,
+    ).toBe(4.9);
+    expect(
+      resolved.rankedCandidates.map((entry) => entry.candidate.action.actionId),
+    ).not.toContain('does-not-exist');
     expect(resolved.effects).toEqual(
       expect.arrayContaining([
-        expect.objectContaining({ action: 'exclude_target', targetActionId: 'product:20712' }),
-        expect.objectContaining({ action: 'replace_slate', targetActionId: 'product:20751' }),
-        expect.objectContaining({ action: 'boost_target', targetActionId: 'product:20732' }),
+        expect.objectContaining({
+          action: 'exclude_target',
+          targetActionId: 'product:20712',
+        }),
+        expect.objectContaining({
+          action: 'replace_slate',
+          targetActionId: 'product:20751',
+        }),
+        expect.objectContaining({
+          action: 'boost_target',
+          targetActionId: 'product:20732',
+        }),
       ]),
     );
     expect(
@@ -338,15 +421,27 @@ describe('merchandising policy snapshots', () => {
     ).toEqual(['product:20751', 'product:20732', 'product:20748']);
 
     const suppressed = resolveMerchandisingPolicies({
-      context: context({ request: { ...context().request, storeId: 'KFCVN0036' } }),
+      context: context({
+        request: { ...context().request, storeId: 'KFCVN0036' },
+      }),
       rankedCandidates: ranked,
       policies: policies(
         { action: 'replace_slate', targetIds: ['20732'], boostWeight: null },
-        { action: 'suppress_placement', targetIds: [], boostWeight: null, priority: 1, includedStoreIds: ['KFCVN0036'] },
+        {
+          action: 'suppress_placement',
+          targetIds: [],
+          boostWeight: null,
+          priority: 1,
+          includedStoreIds: ['KFCVN0036'],
+        },
       ),
       cartCategoryIds: ['chicken'],
     });
-    expect(suppressed).toMatchObject({ suppressed: true, replacement: null, rankedCandidates: [] });
+    expect(suppressed).toMatchObject({
+      suppressed: true,
+      replacement: null,
+      rankedCandidates: [],
+    });
 
     const pinned = resolveMerchandisingPolicies({
       context: context(),
@@ -368,6 +463,27 @@ describe('merchandising policy snapshots', () => {
         targetActionId: 'modifier:line-20732:41091',
       }),
     ]);
+
+    const alreadyPinned = resolveMerchandisingPolicies({
+      context: context(),
+      rankedCandidates: [
+        candidate('41091', 10, 'modifier:line-20732:41091'),
+        candidate('20732', 4),
+      ],
+      policies: policies({
+        action: 'pin_target',
+        targetIds: ['41091'],
+        boostWeight: null,
+        pinPosition: 1,
+      }),
+      cartCategoryIds: ['chicken'],
+    });
+    expect(
+      alreadyPinned.rankedCandidates.map(
+        (entry) => entry.candidate.action.actionId,
+      ),
+    ).toEqual(['modifier:line-20732:41091', 'product:20732']);
+    expect(alreadyPinned.effects).toEqual([]);
   });
 
   it('skips an invalid-size smart cross-sell replacement atomically', () => {
@@ -388,11 +504,9 @@ describe('merchandising policy snapshots', () => {
     });
 
     expect(result.replacement).toBeNull();
-    expect(result.rankedCandidates.map((entry) => entry.candidate.action.actionId)).toEqual([
-      '20732',
-      '20751',
-      '20748',
-    ]);
+    expect(
+      result.rankedCandidates.map((entry) => entry.candidate.action.actionId),
+    ).toEqual(['20732', '20751', '20748']);
   });
 
   it('skips an otherwise valid-size Smart Cross-sell replacement with a missing eligible target', () => {
@@ -413,11 +527,9 @@ describe('merchandising policy snapshots', () => {
     });
 
     expect(result.replacement).toBeNull();
-    expect(result.rankedCandidates.map((entry) => entry.candidate.action.actionId)).toEqual([
-      'product:20732',
-      'product:20751',
-      'product:20748',
-    ]);
+    expect(
+      result.rankedCandidates.map((entry) => entry.candidate.action.actionId),
+    ).toEqual(['product:20732', 'product:20751', 'product:20748']);
     expect(result.effects).not.toEqual(
       expect.arrayContaining([
         expect.objectContaining({ action: 'replace_slate' }),
@@ -436,9 +548,14 @@ describe('merchandising policy snapshots', () => {
       cartCategoryIds: ['chicken'],
     });
 
-    expect(result.rankedCandidates.map((entry) => entry.candidate.action.actionId)).toEqual(['product:20732']);
+    expect(
+      result.rankedCandidates.map((entry) => entry.candidate.action.actionId),
+    ).toEqual(['product:20732']);
     expect(result.effects).toEqual([
-      expect.objectContaining({ action: 'exclude_target', targetActionId: 'product:20712' }),
+      expect.objectContaining({
+        action: 'exclude_target',
+        targetActionId: 'product:20712',
+      }),
     ]);
   });
 });

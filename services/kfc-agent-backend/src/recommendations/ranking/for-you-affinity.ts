@@ -2,6 +2,7 @@ import {
   assertEligibleCandidates,
   contextualPopularityForCandidate,
 } from './contextual-popularity.js';
+import { compareCanonicalUtcInstants } from '../domain/canonical-instant.js';
 import type { PlacementRanker, RankedCandidate, RankerInput } from './types.js';
 
 const MILLISECONDS_PER_DAY = 24 * 60 * 60 * 1000;
@@ -30,9 +31,16 @@ function historyTotals(
   let exact = 0;
   let category = 0;
   for (const order of history.completedOrders) {
-    const completedEpoch = Date.parse(order.completedAt);
-    if (!Number.isFinite(completedEpoch) || completedEpoch >= decisionEpoch)
+    if (
+      compareCanonicalUtcInstants(
+        order.completedAt,
+        input.context.request.decisionTime,
+      ) !== -1
+    ) {
       continue;
+    }
+    const completedEpoch = Date.parse(order.completedAt);
+    if (!Number.isFinite(completedEpoch)) continue;
     const ageDays = (decisionEpoch - completedEpoch) / MILLISECONDS_PER_DAY;
     const decay = 2 ** (-ageDays / 90);
     for (const line of order.lines) {

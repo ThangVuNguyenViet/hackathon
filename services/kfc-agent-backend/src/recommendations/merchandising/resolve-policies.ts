@@ -258,12 +258,10 @@ function applyPins(
         (entry) => entry.candidate.targetId === targetId,
       );
       if (index < 0) continue;
+      const destination = Math.min(policy.pinPosition! - 1, result.length - 1);
+      if (index === destination) continue;
       const [entry] = result.splice(index, 1);
-      result.splice(
-        Math.min(policy.pinPosition! - 1, result.length),
-        0,
-        entry!,
-      );
+      result.splice(destination, 0, entry!);
       addEffect(policy, entry!.candidate.action.actionId);
     }
   }

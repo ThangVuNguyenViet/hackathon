@@ -3,6 +3,10 @@ import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import {
+  canonicalUtcInstantOccursBefore,
+  compareCanonicalUtcInstants,
+} from '../../src/recommendations/domain/canonical-instant.js';
+import {
   instantSchema,
   parseRecommendationDecisionRequest,
   parseRecommendationDecisionResponse,
@@ -74,10 +78,7 @@ type DecisionResponseFixture = {
   };
   displayFacts: Array<{ actionId: string }>;
   decisionSource:
-    | 'ranked'
-    | 'merchandising_replacement'
-    | 'fallback'
-    | 'suppressed';
+    'ranked' | 'merchandising_replacement' | 'fallback' | 'suppressed';
   placement:
     'for_you' | 'local_favorite' | 'modifier_upsell' | 'smart_cross_sell';
   primaryOffer: { actions: RecommendationActionFixture[] } | null;
@@ -173,6 +174,29 @@ describe('recommendation domain contracts', () => {
       expect(() => instantSchema.parse(value)).toThrow();
     },
   );
+
+  it.each([
+    '2026-02-31T00:00:00Z',
+    '2026-13-01T00:00:00Z',
+    '2026-02-29T00:00:00Z',
+  ])('fails closed for calendar-invalid canonical UTC text: %s', (value) => {
+    expect(instantSchema.safeParse(value).success).toBe(false);
+    expect(
+      compareCanonicalUtcInstants(value, '2026-03-01T00:00:00Z'),
+    ).toBeNull();
+    expect(canonicalUtcInstantOccursBefore(value, '2026-03-01T00:00:00Z')).toBe(
+      false,
+    );
+  });
+
+  it('retains exact fractional precision for a valid leap-day Instant', () => {
+    expect(
+      compareCanonicalUtcInstants(
+        '2028-02-29T00:00:00.1001Z',
+        '2028-02-29T00:00:00.1002Z',
+      ),
+    ).toBe(-1);
+  });
 
   it('parses the canonical decision response and event', () => {
     expect(

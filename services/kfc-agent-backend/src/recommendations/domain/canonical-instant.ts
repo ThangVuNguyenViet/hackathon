@@ -1,5 +1,5 @@
 const canonicalUtcInstantPartsPattern =
-  /^(?<whole>[0-9]{4}-(?:0[1-9]|1[0-2])-(?:0[1-9]|[12][0-9]|3[01])T(?:[01][0-9]|2[0-3]):[0-5][0-9]:[0-5][0-9])(?:\.(?<fraction>[0-9]+))?Z$/u;
+  /^(?<whole>(?<year>[0-9]{4})-(?<month>0[1-9]|1[0-2])-(?<day>0[1-9]|[12][0-9]|3[01])T(?<hour>[01][0-9]|2[0-3]):(?<minute>[0-5][0-9]):(?<second>[0-5][0-9]))(?:\.(?<fraction>[0-9]+))?Z$/u;
 
 type CanonicalUtcInstantParts = {
   fraction: string;
@@ -14,6 +14,17 @@ function canonicalUtcInstantParts(
 
   const wholeSecondEpoch = Date.parse(`${match.groups.whole}Z`);
   if (!Number.isFinite(wholeSecondEpoch)) return null;
+  const parsed = new Date(wholeSecondEpoch);
+  if (
+    parsed.getUTCFullYear() !== Number(match.groups.year) ||
+    parsed.getUTCMonth() + 1 !== Number(match.groups.month) ||
+    parsed.getUTCDate() !== Number(match.groups.day) ||
+    parsed.getUTCHours() !== Number(match.groups.hour) ||
+    parsed.getUTCMinutes() !== Number(match.groups.minute) ||
+    parsed.getUTCSeconds() !== Number(match.groups.second)
+  ) {
+    return null;
+  }
   return {
     fraction: (match.groups.fraction ?? '').replace(/0+$/u, ''),
     wholeSecondEpoch,

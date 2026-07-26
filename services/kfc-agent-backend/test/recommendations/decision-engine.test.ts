@@ -328,6 +328,51 @@ describe('pure recommendation decision engine', () => {
     });
   });
 
+  it('fails closed when verified history contains a calendar-invalid completion Instant', async () => {
+    const context = forYouContext();
+    context.customerHistory!.completedOrders[0]!.completedAt =
+      '2026-02-31T09:00:00Z';
+
+    const result = await decide(context);
+    const itemDecision = result.technical.eligibilityDecisions.find(
+      (decision) => decision.actionId === 'product:20751',
+    );
+
+    expect(result.response).toMatchObject({
+      placement: 'for_you',
+      status: 'empty',
+      decisionSource: 'fallback',
+      primaryOffer: null,
+    });
+    expect(itemDecision?.reasonCodes).toEqual(['zero_history_required']);
+  });
+
+  it('excludes a calendar-invalid order from affinity when other verified history is valid', async () => {
+    const context = forYouContext('41127');
+    context.customerHistory!.completedOrders.push({
+      orderId: 'calendar-invalid-order',
+      completedAt: '2026-02-31T09:00:00Z',
+      lines: [
+        {
+          sellableItemId: '20751',
+          categoryId: '20000',
+          quantity: 99,
+        },
+      ],
+    });
+
+    const result = await decide(context);
+    const invalidHistoryTarget = result.technical.eligiblePrePolicyRanking.find(
+      (entry) => entry.candidate.sellableItemId === '20751',
+    );
+    const validHistoryTarget = result.technical.eligiblePrePolicyRanking.find(
+      (entry) => entry.candidate.sellableItemId === '41127',
+    );
+
+    expect(invalidHistoryTarget?.featureSummary.exactAffinityTotal).toBe(0);
+    expect(validHistoryTarget?.featureSummary.exactAffinityTotal).toBe(0.5);
+  });
+
   it('chooses the highest positive-price compatible 20752 modifier with a deterministic tie break', async () => {
     const result = await decide(modifierContext());
 
@@ -437,7 +482,7 @@ describe('pure recommendation decision engine', () => {
     expect(noParent.technical.emptyReason).toBe('parent_cart_line_required');
   });
 
-  it('applies bundled exclusion, boost, pin, replacement, and KFCVN0036 suppression', async () => {
+  it('reports only material bundled effects and KFCVN0036 suppression', async () => {
     const local = await decide(makeContext());
     const personalized = await decide(forYouContext());
     const modifier = await decide(modifierContext());
@@ -460,12 +505,8 @@ describe('pure recommendation decision engine', () => {
     expect(personalized.response.decisionSource).toBe(
       'merchandising_replacement',
     );
-    expect(modifier.response.merchandisingEffects).toEqual([
-      expect.objectContaining({
-        policyId: 'modifier-pin-41091',
-        action: 'pin_target',
-      }),
-    ]);
+    expect(modifier.response.merchandisingEffects).toEqual([]);
+    expect(modifier.technical.merchandisingResolution.effects).toEqual([]);
     expect(smart.response.merchandisingEffects).toEqual([
       expect.objectContaining({
         policyId: 'smart-cross-sell-exclude-20712',
