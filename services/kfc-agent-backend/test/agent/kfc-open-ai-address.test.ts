@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import {
   createKfcOpenAiTools,
   createKfcToolSession,
@@ -41,6 +41,50 @@ async function addressTool(sessionId: string) {
 }
 
 describe('direct OpenAI delivery address flow', () => {
+  it('does not clone the Worker external call context before executing a tool', async () => {
+    const originalStructuredClone = globalThis.structuredClone;
+    const structuredCloneSpy = vi
+      .spyOn(globalThis, 'structuredClone')
+      .mockImplementation((value, options) => {
+        if (
+          typeof value === 'object' &&
+          value !== null &&
+          'externalCallContext' in value
+        ) {
+          throw new DOMException(
+            'AbortSignal could not be cloned',
+            'DataCloneError',
+          );
+        }
+        return originalStructuredClone(value, options);
+      });
+
+    try {
+      const { quoteFulfillment } = await addressTool(
+        'kfc:worker_clone_boundary',
+      );
+      await expect(
+        quoteFulfillment.execute({
+          method: 'delivery',
+          address: {
+            ...emptyAddressUpdate,
+            recipientName: 'Minh',
+            phone: '0900000000',
+            addressLine: '54/2 Nguyễn Hồng Đào',
+            communeName: 'Phường 14',
+            provinceName: 'TP.HCM',
+            legacyDistrictText: 'Quận Tân Bình',
+          },
+        }),
+      ).resolves.toMatchObject({
+        ok: true,
+        toolName: 'quoteFulfillment',
+      });
+    } finally {
+      structuredCloneSpy.mockRestore();
+    }
+  });
+
   it('exposes a strict partial structured address schema to the model', async () => {
     const { quoteFulfillment } = await addressTool('kfc:address_schema');
     const parameters = quoteFulfillment.definition.parameters;

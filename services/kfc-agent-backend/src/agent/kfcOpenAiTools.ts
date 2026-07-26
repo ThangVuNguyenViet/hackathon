@@ -279,6 +279,14 @@ export interface CreateKfcOpenAiToolsInput {
   >;
 }
 
+function cloneKfcToolSession(session: KfcToolSession): KfcToolSession {
+  const { externalCallContext, ...cloneableSession } = session;
+  return {
+    ...structuredClone(cloneableSession),
+    externalCallContext,
+  };
+}
+
 export function hydrateKfcToolSession(
   session: KfcToolSession,
   state: Partial<
@@ -1315,7 +1323,7 @@ export function createKfcOpenAiTools(
     async execute(arguments_: Record<string, unknown>, options) {
       // Mutate a private session snapshot. A late non-cancellable provider
       // promise is quarantined after the SDK timeout wins.
-      const session = structuredClone(input.session);
+      const session = cloneKfcToolSession(input.session);
       const originalExternalCallContext = input.session.externalCallContext;
       session.externalCallContext = {
         signal: AbortSignal.any([
