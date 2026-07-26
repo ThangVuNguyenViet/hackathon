@@ -3,18 +3,12 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { z } from 'zod';
 import type { BaseCheckpointSaver } from '@langchain/langgraph';
+import { KfcDirectTurnService } from '../agent/kfcDirectTurnService.js';
+import { selectKfcOpenAiGenUi } from '../agent/kfcOpenAiGenUi.js';
 import {
-  createKfcOpenAiTools,
-  createKfcToolSession,
-  verifiedKfcToolSessionContext,
+  directAgentToolArguments,
   type KfcToolSession,
 } from '../agent/kfcOpenAiTools.js';
-import {
-  hydrateKfcOpenAiToolSession,
-  persistKfcOpenAiToolSession,
-} from '../agent/kfcOpenAiToolSessionLifecycle.js';
-import { selectKfcOpenAiGenUi } from '../agent/kfcOpenAiGenUi.js';
-import { createAgentTurnExternalCallScope } from '../agent/agentExternalCallScope.js';
 import { prepareStructuredCustomerAction } from '../agent/structuredCustomerAction.js';
 import type {
   ExternalClients,
@@ -282,10 +276,15 @@ export function createRouteAgentRuntime(
     latestKfcProofPreconditions,
   } = input;
   const locallyActiveSynchronousRequests = new Set<string>();
-  const openAiToolSessions = new Map<
-    string,
-    { clients: ExternalClients; session: KfcToolSession }
-  >();
+  const directTurnService = options.openAiAgent
+    ? new KfcDirectTurnService({
+        store,
+        openAiAgent: options.openAiAgent,
+        getFixtures,
+        createClients: createFirstPartyKfcClients,
+        getAccessContext: kfcProofAccessContext,
+      })
+    : undefined;
   const {
     deferAiMonitorRefinement,
     emitSessionControlIntelligence,
@@ -470,191 +469,164 @@ export function createRouteAgentRuntime(
           },
         };
       }
-      if (options.openAiAgent) {
-        const externalCalls = createAgentTurnExternalCallScope(120_000);
-        try {
-          let toolRuntime = openAiToolSessions.get(input.sessionId);
-          if (!toolRuntime) {
-            const clients = await createFirstPartyKfcClients(
-              input.sessionId,
-              trustedMetadata,
-            );
-            const freshSession = await createKfcToolSession(
-              clients,
-              input.sessionId,
-              input.customerId,
-              'kfc',
-              externalCalls.context,
-            );
-            toolRuntime = {
-              clients,
-              session: await hydrateKfcOpenAiToolSession({
-                store,
-                sessionId: input.sessionId,
-                freshSession,
-              }),
+      if (options.openAiAgent && directTurnService) {
+        const directMetadata = input.trustedCustomerAction
+          ? {
+              ...trustedMetadata,
+              customerCommand: input.trustedCustomerAction.command,
+            }
+          : trustedMetadata;
+        let requiredToolCalls:
+          | Array<{
+              name: string;
+              arguments: Record<string, unknown>;
+            }>
+          | undefined;
+        let selectedPaymentMethod:
+          KfcToolSession['selectedPaymentMethod'] | undefined;
+        if (input.trustedCustomerAction) {
+          const verifiedStateEvent = [
+            ...(await store.listEvents(input.sessionId)),
+          ]
+            .reverse()
+            .find(({ sourceType }) => sourceType === 'graph:verified_state');
+          const verifiedState = verifiedStateEvent?.payload.verifiedState;
+          if (!isRecord(verifiedState)) {
+            return {
+              status: 409,
+              body: { errorCode: 'trusted_genui_state_unavailable' },
             };
-            openAiToolSessions.set(input.sessionId, toolRuntime);
-          } else {
-            toolRuntime.session.externalCallContext = externalCalls.context;
           }
-          const directMetadata = input.trustedCustomerAction
-            ? {
-                ...trustedMetadata,
-                customerCommand: input.trustedCustomerAction.command,
-              }
-            : trustedMetadata;
-          const directTools = createKfcOpenAiTools({
-            clients: toolRuntime.clients,
-            session: toolRuntime.session,
-            accessContext,
-            fixtures: await getFixtures(),
-          });
-          let requiredToolCalls:
-            | Array<{ name: string; arguments: Record<string, unknown> }>
-            | undefined;
-          if (input.trustedCustomerAction) {
-            const verifiedStateEvent = [
-              ...(await store.listEvents(input.sessionId)),
-            ]
-              .reverse()
-              .find(({ sourceType }) => sourceType === 'graph:verified_state');
-            const verifiedState = verifiedStateEvent?.payload.verifiedState;
-            if (!isRecord(verifiedState)) {
+          const command = input.trustedCustomerAction.command;
+          if (command.kind === 'submit_address' && command.address) {
+            requiredToolCalls = [
+              {
+                name: 'quoteFulfillment',
+                arguments: {
+                  method: 'delivery',
+                  address: command.address,
+                },
+              },
+            ];
+          } else {
+            const preparation = prepareStructuredCustomerAction({
+              envelope: input.trustedCustomerAction,
+              revisionValidated: false,
+              state: verifiedState as unknown as AgentGraphState,
+            });
+            if (preparation.kind === 'reject') {
               return {
-                status: 409,
-                body: { errorCode: 'trusted_genui_state_unavailable' },
+                status: 422,
+                body: { errorCode: preparation.errorCode },
               };
             }
-            const command = input.trustedCustomerAction.command;
-            if (command.kind === 'submit_address' && command.address) {
+            if (
+              preparation.kind === 'present' &&
+              command.kind === 'select_payment_method' &&
+              preparation.state.selectedPaymentMethod
+            ) {
+              selectedPaymentMethod = preparation.state.selectedPaymentMethod;
+            }
+            if (preparation.kind === 'execute') {
               requiredToolCalls = [
                 {
-                  name: 'quoteFulfillment',
-                  arguments: {
-                    method: 'delivery',
-                    address: command.address,
-                  },
+                  name: preparation.call.toolName,
+                  arguments: directAgentToolArguments(
+                    preparation.call.toolName,
+                    preparation.call.arguments,
+                  ),
                 },
+                ...(command.kind === 'confirm_order' &&
+                preparation.call.toolName === 'previewOrder' &&
+                preparation.afterTool === 'prepare'
+                  ? [{ name: 'placeOrder', arguments: {} }]
+                  : []),
               ];
-            } else {
-              const preparation = prepareStructuredCustomerAction({
-                envelope: input.trustedCustomerAction,
-                revisionValidated: false,
-                state: verifiedState as unknown as AgentGraphState,
-              });
-              if (preparation.kind === 'reject') {
-                return {
-                  status: 422,
-                  body: { errorCode: preparation.errorCode },
-                };
-              }
-              if (
-                preparation.kind === 'present' &&
-                command.kind === 'select_payment_method' &&
-                preparation.state.selectedPaymentMethod
-              ) {
-                toolRuntime.session.selectedPaymentMethod =
-                  preparation.state.selectedPaymentMethod;
-              }
-              if (preparation.kind === 'execute') {
-                requiredToolCalls = [
-                  {
-                    name: preparation.call.toolName,
-                    arguments: preparation.call.arguments,
-                  },
-                  ...(command.kind === 'confirm_order' &&
-                  preparation.call.toolName === 'previewOrder' &&
-                  preparation.afterTool === 'prepare'
-                    ? [{ name: 'placeOrder', arguments: {} }]
-                    : []),
-                ];
-              }
             }
           }
-          const directOutput = await options.openAiAgent.respond({
-            sessionId: input.sessionId,
-            customerId: input.customerId,
-            channel: 'kfc',
-            text: input.text,
-            externalMessageId: input.clientMessageId,
-            metadata: directMetadata,
-            store,
-            verifiedBusinessContext: verifiedKfcToolSessionContext(
-              toolRuntime.session,
-            ),
-            tools: directTools,
-            requiredToolCalls,
-            allowModelToolCalls: !input.trustedCustomerAction,
-            ...(directMetadata.responseProfile === 'social'
-              ? {}
-              : {
-                  selectGenUi: (result) => {
-                    const selectionInput = {
-                      session: toolRuntime.session,
-                      latestUserMessage: input.text,
-                      toolCalls: result.toolCalls,
-                      customerCommand: directMetadata.customerCommand,
-                    };
-                    return selectKfcOpenAiGenUi(selectionInput);
-                  },
-                }),
-          });
-          await persistKfcOpenAiToolSession({
-            store,
-            sessionId: input.sessionId,
-            session: toolRuntime.session,
-            latestUserMessage: input.text,
-            toolCalls: directOutput.toolCalls,
-            assistantTurnId: directOutput.assistantTurnId,
-            customerCommand: directMetadata.customerCommand,
-            fence: runGuard.commitFence,
-          });
-          const presentation = buildChannelPresentation({
-            channel: 'kfc',
-            responseProfile: directMetadata.responseProfile,
-            graphResponseText: directOutput.responseText,
-            genUi: directOutput.genUi,
-          });
-          const responseBody = {
-            agentRuntime: 'openai-responses',
-            status: 'completed',
-            sessionId: input.sessionId,
-            customerId: input.customerId,
-            userTurnId: directOutput.userTurnId,
-            assistantTurnId: directOutput.assistantTurnId,
-            responseText: directOutput.responseText,
-            presentation,
-            ...(directOutput.genUi ? { genUi: directOutput.genUi } : {}),
-            usage: directOutput.usage,
-            replayed: false,
-          };
-          const completion = await reservation.fence.complete({
-            status: 200,
-            body: responseBody,
-          });
-          await store.updateTurnDeliveryStatus(
-            directOutput.assistantTurnId,
-            completion.completedByOwner ? 'sent' : 'failed',
-            null,
-          );
-          if (completion.completedByOwner) {
-            dashboard.emitEvent({
-              id: dashboardEventId(input.sessionId, 'assistant_reply_sent'),
-              sessionId: input.sessionId,
-              type: 'assistant_reply_sent',
-              payload: {
-                deliveryStatus: 'sent',
-                deliveryPath: 'kfc_http_response',
-                assistantTurnId: directOutput.assistantTurnId,
-              },
-              createdAt: new Date().toISOString(),
-            });
-          }
-          return completion.response;
-        } finally {
-          externalCalls.dispose();
         }
+        const directOutput = await directTurnService.run({
+          sessionId: input.sessionId,
+          customerId: input.customerId,
+          channel: 'kfc',
+          text: input.text,
+          externalMessageId: input.clientMessageId,
+          metadata: directMetadata,
+          fence: runGuard.commitFence,
+          prepareSession: (session) => {
+            return {
+              session: selectedPaymentMethod
+                ? { ...session, selectedPaymentMethod }
+                : session,
+              requiredToolCalls,
+              allowModelToolCalls: !input.trustedCustomerAction,
+            };
+          },
+          ...(directMetadata.responseProfile === 'social'
+            ? {}
+            : {
+                selectGenUi: (result, session) =>
+                  selectKfcOpenAiGenUi({
+                    session,
+                    latestUserMessage: input.text,
+                    toolCalls: result.toolCalls,
+                    customerCommand: directMetadata.customerCommand,
+                  }),
+              }),
+        });
+        if (directOutput.stateCommit === 'stale') {
+          await reservation.fence.fail('agent_run_superseded');
+          return {
+            status: 409,
+            body: {
+              errorCode: 'agent_run_superseded',
+              sessionId: input.sessionId,
+              suppressed: true,
+            },
+          };
+        }
+        const presentation = buildChannelPresentation({
+          channel: 'kfc',
+          responseProfile: directMetadata.responseProfile,
+          graphResponseText: directOutput.responseText,
+          genUi: directOutput.genUi,
+        });
+        const responseBody = {
+          agentRuntime: 'openai-responses',
+          status: 'completed',
+          sessionId: input.sessionId,
+          customerId: input.customerId,
+          userTurnId: directOutput.userTurnId,
+          assistantTurnId: directOutput.assistantTurnId,
+          responseText: directOutput.responseText,
+          presentation,
+          ...(directOutput.genUi ? { genUi: directOutput.genUi } : {}),
+          usage: directOutput.usage,
+          replayed: false,
+        };
+        const completion = await reservation.fence.complete({
+          status: 200,
+          body: responseBody,
+        });
+        await store.updateTurnDeliveryStatus(
+          directOutput.assistantTurnId,
+          completion.completedByOwner ? 'sent' : 'failed',
+          null,
+        );
+        if (completion.completedByOwner) {
+          dashboard.emitEvent({
+            id: dashboardEventId(input.sessionId, 'assistant_reply_sent'),
+            sessionId: input.sessionId,
+            type: 'assistant_reply_sent',
+            payload: {
+              deliveryStatus: 'sent',
+              deliveryPath: 'kfc_http_response',
+              assistantTurnId: directOutput.assistantTurnId,
+            },
+            createdAt: new Date().toISOString(),
+          });
+        }
+        return completion.response;
       }
       const output = await runAgentTurn({
         sessionId: input.sessionId,
@@ -878,8 +850,6 @@ export function createRouteAgentRuntime(
   }
 
   async function clearPersistedHandoff(sessionId: string): Promise<void> {
-    const directSession = openAiToolSessions.get(sessionId)?.session;
-    if (directSession) directSession.handoff = undefined;
     const events = await store.listEvents(sessionId);
     for (let index = events.length - 1; index >= 0; index -= 1) {
       const event = events[index];
@@ -1008,6 +978,7 @@ export function createRouteAgentRuntime(
   }
 
   return {
+    runDirectKfcTurn: directTurnService?.run.bind(directTurnService),
     kfcAgentResponse,
     deferAiMonitorRefinement,
     deliverAssistantReply,

@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import {
   createKfcOpenAiTools,
   createKfcToolSession,
@@ -26,21 +26,68 @@ async function addressTool(sessionId: string) {
   const fixtures = createTestFixtures();
   const clients = createMockClients(fixtures);
   const session = await createKfcToolSession(clients, sessionId);
+  const sessionState = { current: session };
   const quoteFulfillment = createKfcOpenAiTools({
     clients,
-    session,
+    sessionState,
     fixtures,
   }).find((tool) => tool.definition.name === 'quoteFulfillment');
-  const updateCart = createKfcOpenAiTools({ clients, session }).find(
+  const updateCart = createKfcOpenAiTools({ clients, sessionState }).find(
     (tool) => tool.definition.name === 'updateCart',
   );
   if (!quoteFulfillment) throw new Error('quoteFulfillment missing');
   if (!updateCart) throw new Error('updateCart missing');
-  await updateCart.execute({ itemCode: '20751', quantity: 1 });
-  return { session, quoteFulfillment };
+  await updateCart.execute({
+    changes: [{ itemCode: '20751', orderedMenuItemQuantity: 1 }],
+  });
+  return { sessionState, quoteFulfillment };
 }
 
 describe('direct OpenAI delivery address flow', () => {
+  it('does not clone the Worker external call context before executing a tool', async () => {
+    const originalStructuredClone = globalThis.structuredClone;
+    const structuredCloneSpy = vi
+      .spyOn(globalThis, 'structuredClone')
+      .mockImplementation((value, options) => {
+        if (
+          typeof value === 'object' &&
+          value !== null &&
+          'externalCallContext' in value
+        ) {
+          throw new DOMException(
+            'AbortSignal could not be cloned',
+            'DataCloneError',
+          );
+        }
+        return originalStructuredClone(value, options);
+      });
+
+    try {
+      const { quoteFulfillment } = await addressTool(
+        'kfc:worker_clone_boundary',
+      );
+      await expect(
+        quoteFulfillment.execute({
+          method: 'delivery',
+          address: {
+            ...emptyAddressUpdate,
+            recipientName: 'Minh',
+            phone: '0900000000',
+            addressLine: '54/2 Nguyễn Hồng Đào',
+            communeName: 'Phường 14',
+            provinceName: 'TP.HCM',
+            legacyDistrictText: 'Quận Tân Bình',
+          },
+        }),
+      ).resolves.toMatchObject({
+        ok: true,
+        toolName: 'quoteFulfillment',
+      });
+    } finally {
+      structuredCloneSpy.mockRestore();
+    }
+  });
+
   it('exposes a strict partial structured address schema to the model', async () => {
     const { quoteFulfillment } = await addressTool('kfc:address_schema');
     const parameters = quoteFulfillment.definition.parameters;
@@ -76,7 +123,7 @@ describe('direct OpenAI delivery address flow', () => {
   });
 
   it('resolves fixture-declared natural administrative abbreviations before quoting', async () => {
-    const { session, quoteFulfillment } = await addressTool(
+    const { sessionState, quoteFulfillment } = await addressTool(
       'kfc:address_partial',
     );
 
@@ -134,7 +181,7 @@ describe('direct OpenAI delivery address flow', () => {
         },
       },
     });
-    expect(session.deliveryAddressDraft).toMatchObject({
+    expect(sessionState.current.deliveryAddressDraft).toMatchObject({
       recipientName: 'Nguyễn An',
       phone: '0901234567',
       addressLine: '54/2 Nguyễn Hồng Đào',
@@ -199,18 +246,21 @@ describe('direct OpenAI delivery address flow', () => {
   });
 
   it('canonical structured fields replace stale missing state and publish a quote', async () => {
-    const { session, quoteFulfillment } = await addressTool(
+    const { sessionState, quoteFulfillment } = await addressTool(
       'kfc:address_structured_repair',
     );
-    session.deliveryAddressDraft = {
-      recipientName: 'Nguyễn An',
-      phone: '0901234567',
-      addressLine: '54/2 Nguyễn Hồng Đào',
-      rawAddress: '54/2 Nguyễn Hồng Đào p14 q Tân Bình tp HCM',
-      legacyDistrictText: 'Quận Tân Bình',
+    sessionState.current = {
+      ...sessionState.current,
+      deliveryAddressDraft: {
+        recipientName: 'Nguyễn An',
+        phone: '0901234567',
+        addressLine: '54/2 Nguyễn Hồng Đào',
+        rawAddress: '54/2 Nguyễn Hồng Đào p14 q Tân Bình tp HCM',
+        legacyDistrictText: 'Quận Tân Bình',
+      },
+      deliveryAddressStatus: 'incomplete',
+      deliveryAddressMissingFields: ['addressLine'],
     };
-    session.deliveryAddressStatus = 'incomplete';
-    session.deliveryAddressMissingFields = ['provinceName', 'communeName'];
 
     const result = await quoteFulfillment.execute({
       method: 'delivery',
@@ -246,15 +296,15 @@ describe('direct OpenAI delivery address flow', () => {
         },
       },
     });
-    expect(session.deliveryAddressStatus).toBe('quoted');
-    expect(session.deliveryAddressMissingFields).toEqual([]);
-    expect(verifiedKfcToolSessionContext(session)).not.toHaveProperty(
-      'deliveryAddressMissingFields',
-    );
+    expect(sessionState.current.deliveryAddressStatus).toBe('quoted');
+    expect(sessionState.current.deliveryAddressMissingFields).toEqual([]);
+    expect(
+      verifiedKfcToolSessionContext(sessionState.current),
+    ).not.toHaveProperty('deliveryAddressMissingFields');
   });
 
-  it('keeps a complete unsupported address separate from an incomplete address', async () => {
-    const { quoteFulfillment } = await addressTool('kfc:address_unsupported');
+  it('quotes any complete customer address without administrative validation', async () => {
+    const { quoteFulfillment } = await addressTool('kfc:address_unrestricted');
 
     const result = await quoteFulfillment.execute({
       method: 'delivery',
@@ -263,8 +313,8 @@ describe('direct OpenAI delivery address flow', () => {
         recipientName: 'Nguyễn An',
         phone: '0901234567',
         addressLine: '1 Tràng Tiền',
-        communeName: 'Hoàn Kiếm',
-        provinceName: 'Hà Nội',
+        communeName: 'Khu vực khách nhập',
+        provinceName: 'Địa phương khách nhập',
         rawAddress: 'Nguyễn An, 0901234567, 1 Tràng Tiền, Hoàn Kiếm, Hà Nội',
       },
     });
@@ -273,14 +323,54 @@ describe('direct OpenAI delivery address flow', () => {
       ok: true,
       toolName: 'quoteFulfillment',
       value: {
-        status: 'unsupported',
+        status: 'quoted',
         missingFields: [],
+        addressDraft: {
+          recipientName: 'Nguyễn An',
+          phone: '0901234567',
+          addressLine: '1 Tràng Tiền',
+          communeName: 'Khu vực khách nhập',
+          provinceName: 'Địa phương khách nhập',
+        },
+        fulfillment: {
+          method: 'delivery',
+          feeVnd: expect.any(Number),
+        },
+      },
+    });
+  });
+
+  it('quotes a free-form address without requiring province or commune fields', async () => {
+    const { quoteFulfillment } = await addressTool('kfc:address_free_form');
+
+    const result = await quoteFulfillment.execute({
+      method: 'delivery',
+      address: {
+        ...emptyAddressUpdate,
+        recipientName: 'Nguyễn An',
+        phone: '0901234567',
+        addressLine: 'Hẻm cạnh trường tiểu học, căn nhà cửa xanh',
+        rawAddress:
+          'Nguyễn An, 0901234567, hẻm cạnh trường tiểu học, căn nhà cửa xanh',
+      },
+    });
+
+    expect(result).toMatchObject({
+      ok: true,
+      toolName: 'quoteFulfillment',
+      value: {
+        status: 'quoted',
+        missingFields: [],
+        fulfillment: {
+          method: 'delivery',
+          feeVnd: expect.any(Number),
+        },
       },
     });
   });
 
   it('quotes a complete address and retains the canonical draft', async () => {
-    const { session, quoteFulfillment } =
+    const { sessionState, quoteFulfillment } =
       await addressTool('kfc:address_quoted');
 
     const result = await quoteFulfillment.execute({
@@ -311,19 +401,19 @@ describe('direct OpenAI delivery address flow', () => {
         },
       },
     });
-    expect(session.fulfillment).toMatchObject({
+    expect(sessionState.current.fulfillment).toMatchObject({
       method: 'delivery',
       feeVnd: expect.any(Number),
     });
-    expect(session.cart).toMatchObject({
+    expect(sessionState.current.cart).toMatchObject({
       subtotalVnd: 99_000,
       discountVnd: 0,
       deliveryFeeVnd: 18_000,
       totalVnd: 117_000,
     });
-    expect(session.deliveryAddressDraft?.deliveryInstructions).toBe(
-      'Gọi khi đến',
-    );
+    expect(
+      sessionState.current.deliveryAddressDraft?.deliveryInstructions,
+    ).toBe('Gọi khi đến');
   });
 
   it('hydrates and publishes an address draft across direct Responses turns', async () => {

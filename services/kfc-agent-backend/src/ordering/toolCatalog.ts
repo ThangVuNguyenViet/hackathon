@@ -168,82 +168,47 @@ export const toolArgumentSchemas = {
     .strict(),
   getItemDetails: z.object({ code: z.string().min(1) }).strict(),
   getModifierOptions: z.object({ code: z.string().min(1) }).strict(),
-  updateCart: z.union([
-    z
-      .object({
-        itemCode: z.string().min(1),
-        quantity: z
-          .number()
-          .int()
-          .nonnegative()
-          .describe(
-            'Line-item quantity in menu portions; for a product containing N pieces, use 1 for one portion, not the embedded piece count.',
-          ),
-        modifiers: z
-          .array(
-            z
-              .object({
-                groupId: z.string().min(1),
-                modifierId: z.string().min(1),
-                quantity: z
-                  .number()
-                  .int()
-                  .positive()
-                  .optional()
-                  .describe(
-                    'Selected modifier quantity per menu portion, using the verified modifier option contract.',
-                  ),
-                groupName: z.string().min(1).optional(),
-                modifierName: z.string().min(1).optional(),
-                priceDeltaVnd: z.number().int().optional(),
-              })
-              .strict(),
-          )
-          .optional(),
-      })
-      .strict(),
-    z
-      .object({
-        changes: z
-          .array(
-            z
-              .object({
-                itemCode: z.string().min(1),
-                quantity: z
-                  .number()
-                  .int()
-                  .nonnegative()
-                  .describe(
-                    'Line-item quantity in menu portions; for a product containing N pieces, use 1 for one portion, not the embedded piece count.',
-                  ),
-                modifiers: z
-                  .array(
-                    z
-                      .object({
-                        groupId: z.string().min(1),
-                        modifierId: z.string().min(1),
-                        quantity: z
-                          .number()
-                          .int()
-                          .positive()
-                          .optional()
-                          .describe(
-                            'Selected modifier quantity per menu portion, using the verified modifier option contract.',
-                          ),
-                        groupName: z.string().min(1).optional(),
-                        modifierName: z.string().min(1).optional(),
-                        priceDeltaVnd: z.number().int().optional(),
-                      })
-                      .strict(),
-                  )
-                  .optional(),
-              })
-              .strict(),
-          )
-          .min(1),
-      })
-      .strict(),
-  ]),
+  updateCart: z
+    .object({
+      changes: z
+        .array(
+          z
+            .object({
+              itemCode: z.string().min(1),
+              quantity: z
+                .number()
+                .int()
+                .nonnegative()
+                .describe(
+                  'Absolute line-item quantity in menu portions; zero removes the item.',
+                ),
+              modifiers: z
+                .array(
+                  z
+                    .object({
+                      groupId: z.string().min(1),
+                      modifierId: z.string().min(1),
+                      quantity: z
+                        .number()
+                        .int()
+                        .positive()
+                        .optional()
+                        .describe(
+                          'Selected modifier quantity per menu portion, using the verified modifier option contract.',
+                        ),
+                      groupName: z.string().min(1).optional(),
+                      modifierName: z.string().min(1).optional(),
+                      priceDeltaVnd: z.number().int().optional(),
+                    })
+                    .strict(),
+                )
+                .optional(),
+            })
+            .strict(),
+        )
+        .min(1),
+    })
+    .strict(),
   previewCart: z.object({}).strict(),
   recommendAddOns: z.object({}).strict(),
   findStores: z

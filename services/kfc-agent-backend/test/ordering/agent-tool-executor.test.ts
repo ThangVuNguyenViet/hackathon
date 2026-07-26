@@ -27,7 +27,10 @@ import {
   type AgentApprovalExecutionContext,
   type AgentToolExecutorContext,
 } from "../../src/ordering/agentToolExecutor.js";
-import { agentToolArgumentSchemas } from "../../src/ordering/toolCatalog.js";
+import {
+  agentToolArgumentSchemas,
+  toolArgumentSchemas,
+} from "../../src/ordering/toolCatalog.js";
 import type {
   CommerceApprovalBinding,
   CommerceApprovalCapability,
@@ -664,6 +667,12 @@ describe("provider-neutral agent commerce executor", () => {
             ],
           },
         ],
+      }).success,
+    ).toBe(false);
+    expect(
+      toolArgumentSchemas.updateCart.safeParse({
+        mode: "patch",
+        changes: [{ itemCode: "20751", quantity: 1 }],
       }).success,
     ).toBe(false);
     expect(
@@ -1560,6 +1569,10 @@ describe("provider-neutral agent commerce executor", () => {
         throw new Error("approval binding missing");
 
       const approved = await approvalContext(pending.approvalBinding);
+      const expectedProviderOutcome =
+        toolName === "acquireVoucher"
+          ? { ok: false, errorCode: "membership_points_insufficient" }
+          : { ok: true };
       await expect(
         executeAgentToolCall(clients, request, {
           state: currentState,
@@ -1567,7 +1580,7 @@ describe("provider-neutral agent commerce executor", () => {
           approval: approved,
           runGuard: currentRunGuard(),
         }),
-      ).resolves.toMatchObject({ ok: true });
+      ).resolves.toMatchObject(expectedProviderOutcome);
       await expect(
         executeAgentToolCall(clients, request, {
           state: currentState,
@@ -1575,7 +1588,7 @@ describe("provider-neutral agent commerce executor", () => {
           approval: approved,
           runGuard: currentRunGuard(),
         }),
-      ).resolves.toMatchObject({ ok: true });
+      ).resolves.toMatchObject(expectedProviderOutcome);
     },
   );
 

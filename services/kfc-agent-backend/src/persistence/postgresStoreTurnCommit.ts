@@ -1,6 +1,8 @@
 import type { PoolClient } from 'pg';
 import type { VerifiedRefRecord } from '../domain/verifiedRef.js';
 import type {
+  CommitAssistantTurnInput,
+  CommitAssistantTurnResult,
   CommitAssistantTurnIfRunCurrentInput,
   CommitAssistantTurnIfRunCurrentResult,
 } from './contracts.js';
@@ -15,10 +17,31 @@ import {
   isConnectablePostgres,
   lockPostgresRunCommitOwner,
 } from './postgresStoreRunOwner.js';
+import {
+  lockPostgresSessionAuthority,
+} from './postgresStoreSessionAuthority.js';
 
 export async function commitPostgresAssistantTurnIfRunCurrent(input: {
   db: Queryable;
   operation: CommitAssistantTurnIfRunCurrentInput;
+}): Promise<CommitAssistantTurnIfRunCurrentResult> {
+  return commitPostgresAssistantTurnOperation(input);
+}
+
+export async function commitPostgresAssistantTurn(input: {
+  db: Queryable;
+  operation: CommitAssistantTurnInput;
+}): Promise<CommitAssistantTurnResult> {
+  const result = await commitPostgresAssistantTurnOperation(input);
+  if (result.status === 'stale') {
+    throw new Error('postgres_unfenced_agent_turn_commit_stale');
+  }
+  return result;
+}
+
+async function commitPostgresAssistantTurnOperation(input: {
+  db: Queryable;
+  operation: CommitAssistantTurnInput | CommitAssistantTurnIfRunCurrentInput;
 }): Promise<CommitAssistantTurnIfRunCurrentResult> {
   if (!isConnectablePostgres(input.db)) {
     throw new Error('postgres_atomic_agent_turn_commit_unavailable');
@@ -27,6 +50,27 @@ export async function commitPostgresAssistantTurnIfRunCurrent(input: {
   const client = await input.db.connect();
   try {
     await client.query('BEGIN');
+    if ('fence' in input.operation) {
+      const operation = input.operation;
+      if (!await lockPostgresRunCommitOwner(client, {
+        sessionId: operation.stateEvent.sessionId,
+        fence: operation.fence,
+        ...(operation.notAfter === undefined
+          ? {}
+          : { notAfter: operation.notAfter }),
+      })) {
+        await client.query('ROLLBACK');
+        return { status: 'stale' };
+      }
+    } else if (
+      prepared.sdkSessionMutation.mode === 'replace' ||
+      prepared.sdkSessionMutation.items.length > 0
+    ) {
+      await lockPostgresSessionAuthority(
+        client,
+        prepared.turn.sessionId,
+      );
+    }
     const sessionGeneration =
       prepared.verifiedRefs.length > 0
         ? await lockVerifiedRefGeneration(
@@ -34,16 +78,6 @@ export async function commitPostgresAssistantTurnIfRunCurrent(input: {
             prepared.turn.sessionId,
           )
         : undefined;
-    if (!await lockPostgresRunCommitOwner(client, {
-      sessionId: input.operation.stateEvent.sessionId,
-      fence: input.operation.fence,
-      ...(input.operation.notAfter === undefined
-        ? {}
-        : { notAfter: input.operation.notAfter }),
-    })) {
-      await client.query('ROLLBACK');
-      return { status: 'stale' };
-    }
     for (const record of prepared.verifiedRefs) {
       await insertVerifiedRef(
         client,
@@ -73,6 +107,28 @@ export async function commitPostgresAssistantTurnIfRunCurrent(input: {
       ],
     );
     await insertEvent(client, prepared.turnEvent);
+    if (prepared.auditEvent) await insertEvent(client, prepared.auditEvent);
+    if (prepared.sdkSessionMutation.mode === 'replace') {
+      await client.query(
+        'DELETE FROM agent_session_items WHERE session_id = $1',
+        [prepared.turn.sessionId],
+      );
+    }
+    if (prepared.sdkSessionMutation.items.length > 0) {
+      await client.query(
+        `INSERT INTO agent_session_items (session_id, item_json)
+         SELECT $1, item::jsonb
+         FROM unnest($2::text[]) WITH ORDINALITY
+           AS values_to_insert(item, ordinal)
+         ORDER BY ordinal`,
+        [
+          prepared.turn.sessionId,
+          prepared.sdkSessionMutation.items.map((item) =>
+            JSON.stringify(item)
+          ),
+        ],
+      );
+    }
     await client.query('COMMIT');
     return { status: 'committed', ...structuredClone(prepared) };
   } catch (error) {

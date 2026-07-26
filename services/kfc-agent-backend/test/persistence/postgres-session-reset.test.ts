@@ -107,6 +107,7 @@ describe('Postgres session reset non-agent delivery fence', () => {
       entry.text.includes('deleted_deliveries AS')
     )?.text;
     expect(resetQuery).toContain('DELETE FROM webhook_deliveries');
+    expect(resetQuery).toContain('DELETE FROM agent_session_items');
     expect(resetQuery).not.toContain('non_agent_text_deliveries');
     expect(harness.queries.some((entry) =>
       entry.text.includes("SET status = 'outcome_unknown'") &&

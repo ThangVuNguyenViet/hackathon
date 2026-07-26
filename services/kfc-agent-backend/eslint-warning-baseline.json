@@ -70,6 +70,9 @@
     "src/agent/modelPublicationStateProjection.ts": {
       "@typescript-eslint/no-unsafe-type-assertion": 13
     },
+    "src/agent/openAiKfcAgent.ts": {
+      "@typescript-eslint/no-unsafe-type-assertion": 2
+    },
     "src/agent/parallelReadBatch.ts": {
       "@typescript-eslint/no-unsafe-type-assertion": 2
     },
@@ -262,8 +265,14 @@
     "test/agent/kfc-create-agent-tool-coordinator.test.ts": {
       "@typescript-eslint/no-unsafe-type-assertion": 2
     },
+    "test/agent/kfc-openai-agents-sdk-tools.test.ts": {
+      "@typescript-eslint/no-unsafe-type-assertion": 1
+    },
     "test/agent/model-publication-projection.test.ts": {
       "@typescript-eslint/no-unsafe-type-assertion": 5
+    },
+    "test/agent/open-ai-kfc-agent.test.ts": {
+      "@typescript-eslint/no-unsafe-type-assertion": 2
     },
     "test/agent/order-status-evidence-freshness.test.ts": {
       "@typescript-eslint/no-unsafe-type-assertion": 2
@@ -293,7 +302,7 @@
       "@typescript-eslint/no-unsafe-type-assertion": 1
     },
     "test/api/channel-presentation-delivery.test.ts": {
-      "@typescript-eslint/no-unsafe-type-assertion": 8
+      "@typescript-eslint/no-unsafe-type-assertion": 9
     },
     "test/api/customer-run-streaming.test.ts": {
       "@typescript-eslint/no-unsafe-type-assertion": 6
@@ -304,10 +313,16 @@
     "test/api/human-takeover.test.ts": {
       "@typescript-eslint/no-unsafe-type-assertion": 10
     },
+    "test/api/health.test.ts": {
+      "@typescript-eslint/no-unsafe-type-assertion": 1
+    },
     "test/api/lifecycle-control.test.ts": {
       "@typescript-eslint/no-unsafe-type-assertion": 1
     },
     "test/api/messenger-proof-envelope.test.ts": {
+      "@typescript-eslint/no-unsafe-type-assertion": 1
+    },
+    "test/api/open-ai-kfc-agent.test.ts": {
       "@typescript-eslint/no-unsafe-type-assertion": 1
     },
     "test/api/run-authority-publication.test.ts": {
@@ -437,7 +452,7 @@
       "@typescript-eslint/no-unsafe-type-assertion": 4
     },
     "test/persistence/run-commit-fence-store.test.ts": {
-      "@typescript-eslint/no-unsafe-type-assertion": 7
+      "@typescript-eslint/no-unsafe-type-assertion": 8
     },
     "test/persistence/verified-ref-store.test.ts": {
       "@typescript-eslint/no-unsafe-type-assertion": 4

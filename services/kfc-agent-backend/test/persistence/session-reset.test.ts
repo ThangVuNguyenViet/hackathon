@@ -92,7 +92,7 @@ describe('complete session reset', () => {
     const store = new D1Store(db, hook);
     await store.initialize();
     const directSessionTables = [
-      'conversation_turns', 'conversation_events', 'dashboard_events', 'webhook_deliveries',
+      'agent_session_items', 'conversation_turns', 'conversation_events', 'dashboard_events', 'webhook_deliveries',
       'pending_customer_turns', 'agent_runs', 'session_agent_state',
       'customer_runs', 'irreversible_operations',
     ] as const;

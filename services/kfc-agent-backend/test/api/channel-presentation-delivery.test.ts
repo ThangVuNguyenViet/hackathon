@@ -2,6 +2,7 @@ import { fakeModel } from '@langchain/core/testing';
 import { MemorySaver } from '@langchain/langgraph';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { OpenAiKfcAgent } from '../../src/agent/openAiKfcAgent.js';
+import { user, type OpenAIClient } from '@kfc/openai-agents-runtime';
 import { createRouteHandlers } from '../../src/api/routeHandlers.js';
 import { agentRunExecutionFence } from '../../src/persistence/agentRunExecutionLease.js';
 import { MemoryStore } from '../../src/persistence/memoryStore.js';
@@ -9,13 +10,35 @@ import { createTestFixtures } from '../fixtures/testFixtures.js';
 import { groundedResponseModelReply } from '../fixtures/groundedResponse.js';
 import { testAgent } from '../fixtures/testAgent.js';
 
+function sdkResponse(input: { output?: Array<Record<string, unknown>>; text: string; usage?: Record<string, number> }) {
+  return {
+    id: crypto.randomUUID(),
+    object: 'response',
+    created_at: 0,
+    model: 'gpt-4.1-mini',
+    output: input.output?.map((item) => ({ id: crypto.randomUUID(), ...item })) ?? [{
+      id: crypto.randomUUID(),
+      type: 'message',
+      role: 'assistant',
+      status: 'completed',
+      content: [{ type: 'output_text', text: input.text }],
+    }],
+    output_text: input.text,
+    usage: input.usage ?? { input_tokens: 0, output_tokens: 0, total_tokens: 0 },
+  };
+}
+
+function sdkTestClient(client: { responses: { create: (request: Record<string, unknown>) => Promise<unknown> } }): OpenAIClient {
+  return client as unknown as OpenAIClient;
+}
+
 function directAgent(responseText: string): OpenAiKfcAgent {
   return new OpenAiKfcAgent({
-    client: {
+    client: sdkTestClient({
       responses: {
-        create: async () => ({ output: [], output_text: responseText }),
+        create: async () => sdkResponse({ text: responseText }),
       },
-    },
+    }),
     model: 'gpt-4.1-mini',
   });
 }
@@ -137,18 +160,17 @@ describe('channel presentation delivery compatibility', () => {
     });
     const requests: Array<Record<string, unknown>> = [];
     const openAiAgent = new OpenAiKfcAgent({
-      client: {
+      client: sdkTestClient({
         responses: {
           create: async (request) => {
             requests.push(request);
-            return {
-              output: [],
-              output_text: 'Mình gợi ý món gà phù hợp nhé.',
+            return sdkResponse({
+              text: 'Mình gợi ý món gà phù hợp nhé.',
               usage: { input_tokens: 10, output_tokens: 8, total_tokens: 18 },
-            };
+            });
           },
         },
-      },
+      }),
       model: 'gpt-4.1-mini',
     });
     const messengerFetchImpl = vi.fn(
@@ -215,13 +237,13 @@ describe('channel presentation delivery compatibility', () => {
     const requests: Array<Record<string, unknown>> = [];
     let responseIndex = 0;
     const openAiAgent = new OpenAiKfcAgent({
-      client: {
+      client: sdkTestClient({
         responses: {
           create: async (request) => {
             requests.push(structuredClone(request));
             responseIndex += 1;
             if (responseIndex === 1) {
-              return {
+              return sdkResponse({
                 output: [
                   {
                     type: 'function_call',
@@ -231,26 +253,25 @@ describe('channel presentation delivery compatibility', () => {
                       changes: [
                         {
                           itemCode: item.code,
-                          quantity: 2,
-                          modifiers: [],
+                          orderedMenuItemQuantity: 2,
+                          modifiers: null,
                         },
                       ],
                     }),
                   },
                 ],
-                output_text: '',
-              };
+                text: '',
+              });
             }
-            return {
-              output: [],
-              output_text:
+            return sdkResponse({
+              text:
                 responseIndex === 2
                   ? 'Đã thêm món vào giỏ.'
                   : 'Giỏ hàng vẫn còn món bạn đã chọn.',
-            };
+            });
           },
         },
-      },
+      }),
       model: 'gpt-4.1-mini',
     });
     const messengerFetchImpl = vi.fn(
@@ -311,14 +332,7 @@ describe('channel presentation delivery compatibility', () => {
       recreatedHandlers.processMessengerAgentRun('run_durable_cart_2'),
     ).resolves.toEqual({ status: 'processed' });
 
-    expect(requests.at(-1)?.input).toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({
-          role: 'developer',
-          content: expect.stringContaining(`"itemCode":"${item.code}"`),
-        }),
-      ]),
-    );
+    expect(requests.at(-1)?.instructions).toContain(`"itemCode":"${item.code}"`);
     const verifiedStates = (await store.listEvents(sessionId))
       .filter(({ sourceType }) => sourceType === 'graph:verified_state')
       .map(({ payload }) => payload.verifiedState);
@@ -342,12 +356,12 @@ describe('channel presentation delivery compatibility', () => {
     const privateQuery = 'private.person@example.com 0901234567';
     let responseIndex = 0;
     const openAiAgent = new OpenAiKfcAgent({
-      client: {
+      client: sdkTestClient({
         responses: {
           create: async () => {
             responseIndex += 1;
             return responseIndex === 1
-              ? {
+              ? sdkResponse({
                   output: [
                     {
                       type: 'function_call',
@@ -356,15 +370,12 @@ describe('channel presentation delivery compatibility', () => {
                       arguments: JSON.stringify({ query: privateQuery }),
                     },
                   ],
-                  output_text: '',
-                }
-              : {
-                  output: [],
-                  output_text: 'Mình chưa tìm thấy món phù hợp.',
-                };
+                  text: '',
+                })
+              : sdkResponse({ text: 'Mình chưa tìm thấy món phù hợp.' });
           },
         },
-      },
+      }),
       model: 'gpt-4.1-mini',
     });
     const messengerFetchImpl = vi.fn(
@@ -409,13 +420,17 @@ describe('channel presentation delivery compatibility', () => {
     );
     expect(traceEvent?.payload).toMatchObject({
       schemaVersion: 'openai-redacted-tool-trace-v1',
+      run: {
+        status: 'success',
+        latencyMs: expect.any(Number),
+      },
       calls: [
         {
           index: 0,
           name: 'searchMenu',
           arguments: {
             redacted: true,
-            keys: ['query'],
+          keys: ['mode', 'query'],
             digest: expect.stringMatching(/^[a-f0-9]{64}$/),
           },
         },
@@ -485,19 +500,21 @@ describe('channel presentation delivery compatibility', () => {
       debounceDeadlineAt: '2026-07-11T00:00:01.000Z',
     });
 
-    const appendTurn = store.appendTurn.bind(store);
-    vi.spyOn(store, 'appendTurn').mockImplementation(async (input) => {
-      const result = await appendTurn(input);
-      if (input.role === 'assistant') {
+    await store.addAgentSessionItems('messenger:stale_user', [
+      user('prior durable history'),
+    ]);
+    const commit = store.commitAssistantTurnIfRunCurrent.bind(store);
+    vi.spyOn(store, 'commitAssistantTurnIfRunCurrent').mockImplementation(
+      async (input) => {
         await store.setSessionAgentState({
           sessionId: 'messenger:stale_user',
           currentRunId: 'run_newer',
           generation: 2,
           debounceDeadlineAt: '2026-07-11T00:00:02.000Z',
         });
-      }
-      return result;
-    });
+        return commit(input);
+      },
+    );
     const handlers = createRouteHandlers({
       store,
       fixtures: createTestFixtures(),
@@ -530,6 +547,21 @@ describe('channel presentation delivery compatibility', () => {
       status: 'superseded',
       deliveryStatus: 'suppressed',
     });
+    expect(
+      (await store.listTurns('messenger:stale_user')).filter(
+        (turn) => turn.role === 'assistant',
+      ),
+    ).toEqual([]);
+    await expect(
+      store.listAgentSessionItems('messenger:stale_user'),
+    ).resolves.toEqual([user('prior durable history')]);
+    expect(
+      (await store.listEvents('messenger:stale_user')).filter(
+        (event) =>
+          event.sourceType === 'graph:verified_state' ||
+          event.sourceType === 'openai:tool_trace',
+      ),
+    ).toEqual([]);
     expect(
       handlers.dashboard
         .getEvents('messenger:stale_user')

@@ -4,9 +4,12 @@ import type {
   SessionAgentState,
 } from '../domain/types.js';
 import type { CustomerRun } from '../customerRuns/contracts.js';
+import type { AgentInputItem } from '@kfc/openai-agents-runtime';
 import type {
   AppendEventIfRunCurrentInput,
   AppendEventIfRunCurrentResult,
+  CommitAssistantTurnInput,
+  CommitAssistantTurnResult,
   CommitAssistantTurnIfRunCurrentInput,
   CommitAssistantTurnIfRunCurrentResult,
   IrreversibleOperationInput,
@@ -87,6 +90,7 @@ export function commitMemoryAssistantTurnIfRunCurrent(input: {
   verifiedRefs: Map<string, MemoryVerifiedRefStorageSnapshot>;
   turns: ConversationTurn[];
   events: StoredEvent[];
+  agentSessionItems: Map<string, AgentInputItem[]>;
   now?: () => number;
 }): CommitAssistantTurnIfRunCurrentResult {
   const now = input.now?.() ?? Date.now();
@@ -133,10 +137,58 @@ export function commitMemoryAssistantTurnIfRunCurrent(input: {
   input.events.push(prepared.stateEvent);
   input.turns.push(prepared.turn);
   input.events.push(prepared.turnEvent);
+  if (prepared.auditEvent) input.events.push(prepared.auditEvent);
+  const sessionItems = prepared.sdkSessionMutation.mode === 'replace'
+    ? []
+    : input.agentSessionItems.get(prepared.turn.sessionId) ?? [];
+  sessionItems.push(
+    ...structuredClone(prepared.sdkSessionMutation.items),
+  );
+  input.agentSessionItems.set(prepared.turn.sessionId, sessionItems);
   return {
     status: 'committed',
     ...structuredClone(prepared),
   };
+}
+
+export function commitMemoryAssistantTurn(input: {
+  operation: CommitAssistantTurnInput;
+  confirmationPauseGenerations: ReadonlyMap<string, number>;
+  verifiedRefs: Map<string, MemoryVerifiedRefStorageSnapshot>;
+  turns: ConversationTurn[];
+  events: StoredEvent[];
+  agentSessionItems: Map<string, AgentInputItem[]>;
+  now?: () => number;
+}): CommitAssistantTurnResult {
+  const prepared = prepareAssistantTurnCommit(
+    input.operation,
+    new Date(input.now?.() ?? Date.now()),
+  );
+  const sessionGeneration =
+    input.confirmationPauseGenerations.get(prepared.turn.sessionId) ?? 0;
+  for (const record of prepared.verifiedRefs) {
+    if (input.verifiedRefs.has(record.ref.id)) {
+      throw new Error('verified_ref_id_collision');
+    }
+  }
+  for (const record of prepared.verifiedRefs) {
+    input.verifiedRefs.set(
+      record.ref.id,
+      memoryVerifiedRefStorageSnapshot(record, sessionGeneration),
+    );
+  }
+  input.events.push(prepared.stateEvent);
+  input.turns.push(prepared.turn);
+  input.events.push(prepared.turnEvent);
+  if (prepared.auditEvent) input.events.push(prepared.auditEvent);
+  const sessionItems = prepared.sdkSessionMutation.mode === 'replace'
+    ? []
+    : input.agentSessionItems.get(prepared.turn.sessionId) ?? [];
+  sessionItems.push(
+    ...structuredClone(prepared.sdkSessionMutation.items),
+  );
+  input.agentSessionItems.set(prepared.turn.sessionId, sessionItems);
+  return { status: 'committed', ...structuredClone(prepared) };
 }
 
 export function memoryRunCommitFenceIsCurrent(

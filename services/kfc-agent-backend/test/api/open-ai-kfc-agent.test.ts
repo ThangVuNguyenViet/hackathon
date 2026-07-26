@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { OpenAiKfcAgent } from '../../src/agent/openAiKfcAgent.js';
+import type { OpenAIClient } from '@kfc/openai-agents-runtime';
 import { buildServer } from '../../src/api/server.js';
 import { MemoryStore } from '../../src/persistence/memoryStore.js';
 import { createTestFixtures } from '../fixtures/testFixtures.js';
@@ -27,6 +28,48 @@ function requestToolNames(request: Record<string, unknown> | undefined) {
   });
 }
 
+/**
+ * Builds the subset of a Responses API result consumed by @openai/agents.
+ * The former direct-loop fixtures only supplied output_text; the SDK expects
+ * an assistant message item in output as well as the Response envelope.
+ */
+function sdkResponse(response: Record<string, unknown>) {
+  const rawOutput = Array.isArray(response.output) ? response.output : [];
+  const output = rawOutput.length
+    ? rawOutput.map((item, index) =>
+        typeof item === 'object' && item !== null
+          ? { id: `output_${index}`, ...item }
+          : item,
+      )
+    : typeof response.output_text === 'string' && response.output_text
+      ? [
+          {
+            id: 'output_message',
+            type: 'message',
+            role: 'assistant',
+            status: 'completed',
+            content: [{ type: 'output_text', text: response.output_text }],
+          },
+        ]
+      : [];
+
+  return {
+    id: 'response_fixture',
+    object: 'response',
+    created_at: 0,
+    model: 'gpt-4.1-mini',
+    usage: { input_tokens: 0, output_tokens: 0, total_tokens: 0 },
+    ...response,
+    output,
+  };
+}
+
+function sdkTestClient(client: {
+  responses: { create: (request: Record<string, unknown>) => Promise<unknown> };
+}): OpenAIClient {
+  return client as unknown as OpenAIClient;
+}
+
 describe('OpenAI KFC chat API', () => {
   it('persists an incomplete address draft and accepts one structured prefilled-form update after restart', async () => {
     const store = new MemoryStore();
@@ -45,21 +88,26 @@ describe('OpenAI KFC chat API', () => {
       legacyDistrictText: null,
     };
     const openAiAgent = new OpenAiKfcAgent({
-      client: {
+      client: sdkTestClient({
         responses: {
           create: async (request) => {
             requests.push(request);
             responseIndex += 1;
             if (responseIndex === 1) {
-              return {
+              return sdkResponse({
                 output: [
                   {
                     type: 'function_call',
                     call_id: 'call_add_cart_item',
                     name: 'updateCart',
                     arguments: JSON.stringify({
-                      itemCode: '20751',
-                      quantity: 1,
+                      changes: [
+                        {
+                          itemCode: '20751',
+                          orderedMenuItemQuantity: 1,
+                          modifiers: null,
+                        },
+                      ],
                     }),
                   },
                   {
@@ -81,18 +129,18 @@ describe('OpenAI KFC chat API', () => {
                   },
                 ],
                 output_text: '',
-              };
+              });
             }
-            return {
+            return sdkResponse({
               output: [],
               output_text:
                 responseIndex === 2
                   ? 'Bạn cho mình xin tên người nhận và số điện thoại nhé.'
                   : 'Mình đã lưu tên người nhận; còn thiếu số điện thoại.',
-            };
+            });
           },
         },
-      },
+      }),
       model: 'gpt-4.1-mini',
     });
     const server = buildServer({
@@ -180,15 +228,13 @@ describe('OpenAI KFC chat API', () => {
         },
       },
     });
-    expect(requests.at(-1)?.input).toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({
-          type: 'function_call',
-          name: 'quoteFulfillment',
-          arguments: expect.stringContaining('"recipientName":"Nguyễn An"'),
-        }),
-      ]),
+    expect(requests.at(-1)?.instructions).toContain(
+      'Verified GenUI customer action:',
     );
+    expect(requests.at(-1)?.instructions).toContain(
+      '"recipientName":"Nguyễn An"',
+    );
+    expect(requests.at(-1)?.tools).toEqual([]);
 
     const quotedResponse = await resumedServer.inject({
       method: 'POST',
@@ -253,15 +299,16 @@ describe('OpenAI KFC chat API', () => {
   it('routes first-party chat through the direct Responses agent', async () => {
     const store = new MemoryStore();
     const openAiAgent = new OpenAiKfcAgent({
-      client: {
+      client: sdkTestClient({
         responses: {
-          create: async () => ({
-            output: [],
-            output_text: 'Mình sẽ giúp bạn chọn món thật đơn giản.',
-            usage: { input_tokens: 10, output_tokens: 8, total_tokens: 18 },
-          }),
+          create: async () =>
+            sdkResponse({
+              output: [],
+              output_text: 'Mình sẽ giúp bạn chọn món thật đơn giản.',
+              usage: { input_tokens: 10, output_tokens: 8, total_tokens: 18 },
+            }),
         },
-      },
+      }),
       model: 'gpt-4.1-mini',
     });
     const server = buildServer({
@@ -309,12 +356,12 @@ describe('OpenAI KFC chat API', () => {
     const store = new MemoryStore();
     let responseIndex = 0;
     const openAiAgent = new OpenAiKfcAgent({
-      client: {
+      client: sdkTestClient({
         responses: {
           create: async () => {
             responseIndex += 1;
             if (responseIndex === 1) {
-              return {
+              return sdkResponse({
                 output: [
                   {
                     type: 'function_call',
@@ -324,9 +371,9 @@ describe('OpenAI KFC chat API', () => {
                   },
                 ],
                 output_text: '',
-              };
+              });
             }
-            return {
+            return sdkResponse({
               output: [],
               output_text:
                 responseIndex === 2
@@ -334,10 +381,10 @@ describe('OpenAI KFC chat API', () => {
                   : responseIndex === 3
                     ? 'Đã thêm combo vào giỏ.'
                     : 'Giỏ hàng của bạn hiện đã trống.',
-            };
+            });
           },
         },
-      },
+      }),
       model: 'gpt-4.1-mini',
     });
     const server = buildServer({
@@ -408,14 +455,14 @@ describe('OpenAI KFC chat API', () => {
     let responseIndex = 0;
     const requests: Array<Record<string, unknown>> = [];
     const openAiAgent = new OpenAiKfcAgent({
-      client: {
+      client: sdkTestClient({
         responses: {
           create: async (request) => {
             requests.push(request);
             responseIndex += 1;
             switch (responseIndex) {
               case 1:
-                return {
+                return sdkResponse({
                   output: [
                     {
                       type: 'function_call',
@@ -425,9 +472,9 @@ describe('OpenAI KFC chat API', () => {
                     },
                   ],
                   output_text: '',
-                };
+                });
               case 2:
-                return {
+                return sdkResponse({
                   output: [],
                   output_text: 'Mời bạn chọn combo phù hợp.',
                   usage: {
@@ -435,19 +482,9 @@ describe('OpenAI KFC chat API', () => {
                     output_tokens: 6,
                     total_tokens: 26,
                   },
-                };
+                });
               case 3:
-                return {
-                  output: [],
-                  output_text: 'Mời bạn chọn combo phù hợp.',
-                  usage: {
-                    input_tokens: 20,
-                    output_tokens: 6,
-                    total_tokens: 26,
-                  },
-                };
-              case 4:
-                return {
+                return sdkResponse({
                   output: [],
                   output_text: 'Đã thêm 2 combo vào giỏ.',
                   usage: {
@@ -455,9 +492,9 @@ describe('OpenAI KFC chat API', () => {
                     output_tokens: 8,
                     total_tokens: 38,
                   },
-                };
-              case 5:
-                return {
+                });
+              case 4:
+                return sdkResponse({
                   output: [
                     {
                       type: 'function_call',
@@ -482,43 +519,38 @@ describe('OpenAI KFC chat API', () => {
                     },
                   ],
                   output_text: '',
-                };
+                });
+              case 5:
+                return sdkResponse({
+                  output: [],
+                  output_text: 'Mình đã kiểm tra giao hàng đến Quận 7.',
+                });
               case 6:
-                return {
-                  output: [],
-                  output_text: 'Mình đã kiểm tra giao hàng đến Quận 7.',
-                };
-              case 7:
-                return {
-                  output: [],
-                  output_text: 'Mình đã kiểm tra giao hàng đến Quận 7.',
-                };
-              case 8:
-                return {
+                return sdkResponse({
                   output: [],
                   output_text: 'Mời bạn kiểm tra lại đơn hàng.',
-                };
-              case 9:
-                return {
+                });
+              case 7:
+                return sdkResponse({
                   output: [],
                   output_text: 'Đơn hàng đã được đặt thành công.',
-                };
-              case 10:
-                return {
+                });
+              case 8:
+                return sdkResponse({
                   output: [],
                   output_text: 'Mời bạn chọn phương thức thanh toán.',
-                };
-              case 11:
-                return {
+                });
+              case 9:
+                return sdkResponse({
                   output: [],
                   output_text: 'Đã chọn Ví ZaloPay.',
-                };
+                });
               default:
                 throw new Error('Unexpected extra Responses API call');
             }
           },
         },
-      },
+      }),
       model: 'gpt-4.1-mini',
     });
     const server = buildServer({
@@ -601,27 +633,11 @@ describe('OpenAI KFC chat API', () => {
         },
       },
     });
-    expect(requests[3]?.input).toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({
-          role: 'developer',
-          content:
-            'Verified GenUI customer action: {"kind":"cart_batch_update","items":[{"itemCode":"20751","quantity":2}]}',
-        }),
-        expect.objectContaining({
-          type: 'function_call',
-          name: 'updateCart',
-          arguments: JSON.stringify({
-            changes: [{ itemCode: '20751', quantity: 2, modifiers: [] }],
-          }),
-        }),
-        expect.objectContaining({
-          type: 'function_call_output',
-          output: expect.stringContaining('"toolName":"updateCart"'),
-        }),
-      ]),
+    expect(requests[2]?.instructions).toContain(
+      'Verified GenUI customer action: {"kind":"cart_batch_update","items":[{"itemCode":"20751","quantity":2}]}',
     );
-    expect(requests[3]?.tools).toEqual([]);
+    expect(requests[2]?.instructions).toContain('"toolName":"updateCart"');
+    expect(requests[2]?.tools).toEqual([]);
 
     const resumedServer = buildServer({
       store,
@@ -659,14 +675,7 @@ describe('OpenAI KFC chat API', () => {
         },
       },
     });
-    expect(requests[4]?.input).toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({
-          role: 'developer',
-          content: expect.stringContaining('"itemCode":"20751"'),
-        }),
-      ]),
-    );
+    expect(requests[3]?.instructions).toContain('"itemCode":"20751"');
 
     const acceptedFulfillmentResponse = await resumedServer.inject({
       method: 'POST',
@@ -718,20 +727,8 @@ describe('OpenAI KFC chat API', () => {
         },
       },
     });
-    expect(requests[8]?.input).toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({
-          type: 'function_call',
-          name: 'previewOrder',
-          arguments: '{}',
-        }),
-        expect.objectContaining({
-          type: 'function_call',
-          name: 'placeOrder',
-          arguments: '{}',
-        }),
-      ]),
-    );
+    expect(requests[6]?.instructions).toContain('"toolName":"previewOrder"');
+    expect(requests[6]?.instructions).toContain('"toolName":"placeOrder"');
 
     const paymentMethodsResponse = await resumedServer.inject({
       method: 'POST',
@@ -797,13 +794,13 @@ describe('OpenAI KFC chat API', () => {
     let responseIndex = 0;
     const requests: Array<Record<string, unknown>> = [];
     const openAiAgent = new OpenAiKfcAgent({
-      client: {
+      client: sdkTestClient({
         responses: {
           create: async (request) => {
             requests.push(request);
             responseIndex += 1;
             return responseIndex === 1
-              ? {
+              ? sdkResponse({
                   output: [
                     {
                       type: 'function_call',
@@ -813,14 +810,14 @@ describe('OpenAI KFC chat API', () => {
                     },
                   ],
                   output_text: '',
-                }
-              : {
+                })
+              : sdkResponse({
                   output: [],
                   output_text: 'Combo Hợp Gu 99K có giá 99.000đ.',
-                };
+                });
           },
         },
-      },
+      }),
       model: 'gpt-4.1-mini',
     });
     const server = buildServer({
@@ -871,14 +868,18 @@ describe('OpenAI KFC chat API', () => {
             call_id: 'call_add',
             name: 'updateCart',
             arguments: JSON.stringify({
-              itemCode: fixtures.menuItems[0]!.code,
-              quantity: 1,
+              changes: [
+                {
+                  itemCode: fixtures.menuItems[0]!.code,
+                  orderedMenuItemQuantity: 1,
+                  modifiers: null,
+                },
+              ],
             }),
           },
         ],
         output_text: '',
       },
-      { output: [], output_text: 'Món đã ở trong giỏ.' },
       { output: [], output_text: 'Món đã ở trong giỏ.' },
       {
         output: [
@@ -905,7 +906,6 @@ describe('OpenAI KFC chat API', () => {
         ],
         output_text: '',
       },
-      { output: [], output_text: 'Địa chỉ giao hàng đã được xác minh.' },
       { output: [], output_text: 'Địa chỉ giao hàng đã được xác minh.' },
       {
         output: [
@@ -957,20 +957,16 @@ describe('OpenAI KFC chat API', () => {
         output: [],
         output_text: 'Đơn đã được đặt và liên kết thanh toán đã sẵn sàng.',
       },
-      {
-        output: [],
-        output_text: 'Đơn đã được đặt và liên kết thanh toán đã sẵn sàng.',
-      },
     ];
     const openAiAgent = new OpenAiKfcAgent({
-      client: {
+      client: sdkTestClient({
         responses: {
           create: async (request) => {
             requests.push(structuredClone(request));
-            return responses.shift();
+            return sdkResponse(responses.shift() ?? {});
           },
         },
-      },
+      }),
       model: 'gpt-4.1-mini',
     });
     const server = buildServer({ store, fixtures, openAiAgent });
@@ -1004,16 +1000,15 @@ describe('OpenAI KFC chat API', () => {
     const finalInput = requests.at(-1)?.input;
     expect(finalInput).toEqual(
       expect.arrayContaining([
-        expect.objectContaining({ name: 'listPaymentMethods' }),
-        expect.objectContaining({ name: 'previewOrder' }),
-        expect.objectContaining({ name: 'placeOrder' }),
         expect.objectContaining({
-          name: 'createPaymentLink',
-          arguments: JSON.stringify({
-            methodId: supportedMethod.methodId,
-          }),
+          type: 'function_call_output',
+          call_id: 'call_payment',
+          output: expect.stringContaining('"toolName":"createPaymentLink"'),
         }),
       ]),
+    );
+    expect(requests.at(-1)?.instructions).toContain(
+      'Verified current fixture business state',
     );
   });
 });

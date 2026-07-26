@@ -1,3 +1,4 @@
+import type { AgentInputItem } from '@kfc/openai-agents-runtime';
 import type {
   AgentMode,
   ConversationProfile,
@@ -146,6 +147,79 @@ import {
 } from './d1StoreAgentRunCreation.js';
 
 export class D1StoreAgentOperations extends D1StoreConversationOperations {
+  async listAgentSessionItems(
+    sessionId: string,
+    limit?: number,
+  ): Promise<AgentInputItem[]> {
+    const statement = limit === undefined
+      ? this.db.prepare(
+        `SELECT item_json
+         FROM agent_session_items
+         WHERE session_id = ?
+         ORDER BY id ASC`,
+      ).bind(sessionId)
+      : this.db.prepare(
+        `SELECT item_json
+         FROM (
+           SELECT id, item_json
+           FROM agent_session_items
+           WHERE session_id = ?
+           ORDER BY id DESC
+           LIMIT ?
+         )
+         ORDER BY id ASC`,
+      ).bind(sessionId, limit);
+    const result = await statement.all<{ item_json: string }>();
+    return (result.results ?? []).map(
+      // The JSON was written from AgentInputItem by addAgentSessionItems.
+      // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion
+      (row) => JSON.parse(row.item_json) as AgentInputItem,
+    );
+  }
+
+  async addAgentSessionItems(
+    sessionId: string,
+    items: AgentInputItem[],
+  ): Promise<void> {
+    if (items.length === 0) return;
+    if (!this.db.batch) {
+      throw new Error('d1_atomic_agent_session_append_unavailable');
+    }
+    await this.db.batch(
+      items.map((item) =>
+        this.db.prepare(
+          `INSERT INTO agent_session_items (session_id, item_json)
+           VALUES (?, ?)`,
+        ).bind(sessionId, JSON.stringify(item)),
+      ),
+    );
+  }
+
+  async popAgentSessionItem(
+    sessionId: string,
+  ): Promise<AgentInputItem | undefined> {
+    const row = await this.db.prepare(
+      `DELETE FROM agent_session_items
+       WHERE id = (
+         SELECT id
+         FROM agent_session_items
+         WHERE session_id = ?
+         ORDER BY id DESC
+         LIMIT 1
+       )
+       RETURNING item_json`,
+    ).bind(sessionId).first<{ item_json: string }>();
+    // The JSON was written from AgentInputItem by addAgentSessionItems.
+    // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion
+    return row ? JSON.parse(row.item_json) as AgentInputItem : undefined;
+  }
+
+  async clearAgentSessionItems(sessionId: string): Promise<void> {
+    await this.db.prepare(
+      `DELETE FROM agent_session_items WHERE session_id = ?`,
+    ).bind(sessionId).run();
+  }
+
   async createAgentRun(input: CreateAgentRunInput): Promise<AgentRun> {
     return createD1AgentRun({ db: this.db, operation: input });
   }

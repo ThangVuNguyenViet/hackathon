@@ -14,6 +14,7 @@ import {
   type CustomerRun,
   type CustomerRunEvent,
 } from '../customerRuns/contracts.js';
+import type { AgentInputItem } from '@kfc/openai-agents-runtime';
 import type {
   AuthenticatedCommerceApprovalPrincipal,
   CommerceApprovalBinding,
@@ -121,8 +122,7 @@ export interface AppendEventIfRunCurrentInput {
   notAfter?: string;
 }
 
-export interface CommitAssistantTurnIfRunCurrentInput {
-  fence: RunCommitFence;
+export interface CommitAssistantTurnInput {
   /**
    * Optional server-issued authorization expiry. Stores compare it with their
    * own wall clock in the same atomic operation as every durable write.
@@ -134,12 +134,28 @@ export interface CommitAssistantTurnIfRunCurrentInput {
     payload: Record<string, unknown>;
   };
   assistantTurn: AppendConversationTurnInput;
+  sdkSessionMutation?: AgentSessionItemsMutation;
+  auditEvent?: {
+    sessionId: string;
+    sourceType: string;
+    payload: Record<string, unknown>;
+  };
   /**
    * Opaque references staged in memory while building the presentation. They
    * become visible only in the same atomic commit as the turn that publishes
    * them.
    */
   verifiedRefs?: readonly VerifiedRefRecord[];
+}
+
+export interface AgentSessionItemsMutation {
+  mode: 'append' | 'replace';
+  items: readonly AgentInputItem[];
+}
+
+export interface CommitAssistantTurnIfRunCurrentInput
+  extends CommitAssistantTurnInput {
+  fence: RunCommitFence;
 }
 
 export type CommitAssistantTurnIfRunCurrentResult =
@@ -151,6 +167,11 @@ export type CommitAssistantTurnIfRunCurrentResult =
       verifiedRefs: VerifiedRefRecord[];
     }
   | { status: 'stale' };
+
+export type CommitAssistantTurnResult = Exclude<
+  CommitAssistantTurnIfRunCurrentResult,
+  { status: 'stale' }
+>;
 
 export interface CommitConfirmationPauseIfRunCurrentInput {
   fence: RunCommitFence;
@@ -669,6 +690,18 @@ export type AppendConversationTurnInput = Omit<
 };
 
 export interface ConversationStore {
+  listAgentSessionItems(
+    sessionId: string,
+    limit?: number,
+  ): Promise<AgentInputItem[]>;
+  addAgentSessionItems(
+    sessionId: string,
+    items: AgentInputItem[],
+  ): Promise<void>;
+  popAgentSessionItem(
+    sessionId: string,
+  ): Promise<AgentInputItem | undefined>;
+  clearAgentSessionItems(sessionId: string): Promise<void>;
   resetSession(sessionId: string): Promise<SessionControl>;
   createCustomerRun(input: CreateCustomerRunInput): Promise<CustomerRun>;
   createCustomerRunWithEvent?(
@@ -857,6 +890,9 @@ export interface ConversationStore {
   commitAssistantTurnIfRunCurrent(
     input: CommitAssistantTurnIfRunCurrentInput,
   ): Promise<CommitAssistantTurnIfRunCurrentResult>;
+  commitAssistantTurn(
+    input: CommitAssistantTurnInput,
+  ): Promise<CommitAssistantTurnResult>;
   /**
    * Atomically validates the durable owner and commits the pause's verified
    * state, canonical approval record, and bounded creation audit.

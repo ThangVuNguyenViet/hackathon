@@ -4,17 +4,6 @@ import { fileURLToPath } from 'node:url';
 import { z } from 'zod';
 import type { BaseCheckpointSaver } from '@langchain/langgraph';
 import { AgentRunCoordinator } from '../agentRuns/coordinator.js';
-import { createAgentTurnExternalCallScope } from '../agent/agentExternalCallScope.js';
-import {
-  createKfcOpenAiTools,
-  createKfcToolSession,
-  verifiedKfcToolSessionContext,
-  type KfcToolSession,
-} from '../agent/kfcOpenAiTools.js';
-import {
-  hydrateKfcOpenAiToolSession,
-  persistKfcOpenAiToolSession,
-} from '../agent/kfcOpenAiToolSessionLifecycle.js';
 import type {
   ChannelMediaDeliveryResult,
   ExternalClients,
@@ -195,11 +184,8 @@ export function createRouteMessengerRuntime(
     pauseIfHumanJoined,
     latestUnansweredCustomerTurn,
     replyToLatestUnansweredCustomerTurn,
+    runDirectKfcTurn,
   } = input;
-  const openAiToolSessions = new Map<
-    string,
-    { clients: ExternalClients; session: KfcToolSession }
-  >();
   async function processMessengerEventInternal(
     event: ConversationEvent,
   ): Promise<MessengerWebhookEventProcessingResult> {
@@ -665,7 +651,7 @@ export function createRouteMessengerRuntime(
         presentation = textOnlyPresentation(assistantTurn.text, run.channel);
         deliveryAssistantTurnId = assistantTurn.id;
       } else {
-        if (!options.openAiAgent) {
+        if (!options.openAiAgent || !runDirectKfcTurn) {
           const failed = await updateExecutingRun({
             status: 'failed',
             deliveryStatus: 'failed',
@@ -677,97 +663,50 @@ export function createRouteMessengerRuntime(
             ? { status: 'failed', errorCode: 'kfc_agent_not_configured' }
             : { status: 'skipped', errorCode: 'stale_agent_run' };
         }
-        const externalCalls = createAgentTurnExternalCallScope(120_000);
-        try {
-          let toolRuntime = openAiToolSessions.get(run.sessionId);
-          if (!toolRuntime) {
-            const freshSession = await createKfcToolSession(
-              clients,
-              run.sessionId,
-              run.externalUserId,
-              run.channel,
-              externalCalls.context,
-            );
-            toolRuntime = {
-              clients,
-              session: await hydrateKfcOpenAiToolSession({
-                store,
-                sessionId: run.sessionId,
-                freshSession,
-              }),
-            };
-            openAiToolSessions.set(run.sessionId, toolRuntime);
-          } else {
-            toolRuntime.session.externalCallContext = externalCalls.context;
-          }
-          const directOutput = await options.openAiAgent.respond({
-            sessionId: run.sessionId,
-            customerId: run.externalUserId,
-            channel: run.channel,
-            text: run.coalescedInputText,
-            externalMessageId: linkedTurns[0]!.externalMessageId,
-            metadata: null,
-            store,
-            verifiedBusinessContext: verifiedKfcToolSessionContext(
-              toolRuntime.session,
-            ),
-            tools: createKfcOpenAiTools({
-              clients: toolRuntime.clients,
-              session: toolRuntime.session,
-              fixtures: await getFixtures(),
-              accessContext: await kfcProofAccessContext(
-                run.sessionId,
-                run.externalUserId,
-              ),
-            }),
+        const directOutput = await runDirectKfcTurn({
+          sessionId: run.sessionId,
+          customerId: run.externalUserId,
+          channel: run.channel,
+          text: run.coalescedInputText,
+          externalMessageId: linkedTurns[0]!.externalMessageId,
+          metadata: null,
+          clients,
+          fence: commitFence,
+        });
+        if (!(await isCurrentRun())) {
+          await suppressRun('run_not_current_before_delivery');
+          return { status: 'skipped', errorCode: 'stale_agent_run' };
+        }
+        if (directOutput.stateCommit === 'stale') {
+          await suppressRun('run_not_current_before_state_commit');
+          return { status: 'skipped', errorCode: 'stale_agent_run' };
+        }
+        presentation = textOnlyPresentation(
+          directOutput.responseText,
+          run.channel,
+        );
+        deliveryAssistantTurnId = directOutput.assistantTurnId;
+        const assistantTurn = (await store.listTurns(run.sessionId)).find(
+          (turn) =>
+            turn.id === deliveryAssistantTurnId &&
+            turn.sessionId === run.sessionId &&
+            turn.channel === run.channel &&
+            turn.role === 'assistant',
+        );
+        if (!assistantTurn) {
+          const failed = await updateExecutingRun({
+            status: 'failed',
+            deliveryStatus: 'failed',
+            errorCode: 'agent_run_assistant_turn_missing',
+            errorMessage: 'Agent run produced no valid durable assistant turn',
+            completedAt: new Date().toISOString(),
           });
-          if (!(await isCurrentRun())) {
-            await suppressRun('run_not_current_before_delivery');
-            return { status: 'skipped', errorCode: 'stale_agent_run' };
-          }
-          const stateCommit = await persistKfcOpenAiToolSession({
-            store,
-            sessionId: run.sessionId,
-            session: toolRuntime.session,
-            latestUserMessage: run.coalescedInputText,
-            toolCalls: directOutput.toolCalls,
-            assistantTurnId: directOutput.assistantTurnId,
-            fence: commitFence,
-          });
-          if (stateCommit === 'stale') {
-            await suppressRun('run_not_current_before_state_commit');
-            return { status: 'skipped', errorCode: 'stale_agent_run' };
-          }
-          presentation = textOnlyPresentation(
-            directOutput.responseText,
-            run.channel,
-          );
-          deliveryAssistantTurnId = directOutput.assistantTurnId;
-          const assistantTurn = (await store.listTurns(run.sessionId)).find(
-            (turn) =>
-              turn.id === deliveryAssistantTurnId &&
-              turn.sessionId === run.sessionId &&
-              turn.channel === run.channel &&
-              turn.role === 'assistant',
-          );
-          if (!assistantTurn) {
-            const failed = await updateExecutingRun({
-              status: 'failed',
-              deliveryStatus: 'failed',
-              errorCode: 'agent_run_assistant_turn_missing',
-              errorMessage:
-                'Agent run produced no valid durable assistant turn',
-              completedAt: new Date().toISOString(),
-            });
-            return failed.status === 'committed'
-              ? {
-                  status: 'failed',
-                  errorCode: 'agent_run_assistant_turn_missing',
-                }
-              : { status: 'skipped', errorCode: 'stale_agent_run' };
-          }
-        } finally {
-          externalCalls.dispose();
+          return failed.status === 'committed'
+            ? {
+                status: 'failed',
+                errorCode: 'agent_run_assistant_turn_missing',
+              }
+            : { status: 'skipped', errorCode: 'stale_agent_run' };
         }
       }
       if (!deliveryAssistantTurnId) {

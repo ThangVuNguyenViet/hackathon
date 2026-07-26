@@ -387,8 +387,24 @@ export function createMockClients(fixtures: GeneratedFixtures, options: MockClie
           (area) => area.storeId === uniquelyRankedStore.storeId,
         )
       : serviceAreaMatches;
-    if (rankedAreaMatches.length !== 1) return undefined;
-    const area = rankedAreaMatches[0]!;
+    const matchedArea =
+      rankedAreaMatches.length === 1 ? rankedAreaMatches[0] : undefined;
+    const area =
+      matchedArea ??
+      fixtures.fulfillmentServiceAreas.find((candidate) => {
+        const store = storeById.get(candidate.storeId);
+        return (
+          candidate.method === method &&
+          store !== undefined &&
+          (itemCodes.length === 0 ||
+            data.checkItemsAvailable({
+              storeId: store.storeId,
+              disposition: method === 'pickup' ? 'pickup' : 'delivery',
+              itemIds: itemCodes,
+            }).ok)
+        );
+      });
+    if (!area) return undefined;
     const store = storeById.get(area.storeId);
     if (!store) return undefined;
     if (
@@ -406,8 +422,14 @@ export function createMockClients(fixtures: GeneratedFixtures, options: MockClie
       resolvedAddress: {
         label: address.label ?? address.line1,
         line1: address.line1,
-        district: area.canonicalDistrict,
-        city: area.canonicalCity,
+        district:
+          matchedArea === undefined
+            ? (address.district ?? area.canonicalDistrict)
+            : area.canonicalDistrict,
+        city:
+          matchedArea === undefined
+            ? (address.city ?? area.canonicalCity)
+            : area.canonicalCity,
       },
     };
   };

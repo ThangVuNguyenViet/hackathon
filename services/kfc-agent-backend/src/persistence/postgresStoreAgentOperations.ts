@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto';
+import type { AgentInputItem } from '@kfc/openai-agents-runtime';
 import {
   commerceApprovalPrincipalStorageEvidenceRef,
   commerceApprovalPrincipalStorageSubject,
@@ -130,6 +131,87 @@ import {
 import { createPostgresConfirmationPause } from './postgresStoreConfirmationPauseCreation.js';
 
 export class PostgresStoreAgentOperations extends PostgresStoreConversationOperations {
+  async listAgentSessionItems(
+    sessionId: string,
+    limit?: number,
+  ): Promise<AgentInputItem[]> {
+    const result = limit === undefined
+      ? await this.db.query<{ item_json: AgentInputItem }>(
+        `SELECT item_json
+         FROM agent_session_items
+         WHERE session_id = $1
+         ORDER BY id ASC`,
+        [sessionId],
+      )
+      : await this.db.query<{ item_json: AgentInputItem }>(
+        `SELECT item_json
+         FROM (
+           SELECT id, item_json
+           FROM agent_session_items
+           WHERE session_id = $1
+           ORDER BY id DESC
+           LIMIT $2
+         ) recent_items
+         ORDER BY id ASC`,
+        [sessionId, limit],
+      );
+    return result.rows.map((row) =>
+      typeof row.item_json === 'string'
+        // Test doubles return JSON text; pg returns decoded jsonb.
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion
+        ? JSON.parse(row.item_json) as AgentInputItem
+        : row.item_json,
+    );
+  }
+
+  async addAgentSessionItems(
+    sessionId: string,
+    items: AgentInputItem[],
+  ): Promise<void> {
+    if (items.length === 0) return;
+    await this.db.query(
+      `WITH session_lock AS (
+         SELECT pg_advisory_xact_lock(hashtextextended($1, 0))
+       )
+       INSERT INTO agent_session_items (session_id, item_json)
+       SELECT $1, item::jsonb
+       FROM unnest($2::text[]) WITH ORDINALITY AS values_to_insert(item, ordinal)
+       CROSS JOIN session_lock
+       ORDER BY ordinal`,
+      [sessionId, items.map((item) => JSON.stringify(item))],
+    );
+  }
+
+  async popAgentSessionItem(
+    sessionId: string,
+  ): Promise<AgentInputItem | undefined> {
+    const result = await this.db.query<{ item_json: AgentInputItem }>(
+      `DELETE FROM agent_session_items
+       WHERE id = (
+         SELECT id
+         FROM agent_session_items
+         WHERE session_id = $1
+         ORDER BY id DESC
+         LIMIT 1
+       )
+       RETURNING item_json`,
+      [sessionId],
+    );
+    const item = result.rows[0]?.item_json;
+    return typeof item === 'string'
+      // Test doubles return JSON text; pg returns decoded jsonb.
+      // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion
+      ? JSON.parse(item) as AgentInputItem
+      : item;
+  }
+
+  async clearAgentSessionItems(sessionId: string): Promise<void> {
+    await this.db.query(
+      'DELETE FROM agent_session_items WHERE session_id = $1',
+      [sessionId],
+    );
+  }
+
   async createAgentRun(input: CreateAgentRunInput): Promise<AgentRun> {
     return createPostgresAgentRun({ db: this.db, operation: input });
   }

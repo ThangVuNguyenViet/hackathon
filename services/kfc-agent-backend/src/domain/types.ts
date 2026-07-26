@@ -135,8 +135,6 @@ export const deliveryAddressRequiredFields = [
   'recipientName',
   'phone',
   'addressLine',
-  'provinceName',
-  'communeName',
 ] as const;
 
 export type DeliveryAddressRequiredField =

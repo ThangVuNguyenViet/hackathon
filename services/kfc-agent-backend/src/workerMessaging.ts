@@ -1,6 +1,9 @@
 import { AgentRunCoordinator } from './agentRuns/coordinator.js';
 import type { ConversationEvent } from './channels/conversationEvent.js';
-import { createMessengerClient, normalizeMessengerWebhook } from './channels/messenger.js';
+import {
+  createMessengerClient,
+  normalizeMessengerWebhook,
+} from './channels/messenger.js';
 import { createMessengerHistoryClient, MessengerHistorySyncCoordinator, MessengerHistorySyncService } from './channels/messengerHistory.js';
 import { normalizeZaloWebhook } from './channels/zalo.js';
 import { DashboardEventBus } from './dashboard/eventBus.js';

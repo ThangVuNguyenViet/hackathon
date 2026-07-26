@@ -7,6 +7,15 @@ CREATE TABLE IF NOT EXISTS sessions (
   updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
+CREATE TABLE IF NOT EXISTS agent_session_items (
+  id BIGSERIAL PRIMARY KEY,
+  session_id TEXT NOT NULL,
+  item_json JSONB NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS agent_session_items_session_id_idx
+  ON agent_session_items (session_id, id);
+
 CREATE TABLE IF NOT EXISTS transcript_events (
   id BIGSERIAL PRIMARY KEY,
   session_id TEXT NOT NULL,

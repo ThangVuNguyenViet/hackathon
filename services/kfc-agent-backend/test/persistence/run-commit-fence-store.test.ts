@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { user } from '@kfc/openai-agents-runtime';
 import {
   issueVerifiedRefRecord,
 } from '../../src/domain/verifiedRef.js';
@@ -11,6 +12,7 @@ import type {
 } from '../../src/ordering/types.js';
 import type {
   AppendEventIfRunCurrentInput,
+  CommitAssistantTurnInput,
   CommitAssistantTurnIfRunCurrentInput,
   CommitConfirmationPauseIfRunCurrentInput,
   ConversationStore,
@@ -23,6 +25,7 @@ import {
 } from '../../src/persistence/d1Store.js';
 import { MemoryStore } from '../../src/persistence/memoryStore.js';
 import { PostgresStore } from '../../src/persistence/postgresStore.js';
+import { FakeD1Database } from '../support/fakeD1Database.js';
 
 const sessionId = 'run-commit-fence-session';
 const customerRunId = 'run-commit-fence-customer-run';
@@ -95,6 +98,19 @@ function assistantCommitInput(
       metadata: null,
     },
   };
+}
+
+function unfencedAssistantCommitInput(): CommitAssistantTurnInput {
+  const {
+    fence: _fence,
+    notAfter: _notAfter,
+    ...input
+  } = assistantCommitInput({
+    kind: 'customer_run',
+    runId: customerRunId,
+    sessionAuthorityGeneration: 0,
+  });
+  return input;
 }
 
 function stagedRef() {
@@ -472,6 +488,15 @@ describe('MemoryStore current-run conditional event commit', () => {
     });
     const ref = stagedRef();
     input.verifiedRefs = [ref];
+    input.sdkSessionMutation = {
+      mode: 'append',
+      items: [user('published SDK context')],
+    };
+    input.auditEvent = {
+      sessionId,
+      sourceType: 'openai:tool_trace',
+      payload: { schemaVersion: 'openai-redacted-tool-trace-v1' },
+    };
 
     await expect(
       store.commitAssistantTurnIfRunCurrent(input),
@@ -484,11 +509,14 @@ describe('MemoryStore current-run conditional event commit', () => {
     }).nested.value = 'mutated-after-commit';
 
     const events = await store.listEvents(sessionId);
-    expect(events).toHaveLength(2);
+    expect(events).toHaveLength(3);
     expect(events[0]?.payload).toMatchObject({
       verifiedState: { nested: { value: 'committed' } },
     });
     expect(await store.listTurns(sessionId)).toHaveLength(1);
+    await expect(store.listAgentSessionItems(sessionId)).resolves.toEqual([
+      user('published SDK context'),
+    ]);
     await expect(
       store.resolveVerifiedRef({
         ref: ref.ref,
@@ -497,6 +525,62 @@ describe('MemoryStore current-run conditional event commit', () => {
         now: '2026-07-20T00:00:01.000Z',
       }),
     ).resolves.toMatchObject({ ref: ref.ref });
+  });
+
+  it('atomically replaces SDK session history without changing the customer transcript', async () => {
+    const store = new MemoryStore();
+    const run = await seedCustomerRun(store);
+    await store.addAgentSessionItems(sessionId, [
+      user('old SDK context'),
+    ]);
+    const input = assistantCommitInput({
+      kind: 'customer_run',
+      runId: customerRunId,
+      sessionAuthorityGeneration:
+        run.sessionAuthorityGeneration,
+    });
+    input.sdkSessionMutation = {
+      mode: 'replace',
+      items: [user('compacted SDK context')],
+    };
+
+    await expect(
+      store.commitAssistantTurnIfRunCurrent(input),
+    ).resolves.toMatchObject({ status: 'committed' });
+
+    await expect(store.listAgentSessionItems(sessionId)).resolves.toEqual([
+      user('compacted SDK context'),
+    ]);
+    await expect(store.listTurns(sessionId)).resolves.toEqual([
+      expect.objectContaining({
+        role: 'assistant',
+        text: 'Grounded response',
+      }),
+    ]);
+  });
+
+  it('replaces durable D1 SDK history through the real store contract', async () => {
+    const store = new D1Store(new FakeD1Database());
+    await store.initialize();
+    const run = await seedCustomerRun(store);
+    await store.addAgentSessionItems(sessionId, [user('old D1 context')]);
+    const input = assistantCommitInput({
+      kind: 'customer_run',
+      runId: customerRunId,
+      sessionAuthorityGeneration:
+        run.sessionAuthorityGeneration,
+    });
+    input.sdkSessionMutation = {
+      mode: 'replace',
+      items: [user('compacted D1 context')],
+    };
+
+    await expect(
+      store.commitAssistantTurnIfRunCurrent(input),
+    ).resolves.toMatchObject({ status: 'committed' });
+    await expect(store.listAgentSessionItems(sessionId)).resolves.toEqual([
+      user('compacted D1 context'),
+    ]);
   });
 
   it('leaves every assistant artifact absent when the owner is stale', async () => {
@@ -515,11 +599,21 @@ describe('MemoryStore current-run conditional event commit', () => {
         run.sessionAuthorityGeneration,
     });
     input.verifiedRefs = [ref];
+    input.sdkSessionMutation = {
+      mode: 'append',
+      items: [user('must not persist')],
+    };
+    input.auditEvent = {
+      sessionId,
+      sourceType: 'openai:tool_trace',
+      payload: { schemaVersion: 'openai-redacted-tool-trace-v1' },
+    };
     await expect(
       store.commitAssistantTurnIfRunCurrent(input),
     ).resolves.toEqual({ status: 'stale' });
     expect(await store.listEvents(sessionId)).toEqual([]);
     expect(await store.listTurns(sessionId)).toEqual([]);
+    expect(await store.listAgentSessionItems(sessionId)).toEqual([]);
     await expect(
       store.resolveVerifiedRef({
         ref: ref.ref,
@@ -833,17 +927,25 @@ describe('durable store current-run conditional INSERT contracts', () => {
     const db = new AtomicCommitD1();
     const store = new D1Store(db);
 
-    await expect(
-      store.commitAssistantTurnIfRunCurrent(
-        assistantCommitInput({
+    const input = assistantCommitInput({
           kind: 'customer_run',
           runId: customerRunId,
           sessionAuthorityGeneration: 0,
-        }),
-      ),
+        });
+    input.sdkSessionMutation = {
+      mode: 'append',
+      items: [user('D1 SDK context')],
+    };
+    input.auditEvent = {
+      sessionId,
+      sourceType: 'openai:tool_trace',
+      payload: { schemaVersion: 'openai-redacted-tool-trace-v1' },
+    };
+    await expect(
+      store.commitAssistantTurnIfRunCurrent(input),
     ).resolves.toMatchObject({ status: 'committed' });
 
-    expect(db.calls).toHaveLength(3);
+    expect(db.calls).toHaveLength(5);
     expect(db.calls[0]?.query).toMatch(
       /INSERT INTO conversation_events[\s\S]+FROM customer_runs/u,
     );
@@ -853,21 +955,63 @@ describe('durable store current-run conditional INSERT contracts', () => {
     expect(db.calls[2]?.query).toMatch(
       /conversation_turn:assistant|INSERT INTO conversation_events/u,
     );
+    expect(db.calls[3]?.query).toContain('INSERT INTO conversation_events');
+    expect(db.calls[4]?.query).toContain('INSERT INTO agent_session_items');
+    expectD1BindingsMatch(db.calls);
+  });
+
+  it('replaces D1 SDK history inside the fenced assistant-turn batch', async () => {
+    const db = new AtomicCommitD1();
+    const store = new D1Store(db);
+    const input = assistantCommitInput({
+      kind: 'customer_run',
+      runId: customerRunId,
+      sessionAuthorityGeneration: 0,
+    });
+    input.sdkSessionMutation = {
+      mode: 'replace',
+      items: [user('compacted D1 context')],
+    };
+
+    await expect(
+      store.commitAssistantTurnIfRunCurrent(input),
+    ).resolves.toMatchObject({ status: 'committed' });
+
+    const queries = db.calls.map(({ query }) => query);
+    const deleteIndex = queries.findIndex((query) =>
+      /DELETE FROM agent_session_items/u.test(query)
+    );
+    const insertIndex = queries.findIndex((query) =>
+      /INSERT INTO agent_session_items/u.test(query)
+    );
+    expect(deleteIndex).toBeGreaterThanOrEqual(0);
+    expect(insertIndex).toBeGreaterThan(deleteIndex);
+    expect(queries[deleteIndex]).toMatch(
+      /EXISTS[\s\S]+FROM customer_runs/u,
+    );
     expectD1BindingsMatch(db.calls);
   });
 
   it('uses a PostgreSQL transaction and rolls back an incomplete publication', async () => {
     const db = new AtomicCommitPostgres();
     const store = new PostgresStore(db as never);
+    const input = assistantCommitInput({
+      kind: 'customer_run',
+      runId: customerRunId,
+      sessionAuthorityGeneration: 0,
+    });
+    input.sdkSessionMutation = {
+      mode: 'append',
+      items: [user('Postgres SDK context')],
+    };
+    input.auditEvent = {
+      sessionId,
+      sourceType: 'openai:tool_trace',
+      payload: { schemaVersion: 'openai-redacted-tool-trace-v1' },
+    };
 
     await expect(
-      store.commitAssistantTurnIfRunCurrent(
-        assistantCommitInput({
-          kind: 'customer_run',
-          runId: customerRunId,
-          sessionAuthorityGeneration: 0,
-        }),
-      ),
+      store.commitAssistantTurnIfRunCurrent(input),
     ).resolves.toMatchObject({ status: 'committed' });
     expect(db.client.calls.map(({ query }) => query.trim())).toEqual(
       expect.arrayContaining(['BEGIN', 'COMMIT']),
@@ -875,6 +1019,45 @@ describe('durable store current-run conditional INSERT contracts', () => {
     expect(db.client.calls.some(({ query }) =>
       /FROM customer_runs[\s\S]+FOR UPDATE/u.test(query)
     )).toBe(true);
+    expect(db.client.calls.some(({ query }) =>
+      /INSERT INTO agent_session_items/u.test(query)
+    )).toBe(true);
+    const fencedQueries = db.client.calls.map(({ query }) => query);
+    const fencedSessionLockIndex = fencedQueries.findIndex((query) =>
+      query.includes(
+        'pg_advisory_xact_lock(hashtextextended($1, 0))',
+      ));
+    const fencedOwnerLockIndex = fencedQueries.findIndex((query) =>
+      /FROM customer_runs[\s\S]+FOR UPDATE/u.test(query));
+    const fencedSdkInsertIndex = fencedQueries.findIndex((query) =>
+      /INSERT INTO agent_session_items/u.test(query));
+    expect(fencedSessionLockIndex).toBeGreaterThan(
+      fencedQueries.indexOf('BEGIN'),
+    );
+    expect(fencedSessionLockIndex).toBeLessThan(fencedOwnerLockIndex);
+    expect(fencedSessionLockIndex).toBeLessThan(fencedSdkInsertIndex);
+
+    const unfenced = new AtomicCommitPostgres();
+    const unfencedStore = new PostgresStore(unfenced as never);
+    const unfencedInput = unfencedAssistantCommitInput();
+    unfencedInput.sdkSessionMutation = {
+      mode: 'append',
+      items: [user('Unfenced Postgres SDK context')],
+    };
+    await expect(
+      unfencedStore.commitAssistantTurn(unfencedInput),
+    ).resolves.toMatchObject({ turn: { text: 'Grounded response' } });
+    const unfencedQueries = unfenced.client.calls.map(({ query }) => query);
+    const unfencedSessionLockIndex = unfencedQueries.findIndex((query) =>
+      query.includes(
+        'pg_advisory_xact_lock(hashtextextended($1, 0))',
+      ));
+    const unfencedSdkInsertIndex = unfencedQueries.findIndex((query) =>
+      /INSERT INTO agent_session_items/u.test(query));
+    expect(unfencedSessionLockIndex).toBeGreaterThan(
+      unfencedQueries.indexOf('BEGIN'),
+    );
+    expect(unfencedSessionLockIndex).toBeLessThan(unfencedSdkInsertIndex);
 
     const failing = new AtomicCommitPostgres();
     failing.client.failOnTurnInsert = true;
@@ -894,6 +1077,37 @@ describe('durable store current-run conditional INSERT contracts', () => {
     expect(
       failing.client.calls.map(({ query }) => query.trim()),
     ).not.toContain('COMMIT');
+  });
+
+  it('replaces PostgreSQL SDK history in the assistant-turn transaction', async () => {
+    const db = new AtomicCommitPostgres();
+    // Narrow transaction-double boundary for the Postgres store.
+    // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion
+    const store = new PostgresStore(db as never);
+    const input = assistantCommitInput({
+      kind: 'customer_run',
+      runId: customerRunId,
+      sessionAuthorityGeneration: 0,
+    });
+    input.sdkSessionMutation = {
+      mode: 'replace',
+      items: [user('compacted PostgreSQL context')],
+    };
+
+    await expect(
+      store.commitAssistantTurnIfRunCurrent(input),
+    ).resolves.toMatchObject({ status: 'committed' });
+
+    const queries = db.client.calls.map(({ query }) => query.trim());
+    const deleteIndex = queries.findIndex((query) =>
+      query.startsWith('DELETE FROM agent_session_items')
+    );
+    const insertIndex = queries.findIndex((query) =>
+      query.startsWith('INSERT INTO agent_session_items')
+    );
+    expect(deleteIndex).toBeGreaterThan(queries.indexOf('BEGIN'));
+    expect(insertIndex).toBeGreaterThan(deleteIndex);
+    expect(queries.indexOf('COMMIT')).toBeGreaterThan(insertIndex);
   });
 
   it('fails stale D1 and PostgreSQL pause commits before any pause artifact', async () => {

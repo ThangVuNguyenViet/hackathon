@@ -15,6 +15,8 @@ import type {
   AppendConversationTurnInput,
   CommitAssistantTurnIfRunCurrentInput,
   CommitAssistantTurnIfRunCurrentResult,
+  CommitAssistantTurnInput,
+  CommitAssistantTurnResult,
   CommitConfirmationPauseIfRunCurrentInput,
   CommitConfirmationPauseIfRunCurrentResult,
   ConversationStore,
@@ -99,7 +101,10 @@ import {
   lockPostgresSessionAuthority,
   transitionPostgresSessionAuthority,
 } from './postgresStoreSessionAuthority.js';
-import { commitPostgresAssistantTurnIfRunCurrent } from './postgresStoreTurnCommit.js';
+import {
+  commitPostgresAssistantTurn,
+  commitPostgresAssistantTurnIfRunCurrent,
+} from './postgresStoreTurnCommit.js';
 import { commitPostgresConfirmationPauseIfRunCurrent } from './postgresStorePauseCommit.js';
 import {
   beginPostgresNonAgentTextDeliveryAttempt,
@@ -123,6 +128,11 @@ export abstract class PostgresStoreConversationOperations extends PostgresStoreC
       db: this.db,
       operation: input,
     });
+  }
+  async commitAssistantTurn(
+    input: CommitAssistantTurnInput,
+  ): Promise<CommitAssistantTurnResult> {
+    return commitPostgresAssistantTurn({ db: this.db, operation: input });
   }
   async commitConfirmationPauseIfRunCurrent(
     input: CommitConfirmationPauseIfRunCurrentInput,

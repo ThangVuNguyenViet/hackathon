@@ -2,7 +2,7 @@ import type {
   ExternalCallContext,
   ExternalClients,
   ProviderMutationIdentity,
-} from '../clients/interfaces.js';
+} from "../clients/interfaces.js";
 import type {
   Address,
   Cart,
@@ -10,33 +10,34 @@ import type {
   CustomerAccessScope,
   Order,
   ToolSideEffectClass,
-} from '../domain/types.js';
-import type { AgentGraphState } from '../graph/state.js';
-import { authorizeCustomerAccess } from '../security/customerAccessContext.js';
+} from "../domain/types.js";
+import type { AgentGraphState } from "../graph/state.js";
+import { authorizeCustomerAccess } from "../security/customerAccessContext.js";
 import {
   parseToolArguments,
   resolvedFulfillmentAddressSchema,
   toolArgumentSchemas,
-} from './toolCatalog.js';
+} from "./toolCatalog.js";
 import type {
   CartWithModifiers,
   SourceProvenance,
   ToolCallRequest,
   ToolCallResult,
-} from './types.js';
+} from "./types.js";
 import {
   readCustomerFavoriteItems,
   readCustomerRecentOrder,
   readCustomerSavedAddresses,
-} from './customerContextReadTools.js';
+} from "./customerContextReadTools.js";
 import {
   cancelledResult,
   externalCallCancelledErrorCode,
   result,
   resultFromToolResult,
-} from './toolExecutionResult.js';
+} from "./toolExecutionResult.js";
 import { paymentOrderIdentifierMatches } from './paymentOrderAuthority.js';
 import { executePaymentToolCall } from './paymentToolExecution.js';
+
 export interface ExecutorContext {
   externalCallContext: ExternalCallContext;
   state?: AgentGraphState;
@@ -53,48 +54,49 @@ export interface ExecutorContext {
   runGuard?: {
     isCurrent(): Promise<boolean>;
     recordIrreversibleBoundary?(
-      toolName: ToolCallRequest['toolName'],
+      toolName: ToolCallRequest["toolName"],
     ): Promise<void>;
   };
 }
+
 export { externalCallCancelledErrorCode };
 
 const privateToolScopes: Partial<
-  Record<ToolCallRequest['toolName'], readonly CustomerAccessScope[]>
+  Record<ToolCallRequest["toolName"], readonly CustomerAccessScope[]>
 > = {
-  getMembershipProfile: ['membership:read'],
-  listMembershipRewards: ['membership:read'],
-  listMembershipWallet: ['membership:read'],
-  getMembershipPointHistory: ['membership:read'],
-  listMembershipTools: ['membership:read'],
-  getSavedAddresses: ['customer:read'],
-  getRecentOrder: ['customer:read', 'order:read'],
-  getFavoriteItems: ['customer:read'],
-  acquireVoucher: ['membership:write'],
-  redeemReward: ['membership:write'],
-  resolveHandoff: ['handoff:write'],
-  getOrderStatus: ['order:read'],
-  checkPaymentStatus: ['payment:read'],
+  getMembershipProfile: ["membership:read"],
+  listMembershipRewards: ["membership:read"],
+  listMembershipWallet: ["membership:read"],
+  getMembershipPointHistory: ["membership:read"],
+  listMembershipTools: ["membership:read"],
+  getSavedAddresses: ["customer:read"],
+  getRecentOrder: ["customer:read", "order:read"],
+  getFavoriteItems: ["customer:read"],
+  acquireVoucher: ["membership:write"],
+  redeemReward: ["membership:write"],
+  resolveHandoff: ["handoff:write"],
+  getOrderStatus: ["order:read"],
+  checkPaymentStatus: ["payment:read"],
 };
 
 const membershipConfirmationPolicyProvenance = Object.freeze({
   // `provider_runtime` is the existing v2 category for production-runtime
   // evidence. The typed serverPolicy field explicitly distinguishes this
   // local gate from an upstream membership-provider response.
-  fixtureMode: 'provider_runtime',
-  sourceFile: 'src/ordering/toolExecutor.ts',
+  fixtureMode: "provider_runtime",
+  sourceFile: "src/ordering/toolExecutor.ts",
   serverPolicy: Object.freeze({
-    policyId: 'membership-explicit-confirmation',
-    revision: '1',
+    policyId: "membership-explicit-confirmation",
+    revision: "1",
   }),
 }) satisfies SourceProvenance;
 
 function isToolCallRequest(value: unknown): value is ToolCallRequest {
   return (
-    typeof value === 'object' &&
+    typeof value === "object" &&
     value !== null &&
-    'toolName' in value &&
-    'arguments' in value
+    "toolName" in value &&
+    "arguments" in value
   );
 }
 
@@ -116,7 +118,7 @@ function providerMutationIdentityIsValid(
 
 function buildVoucherCart(subtotalVnd: number): Cart {
   return {
-    id: 'cart_validation_only',
+    id: "cart_validation_only",
     items: [],
     subtotalVnd,
     discountVnd: 0,
@@ -135,18 +137,18 @@ function normalizeExecution(
     const context =
       (maybeRequest as ExecutorContext | undefined) ?? maybeContext;
     if (!context) {
-      throw new Error('ExecutorContext is required');
+      throw new Error("ExecutorContext is required");
     }
     return { request: requestOrState, context };
   }
 
   if (!maybeRequest) {
     throw new Error(
-      'ToolCallRequest is required when executeToolCall is called with graph state',
+      "ToolCallRequest is required when executeToolCall is called with graph state",
     );
   }
   if (!maybeContext) {
-    throw new Error('ExecutorContext is required');
+    throw new Error("ExecutorContext is required");
   }
 
   return {
@@ -177,13 +179,13 @@ async function checkInventory(
   input: {
     storeId: string;
     itemCodes: string[];
-    disposition?: 'pickup' | 'delivery';
+    disposition?: "pickup" | "delivery";
   },
 ): Promise<ToolCallResult> {
   const atomicCheck = clients.inventory.checkInventoryWithAuthority;
   if (!atomicCheck || !input.disposition) {
     return resultFromToolResult(
-      'checkStoreAvailability',
+      "checkStoreAvailability",
       await clients.inventory.checkInventory(
         input.storeId,
         input.itemCodes,
@@ -200,7 +202,7 @@ async function checkInventory(
   );
   if (!response.ok || response.value === undefined) {
     return {
-      toolName: 'checkStoreAvailability',
+      toolName: "checkStoreAvailability",
       ok: false,
       errorCode: response.errorCode,
       message: response.message,
@@ -212,14 +214,14 @@ async function checkInventory(
   );
   if (!availabilitySource) {
     return {
-      toolName: 'checkStoreAvailability',
+      toolName: "checkStoreAvailability",
       ok: false,
-      errorCode: 'inventory_availability_provenance_missing',
-      message: 'Atomic inventory availability provenance is required',
+      errorCode: "inventory_availability_provenance_missing",
+      message: "Atomic inventory availability provenance is required",
       provenance: [],
     };
   }
-  const legacy = resultFromToolResult('checkStoreAvailability', {
+  const legacy = resultFromToolResult("checkStoreAvailability", {
     ...response,
     provenance: [availabilitySource],
     value: response.value.availability,
@@ -241,24 +243,24 @@ function getSessionId(context: ExecutorContext): string | undefined {
 }
 
 export function classifyToolSideEffect(
-  toolName: ToolCallRequest['toolName'],
+  toolName: ToolCallRequest["toolName"],
   args: Record<string, unknown>,
 ): ToolSideEffectClass {
   switch (toolName) {
-    case 'updateCart':
-    case 'previewOrder':
-    case 'collectInvoice':
-      return 'reversible';
-    case 'placeOrder':
-    case 'createPaymentLink':
-    case 'handoff':
-    case 'resolveHandoff':
-      return 'irreversible';
-    case 'acquireVoucher':
-    case 'redeemReward':
-      return 'irreversible';
+    case "updateCart":
+    case "previewOrder":
+    case "collectInvoice":
+      return "reversible";
+    case "placeOrder":
+    case "createPaymentLink":
+    case "handoff":
+    case "resolveHandoff":
+      return "irreversible";
+    case "acquireVoucher":
+    case "redeemReward":
+      return "irreversible";
     default:
-      return 'read';
+      return "read";
   }
 }
 
@@ -303,7 +305,7 @@ export async function executeToolCall(
       false,
       undefined,
       parsed.error.message,
-      'invalid_tool_arguments',
+      "invalid_tool_arguments",
     );
   }
 
@@ -320,8 +322,8 @@ export async function executeToolCall(
         request,
         false,
         undefined,
-        'Trusted customer access context is required',
-        'authentication_required',
+        "Trusted customer access context is required",
+        "authentication_required",
       );
     }
     for (const requiredScope of requiredScopes) {
@@ -348,18 +350,18 @@ export async function executeToolCall(
     request.arguments,
   );
   if (
-    sideEffectClass === 'irreversible' &&
+    sideEffectClass === "irreversible" &&
     !providerMutationIdentityIsValid(context.providerMutationIdentity)
   ) {
     return result(
       request,
       false,
       undefined,
-      'Irreversible provider mutation identity is required',
-      'provider_mutation_identity_required',
+      "Irreversible provider mutation identity is required",
+      "provider_mutation_identity_required",
     );
   }
-  if (context.runGuard && sideEffectClass === 'irreversible') {
+  if (context.runGuard && sideEffectClass === "irreversible") {
     try {
       const isCurrent = await context.runGuard.isCurrent();
       if (externalCallIsCancelled(context.externalCallContext)) {
@@ -370,8 +372,8 @@ export async function executeToolCall(
           request,
           false,
           undefined,
-          'Agent run is no longer current; irreversible tool call suppressed',
-          'stale_agent_run',
+          "Agent run is no longer current; irreversible tool call suppressed",
+          "stale_agent_run",
         );
       }
       await context.runGuard.recordIrreversibleBoundary?.(request.toolName);
@@ -388,14 +390,14 @@ export async function executeToolCall(
   }
 
   switch (request.toolName) {
-    case 'searchMenu': {
+    case "searchMenu": {
       const args = toolArgumentSchemas.searchMenu.parse(request.arguments);
       return resultFromToolResult(
         request.toolName,
         await clients.menu.searchMenu(args, context.externalCallContext),
       );
     }
-    case 'getItemDetails': {
+    case "getItemDetails": {
       const args = toolArgumentSchemas.getItemDetails.parse(request.arguments);
       return resultFromToolResult(
         request.toolName,
@@ -405,7 +407,7 @@ export async function executeToolCall(
         ),
       );
     }
-    case 'getModifierOptions': {
+    case "getModifierOptions": {
       const args = toolArgumentSchemas.getModifierOptions.parse(
         request.arguments,
       );
@@ -417,54 +419,46 @@ export async function executeToolCall(
         ),
       );
     }
-    case 'updateCart': {
+    case "updateCart": {
       const args = toolArgumentSchemas.updateCart.parse(request.arguments);
       if (!cart)
         return result(
           request,
           false,
           undefined,
-          'Cart is required before updateCart',
-          'cart_required',
+          "Cart is required before updateCart",
+          "cart_required",
         );
       return resultFromToolResult(
         request.toolName,
-        'changes' in args
-          ? await clients.cart.applyChanges(
-              cart,
-              args.changes,
-              context.externalCallContext,
-            )
-          : await clients.cart.updateCart(
-              cart,
-              args.itemCode,
-              args.quantity,
-              args.modifiers,
-              context.externalCallContext,
-            ),
+        await clients.cart.applyChanges(
+          cart,
+          args.changes,
+          context.externalCallContext,
+        ),
       );
     }
-    case 'previewCart':
+    case "previewCart":
       if (!cart)
         return result(
           request,
           false,
           undefined,
-          'Cart is required before previewCart',
-          'cart_required',
+          "Cart is required before previewCart",
+          "cart_required",
         );
       return resultFromToolResult(
         request.toolName,
         await clients.cart.previewCart(cart, context.externalCallContext),
       );
-    case 'recommendAddOns':
+    case "recommendAddOns":
       if (!cart)
         return result(
           request,
           false,
           undefined,
-          'Cart is required before recommendAddOns',
-          'cart_required',
+          "Cart is required before recommendAddOns",
+          "cart_required",
         );
       return resultFromToolResult(
         request.toolName,
@@ -473,7 +467,7 @@ export async function executeToolCall(
           context.externalCallContext,
         ),
       );
-    case 'findStores': {
+    case "findStores": {
       const args = toolArgumentSchemas.findStores.parse(request.arguments);
       return resultFromToolResult(
         request.toolName,
@@ -483,13 +477,13 @@ export async function executeToolCall(
         ),
       );
     }
-    case 'checkStoreAvailability': {
+    case "checkStoreAvailability": {
       const args = toolArgumentSchemas.checkStoreAvailability.parse(
         request.arguments,
       );
       return checkInventory(clients, context, args);
     }
-    case 'quoteFulfillment': {
+    case "quoteFulfillment": {
       const args = toolArgumentSchemas.quoteFulfillment.parse(
         request.arguments,
       );
@@ -507,28 +501,33 @@ export async function executeToolCall(
           request,
           false,
           undefined,
-          'Fulfillment provider did not return a normalized address',
-          'invalid_fulfillment_address_resolution',
+          "Fulfillment provider did not return a normalized address",
+          "invalid_fulfillment_address_resolution",
           providerResult.provenance ?? [],
         );
       }
       if (
         providerResult.ok &&
-        (providerResult.value?.method !== args.method ||
-          providerResult.value.disposition !== args.method)
+        (
+          providerResult.value?.method !== args.method ||
+          providerResult.value.disposition !== args.method
+        )
       ) {
         return result(
           request,
           false,
           undefined,
-          'Fulfillment provider returned a quote for a different method',
-          'invalid_fulfillment_quote_binding',
+          "Fulfillment provider returned a quote for a different method",
+          "invalid_fulfillment_quote_binding",
           providerResult.provenance ?? [],
         );
       }
-      return resultFromToolResult(request.toolName, providerResult);
+      return resultFromToolResult(
+        request.toolName,
+        providerResult,
+      );
     }
-    case 'searchPromotions': {
+    case "searchPromotions": {
       const args = toolArgumentSchemas.searchPromotions.parse(
         request.arguments,
       );
@@ -540,7 +539,7 @@ export async function executeToolCall(
         ),
       );
     }
-    case 'explainPromotion': {
+    case "explainPromotion": {
       const args = toolArgumentSchemas.explainPromotion.parse(
         request.arguments,
       );
@@ -552,7 +551,7 @@ export async function executeToolCall(
         ),
       );
     }
-    case 'validateVoucher': {
+    case "validateVoucher": {
       const args = toolArgumentSchemas.validateVoucher.parse(request.arguments);
       return resultFromToolResult(
         request.toolName,
@@ -563,12 +562,12 @@ export async function executeToolCall(
         ),
       );
     }
-    case 'getMembershipProfile':
+    case "getMembershipProfile":
       return resultFromToolResult(
         request.toolName,
         await clients.membership.getProfile(context.externalCallContext),
       );
-    case 'listMembershipRewards': {
+    case "listMembershipRewards": {
       const args = toolArgumentSchemas.listMembershipRewards.parse(
         request.arguments,
       );
@@ -580,7 +579,7 @@ export async function executeToolCall(
         ),
       );
     }
-    case 'listMembershipWallet': {
+    case "listMembershipWallet": {
       const args = toolArgumentSchemas.listMembershipWallet.parse(
         request.arguments,
       );
@@ -592,7 +591,7 @@ export async function executeToolCall(
         ),
       );
     }
-    case 'getMembershipPointHistory': {
+    case "getMembershipPointHistory": {
       const args = toolArgumentSchemas.getMembershipPointHistory.parse(
         request.arguments,
       );
@@ -604,7 +603,7 @@ export async function executeToolCall(
         ),
       );
     }
-    case 'listMembershipTools': {
+    case "listMembershipTools": {
       const args = toolArgumentSchemas.listMembershipTools.parse(
         request.arguments,
       );
@@ -616,7 +615,7 @@ export async function executeToolCall(
         ),
       );
     }
-    case 'listPaymentMethods': {
+    case "listPaymentMethods": {
       const args = toolArgumentSchemas.listPaymentMethods.parse(
         request.arguments,
       );
@@ -631,7 +630,7 @@ export async function executeToolCall(
         ),
       );
     }
-    case 'getSavedAddresses':
+    case "getSavedAddresses":
       return resultFromToolResult(
         request.toolName,
         await readCustomerSavedAddresses({
@@ -641,7 +640,7 @@ export async function executeToolCall(
           externalCallContext: context.externalCallContext,
         }),
       );
-    case 'getRecentOrder':
+    case "getRecentOrder":
       return resultFromToolResult(
         request.toolName,
         await readCustomerRecentOrder({
@@ -650,7 +649,7 @@ export async function executeToolCall(
           externalCallContext: context.externalCallContext,
         }),
       );
-    case 'getFavoriteItems':
+    case "getFavoriteItems":
       return resultFromToolResult(
         request.toolName,
         await readCustomerFavoriteItems({
@@ -659,15 +658,15 @@ export async function executeToolCall(
           externalCallContext: context.externalCallContext,
         }),
       );
-    case 'acquireVoucher': {
+    case "acquireVoucher": {
       const args = toolArgumentSchemas.acquireVoucher.parse(request.arguments);
       if (!args.confirmed) {
         return result(
           request,
           false,
           undefined,
-          'User confirmation is required before voucher acquisition',
-          'confirmation_required',
+          "User confirmation is required before voucher acquisition",
+          "confirmation_required",
           [membershipConfirmationPolicyProvenance],
         );
       }
@@ -680,15 +679,15 @@ export async function executeToolCall(
         ),
       );
     }
-    case 'redeemReward': {
+    case "redeemReward": {
       const args = toolArgumentSchemas.redeemReward.parse(request.arguments);
       if (!args.confirmed) {
         return result(
           request,
           false,
           undefined,
-          'User confirmation is required before reward redemption',
-          'confirmation_required',
+          "User confirmation is required before reward redemption",
+          "confirmation_required",
           [membershipConfirmationPolicyProvenance],
         );
       }
@@ -705,7 +704,7 @@ export async function executeToolCall(
         ),
       );
     }
-    case 'searchContentPolicy': {
+    case "searchContentPolicy": {
       const args = toolArgumentSchemas.searchContentPolicy.parse(
         request.arguments,
       );
@@ -718,7 +717,7 @@ export async function executeToolCall(
         ),
       );
     }
-    case 'answerAllergenQuestion': {
+    case "answerAllergenQuestion": {
       const args = toolArgumentSchemas.answerAllergenQuestion.parse(
         request.arguments,
       );
@@ -730,30 +729,30 @@ export async function executeToolCall(
         ),
       );
     }
-    case 'previewOrder':
+    case "previewOrder":
       if (!cart)
         return result(
           request,
           false,
           undefined,
-          'Cart is required before previewOrder',
-          'cart_required',
+          "Cart is required before previewOrder",
+          "cart_required",
         );
       if (!address)
         return result(
           request,
           false,
           undefined,
-          'Address is required before previewOrder',
-          'address_required',
+          "Address is required before previewOrder",
+          "address_required",
         );
       if (!context.state?.fulfillment?.storeId) {
         return result(
           request,
           false,
           undefined,
-          'Fulfillment store is required before previewOrder',
-          'fulfillment_required',
+          "Fulfillment store is required before previewOrder",
+          "fulfillment_required",
         );
       }
       return resultFromToolResult(
@@ -763,14 +762,14 @@ export async function executeToolCall(
           context.externalCallContext,
         ),
       );
-    case 'placeOrder':
+    case "placeOrder":
       if (!orderPreview) {
         return result(
           request,
           false,
           undefined,
-          'Order preview is required before placeOrder',
-          'order_preview_required',
+          "Order preview is required before placeOrder",
+          "order_preview_required",
         );
       }
       return resultFromToolResult(
@@ -785,7 +784,7 @@ export async function executeToolCall(
                     sessionId: context.sessionId,
                     clientMessageId: context.clientMessageId,
                     traceId: context.commerceTraceId ?? crypto.randomUUID(),
-                    scenarioId: context.commerceScenarioId ?? 'live-agent',
+                    scenarioId: context.commerceScenarioId ?? "live-agent",
                   }
                 : undefined,
           },
@@ -793,15 +792,15 @@ export async function executeToolCall(
           context.providerMutationIdentity!,
         ),
       );
-    case 'getOrderStatus': {
+    case "getOrderStatus": {
       const args = toolArgumentSchemas.getOrderStatus.parse(request.arguments);
       if (!paymentOrderIdentifierMatches(order, args.orderId)) {
         return result(
           request,
           false,
           undefined,
-          'Order ownership could not be verified',
-          'order_access_unverified',
+          "Order ownership could not be verified",
+          "order_access_unverified",
         );
       }
       return resultFromToolResult(
@@ -812,25 +811,25 @@ export async function executeToolCall(
         ),
       );
     }
-    case 'createPaymentLink':
-    case 'checkPaymentStatus':
+    case "createPaymentLink":
+    case "checkPaymentStatus":
       return executePaymentToolCall(clients, request, context, order);
-    case 'collectInvoice': {
+    case "collectInvoice": {
       const args = toolArgumentSchemas.collectInvoice.parse(request.arguments);
       return resultFromToolResult(
         request.toolName,
         await clients.invoice.collectInvoice(args, context.externalCallContext),
       );
     }
-    case 'handoff': {
+    case "handoff": {
       const args = toolArgumentSchemas.handoff.parse(request.arguments);
       if (!sessionId)
         return result(
           request,
           false,
           undefined,
-          'Session id is required before handoff',
-          'session_required',
+          "Session id is required before handoff",
+          "session_required",
         );
       return resultFromToolResult(
         request.toolName,
@@ -842,15 +841,16 @@ export async function executeToolCall(
         ),
       );
     }
-    case 'resolveHandoff': {
-      const args = toolArgumentSchemas.resolveHandoff.parse(request.arguments);
+    case "resolveHandoff": {
+      const args =
+        toolArgumentSchemas.resolveHandoff.parse(request.arguments);
       if (!sessionId) {
         return result(
           request,
           false,
           undefined,
-          'Session id is required before handoff resolution',
-          'session_required',
+          "Session id is required before handoff resolution",
+          "session_required",
         );
       }
       return resultFromToolResult(

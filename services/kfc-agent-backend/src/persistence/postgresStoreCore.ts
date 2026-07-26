@@ -124,6 +124,17 @@ export abstract class PostgresStoreCore {
 
   async initialize(): Promise<void> {
     await this.db.query(`
+      CREATE TABLE IF NOT EXISTS agent_session_items (
+        id bigserial PRIMARY KEY,
+        session_id text NOT NULL,
+        item_json jsonb NOT NULL
+      )
+    `);
+    await this.db.query(`
+      CREATE INDEX IF NOT EXISTS agent_session_items_session_id_idx
+      ON agent_session_items (session_id, id)
+    `);
+    await this.db.query(`
       CREATE TABLE IF NOT EXISTS confirmation_pause_sessions (
         session_id text PRIMARY KEY,
         generation integer NOT NULL CHECK (generation >= 0)
