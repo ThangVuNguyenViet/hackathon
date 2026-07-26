@@ -281,7 +281,7 @@ export const DIRECT_AGENT_MANUAL_REGRESSION_BANK: DirectAgentScenario[] = [
     ],
     referenceAssistantTurns: [],
     observations: [
-      'Verify that a delegated full replacement uses updateCart mode replace, removes every old unlisted line, and reports only the returned authoritative cart.',
+      'Verify that a delegated rebalance explicitly sets every unwanted existing line to quantity zero and reports only the returned authoritative cart.',
     ],
   },
   {
@@ -596,7 +596,6 @@ export function resolveDirectAgentTrustedCartAction(input: {
       {
         name: 'updateCart',
         arguments: {
-          mode: 'patch',
           changes: [
             {
               itemCode,

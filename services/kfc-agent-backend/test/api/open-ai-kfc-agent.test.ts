@@ -101,8 +101,13 @@ describe('OpenAI KFC chat API', () => {
                     call_id: 'call_add_cart_item',
                     name: 'updateCart',
                     arguments: JSON.stringify({
-                      itemCode: '20751',
-                      quantity: 1,
+                      changes: [
+                        {
+                          itemCode: '20751',
+                          orderedMenuItemQuantity: 1,
+                          modifiers: null,
+                        },
+                      ],
                     }),
                   },
                   {
@@ -863,8 +868,13 @@ describe('OpenAI KFC chat API', () => {
             call_id: 'call_add',
             name: 'updateCart',
             arguments: JSON.stringify({
-              itemCode: fixtures.menuItems[0]!.code,
-              quantity: 1,
+              changes: [
+                {
+                  itemCode: fixtures.menuItems[0]!.code,
+                  orderedMenuItemQuantity: 1,
+                  modifiers: null,
+                },
+              ],
             }),
           },
         ],

@@ -84,7 +84,13 @@ describe('KFC OpenAI Agents SDK tools', () => {
       tool: updateCart!,
       runContext: context,
       input: JSON.stringify({
-        changes: [{ itemCode: '20751', quantity: 1, modifiers: [] }],
+        changes: [
+          {
+            itemCode: '20751',
+            orderedMenuItemQuantity: 1,
+            modifiers: [],
+          },
+        ],
       }),
     });
 
@@ -128,7 +134,13 @@ describe('KFC OpenAI Agents SDK tools', () => {
       tool: updateCart!,
       runContext: context,
       input: JSON.stringify({
-        changes: [{ itemCode: '20751', quantity: 1, modifiers: [] }],
+        changes: [
+          {
+            itemCode: '20751',
+            orderedMenuItemQuantity: 1,
+            modifiers: [],
+          },
+        ],
       }),
     });
 
@@ -250,14 +262,25 @@ describe('KFC OpenAI Agents SDK tools', () => {
       tool: updateCart!,
       runContext: context,
       input: JSON.stringify({
-        changes: [{ itemCode: '20751', quantity: 1, modifiers: [] }],
+        changes: [
+          {
+            itemCode: '20751',
+            orderedMenuItemQuantity: 1,
+            modifiers: [],
+          },
+        ],
       }),
     });
 
     expect(executed).toEqual([
       {
-        mode: 'patch',
-        changes: [{ itemCode: '20751', quantity: 1, modifiers: [] }],
+        changes: [
+          {
+            itemCode: '20751',
+            orderedMenuItemQuantity: 1,
+            modifiers: [],
+          },
+        ],
       },
     ]);
     expect(result).toMatchObject({
@@ -268,8 +291,13 @@ describe('KFC OpenAI Agents SDK tools', () => {
       expect.objectContaining({
         name: 'updateCart',
         arguments: {
-          mode: 'patch',
-          changes: [{ itemCode: '20751', quantity: 1, modifiers: [] }],
+          changes: [
+            {
+              itemCode: '20751',
+              orderedMenuItemQuantity: 1,
+              modifiers: [],
+            },
+          ],
         },
       }),
     ]);

@@ -253,8 +253,8 @@ describe('channel presentation delivery compatibility', () => {
                       changes: [
                         {
                           itemCode: item.code,
-                          quantity: 2,
-                          modifiers: [],
+                          orderedMenuItemQuantity: 2,
+                          modifiers: null,
                         },
                       ],
                     }),

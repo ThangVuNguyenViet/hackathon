@@ -5,7 +5,10 @@ import { z } from 'zod';
 import type { BaseCheckpointSaver } from '@langchain/langgraph';
 import { KfcDirectTurnService } from '../agent/kfcDirectTurnService.js';
 import { selectKfcOpenAiGenUi } from '../agent/kfcOpenAiGenUi.js';
-import type { KfcToolSession } from '../agent/kfcOpenAiTools.js';
+import {
+  directAgentToolArguments,
+  type KfcToolSession,
+} from '../agent/kfcOpenAiTools.js';
 import { prepareStructuredCustomerAction } from '../agent/structuredCustomerAction.js';
 import type {
   ExternalClients,
@@ -528,7 +531,10 @@ export function createRouteAgentRuntime(
               requiredToolCalls = [
                 {
                   name: preparation.call.toolName,
-                  arguments: preparation.call.arguments,
+                  arguments: directAgentToolArguments(
+                    preparation.call.toolName,
+                    preparation.call.arguments,
+                  ),
                 },
                 ...(command.kind === 'confirm_order' &&
                 preparation.call.toolName === 'previewOrder' &&
@@ -548,10 +554,10 @@ export function createRouteAgentRuntime(
           metadata: directMetadata,
           fence: runGuard.commitFence,
           prepareSession: (session) => {
-            if (selectedPaymentMethod) {
-              session.selectedPaymentMethod = selectedPaymentMethod;
-            }
             return {
+              session: selectedPaymentMethod
+                ? { ...session, selectedPaymentMethod }
+                : session,
               requiredToolCalls,
               allowModelToolCalls: !input.trustedCustomerAction,
             };

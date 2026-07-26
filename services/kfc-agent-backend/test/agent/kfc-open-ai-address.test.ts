@@ -26,18 +26,21 @@ async function addressTool(sessionId: string) {
   const fixtures = createTestFixtures();
   const clients = createMockClients(fixtures);
   const session = await createKfcToolSession(clients, sessionId);
+  const sessionState = { current: session };
   const quoteFulfillment = createKfcOpenAiTools({
     clients,
-    session,
+    sessionState,
     fixtures,
   }).find((tool) => tool.definition.name === 'quoteFulfillment');
-  const updateCart = createKfcOpenAiTools({ clients, session }).find(
+  const updateCart = createKfcOpenAiTools({ clients, sessionState }).find(
     (tool) => tool.definition.name === 'updateCart',
   );
   if (!quoteFulfillment) throw new Error('quoteFulfillment missing');
   if (!updateCart) throw new Error('updateCart missing');
-  await updateCart.execute({ itemCode: '20751', quantity: 1 });
-  return { session, quoteFulfillment };
+  await updateCart.execute({
+    changes: [{ itemCode: '20751', orderedMenuItemQuantity: 1 }],
+  });
+  return { sessionState, quoteFulfillment };
 }
 
 describe('direct OpenAI delivery address flow', () => {
@@ -120,7 +123,7 @@ describe('direct OpenAI delivery address flow', () => {
   });
 
   it('resolves fixture-declared natural administrative abbreviations before quoting', async () => {
-    const { session, quoteFulfillment } = await addressTool(
+    const { sessionState, quoteFulfillment } = await addressTool(
       'kfc:address_partial',
     );
 
@@ -178,7 +181,7 @@ describe('direct OpenAI delivery address flow', () => {
         },
       },
     });
-    expect(session.deliveryAddressDraft).toMatchObject({
+    expect(sessionState.current.deliveryAddressDraft).toMatchObject({
       recipientName: 'Nguyễn An',
       phone: '0901234567',
       addressLine: '54/2 Nguyễn Hồng Đào',
@@ -243,18 +246,21 @@ describe('direct OpenAI delivery address flow', () => {
   });
 
   it('canonical structured fields replace stale missing state and publish a quote', async () => {
-    const { session, quoteFulfillment } = await addressTool(
+    const { sessionState, quoteFulfillment } = await addressTool(
       'kfc:address_structured_repair',
     );
-    session.deliveryAddressDraft = {
-      recipientName: 'Nguyễn An',
-      phone: '0901234567',
-      addressLine: '54/2 Nguyễn Hồng Đào',
-      rawAddress: '54/2 Nguyễn Hồng Đào p14 q Tân Bình tp HCM',
-      legacyDistrictText: 'Quận Tân Bình',
+    sessionState.current = {
+      ...sessionState.current,
+      deliveryAddressDraft: {
+        recipientName: 'Nguyễn An',
+        phone: '0901234567',
+        addressLine: '54/2 Nguyễn Hồng Đào',
+        rawAddress: '54/2 Nguyễn Hồng Đào p14 q Tân Bình tp HCM',
+        legacyDistrictText: 'Quận Tân Bình',
+      },
+      deliveryAddressStatus: 'incomplete',
+      deliveryAddressMissingFields: ['addressLine'],
     };
-    session.deliveryAddressStatus = 'incomplete';
-    session.deliveryAddressMissingFields = ['addressLine'];
 
     const result = await quoteFulfillment.execute({
       method: 'delivery',
@@ -290,11 +296,11 @@ describe('direct OpenAI delivery address flow', () => {
         },
       },
     });
-    expect(session.deliveryAddressStatus).toBe('quoted');
-    expect(session.deliveryAddressMissingFields).toEqual([]);
-    expect(verifiedKfcToolSessionContext(session)).not.toHaveProperty(
-      'deliveryAddressMissingFields',
-    );
+    expect(sessionState.current.deliveryAddressStatus).toBe('quoted');
+    expect(sessionState.current.deliveryAddressMissingFields).toEqual([]);
+    expect(
+      verifiedKfcToolSessionContext(sessionState.current),
+    ).not.toHaveProperty('deliveryAddressMissingFields');
   });
 
   it('quotes any complete customer address without administrative validation', async () => {
@@ -364,7 +370,7 @@ describe('direct OpenAI delivery address flow', () => {
   });
 
   it('quotes a complete address and retains the canonical draft', async () => {
-    const { session, quoteFulfillment } =
+    const { sessionState, quoteFulfillment } =
       await addressTool('kfc:address_quoted');
 
     const result = await quoteFulfillment.execute({
@@ -395,19 +401,19 @@ describe('direct OpenAI delivery address flow', () => {
         },
       },
     });
-    expect(session.fulfillment).toMatchObject({
+    expect(sessionState.current.fulfillment).toMatchObject({
       method: 'delivery',
       feeVnd: expect.any(Number),
     });
-    expect(session.cart).toMatchObject({
+    expect(sessionState.current.cart).toMatchObject({
       subtotalVnd: 99_000,
       discountVnd: 0,
       deliveryFeeVnd: 18_000,
       totalVnd: 117_000,
     });
-    expect(session.deliveryAddressDraft?.deliveryInstructions).toBe(
-      'Gọi khi đến',
-    );
+    expect(
+      sessionState.current.deliveryAddressDraft?.deliveryInstructions,
+    ).toBe('Gọi khi đến');
   });
 
   it('hydrates and publishes an address draft across direct Responses turns', async () => {

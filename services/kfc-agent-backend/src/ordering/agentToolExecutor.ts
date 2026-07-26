@@ -511,7 +511,7 @@ export async function executeAgentToolCall(
       }
       trustedRequest = {
         toolName: canonicalRequest.toolName,
-        arguments: { mode: args.mode, changes },
+        arguments: { changes },
       };
       break;
     }

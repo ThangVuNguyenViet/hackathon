@@ -27,7 +27,10 @@ import {
   type AgentApprovalExecutionContext,
   type AgentToolExecutorContext,
 } from "../../src/ordering/agentToolExecutor.js";
-import { agentToolArgumentSchemas } from "../../src/ordering/toolCatalog.js";
+import {
+  agentToolArgumentSchemas,
+  toolArgumentSchemas,
+} from "../../src/ordering/toolCatalog.js";
 import type {
   CommerceApprovalBinding,
   CommerceApprovalCapability,
@@ -664,6 +667,12 @@ describe("provider-neutral agent commerce executor", () => {
             ],
           },
         ],
+      }).success,
+    ).toBe(false);
+    expect(
+      toolArgumentSchemas.updateCart.safeParse({
+        mode: "patch",
+        changes: [{ itemCode: "20751", quantity: 1 }],
       }).success,
     ).toBe(false);
     expect(

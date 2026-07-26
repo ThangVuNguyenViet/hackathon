@@ -24,24 +24,10 @@ function redactedResultSummary(result: unknown): Record<string, unknown> {
       ? envelope.value
       : envelope;
   const items = Array.isArray(value.items) ? value.items : undefined;
-  const recovery = isRecord(envelope.recovery) ? envelope.recovery : undefined;
   return {
     outcome: envelope.ok === false ? 'error' : 'success',
     ...(typeof value.total === 'number' ? { total: value.total } : {}),
     ...(items ? { itemCount: items.length } : {}),
-    ...(recovery &&
-    typeof recovery.reason === 'string' &&
-    typeof recovery.attempt === 'number' &&
-    typeof recovery.maxAttempts === 'number'
-      ? {
-          recovery: {
-            reason: recovery.reason,
-            attempt: recovery.attempt,
-            maxAttempts: recovery.maxAttempts,
-            exhausted: recovery.exhausted === true,
-          },
-        }
-      : {}),
   };
 }
 

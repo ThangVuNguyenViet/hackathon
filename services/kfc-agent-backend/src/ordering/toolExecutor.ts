@@ -431,36 +431,11 @@ export async function executeToolCall(
         );
       return resultFromToolResult(
         request.toolName,
-        "changes" in args
-          ? await clients.cart.applyChanges(
-              cart,
-              args.mode === "replace"
-                ? [
-                    ...cart.items
-                      .filter(
-                        (item) =>
-                          !args.changes.some(
-                            (change) =>
-                              change.itemCode === item.itemCode &&
-                              change.quantity > 0,
-                          ),
-                      )
-                      .map((item) => ({
-                        itemCode: item.itemCode,
-                        quantity: 0,
-                      })),
-                    ...args.changes,
-                  ]
-                : args.changes,
-              context.externalCallContext,
-            )
-          : await clients.cart.updateCart(
-              cart,
-              args.itemCode,
-              args.quantity,
-              args.modifiers,
-              context.externalCallContext,
-            ),
+        await clients.cart.applyChanges(
+          cart,
+          args.changes,
+          context.externalCallContext,
+        ),
       );
     }
     case "previewCart":

@@ -88,11 +88,7 @@ function safeSdkToolFailure(
 
 function canonicalArgumentSchema(name: string): z.ZodTypeAny | undefined {
   if (name === 'updateCart') {
-    return z.union([
-      directUpdateCartArgumentsSchema,
-      (agentToolArgumentSchemas as Record<string, z.ZodTypeAny>).updateCart,
-      (toolArgumentSchemas as Record<string, z.ZodTypeAny>).updateCart,
-    ]);
+    return directUpdateCartArgumentsSchema;
   }
   if (name === 'quoteFulfillment') return directQuoteFulfillmentArgumentsSchema;
   if (name === 'acquireVoucher' || name === 'redeemReward') {
@@ -271,7 +267,7 @@ export interface KfcToolSession {
 
 export interface CreateKfcOpenAiToolsInput {
   clients: ExternalClients;
-  session: KfcToolSession;
+  sessionState: KfcToolSessionState;
   accessContext?: CustomerAccessContext;
   fixtures?: Pick<
     GeneratedFixtures,
@@ -279,12 +275,8 @@ export interface CreateKfcOpenAiToolsInput {
   >;
 }
 
-function cloneKfcToolSession(session: KfcToolSession): KfcToolSession {
-  const { externalCallContext, ...cloneableSession } = session;
-  return {
-    ...structuredClone(cloneableSession),
-    externalCallContext,
-  };
+export interface KfcToolSessionState {
+  current: KfcToolSession;
 }
 
 export function hydrateKfcToolSession(
@@ -396,24 +388,24 @@ export function verifiedKfcToolSessionContext(
 
 const descriptions: Record<ToolName, string> = {
   searchMenu:
-    'Search verified menu items and selectable options deterministically in one searchMenu call in the same user turn. Put concise product or product-composition terms in query. For a category-wide request, put the exact category wording already exposed by menu evidence in category and leave query empty; retrieve the category first and filter customer exclusions from the returned candidates. When the customer asks you to choose one item and the request is sufficiently clear, use the returned candidates to choose and continue in the same turn instead of asking whether they want details. Put each required selectable choice in modifierQueries using wording exposed by the selectable option. Keep negation when it is part of the desired option name, such as "không cay"; for an omitted optional add-on, use the target wording, such as "phô mai". Example: "gà không cay, không phô mai" can use query "gà" and modifierQueries ["không cay", "phô mai"]. Product components named in an item or description belong in query, not modifierQueries. Keep search terms in Vietnamese because the catalog is Vietnamese. Put category, partySize, and maxPriceVnd in their structured arguments. partySize is ranking evidence, and maxPriceVnd is a per-item ceiling; combine returned priceVnd values yourself for a total recommendation budget. Each candidate returns availability and compact matchedModifiers evidence; available false means the item cannot currently be ordered. Absence of a match does not prove absence of an ingredient or property; only claim all requested selectable choices matched when matchesAllModifierQueries is true. An exact item-name query ranks the top exact candidate above similarly named combos; use that top exact candidate and call getItemDetails rather than substituting another item. Use mode "full" only for the complete menu. When an exact item code is already known or the full option tree is needed, call getModifierOptions directly.',
+    'Search verified fixture menu data. query searches product text including names, descriptions, categories, and fixture aliases. category is one exact category filter copied from a returned item.category value; omit category when that exact value is not known. modifierQueries are independent terms for selectable options that must match the same item; use option wording rather than inferred product semantics, and matchedModifiers reports the verified option evidence. maxPriceVnd is a per-item price ceiling. partySize is ranking evidence and does not guarantee serving size. mode "full" returns the complete available menu; mode "search" ranks matching items. Returned product facts, prices, availability, and modifier matches come from verified fixture data; available false means the item cannot currently be ordered. An empty result means only that the supplied arguments returned no matches.',
   getItemDetails:
     'Get verified name, description, category, base price, and current availability for one KFC menu item code. Treat available false as unavailable to order.',
   getModifierOptions:
-    'Get the verified selectable modifier tree for one menu item code; call this before answering any exact modifier-price question. Every name, attribute, and price belongs only to its exact option and branch. Do not transfer a property to sibling options, the whole item, or another item. Quote an exact modifier price only from its returned priceDeltaVnd; do not infer a modifier price from the item price or conversation. Missing attribute or modifier data means unknown; absence of a modifier choice does not prove an ingredient, taste, or allergen property.',
+    'Get the verified selectable modifier tree for one menu item code. Every returned name, attribute, identifier, and price belongs only to its exact option and branch; do not transfer facts between branches or items. priceDeltaVnd is the authoritative modifier price delta; do not infer a modifier price from the base item price. Missing modifier data means unknown; absence of a choice does not prove an ingredient, taste, or allergen property.',
   updateCart:
-    'Add, update, remove, or replace one or more items in the current cart. This is a reversible cart edit: when the customer explicitly asks to choose and add an item, execute it without another confirmation. Use mode "patch" when changing only the listed item codes while preserving all other cart lines. Use mode "replace" when changes describe the complete desired cart; every current cart item not listed with a positive quantity is removed atomically. orderedMenuItemQuantity is how many times the customer is purchasing the named menu item, never the number of pieces described inside that item. If the customer says one portion of a menu item that contains two pieces, orderedMenuItemQuantity is 1; if both pieces use the same verified option, quantityPerPortion can be 2. Modifier quantities are per ordered menu item and must use exact verified identifiers and pricing from getModifierOptions.',
+    'Set the absolute requested quantity for one or more verified menu items in the current cart. Items not listed remain unchanged. orderedMenuItemQuantity is the number of menu portions, not the number of pieces described inside an item; quantity 0 removes that item. Listed changes are applied together and the returned cart is the authoritative current cart with verified prices and totals. Modifier identifiers and quantities apply per menu portion and must match verified selectable options. This is a reversible, idempotent absolute-quantity update.',
   previewCart: 'Read the current cart with verified prices and totals.',
   recommendAddOns:
-    'Return verified add-on candidates for the current cart without changing it. Use this for a general add-on request; if the customer asks for a specific add-on and no candidate is returned, that does not mean the item is absent from the full menu, so search the menu for a standalone item.',
+    'Return verified add-on candidates for the current cart without changing it.',
   findStores:
-    'Find KFC stores by query, city, or district. A nearby or named store does not verify delivery coverage, fee, ETA, or item serviceability; use quoteFulfillment with the complete delivery details for those facts.',
+    'Find verified KFC stores by query, city, or district. Store results do not verify delivery coverage, fee, ETA, or cart serviceability.',
   checkStoreAvailability:
     'Check whether the current cart items are available at one exact store for pickup or delivery. This verifies item availability only; it does not verify delivery fee or ETA.',
   quoteFulfillment:
-    'Merge customer-supplied delivery details into the current address draft and, when complete, quote the exact current cart. Call this whenever the customer supplies or corrects any delivery address, recipient, phone, or delivery-instruction field, including an incomplete address. Extract fields from natural language into address; use null for every field not supplied in the current message. Never send placeholders such as a generic recipient, an example phone number, an invented address, or invented administrative codes. Recipient name, phone, and the customer’s free-form address line are sufficient; province and commune are optional, and this mock accepts every supplied address. The backend retains prior fields and returns status incomplete only for missing required customer details, or quoted with a fulfillment quote. Ask naturally for missing fields and preserve known fields. Only a successful quoted result verifies serviceability, delivery fee, ETA, store, and cart availability. This tool does not place or confirm an order.',
+    'Merge supplied delivery fields into the current address draft and quote the exact current cart when required details are complete. Null fields mean not supplied in this update; prior verified fields are retained. Recipient name, phone, and a free-form address line are sufficient; province and commune are optional, and this fixture accepts every supplied address. The result is incomplete with missingFields or quoted; only a successful quoted result verifies serviceability, fee, ETA, store, and cart availability. This operation does not place an order.',
   searchPromotions:
-    'Search the current verified promotion and voucher catalog. Use an empty query for a broad listing or a concise Vietnamese term for a targeted search. An empty filtered result does not prove that no promotion exists; broaden the query or list the current catalog when appropriate.',
+    'Search the current verified promotion and voucher catalog. An empty query lists the catalog; a non-empty query filters it. An empty result means only that the supplied query returned no matches.',
   explainPromotion: 'Explain one promotion using its offer ID.',
   validateVoucher: 'Validate a voucher against the current cart subtotal.',
   getMembershipProfile:
@@ -427,125 +419,37 @@ const descriptions: Record<ToolName, string> = {
   listMembershipTools:
     'List discovered membership capabilities and whether each capability is available in the current runtime.',
   listPaymentMethods:
-    'List verified KFC payment methods. When the customer names or repeats a payment method while confirming checkout, query that exact customer-facing name first, then use only the exact supported methodId returned by this call for createPaymentLink in the same tool loop. Do not guess a methodId or infer support from a name.',
+    'List verified KFC payment methods, optionally filtered by customer-facing name. Returned methodId values are the only supported identifiers for payment-link creation.',
   getSavedAddresses:
     'Read saved delivery addresses for the authenticated customer.',
   getRecentOrder: 'Read the authenticated customer’s most recent order.',
   getFavoriteItems: 'Read the authenticated customer’s favorite menu items.',
   acquireVoucher:
-    'Acquire one verified membership reward when the customer explicitly asks to acquire or confirms acquiring it. Use the exact rewardId from listMembershipRewards. The server supplies confirmation and mutation identity; do not claim completion unless the result status is completed.',
+    'Acquire one verified membership reward by exact rewardId. The server supplies confirmation and mutation identity. Only a completed result verifies acquisition.',
   redeemReward:
-    'Redeem one verified wallet voucher when the customer explicitly asks to use or confirms using it. Use the exact voucherId from listMembershipWallet and the requested channel. The server supplies confirmation and mutation identity; do not claim completion unless the result status is completed.',
+    'Redeem one verified wallet voucher by exact voucherId and channel. The server supplies confirmation and mutation identity. Only a completed result verifies redemption.',
   searchContentPolicy:
     'Search approved KFC policy, promotion, news, or allergen knowledge.',
   answerAllergenQuestion: 'Search approved KFC allergen knowledge.',
   previewOrder:
-    'Create an order preview from the current cart and fulfillment quote. Do not call this again when verified current state already contains an order.',
+    'Create a verified order preview from the current cart and fulfillment quote without placing the order.',
   placeOrder:
-    'Place the current fixture order immediately from its preview. Do not call this again when verified current state already contains an order.',
+    'Place the current fixture order from its verified preview. Provider mutation identity makes repeated execution idempotent.',
   getOrderStatus:
     'Read the latest verified status for the current order. Describe status, timing, or fulfillment progress using only fields returned by this call.',
   createPaymentLink:
-    'Create a fixture payment link for the placed order using only an exact supported methodId from the active listPaymentMethods result. If the customer confirms both placing the order and a named payment method, continue previewOrder (only when no current order exists), placeOrder (only when no current order exists), and createPaymentLink in the same Responses tool loop.',
+    'Create a fixture payment link for the placed order using an exact supported methodId from the active verified payment-method collection.',
   checkPaymentStatus: 'Read the current fixture payment status.',
   collectInvoice:
-    'Record customer-provided invoice fields for the current order. Send only values the customer supplied, leave unavailable optional fields unset, and ask for required missing information when execution reports it. This does not place or modify the order.',
+    'Record supplied invoice fields for the current order. Missing optional fields remain unset. The result reports any missing required fields. This does not place or modify the order.',
   handoff:
     'Queue the conversation for a human operator. A successful result means the request is queued and awaiting a human; it does not mean a human accepted or joined. If a handoff is already queued, this returns that same verified escalation without creating another.',
   resolveHandoff: 'Resolve an existing human-support escalation.',
 };
 
-const planningGuidance: Partial<Record<ToolName, string>> = {
-  searchMenu:
-    ' The category argument represents one exact category label, so do not combine unrelated category concepts into it. Customer exclusions about packaged product components are selection criteria, not modifierQueries: search the positive product terms, then reject candidates whose returned description includes an excluded component. When the customer delegates a clear choice to add, select a suitable available candidate and call updateCart before replying. A multi-item plan may use multiple targeted or category searches in the same user turn. If a requested component is not included in a suitable combo, search for a standalone requested component instead of treating the combo result as the whole menu.',
-  updateCart:
-    ' For a delegated complete cart plan, apply all additions, quantity changes, and removals in one multi-change call; use quantity 0 for unwanted existing lines when rebalancing the cart. Do not merely present the plan or ask for another confirmation when the customer already authorized this reversible choice. Treat the returned cart as the authoritative current cart. If it does not satisfy the customer’s explicit constraints, make a corrected update in the same user turn.',
-};
-
-const retryableEmptyReadTools = new Set<ToolName>([
-  'searchMenu',
-  'findStores',
-  'searchPromotions',
-  'listMembershipRewards',
-  'listMembershipTools',
-  'listPaymentMethods',
-  'searchContentPolicy',
-  'answerAllergenQuestion',
-]);
-
-const retryableReadTools = new Set<ToolName>([
-  ...retryableEmptyReadTools,
-  'getItemDetails',
-  'getModifierOptions',
-  'previewCart',
-  'recommendAddOns',
-  'checkStoreAvailability',
-  'explainPromotion',
-  'validateVoucher',
-  'getMembershipProfile',
-  'listMembershipWallet',
-  'getMembershipPointHistory',
-  'getOrderStatus',
-  'checkPaymentStatus',
-]);
-
-function retryGuidance(toolName: ToolName): string {
-  if (retryableEmptyReadTools.has(toolName)) {
-    return ' If the result is empty, errored, or invalid, follow its recovery instruction and retry with materially corrected or broader arguments; do not repeat identical arguments. Stop after three total attempts.';
-  }
-  if (retryableReadTools.has(toolName)) {
-    return ' If the result is errored or invalid, follow its recovery instruction and retry with materially corrected arguments; do not repeat identical arguments. Stop after three total attempts.';
-  }
-  return ' If arguments are rejected before execution, correct them. Never retry after an uncertain execution error.';
-}
-
-function emptyReadItemCount(result: unknown): number | undefined {
-  if (!isRecord(result) || result.ok !== true) return undefined;
-  if (Array.isArray(result.value)) return result.value.length;
-  if (!isRecord(result.value)) return undefined;
-  if (typeof result.value.total === 'number') return result.value.total;
-  return Array.isArray(result.value.items)
-    ? result.value.items.length
-    : undefined;
-}
-
-function withEmptyReadRecovery(
-  toolName: ToolName,
-  result: unknown,
-  availableCategories: readonly string[] = [],
-): unknown {
-  if (
-    !retryableEmptyReadTools.has(toolName) ||
-    emptyReadItemCount(result) !== 0 ||
-    !isRecord(result)
-  ) {
-    return result;
-  }
-  return {
-    ...result,
-    recovery: {
-      reason: 'empty_result',
-      retry: true,
-      instruction:
-        toolName === 'searchMenu'
-          ? 'Before replying to the customer, retry in this turn with materially broader arguments: drop constraints one at a time; for category browsing use the exact category wording already exposed by menu evidence and leave query empty, or omit category and use a concise product query. Request the full menu only when that matches the customer intent. Do not repeat identical arguments.'
-          : 'Before replying to the customer, retry in this turn with materially broader arguments: drop constraints one at a time or use the tool’s unfiltered listing form when available. Do not repeat identical arguments.',
-      ...(toolName === 'searchMenu' && availableCategories.length > 0
-        ? { availableCategories }
-        : {}),
-    },
-  };
-}
-
 const directUpdateCartJsonSchema = {
   type: 'object',
   properties: {
-    mode: {
-      type: 'string',
-      enum: ['patch', 'replace'],
-      description:
-        'Use patch to preserve unlisted cart lines. Use replace when changes are the complete desired cart and every unlisted current item must be removed.',
-    },
     changes: {
       type: 'array',
       minItems: 1,
@@ -598,15 +502,12 @@ const directUpdateCartJsonSchema = {
       },
     },
   },
-  required: ['mode', 'changes'],
+  required: ['changes'],
   additionalProperties: false,
 } as const;
 
 const directUpdateCartArgumentsSchema = z
   .object({
-    // Trusted GenUI actions created before mode was exposed remain patch edits.
-    // The provider-facing JSON Schema still requires the model to choose.
-    mode: z.enum(['patch', 'replace']).default('patch'),
     changes: z
       .array(
         z
@@ -664,9 +565,6 @@ function canonicalUpdateCartArguments(
   );
   if (!modelFacing) return arguments_;
   return {
-    ...(arguments_.mode === 'replace'
-      ? { mode: 'replace' }
-      : { mode: 'patch' }),
     changes: arguments_.changes.map((change) => {
       if (!isRecord(change)) return change;
       return {
@@ -687,6 +585,36 @@ function canonicalUpdateCartArguments(
               }),
             }
           : {}),
+      };
+    }),
+  };
+}
+
+export function directAgentToolArguments(
+  toolName: ToolName,
+  arguments_: Record<string, unknown>,
+): Record<string, unknown> {
+  if (toolName !== 'updateCart' || !Array.isArray(arguments_.changes)) {
+    return arguments_;
+  }
+  return {
+    changes: arguments_.changes.map((change) => {
+      if (!isRecord(change)) return change;
+      return {
+        itemCode: change.itemCode,
+        orderedMenuItemQuantity:
+          change.orderedMenuItemQuantity ?? change.quantity,
+        modifiers: Array.isArray(change.modifiers)
+          ? change.modifiers.map((modifier) => {
+              if (!isRecord(modifier)) return modifier;
+              return {
+                groupId: modifier.groupId,
+                modifierId: modifier.modifierId,
+                quantityPerPortion:
+                  modifier.quantityPerPortion ?? modifier.quantity ?? null,
+              };
+            })
+          : null,
       };
     }),
   };
@@ -984,17 +912,23 @@ async function executeDirectQuoteFulfillment(input: {
     GeneratedFixtures,
     'administrativeDivisions' | 'administrativeLegacyMappings'
   >;
-}): Promise<Record<string, unknown> | ToolCallResult> {
+}): Promise<{
+  result: Record<string, unknown> | ToolCallResult;
+  session: KfcToolSession;
+}> {
   const parsed = directQuoteFulfillmentArgumentsSchema.safeParse(
     input.arguments,
   );
   if (!parsed.success) {
     return {
-      toolName: 'quoteFulfillment',
-      ok: false,
-      errorCode: 'invalid_tool_arguments',
-      message: parsed.error.message,
-      provenance: [],
+      result: {
+        toolName: 'quoteFulfillment',
+        ok: false,
+        errorCode: 'invalid_tool_arguments',
+        message: parsed.error.message,
+        provenance: [],
+      },
+      session: input.session,
     };
   }
   const previousDraft = input.session.deliveryAddressDraft;
@@ -1007,23 +941,30 @@ async function executeDirectQuoteFulfillment(input: {
     fixtures: input.fixtures,
   });
   const addressDraft = administrative.draft;
-  input.session.deliveryAddressDraft = addressDraft;
-  input.session.deliveryAdministrativeOptions = administrative.options;
-  if (JSON.stringify(previousDraft) !== JSON.stringify(addressDraft)) {
-    input.session.address = undefined;
-    input.session.fulfillment = undefined;
-  }
+  const draftChanged =
+    JSON.stringify(previousDraft) !== JSON.stringify(addressDraft);
+  const draftSession: KfcToolSession = {
+    ...input.session,
+    deliveryAddressDraft: addressDraft,
+    deliveryAdministrativeOptions: administrative.options,
+    ...(draftChanged ? { address: undefined, fulfillment: undefined } : {}),
+  };
   const missingFields = [
     ...new Set([...missingDeliveryAddressFields(addressDraft)]),
   ];
   if (missingFields.length > 0) {
-    input.session.deliveryAddressStatus = 'incomplete';
-    input.session.deliveryAddressMissingFields = missingFields;
-    return directQuoteSuccess({
-      status: 'incomplete',
-      addressDraft,
-      missingFields,
-    });
+    return {
+      result: directQuoteSuccess({
+        status: 'incomplete',
+        addressDraft,
+        missingFields,
+      }),
+      session: {
+        ...draftSession,
+        deliveryAddressStatus: 'incomplete',
+        deliveryAddressMissingFields: missingFields,
+      },
+    };
   }
 
   const effectiveArguments = {
@@ -1040,10 +981,10 @@ async function executeDirectQuoteFulfillment(input: {
         addressDraft.provinceName ??
         null,
     },
-    itemCodes: input.session.cart.items.map((item) => item.itemCode),
+    itemCodes: draftSession.cart.items.map((item) => item.itemCode),
   };
-  const context = executionContext(
-    input.session,
+  const prepared = prepareExecution(
+    draftSession,
     input.accessContext,
     'quoteFulfillment',
     effectiveArguments,
@@ -1051,27 +992,38 @@ async function executeDirectQuoteFulfillment(input: {
   const result = await executeToolCall(
     input.clients,
     { toolName: 'quoteFulfillment', arguments: effectiveArguments },
-    context,
+    prepared.context,
   );
   if (!result.ok && result.errorCode === 'address_resolution_failed') {
-    input.session.deliveryAddressStatus = 'unsupported';
-    input.session.deliveryAddressMissingFields = [];
-    return directQuoteSuccess({
-      status: 'unsupported',
+    return {
+      result: directQuoteSuccess({
+        status: 'unsupported',
+        addressDraft,
+        missingFields: [],
+      }),
+      session: {
+        ...prepared.session,
+        deliveryAddressStatus: 'unsupported',
+        deliveryAddressMissingFields: [],
+      },
+    };
+  }
+  if (!result.ok || result.toolName !== 'quoteFulfillment') {
+    return { result, session: prepared.session };
+  }
+  return {
+    result: directQuoteSuccess({
+      status: 'quoted',
       addressDraft,
       missingFields: [],
-    });
-  }
-  if (!result.ok || result.toolName !== 'quoteFulfillment') return result;
-  applyResult(input.session, result, effectiveArguments);
-  input.session.deliveryAddressStatus = 'quoted';
-  input.session.deliveryAddressMissingFields = [];
-  return directQuoteSuccess({
-    status: 'quoted',
-    addressDraft,
-    missingFields: [],
-    fulfillment: result.value,
-  });
+      fulfillment: result.value,
+    }),
+    session: {
+      ...reduceToolResult(prepared.session, result, effectiveArguments),
+      deliveryAddressStatus: 'quoted',
+      deliveryAddressMissingFields: [],
+    },
+  };
 }
 
 export async function createKfcToolSession(
@@ -1098,13 +1050,14 @@ export async function createKfcToolSession(
   };
 }
 
-function executionContext(
+function prepareExecution(
   session: KfcToolSession,
   accessContext: CustomerAccessContext | undefined,
   toolName: ToolName,
   arguments_: Record<string, unknown>,
-): ExecutorContext {
-  const toolCallSequence = ++session.toolCallSequence;
+): { session: KfcToolSession; context: ExecutorContext } {
+  const toolCallSequence = session.toolCallSequence + 1;
+  const nextSession = { ...session, toolCallSequence };
   const bindingFingerprint = createHash('sha256')
     .update(
       JSON.stringify({
@@ -1116,72 +1069,71 @@ function executionContext(
     )
     .digest('hex');
   return {
-    externalCallContext: session.externalCallContext,
-    sessionId: session.sessionId,
-    clientMessageId: `direct-openai-${toolCallSequence}`,
-    accessContext,
-    cart: session.cart,
-    address: session.address,
-    orderPreview: session.orderPreview,
-    order: session.order,
-    providerMutationIdentity: {
-      idempotencyKey: `${session.sessionId}:${toolName}:${toolCallSequence}`,
-      bindingFingerprint,
-    },
-    state: {
+    session: nextSession,
+    context: {
+      externalCallContext: session.externalCallContext,
       sessionId: session.sessionId,
-      customerId: session.customerId,
-      channel: session.channel,
-      latestUserMessage: '',
-      userConfirmedOrder: toolName === 'placeOrder',
-      escalationReasons: [],
-      retrievedEvidence: [],
+      clientMessageId: `direct-openai-${toolCallSequence}`,
+      accessContext,
       cart: session.cart,
-      ...(session.address ? { address: session.address } : {}),
-      ...(session.fulfillment ? { fulfillment: session.fulfillment } : {}),
-      ...(session.orderPreview ? { orderPreview: session.orderPreview } : {}),
-      ...(session.order ? { order: session.order } : {}),
-      ...(session.selectedPaymentMethod
-        ? { selectedPaymentMethod: session.selectedPaymentMethod }
-        : {}),
-      ...(session.paymentAttempt
-        ? { paymentAttempt: session.paymentAttempt }
-        : {}),
-      ...(session.activeCollectionKeys
-        ? { activeCollectionKeys: session.activeCollectionKeys }
-        : {}),
-      ...(session.verifiedCollections
-        ? { verifiedCollections: session.verifiedCollections }
-        : {}),
+      address: session.address,
+      orderPreview: session.orderPreview,
+      order: session.order,
+      providerMutationIdentity: {
+        idempotencyKey: `${session.sessionId}:${toolName}:${toolCallSequence}`,
+        bindingFingerprint,
+      },
+      state: {
+        sessionId: session.sessionId,
+        customerId: session.customerId,
+        channel: session.channel,
+        latestUserMessage: '',
+        userConfirmedOrder: toolName === 'placeOrder',
+        escalationReasons: [],
+        retrievedEvidence: [],
+        cart: session.cart,
+        ...(session.address ? { address: session.address } : {}),
+        ...(session.fulfillment ? { fulfillment: session.fulfillment } : {}),
+        ...(session.orderPreview ? { orderPreview: session.orderPreview } : {}),
+        ...(session.order ? { order: session.order } : {}),
+        ...(session.selectedPaymentMethod
+          ? { selectedPaymentMethod: session.selectedPaymentMethod }
+          : {}),
+        ...(session.paymentAttempt
+          ? { paymentAttempt: session.paymentAttempt }
+          : {}),
+        ...(session.activeCollectionKeys
+          ? { activeCollectionKeys: session.activeCollectionKeys }
+          : {}),
+        ...(session.verifiedCollections
+          ? { verifiedCollections: session.verifiedCollections }
+          : {}),
+      },
     },
   };
 }
 
-function applyResult(
+function reduceToolResult(
   session: KfcToolSession,
   result: ToolCallResult,
   arguments_: Record<string, unknown>,
-): void {
-  if (!result.ok) return;
+): KfcToolSession {
+  if (!result.ok) return session;
   switch (result.toolName) {
     case 'updateCart':
     case 'previewCart':
-      session.cart = result.value;
-      break;
+      return { ...session, cart: result.value };
     case 'quoteFulfillment': {
       const parsed = toolArgumentSchemas.quoteFulfillment.safeParse(arguments_);
-      if (result.value.resolvedAddress) {
-        session.address = result.value.resolvedAddress;
-      } else if (
-        parsed.success &&
-        parsed.data.address.label !== null &&
-        parsed.data.address.district !== null &&
-        parsed.data.address.city !== null
-      ) {
-        session.address = parsed.data.address as Address;
-      }
-      session.fulfillment = result.value;
-      session.cart = {
+      const address = result.value.resolvedAddress
+        ? result.value.resolvedAddress
+        : parsed.success &&
+            parsed.data.address.label !== null &&
+            parsed.data.address.district !== null &&
+            parsed.data.address.city !== null
+          ? (parsed.data.address as Address)
+          : session.address;
+      const cart = {
         ...session.cart,
         deliveryFeeVnd: result.value.feeVnd,
         totalVnd: Math.max(
@@ -1191,60 +1143,70 @@ function applyResult(
             result.value.feeVnd,
         ),
       };
-      break;
+      return {
+        ...session,
+        ...(address ? { address } : {}),
+        fulfillment: result.value,
+        cart,
+      };
     }
     case 'validateVoucher': {
-      if (!result.value.ok) break;
-      session.cart = {
-        ...session.cart,
-        voucherCode: result.value.publicCode,
-        discountVnd: result.value.discountVnd,
-        totalVnd: Math.max(
-          0,
-          session.cart.subtotalVnd -
-            result.value.discountVnd +
-            session.cart.deliveryFeeVnd,
-        ),
+      if (!result.value.ok) return session;
+      return {
+        ...session,
+        cart: {
+          ...session.cart,
+          voucherCode: result.value.publicCode,
+          discountVnd: result.value.discountVnd,
+          totalVnd: Math.max(
+            0,
+            session.cart.subtotalVnd -
+              result.value.discountVnd +
+              session.cart.deliveryFeeVnd,
+          ),
+        },
       };
-      break;
     }
     case 'previewOrder':
-      session.orderPreview = result.value;
-      break;
+      return { ...session, orderPreview: result.value };
     case 'placeOrder':
     case 'getOrderStatus':
-      session.order = result.value;
-      break;
+      return { ...session, order: result.value };
     case 'createPaymentLink': {
       const parsed =
         toolArgumentSchemas.createPaymentLink.safeParse(arguments_);
-      session.paymentAttempt = {
-        orderId: result.value.orderId,
-        method: parsed.success ? parsed.data.methodId : undefined,
-        status: result.value.status,
-        paymentUrl: result.value.url,
+      return {
+        ...session,
+        paymentAttempt: {
+          orderId: result.value.orderId,
+          method: parsed.success ? parsed.data.methodId : undefined,
+          status: result.value.status,
+          paymentUrl: result.value.url,
+        },
       };
-      break;
     }
     case 'checkPaymentStatus':
-      session.paymentAttempt = {
-        ...session.paymentAttempt,
-        status: result.value.status,
+      return {
+        ...session,
+        paymentAttempt: {
+          ...session.paymentAttempt,
+          status: result.value.status,
+        },
       };
-      break;
     case 'handoff': {
       const parsed = toolArgumentSchemas.handoff.safeParse(arguments_);
-      session.handoff = {
-        escalationId: result.value.escalationId,
-        reasons: parsed.success ? parsed.data.reasons : [],
+      return {
+        ...session,
+        handoff: {
+          escalationId: result.value.escalationId,
+          reasons: parsed.success ? parsed.data.reasons : [],
+        },
       };
-      break;
     }
     case 'resolveHandoff':
-      session.handoff = undefined;
-      break;
+      return { ...session, handoff: undefined };
     default:
-      break;
+      return session;
   }
 }
 
@@ -1309,48 +1271,61 @@ function membershipToolsWithRuntimeCapability(result: ToolCallResult): unknown {
 export function createKfcOpenAiTools(
   input: CreateKfcOpenAiToolsInput,
 ): KfcCanonicalTool[] {
-  const availableMenuCategories = [
-    ...new Set(input.fixtures?.menuItems.map(({ category }) => category) ?? []),
-  ];
   return toolNames.map((toolName) => ({
     definition: {
       type: 'function',
       name: toolName,
-      description: `${descriptions[toolName]}${planningGuidance[toolName] ?? ''}${retryGuidance(toolName)}`,
+      description: descriptions[toolName],
       parameters: jsonSchemaFor(toolName),
       strict: toolName === 'quoteFulfillment' || toolName === 'updateCart',
     },
     async execute(arguments_: Record<string, unknown>, options) {
-      // Mutate a private session snapshot. A late non-cancellable provider
-      // promise is quarantined after the SDK timeout wins.
-      const session = cloneKfcToolSession(input.session);
-      const originalExternalCallContext = input.session.externalCallContext;
-      session.externalCallContext = {
-        signal: AbortSignal.any([
-          input.session.externalCallContext.signal,
-          options?.signal ?? input.session.externalCallContext.signal,
-        ]),
-        deadlineAt: Math.min(
-          input.session.externalCallContext.deadlineAt,
-          options?.deadlineAt ?? input.session.externalCallContext.deadlineAt,
-        ),
+      const baseSession = input.sessionState.current;
+      const session = {
+        ...baseSession,
+        externalCallContext: {
+          signal: AbortSignal.any([
+            baseSession.externalCallContext.signal,
+            options?.signal ?? baseSession.externalCallContext.signal,
+          ]),
+          deadlineAt: Math.min(
+            baseSession.externalCallContext.deadlineAt,
+            options?.deadlineAt ?? baseSession.externalCallContext.deadlineAt,
+          ),
+        },
+      } satisfies KfcToolSession;
+      const publish = (nextSession: KfcToolSession): boolean => {
+        if (options?.signal.aborted) return false;
+        if (input.sessionState.current !== baseSession) return false;
+        input.sessionState.current = {
+          ...nextSession,
+          externalCallContext: baseSession.externalCallContext,
+        };
+        return true;
       };
-      const commit = () => {
-        if (!options?.signal.aborted) {
-          Object.assign(input.session, session);
-          input.session.externalCallContext = originalExternalCallContext;
-        }
+      const publishOrConflict = (
+        result: unknown,
+        nextSession: KfcToolSession,
+      ): unknown => {
+        if (publish(nextSession)) return result;
+        if (options?.signal.aborted) return result;
+        return {
+          toolName,
+          ok: false,
+          errorCode: 'agent_tool_state_conflict',
+          message: 'Tool state changed before this result could be applied',
+          provenance: [],
+        } satisfies ToolCallResult;
       };
       if (toolName === 'quoteFulfillment') {
-        const result = await executeDirectQuoteFulfillment({
+        const execution = await executeDirectQuoteFulfillment({
           clients: input.clients,
           session,
           accessContext: input.accessContext,
           arguments: arguments_,
           fixtures: input.fixtures,
         });
-        commit();
-        return result;
+        return publishOrConflict(execution.result, execution.session);
       }
       if (toolName === 'handoff' && session.handoff) {
         return {
@@ -1381,6 +1356,7 @@ export function createKfcOpenAiTools(
               ? { ...arguments_, confirmed: true }
               : arguments_;
       const effectiveArguments = directArguments;
+      let preparedSession = session;
       if (toolName === 'createPaymentLink') {
         const parsed =
           toolArgumentSchemas.createPaymentLink.safeParse(effectiveArguments);
@@ -1399,15 +1375,17 @@ export function createKfcOpenAiTools(
             ok: false,
             errorCode: 'unverified_payment_method',
             message:
-              'Read the named payment method with listPaymentMethods and use its exact supported methodId',
+              'The supplied methodId is not in the active verified payment-method collection',
             provenance: [],
           } satisfies ToolCallResult;
         }
-        session.selectedPaymentMethod =
-          selectedPaymentMethodAuthority(authority);
+        preparedSession = {
+          ...preparedSession,
+          selectedPaymentMethod: selectedPaymentMethodAuthority(authority),
+        };
       }
-      const context = executionContext(
-        session,
+      const prepared = prepareExecution(
+        preparedSession,
         input.accessContext,
         toolName,
         effectiveArguments,
@@ -1415,13 +1393,13 @@ export function createKfcOpenAiTools(
       const legacyResult = await executeToolCall(
         input.clients,
         { toolName, arguments: effectiveArguments },
-        context,
+        prepared.context,
       );
       if (toolName === 'listPaymentMethods') {
         const result = await adaptAgentToolResult({
           clients: input.clients,
           request: { toolName, arguments: effectiveArguments },
-          context,
+          context: prepared.context,
           legacy: legacyResult,
           scope:
             typeof effectiveArguments.query === 'string'
@@ -1431,23 +1409,26 @@ export function createKfcOpenAiTools(
                 }
               : { scope: 'all' },
         });
+        let nextSession = prepared.session;
         if (result.ok && result.verifiedCollection) {
-          session.activeCollectionKeys = {
-            ...session.activeCollectionKeys,
-            listPaymentMethods: result.verifiedCollection.key,
+          nextSession = {
+            ...nextSession,
+            activeCollectionKeys: {
+              ...nextSession.activeCollectionKeys,
+              listPaymentMethods: result.verifiedCollection.key,
+            },
+            verifiedCollections: replaceVerifiedCollection(
+              nextSession.verifiedCollections,
+              'listPaymentMethods',
+              result.verifiedCollection,
+            ),
           };
-          session.verifiedCollections = replaceVerifiedCollection(
-            session.verifiedCollections,
-            'listPaymentMethods',
-            result.verifiedCollection,
-          );
         }
-        commit();
-        return withEmptyReadRecovery(toolName, result, availableMenuCategories);
+        return publishOrConflict(result, nextSession);
       }
       if (toolName === 'listMembershipRewards') {
-        const profileContext = executionContext(
-          session,
+        const profile = prepareExecution(
+          prepared.session,
           input.accessContext,
           'getMembershipProfile',
           {},
@@ -1455,31 +1436,25 @@ export function createKfcOpenAiTools(
         const profileResult = await executeToolCall(
           input.clients,
           { toolName: 'getMembershipProfile', arguments: {} },
-          profileContext,
+          profile.context,
         );
         const result = rewardCatalogWithEligibility(
           legacyResult,
           profileResult,
         );
-        commit();
-        return withEmptyReadRecovery(toolName, result, availableMenuCategories);
+        return publishOrConflict(result, profile.session);
       }
       if (toolName === 'listMembershipWallet') {
         const result = walletWithRuntimeCapability(legacyResult);
-        commit();
-        return withEmptyReadRecovery(toolName, result, availableMenuCategories);
+        return publishOrConflict(result, prepared.session);
       }
       if (toolName === 'listMembershipTools') {
         const result = membershipToolsWithRuntimeCapability(legacyResult);
-        commit();
-        return withEmptyReadRecovery(toolName, result, availableMenuCategories);
+        return publishOrConflict(result, prepared.session);
       }
-      applyResult(session, legacyResult, effectiveArguments);
-      commit();
-      return withEmptyReadRecovery(
-        toolName,
+      return publishOrConflict(
         legacyResult,
-        availableMenuCategories,
+        reduceToolResult(prepared.session, legacyResult, effectiveArguments),
       );
     },
   }));

@@ -383,7 +383,6 @@ describe('direct Agents SDK live scenarios', () => {
         {
           name: 'updateCart',
           arguments: {
-            mode: 'patch',
             changes: [
               {
                 itemCode: 'fixture-dynamic-code',

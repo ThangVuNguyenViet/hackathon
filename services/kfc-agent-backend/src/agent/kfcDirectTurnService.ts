@@ -17,6 +17,7 @@ import {
   createKfcToolSession,
   verifiedKfcToolSessionContext,
   type KfcToolSession,
+  type KfcToolSessionState,
 } from './kfcOpenAiTools.js';
 import {
   hydrateKfcOpenAiToolSession,
@@ -31,6 +32,7 @@ import {
 import type { OpenAiCompactionEvent } from './observedOpenAiResponsesCompactionSession.js';
 
 export interface PreparedDirectKfcTurn {
+  session?: KfcToolSession;
   requiredToolCalls?: Array<{
     name: string;
     arguments: Record<string, unknown>;
@@ -93,13 +95,19 @@ export class KfcDirectTurnService {
         input.channel,
         externalCalls.context,
       );
-      const session = await hydrateKfcOpenAiToolSession({
+      const hydratedSession = await hydrateKfcOpenAiToolSession({
         store: this.options.store,
         sessionId: input.sessionId,
         freshSession,
       });
-      session.externalCallContext = externalCalls.context;
-      const prepared = await input.prepareSession?.(session);
+      const initialSession = {
+        ...hydratedSession,
+        externalCallContext: externalCalls.context,
+      };
+      const prepared = await input.prepareSession?.(initialSession);
+      const sessionState: KfcToolSessionState = {
+        current: prepared?.session ?? initialSession,
+      };
       let runMetrics:
         | {
             status: 'success' | 'error';
@@ -122,11 +130,13 @@ export class KfcDirectTurnService {
           externalMessageId: input.externalMessageId,
           metadata: input.metadata,
           store: this.options.store,
-          verifiedBusinessContext: verifiedKfcToolSessionContext(session),
+          verifiedBusinessContext: verifiedKfcToolSessionContext(
+            sessionState.current,
+          ),
           tools: createKfcOpenAiAgentsTools(
             createKfcOpenAiTools({
               clients,
-              session,
+              sessionState,
               accessContext: await this.options.getAccessContext(
                 input.sessionId,
                 input.customerId,
@@ -150,7 +160,8 @@ export class KfcDirectTurnService {
           },
           ...(input.selectGenUi
             ? {
-                selectGenUi: (result) => input.selectGenUi?.(result, session),
+                selectGenUi: (result) =>
+                  input.selectGenUi?.(result, sessionState.current),
               }
             : {}),
         });
@@ -181,6 +192,7 @@ export class KfcDirectTurnService {
         }
         throw error;
       }
+      const session = sessionState.current;
       const publication = await prepareKfcOpenAiToolSessionPublication({
         session,
         latestUserMessage: input.text,

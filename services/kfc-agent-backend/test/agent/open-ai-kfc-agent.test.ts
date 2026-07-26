@@ -413,7 +413,6 @@ describe('OpenAiKfcAgent SDK Runner', () => {
 
     expect(executed).toEqual([
       {
-        mode: 'patch',
         changes: [
           {
             itemCode: '20751',
