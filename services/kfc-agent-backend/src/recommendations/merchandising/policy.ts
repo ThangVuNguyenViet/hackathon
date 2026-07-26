@@ -11,6 +11,7 @@ import {
   merchandisingActionSchema,
   placementSchema,
 } from '../domain/schemas.js';
+import { compareCanonicalUtcInstants } from '../domain/canonical-instant.js';
 
 const policyTextSchema = z.string().min(1).max(240);
 const boundedUniqueIds = (maximum = 100) =>
@@ -77,7 +78,7 @@ export const recommendationPolicySchema = z
 
     if (
       policy.endsAt !== null &&
-      compareCanonicalInstants(policy.startsAt, policy.endsAt) >= 0
+      (compareCanonicalUtcInstants(policy.startsAt, policy.endsAt) ?? 0) >= 0
     ) {
       context.addIssue({
         code: z.ZodIssueCode.custom,
@@ -167,20 +168,3 @@ export type RecommendationPolicy = z.infer<typeof recommendationPolicySchema>;
 export type MerchandisingPolicySnapshot = z.infer<
   typeof merchandisingPolicySnapshotSchema
 >;
-
-export function compareCanonicalInstants(left: string, right: string): number {
-  const parse = (value: string): { epoch: number; fraction: string } => {
-    const [whole, fraction = ''] = value.slice(0, -1).split('.');
-    return {
-      epoch: Date.parse(`${whole}Z`),
-      fraction: fraction.replace(/0+$/u, ''),
-    };
-  };
-  const a = parse(left);
-  const b = parse(right);
-  if (a.epoch !== b.epoch) return a.epoch - b.epoch;
-  const precision = Math.max(a.fraction.length, b.fraction.length);
-  return a.fraction
-    .padEnd(precision, '0')
-    .localeCompare(b.fraction.padEnd(precision, '0'));
-}

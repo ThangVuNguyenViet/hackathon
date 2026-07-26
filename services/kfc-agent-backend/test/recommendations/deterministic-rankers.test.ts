@@ -55,7 +55,10 @@ const makeContext = (
       promotion: snapshotBinding('promotion'),
     },
     eligibilityPolicyVersion: 'kfc-recommendation-policy-v1',
-    experimentProfile: { profileId: 'experiment-ranker-001', outputMode: 'baseline' },
+    experimentProfile: {
+      profileId: 'experiment-ranker-001',
+      outputMode: 'baseline',
+    },
   }),
   storeTimezone: 'Asia/Ho_Chi_Minh',
   verifiedCohorts: [],
@@ -111,7 +114,9 @@ const candidate = (
   ...overrides,
 });
 
-const eligible = (entry: PotentialRecommendationCandidate): EligibilityDecision => ({
+const eligible = (
+  entry: PotentialRecommendationCandidate,
+): EligibilityDecision => ({
   policyVersion: 'kfc-recommendation-policy-v1',
   actionId: entry.action.actionId,
   eligible: true,
@@ -192,13 +197,15 @@ describe('deterministic recommendation rankers', () => {
                         ...statistics.storeCalendarDayTypeDaypartOrderCounts,
                         'KFCVN0002:weekday:lunch': 0,
                       }
-                  : statistics.storeCalendarDayTypeDaypartOrderCounts,
+                    : statistics.storeCalendarDayTypeDaypartOrderCounts,
               storeDaypartOrderCounts:
                 expectation.strip === 'daypart' || expectation.strip === 'store'
                   ? {}
                   : statistics.storeDaypartOrderCounts,
               storeOrderCounts:
-                expectation.strip === 'store' ? {} : statistics.storeOrderCounts,
+                expectation.strip === 'store'
+                  ? {}
+                  : statistics.storeOrderCounts,
             })),
           ]),
           context: makeContext({
@@ -274,12 +281,24 @@ describe('deterministic recommendation rankers', () => {
               {
                 orderId: 'past-90-days',
                 completedAt: '2026-04-28T09:00:00Z',
-                lines: [{ sellableItemId: '20751', categoryId: 'chicken', quantity: 1 }],
+                lines: [
+                  {
+                    sellableItemId: '20751',
+                    categoryId: 'chicken',
+                    quantity: 1,
+                  },
+                ],
               },
               {
                 orderId: 'future',
                 completedAt: '2026-07-28T09:00:00Z',
-                lines: [{ sellableItemId: '20751', categoryId: 'chicken', quantity: 99 }],
+                lines: [
+                  {
+                    sellableItemId: '20751',
+                    categoryId: 'chicken',
+                    quantity: 99,
+                  },
+                ],
               },
             ],
           },
@@ -319,8 +338,16 @@ describe('deterministic recommendation rankers', () => {
                 orderId: 'large-past-order',
                 completedAt: '2026-04-28T09:00:00Z',
                 lines: [
-                  { sellableItemId: '20751', categoryId: 'chicken', quantity: 100 },
-                  { sellableItemId: 'another', categoryId: 'chicken', quantity: 100 },
+                  {
+                    sellableItemId: '20751',
+                    categoryId: 'chicken',
+                    quantity: 100,
+                  },
+                  {
+                    sellableItemId: 'another',
+                    categoryId: 'chicken',
+                    quantity: 100,
+                  },
                 ],
               },
             ],
@@ -360,7 +387,9 @@ describe('deterministic recommendation rankers', () => {
           {
             orderId: 'half-life-order',
             completedAt: '2026-04-28T09:00:00Z',
-            lines: [{ sellableItemId: '20751', categoryId: 'chicken', quantity: 1 }],
+            lines: [
+              { sellableItemId: '20751', categoryId: 'chicken', quantity: 1 },
+            ],
           },
         ],
       },
@@ -397,7 +426,13 @@ describe('deterministic recommendation rankers', () => {
             completedOrders: [
               {
                 ...zeroContext.customerHistory!.completedOrders[0],
-                lines: [{ sellableItemId: '20751', categoryId: 'chicken', quantity: 2 }],
+                lines: [
+                  {
+                    sellableItemId: '20751',
+                    categoryId: 'chicken',
+                    quantity: 2,
+                  },
+                ],
               },
             ],
           },
@@ -416,30 +451,50 @@ describe('deterministic recommendation rankers', () => {
     const entries = [
       candidate('modifier-b', {
         action: action({
-          type: 'apply_modifier', actionId: 'modifier:z', parentCartLineId: 'line-1',
-          parentSellableItemId: '20752', optionId: 'b', groupPath: ['1'], quantity: 1,
-          priceImpact: { amount: 10_000, currency: 'VND' }, cartRevision: 'cart-revision-ranker-001',
+          type: 'apply_modifier',
+          actionId: 'modifier:z',
+          parentCartLineId: 'line-1',
+          parentSellableItemId: '20752',
+          optionId: 'b',
+          groupPath: ['1'],
+          quantity: 1,
+          priceImpact: { amount: 10_000, currency: 'VND' },
+          cartRevision: 'cart-revision-ranker-001',
         }),
       }),
       candidate('modifier-a', {
         action: action({
-          type: 'apply_modifier', actionId: 'modifier:a', parentCartLineId: 'line-1',
-          parentSellableItemId: '20752', optionId: 'a', groupPath: ['1'], quantity: 1,
-          priceImpact: { amount: 10_000, currency: 'VND' }, cartRevision: 'cart-revision-ranker-001',
+          type: 'apply_modifier',
+          actionId: 'modifier:a',
+          parentCartLineId: 'line-1',
+          parentSellableItemId: '20752',
+          optionId: 'a',
+          groupPath: ['1'],
+          quantity: 1,
+          priceImpact: { amount: 10_000, currency: 'VND' },
+          cartRevision: 'cart-revision-ranker-001',
         }),
       }),
       candidate('modifier-high', {
         action: action({
-          type: 'apply_modifier', actionId: 'modifier:high', parentCartLineId: 'line-1',
-          parentSellableItemId: '20752', optionId: 'high', groupPath: ['1'], quantity: 1,
-          priceImpact: { amount: 20_000, currency: 'VND' }, cartRevision: 'cart-revision-ranker-001',
+          type: 'apply_modifier',
+          actionId: 'modifier:high',
+          parentCartLineId: 'line-1',
+          parentSellableItemId: '20752',
+          optionId: 'high',
+          groupPath: ['1'],
+          quantity: 1,
+          priceImpact: { amount: 20_000, currency: 'VND' },
+          cartRevision: 'cart-revision-ranker-001',
         }),
       }),
     ];
     const results = new IncrementalValueRanker().rank(rankerInput(entries));
 
     expect(results.map((result) => result.candidate.action.actionId)).toEqual([
-      'modifier:high', 'modifier:a', 'modifier:z',
+      'modifier:high',
+      'modifier:a',
+      'modifier:z',
     ]);
     expect(results[0].score).toBe(Math.log1p(20_000));
     expect(results[0].reasonCodes).toEqual(['completes_your_item']);
@@ -451,13 +506,24 @@ describe('deterministic recommendation rankers', () => {
       candidate('20732', { activeDiscountRatio: 0.5 }),
     ];
     const results = new SmartCrossBlendRanker().rank(rankerInput(entries));
-    const first = results.find((result) => result.candidate.sellableItemId === '20751')!;
+    const first = results.find(
+      (result) => result.candidate.sellableItemId === '20751',
+    )!;
     const expectedPopularity = Math.log1p(2 * 50 + 120);
-    expect(first.featureSummary.popularityZ).toBeCloseTo((expectedPopularity - 4.5) / 1.2, 12);
+    expect(first.featureSummary.popularityZ).toBeCloseTo(
+      (expectedPopularity - 4.5) / 1.2,
+      12,
+    );
     expect(first.featureSummary.discountZ).toBeCloseTo(-0.5, 12);
-    expect(first.score).toBeCloseTo(((expectedPopularity - 4.5) / 1.2 - 0.5) / 2, 12);
+    expect(first.score).toBeCloseTo(
+      ((expectedPopularity - 4.5) / 1.2 - 0.5) / 2,
+      12,
+    );
     expect(results).toHaveLength(2);
-    expect(results.find((result) => result.candidate.sellableItemId === '20732')!.reasonCodes).toEqual(['active_offer']);
+    expect(
+      results.find((result) => result.candidate.sellableItemId === '20732')!
+        .reasonCodes,
+    ).toEqual(['active_offer']);
   });
 
   it('composes a default three and only a diverse, positive, affordable fourth', () => {
@@ -469,13 +535,37 @@ describe('deterministic recommendation rankers', () => {
       slateCandidate('e', 5, 'drinks', 50),
       slateCandidate('f', -1, 'dessert', 50),
     ];
-    expect(composeSmartCrossSellSlate(ranked, null).map((entry) => entry.candidate.action.actionId)).toEqual([
-      'product:a', 'product:b', 'product:c', 'product:d',
-    ]);
-    expect(composeSmartCrossSellSlate(ranked, 150).map((entry) => entry.candidate.action.actionId)).toEqual([
-      'product:a', 'product:b', 'product:c',
-    ]);
+    expect(
+      composeSmartCrossSellSlate(ranked, null).map(
+        (entry) => entry.candidate.action.actionId,
+      ),
+    ).toEqual(['product:a', 'product:b', 'product:c', 'product:d']);
+    expect(
+      composeSmartCrossSellSlate(ranked, 150).map(
+        (entry) => entry.candidate.action.actionId,
+      ),
+    ).toEqual(['product:a', 'product:b', 'product:c']);
     expect(composeSmartCrossSellSlate(ranked.slice(0, 2), null)).toEqual([]);
+  });
+
+  it('preserves post-merchandising order while applying slate constraints', () => {
+    const postMerchandisingRanking = [
+      slateCandidate('pinned', 1, 'sides', 50),
+      slateCandidate('highest-score', 9, 'chicken', 50),
+      slateCandidate('second-score', 8, 'chicken', 50),
+      slateCandidate('diverse-fourth', 7, 'drinks', 50),
+    ];
+
+    expect(
+      composeSmartCrossSellSlate(postMerchandisingRanking, null).map(
+        (entry) => entry.candidate.action.actionId,
+      ),
+    ).toEqual([
+      'product:pinned',
+      'product:highest-score',
+      'product:second-score',
+      'product:diverse-fourth',
+    ]);
   });
 
   it('enforces unique products, category cap, running budget, eligible decisions, and placement versions', () => {
@@ -488,20 +578,40 @@ describe('deterministic recommendation rankers', () => {
       slateCandidate('four', 6, 'sides', 100),
       slateCandidate('five', 5, 'drink', 30),
     ];
-    expect(composeSmartCrossSellSlate(ranked, 120).map((entry) => entry.candidate.action.actionId)).toEqual([
-      'product:duplicate', 'product:two', 'product:five',
-    ]);
+    expect(
+      composeSmartCrossSellSlate(ranked, 120).map(
+        (entry) => entry.candidate.action.actionId,
+      ),
+    ).toEqual(['product:duplicate', 'product:two', 'product:five']);
 
     const repository = new RankerRepository();
-    expect(repository.forPlacement('local_favorite').version).toBe('contextual-popularity-v1');
-    expect(repository.forPlacement('for_you').version).toBe('for-you-affinity-v1');
-    expect(repository.forPlacement('modifier_upsell').version).toBe('incremental-value-v1');
-    expect(repository.forPlacement('smart_cross_sell').version).toBe('smart-cross-blend-v1');
+    expect(repository.forPlacement('local_favorite').version).toBe(
+      'contextual-popularity-v1',
+    );
+    expect(repository.forPlacement('for_you').version).toBe(
+      'for-you-affinity-v1',
+    );
+    expect(repository.forPlacement('modifier_upsell').version).toBe(
+      'incremental-value-v1',
+    );
+    expect(repository.forPlacement('smart_cross_sell').version).toBe(
+      'smart-cross-blend-v1',
+    );
 
     const ineligible = candidate('20751');
-    expect(() => new ContextualPopularityRanker().rank(rankerInput([ineligible], {
-      eligibilityDecisions: [{ ...eligible(ineligible), eligible: false, reasonCodes: ['store_unavailable'] }],
-    }))).toThrow('eligible decision');
+    expect(() =>
+      new ContextualPopularityRanker().rank(
+        rankerInput([ineligible], {
+          eligibilityDecisions: [
+            {
+              ...eligible(ineligible),
+              eligible: false,
+              reasonCodes: ['store_unavailable'],
+            },
+          ],
+        }),
+      ),
+    ).toThrow('eligible decision');
   });
 });
 
@@ -515,8 +625,12 @@ function slateCandidate(
   return {
     candidate: candidate(sellableItemId, {
       action: action({
-        type: 'add_product', actionId: `product:${id}`, sellableItemId, quantity: 1,
-        priceImpact: { amount, currency: 'VND' }, cartRevision: 'cart-revision-ranker-001',
+        type: 'add_product',
+        actionId: `product:${id}`,
+        sellableItemId,
+        quantity: 1,
+        priceImpact: { amount, currency: 'VND' },
+        cartRevision: 'cart-revision-ranker-001',
       }),
       categoryId,
       basePriceVnd: amount,

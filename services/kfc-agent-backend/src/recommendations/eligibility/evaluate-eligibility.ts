@@ -1,5 +1,6 @@
 import type { GeneratedModifierGroup } from '../../fixtures/schema.js';
 import { digestCommerceAction } from '../../ordering/commerceDigest.js';
+import { canonicalUtcInstantOccursBefore } from '../domain/canonical-instant.js';
 import { KFC_RECOMMENDATION_POLICY_VERSION } from '../domain/versions.js';
 import type {
   EligibilityDecision,
@@ -61,18 +62,6 @@ export async function createEligibilityDecision(input: {
   return { ...decision, digest: await digestCommerceAction(decision) };
 }
 
-function compareCanonicalInstants(left: string, right: string): number {
-  const [leftWhole, leftFraction = ''] = left.slice(0, -1).split('.');
-  const [rightWhole, rightFraction = ''] = right.slice(0, -1).split('.');
-  if (leftWhole !== rightWhole) return leftWhole < rightWhole ? -1 : 1;
-
-  const precision = Math.max(leftFraction.length, rightFraction.length);
-  const normalizedLeft = leftFraction.padEnd(precision, '0');
-  const normalizedRight = rightFraction.padEnd(precision, '0');
-  if (normalizedLeft === normalizedRight) return 0;
-  return normalizedLeft < normalizedRight ? -1 : 1;
-}
-
 function visibleCompletedOrders(context: RecommendationDecisionContext) {
   if (
     !context.customerHistory ||
@@ -82,12 +71,11 @@ function visibleCompletedOrders(context: RecommendationDecisionContext) {
   ) {
     return null;
   }
-  return context.customerHistory.completedOrders.filter(
-    (order) =>
-      compareCanonicalInstants(
-        order.completedAt,
-        context.request.decisionTime,
-      ) < 0,
+  return context.customerHistory.completedOrders.filter((order) =>
+    canonicalUtcInstantOccursBefore(
+      order.completedAt,
+      context.request.decisionTime,
+    ),
   );
 }
 

@@ -4,6 +4,10 @@ import type {
   GeneratedModifierOption,
 } from '../../fixtures/schema.js';
 import type { RecommendationAction } from '../domain/contracts.js';
+import {
+  canonicalUtcInstantOccursBefore,
+  compareCanonicalUtcInstants,
+} from '../domain/canonical-instant.js';
 import type {
   CandidateEnumerationInput,
   PotentialRecommendationCandidate,
@@ -14,32 +18,20 @@ type ModifierPathOption = {
   option: GeneratedModifierOption;
 };
 
-function compareCanonicalInstants(left: string, right: string): number {
-  const [leftWhole, leftFraction = ''] = left.slice(0, -1).split('.');
-  const [rightWhole, rightFraction = ''] = right.slice(0, -1).split('.');
-  if (leftWhole !== rightWhole) return leftWhole < rightWhole ? -1 : 1;
-
-  const precision = Math.max(leftFraction.length, rightFraction.length);
-  const normalizedLeft = leftFraction.padEnd(precision, '0');
-  const normalizedRight = rightFraction.padEnd(precision, '0');
-  if (normalizedLeft === normalizedRight) return 0;
-  return normalizedLeft < normalizedRight ? -1 : 1;
-}
-
 const isActivePromotion = (
   promotion: CandidateEnumerationInput['promotionFacts']['promotions'][number],
   input: CandidateEnumerationInput,
   itemId: string,
 ): boolean =>
   promotion.sellableItemId === itemId &&
-  compareCanonicalInstants(
+  (compareCanonicalUtcInstants(
     promotion.startsAt,
     input.context.request.decisionTime,
-  ) <= 0 &&
-  compareCanonicalInstants(
+  ) ?? 1) <= 0 &&
+  canonicalUtcInstantOccursBefore(
     input.context.request.decisionTime,
     promotion.endsAt,
-  ) < 0 &&
+  ) &&
   (promotion.includedStoreIds.length === 0 ||
     promotion.includedStoreIds.some(
       (storeId) => storeId === input.context.request.storeId,

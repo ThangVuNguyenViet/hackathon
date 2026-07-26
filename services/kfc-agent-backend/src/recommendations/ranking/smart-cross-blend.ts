@@ -67,7 +67,7 @@ export function composeSmartCrossSellSlate(
   const selectedItems = new Set<string>();
   const categoryCounts = new Map<string, number>();
   let budget = remainingBudgetVnd;
-  const sorted = [...rankedCandidates].sort(compareRankedCandidates);
+  const postPolicyRanking = [...rankedCandidates];
 
   const fits = (candidate: RankedCandidate): boolean =>
     budget === null || candidate.candidate.action.priceImpact.amount <= budget;
@@ -82,7 +82,7 @@ export function composeSmartCrossSellSlate(
       budget -= candidate.candidate.action.priceImpact.amount;
   };
 
-  for (const candidate of sorted) {
+  for (const candidate of postPolicyRanking) {
     if (selected.length === 3) break;
     if (candidate.candidate.action.type !== 'add_product') continue;
     if (selectedItems.has(candidate.candidate.sellableItemId)) continue;
@@ -96,7 +96,7 @@ export function composeSmartCrossSellSlate(
   const firstThreeCategories = new Set(
     selected.map((candidate) => candidate.candidate.categoryId),
   );
-  for (const candidate of sorted) {
+  for (const candidate of postPolicyRanking) {
     if (candidate.candidate.action.type !== 'add_product') continue;
     if (candidate.score <= 0) continue;
     if (selectedItems.has(candidate.candidate.sellableItemId)) continue;

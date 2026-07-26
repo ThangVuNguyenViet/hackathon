@@ -18,6 +18,7 @@ import type {
   RecommendationDecisionResponse,
   RecommendationEvent,
 } from './contracts.js';
+import { compareCanonicalUtcInstants } from './canonical-instant.js';
 import {
   KFC_RECOMMENDATION_API_VERSION,
   KFC_RECOMMENDATION_EVENT_VERSION,
@@ -427,15 +428,6 @@ const bindings = (value: z.infer<typeof commerceSnapshotBindingsSchema>) =>
     ['promotion', value.promotion],
   ] as const;
 
-const canonicalInstantEpoch = (value: string): number | null => {
-  const parsedInstant = instantSchema.safeParse(value);
-  if (!parsedInstant.success) {
-    return null;
-  }
-  const epoch = Date.parse(parsedInstant.data);
-  return Number.isFinite(epoch) ? epoch : null;
-};
-
 export const recommendationDecisionRequestSchema =
   recommendationDecisionRequestShape.superRefine((value, context) => {
     if (value.cart.revision !== value.cartRevision) {
@@ -460,25 +452,30 @@ export const recommendationDecisionRequestSchema =
       });
     }
 
-    const decisionTime = canonicalInstantEpoch(value.decisionTime);
-    if (decisionTime === null) {
-      return;
-    }
     for (const [name, binding] of snapshotBindings) {
-      const effectiveAt = canonicalInstantEpoch(binding.effectiveAt);
-      const expiresAt = canonicalInstantEpoch(binding.expiresAt);
-      const observedAt = canonicalInstantEpoch(binding.observedAt);
+      const effectiveAt = compareCanonicalUtcInstants(
+        binding.effectiveAt,
+        value.decisionTime,
+      );
+      const expiresAt = compareCanonicalUtcInstants(
+        value.decisionTime,
+        binding.expiresAt,
+      );
+      const observedAt = compareCanonicalUtcInstants(
+        binding.observedAt,
+        value.decisionTime,
+      );
       if (effectiveAt === null || expiresAt === null || observedAt === null) {
         continue;
       }
-      if (effectiveAt > decisionTime || decisionTime >= expiresAt) {
+      if (effectiveAt > 0 || expiresAt >= 0) {
         context.addIssue({
           code: z.ZodIssueCode.custom,
           path: ['commerceSnapshotBindings', name],
           message: 'Snapshot must be effective at the decision time',
         });
       }
-      if (observedAt > decisionTime) {
+      if (observedAt > 0) {
         context.addIssue({
           code: z.ZodIssueCode.custom,
           path: ['commerceSnapshotBindings', name, 'observedAt'],

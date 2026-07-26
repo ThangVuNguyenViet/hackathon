@@ -9,46 +9,11 @@ import {
   instantSchema,
   moneySchema,
 } from '../domain/schemas.js';
+import { canonicalUtcInstantOccursBefore } from '../domain/canonical-instant.js';
 
 const nonNegativeIntegerSchema = moneySchema.shape.amount;
 const positiveNumberSchema = z.number().positive();
 const nonEmptyStringSchema = z.string().min(1);
-const canonicalInstantPartsPattern =
-  /^(?<whole>[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2})(?:\.(?<fraction>[0-9]+))?Z$/u;
-
-const parseCanonicalInstantParts = (
-  instant: string,
-): { fraction: string; wholeSecondEpoch: number } | null => {
-  const match = canonicalInstantPartsPattern.exec(instant);
-  if (!match?.groups) return null;
-
-  const wholeSecondEpoch = Date.parse(`${match.groups.whole}Z`);
-  if (!Number.isFinite(wholeSecondEpoch)) return null;
-
-  return {
-    fraction: (match.groups.fraction ?? '').replace(/0+$/u, ''),
-    wholeSecondEpoch,
-  };
-};
-
-const occursBefore = (earlier: string, later: string): boolean => {
-  const earlierParts = parseCanonicalInstantParts(earlier);
-  const laterParts = parseCanonicalInstantParts(later);
-  if (!earlierParts || !laterParts) return false;
-
-  if (earlierParts.wholeSecondEpoch !== laterParts.wholeSecondEpoch) {
-    return earlierParts.wholeSecondEpoch < laterParts.wholeSecondEpoch;
-  }
-
-  const precision = Math.max(
-    earlierParts.fraction.length,
-    laterParts.fraction.length,
-  );
-  return (
-    earlierParts.fraction.padEnd(precision, '0') <
-    laterParts.fraction.padEnd(precision, '0')
-  );
-};
 const daypartSchema = z.enum([
   'breakfast',
   'lunch',
@@ -150,7 +115,8 @@ export const rankingStatisticsSnapshotSchema = z
   })
   .strict()
   .refine(
-    (snapshot) => occursBefore(snapshot.effectiveAt, snapshot.expiresAt),
+    (snapshot) =>
+      canonicalUtcInstantOccursBefore(snapshot.effectiveAt, snapshot.expiresAt),
     'Snapshot must expire after it becomes effective',
   );
 
@@ -184,7 +150,8 @@ const promotionFactSchema = z
   })
   .strict()
   .refine(
-    (promotion) => occursBefore(promotion.startsAt, promotion.endsAt),
+    (promotion) =>
+      canonicalUtcInstantOccursBefore(promotion.startsAt, promotion.endsAt),
     'Promotion must end after it starts',
   )
   .refine(
@@ -217,6 +184,7 @@ export const promotionFactsSnapshotSchema = z
   })
   .strict()
   .refine(
-    (snapshot) => occursBefore(snapshot.effectiveAt, snapshot.expiresAt),
+    (snapshot) =>
+      canonicalUtcInstantOccursBefore(snapshot.effectiveAt, snapshot.expiresAt),
     'Snapshot must expire after it becomes effective',
   );

@@ -3,12 +3,10 @@ import type {
   MerchandisingEffect,
 } from '../domain/contracts.js';
 import { placementAcceptsActionCount } from '../domain/schemas.js';
+import { compareCanonicalUtcInstants } from '../domain/canonical-instant.js';
 import type { RecommendationDecisionContext } from '../eligibility/types.js';
 import type { RankedCandidate } from '../ranking/types.js';
-import {
-  compareCanonicalInstants,
-  type RecommendationPolicy,
-} from './policy.js';
+import type { RecommendationPolicy } from './policy.js';
 
 export interface MerchandisingResolution {
   suppressed: boolean;
@@ -50,7 +48,8 @@ export function applicableMerchandisingPolicies(
       if (priority !== 0) return priority;
       const specificity = specificityOf(right) - specificityOf(left);
       if (specificity !== 0) return specificity;
-      const startsAt = compareCanonicalInstants(right.startsAt, left.startsAt);
+      const startsAt =
+        compareCanonicalUtcInstants(right.startsAt, left.startsAt) ?? 0;
       if (startsAt !== 0) return startsAt;
       return left.policyId.localeCompare(right.policyId);
     });
@@ -163,11 +162,14 @@ function policyApplies(
   ) {
     return false;
   }
-  if (compareCanonicalInstants(request.decisionTime, policy.startsAt) < 0)
+  if (
+    (compareCanonicalUtcInstants(request.decisionTime, policy.startsAt) ?? 0) <
+    0
+  )
     return false;
   if (
     policy.endsAt !== null &&
-    compareCanonicalInstants(request.decisionTime, policy.endsAt) >= 0
+    (compareCanonicalUtcInstants(request.decisionTime, policy.endsAt) ?? 0) >= 0
   ) {
     return false;
   }
