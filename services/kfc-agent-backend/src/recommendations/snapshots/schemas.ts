@@ -13,6 +13,15 @@ import {
 const nonNegativeIntegerSchema = moneySchema.shape.amount;
 const positiveNumberSchema = z.number().positive();
 const nonEmptyStringSchema = z.string().min(1);
+const occursBefore = (earlier: string, later: string): boolean => {
+  const earlierEpoch = Date.parse(earlier);
+  const laterEpoch = Date.parse(later);
+  return (
+    Number.isFinite(earlierEpoch) &&
+    Number.isFinite(laterEpoch) &&
+    earlierEpoch < laterEpoch
+  );
+};
 const daypartSchema = z.enum([
   'breakfast',
   'lunch',
@@ -114,7 +123,7 @@ export const rankingStatisticsSnapshotSchema = z
   })
   .strict()
   .refine(
-    (snapshot) => snapshot.effectiveAt < snapshot.expiresAt,
+    (snapshot) => occursBefore(snapshot.effectiveAt, snapshot.expiresAt),
     'Snapshot must expire after it becomes effective',
   );
 
@@ -148,7 +157,7 @@ const promotionFactSchema = z
   })
   .strict()
   .refine(
-    (promotion) => promotion.startsAt < promotion.endsAt,
+    (promotion) => occursBefore(promotion.startsAt, promotion.endsAt),
     'Promotion must end after it starts',
   )
   .refine(
@@ -181,6 +190,6 @@ export const promotionFactsSnapshotSchema = z
   })
   .strict()
   .refine(
-    (snapshot) => snapshot.effectiveAt < snapshot.expiresAt,
+    (snapshot) => occursBefore(snapshot.effectiveAt, snapshot.expiresAt),
     'Snapshot must expire after it becomes effective',
   );

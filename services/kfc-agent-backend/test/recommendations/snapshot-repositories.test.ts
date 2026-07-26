@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  assertNoUnknownCommerceProperties,
   BundledCommerceFactsRepository,
   BundledPromotionFactsRepository,
   BundledRankingStatisticsRepository,
@@ -44,8 +45,8 @@ describe('bundled recommendation fact repositories', () => {
       },
     });
     expect(snapshot.productStatistics).toHaveLength(9);
-    expect(snapshot.productStatistics.find((row) => row.sellableItemId === '20751'))
-      .toEqual({
+    expect(snapshot.productStatistics).toEqual([
+      {
         sellableItemId: '20751',
         globalOrderCount: 120,
         storeOrderCounts: { KFCVN0002: 50 },
@@ -53,7 +54,16 @@ describe('bundled recommendation fact repositories', () => {
         storeCalendarDayTypeDaypartOrderCounts: {
           'KFCVN0002:weekday:lunch': 18,
         },
-      });
+      },
+      { sellableItemId: '20732', globalOrderCount: 100, storeOrderCounts: { KFCVN0002: 44 }, storeDaypartOrderCounts: { 'KFCVN0002:lunch': 20 }, storeCalendarDayTypeDaypartOrderCounts: { 'KFCVN0002:weekday:lunch': 15 } },
+      { sellableItemId: '20748', globalOrderCount: 88, storeOrderCounts: { KFCVN0002: 36 }, storeDaypartOrderCounts: { 'KFCVN0002:lunch': 16 }, storeCalendarDayTypeDaypartOrderCounts: { 'KFCVN0002:weekday:lunch': 12 } },
+      { sellableItemId: '41127', globalOrderCount: 72, storeOrderCounts: { KFCVN0002: 26 }, storeDaypartOrderCounts: { 'KFCVN0002:lunch': 14 }, storeCalendarDayTypeDaypartOrderCounts: { 'KFCVN0002:weekday:lunch': 10 } },
+      { sellableItemId: '20687', globalOrderCount: 68, storeOrderCounts: { KFCVN0002: 24 }, storeDaypartOrderCounts: { 'KFCVN0002:lunch': 12 }, storeCalendarDayTypeDaypartOrderCounts: { 'KFCVN0002:weekday:lunch': 9 } },
+      { sellableItemId: '41035', globalOrderCount: 90, storeOrderCounts: { KFCVN0002: 34 }, storeDaypartOrderCounts: { 'KFCVN0002:lunch': 18 }, storeCalendarDayTypeDaypartOrderCounts: { 'KFCVN0002:weekday:lunch': 13 } },
+      { sellableItemId: '41042', globalOrderCount: 64, storeOrderCounts: { KFCVN0002: 22 }, storeDaypartOrderCounts: { 'KFCVN0002:lunch': 11 }, storeCalendarDayTypeDaypartOrderCounts: { 'KFCVN0002:weekday:lunch': 8 } },
+      { sellableItemId: '41052', globalOrderCount: 58, storeOrderCounts: { KFCVN0002: 20 }, storeDaypartOrderCounts: { 'KFCVN0002:lunch': 10 }, storeCalendarDayTypeDaypartOrderCounts: { 'KFCVN0002:weekday:lunch': 7 } },
+      { sellableItemId: '41072', globalOrderCount: 52, storeOrderCounts: { KFCVN0002: 18 }, storeDaypartOrderCounts: { 'KFCVN0002:lunch': 9 }, storeCalendarDayTypeDaypartOrderCounts: { 'KFCVN0002:weekday:lunch': 6 } },
+    ]);
   });
 
   it('loads the normalized promotion facts including expired POC data', () => {
@@ -74,29 +84,39 @@ describe('bundled recommendation fact repositories', () => {
       },
     });
     expect(snapshot.promotions).toEqual([
-      expect.objectContaining({
+      {
         promotionId: 'poc-discount-20732',
         sellableItemId: '20732',
+        startsAt: '2026-01-01T00:00:00Z',
+        endsAt: '2027-01-01T00:00:00Z',
         originalPriceVnd: 239000,
         promotionalPriceVnd: 189000,
         includedStoreIds: [],
         excludedStoreIds: [],
         fulfilmentModes: ['pickup', 'delivery'],
-      }),
-      expect.objectContaining({
+      },
+      {
         promotionId: 'poc-discount-20748',
         sellableItemId: '20748',
+        startsAt: '2026-01-01T00:00:00Z',
+        endsAt: '2027-01-01T00:00:00Z',
         originalPriceVnd: 404000,
         promotionalPriceVnd: 269000,
-      }),
-      expect.objectContaining({
+        includedStoreIds: [],
+        excludedStoreIds: [],
+        fulfilmentModes: ['pickup', 'delivery'],
+      },
+      {
         promotionId: 'poc-expired-discount-41172',
         sellableItemId: '41172',
         startsAt: '2026-01-01T00:00:00Z',
         endsAt: '2026-06-01T00:00:00Z',
         originalPriceVnd: 179000,
         promotionalPriceVnd: 159000,
-      }),
+        includedStoreIds: [],
+        excludedStoreIds: [],
+        fulfilmentModes: ['pickup', 'delivery'],
+      },
     ]);
   });
 
@@ -133,5 +153,26 @@ describe('bundled recommendation fact repositories', () => {
     expect(promotionFactsSnapshotSchema.safeParse(invalidPromotion).success).toBe(
       false,
     );
+  });
+
+  it('rejects equal instants expressed with different fractional precision', () => {
+    const invalidRanking = structuredClone(
+      new BundledRankingStatisticsRepository().load(),
+    );
+    invalidRanking.effectiveAt = '2026-01-01T00:00:00.10Z';
+    invalidRanking.expiresAt = '2026-01-01T00:00:00.1Z';
+
+    expect(rankingStatisticsSnapshotSchema.safeParse(invalidRanking).success).toBe(
+      false,
+    );
+  });
+
+  it('rejects an unknown nested commerce fixture field at the adapter boundary', () => {
+    expect(() =>
+      assertNoUnknownCommerceProperties(
+        [{ item: { known: true, unexpected: true } }],
+        [{ item: { known: true } }],
+      ),
+    ).toThrow('Unknown commerce fixture property at $[0].item.unexpected');
   });
 });
