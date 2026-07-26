@@ -162,8 +162,9 @@ describe('recommendation JSON Schema contract', async () => {
   )) as unknown as InstantConformanceCorpus;
   const ajv = new (
     Ajv2020 as unknown as typeof import('ajv/dist/2020.js').Ajv2020
-  )({ $data: true, allErrors: true, strict: true, strictTuples: false });
+  )({ allErrors: true, strict: true, strictTuples: false });
   (addFormats as unknown as typeof import('ajv-formats').default)(ajv);
+  expect(ajv.validateSchema(schema)).toBe(true);
   ajv.addSchema(schema);
 
   const schemaId = schema.$id;
@@ -232,6 +233,18 @@ describe('recommendation JSON Schema contract', async () => {
   it.each(invalidCases)('rejects $name', (invalidCase) => {
     const value = applyPatch(getSource(invalidCase.source), invalidCase.patch);
     expect(validatorFor(invalidCase.definition)(value)).toBe(false);
+  });
+
+  it('accepts duplicate rendered action IDs as a structural schema limitation', () => {
+    const value = structuredClone(validImpressionRequest) as {
+      renderedActions: JsonObject[];
+    };
+    value.renderedActions.push({
+      actionId: 'action-product-001',
+      position: 2,
+    });
+
+    expect(impressionRequestValidator(value)).toBe(true);
   });
 
   it.each([

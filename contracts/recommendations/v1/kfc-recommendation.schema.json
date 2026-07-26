@@ -678,16 +678,87 @@
         {
           "if": {
             "type": "object",
-            "properties": { "pendingRecommendation": { "type": "object" } }
+            "required": ["pendingRecommendation"],
+            "properties": {
+              "pendingRecommendation": {
+                "type": "object",
+                "required": ["placement"],
+                "properties": { "placement": { "const": "local_favorite" } }
+              }
+            }
           },
           "then": {
             "type": "object",
             "properties": {
+              "attemptedPlacements": {
+                "type": "array",
+                "contains": { "const": "local_favorite" }
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "type": "object",
+            "required": ["pendingRecommendation"],
+            "properties": {
               "pendingRecommendation": {
                 "type": "object",
-                "properties": {
-                  "placement": { "enum": { "$data": "/attemptedPlacements" } }
-                }
+                "required": ["placement"],
+                "properties": { "placement": { "const": "for_you" } }
+              }
+            }
+          },
+          "then": {
+            "type": "object",
+            "properties": {
+              "attemptedPlacements": {
+                "type": "array",
+                "contains": { "const": "for_you" }
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "type": "object",
+            "required": ["pendingRecommendation"],
+            "properties": {
+              "pendingRecommendation": {
+                "type": "object",
+                "required": ["placement"],
+                "properties": { "placement": { "const": "modifier_upsell" } }
+              }
+            }
+          },
+          "then": {
+            "type": "object",
+            "properties": {
+              "attemptedPlacements": {
+                "type": "array",
+                "contains": { "const": "modifier_upsell" }
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "type": "object",
+            "required": ["pendingRecommendation"],
+            "properties": {
+              "pendingRecommendation": {
+                "type": "object",
+                "required": ["placement"],
+                "properties": { "placement": { "const": "smart_cross_sell" } }
+              }
+            }
+          },
+          "then": {
+            "type": "object",
+            "properties": {
+              "attemptedPlacements": {
+                "type": "array",
+                "contains": { "const": "smart_cross_sell" }
               }
             }
           }
@@ -726,6 +797,7 @@
           "type": "array",
           "minItems": 1,
           "maxItems": 4,
+          "$comment": "Draft 2020-12 cannot enforce uniqueness of arbitrary actionId properties across array objects; Zod and Pydantic enforce it.",
           "items": { "$ref": "#/$defs/RenderedRecommendationAction" },
           "allOf": [
             {
@@ -747,55 +819,6 @@
               "contains": { "type": "object", "properties": { "position": { "const": 4 } } },
               "minContains": 0,
               "maxContains": 1
-            }
-          ],
-          "prefixItems": [
-            { "$ref": "#/$defs/RenderedRecommendationAction" },
-            {
-              "allOf": [
-                { "$ref": "#/$defs/RenderedRecommendationAction" },
-                {
-                  "type": "object",
-                  "properties": {
-                    "actionId": {
-                      "not": { "const": { "$data": "/renderedActions/0/actionId" } }
-                    }
-                  }
-                }
-              ]
-            },
-            {
-              "allOf": [
-                { "$ref": "#/$defs/RenderedRecommendationAction" },
-                {
-                  "type": "object",
-                  "properties": {
-                    "actionId": {
-                      "allOf": [
-                        { "not": { "const": { "$data": "/renderedActions/0/actionId" } } },
-                        { "not": { "const": { "$data": "/renderedActions/1/actionId" } } }
-                      ]
-                    }
-                  }
-                }
-              ]
-            },
-            {
-              "allOf": [
-                { "$ref": "#/$defs/RenderedRecommendationAction" },
-                {
-                  "type": "object",
-                  "properties": {
-                    "actionId": {
-                      "allOf": [
-                        { "not": { "const": { "$data": "/renderedActions/0/actionId" } } },
-                        { "not": { "const": { "$data": "/renderedActions/1/actionId" } } },
-                        { "not": { "const": { "$data": "/renderedActions/2/actionId" } } }
-                      ]
-                    }
-                  }
-                }
-              ]
             }
           ]
         },

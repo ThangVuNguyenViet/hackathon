@@ -128,17 +128,6 @@
     "patch": { "renderedActions": [{ "actionId": "action-product-001", "position": 1, "unexpected": true }] }
   },
   {
-    "name": "impression action IDs must be unique",
-    "definition": "RecommendationImpressionRequest",
-    "source": "valid-impression-request.json",
-    "patch": {
-      "renderedActions": [
-        { "actionId": "action-product-001", "position": 1 },
-        { "actionId": "action-product-001", "position": 2 }
-      ]
-    }
-  },
-  {
     "name": "impression positions must be unique",
     "definition": "RecommendationImpressionRequest",
     "source": "valid-impression-request.json",
