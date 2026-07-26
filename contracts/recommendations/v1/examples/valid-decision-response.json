@@ -1,0 +1,55 @@
+{
+  "schemaVersion": "kfc-recommendation-v1",
+  "recommendationId": "recommendation-001",
+  "requestId": "rec-request-001",
+  "orderFlowId": "order-flow-001",
+  "placement": "for_you",
+  "status": "recommended",
+  "decisionSource": "ranked",
+  "primaryOffer": {
+    "actions": [
+      {
+        "type": "add_product",
+        "actionId": "action-product-001",
+        "sellableItemId": "item-001",
+        "quantity": 1,
+        "priceImpact": { "amount": 45000, "currency": "VND" },
+        "cartRevision": "cart-revision-001"
+      }
+    ]
+  },
+  "displayFacts": [
+    {
+      "actionId": "action-product-001",
+      "name": "Recommended item",
+      "imageUrl": null,
+      "priceImpact": { "amount": 45000, "currency": "VND" }
+    }
+  ],
+  "reasonCodes": ["matches_your_history"],
+  "merchandisingEffects": [],
+  "versionBindings": {
+    "catalog": "catalog-snapshot-001",
+    "modifierGraph": "modifier-graph-snapshot-001",
+    "store": "store-snapshot-001",
+    "availability": "availability-snapshot-001",
+    "promotion": "promotion-snapshot-001",
+    "eligibilityPolicy": "kfc-recommendation-policy-v1",
+    "sanitySnapshot": "sanity-snapshot-001",
+    "featureSchema": "for-you-feature-schema-v1",
+    "servingRanker": "for-you-affinity-v1",
+    "shadowModel": null,
+    "calibration": null,
+    "experiment": "experiment-profile-001",
+    "loggingPolicy": "logging-policy-v1"
+  },
+  "counts": {
+    "potential": 8,
+    "eligible": 4,
+    "ineligible": 4,
+    "scored": 4,
+    "displayed": 1,
+    "complete": true
+  },
+  "traceRef": "trace-001"
+}

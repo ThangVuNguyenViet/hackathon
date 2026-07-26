@@ -1,0 +1,537 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://kfc.local/contracts/recommendations/v1/kfc-recommendation.schema.json",
+  "title": "KFC Recommendation v1",
+  "oneOf": [
+    { "$ref": "#/$defs/RecommendationDecisionRequest" },
+    { "$ref": "#/$defs/RecommendationDecisionResponse" },
+    { "$ref": "#/$defs/RecommendationEvent" }
+  ],
+  "$defs": {
+    "OpaqueId": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9:_-]{0,127}$"
+    },
+    "Sha256": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{64}$"
+    },
+    "Instant": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "Money": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["amount", "currency"],
+      "properties": {
+        "amount": { "type": "integer", "minimum": 0 },
+        "currency": { "const": "VND" }
+      }
+    },
+    "SnapshotProvenance": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["source", "reference"],
+      "properties": {
+        "source": { "type": "string", "minLength": 1 },
+        "reference": { "type": "string", "minLength": 1 }
+      }
+    },
+    "SnapshotBinding": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "snapshotId",
+        "digest",
+        "sourceRevision",
+        "observedAt",
+        "effectiveAt",
+        "expiresAt",
+        "complete",
+        "commerceEnvironment",
+        "provenance"
+      ],
+      "properties": {
+        "snapshotId": { "$ref": "#/$defs/OpaqueId" },
+        "digest": { "$ref": "#/$defs/Sha256" },
+        "sourceRevision": { "type": "string", "minLength": 1 },
+        "observedAt": { "$ref": "#/$defs/Instant" },
+        "effectiveAt": { "$ref": "#/$defs/Instant" },
+        "expiresAt": { "$ref": "#/$defs/Instant" },
+        "complete": { "type": "boolean" },
+        "commerceEnvironment": { "$ref": "#/$defs/OpaqueId" },
+        "provenance": { "$ref": "#/$defs/SnapshotProvenance" }
+      }
+    },
+    "CommerceSnapshotBindings": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "catalog",
+        "modifierGraph",
+        "store",
+        "availability",
+        "promotion"
+      ],
+      "properties": {
+        "catalog": { "$ref": "#/$defs/SnapshotBinding" },
+        "modifierGraph": { "$ref": "#/$defs/SnapshotBinding" },
+        "store": { "$ref": "#/$defs/SnapshotBinding" },
+        "availability": { "$ref": "#/$defs/SnapshotBinding" },
+        "promotion": { "$ref": "#/$defs/SnapshotBinding" }
+      }
+    },
+    "ModifierSelection": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["groupPath", "optionId", "quantity", "priceImpact"],
+      "properties": {
+        "groupPath": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "$ref": "#/$defs/OpaqueId" }
+        },
+        "optionId": { "$ref": "#/$defs/OpaqueId" },
+        "quantity": { "type": "integer", "minimum": 1 },
+        "priceImpact": { "$ref": "#/$defs/Money" }
+      }
+    },
+    "CartLine": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "lineId",
+        "sellableItemId",
+        "quantity",
+        "unitPrice",
+        "modifiers"
+      ],
+      "properties": {
+        "lineId": { "$ref": "#/$defs/OpaqueId" },
+        "sellableItemId": { "$ref": "#/$defs/OpaqueId" },
+        "quantity": { "type": "integer", "minimum": 1 },
+        "unitPrice": { "$ref": "#/$defs/Money" },
+        "modifiers": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/ModifierSelection" }
+        }
+      }
+    },
+    "CartSnapshot": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["cartId", "revision", "subtotal", "lines"],
+      "properties": {
+        "cartId": { "$ref": "#/$defs/OpaqueId" },
+        "revision": { "$ref": "#/$defs/OpaqueId" },
+        "subtotal": { "$ref": "#/$defs/Money" },
+        "lines": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/CartLine" }
+        }
+      }
+    },
+    "ExperimentProfile": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["profileId", "outputMode"],
+      "properties": {
+        "profileId": { "$ref": "#/$defs/OpaqueId" },
+        "outputMode": { "enum": ["baseline", "learned_technical"] }
+      }
+    },
+    "Placement": {
+      "enum": [
+        "local_favorite",
+        "for_you",
+        "modifier_upsell",
+        "smart_cross_sell"
+      ]
+    },
+    "DecisionStatus": {
+      "enum": [
+        "recommended",
+        "empty",
+        "suppressed",
+        "invalid_context",
+        "ineligible_context"
+      ]
+    },
+    "DecisionSource": {
+      "enum": ["ranked", "merchandising_replacement", "fallback", "suppressed"]
+    },
+    "RecommendationDecisionRequest": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schemaVersion",
+        "requestId",
+        "idempotencyKey",
+        "orderFlowId",
+        "sessionId",
+        "placement",
+        "verifiedCustomerRef",
+        "storeId",
+        "fulfilmentMode",
+        "decisionTime",
+        "cart",
+        "cartRevision",
+        "commerceSnapshotBindings",
+        "eligibilityPolicyVersion",
+        "experimentProfile"
+      ],
+      "properties": {
+        "schemaVersion": { "const": "kfc-recommendation-v1" },
+        "requestId": { "$ref": "#/$defs/OpaqueId" },
+        "idempotencyKey": { "$ref": "#/$defs/OpaqueId" },
+        "orderFlowId": { "$ref": "#/$defs/OpaqueId" },
+        "sessionId": { "$ref": "#/$defs/OpaqueId" },
+        "placement": { "$ref": "#/$defs/Placement" },
+        "verifiedCustomerRef": {
+          "anyOf": [{ "$ref": "#/$defs/OpaqueId" }, { "type": "null" }]
+        },
+        "storeId": { "$ref": "#/$defs/OpaqueId" },
+        "fulfilmentMode": { "enum": ["pickup", "delivery"] },
+        "decisionTime": { "$ref": "#/$defs/Instant" },
+        "cart": { "$ref": "#/$defs/CartSnapshot" },
+        "cartRevision": { "$ref": "#/$defs/OpaqueId" },
+        "commerceSnapshotBindings": {
+          "$ref": "#/$defs/CommerceSnapshotBindings"
+        },
+        "eligibilityPolicyVersion": {
+          "const": "kfc-recommendation-policy-v1"
+        },
+        "experimentProfile": { "$ref": "#/$defs/ExperimentProfile" }
+      }
+    },
+    "AddProductAction": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "type",
+        "actionId",
+        "sellableItemId",
+        "quantity",
+        "priceImpact",
+        "cartRevision"
+      ],
+      "properties": {
+        "type": { "const": "add_product" },
+        "actionId": { "$ref": "#/$defs/OpaqueId" },
+        "sellableItemId": { "$ref": "#/$defs/OpaqueId" },
+        "quantity": { "type": "integer", "minimum": 1 },
+        "priceImpact": { "$ref": "#/$defs/Money" },
+        "cartRevision": { "$ref": "#/$defs/OpaqueId" }
+      }
+    },
+    "ApplyModifierAction": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "type",
+        "actionId",
+        "parentCartLineId",
+        "parentSellableItemId",
+        "optionId",
+        "groupPath",
+        "quantity",
+        "priceImpact",
+        "cartRevision"
+      ],
+      "properties": {
+        "type": { "const": "apply_modifier" },
+        "actionId": { "$ref": "#/$defs/OpaqueId" },
+        "parentCartLineId": { "$ref": "#/$defs/OpaqueId" },
+        "parentSellableItemId": { "$ref": "#/$defs/OpaqueId" },
+        "optionId": { "$ref": "#/$defs/OpaqueId" },
+        "groupPath": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "$ref": "#/$defs/OpaqueId" }
+        },
+        "quantity": { "type": "integer", "minimum": 1 },
+        "priceImpact": { "$ref": "#/$defs/Money" },
+        "cartRevision": { "$ref": "#/$defs/OpaqueId" }
+      }
+    },
+    "ReplaceCartLineAction": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "type",
+        "actionId",
+        "replacedCartLineId",
+        "replacement",
+        "priceImpact",
+        "cartRevision"
+      ],
+      "properties": {
+        "type": { "const": "replace_cart_line" },
+        "actionId": { "$ref": "#/$defs/OpaqueId" },
+        "replacedCartLineId": { "$ref": "#/$defs/OpaqueId" },
+        "replacement": { "$ref": "#/$defs/AddProductAction" },
+        "priceImpact": { "$ref": "#/$defs/Money" },
+        "cartRevision": { "$ref": "#/$defs/OpaqueId" }
+      }
+    },
+    "RecommendationAction": {
+      "oneOf": [
+        { "$ref": "#/$defs/AddProductAction" },
+        { "$ref": "#/$defs/ApplyModifierAction" },
+        { "$ref": "#/$defs/ReplaceCartLineAction" }
+      ]
+    },
+    "PrimaryOffer": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["actions"],
+      "properties": {
+        "actions": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 4,
+          "items": { "$ref": "#/$defs/RecommendationAction" }
+        }
+      }
+    },
+    "DisplayFact": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["actionId", "name", "imageUrl", "priceImpact"],
+      "properties": {
+        "actionId": { "$ref": "#/$defs/OpaqueId" },
+        "name": { "type": "string" },
+        "imageUrl": { "type": ["string", "null"] },
+        "priceImpact": { "$ref": "#/$defs/Money" }
+      }
+    },
+    "CustomerReasonCode": {
+      "enum": [
+        "popular_here",
+        "ordered_before",
+        "matches_your_history",
+        "completes_your_item",
+        "completes_your_meal",
+        "active_offer",
+        "merchandising_selection"
+      ]
+    },
+    "MerchandisingAction": {
+      "enum": [
+        "exclude_target",
+        "boost_target",
+        "pin_target",
+        "replace_slate",
+        "suppress_placement"
+      ]
+    },
+    "MerchandisingEffect": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["policyId", "action", "targetActionId", "detail"],
+      "properties": {
+        "policyId": { "$ref": "#/$defs/OpaqueId" },
+        "action": { "$ref": "#/$defs/MerchandisingAction" },
+        "targetActionId": {
+          "anyOf": [{ "$ref": "#/$defs/OpaqueId" }, { "type": "null" }]
+        },
+        "detail": { "type": "string", "minLength": 1 }
+      }
+    },
+    "VersionBindings": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "catalog",
+        "modifierGraph",
+        "store",
+        "availability",
+        "promotion",
+        "eligibilityPolicy",
+        "sanitySnapshot",
+        "featureSchema",
+        "servingRanker",
+        "shadowModel",
+        "calibration",
+        "experiment",
+        "loggingPolicy"
+      ],
+      "properties": {
+        "catalog": { "$ref": "#/$defs/OpaqueId" },
+        "modifierGraph": { "$ref": "#/$defs/OpaqueId" },
+        "store": { "$ref": "#/$defs/OpaqueId" },
+        "availability": { "$ref": "#/$defs/OpaqueId" },
+        "promotion": { "$ref": "#/$defs/OpaqueId" },
+        "eligibilityPolicy": { "$ref": "#/$defs/OpaqueId" },
+        "sanitySnapshot": { "$ref": "#/$defs/OpaqueId" },
+        "featureSchema": { "$ref": "#/$defs/OpaqueId" },
+        "servingRanker": { "$ref": "#/$defs/OpaqueId" },
+        "shadowModel": {
+          "anyOf": [{ "$ref": "#/$defs/OpaqueId" }, { "type": "null" }]
+        },
+        "calibration": {
+          "anyOf": [{ "$ref": "#/$defs/OpaqueId" }, { "type": "null" }]
+        },
+        "experiment": { "$ref": "#/$defs/OpaqueId" },
+        "loggingPolicy": { "$ref": "#/$defs/OpaqueId" }
+      }
+    },
+    "RecommendationCounts": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "potential",
+        "eligible",
+        "ineligible",
+        "scored",
+        "displayed",
+        "complete"
+      ],
+      "properties": {
+        "potential": { "type": "integer", "minimum": 0 },
+        "eligible": { "type": "integer", "minimum": 0 },
+        "ineligible": { "type": "integer", "minimum": 0 },
+        "scored": { "type": "integer", "minimum": 0 },
+        "displayed": { "type": "integer", "minimum": 0 },
+        "complete": { "type": "boolean" }
+      }
+    },
+    "RecommendationDecisionResponse": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schemaVersion",
+        "recommendationId",
+        "requestId",
+        "orderFlowId",
+        "placement",
+        "status",
+        "decisionSource",
+        "primaryOffer",
+        "displayFacts",
+        "reasonCodes",
+        "merchandisingEffects",
+        "versionBindings",
+        "counts",
+        "traceRef"
+      ],
+      "properties": {
+        "schemaVersion": { "const": "kfc-recommendation-v1" },
+        "recommendationId": { "$ref": "#/$defs/OpaqueId" },
+        "requestId": { "$ref": "#/$defs/OpaqueId" },
+        "orderFlowId": { "$ref": "#/$defs/OpaqueId" },
+        "placement": { "$ref": "#/$defs/Placement" },
+        "status": { "$ref": "#/$defs/DecisionStatus" },
+        "decisionSource": { "$ref": "#/$defs/DecisionSource" },
+        "primaryOffer": {
+          "anyOf": [{ "$ref": "#/$defs/PrimaryOffer" }, { "type": "null" }]
+        },
+        "displayFacts": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/DisplayFact" }
+        },
+        "reasonCodes": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/CustomerReasonCode" }
+        },
+        "merchandisingEffects": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/MerchandisingEffect" }
+        },
+        "versionBindings": { "$ref": "#/$defs/VersionBindings" },
+        "counts": { "$ref": "#/$defs/RecommendationCounts" },
+        "traceRef": { "$ref": "#/$defs/OpaqueId" }
+      }
+    },
+    "EventType": {
+      "enum": [
+        "decision_requested",
+        "decision_completed",
+        "candidate_eligibility_summary",
+        "impression_rendered",
+        "selected",
+        "explicitly_dismissed",
+        "ignored",
+        "superseded",
+        "cart_mutation_succeeded",
+        "cart_mutation_failed",
+        "checkout_completed",
+        "order_abandoned",
+        "order_cancelled"
+      ]
+    },
+    "EventActor": {
+      "enum": ["customer", "agent", "system", "client"]
+    },
+    "JsonValue": {
+      "oneOf": [
+        { "type": "null" },
+        { "type": "boolean" },
+        { "type": "number" },
+        { "type": "string" },
+        {
+          "type": "array",
+          "items": { "$ref": "#/$defs/JsonValue" }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "patternProperties": {
+            ".*": { "$ref": "#/$defs/JsonValue" }
+          }
+        }
+      ]
+    },
+    "RecommendationEvent": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schemaVersion",
+        "eventId",
+        "eventType",
+        "recommendationId",
+        "requestId",
+        "orderFlowId",
+        "sessionId",
+        "placement",
+        "occurredAt",
+        "recordedAt",
+        "actor",
+        "actionId",
+        "cartRevision",
+        "versionBindings",
+        "payload"
+      ],
+      "properties": {
+        "schemaVersion": { "const": "kfc-recommendation-event-v1" },
+        "eventId": { "$ref": "#/$defs/OpaqueId" },
+        "eventType": { "$ref": "#/$defs/EventType" },
+        "recommendationId": {
+          "anyOf": [{ "$ref": "#/$defs/OpaqueId" }, { "type": "null" }]
+        },
+        "requestId": { "$ref": "#/$defs/OpaqueId" },
+        "orderFlowId": { "$ref": "#/$defs/OpaqueId" },
+        "sessionId": { "$ref": "#/$defs/OpaqueId" },
+        "placement": { "$ref": "#/$defs/Placement" },
+        "occurredAt": { "$ref": "#/$defs/Instant" },
+        "recordedAt": { "$ref": "#/$defs/Instant" },
+        "actor": { "$ref": "#/$defs/EventActor" },
+        "actionId": {
+          "anyOf": [{ "$ref": "#/$defs/OpaqueId" }, { "type": "null" }]
+        },
+        "cartRevision": {
+          "anyOf": [{ "$ref": "#/$defs/OpaqueId" }, { "type": "null" }]
+        },
+        "versionBindings": { "$ref": "#/$defs/VersionBindings" },
+        "payload": {
+          "type": "object",
+          "additionalProperties": false,
+          "patternProperties": {
+            ".*": { "$ref": "#/$defs/JsonValue" }
+          }
+        }
+      }
+    }
+  }
+}

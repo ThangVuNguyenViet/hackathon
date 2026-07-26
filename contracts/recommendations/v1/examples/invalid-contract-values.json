@@ -1,0 +1,28 @@
+[
+  {
+    "name": "client candidates are forbidden",
+    "definition": "RecommendationDecisionRequest",
+    "source": "valid-decision-request.json",
+    "patch": { "candidates": [] }
+  },
+  {
+    "name": "fractional VND is forbidden",
+    "definition": "RecommendationDecisionRequest",
+    "source": "valid-decision-request.json",
+    "patch": { "cart.subtotal.amount": 89000.5 }
+  },
+  {
+    "name": "unknown placement is forbidden",
+    "definition": "RecommendationDecisionRequest",
+    "source": "valid-decision-request.json",
+    "patch": { "placement": "single_upsell" }
+  },
+  {
+    "name": "more than four actions are forbidden",
+    "definition": "RecommendationDecisionResponse",
+    "source": "valid-decision-response.json",
+    "patch": {
+      "primaryOffer.actions": ["copy:0", "copy:0", "copy:0", "copy:0", "copy:0"]
+    }
+  }
+]

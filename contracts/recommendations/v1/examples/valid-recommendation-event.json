@@ -1,0 +1,34 @@
+{
+  "schemaVersion": "kfc-recommendation-event-v1",
+  "eventId": "event-impression-001",
+  "eventType": "impression_rendered",
+  "recommendationId": "recommendation-001",
+  "requestId": "rec-request-001",
+  "orderFlowId": "order-flow-001",
+  "sessionId": "session-001",
+  "placement": "for_you",
+  "occurredAt": "2026-07-27T09:00:05Z",
+  "recordedAt": "2026-07-27T09:00:06Z",
+  "actor": "client",
+  "actionId": "action-product-001",
+  "cartRevision": "cart-revision-001",
+  "versionBindings": {
+    "catalog": "catalog-snapshot-001",
+    "modifierGraph": "modifier-graph-snapshot-001",
+    "store": "store-snapshot-001",
+    "availability": "availability-snapshot-001",
+    "promotion": "promotion-snapshot-001",
+    "eligibilityPolicy": "kfc-recommendation-policy-v1",
+    "sanitySnapshot": "sanity-snapshot-001",
+    "featureSchema": "for-you-feature-schema-v1",
+    "servingRanker": "for-you-affinity-v1",
+    "shadowModel": null,
+    "calibration": null,
+    "experiment": "experiment-profile-001",
+    "loggingPolicy": "logging-policy-v1"
+  },
+  "payload": {
+    "renderedActionIds": ["action-product-001"],
+    "position": 1
+  }
+}

@@ -1,0 +1,104 @@
+{
+  "schemaVersion": "kfc-recommendation-v1",
+  "requestId": "rec-request-001",
+  "idempotencyKey": "rec-idempotency-001",
+  "orderFlowId": "order-flow-001",
+  "sessionId": "session-001",
+  "placement": "for_you",
+  "verifiedCustomerRef": "customer-returning-001",
+  "storeId": "store-001",
+  "fulfilmentMode": "pickup",
+  "decisionTime": "2026-07-27T09:00:00Z",
+  "cart": {
+    "cartId": "cart-001",
+    "revision": "cart-revision-001",
+    "subtotal": { "amount": 89000, "currency": "VND" },
+    "lines": [
+      {
+        "lineId": "cart-line-001",
+        "sellableItemId": "cart-item-001",
+        "quantity": 1,
+        "unitPrice": { "amount": 89000, "currency": "VND" },
+        "modifiers": []
+      }
+    ]
+  },
+  "cartRevision": "cart-revision-001",
+  "commerceSnapshotBindings": {
+    "catalog": {
+      "snapshotId": "catalog-snapshot-001",
+      "digest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "sourceRevision": "fixture-revision-001",
+      "observedAt": "2026-07-27T08:00:00Z",
+      "effectiveAt": "2026-07-27T08:30:00Z",
+      "expiresAt": "2026-07-27T10:00:00Z",
+      "complete": true,
+      "commerceEnvironment": "kfc-vietnam-demo",
+      "provenance": {
+        "source": "checked-in-fixture",
+        "reference": "fixture-revision-001"
+      }
+    },
+    "modifierGraph": {
+      "snapshotId": "modifier-graph-snapshot-001",
+      "digest": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "sourceRevision": "fixture-revision-001",
+      "observedAt": "2026-07-27T08:00:00Z",
+      "effectiveAt": "2026-07-27T08:30:00Z",
+      "expiresAt": "2026-07-27T10:00:00Z",
+      "complete": true,
+      "commerceEnvironment": "kfc-vietnam-demo",
+      "provenance": {
+        "source": "checked-in-fixture",
+        "reference": "fixture-revision-001"
+      }
+    },
+    "store": {
+      "snapshotId": "store-snapshot-001",
+      "digest": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+      "sourceRevision": "fixture-revision-001",
+      "observedAt": "2026-07-27T08:00:00Z",
+      "effectiveAt": "2026-07-27T08:30:00Z",
+      "expiresAt": "2026-07-27T10:00:00Z",
+      "complete": true,
+      "commerceEnvironment": "kfc-vietnam-demo",
+      "provenance": {
+        "source": "checked-in-fixture",
+        "reference": "fixture-revision-001"
+      }
+    },
+    "availability": {
+      "snapshotId": "availability-snapshot-001",
+      "digest": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+      "sourceRevision": "fixture-revision-001",
+      "observedAt": "2026-07-27T08:00:00Z",
+      "effectiveAt": "2026-07-27T08:30:00Z",
+      "expiresAt": "2026-07-27T10:00:00Z",
+      "complete": true,
+      "commerceEnvironment": "kfc-vietnam-demo",
+      "provenance": {
+        "source": "checked-in-fixture",
+        "reference": "fixture-revision-001"
+      }
+    },
+    "promotion": {
+      "snapshotId": "promotion-snapshot-001",
+      "digest": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+      "sourceRevision": "fixture-revision-001",
+      "observedAt": "2026-07-27T08:00:00Z",
+      "effectiveAt": "2026-07-27T08:30:00Z",
+      "expiresAt": "2026-07-27T10:00:00Z",
+      "complete": true,
+      "commerceEnvironment": "kfc-vietnam-demo",
+      "provenance": {
+        "source": "checked-in-fixture",
+        "reference": "fixture-revision-001"
+      }
+    }
+  },
+  "eligibilityPolicyVersion": "kfc-recommendation-policy-v1",
+  "experimentProfile": {
+    "profileId": "experiment-profile-001",
+    "outputMode": "baseline"
+  }
+}
