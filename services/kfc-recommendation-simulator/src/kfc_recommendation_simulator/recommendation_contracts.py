@@ -6,8 +6,8 @@ from datetime import datetime
 from typing import Annotated, Literal, Self
 
 from pydantic import (
-    AfterValidator,
     BaseModel,
+    BeforeValidator,
     ConfigDict,
     Field,
     JsonValue,
@@ -24,13 +24,19 @@ NonEmptyString = Annotated[str, StringConstraints(min_length=1)]
 PositiveInt = Annotated[int, Field(gt=0)]
 
 
-def _require_timezone_aware(value: datetime) -> datetime:
-    if value.tzinfo is None or value.utcoffset() is None:
+def _parse_instant(value: object) -> datetime:
+    if not isinstance(value, str):
+        raise ValueError("Instant must be an ISO date-time string")  # noqa: TRY004
+    try:
+        parsed = datetime.fromisoformat(value)
+    except ValueError as error:
+        raise ValueError("Instant must be an ISO date-time string") from error
+    if parsed.tzinfo is None or parsed.utcoffset() is None:
         raise ValueError("Instant must be timezone-aware")
-    return value
+    return parsed
 
 
-Instant = Annotated[datetime, AfterValidator(_require_timezone_aware)]
+Instant = Annotated[datetime, BeforeValidator(_parse_instant)]
 Placement = Literal[
     "local_favorite", "for_you", "modifier_upsell", "smart_cross_sell"
 ]
@@ -39,7 +45,7 @@ Placement = Literal[
 class ContractModel(BaseModel):
     """Strict, immutable base for every model in this transport projection."""
 
-    model_config = ConfigDict(extra="forbid", frozen=True)
+    model_config = ConfigDict(extra="forbid", frozen=True, strict=True)
 
 
 class Money(ContractModel):

@@ -89,6 +89,10 @@ class RecommendationContractsTest(unittest.TestCase):
         with self.assertRaises(ValidationError):
             RecommendationDecisionResponse.model_validate(value)
 
+    def assert_invalid_event(self, value: dict[str, Any]) -> None:
+        with self.assertRaises(ValidationError):
+            RecommendationEvent.model_validate(value)
+
     def test_parses_canonical_decision_request(self) -> None:
         parsed = RecommendationDecisionRequest.model_validate(valid_request())
 
@@ -106,6 +110,54 @@ class RecommendationContractsTest(unittest.TestCase):
             RecommendationEvent.model_validate(valid_event()).event_id,
             "event-impression-001",
         )
+
+    def test_rejects_non_string_instants(self) -> None:
+        request = valid_request()
+        request["decisionTime"] = 1785142800
+        self.assert_invalid_request(request)
+
+        event = valid_event()
+        event["occurredAt"] = 1785142805
+        self.assert_invalid_event(event)
+
+    def test_rejects_coerced_json_transport_primitives(self) -> None:
+        request_cases: tuple[tuple[str, str, Any], ...] = (
+            ("string opaque identifier", "requestId", 1),
+            ("string money", "cart.subtotal.amount", "89000"),
+            ("boolean quantity", "cart.lines.0.quantity", True),
+            (
+                "string boolean",
+                "commerceSnapshotBindings.catalog.complete",
+                "true",
+            ),
+        )
+        for name, path, replacement in request_cases:
+            with self.subTest(name=name):
+                value = valid_request()
+                target: dict[str, Any] = value
+                segments = path.split(".")
+                for segment in segments[:-1]:
+                    target = target[segment] if not segment.isdigit() else target[int(segment)]
+                target[segments[-1]] = replacement
+                self.assert_invalid_request(value)
+
+        response = valid_response()
+        response["counts"]["potential"] = "8"
+        self.assert_invalid_response(response)
+
+    def test_rejects_unknown_properties(self) -> None:
+        value = valid_request()
+        value["unexpected"] = "forbidden"
+
+        self.assert_invalid_request(value)
+
+    def test_parsed_models_are_frozen(self) -> None:
+        parsed = RecommendationDecisionRequest.model_validate(valid_request())
+
+        with self.assertRaises(ValidationError):
+            parsed.request_id = "rec-request-other"
+        with self.assertRaises(ValidationError):
+            parsed.cart.revision = "cart-revision-other"
 
     def test_rejects_mixed_commerce_environments(self) -> None:
         value = valid_request()
