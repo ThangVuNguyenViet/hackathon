@@ -13,13 +13,40 @@ import {
 const nonNegativeIntegerSchema = moneySchema.shape.amount;
 const positiveNumberSchema = z.number().positive();
 const nonEmptyStringSchema = z.string().min(1);
+const canonicalInstantPartsPattern =
+  /^(?<whole>[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2})(?:\.(?<fraction>[0-9]+))?Z$/u;
+
+const parseCanonicalInstantParts = (
+  instant: string,
+): { fraction: string; wholeSecondEpoch: number } | null => {
+  const match = canonicalInstantPartsPattern.exec(instant);
+  if (!match?.groups) return null;
+
+  const wholeSecondEpoch = Date.parse(`${match.groups.whole}Z`);
+  if (!Number.isFinite(wholeSecondEpoch)) return null;
+
+  return {
+    fraction: (match.groups.fraction ?? '').replace(/0+$/u, ''),
+    wholeSecondEpoch,
+  };
+};
+
 const occursBefore = (earlier: string, later: string): boolean => {
-  const earlierEpoch = Date.parse(earlier);
-  const laterEpoch = Date.parse(later);
+  const earlierParts = parseCanonicalInstantParts(earlier);
+  const laterParts = parseCanonicalInstantParts(later);
+  if (!earlierParts || !laterParts) return false;
+
+  if (earlierParts.wholeSecondEpoch !== laterParts.wholeSecondEpoch) {
+    return earlierParts.wholeSecondEpoch < laterParts.wholeSecondEpoch;
+  }
+
+  const precision = Math.max(
+    earlierParts.fraction.length,
+    laterParts.fraction.length,
+  );
   return (
-    Number.isFinite(earlierEpoch) &&
-    Number.isFinite(laterEpoch) &&
-    earlierEpoch < laterEpoch
+    earlierParts.fraction.padEnd(precision, '0') <
+    laterParts.fraction.padEnd(precision, '0')
   );
 };
 const daypartSchema = z.enum([

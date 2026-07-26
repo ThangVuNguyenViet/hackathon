@@ -167,6 +167,31 @@ describe('bundled recommendation fact repositories', () => {
     );
   });
 
+  it('preserves arbitrary canonical fractional-second precision in chronology', () => {
+    const base = new BundledRankingStatisticsRepository().load();
+    const subMillisecondWindow = structuredClone(base);
+    subMillisecondWindow.effectiveAt = '2026-01-01T00:00:00.1001Z';
+    subMillisecondWindow.expiresAt = '2026-01-01T00:00:00.1002Z';
+
+    const equalWindow = structuredClone(base);
+    equalWindow.effectiveAt = '2026-01-01T00:00:00.1Z';
+    equalWindow.expiresAt = '2026-01-01T00:00:00.10Z';
+
+    const crossSecondWindow = structuredClone(base);
+    crossSecondWindow.effectiveAt = '2026-01-01T00:00:00.999999Z';
+    crossSecondWindow.expiresAt = '2026-01-01T00:00:01Z';
+
+    expect(
+      rankingStatisticsSnapshotSchema.safeParse(subMillisecondWindow).success,
+    ).toBe(true);
+    expect(rankingStatisticsSnapshotSchema.safeParse(equalWindow).success).toBe(
+      false,
+    );
+    expect(rankingStatisticsSnapshotSchema.safeParse(crossSecondWindow).success).toBe(
+      true,
+    );
+  });
+
   it('rejects an unknown nested commerce fixture field at the adapter boundary', () => {
     expect(() =>
       assertNoUnknownCommerceProperties(
