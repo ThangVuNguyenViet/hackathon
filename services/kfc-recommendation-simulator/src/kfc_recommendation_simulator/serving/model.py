@@ -279,12 +279,14 @@ class QualifiedShadowModel(mlflow.pyfunc.PythonModel):
         self._trusted_manifest_digest = trusted_manifest_digest
 
     def load_context(self, context: mlflow.pyfunc.PythonModelContext) -> None:
+        self._placements = {}
         if self._trusted_manifest_digest is None:
             raise ValueError("trusted manifest digest is required to load artifacts")
         manifest = verify_trusted_artifact_manifest(
             context.artifacts,
             self._trusted_manifest_digest,
         )
+        loaded_placements: dict[str, PlacementModel] = {}
         for placement, required_digest in manifest[
             "qualificationResultDigests"
         ].items():
@@ -292,12 +294,10 @@ class QualifiedShadowModel(mlflow.pyfunc.PythonModel):
                 Path(context.artifacts[f"{placement}_result"]),
                 required_digest,
             )
-            if placement not in self._placements:
-                self._placements[placement] = _load_placement_model(
-                    placement=placement,
-                    model_directory=Path(context.artifacts[f"{placement}_model"]),
-                )
-            placement_model = self._placements[placement]
+            placement_model = _load_placement_model(
+                placement=placement,
+                model_directory=Path(context.artifacts[f"{placement}_model"]),
+            )
             metadata = manifest["placements"][placement]
             if (
                 placement_model.model_artifact_id != metadata["modelArtifactId"]
@@ -307,6 +307,8 @@ class QualifiedShadowModel(mlflow.pyfunc.PythonModel):
                 raise ValueError(
                     f"trusted artifact identities do not match {placement} model"
                 )
+            loaded_placements[placement] = placement_model
+        self._placements = loaded_placements
 
     def predict(
         self,
