@@ -1,12 +1,15 @@
 from __future__ import annotations
 
+import hashlib
 import json
 import tempfile
 import unittest
 from pathlib import Path
 
+import mlflow.pyfunc
 import numpy as np
 import pandas as pd
+from mlflow.exceptions import MlflowException
 
 from kfc_recommendation_simulator.serving import (
     FEATURE_CONTRIBUTION_LIMIT,
@@ -39,9 +42,13 @@ class _SquareCalibrator:
 
 
 def _placement_model(placement: str, intercept: float) -> PlacementModel:
-    numeric_features = ("feature_price_delta_vnd", "feature_discount_vnd")
+    numeric_features = (
+        "feature_price_delta_vnd",
+        "feature_discount_vnd",
+        "feature_budget_vnd",
+    )
     if placement == "modifier_upsell":
-        numeric_features = (*numeric_features, "feature_budget_vnd")
+        numeric_features = (*numeric_features, "feature_remaining_budget_vnd")
     return PlacementModel(
         placement=placement,
         feature_schema_id=f"{placement}-feature-schema-v1",
@@ -74,6 +81,7 @@ def _input_frame() -> pd.DataFrame:
                 "action_id": "item:41035",
                 "feature_price_delta_vnd": 20_000,
                 "feature_discount_vnd": 10_000,
+                "feature_budget_vnd": 100_000,
             },
             {
                 "placement": "modifier_upsell",
@@ -83,9 +91,116 @@ def _input_frame() -> pd.DataFrame:
                 "feature_price_delta_vnd": 7_000,
                 "feature_discount_vnd": 10_000,
                 "feature_budget_vnd": 100_000,
+                "feature_remaining_budget_vnd": 50_000,
             },
         ]
     )
+
+
+def _canonical_digest(payload: object) -> str:
+    encoded = json.dumps(
+        payload,
+        ensure_ascii=False,
+        sort_keys=True,
+        separators=(",", ":"),
+    ).encode()
+    return hashlib.sha256(encoded).hexdigest()
+
+
+def _file_digest(path: Path) -> str:
+    return hashlib.sha256(path.read_bytes()).hexdigest()
+
+
+def _write_json(path: Path, payload: object) -> None:
+    path.write_text(
+        json.dumps(payload, indent=2, sort_keys=True) + "\n",
+        encoding="utf-8",
+    )
+
+
+def _create_reloadable_pyfunc(
+    root: Path,
+) -> tuple[Path, dict[str, Path]]:
+    artifacts_root = root / "source-artifacts"
+    artifacts_root.mkdir()
+    artifacts: dict[str, Path] = {}
+    placements: dict[str, dict[str, object]] = {}
+    qualification_digests: dict[str, str] = {}
+    model_files = {
+        "smart_cross_sell": "model.lightgbm.txt",
+        "modifier_upsell": "model.keras",
+    }
+    for placement, ranker in (
+        ("smart_cross_sell", "lightgbm"),
+        ("modifier_upsell", "keras"),
+    ):
+        placement_root = artifacts_root / placement
+        model_root = placement_root / f"{placement}-model"
+        model_root.mkdir(parents=True)
+        result_payload = {
+            "placement": placement,
+            "schemaVersion": "qualification-v1",
+        }
+        qualification_digest = _canonical_digest(result_payload)
+        qualification_digests[placement] = qualification_digest
+        result_payload["contentDigest"] = qualification_digest
+        result_path = placement_root / f"{placement}-benchmark-result.json"
+        _write_json(result_path, result_payload)
+        feature_schema_path = model_root / "feature-schema.json"
+        ranker_manifest_path = model_root / "ranker-manifest.json"
+        calibrator_path = model_root / "calibrator.joblib"
+        model_path = model_root / model_files[placement]
+        _write_json(
+            feature_schema_path,
+            {
+                "schemaVersion": f"{placement}-feature-schema-v1",
+            },
+        )
+        _write_json(ranker_manifest_path, {"ranker": ranker})
+        calibrator_path.write_bytes(f"{placement}-calibrator".encode())
+        model_path.write_bytes(f"{placement}-model".encode())
+        file_digests = {
+            "benchmark-result.json": _file_digest(result_path),
+            "feature-schema.json": _file_digest(feature_schema_path),
+            "ranker-manifest.json": _file_digest(ranker_manifest_path),
+            "calibrator.joblib": _file_digest(calibrator_path),
+            model_files[placement]: _file_digest(model_path),
+        }
+        placements[placement] = {
+            "calibrationId": f"{placement}-square-calibration-v1",
+            "featureSchema": f"{placement}-feature-schema-v1",
+            "fileDigests": file_digests,
+            "modelArtifactId": f"{placement}-model-v1",
+            "ranker": ranker,
+        }
+        artifacts[f"{placement}_result"] = result_path
+        artifacts[f"{placement}_model"] = model_root
+    manifest_payload = {
+        "placements": placements,
+        "qualificationResultDigests": qualification_digests,
+        "schemaVersion": "kfc-qualified-shadow-artifact-manifest-v1",
+    }
+    manifest_digest = _canonical_digest(manifest_payload)
+    manifest_payload["contentDigest"] = manifest_digest
+    manifest_path = artifacts_root / "trusted-artifact-manifest.json"
+    _write_json(manifest_path, manifest_payload)
+    artifacts["trusted_manifest"] = manifest_path
+
+    output = root / "mlflow-model"
+    mlflow.pyfunc.save_model(
+        path=output,
+        python_model=QualifiedShadowModel(
+            {
+                "smart_cross_sell": _placement_model("smart_cross_sell", 0.2),
+                "modifier_upsell": _placement_model("modifier_upsell", 0.5),
+            },
+            trusted_manifest_digest=manifest_digest,
+        ),
+        artifacts={key: str(path) for key, path in artifacts.items()},
+        signature=build_serving_signature(),
+        pip_requirements=[],
+    )
+    return output, artifacts
 
 
 class ShadowServingTest(unittest.TestCase):
@@ -122,7 +237,7 @@ class ShadowServingTest(unittest.TestCase):
             model.predict(None, frame.drop(columns=["feature_discount_vnd"]))
 
         foreign_feature = frame.copy()
-        foreign_feature.loc[0, "feature_budget_vnd"] = 100_000
+        foreign_feature.loc[0, "feature_remaining_budget_vnd"] = 100_000
         with self.assertRaisesRegex(ValueError, "outside feature schema"):
             model.predict(None, foreign_feature)
 
@@ -239,6 +354,137 @@ class ShadowServingTest(unittest.TestCase):
                     ['{"placement":"modifier"}', '{"placement":"smart"}'],
                     sorted(path.read_text(encoding="utf-8").strip() for path in paths),
                 )
+
+    def test_saved_pyfunc_reloads_with_complete_typed_mlflow_signature(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            model_path, _ = _create_reloadable_pyfunc(Path(temporary_directory))
+            loaded = mlflow.pyfunc.load_model(model_path)
+
+            output = loaded.predict(_input_frame())
+            self.assertEqual(
+                ["item:41035", "modifier:20752:2:41091"],
+                output["action_id"].tolist(),
+            )
+            input_specs = {
+                spec.name: (str(spec.type), spec.required)
+                for spec in loaded.metadata.get_input_schema()
+            }
+            self.assertEqual(
+                {
+                    "placement": ("DataType.string", True),
+                    "feature_schema": ("DataType.string", True),
+                    "eligible": ("DataType.boolean", True),
+                    "action_id": ("DataType.string", True),
+                },
+                {
+                    name: input_specs[name]
+                    for name in ("placement", "feature_schema", "eligible", "action_id")
+                },
+            )
+            self.assertEqual(
+                {
+                    "candidate_id",
+                    "category",
+                    "product_code",
+                    "feature_cart_anchor",
+                    "feature_store_id",
+                    "feature_mission",
+                    "feature_time_window",
+                    "modifier_path",
+                },
+                {
+                    name
+                    for name, (data_type, required) in input_specs.items()
+                    if data_type == "DataType.string" and not required
+                },
+            )
+            self.assertEqual(
+                {
+                    "feature_price_delta_vnd",
+                    "feature_discount_vnd",
+                    "feature_party_size",
+                    "feature_budget_vnd",
+                    "feature_cart_subtotal_vnd",
+                    "feature_customer_order_count",
+                    "feature_customer_item_order_count",
+                    "feature_customer_category_order_count",
+                    "feature_store_item_order_count",
+                    "feature_global_item_order_count",
+                    "feature_store_local_hour",
+                    "feature_store_local_day_of_week",
+                },
+                {
+                    name
+                    for name, (data_type, required) in input_specs.items()
+                    if data_type == "DataType.long" and not required
+                },
+            )
+            self.assertEqual(
+                {
+                    "feature_discount_ratio",
+                    "feature_basket_association_score",
+                    "feature_remaining_budget_vnd",
+                    "feature_price_to_remaining_budget_ratio",
+                },
+                {
+                    name
+                    for name, (data_type, required) in input_specs.items()
+                    if data_type == "DataType.double" and not required
+                },
+            )
+            output_specs = {
+                spec.name: (str(spec.type), spec.required)
+                for spec in loaded.metadata.get_output_schema()
+            }
+            self.assertEqual(
+                {
+                    "action_id": ("DataType.string", True),
+                    "calibrated_probability": ("DataType.double", True),
+                    "expected_value_score": ("DataType.double", True),
+                    "model_artifact_id": ("DataType.string", True),
+                    "calibration_id": ("DataType.string", True),
+                    "feature_schema": ("DataType.string", True),
+                    "feature_contributions": ("DataType.string", True),
+                },
+                output_specs,
+            )
+
+            with self.assertRaises(MlflowException):
+                loaded.predict(_input_frame().drop(columns=["action_id"]))
+            wrong_type = _input_frame()
+            wrong_type["feature_discount_vnd"] = "not-a-number"
+            with self.assertRaises(MlflowException):
+                loaded.predict(wrong_type)
+
+    def test_saved_pyfunc_rejects_tampered_trusted_manifest(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            model_path, _ = _create_reloadable_pyfunc(Path(temporary_directory))
+            manifest_path = next(
+                (model_path / "artifacts").rglob("trusted-artifact-manifest.json")
+            )
+            manifest_path.write_text("{}\n", encoding="utf-8")
+
+            with self.assertRaisesRegex(ValueError, "trusted manifest digest"):
+                mlflow.pyfunc.load_model(model_path)
+
+    def test_saved_pyfunc_rejects_each_tampered_qualified_artifact(self) -> None:
+        for filename in (
+            "model.lightgbm.txt",
+            "model.keras",
+            "calibrator.joblib",
+            "feature-schema.json",
+            "ranker-manifest.json",
+        ):
+            with (
+                self.subTest(filename=filename),
+                tempfile.TemporaryDirectory() as temporary_directory,
+            ):
+                model_path, _ = _create_reloadable_pyfunc(Path(temporary_directory))
+                artifact_path = next((model_path / "artifacts").rglob(filename))
+                artifact_path.write_bytes(artifact_path.read_bytes() + b"tampered")
+
+                with self.assertRaisesRegex(ValueError, "artifact digest mismatch"):
+                    mlflow.pyfunc.load_model(model_path)
 
 
 if __name__ == "__main__":

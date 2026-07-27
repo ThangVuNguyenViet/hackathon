@@ -43,6 +43,7 @@ OUTPUT_COLUMNS = (
     "feature_contributions",
 )
 FEATURE_CONTRIBUTION_LIMIT = 5
+TRUSTED_ARTIFACT_MANIFEST_SCHEMA = "kfc-qualified-shadow-artifact-manifest-v1"
 
 _SMART_CATEGORICAL_FEATURES = tuple(CATEGORICAL_FEATURES)
 _SMART_NUMERIC_FEATURES = tuple(NUMERIC_FEATURES)
@@ -57,6 +58,20 @@ _ALL_CATEGORICAL_FEATURES = tuple(
 _ALL_NUMERIC_FEATURES = tuple(
     dict.fromkeys((*_SMART_NUMERIC_FEATURES, *_MODIFIER_NUMERIC_FEATURES))
 )
+_INTEGER_FEATURES = {
+    "feature_price_delta_vnd",
+    "feature_discount_vnd",
+    "feature_party_size",
+    "feature_budget_vnd",
+    "feature_cart_subtotal_vnd",
+    "feature_customer_order_count",
+    "feature_customer_item_order_count",
+    "feature_customer_category_order_count",
+    "feature_store_item_order_count",
+    "feature_global_item_order_count",
+    "feature_store_local_hour",
+    "feature_store_local_day_of_week",
+}
 
 
 def _canonical_digest(value: Any) -> str:
@@ -95,6 +110,72 @@ def verify_qualification_result(
     return result
 
 
+def verify_trusted_artifact_manifest(
+    artifacts: Mapping[str, str],
+    trusted_digest: str,
+) -> dict[str, Any]:
+    manifest_path = Path(artifacts["trusted_manifest"])
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    declared_digest = manifest.get("contentDigest")
+    digest_payload = dict(manifest)
+    digest_payload.pop("contentDigest", None)
+    canonical_digest = _canonical_digest(digest_payload)
+    if (
+        declared_digest != trusted_digest
+        or canonical_digest != trusted_digest
+        or manifest.get("schemaVersion") != TRUSTED_ARTIFACT_MANIFEST_SCHEMA
+    ):
+        raise ValueError(
+            "trusted manifest digest mismatch: "
+            f"required {trusted_digest}, declared {declared_digest}, "
+            f"canonical {canonical_digest}"
+        )
+    placements = manifest.get("placements")
+    qualification_digests = manifest.get("qualificationResultDigests")
+    if not isinstance(placements, dict) or set(placements) != set(QUALIFIED_RANKERS):
+        raise ValueError("trusted manifest placements do not match serving placements")
+    if not isinstance(qualification_digests, dict) or set(qualification_digests) != set(
+        QUALIFIED_RANKERS
+    ):
+        raise ValueError(
+            "trusted manifest qualification digests do not match serving placements"
+        )
+
+    for placement, ranker in QUALIFIED_RANKERS.items():
+        metadata = placements[placement]
+        if not isinstance(metadata, dict) or metadata.get("ranker") != ranker:
+            raise ValueError(f"trusted manifest ranker mismatch for {placement}")
+        model_filename = (
+            "model.lightgbm.txt" if placement == "smart_cross_sell" else "model.keras"
+        )
+        required_files = {
+            "benchmark-result.json",
+            "ranker-manifest.json",
+            "feature-schema.json",
+            "calibrator.joblib",
+            model_filename,
+        }
+        file_digests = metadata.get("fileDigests")
+        if not isinstance(file_digests, dict) or set(file_digests) != required_files:
+            raise ValueError(f"trusted manifest file set mismatch for {placement}")
+        paths = {
+            "benchmark-result.json": Path(artifacts[f"{placement}_result"]),
+            **{
+                filename: Path(artifacts[f"{placement}_model"]) / filename
+                for filename in required_files - {"benchmark-result.json"}
+            },
+        }
+        for filename, path in paths.items():
+            actual_digest = _file_digest(path)
+            if actual_digest != file_digests[filename]:
+                raise ValueError(
+                    "artifact digest mismatch for "
+                    f"{placement}/{filename}: required {file_digests[filename]}, "
+                    f"actual {actual_digest}"
+                )
+    return manifest
+
+
 def build_serving_signature() -> ModelSignature:
     inputs = [
         ColSpec("string", "placement"),
@@ -106,7 +187,11 @@ def build_serving_signature() -> ModelSignature:
             for feature in _ALL_CATEGORICAL_FEATURES
         ),
         *(
-            ColSpec("double", feature, required=False)
+            ColSpec(
+                "long" if feature in _INTEGER_FEATURES else "double",
+                feature,
+                required=False,
+            )
             for feature in _ALL_NUMERIC_FEATURES
         ),
     ]
@@ -187,19 +272,41 @@ class QualifiedShadowModel(mlflow.pyfunc.PythonModel):
     def __init__(
         self,
         placements: Mapping[str, PlacementModel] | None = None,
+        *,
+        trusted_manifest_digest: str | None = None,
     ) -> None:
         self._placements = dict(placements or {})
+        self._trusted_manifest_digest = trusted_manifest_digest
 
     def load_context(self, context: mlflow.pyfunc.PythonModelContext) -> None:
-        for placement, required_digest in QUALIFICATION_RESULT_DIGESTS.items():
+        if self._trusted_manifest_digest is None:
+            raise ValueError("trusted manifest digest is required to load artifacts")
+        manifest = verify_trusted_artifact_manifest(
+            context.artifacts,
+            self._trusted_manifest_digest,
+        )
+        for placement, required_digest in manifest[
+            "qualificationResultDigests"
+        ].items():
             verify_qualification_result(
                 Path(context.artifacts[f"{placement}_result"]),
                 required_digest,
             )
-            self._placements[placement] = _load_placement_model(
-                placement=placement,
-                model_directory=Path(context.artifacts[f"{placement}_model"]),
-            )
+            if placement not in self._placements:
+                self._placements[placement] = _load_placement_model(
+                    placement=placement,
+                    model_directory=Path(context.artifacts[f"{placement}_model"]),
+                )
+            placement_model = self._placements[placement]
+            metadata = manifest["placements"][placement]
+            if (
+                placement_model.model_artifact_id != metadata["modelArtifactId"]
+                or placement_model.calibration_id != metadata["calibrationId"]
+                or placement_model.feature_schema_id != metadata["featureSchema"]
+            ):
+                raise ValueError(
+                    f"trusted artifact identities do not match {placement} model"
+                )
 
     def predict(
         self,

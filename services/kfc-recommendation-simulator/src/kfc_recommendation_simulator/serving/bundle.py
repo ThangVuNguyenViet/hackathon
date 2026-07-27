@@ -14,14 +14,52 @@ import mlflow.pyfunc
 from .model import (
     QUALIFICATION_RESULT_DIGESTS,
     QUALIFIED_RANKERS,
+    TRUSTED_ARTIFACT_MANIFEST_SCHEMA,
     QualifiedShadowModel,
     _artifact_identity,
+    _canonical_digest,
     _file_digest,
     build_serving_signature,
     verify_qualification_result,
 )
 
 BUNDLE_SCHEMA_VERSION = "kfc-qualified-shadow-model-bundle-v1"
+QUALIFIED_ARTIFACT_DIGESTS = {
+    "smart_cross_sell": {
+        "benchmark-result.json": (
+            "c24de9dd1a86e0a60446a84239b8a1ec45f13342dc328b7fcff795e7f697cbb7"
+        ),
+        "ranker-manifest.json": (
+            "ca48957a45461f98a73b2a9c2178f1c73ecb490f6f5fdd8a3c154de9db87d86d"
+        ),
+        "feature-schema.json": (
+            "fb0013276eebd0de4b0f7be1552f8b1565a018793b7d66ca4576d4ecb7fd27da"
+        ),
+        "model.lightgbm.txt": (
+            "873cafdc6a6a0a9fa2336c3c20295d0f10ccaf5b15d67555999c51d7ae128f98"
+        ),
+        "calibrator.joblib": (
+            "9c9c55e026c5a193f2576e4c99660d767e45ac0e0f9b13a587b9340b8f361962"
+        ),
+    },
+    "modifier_upsell": {
+        "benchmark-result.json": (
+            "6ca6818d23e30019b49459bc4b45705ebdfc0072bd129f0910bd230a2f238073"
+        ),
+        "ranker-manifest.json": (
+            "8d0dcbbfe8285a491bd7d43bcedd1165897f6e921013c638c097e3bc8e81d7a4"
+        ),
+        "feature-schema.json": (
+            "db6b61c127a48cb73d32d91664c89081db5788e6004fdfd6c906f2ec9cd0fa76"
+        ),
+        "model.keras": (
+            "76b1e4388f687857d6be21a4298007ffa09f82ad2330e25fa031da3e8be530e4"
+        ),
+        "calibrator.joblib": (
+            "c0b6e02e02ca54378edf1c87c187363b3214dca8fe8678972f45bf8626611a3a"
+        ),
+    },
+}
 
 
 def _write_json(path: Path, payload: Any) -> None:
@@ -59,18 +97,26 @@ def _placement_metadata(
         else model_directory / "model.keras"
     )
     calibration_file = model_directory / "calibrator.joblib"
-    required_files = (
-        result_path,
-        ranker_manifest_path,
-        feature_schema_path,
-        model_file,
-        calibration_file,
-    )
-    for path in required_files:
+    required_files = {
+        "benchmark-result.json": result_path,
+        "ranker-manifest.json": ranker_manifest_path,
+        "feature-schema.json": feature_schema_path,
+        model_file.name: model_file,
+        "calibrator.joblib": calibration_file,
+    }
+    for path in required_files.values():
         if not path.is_file():
             raise FileNotFoundError(path)
     if ranker_manifest.get("ranker") != required_ranker:
         raise ValueError(f"{placement} ranker manifest must name {required_ranker}")
+    file_digests = {
+        filename: _file_digest(path) for filename, path in required_files.items()
+    }
+    if file_digests != QUALIFIED_ARTIFACT_DIGESTS[placement]:
+        raise ValueError(
+            f"{placement} qualified artifact digest mismatch: "
+            f"required {QUALIFIED_ARTIFACT_DIGESTS[placement]}, actual {file_digests}"
+        )
     return {
         "placement": placement,
         "qualificationResultDigest": QUALIFICATION_RESULT_DIGESTS[placement],
@@ -84,16 +130,27 @@ def _placement_metadata(
             calibration_file,
         ),
         "ranker": required_ranker,
-        "files": {
-            str(path.relative_to(qualification_directory)): _file_digest(path)
-            for path in required_files
-        },
+        "fileDigests": file_digests,
     }
+
+
+def _trusted_artifact_manifest(
+    placements: Mapping[str, dict[str, Any]],
+) -> dict[str, Any]:
+    manifest = {
+        "schemaVersion": TRUSTED_ARTIFACT_MANIFEST_SCHEMA,
+        "qualificationResultDigests": QUALIFICATION_RESULT_DIGESTS,
+        "placements": dict(placements),
+    }
+    manifest["contentDigest"] = _canonical_digest(manifest)
+    return manifest
 
 
 @contextmanager
 def stage_qualification_results(
     qualifications: Mapping[str, Path],
+    *,
+    trusted_manifest: Mapping[str, Any] | None = None,
 ) -> Iterator[dict[str, str]]:
     with tempfile.TemporaryDirectory(
         prefix="kfc-qualified-shadow-results-"
@@ -107,6 +164,10 @@ def stage_qualification_results(
                 destination,
             )
             staged[f"{placement}_result"] = str(destination)
+        if trusted_manifest is not None:
+            manifest_path = staging_directory / "trusted-artifact-manifest.json"
+            _write_json(manifest_path, trusted_manifest)
+            staged["trusted_manifest"] = str(manifest_path)
         yield staged
 
 
@@ -124,14 +185,20 @@ def save_qualified_shadow_model(
         placement: _placement_metadata(placement, directory)
         for placement, directory in qualifications.items()
     }
+    trusted_manifest = _trusted_artifact_manifest(placements)
     model_artifacts = {
         f"{placement}_model": str(directory / "models" / QUALIFIED_RANKERS[placement])
         for placement, directory in qualifications.items()
     }
-    with stage_qualification_results(qualifications) as result_artifacts:
+    with stage_qualification_results(
+        qualifications,
+        trusted_manifest=trusted_manifest,
+    ) as result_artifacts:
         mlflow.pyfunc.save_model(
             path=output_directory,
-            python_model=QualifiedShadowModel(),
+            python_model=QualifiedShadowModel(
+                trusted_manifest_digest=trusted_manifest["contentDigest"],
+            ),
             artifacts={**result_artifacts, **model_artifacts},
             signature=build_serving_signature(),
             code_paths=[str(Path(__file__).resolve().parents[2])],
@@ -141,6 +208,7 @@ def save_qualified_shadow_model(
         "schemaVersion": BUNDLE_SCHEMA_VERSION,
         "qualificationResultDigests": QUALIFICATION_RESULT_DIGESTS,
         "placements": placements,
+        "trustedArtifactManifestDigest": trusted_manifest["contentDigest"],
         "mlflowSignature": signature,
         "syntheticEvidenceDisclaimer": (
             "These are synthetic-world ranker-recovery results, not evidence "

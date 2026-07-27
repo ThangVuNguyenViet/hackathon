@@ -122,8 +122,11 @@ the qualified LightGBM/Keras model, calibration, feature-schema, ranker
 manifest, and qualification results; generated datasets and duplicate model
 binaries remain outside Git. Its `shadow-model-manifest.json` records input
 file hashes, immutable model/calibration/schema IDs, the MLflow signature, and
-the synthetic-evidence disclaimer. Hugging Face publication and deployment are
-separate provisioning work.
+the synthetic-evidence disclaimer. The PyFunc also packages a pinned trusted
+artifact manifest and verifies the manifest plus every model, calibrator,
+feature-schema, ranker-manifest, and qualification-result digest before loading
+either placement. Hugging Face publication and deployment are separate
+provisioning work.
 
 Generated bundles contain:
 
