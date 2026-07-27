@@ -169,6 +169,7 @@ KfcGenUiAttachment _goldenFixture(KfcGenUiWidgetKind kind) {
     actions: fixture.actions,
     selectedAction: fixture.selectedAction,
     expiresAt: fixture.expiresAt,
+    authority: fixture.authority,
   );
 }
 

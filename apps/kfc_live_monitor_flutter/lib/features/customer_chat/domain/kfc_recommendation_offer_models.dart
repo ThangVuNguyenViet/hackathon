@@ -329,6 +329,9 @@ String? _recommendationActionId(String actionId) {
   return _recommendationOpaqueId(actionId.substring(prefix.length));
 }
 
+bool isValidRecommendationAuthorityId(Object? value) =>
+    _recommendationOpaqueId(value) != null;
+
 String? _recommendationOpaqueId(Object? value) {
   if (value is! String ||
       value.isEmpty ||

@@ -126,6 +126,7 @@ void main() {
           id: 'recommendation-turn-starter',
           role: CustomerChatRole.assistant,
           text: 'Mình có một gợi ý phù hợp với đơn hiện tại.',
+          assistantTurnId: 'recommendation-turn-starter',
           genUi: starter,
         ),
       ],
@@ -179,6 +180,7 @@ void main() {
           id: 'recommendation-turn-cross-sell',
           role: CustomerChatRole.assistant,
           text: 'Bạn có thể chọn thêm một món ăn kèm.',
+          assistantTurnId: 'recommendation-turn-cross-sell',
           genUi: crossSell,
         ),
       ],
@@ -840,6 +842,7 @@ class PersistedTurn {
         ? CustomerChatRole.customer
         : CustomerChatRole.assistant,
     text: text,
+    assistantTurnId: role == 'user' ? null : id,
     genUi: genUi,
   );
 }

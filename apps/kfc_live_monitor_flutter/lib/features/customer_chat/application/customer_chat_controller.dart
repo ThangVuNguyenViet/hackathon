@@ -75,6 +75,7 @@ class CustomerChatController extends BeaconController {
     final attachment = state.value.actionAttachment(action.attachmentId);
     if (!_canSubmit ||
         _pendingOneShotAttachmentIds.contains(action.attachmentId) ||
+        !state.value.hasRecommendationTurnAuthority(action.attachmentId) ||
         attachment?.authorityMatches(
               sessionId: state.value.sessionId,
               customerId: state.value.customerId,
@@ -107,6 +108,10 @@ class CustomerChatController extends BeaconController {
     final impressionRepository =
         repository as RecommendationImpressionRepository;
     if (attachment.widgetKind != KfcGenUiWidgetKind.recommendationOffer ||
+        !state.value.hasRecommendationTurnAuthority(
+          attachment.id,
+          assistantTurnId: assistantTurnId,
+        ) ||
         !attachment.authorityMatches(
           sessionId: state.value.sessionId,
           customerId: state.value.customerId,
@@ -147,6 +152,7 @@ class CustomerChatController extends BeaconController {
               id: message.id,
               role: message.role,
               text: message.text,
+              assistantTurnId: message.assistantTurnId,
               genUi: KfcGenUiAttachment(
                 id: attachment.id,
                 lifecycleStage: attachment.lifecycleStage,
@@ -409,7 +415,7 @@ class CustomerChatController extends BeaconController {
             _message(
               CustomerChatRole.assistant,
               draft.text,
-              id: draft.assistantTurnId,
+              assistantTurnId: draft.assistantTurnId,
               genUi: draft.genUi,
               modelCandidate: draft.modelCandidate,
             ),
@@ -511,18 +517,17 @@ class CustomerChatController extends BeaconController {
   CustomerChatMessage _message(
     CustomerChatRole role,
     String text, {
-    String? id,
+    String? assistantTurnId,
     KfcGenUiAttachment? genUi,
     KfcAgentModelCandidate? modelCandidate,
   }) {
     _messageSequence += 1;
     return CustomerChatMessage(
-      id:
-          id ??
-          'customer_chat_msg_${DateTime.now().microsecondsSinceEpoch}_$_messageSequence',
+      id: 'customer_chat_msg_${DateTime.now().microsecondsSinceEpoch}_$_messageSequence',
       role: role,
       text: text,
       genUi: genUi,
+      assistantTurnId: assistantTurnId,
       modelCandidate: modelCandidate,
     );
   }

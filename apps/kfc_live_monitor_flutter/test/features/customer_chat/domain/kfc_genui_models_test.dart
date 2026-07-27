@@ -144,6 +144,60 @@ void main() {
     expect(replacement?.offers.single.kind, KfcRecommendationOfferKind.product);
   });
 
+  test(
+    'recommendation actions require opaque attachment and one-shot authority',
+    () {
+      final fixture = kfcGenUiFixture(KfcGenUiWidgetKind.recommendationOffer);
+      final invalidAttachments = [
+        KfcGenUiAttachment(
+          id: 'malformed attachment id',
+          lifecycleStage: fixture.lifecycleStage,
+          widgetKind: fixture.widgetKind,
+          status: fixture.status,
+          title: fixture.title,
+          data: fixture.data,
+          actions: fixture.actions,
+          expiresAt: fixture.expiresAt,
+          authority: fixture.authority,
+        ),
+        KfcGenUiAttachment(
+          id: fixture.id,
+          lifecycleStage: fixture.lifecycleStage,
+          widgetKind: fixture.widgetKind,
+          status: fixture.status,
+          title: fixture.title,
+          data: fixture.data,
+          actions: fixture.actions,
+          expiresAt: fixture.expiresAt,
+          authority: KfcGenUiAuthority(
+            schemaVersion: fixture.authority!.schemaVersion,
+            sessionId: fixture.authority!.sessionId,
+            customerId: fixture.authority!.customerId,
+            verifiedRevision: fixture.authority!.verifiedRevision,
+            actionLifecycle: 'replayable',
+            issuedAt: fixture.authority!.issuedAt,
+            expiresAt: fixture.authority!.expiresAt,
+          ),
+        ),
+      ];
+
+      for (final attachment in invalidAttachments) {
+        expect(attachment.canSubmitActions, isFalse);
+        expect(attachment.actionableActions, isEmpty);
+        expect(
+          attachment.bindAction(
+            actionId: 'recommendation_select:fixture-recommendation-action-1',
+          ),
+          isNull,
+        );
+        expect(
+          attachment.bindAction(actionId: 'recommendation_dismiss'),
+          isNull,
+        );
+      }
+    },
+  );
+
   test('preserves exact categorized-menu ids independently of labels', () {
     final attachment = KfcGenUiAttachment.fromJson({
       'id': 'categorized_menu',

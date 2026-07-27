@@ -70,6 +70,27 @@ class CustomerChatState {
     return null;
   }
 
+  bool hasRecommendationTurnAuthority(
+    String attachmentId, {
+    String? assistantTurnId,
+  }) {
+    final draftAttachment = activeDraft?.genUi;
+    if (draftAttachment?.id == attachmentId) {
+      return draftAttachment?.widgetKind !=
+              KfcGenUiWidgetKind.recommendationOffer ||
+          (isValidRecommendationAuthorityId(activeDraft?.assistantTurnId) &&
+              (assistantTurnId == null ||
+                  activeDraft?.assistantTurnId == assistantTurnId));
+    }
+    for (final message in messages.reversed) {
+      if (message.genUi?.id != attachmentId) continue;
+      return message.hasAuthoritativeRecommendationTurn &&
+          (assistantTurnId == null ||
+              message.assistantTurnId == assistantTurnId);
+    }
+    return false;
+  }
+
   CustomerChatState copyWith({
     List<CustomerChatMessage>? messages,
     String? draftText,

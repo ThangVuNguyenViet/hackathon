@@ -670,6 +670,17 @@ KfcGenUiAttachment kfcGenUiFixture(KfcGenUiWidgetKind kind) {
       widgetKind: KfcGenUiWidgetKind.recommendationOffer,
       status: KfcGenUiStatus.active,
       title: 'Có thể bạn cũng thích',
+      expiresAt: '2099-07-28T02:00:00.000Z',
+      authority: KfcGenUiAuthority(
+        schemaVersion: 'kfc-genui-v1',
+        sessionId: 'kfc:customer-1',
+        customerId: 'customer-1',
+        verifiedRevision:
+            'dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd',
+        actionLifecycle: 'one_shot',
+        issuedAt: '2026-01-01T00:00:00.000Z',
+        expiresAt: '2099-07-28T02:00:00.000Z',
+      ),
       data: {
         'recommendationId': 'fixture-recommendation-1',
         'orderFlowId': 'fixture-order-flow-1',

@@ -292,6 +292,25 @@ void main() {
     expect(draft.assistantTurnId, 'recommendation-turn-1');
   });
 
+  test('completed run never fabricates malformed assistant-turn authority', () {
+    final withoutTurn = ActiveAssistantDraft.accepted(runId: 'r1').reduce(
+      _event(1, 'run_completed', {
+        'status': 'completed',
+        'responseText': 'Đây là gợi ý của bạn.',
+      }),
+    );
+
+    expect(withoutTurn.assistantTurnId, isNull);
+    expect(
+      () => _event(1, 'run_completed', {
+        'status': 'completed',
+        'responseText': 'Đây là gợi ý của bạn.',
+        'assistantTurnId': 'malformed/assistant/turn',
+      }),
+      throwsA(isA<FormatException>()),
+    );
+  });
+
   test('streamed approval pointer rejects tokens and unknown fields', () {
     const pointer = {
       'capability': 'placeOrder',

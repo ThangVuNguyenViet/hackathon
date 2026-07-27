@@ -270,6 +270,42 @@ void main() {
     );
   });
 
+  testWidgets('recommendation without assistant-turn authority is read-only', (
+    tester,
+  ) async {
+    final repository = _ScreenImpressionRepository();
+    final attachment = kfcGenUiFixture(KfcGenUiWidgetKind.recommendationOffer);
+    final controller = CustomerChatController(
+      repository: repository,
+      initialState: CustomerChatState(
+        sessionId: 'kfc:customer-1',
+        customerId: 'customer-1',
+        messages: [
+          CustomerChatMessage(
+            id: 'recommendation-display-only',
+            role: CustomerChatRole.assistant,
+            text: 'Gợi ý dành cho bạn.',
+            genUi: attachment,
+          ),
+        ],
+      ),
+    );
+    addTearDown(controller.dispose);
+
+    await tester.pumpWidget(
+      TestApp(child: CustomerChatScreen(controller: controller)),
+    );
+    await tester.pump();
+
+    expect(
+      find.text('Gợi ý này không còn khớp với phiên hiện tại.'),
+      findsOneWidget,
+    );
+    expect(find.text('Thêm vào đơn'), findsNothing);
+    expect(find.text('Không, cảm ơn'), findsNothing);
+    expect(repository.impressionCount, 0);
+  });
+
   testWidgets(
     'human-paused supersession renders the customer turn without a response block',
     (tester) async {
@@ -312,6 +348,19 @@ void main() {
       expect(find.byKey(CustomerChatKeys.errorBanner), findsNothing);
     },
   );
+}
+
+class _ScreenImpressionRepository extends FixtureCustomerChatRepository {
+  _ScreenImpressionRepository() : super(eventDelay: Duration.zero);
+
+  var impressionCount = 0;
+
+  @override
+  Future<void> recordRecommendationImpression(
+    KfcRecommendationImpression impression,
+  ) async {
+    impressionCount += 1;
+  }
 }
 
 class _LongMenuThenCartRepository extends FixtureCustomerChatRepository {

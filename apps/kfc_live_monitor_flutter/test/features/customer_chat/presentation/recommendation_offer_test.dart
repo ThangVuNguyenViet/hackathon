@@ -130,6 +130,62 @@ void main() {
   });
 
   testWidgets(
+    'malformed attachment identity blocks actions and impression authority',
+    (tester) async {
+      var impressions = 0;
+      final attachment = _recommendationAttachment(
+        id: 'malformed attachment id',
+        placement: 'local_favorite',
+        offerCount: 1,
+      );
+
+      await tester.pumpWidget(
+        TestApp(
+          child: KfcGenUiRenderer(
+            attachment: attachment,
+            onAction: (_) {},
+            onImpression: () => impressions += 1,
+          ),
+        ),
+      );
+      await tester.pump();
+
+      expect(find.text('Gợi ý này đang tạm khóa.'), findsOneWidget);
+      expect(find.text('Thêm vào đơn'), findsNothing);
+      expect(find.text('Không, cảm ơn'), findsNothing);
+      expect(impressions, 0);
+    },
+  );
+
+  testWidgets(
+    'replayable recommendation authority blocks actions and impression',
+    (tester) async {
+      var impressions = 0;
+      final attachment = _recommendationAttachment(
+        placement: 'local_favorite',
+        offerCount: 1,
+        actionLifecycle: 'replayable',
+      );
+
+      await tester.pumpWidget(
+        TestApp(
+          child: KfcGenUiRenderer(
+            attachment: attachment,
+            onAction: (_) {},
+            onImpression: () => impressions += 1,
+          ),
+        ),
+      );
+      await tester.pump();
+
+      expect(find.text('Gợi ý này đang tạm khóa.'), findsOneWidget);
+      expect(find.text('Thêm vào đơn'), findsNothing);
+      expect(find.text('Không, cảm ơn'), findsNothing);
+      expect(impressions, 0);
+    },
+  );
+
+  testWidgets(
     'shows loading, answered, expired, blocked, and stale-authority states',
     (tester) async {
       final active = _recommendationAttachment(
@@ -205,8 +261,10 @@ void main() {
 }
 
 KfcGenUiAttachment _recommendationAttachment({
+  String? id,
   required String placement,
   required int offerCount,
+  String actionLifecycle = 'one_shot',
   KfcGenUiStatus status = KfcGenUiStatus.active,
 }) {
   final offers = [
@@ -221,7 +279,7 @@ KfcGenUiAttachment _recommendationAttachment({
       },
   ];
   return KfcGenUiAttachment(
-    id: 'recommendation-attachment-$placement-$offerCount',
+    id: id ?? 'recommendation-attachment-$placement-$offerCount',
     lifecycleStage: 'recommendation',
     widgetKind: KfcGenUiWidgetKind.recommendationOffer,
     status: status,
@@ -256,5 +314,16 @@ KfcGenUiAttachment _recommendationAttachment({
         label: 'Không, cảm ơn',
       ),
     ],
+    expiresAt: '2099-07-28T02:00:00.000Z',
+    authority: KfcGenUiAuthority(
+      schemaVersion: 'kfc-genui-v1',
+      sessionId: 'kfc:customer-1',
+      customerId: 'customer-1',
+      verifiedRevision:
+          'eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee',
+      actionLifecycle: actionLifecycle,
+      issuedAt: '2026-01-01T00:00:00.000Z',
+      expiresAt: '2099-07-28T02:00:00.000Z',
+    ),
   );
 }

@@ -25,15 +25,24 @@ void main() {
 
   test('recommendation impression is reported once per attachment', () async {
     final repository = _RecordingRecommendationImpressionRepository();
+    final attachment = kfcGenUiFixture(KfcGenUiWidgetKind.recommendationOffer);
     final controller = CustomerChatController(
       repository: repository,
-      initialState: const CustomerChatState(
+      initialState: CustomerChatState(
         sessionId: 'kfc:customer-1',
         customerId: 'customer-1',
+        messages: [
+          CustomerChatMessage(
+            id: 'recommendation-display-message-1',
+            role: CustomerChatRole.assistant,
+            text: 'Gợi ý dành cho bạn.',
+            assistantTurnId: 'recommendation-turn-1',
+            genUi: attachment,
+          ),
+        ],
       ),
     );
     addTearDown(controller.dispose);
-    final attachment = kfcGenUiFixture(KfcGenUiWidgetKind.recommendationOffer);
 
     final first = controller.reportRecommendationImpression(
       assistantTurnId: 'recommendation-turn-1',
@@ -65,6 +74,125 @@ void main() {
       'impression:fixture_recommendation_offer',
     );
   });
+
+  test(
+    'recommendation without an authoritative assistant turn stays display-only',
+    () async {
+      final repository = _MissingRecommendationTurnRepository();
+      final controller = CustomerChatController(
+        repository: repository,
+        initialState: const CustomerChatState(
+          sessionId: 'kfc:customer-1',
+          customerId: 'customer-1',
+        ),
+      );
+      addTearDown(controller.dispose);
+
+      await controller.sendQuickPrompt('Gợi ý món');
+
+      final message = controller.state.value.messages.last;
+      final attachment = message.genUi;
+      expect(message.id, startsWith('customer_chat_msg_'));
+      expect(message.assistantTurnId, isNull);
+      expect(attachment?.widgetKind, KfcGenUiWidgetKind.recommendationOffer);
+      expect(attachment?.canSubmitActions, isTrue);
+
+      final action = attachment?.bindAction(
+        actionId: 'recommendation_select:fixture-recommendation-action-1',
+      );
+      expect(action, isNotNull);
+      await controller.reportRecommendationImpression(
+        assistantTurnId: message.id,
+        attachment: attachment!,
+      );
+      await controller.submitAction(action!);
+
+      expect(repository.impressionCount, 0);
+      expect(repository.actionStartCount, 0);
+      expect(
+        controller.state.value.messages.where(
+          (candidate) =>
+              candidate.role == CustomerChatRole.customer &&
+              candidate.text == 'Thêm vào đơn',
+        ),
+        isEmpty,
+      );
+    },
+  );
+
+  test(
+    'invalid recommendation attachment authority suppresses action and impression',
+    () async {
+      final fixture = kfcGenUiFixture(KfcGenUiWidgetKind.recommendationOffer);
+      final invalidAttachments = [
+        KfcGenUiAttachment(
+          id: 'malformed attachment id',
+          lifecycleStage: fixture.lifecycleStage,
+          widgetKind: fixture.widgetKind,
+          status: fixture.status,
+          title: fixture.title,
+          data: fixture.data,
+          actions: fixture.actions,
+          expiresAt: fixture.expiresAt,
+          authority: fixture.authority,
+        ),
+        KfcGenUiAttachment(
+          id: fixture.id,
+          lifecycleStage: fixture.lifecycleStage,
+          widgetKind: fixture.widgetKind,
+          status: fixture.status,
+          title: fixture.title,
+          data: fixture.data,
+          actions: fixture.actions,
+          expiresAt: fixture.expiresAt,
+          authority: KfcGenUiAuthority(
+            schemaVersion: fixture.authority!.schemaVersion,
+            sessionId: fixture.authority!.sessionId,
+            customerId: fixture.authority!.customerId,
+            verifiedRevision: fixture.authority!.verifiedRevision,
+            actionLifecycle: 'replayable',
+            issuedAt: fixture.authority!.issuedAt,
+            expiresAt: fixture.authority!.expiresAt,
+          ),
+        ),
+      ];
+
+      for (final attachment in invalidAttachments) {
+        final repository = _RecordingRecommendationImpressionRepository();
+        final controller = CustomerChatController(
+          repository: repository,
+          initialState: CustomerChatState(
+            sessionId: 'kfc:customer-1',
+            customerId: 'customer-1',
+            messages: [
+              CustomerChatMessage(
+                id: 'display-${attachment.id}',
+                role: CustomerChatRole.assistant,
+                text: 'Gợi ý dành cho bạn.',
+                assistantTurnId: 'recommendation-turn:authority-test',
+                genUi: attachment,
+              ),
+            ],
+          ),
+        );
+
+        await controller.reportRecommendationImpression(
+          assistantTurnId: 'recommendation-turn:authority-test',
+          attachment: attachment,
+        );
+        await controller.submitAction(
+          KfcGenUiAction(
+            attachmentId: attachment.id,
+            actionId: 'recommendation_select:fixture-recommendation-action-1',
+          ),
+        );
+
+        expect(repository.impressions, isEmpty, reason: attachment.id);
+        expect(repository.actionStartCount, 0, reason: attachment.id);
+        controller.dispose();
+      }
+    },
+  );
 
   test(
     'switching models affects the next run and preserves shared transcript provenance',
@@ -1476,6 +1604,29 @@ class _RecordingRecommendationImpressionRepository
 
   final impressions = <KfcRecommendationImpression>[];
   final _completion = Completer<void>();
+  var actionStartCount = 0;
+
+  @override
+  Future<CustomerRunStartResponse> startRun({
+    required String sessionId,
+    required String customerId,
+    required String clientMessageId,
+    String? text,
+    KfcGenUiAction? action,
+    Map<String, Object?>? metadata,
+    String? candidateId,
+  }) {
+    if (action != null) actionStartCount += 1;
+    return super.startRun(
+      sessionId: sessionId,
+      customerId: customerId,
+      clientMessageId: clientMessageId,
+      text: text,
+      action: action,
+      metadata: metadata,
+      candidateId: candidateId,
+    );
+  }
 
   @override
   Future<void> recordRecommendationImpression(
@@ -1487,6 +1638,72 @@ class _RecordingRecommendationImpressionRepository
 
   void complete() {
     if (!_completion.isCompleted) _completion.complete();
+  }
+}
+
+class _MissingRecommendationTurnRepository
+    extends FixtureCustomerChatRepository {
+  _MissingRecommendationTurnRepository() : super(eventDelay: Duration.zero);
+
+  final _actionsByRunId = <String, KfcGenUiAction?>{};
+  var actionStartCount = 0;
+  var impressionCount = 0;
+
+  @override
+  Future<CustomerRunStartResponse> startRun({
+    required String sessionId,
+    required String customerId,
+    required String clientMessageId,
+    String? text,
+    KfcGenUiAction? action,
+    Map<String, Object?>? metadata,
+    String? candidateId,
+  }) async {
+    if (action != null) actionStartCount += 1;
+    final runId = 'missing-turn-run-${_actionsByRunId.length + 1}';
+    _actionsByRunId[runId] = action;
+    return CustomerRunStartResponse(
+      schemaVersion: 1,
+      runId: runId,
+      status: CustomerRunStatus.accepted,
+      nextSequence: 1,
+      replayed: false,
+    );
+  }
+
+  @override
+  Stream<CustomerRunEventEnvelope> watchRun(
+    String runId,
+    int afterSequence,
+  ) async* {
+    final action = _actionsByRunId[runId];
+    if (afterSequence < 1) {
+      yield _runEvent(runId, 1, 'run_accepted', {'status': 'accepted'});
+    }
+    if (action == null && afterSequence < 2) {
+      yield _runEvent(runId, 2, 'genui_snapshot', {
+        'snapshot': kfcGenUiFixture(
+          KfcGenUiWidgetKind.recommendationOffer,
+        ).toJson(),
+      });
+    }
+    if (action != null && afterSequence < 2) {
+      yield _runEvent(runId, 2, 'text_delta', {'delta': 'Đã thêm.'});
+    }
+    if (afterSequence < 3) {
+      yield _runEvent(runId, 3, 'run_completed', {
+        'status': 'completed',
+        'responseText': action == null ? 'Gợi ý dành cho bạn.' : 'Đã thêm.',
+        if (action != null) 'assistantTurnId': 'recommendation-turn:action',
+      });
+    }
+  }
+
+  @override
+  Future<void> recordRecommendationImpression(
+    KfcRecommendationImpression impression,
+  ) async {
+    impressionCount += 1;
   }
 }
 

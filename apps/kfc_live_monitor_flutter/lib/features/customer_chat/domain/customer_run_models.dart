@@ -454,10 +454,7 @@ CustomerRunTerminalData _terminalData(
   final rawAssistantTurnId = payload['assistantTurnId'];
   if (rawAssistantTurnId != null &&
       (type != CustomerRunEventType.runCompleted ||
-          rawAssistantTurnId is! String ||
-          rawAssistantTurnId.trim().isEmpty ||
-          rawAssistantTurnId != rawAssistantTurnId.trim() ||
-          rawAssistantTurnId.length > 200)) {
+          !isValidRecommendationAuthorityId(rawAssistantTurnId))) {
     throw const FormatException('Invalid assistant turn id');
   }
   return CustomerRunTerminalData(

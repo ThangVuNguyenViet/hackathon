@@ -41,6 +41,7 @@ class CustomerChatMessage {
     required this.role,
     required this.text,
     this.genUi,
+    this.assistantTurnId,
     this.modelCandidate,
   });
 
@@ -48,7 +49,13 @@ class CustomerChatMessage {
   final CustomerChatRole role;
   final String text;
   final KfcGenUiAttachment? genUi;
+  final String? assistantTurnId;
   final KfcAgentModelCandidate? modelCandidate;
+
+  bool get hasAuthoritativeRecommendationTurn =>
+      genUi?.widgetKind != KfcGenUiWidgetKind.recommendationOffer ||
+      (role == CustomerChatRole.assistant &&
+          isValidRecommendationAuthorityId(assistantTurnId));
 }
 
 enum CustomerChatRole { customer, assistant }

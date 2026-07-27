@@ -107,11 +107,14 @@ class _CustomerChatScreenState extends State<CustomerChatScreen> {
                               onAction: widget.controller.submitAction,
                               onImpression:
                                   message.genUi?.widgetKind ==
-                                      KfcGenUiWidgetKind.recommendationOffer
+                                          KfcGenUiWidgetKind
+                                              .recommendationOffer &&
+                                      message.hasAuthoritativeRecommendationTurn
                                   ? () => unawaited(
                                       widget.controller
                                           .reportRecommendationImpression(
-                                            assistantTurnId: message.id,
+                                            assistantTurnId:
+                                                message.assistantTurnId!,
                                             attachment: message.genUi!,
                                           ),
                                     )
@@ -122,11 +125,12 @@ class _CustomerChatScreenState extends State<CustomerChatScreen> {
                                   ? state.pendingGenUiAction?.actionId
                                   : null,
                               authorityMatches:
-                                  message.genUi?.authorityMatches(
-                                    sessionId: state.sessionId,
-                                    customerId: state.customerId,
-                                  ) ??
-                                  true,
+                                  (message.genUi?.authorityMatches(
+                                        sessionId: state.sessionId,
+                                        customerId: state.customerId,
+                                      ) ??
+                                      true) &&
+                                  message.hasAuthoritativeRecommendationTurn,
                               handoffStatus: state.handoffStatus,
                               interactive:
                                   message.genUi == null ||

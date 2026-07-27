@@ -95,6 +95,10 @@ class CustomerResponseBlock extends StatelessWidget {
                     attachment: draft.genUi!,
                     onAction: onAction,
                     handoffStatus: handoffStatus,
+                    authorityMatches:
+                        draft.genUi?.widgetKind !=
+                            KfcGenUiWidgetKind.recommendationOffer ||
+                        isValidRecommendationAuthorityId(draft.assistantTurnId),
                   ),
                 ],
               ],

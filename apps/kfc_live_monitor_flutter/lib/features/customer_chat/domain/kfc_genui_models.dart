@@ -291,9 +291,15 @@ class KfcGenUiAttachment {
       hasValidActionEncoding &&
       _hasUniqueActionIds &&
       _hasValidActionManifest &&
+      _hasValidRecommendationActionAuthority &&
       (authority == null || authority!.expiresAt == expiresAt) &&
       _hasUnexpiredActionWindow &&
       interactionFinality == KfcGenUiInteractionFinality.authoritative;
+
+  bool get _hasValidRecommendationActionAuthority =>
+      widgetKind != KfcGenUiWidgetKind.recommendationOffer ||
+      (_recommendationOpaqueId(id) != null &&
+          authority?.actionLifecycle == 'one_shot');
 
   bool get _hasUniqueActionIds {
     final ids = actions.map((action) => action.id).toList(growable: false);
