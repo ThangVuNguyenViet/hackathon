@@ -256,23 +256,28 @@ export async function checkWorkerReadiness(
 async function checkWorkerRecommendationSanityReadiness(
   env: WorkerEnv,
 ): Promise<RecommendationSanityReadiness> {
-  let config;
   try {
-    config = recommendationSanityConfig({
+    const config = recommendationSanityConfig({
       projectId: env.SANITY_PROJECT_ID,
       dataset: env.SANITY_DATASET,
       apiVersion: env.SANITY_API_VERSION,
       readToken: env.SANITY_READ_TOKEN,
     });
+    if (!config) return unconfiguredRecommendationSanityReadiness();
+    const repository = createSanityMerchandisingPolicyRepository(
+      config,
+      env.SANITY_CLIENT ? () => env.SANITY_CLIENT! : undefined,
+    );
+    return await checkRecommendationSanityReadiness(repository);
   } catch {
-    return unconfiguredRecommendationSanityReadiness(true);
+    return {
+      ok: false,
+      required: true,
+      configured: false,
+      authority: 'sanity',
+      message: 'Sanity merchandising configuration is invalid',
+    };
   }
-  if (!config) return unconfiguredRecommendationSanityReadiness();
-  const repository = createSanityMerchandisingPolicyRepository(
-    config,
-    env.SANITY_CLIENT ? () => env.SANITY_CLIENT! : undefined,
-  );
-  return checkRecommendationSanityReadiness(repository);
 }
 
 export async function runWorkerReadinessCheck(

@@ -191,4 +191,30 @@ describe('Sanity merchandising runtime configuration', () => {
     expect(serialized).not.toContain('production');
     expect(serialized).not.toContain('2025-02-19');
   });
+
+  it('returns sanitized Worker readiness for malformed complete configuration', async () => {
+    const malformedProjectId = 'bad project!';
+    const readiness = await checkWorkerReadiness(
+      {
+        DB: {
+          prepare: () => ({ first: async () => ({ ok: 1 }) }),
+        },
+        SANITY_PROJECT_ID: malformedProjectId,
+        SANITY_DATASET: 'production',
+        SANITY_API_VERSION: '2025-02-19',
+      } as never,
+      false,
+      { configured: false, configurationError: true },
+    );
+
+    expect(readiness.ok).toBe(false);
+    expect(readiness.checks.recommendationSanity).toEqual({
+      ok: false,
+      required: true,
+      configured: false,
+      authority: 'sanity',
+      message: 'Sanity merchandising configuration is invalid',
+    });
+    expect(JSON.stringify(readiness)).not.toContain(malformedProjectId);
+  });
 });
