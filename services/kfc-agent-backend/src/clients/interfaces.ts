@@ -95,6 +95,12 @@ export interface CartChange {
   itemCode: string;
   quantity: number;
   modifiers?: ModifierSelectionInput[];
+  /**
+   * Server-owned exact line identity to update, remove, or replace. The item
+   * code may therefore differ from the targeted line during replacement.
+   * Model-authored updateCart arguments never populate this field.
+   */
+  targetCartLineId?: string;
 }
 
 export interface PromotionClient {

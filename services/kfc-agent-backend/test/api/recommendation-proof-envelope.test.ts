@@ -4,8 +4,12 @@ import { buildServer } from '../../src/api/server.js';
 import type { LifecycleInstance } from '../../src/commerce/lifecycleProvider.js';
 import { MemoryStore } from '../../src/persistence/memoryStore.js';
 import { buildDeterministicRecommendationServerOptions } from '../support/recommendationSanity.js';
-import { parseRecommendationDecisionRequest } from '../../src/recommendations/domain/schemas.js';
+import {
+  parseRecommendationDecisionRequest,
+  parseRecommendationOutcomeRequest,
+} from '../../src/recommendations/domain/schemas.js';
 import { renderBindingForDecisionDigests } from '../../src/recommendations/persistence/types.js';
+import type { KfcGenUiAttachment } from '../../src/genui/kfcGenUi.js';
 
 const adminToken = 'recommendation-proof-admin-token';
 const servers: FastifyInstance[] = [];
@@ -65,10 +69,15 @@ async function configuredServer() {
       },
     },
   });
+  const options = buildDeterministicRecommendationServerOptions({
+    KFC_DEMO_ADMIN_TOKEN: adminToken,
+  });
+  const recommendations = options.recommendations?.create(store);
+  if (!recommendations) {
+    throw new Error('Expected configured recommendation services');
+  }
   const server = buildServer({
-    ...buildDeterministicRecommendationServerOptions({
-      KFC_DEMO_ADMIN_TOKEN: adminToken,
-    }),
+    ...options,
     store,
     lifecycle: {
       environment: 'sandbox',
@@ -93,7 +102,7 @@ async function configuredServer() {
     },
   });
   servers.push(server);
-  return { server, sessionId };
+  return { server, sessionId, store, recommendations };
 }
 
 function snapshotBinding(name: string) {
@@ -224,19 +233,19 @@ describe('KFC recommendation proof envelope', () => {
   });
 
   it('composes the redacted recommendation state through decision, impression, and selection transitions', async () => {
-    const { server, sessionId } = await configuredServer();
+    const { server, sessionId, store, recommendations } =
+      await configuredServer();
     const request = decisionRequest(sessionId);
-    const decisionResponse = await server.inject({
-      method: 'POST',
-      url: '/v1/recommendations/decide',
-      payload: request,
+    const decisionResult = await recommendations.application.decide({
+      request,
+      trusted: { presentationCustomerId: 'customer-proof' },
     });
-    expect(decisionResponse.statusCode).toBe(200);
-    const decision = decisionResponse.json<{
-      recommendationId: string;
-      traceRef: string;
-      primaryOffer: { actions: Array<{ actionId: string }> };
-    }>();
+    if (decisionResult.status !== 'decided') {
+      throw new Error('Expected proof recommendation decision');
+    }
+    const decision = decisionResult.response;
+    const primaryOffer = decision.primaryOffer;
+    if (!primaryOffer) throw new Error('Expected proof recommendation offer');
 
     const afterDecision = await proofEnvelope(server, sessionId);
     expect(afterDecision.json()).toMatchObject({
@@ -272,6 +281,52 @@ describe('KFC recommendation proof envelope', () => {
       recommendation: { requestFingerprint: string; actionDigest: string };
     }>();
     const actionDigest = inspection.recommendation.actionDigest;
+    const record = await store.getRecommendationDecision(
+      decision.recommendationId,
+    );
+    if (!record) throw new Error('Expected stored proof recommendation');
+    const attachment: KfcGenUiAttachment = {
+      id: record.renderBinding.attachmentId,
+      lifecycleStage: 'recommendation',
+      widgetKind: 'recommendationOffer',
+      status: 'active',
+      title: 'Gợi ý dành cho bạn',
+      data: {
+        recommendationId: decision.recommendationId,
+        cartRevision: record.renderBinding.cartRevision,
+        actionDigest: record.renderBinding.actionDigest,
+        decisionDigest: record.renderBinding.decisionDigest,
+        versionBindingDigest: record.renderBinding.versionBindingDigest,
+        offers: record.renderBinding.renderedActions.map((action) => ({
+          recommendationActionId: action.actionId,
+        })),
+      },
+      actions: record.renderBinding.renderedActions.map((action) => ({
+        id: `recommendation_select:${action.actionId}`,
+        label: 'Chọn',
+      })),
+      authority: {
+        schemaVersion: 'kfc-genui-v1',
+        sessionId,
+        customerId: 'customer-proof',
+        verifiedRevision: 'proof-verified-revision',
+        actionLifecycle: 'one_shot',
+        issuedAt: '2026-07-27T09:09:00Z',
+        expiresAt: '2099-01-01T00:00:00Z',
+      },
+      expiresAt: '2099-01-01T00:00:00Z',
+    };
+    await store.appendTurn({
+      id: record.renderBinding.assistantTurnId,
+      sessionId,
+      channel: 'kfc',
+      role: 'assistant',
+      text: 'Mình có một gợi ý cho bạn.',
+      externalMessageId: null,
+      externalUserId: 'customer-proof',
+      deliveryStatus: 'sent',
+      metadata: { genUi: attachment },
+    });
     const impressionResponse = await server.inject({
       method: 'POST',
       url: `/v1/recommendations/${encodeURIComponent(decision.recommendationId)}/impressions`,
@@ -280,7 +335,7 @@ describe('KFC recommendation proof envelope', () => {
         eventId: 'proof-impression',
         occurredAt: '2026-07-27T09:10:00Z',
         ...renderBindingForDecisionDigests(inspection.recommendation),
-        renderedActions: decision.primaryOffer.actions.map((action, index) => ({
+        renderedActions: primaryOffer.actions.map((action, index) => ({
           actionId: action.actionId,
           position: index + 1,
         })),
@@ -295,21 +350,20 @@ describe('KFC recommendation proof envelope', () => {
       },
     });
 
-    const outcomeResponse = await server.inject({
-      method: 'POST',
-      url: `/v1/recommendations/${encodeURIComponent(decision.recommendationId)}/outcomes`,
-      payload: {
+    const outcomeResult = await recommendations.application.recordOutcome(
+      decision.recommendationId,
+      parseRecommendationOutcomeRequest({
         schemaVersion: 'kfc-recommendation-event-v1',
         eventId: 'proof-selected',
         eventType: 'selected',
         occurredAt: '2026-07-27T09:11:00Z',
         actor: 'customer',
-        actionId: decision.primaryOffer.actions[0]!.actionId,
+        actionId: primaryOffer.actions[0]!.actionId,
         cartRevision: request.cartRevision,
         payload: {},
-      },
-    });
-    expect(outcomeResponse.statusCode).toBe(201);
+      }),
+    );
+    expect(outcomeResult.status).toBe('recorded');
     const afterSelection = await proofEnvelope(server, sessionId);
     expect(afterSelection.json()).toMatchObject({
       recommendations: {

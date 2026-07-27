@@ -37,6 +37,12 @@ export type ReplyIntent =
   | 'payment_retry'
   | 'general_reply';
 
+export interface TrustedCustomerActionCommitReceipt {
+  status: 'succeeded' | 'failed' | 'dismissed';
+  recommendationId: string;
+  recommendationActionId: string | null;
+}
+
 export interface AgentTurnInput {
   sessionId: string;
   customerId: string;
@@ -88,6 +94,13 @@ export interface AgentTurnInput {
    * populated from request JSON, persisted turn metadata, or model output.
    */
   trustedCustomerAction?: TrustedCustomerActionEnvelope;
+  /**
+   * Server-owned durable completion boundary for one trusted recommendation
+   * action. It is never model-visible or populated from request JSON.
+   */
+  completeTrustedCustomerAction?: (
+    receipt: TrustedCustomerActionCommitReceipt,
+  ) => Promise<void>;
   runGuard?: {
     isCurrent(): Promise<boolean>;
     /**

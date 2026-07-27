@@ -1255,7 +1255,7 @@ describe('KFC Vietnam business pack compatibility', () => {
     ]);
   });
 
-  it('derives an exact product mutation from a stored recommendation action and records selected/succeeded', async () => {
+  it('commits an exact successful recommendation mutation before later model failure', async () => {
     const fixtures = await loadGeneratedFixtures(process.cwd());
     const baseClients = createMockClients(fixtures);
     const sessionId = 'session-kfc-recommendation-product';
@@ -1289,37 +1289,43 @@ describe('KFC Vietnam business pack compatibility', () => {
       }),
     );
     const applyChanges = vi.fn(baseClients.cart.applyChanges);
+    const completeTrustedCustomerAction = vi.fn(async () => undefined);
 
-    await kfcVietnamPack.run(
-      {
-        sessionId,
-        customerId: 'customer-1',
-        channel: 'kfc',
-        text: '',
-        trustedCustomerAction: {
-          source: 'kfc_genui_action',
-          assistantTurnId: 'assistant-turn-recommendation',
-          attachmentId: 'attachment-recommendation',
-          actionDigest: 'a'.repeat(64),
-          verifiedRevision: 'd'.repeat(64),
-          lifecycle: 'one_shot',
-          command: {
-            kind: 'recommendation_select',
-            recommendationId: 'recommendation-trusted-action',
-            recommendationActionId: action.actionId,
+    await expect(
+      kfcVietnamPack.run(
+        {
+          sessionId,
+          customerId: 'customer-1',
+          channel: 'kfc',
+          text: '',
+          trustedCustomerAction: {
+            source: 'kfc_genui_action',
+            assistantTurnId: 'assistant-turn-recommendation',
+            attachmentId: 'attachment-recommendation',
+            actionDigest: 'a'.repeat(64),
+            verifiedRevision: 'd'.repeat(64),
+            lifecycle: 'one_shot',
+            command: {
+              kind: 'recommendation_select',
+              recommendationId: 'recommendation-trusted-action',
+              recommendationActionId: action.actionId,
+            },
           },
+          completeTrustedCustomerAction,
+          recommendations,
+          clients: {
+            ...baseClients,
+            cart: { ...baseClients.cart, applyChanges },
+          },
+          store,
+          dashboard: new DashboardEventBus(),
+          agentModelBinding: configuredTestAgent({} as BaseChatModel),
         },
-        recommendations,
-        clients: {
-          ...baseClients,
-          cart: { ...baseClients.cart, applyChanges },
+        async () => {
+          throw new Error('model unavailable after trusted action');
         },
-        store,
-        dashboard: new DashboardEventBus(),
-        agentModelBinding: configuredTestAgent({} as BaseChatModel),
-      },
-      async () => 'Đã thêm món.',
-    );
+      ),
+    ).rejects.toThrow('model unavailable after trusted action');
 
     expect(applyChanges).toHaveBeenCalledOnce();
     expect(applyChanges.mock.calls[0]?.[1]).toEqual([
@@ -1342,6 +1348,18 @@ describe('KFC Vietnam business pack compatibility', () => {
         actionId: action.actionId,
       }),
     );
+    expect(completeTrustedCustomerAction).toHaveBeenCalledWith({
+      status: 'succeeded',
+      recommendationId: 'recommendation-trusted-action',
+      recommendationActionId: action.actionId,
+    });
+    expect(
+      (
+        (await store.getPackState(sessionId, kfcVietnamPack.ref))?.state as {
+          cart?: { items: Array<{ itemCode: string }> };
+        }
+      ).cart?.items,
+    ).toEqual(expect.arrayContaining([expect.objectContaining({ itemCode })]));
   });
 
   it('derives an exact modifier mutation from a stored recommendation action', async () => {
@@ -1430,6 +1448,7 @@ describe('KFC Vietnam business pack compatibility', () => {
       {
         itemCode: menuModifier.itemCode,
         quantity: 1,
+        targetCartLineId: `cart-line:1:${menuModifier.itemCode}`,
         modifiers: [
           {
             groupId: group.groupId,
@@ -1528,12 +1547,15 @@ describe('KFC Vietnam business pack compatibility', () => {
 
     expect(applyChanges).toHaveBeenCalledOnce();
     expect(applyChanges.mock.calls[0]?.[1]).toEqual([
-      { itemCode: currentItem.code, quantity: 0 },
-      { itemCode: replacementItem.code, quantity: 1 },
+      {
+        itemCode: replacementItem.code,
+        quantity: 1,
+        targetCartLineId: `cart-line:1:${currentItem.code}`,
+      },
     ]);
   });
 
-  it('records a failed trusted recommendation mutation after selection', async () => {
+  it('records a typed failed recommendation outcome when the cart provider throws', async () => {
     const fixtures = await loadGeneratedFixtures(process.cwd());
     const item = fixtures.menuItems[0]!;
     const baseClients = createMockClients(fixtures);
@@ -1563,13 +1585,12 @@ describe('KFC Vietnam business pack compatibility', () => {
         state: { cart: created.value },
       }),
     );
-    const applyChanges = vi.fn(async () => ({
-      ok: false,
-      errorCode: 'provider_rejected',
-      message: 'Cart mutation rejected',
-    }));
+    const applyChanges = vi.fn(async () => {
+      throw new Error('Authorization: Bearer private-cart-provider-token');
+    });
+    const completeTrustedCustomerAction = vi.fn(async () => undefined);
 
-    await kfcVietnamPack.run(
+    const response = await kfcVietnamPack.run(
       {
         sessionId,
         customerId: 'customer-1',
@@ -1588,6 +1609,7 @@ describe('KFC Vietnam business pack compatibility', () => {
             recommendationActionId: action.actionId,
           },
         },
+        completeTrustedCustomerAction,
         recommendations,
         clients: {
           ...baseClients,
@@ -1614,6 +1636,12 @@ describe('KFC Vietnam business pack compatibility', () => {
         cartRevision,
       }),
     );
+    expect(completeTrustedCustomerAction).toHaveBeenCalledWith({
+      status: 'failed',
+      recommendationId: 'recommendation-trusted-action',
+      recommendationActionId: action.actionId,
+    });
+    expect(response).not.toContain('private-cart-provider-token');
   });
 
   it('dismisses the current stored recommendation without mutating the cart', async () => {

@@ -43,6 +43,7 @@ import { renderBindingForDecisionDigests } from '../../src/recommendations/persi
 import { MemoryStore } from '../../src/persistence/memoryStore.js';
 import { createPackStateEnvelope } from '../../src/runtime/businessPack.js';
 import { initialRecommendationState } from '../../src/recommendations/state/state-machine.js';
+import type { KfcGenUiAttachment } from '../../src/genui/kfcGenUi.js';
 
 const serverInstant = '2026-07-27T09:30:00Z';
 const completedServerInstant = '2026-07-27T09:30:00.1Z';
@@ -299,9 +300,66 @@ function outcomeFor(input: {
   });
 }
 
+async function publishRecommendationTurn(
+  store: MemoryStore,
+  recommendationId: string,
+  customerId: string,
+) {
+  const record = await store.getRecommendationDecision(recommendationId);
+  if (!record) throw new Error('recommendation expected');
+  if (record.renderBinding.customerId !== customerId) {
+    throw new Error('presentation customer binding expected');
+  }
+  const attachment: KfcGenUiAttachment = {
+    id: record.renderBinding.attachmentId,
+    lifecycleStage: 'recommendation',
+    widgetKind: 'recommendationOffer',
+    status: 'active',
+    title: 'Gợi ý dành cho bạn',
+    data: {
+      recommendationId,
+      cartRevision: record.renderBinding.cartRevision,
+      actionDigest: record.renderBinding.actionDigest,
+      decisionDigest: record.renderBinding.decisionDigest,
+      versionBindingDigest: record.renderBinding.versionBindingDigest,
+      offers: record.renderBinding.renderedActions.map((action) => ({
+        recommendationActionId: action.actionId,
+      })),
+    },
+    actions: [
+      ...record.renderBinding.renderedActions.map((action) => ({
+        id: `recommendation_select:${action.actionId}`,
+        label: 'Chọn',
+      })),
+      { id: 'recommendation_dismiss', label: 'Không, cảm ơn' },
+    ],
+    authority: {
+      schemaVersion: 'kfc-genui-v1',
+      sessionId: record.request.sessionId,
+      customerId,
+      verifiedRevision: 'test-verified-revision',
+      actionLifecycle: 'one_shot',
+      issuedAt: serverInstant,
+      expiresAt: '2099-01-01T00:00:00Z',
+    },
+    expiresAt: '2099-01-01T00:00:00Z',
+  };
+  await store.appendTurn({
+    id: record.renderBinding.assistantTurnId,
+    sessionId: record.request.sessionId,
+    channel: 'kfc',
+    role: 'assistant',
+    text: 'Mình có một gợi ý cho bạn.',
+    externalMessageId: null,
+    externalUserId: customerId,
+    deliveryStatus: 'sent',
+    metadata: { genUi: attachment },
+  });
+}
+
 async function smartFlowFixture(input: { interveningDecision?: boolean } = {}) {
   const engine = new RecordingEngine();
-  const { service, inspection } = await application(engine);
+  const { service, inspection, store } = await application(engine);
   const starterRequest = requestFor({
     suffix: 'flow-starter',
     placement: 'local_favorite',
@@ -373,7 +431,10 @@ async function smartFlowFixture(input: { interveningDecision?: boolean } = {}) {
   });
   const smart = await service.decide({
     request: smartRequest,
-    trusted: { remainingBudgetVnd: 150_000 },
+    trusted: {
+      remainingBudgetVnd: 150_000,
+      presentationCustomerId: 'customer-flow-smart',
+    },
   });
   if (smart.status !== 'decided') throw new Error('smart expected');
   return {
@@ -383,14 +444,24 @@ async function smartFlowFixture(input: { interveningDecision?: boolean } = {}) {
     starterRequest,
     smartRequest,
     smart,
+    store,
   };
 }
 
 async function localEventFixture(suffix: string) {
-  const { service, inspection } = await application();
+  const { service, inspection, store } = await application();
   const request = requestFor({ suffix, placement: 'local_favorite' });
-  const decision = await service.decide({ request });
+  const customerId = `customer-${suffix}`;
+  const decision = await service.decide({
+    request,
+    trusted: { presentationCustomerId: customerId },
+  });
   if (decision.status !== 'decided') throw new Error('decision expected');
+  await publishRecommendationTurn(
+    store,
+    decision.response.recommendationId,
+    customerId,
+  );
   const projection = await inspection.recommendation(
     decision.response.recommendationId,
   );
@@ -455,11 +526,12 @@ async function completedCustomerRequestFixture() {
   const explicit = await service.decide({
     request: explicitRequest,
     requestKind: 'customer_requested',
+    trusted: { presentationCustomerId: 'customer-complete-explicit' },
   });
   if (explicit.status !== 'decided') {
     throw new Error('customer-requested decision expected');
   }
-  return { service, inspection, explicitRequest, explicit };
+  return { service, inspection, store, explicitRequest, explicit };
 }
 
 async function multiFlowSessionFixture(firstFlowComplete: boolean) {
@@ -720,8 +792,13 @@ describe('Recommendation application service', () => {
   });
 
   it('records the Smart slate and completes the proactive flow', async () => {
-    const { service, inspection, starterRequest, smartRequest, smart } =
+    const { service, inspection, store, starterRequest, smartRequest, smart } =
       await smartFlowFixture();
+    await publishRecommendationTurn(
+      store,
+      smart.response.recommendationId,
+      'customer-flow-smart',
+    );
     const smartProjection = await inspection.recommendation(
       smart.response.recommendationId,
     );
@@ -839,8 +916,13 @@ describe('Recommendation application service', () => {
   });
 
   it('records and replays telemetry for a customer-requested recommendation after complete', async () => {
-    const { service, inspection, explicitRequest, explicit } =
+    const { service, inspection, store, explicitRequest, explicit } =
       await completedCustomerRequestFixture();
+    await publishRecommendationTurn(
+      store,
+      explicit.response.recommendationId,
+      'customer-complete-explicit',
+    );
     const projection = await inspection.recommendation(
       explicit.response.recommendationId,
     );
@@ -1134,8 +1216,16 @@ describe('Recommendation application service', () => {
       sessionId,
       orderFlowId: 'order-flow-future-client-first',
     });
-    const first = await service.decide({ request: firstRequest });
+    const first = await service.decide({
+      request: firstRequest,
+      trusted: { presentationCustomerId: 'customer-future-client-time' },
+    });
     if (first.status !== 'decided') throw new Error('first decision expected');
+    await publishRecommendationTurn(
+      store,
+      first.response.recommendationId,
+      'customer-future-client-time',
+    );
     const firstInspection = await inspection.recommendation(
       first.response.recommendationId,
     );
@@ -1250,6 +1340,41 @@ describe('Recommendation application service', () => {
       (await inspection.recommendation(decision.response.recommendationId))!
         .state.revision,
     ).toBe(2);
+  });
+
+  it('rejects an impression before its bound assistant attachment is committed', async () => {
+    const { service, store } = await application();
+    const request = requestFor({
+      suffix: 'impression-without-publication',
+      placement: 'local_favorite',
+    });
+    const decision = await service.decide({
+      request,
+      trusted: {
+        presentationCustomerId: 'customer-impression-without-publication',
+      },
+    });
+    if (decision.status !== 'decided') throw new Error('decision expected');
+    const record = await store.getRecommendationDecision(
+      decision.response.recommendationId,
+    );
+    if (!record) throw new Error('stored decision expected');
+
+    await expect(
+      service.recordImpression(
+        decision.response.recommendationId,
+        parseRecommendationImpressionRequest({
+          schemaVersion: 'kfc-recommendation-event-v1',
+          eventId: 'recommendation-event-impression-without-publication',
+          occurredAt: '2026-07-27T09:10:00Z',
+          assistantTurnId: record.renderBinding.assistantTurnId,
+          attachmentId: record.renderBinding.attachmentId,
+          renderedActions: record.renderBinding.renderedActions,
+          cartRevision: record.renderBinding.cartRevision,
+          actionDigest: record.renderBinding.actionDigest,
+        }),
+      ),
+    ).resolves.toEqual({ status: 'render_binding_conflict' });
   });
 
   it('replays a distinct repeat impression without recording it twice', async () => {
@@ -1534,8 +1659,16 @@ describe('Recommendation application service', () => {
       suffix: 'stale-event',
       placement: 'local_favorite',
     });
-    const decided = await service.decide({ request });
+    const decided = await service.decide({
+      request,
+      trusted: { presentationCustomerId: 'customer-stale-event' },
+    });
     if (decided.status !== 'decided') throw new Error('decision expected');
+    await publishRecommendationTurn(
+      eventStore,
+      decided.response.recommendationId,
+      'customer-stale-event',
+    );
     const projection = await inspection.recommendation(
       decided.response.recommendationId,
     );

@@ -496,7 +496,7 @@ describe.sequential('Fastify and Worker recommendation route parity', () => {
     });
   });
 
-  it('maps impression and outcome writes, dedupe, and rejection statuses byte-for-byte', async () => {
+  it('maps unpublished impressions and untrusted outcomes byte-for-byte', async () => {
     const request = decisionRequest('parity-events');
     const decision = await expectParity({
       method: 'POST',
@@ -535,14 +535,20 @@ describe.sequential('Fastify and Worker recommendation route parity', () => {
         path: impressionPath,
         payload: impression,
       }),
-    ).toMatchObject({ status: 201, body: { deduplicated: false } });
+    ).toMatchObject({
+      status: 409,
+      body: { errorCode: 'recommendation_render_binding_conflict' },
+    });
     expect(
       await expectParity({
         method: 'POST',
         path: impressionPath,
         payload: structuredClone(impression),
       }),
-    ).toMatchObject({ status: 200, body: { deduplicated: true } });
+    ).toMatchObject({
+      status: 409,
+      body: { errorCode: 'recommendation_render_binding_conflict' },
+    });
 
     const outcome = outcomeFor('parity-events', request);
     const outcomePath = `/v1/recommendations/${encodeURIComponent(recommendationId)}/outcomes`;
@@ -552,14 +558,20 @@ describe.sequential('Fastify and Worker recommendation route parity', () => {
         path: outcomePath,
         payload: outcome,
       }),
-    ).toMatchObject({ status: 201, body: { deduplicated: false } });
+    ).toMatchObject({
+      status: 403,
+      body: { errorCode: 'untrusted_recommendation_outcome' },
+    });
     expect(
       await expectParity({
         method: 'POST',
         path: outcomePath,
         payload: structuredClone(outcome),
       }),
-    ).toMatchObject({ status: 200, body: { deduplicated: true } });
+    ).toMatchObject({
+      status: 403,
+      body: { errorCode: 'untrusted_recommendation_outcome' },
+    });
 
     const invalid = await expectParity({
       method: 'POST',
@@ -587,8 +599,8 @@ describe.sequential('Fastify and Worker recommendation route parity', () => {
       payload: outcomeFor('parity-missing', decisionRequest('parity-missing')),
     });
     expect(missing).toMatchObject({
-      status: 404,
-      body: { errorCode: 'recommendation_not_found' },
+      status: 403,
+      body: { errorCode: 'untrusted_recommendation_outcome' },
     });
 
     const stale = await expectParity({
@@ -597,12 +609,31 @@ describe.sequential('Fastify and Worker recommendation route parity', () => {
       payload: outcomeFor('parity-events-stale', request),
     });
     expect(stale).toMatchObject({
-      status: 409,
-      body: { errorCode: 'stale_recommendation' },
+      status: 403,
+      body: { errorCode: 'untrusted_recommendation_outcome' },
     });
   });
 
-  it('maps cart, render-binding, and event-id conflicts byte-for-byte', async () => {
+  it('rejects forged outcome authority identically in Fastify and Worker', async () => {
+    const request = decisionRequest('parity-untrusted-outcome');
+    const decision = await expectParity({
+      method: 'POST',
+      path: '/v1/recommendations/decide',
+      payload: request,
+    });
+    const result = await expectParity({
+      method: 'POST',
+      path: `/v1/recommendations/${encodeURIComponent(String(decision.body.recommendationId))}/outcomes`,
+      payload: outcomeFor('parity-untrusted-outcome', request),
+    });
+
+    expect(result).toMatchObject({
+      status: 403,
+      body: { errorCode: 'untrusted_recommendation_outcome' },
+    });
+  });
+
+  it('rejects client-authored cart, binding, and event variants byte-for-byte', async () => {
     const cartRequest = decisionRequest('parity-cart');
     const cartDecision = await expectParity({
       method: 'POST',
@@ -620,8 +651,8 @@ describe.sequential('Fastify and Worker recommendation route parity', () => {
         },
       }),
     ).toMatchObject({
-      status: 409,
-      body: { errorCode: 'recommendation_cart_revision_conflict' },
+      status: 403,
+      body: { errorCode: 'untrusted_recommendation_outcome' },
     });
 
     const bindingRequest = decisionRequest('parity-binding');
@@ -641,8 +672,8 @@ describe.sequential('Fastify and Worker recommendation route parity', () => {
         },
       }),
     ).toMatchObject({
-      status: 409,
-      body: { errorCode: 'recommendation_render_binding_conflict' },
+      status: 403,
+      body: { errorCode: 'untrusted_recommendation_outcome' },
     });
 
     const conflictRequest = decisionRequest('parity-event-conflict');
@@ -659,7 +690,10 @@ describe.sequential('Fastify and Worker recommendation route parity', () => {
         path: conflictPath,
         payload: conflictEvent,
       }),
-    ).toMatchObject({ status: 201 });
+    ).toMatchObject({
+      status: 403,
+      body: { errorCode: 'untrusted_recommendation_outcome' },
+    });
     expect(
       await expectParity({
         method: 'POST',
@@ -670,8 +704,8 @@ describe.sequential('Fastify and Worker recommendation route parity', () => {
         },
       }),
     ).toMatchObject({
-      status: 409,
-      body: { errorCode: 'recommendation_event_conflict' },
+      status: 403,
+      body: { errorCode: 'untrusted_recommendation_outcome' },
     });
   });
 
@@ -770,8 +804,8 @@ describe.sequential('Fastify and Worker recommendation route parity', () => {
       });
       expect(eventConflict.worker).toEqual(eventConflict.fastify);
       expect(eventConflict.fastify).toMatchObject({
-        status: 409,
-        body: '{"errorCode":"recommendation_event_conflict"}',
+        status: 403,
+        body: '{"errorCode":"untrusted_recommendation_outcome"}',
       });
     } finally {
       await Promise.all([decisionServer.close(), eventServer.close()]);

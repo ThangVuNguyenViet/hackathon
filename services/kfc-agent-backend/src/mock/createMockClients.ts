@@ -283,6 +283,21 @@ export function createMockClients(
         return false;
       }
 
+      const existing = resolvedByKey.get(selectionKey);
+      if (existing) {
+        if (
+          requested?.quantity !== undefined &&
+          requested.quantity !== existing.quantity
+        ) {
+          resolutionFailure = fail(
+            'invalid_modifier_quantity',
+            `Modifier quantity conflicts for ${modifierId}`,
+          );
+          return false;
+        }
+        return true;
+      }
+
       const fixtureQuantity =
         typeof option.quantity === 'number' && option.quantity > 0
           ? option.quantity
@@ -301,21 +316,6 @@ export function createMockClients(
           `Modifier quantity is required for ${modifierId}`,
         );
         return false;
-      }
-
-      const existing = resolvedByKey.get(selectionKey);
-      if (existing) {
-        if (
-          requested?.quantity !== undefined &&
-          requested.quantity !== existing.quantity
-        ) {
-          resolutionFailure = fail(
-            'invalid_modifier_quantity',
-            `Modifier quantity conflicts for ${modifierId}`,
-          );
-          return false;
-        }
-        return true;
       }
 
       const conflictingSelection = resolved.find(
@@ -417,6 +417,22 @@ export function createMockClients(
       );
     }
 
+    const targetedCartItemByChange = new Map<CartChange, CartItem>();
+    for (const change of changes) {
+      if (!change.targetCartLineId) continue;
+      const target = cart.items.find(
+        (item, index) =>
+          `cart-line:${index + 1}:${item.itemCode}` === change.targetCartLineId,
+      );
+      if (!target) {
+        return fail(
+          'cart_line_target_not_found',
+          'The exact trusted cart line is no longer available',
+        );
+      }
+      targetedCartItemByChange.set(change, target);
+    }
+
     const resolvedModifiersByChange = new Map<CartChange, SelectedModifier[]>();
     for (const change of changes) {
       if (!Number.isInteger(change.quantity) || change.quantity < 0) {
@@ -447,11 +463,18 @@ export function createMockClients(
     for (const change of changes) {
       const item = menuByCode.get(change.itemCode)!;
       const modifiers = resolvedModifiersByChange.get(change) ?? [];
-      nextItems = nextItems.filter(
-        (cartItem) => cartItem.itemCode !== change.itemCode,
-      );
+      const targetedCartItem = targetedCartItemByChange.get(change);
+      if (targetedCartItem) {
+        nextItems = nextItems.filter(
+          (cartItem) => cartItem !== targetedCartItem,
+        );
+      } else {
+        nextItems = nextItems.filter(
+          (cartItem) => cartItem.itemCode !== change.itemCode,
+        );
+      }
       if (change.quantity > 0) {
-        nextItems.push({
+        const nextItem = {
           itemCode: change.itemCode,
           name: item.name,
           quantity: change.quantity,
@@ -459,7 +482,17 @@ export function createMockClients(
           ...(modifiers.length ? { modifiers } : {}),
           imageUrl: item.imageUrl,
           category: item.category,
-        });
+        };
+        if (targetedCartItem) {
+          const targetIndex = cart.items.indexOf(targetedCartItem);
+          nextItems.splice(
+            Math.min(targetIndex, nextItems.length),
+            0,
+            nextItem,
+          );
+        } else {
+          nextItems.push(nextItem);
+        }
       }
     }
     return ok({

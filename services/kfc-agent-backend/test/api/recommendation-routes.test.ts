@@ -437,7 +437,7 @@ describe('recommendation Fastify routes', () => {
     ]);
   });
 
-  it('records and deduplicates canonical impression and outcome envelopes', async () => {
+  it('rejects unpublished impressions and client-authored outcomes', async () => {
     const server = configuredServer();
     const impressionDecision = await decide(server, 'impression-dedupe');
     const impressionInspection = await inspection(
@@ -460,13 +460,14 @@ describe('recommendation Fastify routes', () => {
       url: `/v1/recommendations/${encodeURIComponent(impressionDecision.response.recommendationId)}/impressions`,
       payload: structuredClone(impression),
     });
-    expect(firstImpression.statusCode).toBe(201);
-    expect(replayedImpression.statusCode).toBe(200);
-    expect(firstImpression.json()).toMatchObject({ deduplicated: false });
-    expect(replayedImpression.json()).toEqual({
-      ...firstImpression.json<Record<string, unknown>>(),
-      deduplicated: true,
-    });
+    expect([firstImpression.statusCode, firstImpression.json()]).toEqual([
+      409,
+      { errorCode: 'recommendation_render_binding_conflict' },
+    ]);
+    expect([replayedImpression.statusCode, replayedImpression.json()]).toEqual([
+      409,
+      { errorCode: 'recommendation_render_binding_conflict' },
+    ]);
 
     const outcomeDecision = await decide(server, 'outcome-dedupe');
     const outcome = outcomeFor('outcome-dedupe', outcomeDecision.request);
@@ -480,16 +481,44 @@ describe('recommendation Fastify routes', () => {
       url: `/v1/recommendations/${encodeURIComponent(outcomeDecision.response.recommendationId)}/outcomes`,
       payload: structuredClone(outcome),
     });
-    expect(firstOutcome.statusCode).toBe(201);
-    expect(replayedOutcome.statusCode).toBe(200);
-    expect(firstOutcome.json()).toMatchObject({ deduplicated: false });
-    expect(replayedOutcome.json()).toEqual({
-      ...firstOutcome.json<Record<string, unknown>>(),
-      deduplicated: true,
-    });
+    expect([firstOutcome.statusCode, firstOutcome.json()]).toEqual([
+      403,
+      { errorCode: 'untrusted_recommendation_outcome' },
+    ]);
+    expect([replayedOutcome.statusCode, replayedOutcome.json()]).toEqual([
+      403,
+      { errorCode: 'untrusted_recommendation_outcome' },
+    ]);
     expect(JSON.stringify(firstOutcome.json())).not.toMatch(
       /"technical"|"customerHistory"|"eligibilityDecisions"/u,
     );
+  });
+
+  it('rejects a client-authored outcome without advancing recommendation state', async () => {
+    const server = configuredServer();
+    const decision = await decide(server, 'untrusted-outcome');
+    const response = await server.inject({
+      method: 'POST',
+      url: `/v1/recommendations/${encodeURIComponent(decision.response.recommendationId)}/outcomes`,
+      payload: outcomeFor('untrusted-outcome', decision.request),
+    });
+
+    expect([response.statusCode, response.json()]).toEqual([
+      403,
+      { errorCode: 'untrusted_recommendation_outcome' },
+    ]);
+    const inspection = await server.inject({
+      method: 'GET',
+      url: `/admin/recommendations/${encodeURIComponent(decision.response.recommendationId)}/inspection`,
+      headers: { authorization: `Bearer ${adminToken}` },
+    });
+    expect(inspection.json()).toMatchObject({
+      state: {
+        pendingRecommendation: {
+          recommendationId: decision.response.recommendationId,
+        },
+      },
+    });
   });
 
   it('maps every impression and outcome rejection without leaking technical evidence', async () => {
@@ -519,8 +548,8 @@ describe('recommendation Fastify routes', () => {
       payload: outcomeFor('missing', decisionRequest('missing')),
     });
     expect([missingOutcome.statusCode, missingOutcome.json()]).toEqual([
-      404,
-      { errorCode: 'recommendation_not_found' },
+      403,
+      { errorCode: 'untrusted_recommendation_outcome' },
     ]);
 
     const cartDecision = await decide(server, 'wrong-cart');
@@ -533,8 +562,8 @@ describe('recommendation Fastify routes', () => {
       },
     });
     expect([wrongCart.statusCode, wrongCart.json()]).toEqual([
-      409,
-      { errorCode: 'recommendation_cart_revision_conflict' },
+      403,
+      { errorCode: 'untrusted_recommendation_outcome' },
     ]);
 
     const bindingDecision = await decide(server, 'wrong-binding');
@@ -547,8 +576,8 @@ describe('recommendation Fastify routes', () => {
       },
     });
     expect([wrongBinding.statusCode, wrongBinding.json()]).toEqual([
-      409,
-      { errorCode: 'recommendation_render_binding_conflict' },
+      403,
+      { errorCode: 'untrusted_recommendation_outcome' },
     ]);
 
     const staleDecision = await decide(server, 'stale');
@@ -561,15 +590,15 @@ describe('recommendation Fastify routes', () => {
           payload: outcomeFor('stale-first', staleDecision.request),
         })
       ).statusCode,
-    ).toBe(201);
+    ).toBe(403);
     const stale = await server.inject({
       method: 'POST',
       url: staleUrl,
       payload: outcomeFor('stale-second', staleDecision.request),
     });
     expect([stale.statusCode, stale.json()]).toEqual([
-      409,
-      { errorCode: 'stale_recommendation' },
+      403,
+      { errorCode: 'untrusted_recommendation_outcome' },
     ]);
 
     const eventConflictDecision = await decide(server, 'event-conflict');
@@ -583,19 +612,19 @@ describe('recommendation Fastify routes', () => {
           payload: event,
         })
       ).statusCode,
-    ).toBe(201);
+    ).toBe(403);
     const eventConflict = await server.inject({
       method: 'POST',
       url: eventConflictUrl,
       payload: { ...event, payload: { changed: true } },
     });
     expect([eventConflict.statusCode, eventConflict.json()]).toEqual([
-      409,
-      { errorCode: 'recommendation_event_conflict' },
+      403,
+      { errorCode: 'untrusted_recommendation_outcome' },
     ]);
   });
 
-  it('maps stale event persistence to recommendation_event_conflict', async () => {
+  it('rejects an untrusted outcome before stale event persistence', async () => {
     class StaleEventStore extends MemoryStore {
       stale = false;
 
@@ -619,8 +648,8 @@ describe('recommendation Fastify routes', () => {
     });
 
     expect([response.statusCode, response.json()]).toEqual([
-      409,
-      { errorCode: 'recommendation_event_conflict' },
+      403,
+      { errorCode: 'untrusted_recommendation_outcome' },
     ]);
   });
 

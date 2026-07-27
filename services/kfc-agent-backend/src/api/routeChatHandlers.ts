@@ -883,6 +883,22 @@ export function createChatRouteHandlers(context: RouteHandlerContext) {
             },
           },
           trustedCustomerAction,
+          completeTrustedCustomerAction: async (receipt) => {
+            const completed = await store.completeIrreversibleOperation!(
+              reservationInput,
+              reservation,
+              {
+                status: 200,
+                body: {
+                  responseText: '',
+                  trustedActionResult: receipt,
+                },
+              },
+            );
+            if (completed.status !== 'completed') {
+              throw new Error('trusted_genui_action_completion_lost');
+            }
+          },
         });
       try {
         const response = await invoke();
@@ -916,8 +932,23 @@ export function createChatRouteHandlers(context: RouteHandlerContext) {
             body: { errorCode: 'genui_action_in_progress' },
           };
         }
-        return response;
+        const storedStatus = completed.result.status;
+        const storedBody = completed.result.body;
+        return {
+          status: typeof storedStatus === 'number' ? storedStatus : 200,
+          body: isRecord(storedBody) ? storedBody : {},
+        };
       } catch (error) {
+        const committed =
+          await store.getIrreversibleOperation?.(reservationInput);
+        if (committed?.status === 'completed') {
+          const storedStatus = committed.result.status;
+          const storedBody = committed.result.body;
+          return {
+            status: typeof storedStatus === 'number' ? storedStatus : 200,
+            body: isRecord(storedBody) ? storedBody : {},
+          };
+        }
         await store.failIrreversibleOperation(
           reservationInput,
           reservation,

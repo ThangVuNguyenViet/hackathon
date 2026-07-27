@@ -1,4 +1,5 @@
 import type {
+  CartChange,
   ExternalCallContext,
   ExternalClients,
   ProviderMutationIdentity,
@@ -63,6 +64,8 @@ export interface ExecutorContext {
   currentRunIdentity?: string;
   durableRequestIdentity?: string;
   recommendation?: RecommendationToolExecutionAuthority;
+  /** Exact server-reloaded mutation authority, never model-authored. */
+  trustedCartChanges?: CartChange[];
   runGuard?: {
     isCurrent(): Promise<boolean>;
     recordIrreversibleBoundary?(
@@ -482,14 +485,24 @@ export async function executeToolCall(
           'Cart is required before updateCart',
           'cart_required',
         );
-      return resultFromToolResult(
-        request.toolName,
-        await clients.cart.applyChanges(
-          cart,
-          args.changes,
-          context.externalCallContext,
-        ),
-      );
+      try {
+        return resultFromToolResult(
+          request.toolName,
+          await clients.cart.applyChanges(
+            cart,
+            context.trustedCartChanges ?? args.changes,
+            context.externalCallContext,
+          ),
+        );
+      } catch {
+        return result(
+          request,
+          false,
+          undefined,
+          'Cart update failed',
+          'cart_update_failed',
+        );
+      }
     }
     case 'previewCart':
       if (!cart)

@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { digestCommerceAction } from '../../ordering/commerceDigest.js';
+import { isKfcGenUiAttachment } from '../../genui/kfcGenUi.js';
 import {
   canonicalJson,
   createPackStateEnvelope,
@@ -305,6 +306,58 @@ function presentationFromRecord(
   };
 }
 
+async function hasCommittedRecommendationPublication(
+  dependencies: RecommendationApplicationServiceDependencies,
+  record: RecommendationDecisionRecord,
+): Promise<boolean> {
+  const customerId = record.renderBinding.customerId;
+  if (!customerId) return false;
+  const turn = (
+    await dependencies.persistence.listTurns(record.request.sessionId)
+  ).find((candidate) => candidate.id === record.renderBinding.assistantTurnId);
+  const attachment = turn?.metadata?.genUi;
+  if (
+    !turn ||
+    turn.role !== 'assistant' ||
+    turn.externalUserId !== customerId ||
+    !isKfcGenUiAttachment(attachment) ||
+    attachment.widgetKind !== 'recommendationOffer' ||
+    attachment.id !== record.renderBinding.attachmentId ||
+    attachment.authority?.sessionId !== record.request.sessionId ||
+    attachment.authority.customerId !== customerId ||
+    attachment.authority.actionLifecycle !== 'one_shot' ||
+    attachment.data.recommendationId !== record.response.recommendationId ||
+    attachment.data.cartRevision !== record.renderBinding.cartRevision ||
+    attachment.data.actionDigest !== record.renderBinding.actionDigest ||
+    attachment.data.decisionDigest !== record.renderBinding.decisionDigest ||
+    attachment.data.versionBindingDigest !==
+      record.renderBinding.versionBindingDigest
+  ) {
+    return false;
+  }
+  const publishedActionIds = (
+    Array.isArray(attachment.data.offers) ? attachment.data.offers : []
+  ).flatMap((offer) =>
+    typeof offer === 'object' &&
+    offer !== null &&
+    typeof (offer as Record<string, unknown>).recommendationActionId ===
+      'string'
+      ? [(offer as Record<string, string>).recommendationActionId]
+      : [],
+  );
+  return (
+    canonicalJson(publishedActionIds) ===
+      canonicalJson(
+        record.renderBinding.renderedActions.map((action) => action.actionId),
+      ) &&
+    record.renderBinding.renderedActions.every((rendered) =>
+      attachment.actions.some(
+        (action) => action.id === `recommendation_select:${rendered.actionId}`,
+      ),
+    )
+  );
+}
+
 async function qualifyingStarterDecision(
   dependencies: RecommendationApplicationServiceDependencies,
   loaded: LoadedRecommendationPackState,
@@ -602,6 +655,11 @@ export function createRecommendationApplicationService(
         sessionId: record.request.sessionId,
         orderFlowId: record.request.orderFlowId,
       });
+      if (
+        !(await hasCommittedRecommendationPublication(dependencies, record))
+      ) {
+        return { status: 'render_binding_conflict' };
+      }
       if (existing) {
         return mapAppendResult(
           await dependencies.persistence.appendRecommendationEvent({

@@ -188,12 +188,12 @@ export function createRecommendationRouteHandlers(
         }
         throw error;
       }
-      return eventResponse(
-        await context.recommendations.application.recordOutcome(
-          parsedRecommendationId,
-          request,
-        ),
-      );
+      void parsedRecommendationId;
+      void request;
+      return recommendationJsonResponse({
+        status: 403,
+        body: { errorCode: 'untrusted_recommendation_outcome' },
+      });
     },
 
     async recommendationInspection(

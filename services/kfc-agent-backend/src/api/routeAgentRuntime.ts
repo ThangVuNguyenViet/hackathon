@@ -56,6 +56,7 @@ import {
 } from '../agent/verifiedState.js';
 import { kfcVietnamPack } from '../businessPacks/kfcVietnam/kfcVietnamPack.js';
 import type { AgentTurnOutput } from '../agent/agentTurn.js';
+import type { TrustedCustomerActionCommitReceipt } from '../agent/agentTurn.js';
 import type { ConfiguredAgentModelBinding } from '../config/agentModelProfile.js';
 import type { AgentTracer } from '../observability/agentTracing.js';
 import type { RecommendationApplicationService } from '../recommendations/application/service-types.js';
@@ -280,6 +281,9 @@ export function createRouteAgentRuntime(
     metadata: ConversationTurnMetadata;
     agentModelBinding?: ConfiguredAgentModelBinding;
     trustedCustomerAction?: TrustedCustomerActionEnvelope;
+    completeTrustedCustomerAction?: (
+      receipt: TrustedCustomerActionCommitReceipt,
+    ) => Promise<void>;
     observeRun?: (observation: CustomerRunObservation) => Promise<void>;
     runGuard?: {
       isCurrent(): Promise<boolean>;
@@ -398,6 +402,7 @@ export function createRouteAgentRuntime(
         externalMessageId: input.clientMessageId,
         metadata: trustedMetadata,
         trustedCustomerAction: input.trustedCustomerAction,
+        completeTrustedCustomerAction: input.completeTrustedCustomerAction,
         clients: await createFirstPartyKfcClients(
           input.sessionId,
           trustedMetadata,

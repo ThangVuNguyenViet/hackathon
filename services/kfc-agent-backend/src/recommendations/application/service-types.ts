@@ -1,4 +1,5 @@
 import type { PackRef, PackStateEnvelope } from '../../runtime/businessPack.js';
+import type { ConversationTurn } from '../../domain/types.js';
 import type {
   Placement,
   RecommendationDecisionRequest,
@@ -156,6 +157,7 @@ export interface RecommendationPackStateReader {
     sessionId: string,
     packRef: PackRef,
   ): Promise<PackStateEnvelope | undefined>;
+  listTurns(sessionId: string): Promise<ConversationTurn[]>;
 }
 
 export type RecommendationApplicationPersistence = RecommendationPersistence &
