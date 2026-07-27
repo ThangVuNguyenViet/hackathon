@@ -15,6 +15,7 @@
     "start": "node dist/src/index.js",
     "test": "vitest run",
     "test:live:scenarios": "set -a; [ ! -f ../../.env ] || . ../../.env; set +a; OPENAI_TOOL_PLANNER_MODEL=${OPENAI_TOOL_PLANNER_MODEL:-gpt-4.1-mini} RUN_LIVE_AI_SCENARIOS=1 vitest run test/scenarios/live-ai-scenario-replay.test.ts --maxConcurrency=1",
+    "test:live:protected-trace": "set -a; [ ! -f ../../.env ] || . ../../.env; set +a; tsx scripts/run-protected-trace-qualification.ts",
     "test:live:scenarios:high-risk": "set -a; [ ! -f ../../.env ] || . ../../.env; set +a; OPENAI_TOOL_PLANNER_MODEL=${OPENAI_TOOL_PLANNER_MODEL:-gpt-4.1-mini} KFC_LIVE_SCENARIO_MODE=text KFC_LIVE_HIGH_RISK_REPETITIONS=3 RUN_LIVE_AI_SCENARIOS=1 vitest run test/scenarios/live-ai-scenario-replay.test.ts --maxConcurrency=1",
     "test:live:small-talk-router": "set -a; [ ! -f ../../.env ] || . ../../.env; [ ! -f ../../../../.env ] || . ../../../../.env; set +a; RUN_LIVE_SMALL_TALK_ROUTER=1 vitest run test/llm/live-small-talk-router.test.ts",
     "test:live:direct-catalog": "set -a; [ ! -f ../../.env ] || . ../../.env; [ ! -f ../../../../.env ] || . ../../../../.env; set +a; OPENAI_TOOL_PLANNER_MODEL=${OPENAI_TOOL_PLANNER_MODEL:-gpt-4.1-mini} RUN_LIVE_AI_SCENARIOS=1 vitest run test/scenarios/live-ai-direct-catalog.test.ts",

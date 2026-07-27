@@ -154,9 +154,13 @@ export async function tracePolicyDecision(
   },
 ): Promise<void> {
   if (!turnTrace) return;
+  const approvalRelevant =
+    input.confirmationRequired === true ||
+    input.proposedToolNames.includes('placeOrder');
   const span = await turnTrace.startSpan({
-    name: 'policy_gate',
+    name: approvalRelevant ? 'approval_policy' : 'graph_policy',
     runType: 'chain',
+    category: approvalRelevant ? 'approval' : 'graph_node',
     inputs: { proposedToolNames: input.proposedToolNames },
   });
   await span.end({
@@ -177,8 +181,9 @@ export async function routeSmallTalk(
     hasStructuredAction: Boolean(input.metadata?.customerCommand),
   };
   const spanPromise = turnTrace.startSpan({
-    name: 'small_talk_router',
+    name: 'agent_model:route',
     runType: 'llm',
+    category: 'model',
     inputs: { routerInput },
     metadata: {
       component: 'SmallTalkRouter',

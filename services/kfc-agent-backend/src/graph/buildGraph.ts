@@ -6,6 +6,7 @@ import {
 import {
   createNoopAgentTracer,
   createSafeAgentTracer,
+  type AgentTraceApplicability,
   type AgentTraceSpan
 } from '../observability/agentTracing.js';
 import type { ConversationStore } from '../persistence/memoryStore.js';
@@ -170,6 +171,30 @@ function agentTurnGraphFor(checkpointer: BaseCheckpointSaver) {
   return graph;
 }
 
+function isTraceRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function traceApplicability(input: AgentTurnInput): AgentTraceApplicability {
+  const configured = input.metadata?.rawEvent?.traceApplicability;
+  const requirement = (value: unknown) =>
+    value === 'required' || value === 'optional' ? value : 'forbidden';
+  if (!isTraceRecord(configured)) {
+    return {
+      tool: 'forbidden',
+      approval: 'forbidden',
+      verifiedState: 'forbidden',
+      genui: 'forbidden',
+    };
+  }
+  return {
+    tool: requirement(configured.tool),
+    approval: requirement(configured.approval),
+    verifiedState: requirement(configured.verifiedState),
+    genui: requirement(configured.genui),
+  };
+}
+
 function checkpointRunId(input: AgentTurnInput): string {
   if (input.confirmationRequestId) return `confirmation:${input.confirmationRequestId}`;
   if (input.externalMessageId?.trim()) return input.externalMessageId;
@@ -203,6 +228,8 @@ export async function runAgentTurn(input: AgentTurnInput): Promise<AgentTurnOutp
   });
   const turnTrace = await tracer.startTurn({
     name: 'agent_turn',
+    category: 'agent_loop',
+    applicability: traceApplicability(input),
     inputs: {
       sessionId: input.sessionId,
       customerId: input.customerId,

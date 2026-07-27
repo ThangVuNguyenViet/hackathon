@@ -1,8 +1,28 @@
 export type AgentTraceRunType = 'chain' | 'llm' | 'tool';
+export type AgentTraceCategory =
+  | 'agent_loop'
+  | 'graph_node'
+  | 'model'
+  | 'tool'
+  | 'approval'
+  | 'retry'
+  | 'verified_state'
+  | 'genui_projection';
+
+export type AgentTraceRequirement = 'required' | 'optional' | 'forbidden';
+
+export interface AgentTraceApplicability {
+  tool: AgentTraceRequirement;
+  approval: AgentTraceRequirement;
+  verifiedState: AgentTraceRequirement;
+  genui: AgentTraceRequirement;
+}
 
 export interface AgentTraceSpanInput {
   name: string;
   runType: AgentTraceRunType;
+  category?: AgentTraceCategory;
+  applicability?: AgentTraceApplicability;
   inputs: Record<string, unknown>;
   metadata?: Record<string, unknown>;
   tags?: string[];

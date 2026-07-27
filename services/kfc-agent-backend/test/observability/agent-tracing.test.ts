@@ -65,15 +65,22 @@ class ThrowingAgentTracer implements AgentTracer {
 
 class FakeLangSmithRun implements LangSmithRunLike {
   readonly children: FakeLangSmithRun[] = [];
+  readonly id: string;
+  readonly trace_id: string;
+  readonly parent_run_id?: string;
   posted = false;
   patched = false;
   outputs?: Record<string, unknown>;
   error?: string;
 
-  constructor(readonly config: LangSmithRunConfig) {}
+  constructor(readonly config: LangSmithRunConfig, parent?: FakeLangSmithRun) {
+    this.id = crypto.randomUUID();
+    this.trace_id = parent?.trace_id ?? this.id;
+    this.parent_run_id = parent?.id;
+  }
 
   createChild(config: LangSmithRunConfig): LangSmithRunLike {
-    const child = new FakeLangSmithRun(config);
+    const child = new FakeLangSmithRun(config, this);
     this.children.push(child);
     return child;
   }
@@ -97,7 +104,7 @@ describe('agent tracing', () => {
     const capture = new CapturingAgentTracer();
     const turn = await capture.startTurn({ name: 'agent_turn', inputs: { sessionId: 'demo' } });
     const planner = await turn.startSpan({
-      name: 'planner_iteration',
+      name: 'agent_model',
       runType: 'llm',
       inputs: { iteration: 1 },
     });
@@ -107,8 +114,8 @@ describe('agent tracing', () => {
 
     expect(capture.events.map((event) => `${event.phase}:${event.name}`)).toEqual([
       'start:agent_turn',
-      'start:planner_iteration',
-      'end:planner_iteration',
+      'start:agent_model',
+      'end:agent_model',
       'end:agent_turn',
     ]);
   });
@@ -159,7 +166,7 @@ describe('agent tracing', () => {
       tags: ['agentic-proof'],
     });
     const planner = await turn.startSpan({
-      name: 'planner_iteration',
+      name: 'agent_model',
       runType: 'llm',
       inputs: { iteration: 1 },
     });
@@ -183,9 +190,12 @@ describe('agent tracing', () => {
       posted: true,
       patched: true,
       outputs: { intent: 'ordering' },
-      config: { name: 'planner_iteration', run_type: 'llm' },
+      config: { name: 'agent_model', run_type: 'llm' },
     });
-    expect(root).toMatchObject({ patched: true, outputs: { replyIntent: 'general_reply' } });
+    expect(root).toMatchObject({
+      patched: true,
+      outputs: { replyIntent: 'general_reply' },
+    });
     expect(flushCalls).toBe(1);
     expect(process.env.LANGSMITH_API_KEY).toBe(beforeApiKey);
     expect(process.env.LANGSMITH_PROJECT).toBe(beforeProject);

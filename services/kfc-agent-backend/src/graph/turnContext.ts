@@ -41,6 +41,7 @@ export async function loadAgentTurnContext(
   const contextSpan = await turnTrace.startSpan({
     name: 'context_load',
     runType: 'chain',
+    category: 'graph_node',
     inputs: { sessionRef: traceSessionReference(input.sessionId) },
   });
   let activeContextPolicy = contextPolicyFromMetadata(input.metadata);

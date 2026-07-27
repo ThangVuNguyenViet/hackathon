@@ -1,360 +1,658 @@
-export type PublishedAgentTraceRunType = 'chain' | 'llm' | 'tool';
-export type PublishedAgentTraceCompletion =
-  | 'running'
-  | 'succeeded'
-  | 'failed';
+import { writeFile } from 'node:fs/promises';
+import {
+  protectedTraceDatasetInventoryDigest,
+  type ProtectedTraceQualificationPolicy,
+} from '../evaluation/protectedTraceQualificationPolicy.js';
+import type {
+  AgentTraceApplicability,
+  AgentTraceCategory,
+  AgentTraceRequirement,
+  AgentTraceRunType,
+} from './agentTracing.js';
+import {
+  exactTraceEvidenceMatches,
+  isTraceRecord,
+  safeBoundedTraceInteger,
+} from './langsmithTracePrivacy.js';
 
-export interface RequiredAgentTraceRunExpectation {
+export interface RequiredAgentTraceContext {
+  executionId: string;
+  gitSha: string;
+  runtime: {
+    runtimeId: string;
+    provider: 'openai' | 'google';
+    model: string;
+    profile: string;
+  };
+  policy: ProtectedTraceQualificationPolicy;
+  remoteDatasetId: string;
+  mode: 'text' | 'genui';
+  repetition: number;
+}
+
+export interface CapturedAgentTraceRun {
   id: string;
   traceId: string;
   parentRunId?: string;
   name: string;
-  runType: PublishedAgentTraceRunType;
-  category: string;
-  metadataDigest: string;
-  inputDigest: string;
-  outputDigest: string;
-  completion: Exclude<PublishedAgentTraceCompletion, 'running'>;
+  runType: AgentTraceRunType;
+  category: AgentTraceCategory;
+  metadata: Record<string, unknown>;
+  inputs: Record<string, unknown>;
+  applicability?: AgentTraceApplicability;
+  completion: {
+    status: 'succeeded' | 'failed';
+    outputs: Record<string, unknown>;
+    error: string | null;
+  };
 }
 
 export interface PublishedAgentTraceRun {
   id: string;
-  traceId: string;
-  parentRunId?: string;
+  trace_id?: string;
+  parent_run_id?: string;
   name: string;
-  runType: PublishedAgentTraceRunType;
-  category: string;
-  metadataDigest: string;
-  inputDigest: string;
-  outputDigest: string;
-  completion: PublishedAgentTraceCompletion;
-  startTimeMs: number;
-  endTimeMs: number;
-  usage?: {
-    inputTokens: number;
-    outputTokens: number;
-    totalTokens: number;
-  };
+  run_type: string;
+  start_time?: number | string;
+  end_time?: number | string;
+  extra?: Record<string, unknown>;
+  inputs: Record<string, unknown>;
+  outputs?: Record<string, unknown>;
+  error?: string;
 }
 
 export interface RequiredAgentTracePublicationClient {
-  listRuns(query: {
+  readDataset(input: { datasetId: string }): Promise<{ id: string; name: string }>;
+  listRuns(input: {
     projectName: string;
-    runIds: readonly string[];
-  }): Promise<readonly PublishedAgentTraceRun[]>;
+    id: string[];
+    limit: number;
+  }): AsyncIterable<PublishedAgentTraceRun>;
 }
 
-export interface RequiredAgentTracePublicationVerification {
-  verified: true;
-  flushVerified: true;
-  readbackVerified: true;
-  queryAttempts: number;
-  runIds: string[];
-  traceIds: string[];
-  latency: {
-    totalMs: number;
-    modelMs: number;
-    toolMs: number;
-  };
-  usage:
-    | {
-        status: 'reported';
-        inputTokens: number;
-        outputTokens: number;
-        totalTokens: number;
-      }
-    | { status: 'provider_did_not_report' };
-  cost: { status: 'provider_did_not_report' };
-}
-
-interface RequiredAgentTracePublicationInput {
+export interface VerifiedAgentTraceReceiptPayload {
+  schemaVersion: 1;
+  artifactKind: 'kfc-verified-agent-trace-receipt';
   target: {
-    apiUrl: string;
+    apiUrl: 'https://apac.api.smith.langchain.com';
     projectName: string;
   };
-  flushSucceeded: boolean;
-  mode: 'text' | 'genui';
-  expectedRuns: readonly RequiredAgentTraceRunExpectation[];
-  client: RequiredAgentTracePublicationClient;
+  context: RequiredAgentTraceContext;
+  publication: {
+    queryAttempts: number;
+    flushVerified: true;
+    datasetReadbackVerified: true;
+    readbackVerified: true;
+  };
+  runs: CapturedAgentTraceRun[];
+  evidence: {
+    latency: { totalMs: number; modelMs: number; toolMs: number };
+    providerEconomics: {
+      usage:
+        | {
+            status: 'reported';
+            inputTokens: number;
+            outputTokens: number;
+            totalTokens: number;
+          }
+        | { status: 'provider_did_not_report' };
+      cost:
+        | { status: 'reported'; currency: 'USD'; amountUsd: number }
+        | { status: 'provider_did_not_report' };
+    };
+  };
 }
 
-const APAC_LANGSMITH_API_URL =
-  'https://apac.api.smith.langchain.com';
-const DIGEST_PATTERN = /^[0-9a-f]{64}$/u;
-const UUID_PATTERN =
-  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/u;
-
-function fail(code: string): never {
-  throw new Error(code);
+export interface VerifiedAgentTraceReceipt {
+  readonly payload: VerifiedAgentTraceReceiptPayload;
 }
 
-function isNonnegativeFinite(value: number): boolean {
-  return Number.isFinite(value) && value >= 0;
-}
-
-function validExpectation(run: RequiredAgentTraceRunExpectation): boolean {
-  return (
-    UUID_PATTERN.test(run.id) &&
-    UUID_PATTERN.test(run.traceId) &&
-    (run.parentRunId === undefined || UUID_PATTERN.test(run.parentRunId)) &&
-    run.name.length > 0 &&
-    run.category.length > 0 &&
-    DIGEST_PATTERN.test(run.metadataDigest) &&
-    DIGEST_PATTERN.test(run.inputDigest) &&
-    DIGEST_PATTERN.test(run.outputDigest)
-  );
-}
-
-const BASE_REQUIRED_CATEGORIES = [
+const issuedReceipts = new WeakSet<object>();
+const APAC_ENDPOINT = 'https://apac.api.smith.langchain.com' as const;
+const LEGACY_SPAN_NAMES = new Set([
+  'small_talk_router',
+  'planner_iteration',
+  'response_compose',
+]);
+const BASE_REQUIRED_CATEGORIES: readonly AgentTraceCategory[] = [
   'agent_loop',
   'graph_node',
   'model',
-  'tool',
-  'approval',
-  'verified_state',
-] as const;
-const ALLOWED_SPAN_CATEGORIES = new Set([
-  ...BASE_REQUIRED_CATEGORIES,
-  'retry',
-  'genui_projection',
-]);
+];
+const MAX_DURATION_MS = 7 * 24 * 60 * 60 * 1_000;
 
-function assertExpectedCategories(
-  mode: RequiredAgentTracePublicationInput['mode'],
-  runs: readonly RequiredAgentTraceRunExpectation[],
-): void {
-  const required =
-    mode === 'genui'
-      ? [...BASE_REQUIRED_CATEGORIES, 'genui_projection']
-      : BASE_REQUIRED_CATEGORIES;
-  const roots = runs.filter(({ parentRunId }) => parentRunId === undefined);
+export function isVerifiedAgentTraceReceipt(
+  value: unknown,
+): value is VerifiedAgentTraceReceipt {
+  return typeof value === 'object' && value !== null && issuedReceipts.has(value);
+}
+
+export function verifiedAgentTraceReceiptPayload(
+  receipt: VerifiedAgentTraceReceipt,
+): VerifiedAgentTraceReceiptPayload {
+  if (!isVerifiedAgentTraceReceipt(receipt)) {
+    throw new Error('agent_required_trace_receipt_unverified');
+  }
+  return receipt.payload;
+}
+
+function timestampMs(value: number | string | undefined): number | undefined {
+  if (typeof value === 'number' && Number.isFinite(value) && value >= 0) return value;
+  if (typeof value !== 'string') return undefined;
+  const parsed = Date.parse(value);
+  return Number.isFinite(parsed) && parsed >= 0 ? parsed : undefined;
+}
+
+function durationMs(run: PublishedAgentTraceRun): number | undefined {
+  const started = timestampMs(run.start_time);
+  const ended = timestampMs(run.end_time);
+  if (started === undefined || ended === undefined) return undefined;
+  const duration = ended - started;
+  return Number.isFinite(duration) && duration >= 0 && duration <= MAX_DURATION_MS
+    ? duration
+    : undefined;
+}
+
+function metadataOf(run: PublishedAgentTraceRun): Record<string, unknown> | undefined {
+  return isTraceRecord(run.extra) && isTraceRecord(run.extra.metadata)
+    ? run.extra.metadata
+    : undefined;
+}
+
+function exactRunMatches(
+  run: PublishedAgentTraceRun,
+  expected: CapturedAgentTraceRun,
+): boolean {
+  return run.name === expected.name &&
+    run.run_type === expected.runType &&
+    run.trace_id === expected.traceId &&
+    (run.parent_run_id ?? undefined) === expected.parentRunId &&
+    exactTraceEvidenceMatches(metadataOf(run), expected.metadata) &&
+    exactTraceEvidenceMatches(run.inputs, expected.inputs) &&
+    exactTraceEvidenceMatches(run.outputs ?? {}, expected.completion.outputs) &&
+    (run.error ?? null) === expected.completion.error &&
+    durationMs(run) !== undefined;
+}
+
+function assertCapturedSemantics(runs: readonly CapturedAgentTraceRun[]): void {
+  const byId = new Map(runs.map((run) => [run.id, run]));
+  if (byId.size !== runs.length || runs.some(({ name }) => LEGACY_SPAN_NAMES.has(name))) {
+    throw new Error('agent_required_trace_semantics_invalid');
+  }
   if (
-    roots.length === 0 ||
     runs.some(
-      ({ category, runType }) =>
-        !ALLOWED_SPAN_CATEGORIES.has(category) ||
+      ({ category, runType, completion }) =>
+        completion.status !== 'succeeded' ||
         (category === 'model' && runType !== 'llm') ||
         (category === 'tool' && runType !== 'tool') ||
-        (mode === 'text' && category === 'genui_projection'),
-    ) ||
-    roots.some(({ traceId }) => {
-      const observed = new Set(
-        runs
-          .filter((run) => run.traceId === traceId)
-          .map(({ category }) => category),
-      );
-      return required.some((category) => !observed.has(category));
-    })
+        (category !== 'model' && category !== 'tool' && runType !== 'chain'),
+    )
   ) {
-    fail('agent_required_trace_categories_invalid');
+    throw new Error('agent_required_trace_semantics_invalid');
+  }
+  const roots = runs.filter(({ parentRunId }) => parentRunId === undefined);
+  for (const root of roots) {
+    if (root.id !== root.traceId || root.category !== 'agent_loop' || !root.applicability) {
+      throw new Error('agent_required_trace_semantics_invalid');
+    }
+    const categories = new Set(
+      runs.filter(({ traceId }) => traceId === root.traceId).map(({ category }) => category),
+    );
+    const required = [
+      ...BASE_REQUIRED_CATEGORIES,
+      ...(root.applicability.tool === 'required' ? ['tool' as const] : []),
+      ...(root.applicability.approval === 'required' ? ['approval' as const] : []),
+      ...(root.applicability.verifiedState === 'required'
+        ? ['verified_state' as const]
+        : []),
+      ...(root.applicability.genui === 'required'
+        ? ['genui_projection' as const]
+        : []),
+    ];
+    if (
+      required.some((category) => !categories.has(category)) ||
+      (root.applicability.tool === 'forbidden' && categories.has('tool')) ||
+      (root.applicability.approval === 'forbidden' && categories.has('approval')) ||
+      (root.applicability.verifiedState === 'forbidden' &&
+        categories.has('verified_state')) ||
+      (root.applicability.genui === 'forbidden' &&
+        categories.has('genui_projection'))
+    ) {
+      throw new Error('agent_required_trace_categories_invalid');
+    }
+  }
+  if (roots.length === 0) throw new Error('agent_required_trace_semantics_invalid');
+
+  const resolvedRoot = new Map<string, string>();
+  const resolveRoot = (run: CapturedAgentTraceRun, path: Set<string>): string => {
+    const memoized = resolvedRoot.get(run.id);
+    if (memoized) return memoized;
+    if (path.has(run.id)) throw new Error('agent_required_trace_hierarchy_invalid');
+    if (run.parentRunId === undefined) {
+      resolvedRoot.set(run.id, run.id);
+      return run.id;
+    }
+    const parent = byId.get(run.parentRunId);
+    if (!parent || parent.traceId !== run.traceId) {
+      throw new Error('agent_required_trace_hierarchy_invalid');
+    }
+    const rootId = resolveRoot(parent, new Set(path).add(run.id));
+    resolvedRoot.set(run.id, rootId);
+    return rootId;
+  };
+  for (const run of runs) {
+    if (resolveRoot(run, new Set()) !== run.traceId) {
+      throw new Error('agent_required_trace_hierarchy_invalid');
+    }
   }
 }
 
-function sameRun(
-  expected: RequiredAgentTraceRunExpectation,
-  published: PublishedAgentTraceRun,
-): boolean {
-  return (
-    published.id === expected.id &&
-    published.traceId === expected.traceId &&
-    published.parentRunId === expected.parentRunId &&
-    published.name === expected.name &&
-    published.runType === expected.runType &&
-    published.category === expected.category &&
-    published.metadataDigest === expected.metadataDigest &&
-    published.inputDigest === expected.inputDigest &&
-    published.outputDigest === expected.outputDigest &&
-    published.completion === expected.completion &&
-    isNonnegativeFinite(published.startTimeMs) &&
-    isNonnegativeFinite(published.endTimeMs) &&
-    published.endTimeMs >= published.startTimeMs
-  );
+function usageOf(outputs: Record<string, unknown>) {
+  if (!isTraceRecord(outputs.usageMetadata)) return undefined;
+  const inputTokens = safeBoundedTraceInteger(outputs.usageMetadata.inputTokens, 10_000_000);
+  const outputTokens = safeBoundedTraceInteger(outputs.usageMetadata.outputTokens, 10_000_000);
+  const totalTokens = safeBoundedTraceInteger(outputs.usageMetadata.totalTokens, 20_000_000);
+  return inputTokens !== undefined &&
+    outputTokens !== undefined &&
+    totalTokens === inputTokens + outputTokens &&
+    totalTokens > 0
+    ? { inputTokens, outputTokens, totalTokens }
+    : undefined;
 }
 
-function duration(run: PublishedAgentTraceRun): number {
-  return run.endTimeMs - run.startTimeMs;
+function costOf(outputs: Record<string, unknown>): number | undefined {
+  if (!isTraceRecord(outputs.costMetadata)) return undefined;
+  const amount = outputs.costMetadata.amountUsd;
+  return outputs.costMetadata.currency === 'USD' &&
+    typeof amount === 'number' &&
+    Number.isFinite(amount) &&
+    amount >= 0
+    ? amount
+    : undefined;
 }
 
-function aggregateUsage(
-  runs: readonly PublishedAgentTraceRun[],
-): RequiredAgentTracePublicationVerification['usage'] {
-  const modelRuns = runs.filter(({ runType }) => runType === 'llm');
-  const runsWithUsage = modelRuns.filter(({ usage }) => usage !== undefined);
-  if (runsWithUsage.length === 0) {
-    return { status: 'provider_did_not_report' };
-  }
-  if (runsWithUsage.length !== modelRuns.length) {
-    fail('agent_required_trace_publication_invalid');
-  }
+interface TimeInterval {
+  start: number;
+  end: number;
+}
 
+function intervalOf(run: PublishedAgentTraceRun): TimeInterval | undefined {
+  const start = timestampMs(run.start_time);
+  const end = timestampMs(run.end_time);
+  return start !== undefined && end !== undefined && end >= start
+    ? { start, end }
+    : undefined;
+}
+
+function coveredDuration(intervals: readonly TimeInterval[]): number | undefined {
+  const sorted = [...intervals].sort((left, right) => left.start - right.start);
+  let total = 0;
+  let current: TimeInterval | undefined;
+  for (const interval of sorted) {
+    if (!current) {
+      current = { ...interval };
+    } else if (interval.start <= current.end) {
+      current.end = Math.max(current.end, interval.end);
+    } else {
+      total += current.end - current.start;
+      current = { ...interval };
+    }
+  }
+  if (current) total += current.end - current.start;
+  return Number.isFinite(total) && total >= 0 && total <= MAX_DURATION_MS
+    ? total
+    : undefined;
+}
+
+async function queryOnce(input: {
+  client: RequiredAgentTracePublicationClient;
+  projectName: string;
+  runs: readonly CapturedAgentTraceRun[];
+}): Promise<VerifiedAgentTraceReceiptPayload['evidence'] | undefined> {
+  const expectedById = new Map(input.runs.map((run) => [run.id, run]));
+  const seen = new Set<string>();
+  const rootIntervals: TimeInterval[] = [];
+  const modelIntervals: TimeInterval[] = [];
+  const toolIntervals: TimeInterval[] = [];
   let inputTokens = 0;
   let outputTokens = 0;
-  let totalTokens = 0;
-  for (const run of runsWithUsage) {
-    const usage = run.usage;
-    if (
-      usage === undefined ||
-      !Number.isSafeInteger(usage.inputTokens) ||
-      !Number.isSafeInteger(usage.outputTokens) ||
-      !Number.isSafeInteger(usage.totalTokens) ||
-      usage.inputTokens < 0 ||
-      usage.outputTokens < 0 ||
-      usage.totalTokens !== usage.inputTokens + usage.outputTokens
-    ) {
-      fail('agent_required_trace_publication_invalid');
-    }
-    inputTokens += usage.inputTokens;
-    outputTokens += usage.outputTokens;
-    totalTokens += usage.totalTokens;
-    if (
-      !Number.isSafeInteger(inputTokens) ||
-      !Number.isSafeInteger(outputTokens) ||
-      !Number.isSafeInteger(totalTokens)
-    ) {
-      fail('agent_required_trace_publication_invalid');
+  let usageReports = 0;
+  let amountUsd = 0;
+  let costReports = 0;
+  const ids = [...expectedById.keys()];
+  for (let offset = 0; offset < ids.length; offset += 100) {
+    const chunk = ids.slice(offset, offset + 100);
+    for await (const run of input.client.listRuns({
+      projectName: input.projectName,
+      id: chunk,
+      limit: chunk.length,
+    })) {
+      const expected = expectedById.get(run.id);
+      if (!expected || seen.has(run.id) || !exactRunMatches(run, expected)) return undefined;
+      const interval = intervalOf(run);
+      if (!interval || durationMs(run) === undefined) return undefined;
+      if (expected.parentRunId === undefined) rootIntervals.push(interval);
+      if (expected.category === 'model') modelIntervals.push(interval);
+      if (expected.category === 'tool') toolIntervals.push(interval);
+      const usage = usageOf(expected.completion.outputs);
+      if (usage) {
+        inputTokens += usage.inputTokens;
+        outputTokens += usage.outputTokens;
+        usageReports += 1;
+      }
+      const cost = costOf(expected.completion.outputs);
+      if (cost !== undefined) {
+        amountUsd += cost;
+        costReports += 1;
+      }
+      seen.add(run.id);
     }
   }
-  if (totalTokens === 0) {
-    fail('agent_required_trace_publication_invalid');
-  }
+  const totalMs = coveredDuration(rootIntervals);
+  const modelMs = coveredDuration(modelIntervals);
+  const toolMs = coveredDuration(toolIntervals);
+  const modelRunCount = input.runs.filter(({ category }) => category === 'model').length;
+  if (
+    seen.size !== expectedById.size ||
+    totalMs === undefined ||
+    modelMs === undefined ||
+    toolMs === undefined ||
+    !Number.isSafeInteger(inputTokens) ||
+    !Number.isSafeInteger(outputTokens) ||
+    !Number.isFinite(amountUsd) ||
+    (usageReports !== 0 && usageReports !== modelRunCount) ||
+    (costReports !== 0 && costReports !== modelRunCount)
+  ) return undefined;
   return {
-    status: 'reported',
-    inputTokens,
-    outputTokens,
-    totalTokens,
+    latency: { totalMs, modelMs, toolMs },
+    providerEconomics: {
+      usage: usageReports === 0
+        ? { status: 'provider_did_not_report' }
+        : {
+            status: 'reported',
+            inputTokens,
+            outputTokens,
+            totalTokens: inputTokens + outputTokens,
+          },
+      cost: costReports === 0
+        ? { status: 'provider_did_not_report' }
+        : { status: 'reported', currency: 'USD', amountUsd },
+    },
   };
 }
 
-function assertPublishedHierarchy(
-  runs: readonly PublishedAgentTraceRun[],
-  runsById: ReadonlyMap<string, PublishedAgentTraceRun>,
-): PublishedAgentTraceRun[] {
-  const roots = runs.filter(({ parentRunId }) => parentRunId === undefined);
-  const rootsByTrace = new Map<string, PublishedAgentTraceRun>();
-  for (const root of roots) {
-    if (root.id !== root.traceId || rootsByTrace.has(root.traceId)) {
-      fail('agent_required_trace_publication_invalid');
-    }
-    rootsByTrace.set(root.traceId, root);
-  }
-  if (roots.length === 0) {
-    fail('agent_required_trace_publication_invalid');
-  }
-
-  for (const run of runs) {
-    const root = rootsByTrace.get(run.traceId);
-    if (root === undefined) {
-      fail('agent_required_trace_publication_invalid');
-    }
-    const visited = new Set<string>();
-    let current = run;
-    while (current.parentRunId !== undefined) {
-      if (visited.has(current.id)) {
-        fail('agent_required_trace_publication_invalid');
-      }
-      visited.add(current.id);
-      const parent = runsById.get(current.parentRunId);
-      if (parent === undefined || parent.traceId !== run.traceId) {
-        fail('agent_required_trace_publication_invalid');
-      }
-      current = parent;
-    }
-    if (current.id !== root.id) {
-      fail('agent_required_trace_publication_invalid');
-    }
-  }
-  return roots;
-}
-
-const MAX_RECEIPT_DURATION_MS = 7 * 24 * 60 * 60 * 1_000;
-
-function aggregateLatency(
-  roots: readonly PublishedAgentTraceRun[],
-  runs: readonly PublishedAgentTraceRun[],
-): RequiredAgentTracePublicationVerification['latency'] {
-  const latency = {
-    totalMs: roots.reduce((total, run) => total + duration(run), 0),
-    modelMs: runs
-      .filter(({ runType }) => runType === 'llm')
-      .reduce((total, run) => total + duration(run), 0),
-    toolMs: runs
-      .filter(({ runType }) => runType === 'tool')
-      .reduce((total, run) => total + duration(run), 0),
-  };
-  if (
-    Object.values(latency).some(
-      (value) =>
-        !Number.isFinite(value) ||
-        value < 0 ||
-        value > MAX_RECEIPT_DURATION_MS,
-    ) ||
-    latency.modelMs + latency.toolMs > latency.totalMs
-  ) {
-    fail('agent_required_trace_publication_invalid');
-  }
-  return latency;
-}
-
-export async function verifyRequiredAgentTracePublication(
-  input: RequiredAgentTracePublicationInput,
-): Promise<RequiredAgentTracePublicationVerification> {
-  if (
-    input.target.apiUrl !== APAC_LANGSMITH_API_URL ||
-    input.target.projectName.length === 0
-  ) {
-    fail('agent_required_trace_target_invalid');
-  }
-  if (!input.flushSucceeded) {
-    fail('agent_required_trace_flush_unverified');
-  }
-  if (
-    input.expectedRuns.length === 0 ||
-    input.expectedRuns.some((run) => !validExpectation(run))
-  ) {
-    fail('agent_required_trace_publication_invalid');
-  }
-
-  assertExpectedCategories(input.mode, input.expectedRuns);
-  const runIds = input.expectedRuns.map(({ id }) => id);
-  if (new Set(runIds).size !== runIds.length) {
-    fail('agent_required_trace_publication_invalid');
-  }
-
-  const publishedRuns = await input.client.listRuns({
-    projectName: input.target.projectName,
-    runIds,
+export async function writeVerifiedAgentTraceReceipt(
+  path: string,
+  receipt: VerifiedAgentTraceReceipt,
+): Promise<void> {
+  const payload = verifiedAgentTraceReceiptPayload(receipt);
+  await writeFile(path, `${JSON.stringify(payload, null, 2)}\n`, {
+    encoding: 'utf8',
+    flag: 'wx',
   });
-  const publishedIds = publishedRuns.map(({ id }) => id);
-  if (
-    publishedRuns.length !== input.expectedRuns.length ||
-    new Set(publishedIds).size !== publishedIds.length ||
-    publishedIds.some((id) => !runIds.includes(id))
-  ) {
-    fail('agent_required_trace_publication_invalid');
-  }
+}
 
-  const publishedById = new Map(
-    publishedRuns.map((run) => [run.id, run]),
+function isRequirement(value: unknown): value is AgentTraceRequirement {
+  return value === 'required' || value === 'optional' || value === 'forbidden';
+}
+
+function isRunType(value: unknown): value is AgentTraceRunType {
+  return typeof value === 'string' && (
+    value === 'chain' || value === 'llm' || value === 'tool'
   );
-  for (const expected of input.expectedRuns) {
-    const published = publishedById.get(expected.id);
-    if (published === undefined || !sameRun(expected, published)) {
-      fail('agent_required_trace_publication_invalid');
-    }
+}
+
+function isCategory(value: unknown): value is AgentTraceCategory {
+  return value === 'agent_loop' ||
+    value === 'graph_node' ||
+    value === 'model' ||
+    value === 'tool' ||
+    value === 'approval' ||
+    value === 'retry' ||
+    value === 'verified_state' ||
+    value === 'genui_projection';
+}
+
+function parsedCapturedRun(value: unknown): CapturedAgentTraceRun | undefined {
+  if (
+    !isTraceRecord(value) ||
+    typeof value.id !== 'string' ||
+    typeof value.traceId !== 'string' ||
+    (value.parentRunId !== undefined && typeof value.parentRunId !== 'string') ||
+    typeof value.name !== 'string' ||
+    !isRunType(value.runType) ||
+    !isCategory(value.category) ||
+    !isTraceRecord(value.metadata) ||
+    !isTraceRecord(value.inputs) ||
+    !isTraceRecord(value.completion) ||
+    (value.completion.status !== 'succeeded' && value.completion.status !== 'failed') ||
+    !isTraceRecord(value.completion.outputs) ||
+    (value.completion.error !== null && typeof value.completion.error !== 'string')
+  ) return undefined;
+  const applicability = value.applicability;
+  if (
+    applicability !== undefined &&
+    (!isTraceRecord(applicability) ||
+      !isRequirement(applicability.tool) ||
+      !isRequirement(applicability.approval) ||
+      !isRequirement(applicability.verifiedState) ||
+      !isRequirement(applicability.genui))
+  ) return undefined;
+  const runType = value.runType;
+  const category = value.category;
+  if (!isRunType(runType) || !isCategory(category)) return undefined;
+  return {
+    id: value.id,
+    traceId: value.traceId,
+    ...(typeof value.parentRunId === 'string' ? { parentRunId: value.parentRunId } : {}),
+    name: value.name,
+    runType,
+    category,
+    metadata: value.metadata,
+    inputs: value.inputs,
+    ...(applicability && isTraceRecord(applicability)
+      ? {
+          applicability: {
+            tool: isRequirement(applicability.tool) ? applicability.tool : 'forbidden',
+            approval: isRequirement(applicability.approval)
+              ? applicability.approval
+              : 'forbidden',
+            verifiedState: isRequirement(applicability.verifiedState)
+              ? applicability.verifiedState
+              : 'forbidden',
+            genui: isRequirement(applicability.genui) ? applicability.genui : 'forbidden',
+          },
+        }
+      : {}),
+    completion: {
+      status: value.completion.status,
+      outputs: value.completion.outputs,
+      error: value.completion.error,
+    },
+  };
+}
+
+function parsedReceiptPayload(value: unknown): {
+  apiUrl: string;
+  projectName: string;
+  context: RequiredAgentTraceContext;
+  runs: CapturedAgentTraceRun[];
+} | undefined {
+  if (
+    !isTraceRecord(value) ||
+    value.schemaVersion !== 1 ||
+    value.artifactKind !== 'kfc-verified-agent-trace-receipt' ||
+    !isTraceRecord(value.target) ||
+    typeof value.target.apiUrl !== 'string' ||
+    typeof value.target.projectName !== 'string' ||
+    !isTraceRecord(value.context) ||
+    !isTraceRecord(value.context.runtime) ||
+    !isTraceRecord(value.context.policy) ||
+    !isTraceRecord(value.context.policy.dataset) ||
+    !Array.isArray(value.context.policy.modes) ||
+    !Array.isArray(value.runs)
+  ) return undefined;
+  const runs = value.runs.map(parsedCapturedRun);
+  const modes = value.context.policy.modes.filter(
+    (mode): mode is 'text' | 'genui' => mode === 'text' || mode === 'genui',
+  );
+  if (
+    runs.some((run) => !run) ||
+    modes.length !== value.context.policy.modes.length ||
+    (value.context.runtime.provider !== 'openai' && value.context.runtime.provider !== 'google') ||
+    typeof value.context.runtime.runtimeId !== 'string' ||
+    typeof value.context.runtime.model !== 'string' ||
+    typeof value.context.runtime.profile !== 'string' ||
+    typeof value.context.executionId !== 'string' ||
+    typeof value.context.gitSha !== 'string' ||
+    typeof value.context.remoteDatasetId !== 'string' ||
+    (value.context.mode !== 'text' && value.context.mode !== 'genui') ||
+    typeof value.context.repetition !== 'number' ||
+    typeof value.context.policy.policyId !== 'string' ||
+    typeof value.context.policy.dataset.name !== 'string' ||
+    typeof value.context.policy.dataset.schemaVersion !== 'string' ||
+    typeof value.context.policy.dataset.inventoryVersion !== 'string' ||
+    typeof value.context.policy.dataset.inventoryDigest !== 'string' ||
+    typeof value.context.policy.dataset.sourcePath !== 'string' ||
+    typeof value.context.policy.dataset.scenarioCount !== 'number' ||
+    typeof value.context.policy.dataset.turnCount !== 'number' ||
+    typeof value.context.policy.dataset.caseCount !== 'number' ||
+    typeof value.context.policy.repetitionsPerMode !== 'number' ||
+    value.context.policy.costPolicy !== 'provider_reported_or_unavailable'
+  ) return undefined;
+  return {
+    apiUrl: value.target.apiUrl,
+    projectName: value.target.projectName,
+    context: {
+      executionId: value.context.executionId,
+      gitSha: value.context.gitSha,
+      runtime: {
+        runtimeId: value.context.runtime.runtimeId,
+        provider: value.context.runtime.provider,
+        model: value.context.runtime.model,
+        profile: value.context.runtime.profile,
+      },
+      policy: {
+        policyId: value.context.policy.policyId,
+        dataset: {
+          name: value.context.policy.dataset.name,
+          schemaVersion: value.context.policy.dataset.schemaVersion,
+          inventoryVersion: value.context.policy.dataset.inventoryVersion,
+          inventoryDigest: value.context.policy.dataset.inventoryDigest,
+          sourcePath: value.context.policy.dataset.sourcePath,
+          scenarioCount: value.context.policy.dataset.scenarioCount,
+          turnCount: value.context.policy.dataset.turnCount,
+          caseCount: value.context.policy.dataset.caseCount,
+        },
+        modes,
+        repetitionsPerMode: value.context.policy.repetitionsPerMode,
+        costPolicy: value.context.policy.costPolicy,
+      },
+      remoteDatasetId: value.context.remoteDatasetId,
+      mode: value.context.mode,
+      repetition: value.context.repetition,
+    },
+    runs: runs.filter((run): run is CapturedAgentTraceRun => run !== undefined),
+  };
+}
+
+export async function reverifyAgentTraceReceiptPayload(input: {
+  payload: unknown;
+  client: RequiredAgentTracePublicationClient;
+  polling: {
+    timeoutMs: number;
+    pollIntervalMs: number;
+    now: () => number;
+    sleep: (durationMs: number) => Promise<void>;
+  };
+}): Promise<VerifiedAgentTraceReceipt> {
+  const parsed = parsedReceiptPayload(input.payload);
+  if (!parsed) throw new Error('agent_required_trace_receipt_invalid');
+  return verifyCapturedAgentTracePublication({
+    ...parsed,
+    client: input.client,
+    polling: input.polling,
+  });
+}
+
+function deepFreeze<T>(value: T): T {
+  if (typeof value !== 'object' || value === null || Object.isFrozen(value)) return value;
+  for (const child of Object.values(value)) deepFreeze(child);
+  return Object.freeze(value);
+}
+
+export async function verifyCapturedAgentTracePublication(input: {
+  apiUrl: string;
+  projectName: string;
+  context: RequiredAgentTraceContext;
+  runs: readonly CapturedAgentTraceRun[];
+  client: RequiredAgentTracePublicationClient;
+  polling: {
+    timeoutMs: number;
+    pollIntervalMs: number;
+    now: () => number;
+    sleep: (durationMs: number) => Promise<void>;
+  };
+}): Promise<VerifiedAgentTraceReceipt> {
+  if (input.apiUrl !== APAC_ENDPOINT || input.projectName.length === 0) {
+    throw new Error('agent_required_trace_target_invalid');
+  }
+  if (
+    !input.context.policy.modes.includes(input.context.mode) ||
+    input.context.repetition < 1 ||
+    input.context.repetition > input.context.policy.repetitionsPerMode
+  ) {
+    throw new Error('agent_required_trace_context_invalid');
+  }
+  const dataset = await input.client
+    .readDataset({ datasetId: input.context.remoteDatasetId })
+    .catch(() => undefined);
+  if (
+    !dataset ||
+    dataset.id !== input.context.remoteDatasetId ||
+    dataset.name !== input.context.policy.dataset.name
+  ) {
+    throw new Error('agent_required_trace_dataset_unverified');
+  }
+  assertCapturedSemantics(input.runs);
+  const rootCount = input.runs.filter(({ parentRunId }) => parentRunId === undefined).length;
+  if (rootCount !== input.context.policy.dataset.turnCount) {
+    throw new Error('agent_required_trace_completeness_invalid');
   }
 
-  const roots = assertPublishedHierarchy(publishedRuns, publishedById);
-  const latency = aggregateLatency(roots, publishedRuns);
-
-  return {
-    verified: true,
-    flushVerified: true,
-    readbackVerified: true,
-    queryAttempts: 1,
-    runIds,
-    traceIds: [...new Set(roots.map(({ traceId }) => traceId))],
-    latency,
-    usage: aggregateUsage(publishedRuns),
-    cost: { status: 'provider_did_not_report' },
-  };
+  const deadline = input.polling.now() + input.polling.timeoutMs;
+  let queryAttempts = 0;
+  while (true) {
+    queryAttempts += 1;
+    const evidence = await queryOnce({
+      client: input.client,
+      projectName: input.projectName,
+      runs: input.runs,
+    }).catch(() => undefined);
+    if (evidence) {
+      const payload: VerifiedAgentTraceReceiptPayload = {
+        schemaVersion: 1,
+        artifactKind: 'kfc-verified-agent-trace-receipt',
+        target: { apiUrl: APAC_ENDPOINT, projectName: input.projectName },
+        context: input.context,
+        publication: {
+          queryAttempts,
+          flushVerified: true,
+          datasetReadbackVerified: true,
+          readbackVerified: true,
+        },
+        runs: [...structuredClone(input.runs)],
+        evidence,
+      };
+      const receipt = deepFreeze({ payload: structuredClone(payload) });
+      issuedReceipts.add(receipt);
+      return receipt;
+    }
+    const now = input.polling.now();
+    if (now >= deadline) break;
+    await input.polling.sleep(
+      Math.min(input.polling.pollIntervalMs, Math.max(1, deadline - now)),
+    );
+  }
+  throw new Error('agent_required_trace_publication_unverified');
 }

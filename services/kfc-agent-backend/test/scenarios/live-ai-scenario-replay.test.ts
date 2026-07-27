@@ -32,7 +32,17 @@ import { expectationForLiveQualityMode } from '../../src/evaluation/liveQualityD
 import { scenarioResponseExamples } from './scenarioResponseExamples.js';
 import { arenaCandidate, createArenaPlanner, type PlannerRequestEvent } from '../../src/evaluation/modelArena.js';
 import { plannerSemanticViolations, type PlannerSemanticViolationCode } from '../../src/llm/toolPlannerSemanticContract.js';
+import {
+  protectedTraceApplicabilityForTurn,
+  reviewProtectedTraceRuntimeIdentity,
+} from '../../src/evaluation/protectedTraceQualificationPolicy.js';
 import { LangSmithAgentTracer } from '../../src/observability/langsmithAgentTracer.js';
+import {
+  resolveProtectedTraceQualificationConfig,
+} from '../../src/observability/protectedTraceQualificationConfig.js';
+import {
+  writeVerifiedAgentTraceReceipt,
+} from '../../src/observability/requiredAgentTracePublication.js';
 
 const scenariosRoot = join(process.cwd(), '../../ai-talent-tracks/fnb/conversations');
 const modifierPickerScenarioPath = join(process.cwd(), 'test/scenarios/fixtures/modifier-picker-live-ai.json');
@@ -119,27 +129,44 @@ const requestedLiveScenarioMode = process.env.KFC_LIVE_SCENARIO_MODE?.trim();
 if (requestedLiveScenarioMode && !['text', 'genui', 'both'].includes(requestedLiveScenarioMode)) {
   throw new Error('KFC_LIVE_SCENARIO_MODE must be text, genui, or both');
 }
+const protectedTraceRuntime = reviewProtectedTraceRuntimeIdentity({
+  runtimeId: 'langgraph-stategraph-v1',
+  provider: 'openai',
+  model: openAiModel,
+  profile: 'openai-v2-live-qualification',
+});
+const protectedTraceConfig = resolveProtectedTraceQualificationConfig(
+  process.env,
+  protectedTraceRuntime,
+);
 const arenaOutput = process.env.KFC_ARENA_OUTPUT?.trim();
 const arenaTraceRunId = process.env.KFC_ARENA_TRACE_RUN_ID?.trim();
 const langSmithApiKey = process.env.LANGSMITH_API_KEY?.trim();
 const langSmithProject = process.env.LANGSMITH_PROJECT?.trim();
 const langSmithEndpoint = process.env.LANGSMITH_ENDPOINT?.trim();
-if (arenaCandidateId && (!arenaOutput || !arenaTraceRunId || !langSmithApiKey || !langSmithProject || !langSmithEndpoint)) {
+if (
+  (arenaCandidateId || protectedTraceConfig) &&
+  (!langSmithApiKey || !langSmithProject || !langSmithEndpoint ||
+    (arenaCandidateId && (!arenaOutput || !arenaTraceRunId)))
+) {
   const missing = [
-    !arenaOutput && 'KFC_ARENA_OUTPUT',
-    !arenaTraceRunId && 'KFC_ARENA_TRACE_RUN_ID',
+    arenaCandidateId && !arenaOutput && 'KFC_ARENA_OUTPUT',
+    arenaCandidateId && !arenaTraceRunId && 'KFC_ARENA_TRACE_RUN_ID',
     !langSmithApiKey && 'LANGSMITH_API_KEY',
     !langSmithProject && 'LANGSMITH_PROJECT',
     !langSmithEndpoint && 'LANGSMITH_ENDPOINT',
   ].filter(Boolean);
   throw new Error(`Missing arena observability configuration: ${missing.join(', ')}`);
 }
-const arenaTracer = arenaCandidateId
+const arenaTracer = arenaCandidateId || protectedTraceConfig
   ? new LangSmithAgentTracer({
       projectName: langSmithProject!,
       apiKey: langSmithApiKey!,
       apiUrl: langSmithEndpoint!,
       samplingRate: 1,
+      ...(protectedTraceConfig
+        ? { requiredProof: { context: protectedTraceConfig.context } }
+        : {}),
     })
   : undefined;
 const arenaTraceClient = arenaCandidateId
@@ -166,6 +193,15 @@ const configuredHighRiskRepetitions = process.env.KFC_LIVE_HIGH_RISK_REPETITIONS
   : 1;
 if (![1, 3].includes(configuredHighRiskRepetitions)) {
   throw new Error('KFC_LIVE_HIGH_RISK_REPETITIONS must be 1 or the controlled value 3');
+}
+if (
+  protectedTraceConfig &&
+  (!liveRequested ||
+    deployedBackendUrl !== undefined ||
+    arenaScenarioPrefixes.size > 0 ||
+    configuredHighRiskRepetitions !== 1)
+) {
+  throw new Error('protected_trace_qualification_requires_full_v2_slice');
 }
 const semanticJudge = openAiApiKey
   ? createSemanticResponseJudge({
@@ -197,6 +233,15 @@ function createLiveToolPlanner(timingContext?: LiveAiTimingContext): ToolPlanner
 }
 
 afterAll(async () => {
+  if (protectedTraceConfig) {
+    if (!arenaTracer) throw new Error('protected_trace_qualification_tracer_missing');
+    await arenaTracer.flush();
+    mkdirSync(dirname(resolve(protectedTraceConfig.outputPath)), { recursive: true });
+    await writeVerifiedAgentTraceReceipt(
+      resolve(protectedTraceConfig.outputPath),
+      arenaTracer.requiredProofReceipt(),
+    );
+  }
   if (!arenaOutput) return;
   mkdirSync(dirname(resolve(arenaOutput)), { recursive: true });
   writeFileSync(resolve(arenaOutput), arenaRequestEvents.map((event) => JSON.stringify(event)).join('\n') + '\n');
@@ -999,7 +1044,10 @@ if (liveRequested && deployedBackendUrl) {
       }, null, 2)}\n`);
     });
 
-    const modifierTest = arenaCandidateId && process.env.KFC_ARENA_INCLUDE_MODIFIER !== '1' ? it.skip : it;
+    const modifierTest = protectedTraceConfig ||
+      (arenaCandidateId && process.env.KFC_ARENA_INCLUDE_MODIFIER !== '1')
+      ? it.skip
+      : it;
     modifierTest('presents verified modifier options without a cart mutation', async () => {
       const script = await loadScenarioScript(modifierPickerScenarioPath);
       const planner = new RecordingToolPlanner(createLiveToolPlanner());
@@ -1075,6 +1123,13 @@ if (liveRequested && deployedBackendUrl) {
           toolPlanner: planner,
           tracer: arenaTracer,
           traceRunId: arenaTraceRunId,
+          traceApplicabilityForTurn: (turnIndex) => {
+            const expectation = scenarioCase.turnExpectations.find(
+              (candidate) => candidate.turnIndex === turnIndex,
+            );
+            if (!expectation) throw new Error(`missing_trace_oracle:${turnIndex}`);
+            return protectedTraceApplicabilityForTurn(expectation, mode);
+          },
           turnDeadlineMs: 60_000,
           mockClientOptions: scenarioFixtures.mockClientOptions || seededMockOptions
             ? { ...scenarioFixtures.mockClientOptions, ...seededMockOptions }

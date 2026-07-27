@@ -1,506 +1,350 @@
 import { createHash } from 'node:crypto';
-import { z } from 'zod';
-import { canonicalJson } from '../graph/turnSupport.js';
+import { readFile, writeFile } from 'node:fs/promises';
+import { basename } from 'node:path';
+import {
+  deriveProtectedTraceCampaignDimensions,
+  type ProtectedTraceQualificationPolicy,
+} from '../evaluation/protectedTraceQualificationPolicy.js';
+import {
+  isVerifiedAgentTraceReceipt,
+  verifiedAgentTraceReceiptPayload,
+  type VerifiedAgentTraceReceiptPayload,
+} from './requiredAgentTracePublication.js';
 
-export const PROTECTED_COMMAND_PROOF_SCHEMA_VERSION = 1 as const;
-export const PROTECTED_COMMAND_PROOF_ARTIFACT_KIND =
-  'kfc-protected-command-proof-manifest' as const;
-export const PROTECTED_COMMAND_TRACE_CATEGORIES = [
-  'agent_loop',
-  'graph_node',
-  'model',
-  'tool',
-  'approval',
-  'retry',
-  'verified_state',
-  'genui_projection',
-  'latency',
-  'cost',
-] as const;
-
-const digestSchema = z.string().regex(/^[0-9a-f]{64}$/u);
-const gitShaSchema = z.string().regex(/^[0-9a-f]{40}$/u);
-const opaqueIdentitySchema = z
-  .string()
-  .min(1)
-  .max(256)
-  .regex(/^[A-Za-z0-9][A-Za-z0-9._:/-]*$/u);
-const repositoryPathSchema = z
-  .string()
-  .min(1)
-  .max(512)
-  .regex(/^[A-Za-z0-9][A-Za-z0-9._/-]*$/u)
-  .refine(
-    (value) =>
-      !value.startsWith('/') &&
-      !value.split('/').includes('..'),
-  );
-const turnIdSchema = z
-  .string()
-  .min(1)
-  .max(512)
-  .regex(/^[A-Za-z0-9][A-Za-z0-9._/-]*#[1-9][0-9]*$/u);
-const positiveSafeIntegerSchema = z
-  .number()
-  .int()
-  .positive()
-  .max(Number.MAX_SAFE_INTEGER);
-const nonnegativeSafeIntegerSchema = z
-  .number()
-  .int()
-  .nonnegative()
-  .max(Number.MAX_SAFE_INTEGER);
-const nonnegativeDurationSchema = z
-  .number()
-  .finite()
-  .nonnegative()
-  .max(7 * 24 * 60 * 60 * 1_000);
-
-const sourceSchema = z.object({
-  gitSha: gitShaSchema,
-  dirty: z.literal(false),
-}).strict();
-
-const runtimeSchema = z.object({
-  runtimeId: opaqueIdentitySchema,
-  provider: z.enum(['openai', 'google']),
-  model: opaqueIdentitySchema,
-  profile: opaqueIdentitySchema,
-}).strict();
-
-const datasetIdentitySchema = z.object({
-  name: opaqueIdentitySchema,
-  remoteDatasetId: z.string().uuid(),
-  schemaVersion: opaqueIdentitySchema,
-  inventoryVersion: opaqueIdentitySchema,
-  inventoryDigest: digestSchema,
-  sourcePath: repositoryPathSchema,
-  scenarioCount: positiveSafeIntegerSchema,
-  turnCount: positiveSafeIntegerSchema,
-  caseCount: positiveSafeIntegerSchema,
-}).strict();
-
-const commerceToolIdentitySchema = z.object({
-  contractId: opaqueIdentitySchema,
-  contractVersion: opaqueIdentitySchema,
-  contractDigest: digestSchema,
-}).strict();
-
-const qualifiedScenarioSchema = z.object({
-  fileName: opaqueIdentitySchema,
-  sourcePath: repositoryPathSchema,
-  turnIds: z.array(turnIdSchema).min(1),
-}).strict();
-
-const artifactRoles = [
+const DIGEST_PATTERN = /^[0-9a-f]{64}$/u;
+const GIT_SHA_PATTERN = /^[0-9a-f]{40}$/u;
+const ARTIFACT_ROLES = [
   'inventory',
   'matrix',
   'run',
   'trace_readback',
 ] as const;
-const artifactBindingSchema = z.object({
-  role: z.enum(artifactRoles),
-  path: repositoryPathSchema,
-  digest: digestSchema,
-}).strict();
 
-const qualificationSchema = z.object({
-  executionId: z.string().uuid(),
-  mode: z.enum(['text', 'genui']),
-  repetition: positiveSafeIntegerSchema,
-  matrix: z.object({
-    repetitionsPerMode: positiveSafeIntegerSchema,
-    modeCount: positiveSafeIntegerSchema,
-    scenarioRunCount: positiveSafeIntegerSchema,
-    turnEvaluationCount: positiveSafeIntegerSchema,
-  }).strict(),
-  scenarios: z.array(qualifiedScenarioSchema).min(1),
-}).strict();
+interface ArtifactBinding {
+  role: typeof ARTIFACT_ROLES[number];
+  path: string;
+  digest: string;
+}
 
-const traceCategorySchema = z.object({
-  name: z.enum(PROTECTED_COMMAND_TRACE_CATEGORIES),
-  applicability: z.enum([
-    'required',
-    'when_present',
-    'when_provider_reports_cost',
-    'not_applicable',
-  ]),
-  observed: nonnegativeSafeIntegerSchema,
-}).strict();
+export interface VerifiedProofArtifacts {
+  readonly bindings: readonly ArtifactBinding[];
+}
 
-const traceProofContextSchema = z.object({
-  executionId: z.string().uuid(),
-  gitSha: gitShaSchema,
-  runtimeId: opaqueIdentitySchema,
-  provider: z.enum(['openai', 'google']),
-  model: opaqueIdentitySchema,
-  profile: opaqueIdentitySchema,
-  mode: z.enum(['text', 'genui']),
-  repetition: positiveSafeIntegerSchema,
-  inventory: z.object({
-    name: opaqueIdentitySchema,
-    version: opaqueIdentitySchema,
-    digest: digestSchema,
-    scenarioCount: positiveSafeIntegerSchema,
-    turnCount: positiveSafeIntegerSchema,
-    caseCount: positiveSafeIntegerSchema,
-  }).strict(),
-}).strict();
+const issuedArtifactBindings = new WeakMap<object, readonly ArtifactBinding[]>();
 
-const unavailableProviderEvidenceSchema = z.object({
-  status: z.literal('provider_did_not_report'),
-}).strict();
-const reportedUsageSchema = z.object({
-  status: z.literal('reported'),
-  inputTokens: nonnegativeSafeIntegerSchema,
-  outputTokens: nonnegativeSafeIntegerSchema,
-  totalTokens: positiveSafeIntegerSchema,
-}).strict();
-const providerEconomicsSchema = z.object({
-  usage: z.discriminatedUnion('status', [
-    reportedUsageSchema,
-    unavailableProviderEvidenceSchema,
-  ]),
-  // LangSmith does not currently expose a verified monetary cost in the
-  // publication query used by protected qualification. Do not accept a caller
-  // supplied estimate as proof.
-  cost: unavailableProviderEvidenceSchema,
-}).strict();
+interface ProtectedCommandProofInput {
+  source: { gitSha: string; dirty: false };
+  runtime: VerifiedAgentTraceReceiptPayload['context']['runtime'];
+  policy: ProtectedTraceQualificationPolicy;
+  artifacts: unknown;
+  receipts: readonly unknown[];
+}
 
-const publishedTraceEvidenceSchema = z.object({
-  source: z.literal('published_runs'),
-  latency: z.object({
-    totalMs: nonnegativeDurationSchema,
-    modelMs: nonnegativeDurationSchema,
-    toolMs: nonnegativeDurationSchema,
-  }).strict(),
-  providerEconomics: providerEconomicsSchema,
-}).strict();
+export interface ProtectedCommandProofManifest {
+  schemaVersion: 2;
+  artifactKind: 'kfc-protected-command-proof-manifest';
+  source: ProtectedCommandProofInput['source'];
+  runtime: ProtectedCommandProofInput['runtime'];
+  policy: ProtectedTraceQualificationPolicy;
+  campaign: ReturnType<typeof deriveProtectedTraceCampaignDimensions>;
+  target: {
+    apiUrl: 'https://apac.api.smith.langchain.com';
+    projectName: string;
+    remoteDatasetId: string;
+  };
+  artifacts: ArtifactBinding[];
+  receipts: Array<{
+    executionId: string;
+    mode: 'text' | 'genui';
+    repetition: number;
+    publication: VerifiedAgentTraceReceiptPayload['publication'];
+    runs: VerifiedAgentTraceReceiptPayload['runs'];
+    evidence: VerifiedAgentTraceReceiptPayload['evidence'];
+  }>;
+  integrity: { algorithm: 'sha256'; payloadDigest: string };
+}
 
-const requiredTraceReceiptSchema = z.object({
-  schemaVersion: z.literal(1),
-  artifactKind: z.literal(
-    'kfc-required-agent-trace-proof-receipt',
-  ),
-  failureMode: z.literal('required'),
-  context: traceProofContextSchema,
-  target: z.object({
-    apiUrl: z.literal('https://apac.api.smith.langchain.com'),
-    projectName: opaqueIdentitySchema,
-    samplingRate: z.literal(1),
-  }).strict(),
-  lifecycle: z.object({
-    turnsStarted: positiveSafeIntegerSchema,
-    childSpansStarted: positiveSafeIntegerSchema,
-    spansCompleted: nonnegativeSafeIntegerSchema,
-    spansFailed: nonnegativeSafeIntegerSchema,
-    flushesSucceeded: z.literal(1),
-  }).strict(),
-  publication: z.object({
-    verified: z.literal(true),
-    flushVerified: z.literal(true),
-    readbackVerified: z.literal(true),
-    expectedRuns: positiveSafeIntegerSchema,
-    queryAttempts: positiveSafeIntegerSchema,
-    // Bind only opaque LangSmith identities; prompts and tool arguments never
-    // belong in an immutable qualification artifact.
-    runIds: z.array(z.string().uuid()).min(1),
-    traceIds: z.array(z.string().uuid()).min(1),
-  }).strict(),
-  categories: z.array(traceCategorySchema)
-    .length(PROTECTED_COMMAND_TRACE_CATEGORIES.length),
-  evidence: publishedTraceEvidenceSchema,
-}).strict();
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
 
-export const protectedCommandProofInputSchema = z.object({
-  source: sourceSchema,
-  runtime: runtimeSchema,
-  dataset: datasetIdentitySchema,
-  commerceTools: commerceToolIdentitySchema,
-  artifacts: z.array(artifactBindingSchema).length(artifactRoles.length),
-  qualification: qualificationSchema,
-  traceProof: requiredTraceReceiptSchema,
-}).strict();
+function canonicalValue(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map(canonicalValue);
+  if (!isRecord(value)) return value;
+  return Object.fromEntries(
+    Object.keys(value)
+      .sort()
+      .map((key) => [key, canonicalValue(value[key])]),
+  );
+}
 
-const protectedCommandProofPayloadSchema =
-  protectedCommandProofInputSchema.extend({
-    schemaVersion: z.literal(PROTECTED_COMMAND_PROOF_SCHEMA_VERSION),
-    artifactKind: z.literal(PROTECTED_COMMAND_PROOF_ARTIFACT_KIND),
-  }).strict();
-
-export const protectedCommandProofManifestSchema =
-  protectedCommandProofPayloadSchema.extend({
-    integrity: z.object({
-      algorithm: z.literal('sha256'),
-      payloadDigest: digestSchema,
-    }).strict(),
-  }).strict();
-
-export type ProtectedCommandProofInput = z.infer<
-  typeof protectedCommandProofInputSchema
->;
-export type ProtectedCommandProofManifest = z.infer<
-  typeof protectedCommandProofManifestSchema
->;
+function canonicalJson(value: unknown): string {
+  return JSON.stringify(canonicalValue(value));
+}
 
 function fail(code: string): never {
   throw new Error(code);
 }
 
-function assertTraceLifecycle(
-  receipt: ProtectedCommandProofInput['traceProof'],
-): void {
-  const expectedRuns =
-    receipt.lifecycle.turnsStarted +
-    receipt.lifecycle.childSpansStarted;
-  const closedRuns =
-    receipt.lifecycle.spansCompleted +
-    receipt.lifecycle.spansFailed;
-  const { runIds, traceIds } = receipt.publication;
+function parseRuntime(
+  value: unknown,
+): VerifiedAgentTraceReceiptPayload['context']['runtime'] {
   if (
-    receipt.publication.expectedRuns !== expectedRuns ||
-    closedRuns !== expectedRuns ||
-    runIds.length !== expectedRuns ||
-    traceIds.length !== receipt.lifecycle.turnsStarted ||
-    new Set(runIds).size !== runIds.length ||
-    new Set(traceIds).size !== traceIds.length ||
-    traceIds.some((traceId) => !runIds.includes(traceId))
+    !isRecord(value) ||
+    typeof value.runtimeId !== 'string' ||
+    (value.provider !== 'openai' && value.provider !== 'google') ||
+    typeof value.model !== 'string' ||
+    typeof value.profile !== 'string'
   ) {
-    fail('protected_command_proof_trace_lifecycle_invalid');
+    fail('protected_command_proof_input_invalid');
   }
-}
-
-function expectedCategoryApplicability(
-  name: typeof PROTECTED_COMMAND_TRACE_CATEGORIES[number],
-  mode: ProtectedCommandProofInput['qualification']['mode'],
-): ProtectedCommandProofInput['traceProof']['categories'][number]['applicability'] {
-  if (name === 'retry') return 'when_present';
-  if (name === 'cost') return 'when_provider_reports_cost';
-  if (name === 'genui_projection') {
-    return mode === 'genui' ? 'required' : 'not_applicable';
-  }
-  return 'required';
-}
-
-function assertTraceCategories(
-  input: ProtectedCommandProofInput,
-): void {
-  for (
-    let index = 0;
-    index < PROTECTED_COMMAND_TRACE_CATEGORIES.length;
-    index += 1
-  ) {
-    const category = input.traceProof.categories[index];
-    const expectedName = PROTECTED_COMMAND_TRACE_CATEGORIES[index];
-    const expectedApplicability = expectedCategoryApplicability(
-      expectedName,
-      input.qualification.mode,
-    );
-    if (
-      !category ||
-      category.name !== expectedName ||
-      category.applicability !== expectedApplicability ||
-      (category.applicability === 'required' &&
-        category.observed === 0) ||
-      (category.applicability === 'not_applicable' &&
-        category.observed !== 0)
-    ) {
-      fail('protected_command_proof_trace_categories_invalid');
-    }
-  }
-}
-
-function assertBindings(input: ProtectedCommandProofInput): void {
-  const expectedContext = {
-    executionId: input.qualification.executionId,
-    gitSha: input.source.gitSha,
-    runtimeId: input.runtime.runtimeId,
-    provider: input.runtime.provider,
-    model: input.runtime.model,
-    profile: input.runtime.profile,
-    mode: input.qualification.mode,
-    repetition: input.qualification.repetition,
-    inventory: {
-      name: input.dataset.name,
-      version: input.dataset.inventoryVersion,
-      digest: input.dataset.inventoryDigest,
-      scenarioCount: input.dataset.scenarioCount,
-      turnCount: input.dataset.turnCount,
-      caseCount: input.dataset.caseCount,
-    },
+  return {
+    runtimeId: value.runtimeId,
+    provider: value.provider,
+    model: value.model,
+    profile: value.profile,
   };
-  if (
-    canonicalJson(input.traceProof.context) !==
-      canonicalJson(expectedContext) ||
-    input.traceProof.lifecycle.turnsStarted !== input.dataset.turnCount ||
-    input.traceProof.publication.traceIds.length !== input.dataset.turnCount
-  ) {
-    fail('protected_command_proof_binding_mismatch');
-  }
 }
 
-function assertQualificationMatrix(
-  input: ProtectedCommandProofInput,
-): void {
-  const { matrix } = input.qualification;
-  const providerMatrixPasses =
-    matrix.repetitionsPerMode * matrix.modeCount;
-  if (
-    matrix.scenarioRunCount !==
-      input.dataset.scenarioCount * providerMatrixPasses ||
-    matrix.turnEvaluationCount !==
-      input.dataset.turnCount * providerMatrixPasses
-  ) {
-    fail('protected_command_proof_matrix_invalid');
-  }
-  if (
-    input.qualification.mode === 'text' &&
-    (input.dataset.name !== 'kfc-live-quality-v3' ||
-      input.dataset.inventoryVersion !== '2026-07-20.5' ||
-      input.dataset.inventoryDigest !==
-        '62036883be7e603d19fb08096b6e4931e00c11cc038b62a13d6f12c6e78a9c50' ||
-      input.dataset.scenarioCount !== 9 ||
-      input.dataset.turnCount !== 46 ||
-      input.dataset.caseCount !== 92 ||
-      matrix.repetitionsPerMode !== 3 ||
-      matrix.modeCount !== 2 ||
-      matrix.scenarioRunCount !== 54 ||
-      matrix.turnEvaluationCount !== 276)
-  ) {
-    fail('protected_command_proof_text_corpus_invalid');
-  }
+function positiveInteger(value: unknown): number | undefined {
+  return typeof value === 'number' && Number.isSafeInteger(value) && value > 0
+    ? value
+    : undefined;
 }
 
-function assertFullCorpus(input: ProtectedCommandProofInput): void {
-  const { scenarios } = input.qualification;
-  const fileNames = scenarios.map(({ fileName }) => fileName);
-  const sourcePaths = scenarios.map(({ sourcePath }) => sourcePath);
-  const turnIds = scenarios.flatMap(({ turnIds: ids }) => ids);
-  if (
-    scenarios.length !== input.dataset.scenarioCount ||
-    turnIds.length !== input.dataset.turnCount ||
-    input.dataset.caseCount !== input.dataset.turnCount * 2 ||
-    new Set(fileNames).size !== fileNames.length ||
-    new Set(sourcePaths).size !== sourcePaths.length ||
-    new Set(turnIds).size !== turnIds.length ||
-    scenarios.some(
-      ({ fileName, sourcePath, turnIds: ids }) =>
-        !sourcePath.endsWith(`/${fileName}`) ||
-        ids.some((id) => !id.startsWith(`${fileName}#`)),
-    )
-  ) {
-    fail('protected_command_proof_corpus_invalid');
+function parsePolicy(value: unknown): ProtectedTraceQualificationPolicy {
+  if (!isRecord(value) || !isRecord(value.dataset) || !Array.isArray(value.modes)) {
+    fail('protected_command_proof_policy_invalid');
   }
-}
-
-function assertPublishedEvidence(
-  input: ProtectedCommandProofInput,
-): void {
-  const { latency, providerEconomics } = input.traceProof.evidence;
-  if (
-    latency.modelMs > latency.totalMs ||
-    latency.toolMs > latency.totalMs ||
-    latency.modelMs + latency.toolMs > latency.totalMs
-  ) {
-    fail('protected_command_proof_latency_invalid');
-  }
-  const costTrace = input.traceProof.categories.find(
-    ({ name }) => name === 'cost',
+  const scenarioCount = positiveInteger(value.dataset.scenarioCount);
+  const turnCount = positiveInteger(value.dataset.turnCount);
+  const caseCount = positiveInteger(value.dataset.caseCount);
+  const repetitionsPerMode = positiveInteger(value.repetitionsPerMode);
+  const modes = value.modes.filter(
+    (mode): mode is 'text' | 'genui' => mode === 'text' || mode === 'genui',
   );
-  if (!costTrace) {
-    fail('protected_command_proof_trace_categories_invalid');
-  }
-  const { usage } = providerEconomics;
   if (
-    usage.status === 'reported' &&
-    usage.totalTokens !== usage.inputTokens + usage.outputTokens
+    typeof value.policyId !== 'string' ||
+    typeof value.dataset.name !== 'string' ||
+    typeof value.dataset.schemaVersion !== 'string' ||
+    typeof value.dataset.inventoryVersion !== 'string' ||
+    typeof value.dataset.inventoryDigest !== 'string' ||
+    typeof value.dataset.sourcePath !== 'string' ||
+    scenarioCount === undefined ||
+    turnCount === undefined ||
+    caseCount === undefined ||
+    repetitionsPerMode === undefined ||
+    modes.length !== value.modes.length ||
+    value.costPolicy !== 'provider_reported_or_unavailable'
   ) {
-    fail('protected_command_proof_economics_mismatch');
+    fail('protected_command_proof_policy_invalid');
   }
-  if (costTrace.observed !== 0) {
-    fail('protected_command_proof_economics_mismatch');
+  return {
+    policyId: value.policyId,
+    dataset: {
+      name: value.dataset.name,
+      schemaVersion: value.dataset.schemaVersion,
+      inventoryVersion: value.dataset.inventoryVersion,
+      inventoryDigest: value.dataset.inventoryDigest,
+      sourcePath: value.dataset.sourcePath,
+      scenarioCount,
+      turnCount,
+      caseCount,
+    },
+    modes,
+    repetitionsPerMode,
+    costPolicy: value.costPolicy,
+  };
+}
+
+function parseInput(value: unknown): ProtectedCommandProofInput {
+  if (!isRecord(value)) fail('protected_command_proof_input_invalid');
+  const source = value.source;
+  const runtime = value.runtime;
+  const policy = value.policy;
+  const artifacts = value.artifacts;
+  const receipts = value.receipts;
+  if (
+    !isRecord(source) ||
+    typeof source.gitSha !== 'string' ||
+    !GIT_SHA_PATTERN.test(source.gitSha) ||
+    source.dirty !== false ||
+    !Array.isArray(receipts)
+  ) {
+    fail('protected_command_proof_input_invalid');
+  }
+  return {
+    source: { gitSha: source.gitSha, dirty: false },
+    runtime: parseRuntime(runtime),
+    policy: parsePolicy(policy),
+    artifacts,
+    receipts,
+  };
+}
+
+function validatePolicy(policy: ProtectedTraceQualificationPolicy): void {
+  const { dataset } = policy;
+  if (
+    !policy.policyId ||
+    policy.modes.length === 0 ||
+    new Set(policy.modes).size !== policy.modes.length ||
+    policy.modes.some((mode) => mode !== 'text' && mode !== 'genui') ||
+    !Number.isSafeInteger(policy.repetitionsPerMode) ||
+    policy.repetitionsPerMode < 1 ||
+    !dataset.name ||
+    !dataset.schemaVersion ||
+    !dataset.inventoryVersion ||
+    !DIGEST_PATTERN.test(dataset.inventoryDigest) ||
+    !dataset.sourcePath ||
+    !Number.isSafeInteger(dataset.scenarioCount) ||
+    !Number.isSafeInteger(dataset.turnCount) ||
+    !Number.isSafeInteger(dataset.caseCount) ||
+    dataset.scenarioCount < 1 ||
+    dataset.turnCount < 1 ||
+    dataset.caseCount !== dataset.turnCount * policy.modes.length
+  ) {
+    fail('protected_command_proof_policy_invalid');
   }
 }
 
-function assertArtifacts(input: ProtectedCommandProofInput): void {
-  const roles = input.artifacts.map(({ role }) => role);
-  const paths = input.artifacts.map(({ path }) => path);
-  const digests = input.artifacts.map(({ digest }) => digest);
-  if (
-    roles.some((role, index) => role !== artifactRoles[index]) ||
-    new Set(roles).size !== artifactRoles.length ||
-    new Set(paths).size !== paths.length ||
-    new Set(digests).size !== digests.length
-  ) {
+export async function verifyProtectedProofArtifacts(input: {
+  inventory: string;
+  matrix: string;
+  run: string;
+  traceReadback: string;
+}): Promise<VerifiedProofArtifacts> {
+  const files = [input.inventory, input.matrix, input.run, input.traceReadback];
+  const contents = await Promise.all(files.map((path) => readFile(path)));
+  const bindings = ARTIFACT_ROLES.map((role, index) => ({
+    role,
+    path: basename(files[index] ?? ''),
+    digest: createHash('sha256').update(contents[index] ?? Buffer.alloc(0)).digest('hex'),
+  }));
+  if (bindings.some(({ path }) => !path) || new Set(bindings.map(({ path }) => path)).size !== bindings.length) {
     fail('protected_command_proof_artifacts_invalid');
   }
+  const verified = Object.freeze({ bindings: Object.freeze(bindings) });
+  issuedArtifactBindings.set(verified, bindings);
+  return verified;
 }
 
-function assertSemantics(input: ProtectedCommandProofInput): void {
-  assertArtifacts(input);
-  assertTraceLifecycle(input.traceProof);
-  assertTraceCategories(input);
-  assertBindings(input);
-  assertQualificationMatrix(input);
-  assertFullCorpus(input);
-  assertPublishedEvidence(input);
+function validateArtifacts(value: unknown): ArtifactBinding[] {
+  if (typeof value !== 'object' || value === null) {
+    fail('protected_command_proof_artifacts_unverified');
+  }
+  const bindings = issuedArtifactBindings.get(value);
+  if (!bindings) fail('protected_command_proof_artifacts_unverified');
+  return bindings.map((binding) => ({ ...binding }));
 }
 
-function payloadDigest(
-  payload: z.infer<typeof protectedCommandProofPayloadSchema>,
-): string {
-  return createHash('sha256')
-    .update(canonicalJson(payload))
-    .digest('hex');
+function receiptSlots(policy: ProtectedTraceQualificationPolicy): string[] {
+  return policy.modes.flatMap((mode) =>
+    Array.from(
+      { length: policy.repetitionsPerMode },
+      (_, index) => `${mode}:${index + 1}`,
+    ),
+  );
+}
+
+function validateReceipts(
+  input: ProtectedCommandProofInput,
+): VerifiedAgentTraceReceiptPayload[] {
+  const payloads: VerifiedAgentTraceReceiptPayload[] = [];
+  for (const receipt of input.receipts) {
+    if (!isVerifiedAgentTraceReceipt(receipt)) {
+      fail('protected_command_proof_receipt_unverified');
+    }
+    payloads.push(verifiedAgentTraceReceiptPayload(receipt));
+  }
+  const expectedSlots = receiptSlots(input.policy);
+  const actualSlots = payloads.map(
+    ({ context }) => `${context.mode}:${context.repetition}`,
+  );
+  if (
+    actualSlots.length !== expectedSlots.length ||
+    new Set(actualSlots).size !== actualSlots.length ||
+    expectedSlots.some((slot) => !actualSlots.includes(slot))
+  ) {
+    fail('protected_command_proof_receipts_invalid');
+  }
+  const allRunIds = payloads.flatMap(({ runs }) => runs.map(({ id }) => id));
+  const allTraceIds = payloads.flatMap(({ runs }) =>
+    runs.filter(({ parentRunId }) => parentRunId === undefined).map(({ traceId }) => traceId),
+  );
+  if (
+    new Set(allRunIds).size !== allRunIds.length ||
+    new Set(allTraceIds).size !== allTraceIds.length
+  ) {
+    fail('protected_command_proof_receipts_invalid');
+  }
+  const first = payloads[0];
+  if (!first) fail('protected_command_proof_receipts_invalid');
+  for (const payload of payloads) {
+    if (
+      payload.context.gitSha !== input.source.gitSha ||
+      canonicalJson(payload.context.runtime) !== canonicalJson(input.runtime) ||
+      canonicalJson(payload.context.policy) !== canonicalJson(input.policy) ||
+      payload.target.apiUrl !== first.target.apiUrl ||
+      payload.target.projectName !== first.target.projectName ||
+      payload.context.remoteDatasetId !== first.context.remoteDatasetId ||
+      payload.context.executionId !== first.context.executionId
+    ) {
+      fail('protected_command_proof_binding_mismatch');
+    }
+  }
+  return payloads;
+}
+
+function digestPayload(payload: Omit<ProtectedCommandProofManifest, 'integrity'>): string {
+  return createHash('sha256').update(canonicalJson(payload)).digest('hex');
 }
 
 export function createProtectedCommandProofManifest(
   value: unknown,
 ): ProtectedCommandProofManifest {
-  const parsed = protectedCommandProofInputSchema.safeParse(value);
-  if (!parsed.success) {
-    if (
-      parsed.error.issues.some(({ path }) => path[0] === 'artifacts')
-    ) {
-      fail('protected_command_proof_artifacts_invalid');
-    }
-    if (
-      parsed.error.issues.some(
-        ({ path }) =>
-          path[0] === 'traceProof' &&
-          path[1] === 'categories',
-      )
-    ) {
-      fail('protected_command_proof_trace_categories_invalid');
-    }
-    fail('protected_command_proof_input_invalid');
-  }
-  assertSemantics(parsed.data);
-  const payload = protectedCommandProofPayloadSchema.parse({
-    schemaVersion: PROTECTED_COMMAND_PROOF_SCHEMA_VERSION,
-    artifactKind: PROTECTED_COMMAND_PROOF_ARTIFACT_KIND,
-    ...parsed.data,
-  });
-  return protectedCommandProofManifestSchema.parse({
+  const input = parseInput(value);
+  validatePolicy(input.policy);
+  const artifacts = validateArtifacts(input.artifacts);
+  const receipts = validateReceipts(input);
+  const first = receipts[0];
+  if (!first) fail('protected_command_proof_receipts_invalid');
+  const payload: Omit<ProtectedCommandProofManifest, 'integrity'> = {
+    schemaVersion: 2,
+    artifactKind: 'kfc-protected-command-proof-manifest',
+    source: input.source,
+    runtime: input.runtime,
+    policy: input.policy,
+    campaign: deriveProtectedTraceCampaignDimensions(input.policy),
+    target: {
+      apiUrl: first.target.apiUrl,
+      projectName: first.target.projectName,
+      remoteDatasetId: first.context.remoteDatasetId,
+    },
+    artifacts,
+    receipts: receipts.map(({ context, publication, runs, evidence }) => ({
+      executionId: context.executionId,
+      mode: context.mode,
+      repetition: context.repetition,
+      publication,
+      runs,
+      evidence,
+    })),
+  };
+  return {
     ...payload,
     integrity: {
       algorithm: 'sha256',
-      payloadDigest: payloadDigest(payload),
+      payloadDigest: digestPayload(payload),
     },
-  });
+  };
 }
 
-export function parseProtectedCommandProofManifest(
-  value: unknown,
-): ProtectedCommandProofManifest {
-  const parsed = protectedCommandProofManifestSchema.safeParse(value);
-  if (!parsed.success) {
-    fail('protected_command_proof_manifest_invalid');
-  }
-  const { integrity, ...payload } = parsed.data;
-  if (payloadDigest(payload) !== integrity.payloadDigest) {
-    fail('protected_command_proof_integrity_invalid');
-  }
-  assertSemantics(payload);
-  return parsed.data;
+export async function writeProtectedCommandProofManifest(
+  path: string,
+  manifest: ProtectedCommandProofManifest,
+): Promise<void> {
+  await writeFile(path, `${JSON.stringify(manifest, null, 2)}\n`, {
+    encoding: 'utf8',
+    flag: 'wx',
+  });
 }

@@ -78,6 +78,7 @@ export async function executeTracedToolCall(input: {
   const toolSpan = turnTrace ? await turnTrace.startSpan({
     name: `tool_call:${input.call.toolName}`,
     runType: 'tool',
+    category: 'tool',
     inputs: {
       toolName: input.call.toolName,
       arguments: input.call.arguments,
@@ -124,6 +125,7 @@ export async function applyTracedToolResult(input: {
   const stateSpan = turnTrace ? await turnTrace.startSpan({
     name: 'state_update',
     runType: 'chain',
+    category: input.result.ok ? 'verified_state' : 'graph_node',
     inputs: { toolName: input.call.toolName, before },
   }) : undefined;
 

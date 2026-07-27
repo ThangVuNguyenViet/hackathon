@@ -17,7 +17,10 @@ import {
   type MockedUpstreamApiProfile,
 } from '../mock/createMockClients.js';
 import type { ToolTraceEntry } from '../ordering/types.js';
-import type { AgentTracer } from '../observability/agentTracing.js';
+import type {
+  AgentTraceApplicability,
+  AgentTracer,
+} from '../observability/agentTracing.js';
 import { MemoryStore, type StoredEvent } from '../persistence/memoryStore.js';
 import type { ScenarioScript } from './scenarioScript.js';
 
@@ -68,6 +71,7 @@ export interface RunScenarioOptions {
   toolPlanner?: ToolPlanner;
   tracer?: AgentTracer;
   traceRunId?: string;
+  traceApplicabilityForTurn?: (turnIndex: number) => AgentTraceApplicability;
   turnDeadlineMs?: number;
   testFulfillmentQuoteProvider?: MockClientOptions['fulfillmentQuoteProvider'];
   mockedUpstreamApiForTurn?: (turnIndex: number) => MockedUpstreamApiProfile | undefined;
@@ -137,6 +141,9 @@ export async function runScenario(script: ScenarioScript, options: RunScenarioOp
         rawEvent: {
           scenarioId: script.id,
           ...(options.traceRunId ? { probeRunId: options.traceRunId } : {}),
+          ...(options.traceApplicabilityForTurn
+            ? { traceApplicability: options.traceApplicabilityForTurn(turn.index) }
+            : {}),
           ...(options.contextPolicy ? { contextPolicy: options.contextPolicy } : {}),
         },
       },

@@ -185,8 +185,9 @@ export async function planNaturalLanguageTurn(
       priorPlanForReview,
     };
     const plannerSpan = await turnTrace.startSpan({
-      name: 'planner_iteration',
+      name: 'agent_model:plan',
       runType: 'llm',
+      category: 'model',
       inputs: { iteration: iteration + 1, plannerInput },
       metadata: { component: 'ToolPlanner' },
       tags: ['agent-planner'],

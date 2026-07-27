@@ -95,8 +95,9 @@ export async function composeAssistantResponse(input: {
 
   const responseSpan = input.turnTrace && input.turnInput.responseComposer
     ? await input.turnTrace.startSpan({
-      name: 'response_compose',
+      name: 'agent_model:compose',
       runType: 'llm',
+      category: 'model',
       inputs: { composerInput },
       metadata: {
         component: responseProfile === 'genui' ? 'GenUiCompanionComposer' : 'StandaloneSocialComposer',
@@ -151,6 +152,15 @@ export async function composeAssistantResponse(input: {
         state: composerInput.state,
       });
   assertPresentationMatchesChannel(input.turnInput.channel, presentation, responseProfile);
+  if (presentation.profile === 'genui' && genUi && input.turnTrace) {
+    const projectionSpan = await input.turnTrace.startSpan({
+      name: 'genui_projection',
+      runType: 'chain',
+      category: 'genui_projection',
+      inputs: { genUiKind: genUi?.widgetKind ?? null },
+    });
+    await projectionSpan.end({ genUiKind: genUi?.widgetKind ?? null });
+  }
 
   const output: AgentTurnOutput = {
     state: input.state,

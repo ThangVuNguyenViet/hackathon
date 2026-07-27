@@ -573,6 +573,7 @@ export function compileAgentTurnStateGraph(
       const intelligenceSpan = await runtime.turnTrace.startSpan({
         name: 'session_intelligence',
         runType: 'chain',
+        category: 'graph_node',
         inputs: { customerTurnCount, state: operations.traceStateSummary(state.output.state) },
         metadata: { component: 'resolveMonitorSessionIntelligence' },
         tags: ['agent-session-intelligence'],

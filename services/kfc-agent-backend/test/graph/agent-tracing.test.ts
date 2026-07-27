@@ -7,10 +7,13 @@ import { createMockClients } from '../../src/mock/createMockClients.js';
 import type { AgentTraceSpan, AgentTraceSpanInput, AgentTracer } from '../../src/observability/agentTracing.js';
 import { MemoryStore } from '../../src/persistence/memoryStore.js';
 import { createTestFixtures } from '../fixtures/testFixtures.js';
+import { tracePolicyDecision } from '../../src/graph/turnSupport.js';
 
 interface TraceEvent {
   phase: 'start' | 'end' | 'fail';
   name: string;
+  category?: AgentTraceSpanInput['category'];
+  applicability?: AgentTraceSpanInput['applicability'];
   payload: Record<string, unknown>;
 }
 
@@ -21,7 +24,13 @@ class CaptureSpan implements AgentTraceSpan {
   ) {}
 
   async startSpan(input: AgentTraceSpanInput): Promise<AgentTraceSpan> {
-    this.events.push({ phase: 'start', name: input.name, payload: input.inputs });
+    this.events.push({
+      phase: 'start',
+      name: input.name,
+      category: input.category,
+      applicability: input.applicability,
+      payload: input.inputs,
+    });
     return new CaptureSpan(input.name, this.events);
   }
 
@@ -42,7 +51,13 @@ class CaptureTracer implements AgentTracer {
   readonly events: TraceEvent[] = [];
 
   async startTurn(input: Omit<AgentTraceSpanInput, 'runType'>): Promise<AgentTraceSpan> {
-    this.events.push({ phase: 'start', name: input.name, payload: input.inputs });
+    this.events.push({
+      phase: 'start',
+      name: input.name,
+      category: input.category,
+      applicability: input.applicability,
+      payload: input.inputs,
+    });
     return new CaptureSpan(input.name, this.events);
   }
 
@@ -85,6 +100,20 @@ function planner(output: ToolPlannerOutput) {
 }
 
 describe('agent turn tracing', () => {
+  it('classifies both blocked and approved place-order policy checks as approval evidence', async () => {
+    const tracer = new CaptureTracer();
+    const turn = await tracer.startTurn({ name: 'agent_turn', inputs: {} });
+
+    await tracePolicyDecision(turn, {
+      proposedToolNames: ['placeOrder'],
+      allowedToolNames: ['placeOrder'],
+      blockedReasons: [],
+      confirmationRequired: false,
+    });
+
+    expect(tracer.started('approval_policy')).toMatchObject({ category: 'approval' });
+  });
+
   it('composes a verified planner clarification through the response composer', async () => {
     const composeResponse = vi.fn().mockResolvedValue('unnecessary composer reply');
 
@@ -143,18 +172,30 @@ describe('agent turn tracing', () => {
     expect(plan).not.toHaveBeenCalled();
     expect(composeResponse).toHaveBeenCalledOnce();
     expect(output.genUi).toBeUndefined();
-    expect(tracer.started('small_talk_router')?.payload).toEqual({
+    expect(tracer.started('genui_projection')).toBeUndefined();
+    expect(tracer.started('agent_model:route')?.payload).toEqual({
       routerInput: {
         latestUserMessage: 'social router input',
         channel: 'kfc',
         hasStructuredAction: false,
       },
     });
-    expect(tracer.completed('small_talk_router')?.payload).toEqual({
+    expect(tracer.completed('agent_model:route')?.payload).toEqual({
       routerOutput: { decision: 'handle_social', responseText: 'model social reply' },
     });
-    expect(tracer.started('planner_iteration')).toBeUndefined();
-    expect(tracer.started('response_compose')?.payload).toMatchObject({
+    expect(tracer.started('agent_turn')).toMatchObject({
+      category: 'agent_loop',
+      applicability: {
+        tool: 'forbidden',
+        approval: 'forbidden',
+        verifiedState: 'forbidden',
+        genui: 'forbidden',
+      },
+    });
+    expect(tracer.started('agent_model:route')).toMatchObject({ category: 'model' });
+    expect(tracer.started('agent_model:compose')).toMatchObject({ category: 'model' });
+    expect(tracer.started('agent_model:plan')).toBeUndefined();
+    expect(tracer.started('agent_model:compose')?.payload).toMatchObject({
       composerInput: {
         fallbackText: 'model social reply',
         replyIntent: 'general_reply',
@@ -189,7 +230,9 @@ describe('agent turn tracing', () => {
     expect(route).toHaveBeenCalledTimes(1);
     expect(plan).toHaveBeenCalledTimes(1);
     expect(output.state.cart?.items.map((item) => item.itemCode)).toEqual(['20751']);
-    expect(tracer.started('planner_iteration')).toBeDefined();
+    expect(tracer.started('agent_model:plan')).toMatchObject({ category: 'model' });
+    expect(tracer.started('tool_call:updateCart')).toMatchObject({ category: 'tool' });
+    expect(tracer.started('state_update')).toMatchObject({ category: 'verified_state' });
     expect(tracer.completed('tool_call:updateCart')?.payload).toMatchObject({ ok: true });
   });
 
@@ -407,23 +450,23 @@ describe('agent turn tracing', () => {
       customerId: 'agent_trace_customer',
       latestUserMessage: 'Cho mình xem menu gà',
     });
-    expect(tracer.started('planner_iteration')?.payload).toMatchObject({
+    expect(tracer.started('agent_model:plan')?.payload).toMatchObject({
       plannerInput: {
         state: { latestUserMessage: 'Cho mình xem menu gà' },
       },
     });
-    expect(tracer.completed('planner_iteration')?.payload).toMatchObject({
+    expect(tracer.completed('agent_model:plan')?.payload).toMatchObject({
       plannerOutput: {
         intent: 'ordering',
         toolCalls: [{ toolName: 'searchMenu', arguments: { query: 'gà' } }],
       },
     });
-    expect(tracer.started('response_compose')?.payload).toMatchObject({
+    expect(tracer.started('agent_model:compose')?.payload).toMatchObject({
       composerInput: {
         state: { latestUserMessage: 'Cho mình xem menu gà' },
       },
     });
-    expect(tracer.completed('response_compose')?.payload).toMatchObject({
+    expect(tracer.completed('agent_model:compose')?.payload).toMatchObject({
       responseText: output.responseText,
     });
   });
@@ -455,11 +498,12 @@ describe('agent turn tracing', () => {
 
     expect(output.replyIntent).toBe('ask_clarification');
     expect(output.state.cart?.items).toHaveLength(1);
-    expect(tracer.completed('planner_iteration')?.payload).toMatchObject({
+    expect(tracer.completed('agent_model:plan')?.payload).toMatchObject({
       intent: 'cart_edit',
       proposedToolNames: ['updateCart'],
     });
-    expect(tracer.completed('policy_gate')?.payload).toMatchObject({
+    expect(tracer.started('approval_policy')).toMatchObject({ category: 'approval' });
+    expect(tracer.completed('approval_policy')?.payload).toMatchObject({
       allowedToolNames: [],
       blockedReasons: ['cart_mutation_confirmation_required'],
     });
@@ -493,7 +537,8 @@ describe('agent turn tracing', () => {
     });
 
     expect(output.state.cart?.items).toEqual([]);
-    expect(tracer.completed('policy_gate')?.payload).toMatchObject({
+    expect(tracer.started('graph_policy')).toMatchObject({ category: 'graph_node' });
+    expect(tracer.completed('graph_policy')?.payload).toMatchObject({
       allowedToolNames: ['updateCart'],
       blockedReasons: [],
     });
@@ -505,7 +550,7 @@ describe('agent turn tracing', () => {
     expect(tracer.completed('session_intelligence')?.payload).toMatchObject({
       customerTurnCount: 1,
     });
-    expect(tracer.completed('response_compose')?.payload).toMatchObject({
+    expect(tracer.completed('agent_model:compose')?.payload).toMatchObject({
       replyIntent: 'general_reply',
       responseText: output.responseText,
     });
