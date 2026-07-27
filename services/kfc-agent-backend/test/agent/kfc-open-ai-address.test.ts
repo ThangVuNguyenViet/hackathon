@@ -1,13 +1,24 @@
 import { describe, expect, it, vi } from 'vitest';
 import {
-  createKfcOpenAiTools,
+  createKfcOpenAiTools as createKfcOpenAiToolsFactory,
   createKfcToolSession,
   hydrateKfcToolSession,
+  type CreateKfcOpenAiToolsInput,
   verifiedKfcToolSessionContext,
 } from '../../src/agent/kfcOpenAiTools.js';
 import type { DeliveryAddressDraft } from '../../src/domain/types.js';
 import { createMockClients } from '../../src/mock/createMockClients.js';
 import { createTestFixtures } from '../fixtures/testFixtures.js';
+
+function createKfcOpenAiTools(
+  input: Omit<CreateKfcOpenAiToolsInput, 'fixtures'> &
+    Partial<Pick<CreateKfcOpenAiToolsInput, 'fixtures'>>,
+) {
+  return createKfcOpenAiToolsFactory({
+    ...input,
+    fixtures: input.fixtures ?? createTestFixtures(),
+  });
+}
 
 const emptyAddressUpdate = {
   recipientName: null,

@@ -1,9 +1,4 @@
 import { createHash } from 'node:crypto';
-import {
-  RunContext,
-  tool,
-  type FunctionTool,
-} from '@kfc/openai-agents-runtime';
 import { z } from 'zod';
 import { zodToJsonSchema } from 'zod-to-json-schema';
 import type {
@@ -29,7 +24,6 @@ import {
   toolNames,
 } from '../ordering/toolCatalog.js';
 import {
-  classifyToolSideEffect,
   executeToolCall,
   type ExecutorContext,
 } from '../ordering/toolExecutor.js';
@@ -47,201 +41,25 @@ import {
   activeSupportedPaymentMethod,
   selectedPaymentMethodAuthority,
 } from '../ordering/paymentMethodAuthority.js';
-import type {
-  OpenAiKfcAgentLifecycleObserver,
-  OpenAiToolCallTrace,
-} from './openAiKfcAgent.js';
+import {
+  createKfcOpenAiAgentsTools,
+  type KfcArgumentParseResult,
+  type KfcCanonicalTool,
+  type KfcCanonicalToolDefinition,
+  type KfcOpenAiAgentRunContext,
+  type KfcOpenAiFunctionTool,
+  type KfcStrictJsonObjectSchema,
+} from './kfcOpenAiSdkToolAdapter.js';
 
-export interface KfcCanonicalToolDefinition {
-  type: 'function';
-  name: ToolName;
-  description: string;
-  parameters: Record<string, unknown>;
-  strict: boolean;
-}
-
-/** Domain executor contract, adapted once into the official SDK tool surface. */
-export interface KfcCanonicalTool {
-  definition: KfcCanonicalToolDefinition;
-  execute(
-    arguments_: Record<string, unknown>,
-    options?: { signal: AbortSignal; deadlineAt: number },
-  ): Promise<unknown>;
-}
-
-export interface KfcOpenAiAgentRunContext {
-  toolCalls: OpenAiToolCallTrace[];
-  developerMessages: string[];
-  toolStartedAt?: Map<string, number>;
-  lifecycle?: OpenAiKfcAgentLifecycleObserver;
-}
-
-function safeSdkToolFailure(
-  errorCode: 'invalid_tool_input' | 'tool_execution_failed' | 'tool_timed_out',
-) {
-  return {
-    ok: false,
-    errorCode,
-    message: 'The requested action could not be completed safely.',
-  };
-}
-
-function canonicalArgumentSchema(name: string): z.ZodTypeAny | undefined {
-  if (name === 'updateCart') {
-    return directUpdateCartArgumentsSchema;
-  }
-  if (name === 'quoteFulfillment') return directQuoteFulfillmentArgumentsSchema;
-  if (name === 'acquireVoucher' || name === 'redeemReward') {
-    return (agentToolArgumentSchemas as Record<string, z.ZodTypeAny>)[name];
-  }
-  return (
-    (toolArgumentSchemas as Record<string, z.ZodTypeAny>)[name] ??
-    (agentToolArgumentSchemas as Record<string, z.ZodTypeAny>)[name]
-  );
-}
-
-function isKfcRunContext(
-  value: unknown,
-): value is RunContext<KfcOpenAiAgentRunContext> {
-  return (
-    typeof value === 'object' &&
-    value !== null &&
-    'context' in value &&
-    typeof value.context === 'object' &&
-    value.context !== null &&
-    'toolCalls' in value.context &&
-    Array.isArray(value.context.toolCalls)
-  );
-}
-
-function recordSafeSdkFailure(input: {
-  runContext: unknown;
-  toolName: string;
-  errorCode: 'invalid_tool_input' | 'tool_execution_failed' | 'tool_timed_out';
-}): string {
-  const result = safeSdkToolFailure(input.errorCode);
-  if (isKfcRunContext(input.runContext)) {
-    input.runContext.context.toolCalls.push({
-      name: input.toolName,
-      arguments: {},
-      result,
-    });
-  }
-  return JSON.stringify(result);
-}
-
-function isSdkToolArguments(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value);
-}
-
-/**
- * Converts the canonical KFC tool contract into official Agents SDK function
- * tools. Executors and evidence remain per-turn state on RunContext.
- */
-export function createKfcOpenAiAgentsTools(
-  tools: readonly KfcCanonicalTool[],
-  options: { timeoutMs?: number } = {},
-): FunctionTool<KfcOpenAiAgentRunContext>[] {
-  return tools.map((canonicalTool) =>
-    tool({
-      name: canonicalTool.definition.name,
-      description: canonicalTool.definition.description,
-      // SDK 0.13.5's strict-schema converter throws DataCloneError for some
-      // legacy Zod 3 unions/defaults. Keep the canonical JSON Schema at the
-      // provider boundary and parse the exact Zod schema before execution.
-      parameters: canonicalTool.definition.parameters as never,
-      strict: true,
-      errorFunction: (runContext, error) =>
-        recordSafeSdkFailure({
-          runContext,
-          toolName: canonicalTool.definition.name,
-          errorCode:
-            error instanceof Error && error.name === 'InvalidToolInputError'
-              ? 'invalid_tool_input'
-              : 'tool_execution_failed',
-        }),
-      async execute(
-        arguments_,
-        runContext?: RunContext<KfcOpenAiAgentRunContext>,
-      ) {
-        if (!runContext) {
-          throw new Error('KFC tool is missing its run context');
-        }
-        if (!isSdkToolArguments(arguments_)) {
-          throw new Error('Tool arguments must be a JSON object');
-        }
-        const validation = canonicalArgumentSchema(
-          canonicalTool.definition.name,
-        )?.safeParse(arguments_);
-        if (validation && !validation.success) {
-          const result = safeSdkToolFailure('invalid_tool_input');
-          runContext.context.toolCalls.push({
-            name: canonicalTool.definition.name,
-            arguments: {},
-            result,
-          });
-          return result;
-        }
-        const trace: OpenAiToolCallTrace = {
-          name: canonicalTool.definition.name,
-          arguments: validation?.data ?? arguments_,
-          result: undefined,
-        };
-        runContext.context.toolCalls.push(trace);
-        const abortController = new AbortController();
-        const localDeadlineAt = Date.now() + (options.timeoutMs ?? 120_000);
-        const argumentsForExecution = validation?.data ?? arguments_;
-        const sideEffect = classifyToolSideEffect(
-          canonicalTool.definition.name,
-          argumentsForExecution,
-        );
-        let timeoutId: ReturnType<typeof setTimeout> | undefined;
-        try {
-          const execution = canonicalTool.execute(
-            argumentsForExecution,
-            sideEffect === 'irreversible'
-              ? undefined
-              : {
-                  signal: abortController.signal,
-                  deadlineAt: localDeadlineAt,
-                },
-          );
-          if (sideEffect === 'irreversible') {
-            const result = await execution;
-            trace.result = result;
-            return result;
-          }
-          const timedOut = Symbol('kfc_tool_timed_out');
-          const timeout = new Promise<typeof timedOut>((resolve) => {
-            timeoutId = setTimeout(
-              () => resolve(timedOut),
-              options.timeoutMs ?? 120_000,
-            );
-          });
-          const result = await Promise.race([execution, timeout]);
-          if (
-            result === timedOut ||
-            (isRecord(result) &&
-              result.errorCode === 'agent_tool_execution_cancelled')
-          ) {
-            abortController.abort();
-            const safe = safeSdkToolFailure('tool_timed_out');
-            trace.result = safe;
-            return safe;
-          }
-          trace.result = result;
-          return result;
-        } catch {
-          const result = safeSdkToolFailure('tool_execution_failed');
-          trace.result = result;
-          return result;
-        } finally {
-          if (timeoutId) clearTimeout(timeoutId);
-        }
-      },
-    }),
-  );
-}
+export {
+  createKfcOpenAiAgentsTools,
+  type KfcArgumentParseResult,
+  type KfcCanonicalTool,
+  type KfcCanonicalToolDefinition,
+  type KfcOpenAiAgentRunContext,
+  type KfcOpenAiFunctionTool,
+  type KfcStrictJsonObjectSchema,
+};
 
 export interface KfcToolSession {
   sessionId: string;
@@ -269,7 +87,7 @@ export interface CreateKfcOpenAiToolsInput {
   clients: ExternalClients;
   sessionState: KfcToolSessionState;
   accessContext?: CustomerAccessContext;
-  fixtures?: Pick<
+  fixtures: Pick<
     GeneratedFixtures,
     'administrativeDivisions' | 'administrativeLegacyMappings' | 'menuItems'
   >;
@@ -388,7 +206,7 @@ export function verifiedKfcToolSessionContext(
 
 const descriptions: Record<ToolName, string> = {
   searchMenu:
-    'Search verified fixture menu data. query searches product text including names, descriptions, categories, and fixture aliases. category is one exact category filter copied from a returned item.category value; omit category when that exact value is not known. modifierQueries are independent terms for selectable options that must match the same item; use option wording rather than inferred product semantics, and matchedModifiers reports the verified option evidence. maxPriceVnd is a per-item price ceiling. partySize is ranking evidence and does not guarantee serving size. mode "full" returns the complete available menu; mode "search" ranks matching items. Returned product facts, prices, availability, and modifier matches come from verified fixture data; available false means the item cannot currently be ordered. An empty result means only that the supplied arguments returned no matches.',
+    'Search verified fixture menu data. query searches product names, descriptions, composition, categories, and fixture aliases; query may be empty when another field defines the search. A named-product lookup starts with the product name in query and adds category, price, or party-size filters when those constraints are customer-supplied or already verified. A named product with no other supplied constraint uses query as its only narrowing field; “add one Named Product” uses query: “Named Product”. category selects one exact value from the provided category enum. Browse one category with its exact category value and an empty query. Reserve query for distinct additional product-text constraints. A product-plus-options lookup keeps product terms in query and selectable terms in modifierQueries. modifierQueries search selectable options that should be selected or whose configurability must be verified; modifierQueries form an intersection on one item. An omitted add-on does not itself require that add-on to exist. Example: “product with selectable option A, leaving add-on B unselected” uses query: “product”, modifierQueries: [“option A”]. All supplied filters apply together, so express each distinct constraint in the field that represents it. maxPriceVnd is an inclusive per-item price ceiling. partySize provides ranking evidence. mode "full" returns the complete available menu; mode "search" ranks matching items. Returned facts come from verified fixture data; available reports whether the item can currently be ordered. A zero total describes the supplied filter scope.',
   getItemDetails:
     'Get verified name, description, category, base price, and current availability for one KFC menu item code. Treat available false as unavailable to order.',
   getModifierOptions:
@@ -536,23 +354,68 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
-function jsonSchemaFor(toolName: ToolName): Record<string, unknown> {
+function strictJsonObjectSchema(
+  value: unknown,
+  toolName: ToolName,
+): KfcStrictJsonObjectSchema {
+  if (
+    !isRecord(value) ||
+    value.type !== 'object' ||
+    !isRecord(value.properties) ||
+    value.additionalProperties !== false
+  ) {
+    throw new Error(`${toolName} did not produce a strict JSON object schema`);
+  }
+  const required = value.required;
+  if (
+    required !== undefined &&
+    (!Array.isArray(required) ||
+      required.some((property) => typeof property !== 'string'))
+  ) {
+    throw new Error(`${toolName} produced an invalid required-property list`);
+  }
+  return {
+    ...value,
+    type: 'object',
+    properties: value.properties,
+    required: required ?? [],
+    additionalProperties: false,
+  };
+}
+
+function jsonSchemaFor<TSchema extends z.ZodTypeAny>(
+  toolName: ToolName,
+  schemaSource: TSchema,
+  menuCategories: readonly string[],
+): KfcStrictJsonObjectSchema {
   if (toolName === 'quoteFulfillment') {
-    return directQuoteFulfillmentJsonSchema;
+    return strictJsonObjectSchema(directQuoteFulfillmentJsonSchema, toolName);
   }
   if (toolName === 'updateCart') {
-    return directUpdateCartJsonSchema;
+    return strictJsonObjectSchema(directUpdateCartJsonSchema, toolName);
   }
-  const schemaSource =
-    toolName === 'acquireVoucher' || toolName === 'redeemReward'
-      ? agentToolArgumentSchemas[toolName]
-      : toolArgumentSchemas[toolName];
-  const schema = zodToJsonSchema(schemaSource, {
+  const generated: unknown = zodToJsonSchema(schemaSource, {
     $refStrategy: 'none',
     target: 'jsonSchema7',
-  }) as Record<string, unknown>;
-  const { $schema: _schemaVersion, ...parameters } = schema;
-  return parameters;
+  });
+  if (!isRecord(generated)) {
+    throw new Error(`${toolName} did not produce a JSON schema`);
+  }
+  const { $schema: _schemaVersion, ...parameters } = generated;
+  const strict = strictJsonObjectSchema(parameters, toolName);
+  if (toolName !== 'searchMenu') return strict;
+  return {
+    ...strict,
+    properties: {
+      ...strict.properties,
+      category: {
+        type: 'string',
+        enum: [...menuCategories],
+        description:
+          'Exact verified menu category value from this enum. All supplied fields form one intersection, so add category when it is itself part of the requested or verified scope.',
+      },
+    },
+  };
 }
 
 function canonicalUpdateCartArguments(
@@ -680,6 +543,31 @@ const directQuoteFulfillmentArgumentsSchema = z
     method: z.enum(['pickup', 'delivery']),
   })
   .strict();
+
+function directAgentArgumentSchemas(menuCategories: readonly string[]) {
+  if (menuCategories.length === 0) {
+    throw new Error('Verified menu categories are required for direct tools');
+  }
+  const verifiedCategorySchema = z
+    .string()
+    .refine((category) => menuCategories.includes(category), {
+      message: 'category must be an exact verified menu category',
+    })
+    .optional()
+    .describe(
+      'Exact verified menu category value from this enum. All supplied fields form one intersection, so add category when it is itself part of the requested or verified scope.',
+    );
+  return {
+    ...toolArgumentSchemas,
+    searchMenu: toolArgumentSchemas.searchMenu.extend({
+      category: verifiedCategorySchema,
+    }),
+    updateCart: directUpdateCartArgumentsSchema,
+    quoteFulfillment: directQuoteFulfillmentArgumentsSchema,
+    acquireVoucher: agentToolArgumentSchemas.acquireVoucher,
+    redeemReward: agentToolArgumentSchemas.redeemReward,
+  };
+}
 
 export type DirectQuoteFulfillmentValue =
   | {
@@ -1276,191 +1164,207 @@ function membershipToolsWithRuntimeCapability(result: ToolCallResult): unknown {
 export function createKfcOpenAiTools(
   input: CreateKfcOpenAiToolsInput,
 ): KfcCanonicalTool[] {
-  return toolNames.map((toolName) => ({
-    definition: {
-      type: 'function',
-      name: toolName,
-      description: descriptions[toolName],
-      parameters: jsonSchemaFor(toolName),
-      strict: toolName === 'quoteFulfillment' || toolName === 'updateCart',
-    },
-    async execute(arguments_: Record<string, unknown>, options) {
-      const baseSession = input.sessionState.current;
-      const session = {
-        ...baseSession,
-        externalCallContext: {
-          signal: AbortSignal.any([
-            baseSession.externalCallContext.signal,
-            options?.signal ?? baseSession.externalCallContext.signal,
-          ]),
-          deadlineAt: Math.min(
-            baseSession.externalCallContext.deadlineAt,
-            options?.deadlineAt ?? baseSession.externalCallContext.deadlineAt,
-          ),
-        },
-      } satisfies KfcToolSession;
-      const publish = (nextSession: KfcToolSession): boolean => {
-        if (options?.signal.aborted) return false;
-        if (input.sessionState.current !== baseSession) return false;
-        input.sessionState.current = {
-          ...nextSession,
-          externalCallContext: baseSession.externalCallContext,
+  const menuCategories = [
+    ...new Set(input.fixtures.menuItems.map((item) => item.category)),
+  ];
+  const argumentSchemas = directAgentArgumentSchemas(menuCategories);
+  return toolNames.map((toolName) => {
+    const argumentSchema = argumentSchemas[toolName];
+    return {
+      definition: {
+        type: 'function' as const,
+        name: toolName,
+        description: descriptions[toolName],
+        parameters: jsonSchemaFor(toolName, argumentSchema, menuCategories),
+        strict: true as const,
+      },
+      parseArguments(value: unknown): KfcArgumentParseResult {
+        const parsed = argumentSchema.safeParse(value);
+        if (!parsed.success || !isRecord(parsed.data)) {
+          return { success: false };
+        }
+        return { success: true, data: parsed.data };
+      },
+      async execute(arguments_: Record<string, unknown>, options) {
+        const baseSession = input.sessionState.current;
+        const session = {
+          ...baseSession,
+          externalCallContext: {
+            signal: AbortSignal.any([
+              baseSession.externalCallContext.signal,
+              options?.signal ?? baseSession.externalCallContext.signal,
+            ]),
+            deadlineAt: Math.min(
+              baseSession.externalCallContext.deadlineAt,
+              options?.deadlineAt ?? baseSession.externalCallContext.deadlineAt,
+            ),
+          },
+        } satisfies KfcToolSession;
+        const publish = (nextSession: KfcToolSession): boolean => {
+          if (options?.signal.aborted) return false;
+          if (input.sessionState.current !== baseSession) return false;
+          input.sessionState.current = {
+            ...nextSession,
+            externalCallContext: baseSession.externalCallContext,
+          };
+          return true;
         };
-        return true;
-      };
-      const publishOrConflict = (
-        result: unknown,
-        nextSession: KfcToolSession,
-      ): unknown => {
-        if (publish(nextSession)) return result;
-        if (options?.signal.aborted) return result;
-        return {
-          toolName,
-          ok: false,
-          errorCode: 'agent_tool_state_conflict',
-          message: 'Tool state changed before this result could be applied',
-          provenance: [],
-        } satisfies ToolCallResult;
-      };
-      if (toolName === 'quoteFulfillment') {
-        const execution = await executeDirectQuoteFulfillment({
-          clients: input.clients,
-          session,
-          accessContext: input.accessContext,
-          arguments: arguments_,
-          fixtures: input.fixtures,
-        });
-        return publishOrConflict(execution.result, execution.session);
-      }
-      if (toolName === 'handoff' && session.handoff) {
-        return {
-          toolName: 'handoff',
-          ok: true,
-          value: { escalationId: session.handoff.escalationId },
-          message: 'Human-support request is already queued',
-          provenance: [],
-        } satisfies ToolCallResult;
-      }
-      if (toolName === 'placeOrder' && session.order) {
-        return {
-          toolName: 'placeOrder',
-          ok: true,
-          value: session.order,
-          message: 'Current verified order already exists',
-          provenance: [],
-        } satisfies ToolCallResult;
-      }
-      const directArguments =
-        toolName === 'listPaymentMethods'
-          ? Object.fromEntries(
-              Object.entries(arguments_).filter(([, value]) => value !== null),
-            )
-          : toolName === 'updateCart'
-            ? canonicalUpdateCartArguments(arguments_)
-            : toolName === 'acquireVoucher' || toolName === 'redeemReward'
-              ? { ...arguments_, confirmed: true }
-              : arguments_;
-      const effectiveArguments = directArguments;
-      let preparedSession = session;
-      if (toolName === 'createPaymentLink') {
-        const parsed =
-          toolArgumentSchemas.createPaymentLink.safeParse(effectiveArguments);
-        const authority = parsed.success
-          ? activeSupportedPaymentMethod(
-              {
-                activeCollectionKeys: session.activeCollectionKeys,
-                verifiedCollections: session.verifiedCollections,
-              },
-              parsed.data.methodId,
-            )
-          : undefined;
-        if (!authority) {
+        const publishOrConflict = (
+          result: unknown,
+          nextSession: KfcToolSession,
+        ): unknown => {
+          if (publish(nextSession)) return result;
+          if (options?.signal.aborted) return result;
           return {
-            toolName: 'createPaymentLink',
+            toolName,
             ok: false,
-            errorCode: 'unverified_payment_method',
-            message:
-              'The supplied methodId is not in the active verified payment-method collection',
+            errorCode: 'agent_tool_state_conflict',
+            message: 'Tool state changed before this result could be applied',
+            provenance: [],
+          } satisfies ToolCallResult;
+        };
+        if (toolName === 'quoteFulfillment') {
+          const execution = await executeDirectQuoteFulfillment({
+            clients: input.clients,
+            session,
+            accessContext: input.accessContext,
+            arguments: arguments_,
+            fixtures: input.fixtures,
+          });
+          return publishOrConflict(execution.result, execution.session);
+        }
+        if (toolName === 'handoff' && session.handoff) {
+          return {
+            toolName: 'handoff',
+            ok: true,
+            value: { escalationId: session.handoff.escalationId },
+            message: 'Human-support request is already queued',
             provenance: [],
           } satisfies ToolCallResult;
         }
-        preparedSession = {
-          ...preparedSession,
-          selectedPaymentMethod: selectedPaymentMethodAuthority(authority),
-        };
-      }
-      const prepared = prepareExecution(
-        preparedSession,
-        input.accessContext,
-        toolName,
-        effectiveArguments,
-      );
-      const legacyResult = await executeToolCall(
-        input.clients,
-        { toolName, arguments: effectiveArguments },
-        prepared.context,
-      );
-      if (toolName === 'listPaymentMethods') {
-        const result = await adaptAgentToolResult({
-          clients: input.clients,
-          request: { toolName, arguments: effectiveArguments },
-          context: prepared.context,
-          legacy: legacyResult,
-          scope:
-            typeof effectiveArguments.query === 'string'
-              ? {
-                  scope: 'filtered',
-                  query: effectiveArguments.query,
-                }
-              : { scope: 'all' },
-        });
-        let nextSession = prepared.session;
-        if (result.ok && result.verifiedCollection) {
-          nextSession = {
-            ...nextSession,
-            activeCollectionKeys: {
-              ...nextSession.activeCollectionKeys,
-              listPaymentMethods: result.verifiedCollection.key,
-            },
-            verifiedCollections: replaceVerifiedCollection(
-              nextSession.verifiedCollections,
-              'listPaymentMethods',
-              result.verifiedCollection,
-            ),
+        if (toolName === 'placeOrder' && session.order) {
+          return {
+            toolName: 'placeOrder',
+            ok: true,
+            value: session.order,
+            message: 'Current verified order already exists',
+            provenance: [],
+          } satisfies ToolCallResult;
+        }
+        const directArguments =
+          toolName === 'listPaymentMethods'
+            ? Object.fromEntries(
+                Object.entries(arguments_).filter(
+                  ([, value]) => value !== null,
+                ),
+              )
+            : toolName === 'updateCart'
+              ? canonicalUpdateCartArguments(arguments_)
+              : toolName === 'acquireVoucher' || toolName === 'redeemReward'
+                ? { ...arguments_, confirmed: true }
+                : arguments_;
+        const effectiveArguments = directArguments;
+        let preparedSession = session;
+        if (toolName === 'createPaymentLink') {
+          const parsed =
+            toolArgumentSchemas.createPaymentLink.safeParse(effectiveArguments);
+          const authority = parsed.success
+            ? activeSupportedPaymentMethod(
+                {
+                  activeCollectionKeys: session.activeCollectionKeys,
+                  verifiedCollections: session.verifiedCollections,
+                },
+                parsed.data.methodId,
+              )
+            : undefined;
+          if (!authority) {
+            return {
+              toolName: 'createPaymentLink',
+              ok: false,
+              errorCode: 'unverified_payment_method',
+              message:
+                'The supplied methodId is not in the active verified payment-method collection',
+              provenance: [],
+            } satisfies ToolCallResult;
+          }
+          preparedSession = {
+            ...preparedSession,
+            selectedPaymentMethod: selectedPaymentMethodAuthority(authority),
           };
         }
-        return publishOrConflict(result, nextSession);
-      }
-      if (toolName === 'listMembershipRewards') {
-        const profile = prepareExecution(
-          prepared.session,
+        const prepared = prepareExecution(
+          preparedSession,
           input.accessContext,
-          'getMembershipProfile',
-          {},
+          toolName,
+          effectiveArguments,
         );
-        const profileResult = await executeToolCall(
+        const legacyResult = await executeToolCall(
           input.clients,
-          { toolName: 'getMembershipProfile', arguments: {} },
-          profile.context,
+          { toolName, arguments: effectiveArguments },
+          prepared.context,
         );
-        const result = rewardCatalogWithEligibility(
+        if (toolName === 'listPaymentMethods') {
+          const result = await adaptAgentToolResult({
+            clients: input.clients,
+            request: { toolName, arguments: effectiveArguments },
+            context: prepared.context,
+            legacy: legacyResult,
+            scope:
+              typeof effectiveArguments.query === 'string'
+                ? {
+                    scope: 'filtered',
+                    query: effectiveArguments.query,
+                  }
+                : { scope: 'all' },
+          });
+          let nextSession = prepared.session;
+          if (result.ok && result.verifiedCollection) {
+            nextSession = {
+              ...nextSession,
+              activeCollectionKeys: {
+                ...nextSession.activeCollectionKeys,
+                listPaymentMethods: result.verifiedCollection.key,
+              },
+              verifiedCollections: replaceVerifiedCollection(
+                nextSession.verifiedCollections,
+                'listPaymentMethods',
+                result.verifiedCollection,
+              ),
+            };
+          }
+          return publishOrConflict(result, nextSession);
+        }
+        if (toolName === 'listMembershipRewards') {
+          const profile = prepareExecution(
+            prepared.session,
+            input.accessContext,
+            'getMembershipProfile',
+            {},
+          );
+          const profileResult = await executeToolCall(
+            input.clients,
+            { toolName: 'getMembershipProfile', arguments: {} },
+            profile.context,
+          );
+          const result = rewardCatalogWithEligibility(
+            legacyResult,
+            profileResult,
+          );
+          return publishOrConflict(result, profile.session);
+        }
+        if (toolName === 'listMembershipWallet') {
+          const result = walletWithRuntimeCapability(legacyResult);
+          return publishOrConflict(result, prepared.session);
+        }
+        if (toolName === 'listMembershipTools') {
+          const result = membershipToolsWithRuntimeCapability(legacyResult);
+          return publishOrConflict(result, prepared.session);
+        }
+        return publishOrConflict(
           legacyResult,
-          profileResult,
+          reduceToolResult(prepared.session, legacyResult, effectiveArguments),
         );
-        return publishOrConflict(result, profile.session);
-      }
-      if (toolName === 'listMembershipWallet') {
-        const result = walletWithRuntimeCapability(legacyResult);
-        return publishOrConflict(result, prepared.session);
-      }
-      if (toolName === 'listMembershipTools') {
-        const result = membershipToolsWithRuntimeCapability(legacyResult);
-        return publishOrConflict(result, prepared.session);
-      }
-      return publishOrConflict(
-        legacyResult,
-        reduceToolResult(prepared.session, legacyResult, effectiveArguments),
-      );
-    },
-  }));
+      },
+    };
+  });
 }

@@ -60,7 +60,7 @@ const store = new MemoryStore();
 const clientBySession = new Map<string, ReturnType<typeof createMockClients>>();
 const model = process.env.KFC_AGENT_MODEL?.trim() || 'gpt-4.1-mini';
 const configuredCompactionThreshold = Number(
-  process.env.KFC_DIRECT_LIVE_COMPACTION_THRESHOLD_BYTES ?? '196608',
+  process.env.KFC_DIRECT_LIVE_COMPACTION_THRESHOLD_BYTES ?? '98304',
 );
 if (
   !Number.isInteger(configuredCompactionThreshold) ||

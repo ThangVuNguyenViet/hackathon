@@ -22,7 +22,7 @@ const appEnvSchema = z.object({
     .int()
     .min(16_384)
     .max(4_194_304)
-    .default(196_608),
+    .default(98_304),
   KFC_AGENT_COMPACTION_MODEL: z.string().optional().default(""),
   KFC_MONITOR_PROVIDER: z.enum(["openai", "google"]).optional(),
   KFC_MONITOR_MODEL: z.string().optional().default(""),

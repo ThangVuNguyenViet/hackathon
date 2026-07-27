@@ -38,7 +38,7 @@ describe('buildServerOptionsFromEnv', () => {
 
     expect(Reflect.get(options.openAiAgent!, 'compaction')).toEqual({
       enabled: true,
-      thresholdBytes: 196608,
+      thresholdBytes: 98304,
     });
   });
 

@@ -28,7 +28,8 @@ export type DirectAgentRegressionCoverage =
   | 'one-turn-checkout-progression'
   | 'modifier-preservation-through-checkout'
   | 'genui-selection-and-cart-actions'
-  | 'sdk-compaction-continuity';
+  | 'sdk-compaction-continuity'
+  | 'customer-safe-presentation';
 
 export type DirectAgentScenarioTurn =
   | {
@@ -131,8 +132,11 @@ export interface DirectAgentTurnService {
 
 const canonicalScenarioCount = 11;
 
-function customerTurn(turn: ScenarioTurn): DirectAgentScenarioTurn {
-  return { kind: 'customer', text: turn.text };
+function customerTurn(turn: ScenarioTurn | string): DirectAgentScenarioTurn {
+  return {
+    kind: 'customer',
+    text: typeof turn === 'string' ? turn : turn.text,
+  };
 }
 
 export async function loadCanonicalDirectAgentScenarios(
@@ -169,6 +173,47 @@ export async function loadCanonicalDirectAgentScenarios(
 }
 
 export const DIRECT_AGENT_MANUAL_REGRESSION_BANK: DirectAgentScenario[] = [
+  {
+    id: 'regression-presentation-drink-language',
+    title: 'Customer-safe drink discovery language',
+    source: 'manual-regression',
+    coverage: 'customer-safe-presentation',
+    turns: [
+      customerTurn('Cho mình xem menu có gì?'),
+      customerTurn('Mình muốn chọn một món đồ uống riêng trong menu.'),
+      customerTurn('Ngoài Pepsi ra còn nước nào khác không?'),
+    ],
+    referenceAssistantTurns: [],
+    observations: [
+      'Evaluate whether the agent retrieves standalone drinks and answers with customer-useful choices while keeping matching, tagging, category-filter, and evidence mechanics implicit.',
+    ],
+  },
+  {
+    id: 'regression-presentation-modifier-language',
+    title: 'Customer-safe modifier uncertainty language',
+    source: 'manual-regression',
+    coverage: 'customer-safe-presentation',
+    turns: [
+      customerTurn(
+        'Gợi ý cho mình một món gà không cay và không thêm phô mai.',
+      ),
+    ],
+    referenceAssistantTurns: [],
+    observations: [
+      'Evaluate whether modifier facts stay attached to verified options and any remaining uncertainty is phrased naturally without verification or search-process vocabulary.',
+    ],
+  },
+  {
+    id: 'regression-presentation-catalog-scope',
+    title: 'Customer-safe scoped no-match language',
+    source: 'manual-regression',
+    coverage: 'customer-safe-presentation',
+    turns: [customerTurn('Mình muốn gọi Combo Hợp Gu 99K.')],
+    referenceAssistantTurns: [],
+    observations: [
+      'Evaluate whether an over-constrained empty lookup is corrected before response and never becomes an unsupported catalog-wide absence claim.',
+    ],
+  },
   {
     id: 'regression-menu-search-retry',
     title: 'Corrected menu-search parameters after an empty result',

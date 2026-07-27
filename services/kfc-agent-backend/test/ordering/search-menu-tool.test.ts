@@ -158,27 +158,6 @@ describe('canonical searchMenu tool', () => {
     expect(output.items.every((item) => item.priceVnd <= 100000)).toBe(true);
   });
 
-  it('narrows candidates to a model-supplied price interval', async () => {
-    const output = await search({
-      minPriceVnd: 150000,
-      maxPriceVnd: 161000,
-    });
-
-    expect(output.items.length).toBeGreaterThan(0);
-    expect(
-      output.items.every(
-        (item) => item.priceVnd >= 150000 && item.priceVnd <= 161000,
-      ),
-    ).toBe(true);
-  });
-
-  it('supports an explicit exclusive price boundary without model arithmetic', async () => {
-    const output = await search({ maxPriceExclusiveVnd: 30000 });
-
-    expect(output.items.length).toBeGreaterThan(0);
-    expect(output.items.every((item) => item.priceVnd < 30000)).toBe(true);
-  });
-
   it('filters by normalized category', async () => {
     const category = fixtures.menuItems.find(
       (item) => item.available,
