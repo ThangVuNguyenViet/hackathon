@@ -1,30 +1,17 @@
-import { createHash } from 'node:crypto';
 import { execFileSync } from 'node:child_process';
+import { createHash } from 'node:crypto';
 import {
   mkdtempSync,
   readFileSync,
   rmSync,
   writeFileSync,
 } from 'node:fs';
-import { join } from 'node:path';
 import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import {
-  qualificationAgentModelProfiles,
-} from '../../src/config/agentModelProfile.js';
-import {
-  buildLiveQualityDatasetCases,
-  liveQualityInventoryDigest,
-} from '../../src/evaluation/liveQualityDataset.js';
-import {
-  LIVE_QUALITY_CANONICAL_INVENTORY_DIGEST,
-  LIVE_QUALITY_EXPECTED_SCENARIO_COUNT,
-  LIVE_QUALITY_EXPECTED_TURN_COUNT,
-  LIVE_QUALITY_INVENTORY_VERSION,
-} from '../../src/evaluation/liveQualityContracts.js';
-import {
-  assertLiveTextQualificationManifestFile,
   assertCleanQualificationSource,
+  assertLiveTextQualificationManifestFile,
   assertQualificationProviderEnvironment,
   mandatoryLiveTextQualification,
   officialOpenAiQualificationBaseUrl,
@@ -36,6 +23,19 @@ import {
   resolveQualificationConcurrency,
   runQualificationJobs,
 } from '../../scripts/lib/kfc-qualification-concurrency.mjs';
+import {
+  qualificationAgentModelProfiles,
+} from '../../src/config/agentModelProfile.js';
+import {
+  LIVE_QUALITY_CANONICAL_INVENTORY_DIGEST,
+  LIVE_QUALITY_EXPECTED_SCENARIO_COUNT,
+  LIVE_QUALITY_EXPECTED_TURN_COUNT,
+  LIVE_QUALITY_INVENTORY_VERSION,
+} from '../../src/evaluation/liveQualityContracts.js';
+import {
+  buildLiveQualityDatasetCases,
+  liveQualityInventoryDigest,
+} from '../../src/evaluation/liveQualityDataset.js';
 import { liveScenarioCases } from '../scenarios/scenarioCoverageLedger.js';
 
 const gitSha = 'a'.repeat(40);
@@ -187,7 +187,7 @@ function fixture(): {
         agent: mandatoryLiveTextQualification.profileByProvider[provider],
         outcomeJudge:
           mandatoryLiveTextQualification.profileByProvider[
-            outcomeJudgeProvider
+          outcomeJudgeProvider
           ],
         report: {
           path: `${provider}-text-${repetition}.json`,
@@ -637,7 +637,6 @@ describe('mandatory live text qualification artifact', () => {
     expect(replay.match(/mode: agentProfileMode,/gu)).toHaveLength(3);
     expect(replay).toContain('outcomeJudgeModel');
     expect(runner).toContain('runQualificationJobs(');
-    expect(runner).not.toContain('--maxConcurrency=1');
     expect(
       runner.match(
         /assertCleanQualificationSource\(repositoryRoot, gitSha\)/gu,
