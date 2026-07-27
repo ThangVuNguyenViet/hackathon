@@ -2,6 +2,7 @@ import { readFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { buildServerOptionsFromEnv } from '../../src/api/serverOptions.js';
+import { buildServer } from '../../src/api/server.js';
 import { loadEnv } from '../../src/config/env.js';
 import { recommendationShadowReadiness } from '../../src/config/recommendationShadow.js';
 import { checkWorkerReadiness } from '../../src/workerReadiness.js';
@@ -22,12 +23,11 @@ describe('recommendation shadow configuration', () => {
       required: false,
       configured: false,
       outputMode: 'baseline',
-      modelRevision: null,
       message: 'Recommendation shadow scoring is not configured',
     });
   });
 
-  it('pins learned technical evidence to server configuration and reports no endpoint URL', () => {
+  it('pins learned technical evidence to server configuration without publishing exact provenance', async () => {
     const env = loadEnv({
       KFC_RECOMMENDATION_SHADOW_URL: 'https://shadow.example',
       KFC_RECOMMENDATION_SHADOW_MODEL_REVISION: 'hf-revision-0123456789abcdef',
@@ -41,9 +41,18 @@ describe('recommendation shadow configuration', () => {
       required: false,
       configured: true,
       outputMode: 'learned_technical',
-      modelRevision: 'hf-revision-0123456789abcdef',
     });
     expect(readiness).not.toHaveProperty('url');
+    expect(readiness).not.toHaveProperty('modelRevision');
+
+    const server = buildServer(buildServerOptionsFromEnv(env));
+    try {
+      const response = await server.inject({ method: 'GET', url: '/ready' });
+      expect(response.json().checks.recommendationShadow).toEqual(readiness);
+      expect(response.body).not.toContain('hf-revision-0123456789abcdef');
+    } finally {
+      await server.close();
+    }
     expect(() =>
       loadEnv({ KFC_RECOMMENDATION_OUTPUT_MODE: 'customer_selected' }),
     ).toThrow();
@@ -64,7 +73,6 @@ describe('recommendation shadow configuration', () => {
       required: false,
       configured: false,
       outputMode: 'baseline',
-      modelRevision: null,
       message:
         'KFC_RECOMMENDATION_SHADOW_URL and KFC_RECOMMENDATION_SHADOW_MODEL_REVISION must be configured together',
     });
@@ -84,7 +92,7 @@ describe('recommendation shadow configuration', () => {
     expect(wrangler).toContain('KFC_RECOMMENDATION_OUTPUT_MODE = "baseline"');
   });
 
-  it('exposes the same protected mode and revision on the direct Worker readiness path', async () => {
+  it('exposes only non-sensitive shadow status on the direct Worker readiness path', async () => {
     const readiness = await checkWorkerReadiness(
       {
         DB: {
@@ -104,8 +112,10 @@ describe('recommendation shadow configuration', () => {
       required: false,
       configured: true,
       outputMode: 'learned_technical',
-      modelRevision: 'hf-revision-0123456789abcdef',
     });
     expect(readiness.checks.recommendationShadow).not.toHaveProperty('url');
+    expect(readiness.checks.recommendationShadow).not.toHaveProperty(
+      'modelRevision',
+    );
   });
 });

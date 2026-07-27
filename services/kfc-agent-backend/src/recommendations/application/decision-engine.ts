@@ -184,8 +184,9 @@ async function shadowComparison(input: {
       activeTechnicalOrdering: 'baseline',
       failureCode:
         error instanceof RecommendationShadowScorerError &&
-        error.code === 'shadow_response_invalid'
-          ? 'shadow_response_invalid'
+        (error.code === 'shadow_response_invalid' ||
+          error.code === 'shadow_deadline_exceeded')
+          ? error.code
           : 'shadow_unavailable',
     };
   }

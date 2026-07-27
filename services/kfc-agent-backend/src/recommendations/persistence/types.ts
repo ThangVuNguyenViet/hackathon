@@ -253,7 +253,11 @@ const shadowComparisonSchema = z.discriminatedUnion('status', [
       status: z.literal('failed'),
       modelRevision: nonBlankStringSchema,
       activeTechnicalOrdering: z.literal('baseline'),
-      failureCode: z.enum(['shadow_unavailable', 'shadow_response_invalid']),
+      failureCode: z.enum([
+        'shadow_deadline_exceeded',
+        'shadow_unavailable',
+        'shadow_response_invalid',
+      ]),
     })
     .strict(),
   z

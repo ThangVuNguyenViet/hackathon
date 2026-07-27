@@ -35,6 +35,7 @@ QUALIFIED_RANKERS = {
 CONTROL_COLUMNS = ("placement", "feature_schema", "eligible", "action_id")
 OUTPUT_COLUMNS = (
     "action_id",
+    "model_revision",
     "calibrated_probability",
     "expected_value_score",
     "model_artifact_id",
@@ -197,6 +198,7 @@ def build_serving_signature() -> ModelSignature:
     ]
     outputs = [
         ColSpec("string", "action_id"),
+        ColSpec("string", "model_revision"),
         ColSpec("double", "calibrated_probability"),
         ColSpec("double", "expected_value_score"),
         ColSpec("string", "model_artifact_id"),
@@ -317,6 +319,8 @@ class QualifiedShadowModel(mlflow.pyfunc.PythonModel):
         params: dict[str, Any] | None = None,
     ) -> pd.DataFrame:
         del context, params
+        if self._trusted_manifest_digest is None:
+            raise ValueError("trusted manifest digest is required for prediction")
         frame = self._validate_input(model_input)
         if frame.empty:
             return pd.DataFrame(columns=OUTPUT_COLUMNS)
@@ -342,6 +346,7 @@ class QualifiedShadowModel(mlflow.pyfunc.PythonModel):
                     {
                         "_input_order": int(row["_input_order"]),
                         "action_id": str(row["action_id"]),
+                        "model_revision": self._trusted_manifest_digest,
                         "calibrated_probability": float(probabilities[position]),
                         "expected_value_score": float(expected_values[position]),
                         "model_artifact_id": bundle.model_artifact_id,

@@ -288,7 +288,6 @@ export function createSystemRouteHandlers(context: RouteHandlerContext) {
         required: false as const,
         configured: false,
         outputMode: 'baseline' as const,
-        modelRevision: null,
         message: 'Recommendation shadow scoring is not configured',
       };
       const checks = messengerToken

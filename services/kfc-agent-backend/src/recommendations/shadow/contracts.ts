@@ -93,7 +93,7 @@ export interface RecommendationShadowScorer {
 export type RecommendationOutputMode = 'baseline' | 'learned_technical';
 
 export type RecommendationShadowFailureCode =
-  'shadow_unavailable' | 'shadow_response_invalid';
+  'shadow_deadline_exceeded' | 'shadow_unavailable' | 'shadow_response_invalid';
 
 interface RecommendationShadowComparisonBase {
   outputMode: RecommendationOutputMode;

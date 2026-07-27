@@ -27,6 +27,7 @@ import type {
   RecommendationShadowScoreRequest,
   RecommendationShadowScorer,
 } from '../../src/recommendations/shadow/contracts.js';
+import { HttpRecommendationShadowScorer } from '../../src/recommendations/shadow/http-shadow-scorer.js';
 
 const bundledEngine = createBundledRecommendationDecisionEngine();
 
@@ -774,6 +775,33 @@ describe('pure recommendation decision engine', () => {
     expect(
       JSON.stringify(failedShadow.technical.shadowComparison),
     ).not.toContain('private-shadow-token');
+  });
+
+  it('returns the baseline customer decision when shadow HTTP never resolves', async () => {
+    const context = smartContext();
+    const baseline = await decide(context);
+    const hangingShadow = new HttpRecommendationShadowScorer({
+      baseUrl: 'https://shadow.example',
+      modelRevision: 'expected-immutable-manifest-digest',
+      deadlineMs: 5,
+      fetchImpl: () => new Promise<Response>(() => {}),
+    });
+
+    const timedOutShadow = await decide(
+      context,
+      engineWith({
+        shadowScorer: hangingShadow,
+        shadowOutputMode: 'learned_technical',
+      }),
+    );
+
+    expect(timedOutShadow.response).toEqual(baseline.response);
+    expect(timedOutShadow.technical.shadowComparison).toMatchObject({
+      status: 'failed',
+      outputMode: 'learned_technical',
+      activeTechnicalOrdering: 'baseline',
+      failureCode: 'shadow_deadline_exceeded',
+    });
   });
 
   it('returns typed empty reasons for attempted, wrong-stage, and empty placement contexts', async () => {

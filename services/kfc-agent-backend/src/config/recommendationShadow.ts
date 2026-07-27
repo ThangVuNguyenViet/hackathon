@@ -11,7 +11,6 @@ export type RecommendationShadowReadiness = {
   required: false;
   configured: boolean;
   outputMode: RecommendationOutputMode;
-  modelRevision: string | null;
   message?: string;
 };
 
@@ -28,7 +27,6 @@ export function recommendationShadowReadiness(
       required: false,
       configured: false,
       outputMode: input.outputMode,
-      modelRevision: null,
       message:
         'KFC_RECOMMENDATION_SHADOW_URL and KFC_RECOMMENDATION_SHADOW_MODEL_REVISION must be configured together',
     };
@@ -39,7 +37,6 @@ export function recommendationShadowReadiness(
       required: false,
       configured: false,
       outputMode: input.outputMode,
-      modelRevision: null,
       message: 'Recommendation shadow scoring is not configured',
     };
   }
@@ -48,6 +45,5 @@ export function recommendationShadowReadiness(
     required: false,
     configured: true,
     outputMode: input.outputMode,
-    modelRevision,
   };
 }

@@ -44,9 +44,14 @@ KFC_RECOMMENDATION_SHADOW_MODEL_REVISION
 `KFC_RECOMMENDATION_OUTPUT_MODE` defaults to `baseline`. The only other valid
 value, `learned_technical`, changes protected comparison evidence only. It
 never changes the customer response or action set and cannot be selected by a
-customer request. `/ready` reports whether the endpoint/revision pair is
-configured, the pinned revision, and the protected output mode without
-exposing the endpoint URL.
+customer request. Set `KFC_RECOMMENDATION_SHADOW_MODEL_REVISION` to the
+immutable `trustedArtifactManifestDigest` published in
+`shadow-model-manifest.json`. Every served prediction attests that digest and
+the backend rejects a mismatch. Shadow scoring has a fixed 250 ms deadline;
+timeout and protocol failures retain the deterministic baseline customer
+decision. `/ready` reports only whether the endpoint/revision pair is
+configured and the output mode; it exposes neither the endpoint URL nor exact
+revision provenance.
 
 The current public Hugging Face/MLflow boundary requires no credential, so this
 feature adds no secret. Keep all actual secret values out of `.env.example`,

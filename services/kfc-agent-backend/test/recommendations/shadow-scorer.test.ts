@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   HttpRecommendationShadowScorer,
   parseRecommendationShadowScoreResponse,
@@ -37,6 +37,10 @@ const smartRow = (
 });
 
 describe('HTTP recommendation shadow scorer', () => {
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
   it('sends only the MLflow signature rows and parses exact artifact provenance', async () => {
     const rows = [
       smartRow('product:41127', 50_000),
@@ -52,6 +56,7 @@ describe('HTTP recommendation shadow scorer', () => {
           JSON.stringify({
             predictions: rows.map((row, index) => ({
               action_id: row.action_id,
+              model_revision: 'hf-revision-0123456789abcdef',
               calibrated_probability: index === 0 ? 0.2 : 0.8,
               expected_value_score: index === 0 ? 10_000 : 28_000,
               model_artifact_id: 'smart_cross_sell-lightgbm-873cafdc6a6a0a9f',
@@ -121,6 +126,7 @@ describe('HTTP recommendation shadow scorer', () => {
       predictions: [
         {
           action_id: 'product:41127',
+          model_revision: 'hf-revision-0123456789abcdef',
           calibrated_probability: 0.2,
           expected_value_score: 10_000,
           model_artifact_id: 'smart_cross_sell-lightgbm-873cafdc6a6a0a9f',
@@ -131,6 +137,7 @@ describe('HTTP recommendation shadow scorer', () => {
         },
         {
           action_id: 'product:41172',
+          model_revision: 'hf-revision-0123456789abcdef',
           calibrated_probability: 0.8,
           expected_value_score: 28_000,
           model_artifact_id: 'smart_cross_sell-lightgbm-873cafdc6a6a0a9f',
@@ -153,6 +160,7 @@ describe('HTTP recommendation shadow scorer', () => {
         },
         expectedActionIds,
         'smart-cross-sell-feature-schema-v1',
+        'hf-revision-0123456789abcdef',
       ),
     ).toThrow('shadow_response_action_ids_mismatch');
     expect(() =>
@@ -160,6 +168,7 @@ describe('HTTP recommendation shadow scorer', () => {
         { predictions: [valid.predictions[0]] },
         expectedActionIds,
         'smart-cross-sell-feature-schema-v1',
+        'hf-revision-0123456789abcdef',
       ),
     ).toThrow('shadow_response_action_ids_mismatch');
     expect(() =>
@@ -172,6 +181,7 @@ describe('HTTP recommendation shadow scorer', () => {
         },
         expectedActionIds,
         'smart-cross-sell-feature-schema-v1',
+        'hf-revision-0123456789abcdef',
       ),
     ).toThrow('shadow_response_action_ids_mismatch');
     expect(() =>
@@ -187,8 +197,67 @@ describe('HTTP recommendation shadow scorer', () => {
         },
         expectedActionIds,
         'smart-cross-sell-feature-schema-v1',
+        'hf-revision-0123456789abcdef',
       ),
     ).toThrow('shadow_response_invalid');
+  });
+
+  it('rejects a served model attestation that differs from configured provenance', async () => {
+    const scorer = new HttpRecommendationShadowScorer({
+      baseUrl: 'https://shadow.example',
+      modelRevision: 'expected-immutable-manifest-digest',
+      fetchImpl: async () =>
+        Response.json({
+          predictions: [
+            {
+              action_id: 'product:41127',
+              model_revision: 'stale-served-manifest-digest',
+              calibrated_probability: 0.2,
+              expected_value_score: 10_000,
+              model_artifact_id:
+                'smart_cross_sell-lightgbm-873cafdc6a6a0a9f',
+              calibration_id:
+                'smart_cross_sell-isotonic-calibration-9c9c55e026c5a193',
+              feature_schema: 'smart-cross-sell-feature-schema-v1',
+              feature_contributions: '[]',
+            },
+          ],
+        }),
+    });
+
+    await expect(
+      scorer.score({
+        placement: 'smart_cross_sell',
+        featureSchema: 'smart-cross-sell-feature-schema-v1',
+        rows: [smartRow('product:41127', 50_000)],
+      }),
+    ).rejects.toMatchObject({
+      code: 'shadow_response_invalid',
+      message: 'shadow_model_revision_mismatch',
+    });
+  });
+
+  it('terminates a never-resolving fetch at the fixed shadow deadline', async () => {
+    vi.useFakeTimers();
+    const scorer = new HttpRecommendationShadowScorer({
+      baseUrl: 'https://shadow.example',
+      modelRevision: 'expected-immutable-manifest-digest',
+      deadlineMs: 25,
+      fetchImpl: () => new Promise<Response>(() => {}),
+    });
+    const scoring = scorer.score({
+      placement: 'smart_cross_sell',
+      featureSchema: 'smart-cross-sell-feature-schema-v1',
+      rows: [smartRow('product:41127', 50_000)],
+    });
+    const rejection = expect(scoring).rejects.toMatchObject({
+      code: 'shadow_deadline_exceeded',
+      message: 'shadow_deadline_exceeded',
+    });
+
+    await vi.advanceTimersByTimeAsync(25);
+
+    await rejection;
   });
 
   it('bounds transport failures without exposing the response body', async () => {

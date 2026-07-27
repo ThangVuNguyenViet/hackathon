@@ -53,7 +53,6 @@ export async function checkWorkerReadiness(
         samplingRate: number;
       };
       outputMode?: 'baseline' | 'learned_technical';
-      modelRevision?: string | null;
     }
   >;
   release: {
@@ -165,7 +164,6 @@ export async function checkWorkerReadiness(
         samplingRate: number;
       };
       outputMode?: 'baseline' | 'learned_technical';
-      modelRevision?: string | null;
     }
   > = {
     database,

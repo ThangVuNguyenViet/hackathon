@@ -83,7 +83,8 @@ def _model() -> QualifiedShadowModel:
         {
             "smart_cross_sell": _placement_model("smart_cross_sell", 0.2),
             "modifier_upsell": _placement_model("modifier_upsell", 0.5),
-        }
+        },
+        trusted_manifest_digest="test-immutable-trusted-manifest-digest",
     )
 
 
@@ -381,6 +382,13 @@ class ShadowServingTest(unittest.TestCase):
             ],
             output["model_artifact_id"].tolist(),
         )
+        self.assertEqual(
+            [
+                "test-immutable-trusted-manifest-digest",
+                "test-immutable-trusted-manifest-digest",
+            ],
+            output["model_revision"].tolist(),
+        )
 
     def test_batch_output_and_feature_contributions_are_deterministic_and_bounded(
         self,
@@ -593,6 +601,7 @@ class ShadowServingTest(unittest.TestCase):
         self.assertEqual(
             {
                 "action_id": ("DataType.string", True),
+                "model_revision": ("DataType.string", True),
                 "calibrated_probability": ("DataType.double", True),
                 "expected_value_score": ("DataType.double", True),
                 "model_artifact_id": ("DataType.string", True),
