@@ -34,6 +34,116 @@ void main() {
     expect(attachment.actions.single.intent, KfcGenUiActionIntent.primary);
   });
 
+  test('parses a typed ID-only recommendation offer', () {
+    final attachment = KfcGenUiAttachment.fromJson({
+      'id': 'recommendation-attachment:binding-1',
+      'lifecycleStage': 'recommendation',
+      'widgetKind': 'recommendationOffer',
+      'status': 'active',
+      'title': 'Gợi ý dành cho bạn',
+      'expiresAt': '2099-07-27T10:00:00.000Z',
+      'authority': {
+        'schemaVersion': 'kfc-genui-v1',
+        'sessionId': 'kfc:customer-1',
+        'customerId': 'customer-1',
+        'verifiedRevision':
+            'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+        'actionLifecycle': 'one_shot',
+        'issuedAt': '2026-07-27T09:00:00.000Z',
+        'expiresAt': '2099-07-27T10:00:00.000Z',
+      },
+      'data': {
+        'recommendationId': 'recommendation-starter-1',
+        'orderFlowId': 'order-flow-1',
+        'placement': 'local_favorite',
+        'decisionSource': 'ranked',
+        'offers': [
+          {
+            'recommendationActionId': 'recommendation-action-1',
+            'kind': 'product',
+            'name': '1 Miếng Gà Giòn Cay',
+            'imageUrl': 'https://static.kfcvietnam.com.vn/item-1.webp',
+            'price': {'amount': 49000, 'currency': 'VND'},
+            'priceImpact': {'amount': 49000, 'currency': 'VND'},
+          },
+        ],
+        'reasonCodes': ['popular_here'],
+        'reasonText': ['Được nhiều khách chọn tại cửa hàng này'],
+        'cartRevision': 'cart-revision-1',
+        'actionDigest':
+            'bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb',
+        'decisionDigest':
+            'cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc',
+        'versionBindingDigest':
+            'dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd',
+      },
+      'actions': [
+        {
+          'id': 'recommendation_select:recommendation-action-1',
+          'label': 'Thêm vào đơn',
+          'intent': 'primary',
+        },
+        {
+          'id': 'recommendation_dismiss',
+          'label': 'Không, cảm ơn',
+          'intent': 'secondary',
+        },
+      ],
+    });
+
+    expect(attachment.widgetKind, KfcGenUiWidgetKind.recommendationOffer);
+    expect(
+      attachment.recommendationOfferData?.placement.wireName,
+      'local_favorite',
+    );
+    expect(
+      attachment.recommendationOfferData?.offers.single.name,
+      '1 Miếng Gà Giòn Cay',
+    );
+    expect(attachment.canSubmitActions, isTrue);
+    expect(
+      attachment
+          .bindAction(actionId: 'recommendation_select:recommendation-action-1')
+          ?.toJson(),
+      {
+        'attachmentId': 'recommendation-attachment:binding-1',
+        'actionId': 'recommendation_select:recommendation-action-1',
+      },
+    );
+    expect(
+      KfcRecommendationImpression.tryFromAttachment(
+        assistantTurnId: 'recommendation-turn:binding-1',
+        attachment: attachment,
+        occurredAt: DateTime.utc(2026, 7, 27, 9, 30),
+      )?.eventId,
+      'recommendation-impression:binding-1',
+    );
+  });
+
+  test('recommendation parser mirrors opaque IDs and replacement slates', () {
+    final fixture = kfcGenUiFixture(KfcGenUiWidgetKind.recommendationOffer);
+
+    expect(
+      KfcRecommendationOfferData.tryFromJson({
+        ...fixture.data,
+        'recommendationId': 'not a backend opaque id',
+      }),
+      isNull,
+    );
+
+    final firstOffer = (fixture.data['offers']! as List<Object?>).first;
+    final replacement = KfcRecommendationOfferData.tryFromJson({
+      ...fixture.data,
+      'placement': 'modifier_upsell',
+      'decisionSource': 'merchandising_replacement',
+      'offers': [firstOffer],
+    });
+
+    expect(replacement, isNotNull);
+    expect(replacement?.offers, hasLength(1));
+    expect(replacement?.offers.single.kind, KfcRecommendationOfferKind.product);
+  });
+
   test('preserves exact categorized-menu ids independently of labels', () {
     final attachment = KfcGenUiAttachment.fromJson({
       'id': 'categorized_menu',

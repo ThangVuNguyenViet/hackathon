@@ -13,6 +13,7 @@ import 'widgets/payment_order_status.dart';
 import 'widgets/payment_method_picker.dart';
 import 'widgets/product_detail_card.dart';
 import 'widgets/promotion_gallery.dart';
+import 'widgets/recommendation_offer.dart';
 import 'widgets/smart_menu_picker.dart';
 import 'widgets/support_handoff.dart';
 
@@ -23,12 +24,18 @@ class KfcGenUiRenderer extends StatelessWidget {
     required this.onAction,
     this.handoffStatus,
     this.interactive = true,
+    this.onImpression,
+    this.loadingActionId,
+    this.authorityMatches = true,
   });
 
   final KfcGenUiAttachment attachment;
   final ValueChanged<KfcGenUiAction> onAction;
   final String? handoffStatus;
   final bool interactive;
+  final VoidCallback? onImpression;
+  final String? loadingActionId;
+  final bool authorityMatches;
 
   @override
   Widget build(BuildContext context) {
@@ -88,6 +95,13 @@ class KfcGenUiRenderer extends StatelessWidget {
       KfcGenUiWidgetKind.paymentMethodPicker => PaymentMethodPicker(
         attachment: attachment,
         onAction: onAction,
+      ),
+      KfcGenUiWidgetKind.recommendationOffer => RecommendationOffer(
+        attachment: attachment,
+        onAction: onAction,
+        onImpression: onImpression,
+        loadingActionId: loadingActionId,
+        authorityMatches: authorityMatches,
       ),
     };
   }

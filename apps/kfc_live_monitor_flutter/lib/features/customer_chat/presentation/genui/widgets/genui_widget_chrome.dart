@@ -123,6 +123,7 @@ class GenUiActionButton extends StatelessWidget {
     required this.onPressed,
     this.height = 40,
     this.enabled = true,
+    this.displayLabel,
   });
 
   final KfcGenUiAttachment attachment;
@@ -130,6 +131,7 @@ class GenUiActionButton extends StatelessWidget {
   final VoidCallback onPressed;
   final double height;
   final bool enabled;
+  final String? displayLabel;
 
   @override
   Widget build(BuildContext context) {
@@ -172,7 +174,7 @@ class GenUiActionButton extends StatelessWidget {
       hoverForegroundColor: foreground,
       onPressed: enabled ? onPressed : null,
       child: Text(
-        action.label,
+        displayLabel ?? action.label,
         style: TextStyle(
           color: foreground,
           fontSize: 12,

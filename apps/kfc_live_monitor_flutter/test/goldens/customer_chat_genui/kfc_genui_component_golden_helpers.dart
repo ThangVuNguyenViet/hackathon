@@ -179,7 +179,9 @@ Object? _withoutRemoteMedia(Object? value) {
   if (value is Map<String, Object?>) {
     return <String, Object?>{
       for (final entry in value.entries)
-        if (entry.key != 'imageUrl' && entry.key != 'media')
+        if (entry.key == 'imageUrl')
+          entry.key: null
+        else if (entry.key != 'media')
           entry.key: _withoutRemoteMedia(entry.value),
     };
   }

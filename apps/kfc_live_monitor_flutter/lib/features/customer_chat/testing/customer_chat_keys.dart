@@ -95,4 +95,20 @@ abstract final class CustomerChatKeys {
 
   static Key genUiDecisionImage(String attachmentId, String mediaIdentity) =>
       Key('kfcGenUiDecisionImage_${attachmentId}_$mediaIdentity');
+
+  static Key genUiRecommendationItem(
+    String attachmentId,
+    String recommendationActionId,
+  ) =>
+      Key('kfcGenUiRecommendationItem_${attachmentId}_$recommendationActionId');
+
+  static Key genUiRecommendationImage(
+    String attachmentId,
+    String recommendationActionId,
+  ) => Key(
+    'kfcGenUiRecommendationImage_${attachmentId}_$recommendationActionId',
+  );
+
+  static Key genUiRecommendationState(String attachmentId) =>
+      Key('kfcGenUiRecommendationState_$attachmentId');
 }

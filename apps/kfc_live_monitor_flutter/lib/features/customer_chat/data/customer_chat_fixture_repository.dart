@@ -1,6 +1,7 @@
 part of 'customer_chat_repository.dart';
 
-class FixtureCustomerChatRepository implements CustomerChatRepository {
+class FixtureCustomerChatRepository
+    implements CustomerChatRepository, RecommendationImpressionRepository {
   const FixtureCustomerChatRepository({
     this.eventDelay = const Duration(milliseconds: 25),
   });
@@ -120,6 +121,11 @@ class FixtureCustomerChatRepository implements CustomerChatRepository {
         runId: runId,
         status: CustomerRunStatus.cancelling,
       );
+
+  @override
+  Future<void> recordRecommendationImpression(
+    KfcRecommendationImpression impression,
+  ) async {}
 
   @override
   Future<CustomerConfirmationResumeResult> resumeConfirmation({
@@ -655,6 +661,76 @@ KfcGenUiAttachment kfcGenUiFixture(KfcGenUiWidgetKind kind) {
         KfcGenUiActionSpec(
           id: 'select_payment_method',
           label: 'Chọn phương thức',
+        ),
+      ],
+    ),
+    KfcGenUiWidgetKind.recommendationOffer => const KfcGenUiAttachment(
+      id: 'fixture_recommendation_offer',
+      lifecycleStage: 'recommendation',
+      widgetKind: KfcGenUiWidgetKind.recommendationOffer,
+      status: KfcGenUiStatus.active,
+      title: 'Có thể bạn cũng thích',
+      data: {
+        'recommendationId': 'fixture-recommendation-1',
+        'orderFlowId': 'fixture-order-flow-1',
+        'placement': 'smart_cross_sell',
+        'decisionSource': 'ranked',
+        'offers': [
+          {
+            'recommendationActionId': 'fixture-recommendation-action-1',
+            'kind': 'product',
+            'name': 'Khoai Tây Chiên',
+            'imageUrl': null,
+            'price': {'amount': 29000, 'currency': 'VND'},
+            'priceImpact': {'amount': 29000, 'currency': 'VND'},
+          },
+          {
+            'recommendationActionId': 'fixture-recommendation-action-2',
+            'kind': 'product',
+            'name': 'Pepsi',
+            'imageUrl': null,
+            'price': {'amount': 19000, 'currency': 'VND'},
+            'priceImpact': {'amount': 19000, 'currency': 'VND'},
+          },
+          {
+            'recommendationActionId': 'fixture-recommendation-action-3',
+            'kind': 'product',
+            'name': 'Bắp Cải Trộn',
+            'imageUrl': null,
+            'price': {'amount': 22000, 'currency': 'VND'},
+            'priceImpact': {'amount': 22000, 'currency': 'VND'},
+          },
+        ],
+        'reasonCodes': ['completes_your_meal'],
+        'reasonText': ['Giúp hoàn thiện bữa ăn'],
+        'cartRevision': 'fixture-cart-revision-1',
+        'actionDigest':
+            'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+        'decisionDigest':
+            'bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb',
+        'versionBindingDigest':
+            'cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc',
+      },
+      actions: [
+        KfcGenUiActionSpec(
+          id: 'recommendation_select:fixture-recommendation-action-1',
+          label: 'Thêm vào đơn',
+          intent: KfcGenUiActionIntent.primary,
+        ),
+        KfcGenUiActionSpec(
+          id: 'recommendation_select:fixture-recommendation-action-2',
+          label: 'Thêm vào đơn',
+          intent: KfcGenUiActionIntent.primary,
+        ),
+        KfcGenUiActionSpec(
+          id: 'recommendation_select:fixture-recommendation-action-3',
+          label: 'Thêm vào đơn',
+          intent: KfcGenUiActionIntent.primary,
+        ),
+        KfcGenUiActionSpec(
+          id: 'recommendation_dismiss',
+          label: 'Không, cảm ơn',
+          intent: KfcGenUiActionIntent.secondary,
         ),
       ],
     ),

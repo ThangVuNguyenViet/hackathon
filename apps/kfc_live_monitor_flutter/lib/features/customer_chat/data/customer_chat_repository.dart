@@ -52,7 +52,14 @@ abstract interface class CustomerChatRepository {
   });
 }
 
-class BackendCustomerChatRepository implements CustomerChatRepository {
+abstract interface class RecommendationImpressionRepository {
+  Future<void> recordRecommendationImpression(
+    KfcRecommendationImpression impression,
+  );
+}
+
+class BackendCustomerChatRepository
+    implements CustomerChatRepository, RecommendationImpressionRepository {
   BackendCustomerChatRepository({
     required String baseUrl,
     http.Client? client,
@@ -176,6 +183,16 @@ class BackendCustomerChatRepository implements CustomerChatRepository {
       'clientMessageId': clientMessageId,
       'action': action.toJson(),
     });
+  }
+
+  @override
+  Future<void> recordRecommendationImpression(
+    KfcRecommendationImpression impression,
+  ) async {
+    await _postJson(
+      '/v1/recommendations/${Uri.encodeComponent(impression.recommendationId)}/impressions',
+      impression.toJson(),
+    );
   }
 
   @override

@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
@@ -11,6 +12,7 @@ import 'package:kfc_live_monitor/features/customer_chat/application/customer_cha
 import 'package:kfc_live_monitor/features/customer_chat/application/customer_chat_state.dart';
 import 'package:kfc_live_monitor/features/customer_chat/data/customer_chat_repository.dart';
 import 'package:kfc_live_monitor/features/customer_chat/domain/kfc_genui_models.dart';
+import 'package:kfc_live_monitor/features/customer_chat/domain/customer_run_models.dart';
 import 'package:kfc_live_monitor/features/customer_chat/testing/customer_chat_keys.dart';
 
 import 'support/generated_genui_scenario_capture_data.dart';
@@ -32,6 +34,9 @@ const _expectedRuntimeBinding = String.fromEnvironment(
 const _expectedFlutterRelease = String.fromEnvironment(
   'KFC_EXPECTED_FLUTTER_RELEASE',
 );
+const _recommendationProofOnly = bool.fromEnvironment(
+  'KFC_RECOMMENDATION_PROOF_ONLY',
+);
 final _adminToken = Platform.environment['KFC_PROOF_ADMIN_TOKEN'] ?? '';
 
 void main() {
@@ -46,11 +51,21 @@ void main() {
   );
 
   setUpAll(() async {
+    if (_screenshotDir.isEmpty) {
+      throw TestFailure('KFC_GENUI_SCREENSHOT_DIR is required');
+    }
+    screenshotRoot = _recommendationProofOnly && _screenshotDir == 'system-temp'
+        ? await Directory.systemTemp.createTemp(
+            'kfc-task-6-recommendation-offer-proof-',
+          )
+        : Directory(_screenshotDir);
+    await screenshotRoot.create(recursive: true);
+    debugPrint('KFC_GENUI_SCREENSHOT_DIR=${screenshotRoot.path}');
+    if (_recommendationProofOnly) return;
     for (final entry in {
       'KFC_AGENT_BACKEND_URL': _backendUrl,
       'KFC_GENUI_PERSISTED_BRANCHES': _persistedBranchesPath,
       'KFC_GENUI_GOLDEN_PLAN': _goldenPlanPath,
-      'KFC_GENUI_SCREENSHOT_DIR': _screenshotDir,
       'KFC_GENUI_PERSISTED_BRANCHES_SHA256': _persistedBranchesSha256,
       'KFC_EXPECTED_RUNTIME_BINDING': _expectedRuntimeBinding,
       'KFC_EXPECTED_FLUTTER_RELEASE': _expectedFlutterRelease,
@@ -58,8 +73,6 @@ void main() {
     }.entries) {
       if (entry.value.isEmpty) throw TestFailure('${entry.key} is required');
     }
-    screenshotRoot = Directory(_screenshotDir);
-    await screenshotRoot.create(recursive: true);
     final persistedBytes = await File(_persistedBranchesPath).readAsBytes();
     expect(sha256.convert(persistedBytes).toString(), _persistedBranchesSha256);
     branches = PersistedBranches.fromJson(
@@ -82,6 +95,124 @@ void main() {
       ),
       44,
     );
+  });
+
+  testWidgets('captures the recommendation offer interaction lifecycle', (
+    tester,
+  ) async {
+    const sessionId = 'kfc:recommendation-proof-customer';
+    const customerId = 'recommendation-proof-customer';
+    final repository = _RecommendationProofRepository();
+    final starter = _recommendationProofAttachment(
+      id: 'recommendation-proof-starter',
+      placement: 'for_you',
+      offerCount: 1,
+      sessionId: sessionId,
+      customerId: customerId,
+    );
+    final screenshots = IntegrationScreenshotCatalog(
+      outputDirectory: screenshotRoot,
+      testName: 'recommendation_offer',
+      boundaryKey: boundaryKey,
+    );
+    final controller = await _pumpCustomerChat(
+      tester,
+      boundaryKey,
+      sessionId: sessionId,
+      customerId: customerId,
+      repository: repository,
+      messages: [
+        CustomerChatMessage(
+          id: 'recommendation-turn-starter',
+          role: CustomerChatRole.assistant,
+          text: 'Mình có một gợi ý phù hợp với đơn hiện tại.',
+          genUi: starter,
+        ),
+      ],
+    );
+
+    await tester.pumpAndSettle();
+    expect(repository.impressions, hasLength(1));
+    await screenshots.capture(
+      tester,
+      'starter_offer',
+      target: find.byKey(boundaryKey),
+    );
+
+    final addActionId = 'recommendation_select:recommendation-proof-action-1';
+    await tester.tap(
+      find.byKey(CustomerChatKeys.genUiAction(starter.id, addActionId)),
+    );
+    await tester.pump();
+    expect(find.text('Đang thêm…'), findsOneWidget);
+    await screenshots.capture(
+      tester,
+      'starter_add_loading',
+      target: find.byKey(boundaryKey),
+      settle: false,
+    );
+
+    repository.completeCurrentAction();
+    await tester.pumpAndSettle(const Duration(milliseconds: 50));
+    expect(
+      controller.state.value.actionAttachment(starter.id)?.status,
+      KfcGenUiStatus.answered,
+    );
+    await screenshots.capture(
+      tester,
+      'starter_added',
+      target: find.byKey(boundaryKey),
+    );
+
+    final crossSell = _recommendationProofAttachment(
+      id: 'recommendation-proof-cross-sell',
+      placement: 'smart_cross_sell',
+      offerCount: 4,
+      sessionId: sessionId,
+      customerId: customerId,
+    );
+    controller.state.value = CustomerChatState(
+      sessionId: sessionId,
+      customerId: customerId,
+      messages: [
+        CustomerChatMessage(
+          id: 'recommendation-turn-cross-sell',
+          role: CustomerChatRole.assistant,
+          text: 'Bạn có thể chọn thêm một món ăn kèm.',
+          genUi: crossSell,
+        ),
+      ],
+    );
+    await tester.pumpAndSettle(const Duration(milliseconds: 50));
+    expect(repository.impressions, hasLength(2));
+    await screenshots.capture(
+      tester,
+      'cross_sell_four_card_slate',
+      target: find.byKey(boundaryKey),
+    );
+
+    await tester.tap(
+      find.byKey(
+        CustomerChatKeys.genUiAction(crossSell.id, 'recommendation_dismiss'),
+      ),
+    );
+    await tester.pump();
+    expect(find.text('Đang xử lý…'), findsOneWidget);
+    repository.completeCurrentAction();
+    await tester.pumpAndSettle(const Duration(milliseconds: 50));
+    expect(
+      controller.state.value.actionAttachment(crossSell.id)?.status,
+      KfcGenUiStatus.answered,
+    );
+    await screenshots.capture(
+      tester,
+      'cross_sell_dismissed',
+      target: find.byKey(boundaryKey),
+    );
+    expect(repository.actions.map((action) => action.actionId), [
+      addActionId,
+      'recommendation_dismiss',
+    ]);
   });
 
   testWidgets(
@@ -126,6 +257,7 @@ void main() {
       ]);
     },
     timeout: const Timeout(Duration(minutes: 10)),
+    skip: _recommendationProofOnly,
   );
 
   for (final scenarioPlan in capturePlan.scenarios) {
@@ -189,9 +321,177 @@ void main() {
         );
       },
       timeout: const Timeout(Duration(minutes: 5)),
+      skip: _recommendationProofOnly,
     );
   }
 }
+
+KfcGenUiAttachment _recommendationProofAttachment({
+  required String id,
+  required String placement,
+  required int offerCount,
+  required String sessionId,
+  required String customerId,
+}) {
+  return KfcGenUiAttachment.fromJson({
+    'id': id,
+    'lifecycleStage': 'recommendation',
+    'widgetKind': 'recommendationOffer',
+    'status': 'active',
+    'title': placement == 'smart_cross_sell'
+        ? 'Có thể bạn cũng thích'
+        : 'Gợi ý dành cho bạn',
+    'expiresAt': '2099-07-28T02:00:00.000Z',
+    'authority': {
+      'schemaVersion': 'kfc-genui-v1',
+      'sessionId': sessionId,
+      'customerId': customerId,
+      'verifiedRevision':
+          'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+      'actionLifecycle': 'one_shot',
+      'issuedAt': '2026-01-01T00:00:00.000Z',
+      'expiresAt': '2099-07-28T02:00:00.000Z',
+    },
+    'data': {
+      'recommendationId': 'recommendation-$id',
+      'orderFlowId': 'recommendation-proof-order-flow',
+      'placement': placement,
+      'decisionSource': 'ranked',
+      'offers': [
+        for (var index = 1; index <= offerCount; index += 1)
+          {
+            'recommendationActionId': 'recommendation-proof-action-$index',
+            'kind': 'product',
+            'name': switch (index) {
+              1 => 'Gà Giòn Cay',
+              2 => 'Khoai Tây Chiên',
+              3 => 'Pepsi',
+              _ => 'Bắp Cải Trộn',
+            },
+            'imageUrl': null,
+            'price': {'amount': 19000 + index * 10000, 'currency': 'VND'},
+            'priceImpact': {'amount': 19000 + index * 10000, 'currency': 'VND'},
+          },
+      ],
+      'reasonCodes': [
+        placement == 'for_you' ? 'matches_your_history' : 'completes_your_meal',
+      ],
+      'reasonText': [
+        placement == 'for_you'
+            ? 'Phù hợp với lịch sử đặt món của bạn'
+            : 'Giúp hoàn thiện bữa ăn',
+      ],
+      'cartRevision': 'recommendation-proof-cart-revision',
+      'actionDigest':
+          'bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb',
+      'decisionDigest':
+          'cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc',
+      'versionBindingDigest':
+          'dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd',
+    },
+    'actions': [
+      for (var index = 1; index <= offerCount; index += 1)
+        {
+          'id': 'recommendation_select:recommendation-proof-action-$index',
+          'label': 'Thêm vào đơn',
+          'intent': 'primary',
+        },
+      {
+        'id': 'recommendation_dismiss',
+        'label': 'Không, cảm ơn',
+        'intent': 'secondary',
+      },
+    ],
+  });
+}
+
+class _RecommendationProofRepository extends FixtureCustomerChatRepository {
+  _RecommendationProofRepository() : super(eventDelay: Duration.zero);
+
+  final actions = <KfcGenUiAction>[];
+  final impressions = <KfcRecommendationImpression>[];
+  final _actionCompletions = <String, Completer<void>>{};
+  var _runSequence = 0;
+
+  @override
+  Future<CustomerRunStartResponse> startRun({
+    required String sessionId,
+    required String customerId,
+    required String clientMessageId,
+    String? text,
+    KfcGenUiAction? action,
+    Map<String, Object?>? metadata,
+    String? candidateId,
+  }) async {
+    if (action == null) throw StateError('Recommendation proof expects action');
+    actions.add(action);
+    _runSequence += 1;
+    final runId = 'recommendation-proof-run-$_runSequence';
+    _actionCompletions[runId] = Completer<void>();
+    return CustomerRunStartResponse(
+      schemaVersion: 1,
+      runId: runId,
+      status: CustomerRunStatus.accepted,
+      nextSequence: 1,
+      replayed: false,
+    );
+  }
+
+  @override
+  Stream<CustomerRunEventEnvelope> watchRun(
+    String runId,
+    int afterSequence,
+  ) async* {
+    if (afterSequence < 1) {
+      yield _recommendationRunEvent(runId, 1, 'run_accepted', {
+        'status': 'accepted',
+      });
+    }
+    await _actionCompletions[runId]!.future;
+    if (afterSequence < 2) {
+      yield _recommendationRunEvent(runId, 2, 'text_delta', {
+        'delta': 'Mình đã ghi nhận lựa chọn của bạn.',
+      });
+    }
+    if (afterSequence < 3) {
+      yield _recommendationRunEvent(runId, 3, 'run_completed', {
+        'status': 'completed',
+        'responseText': 'Mình đã ghi nhận lựa chọn của bạn.',
+        'assistantTurnId': 'recommendation-proof-result-turn-$_runSequence',
+      });
+    }
+  }
+
+  @override
+  Future<void> recordRecommendationImpression(
+    KfcRecommendationImpression impression,
+  ) async {
+    impressions.add(impression);
+  }
+
+  void completeCurrentAction() {
+    if (_actionCompletions.isEmpty) {
+      throw StateError('No recommendation action is pending');
+    }
+    final completion = _actionCompletions.values.last;
+    if (!completion.isCompleted) completion.complete();
+  }
+}
+
+CustomerRunEventEnvelope _recommendationRunEvent(
+  String runId,
+  int sequence,
+  String type,
+  Map<String, Object?> payload,
+) => CustomerRunEventEnvelope.fromJson({
+  'schemaVersion': 1,
+  'eventId': 'recommendation-proof-event-$runId-$sequence',
+  'runId': runId,
+  'sequence': sequence,
+  'type': type,
+  'occurredAt': '2026-07-28T01:00:00.000Z',
+  'payload': payload,
+});
 
 Future<CustomerChatController> _pumpCustomerChat(
   WidgetTester tester,
@@ -199,9 +499,11 @@ Future<CustomerChatController> _pumpCustomerChat(
   required String sessionId,
   required String customerId,
   List<CustomerChatMessage>? messages,
+  CustomerChatRepository? repository,
 }) async {
   final controller = CustomerChatController(
-    repository: BackendCustomerChatRepository(baseUrl: _backendUrl),
+    repository:
+        repository ?? BackendCustomerChatRepository(baseUrl: _backendUrl),
     initialState: messages == null
         ? CustomerChatState.initial(
             sessionId: sessionId,

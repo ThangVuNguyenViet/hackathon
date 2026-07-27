@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart'
     show Colors, InputBorder, InputDecoration, Material, Scrollbar, TextField;
 import 'package:flutter/widgets.dart';
@@ -103,6 +105,28 @@ class _CustomerChatScreenState extends State<CustomerChatScreen> {
                             _MessageBlock(
                               message: message,
                               onAction: widget.controller.submitAction,
+                              onImpression:
+                                  message.genUi?.widgetKind ==
+                                      KfcGenUiWidgetKind.recommendationOffer
+                                  ? () => unawaited(
+                                      widget.controller
+                                          .reportRecommendationImpression(
+                                            assistantTurnId: message.id,
+                                            attachment: message.genUi!,
+                                          ),
+                                    )
+                                  : null,
+                              loadingActionId:
+                                  state.pendingGenUiAction?.attachmentId ==
+                                      message.genUi?.id
+                                  ? state.pendingGenUiAction?.actionId
+                                  : null,
+                              authorityMatches:
+                                  message.genUi?.authorityMatches(
+                                    sessionId: state.sessionId,
+                                    customerId: state.customerId,
+                                  ) ??
+                                  true,
                               handoffStatus: state.handoffStatus,
                               interactive:
                                   message.genUi == null ||
@@ -410,12 +434,18 @@ class _MessageBlock extends StatelessWidget {
     required this.message,
     required this.onAction,
     required this.interactive,
+    required this.authorityMatches,
+    this.onImpression,
+    this.loadingActionId,
     this.handoffStatus,
   });
 
   final CustomerChatMessage message;
   final ValueChanged<KfcGenUiAction> onAction;
   final bool interactive;
+  final bool authorityMatches;
+  final VoidCallback? onImpression;
+  final String? loadingActionId;
   final String? handoffStatus;
 
   @override
@@ -490,6 +520,9 @@ class _MessageBlock extends StatelessWidget {
                   onAction: onAction,
                   handoffStatus: handoffStatus,
                   interactive: interactive,
+                  authorityMatches: authorityMatches,
+                  loadingActionId: loadingActionId,
+                  onImpression: onImpression,
                 ),
               ],
             ],

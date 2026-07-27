@@ -153,10 +153,12 @@ class CustomerRunTerminalData extends CustomerRunEventData {
     this.message,
     this.responseText,
     this.approvalPausePointer,
+    this.assistantTurnId,
   });
   final String? message;
   final String? responseText;
   final CustomerApprovalPausePointer? approvalPausePointer;
+  final String? assistantTurnId;
 }
 
 class CustomerRunSupersededData extends CustomerRunEventData {
@@ -250,6 +252,7 @@ class ActiveAssistantDraft {
     this.terminal,
     this.terminalMessage,
     this.approvalPausePointer,
+    this.assistantTurnId,
     this.agentMode,
     this.modelCandidate,
     this.isStopping = false,
@@ -281,6 +284,7 @@ class ActiveAssistantDraft {
   final CustomerRunTerminal? terminal;
   final String? terminalMessage;
   final CustomerApprovalPausePointer? approvalPausePointer;
+  final String? assistantTurnId;
   final CustomerRunAgentMode? agentMode;
   final KfcAgentModelCandidate? modelCandidate;
   final bool materialized;
@@ -329,6 +333,7 @@ class ActiveAssistantDraft {
         next = next.copyWith(
           terminal: CustomerRunTerminal.completed,
           approvalPausePointer: data.approvalPausePointer,
+          assistantTurnId: data.assistantTurnId,
           cancellable: false,
           connection: CustomerRunConnectionState.closed,
         );
@@ -382,6 +387,7 @@ class ActiveAssistantDraft {
     String? terminalMessage,
     CustomerApprovalPausePointer? approvalPausePointer,
     bool clearApprovalPausePointer = false,
+    String? assistantTurnId,
     CustomerRunAgentMode? agentMode,
     KfcAgentModelCandidate? modelCandidate,
     bool? materialized,
@@ -400,6 +406,7 @@ class ActiveAssistantDraft {
       approvalPausePointer: clearApprovalPausePointer
           ? null
           : (approvalPausePointer ?? this.approvalPausePointer),
+      assistantTurnId: assistantTurnId ?? this.assistantTurnId,
       agentMode: agentMode ?? this.agentMode,
       modelCandidate: modelCandidate ?? this.modelCandidate,
       materialized: materialized ?? this.materialized,
@@ -444,6 +451,15 @@ CustomerRunTerminalData _terminalData(
   if (status != expected) {
     throw const FormatException('Customer run terminal status mismatch');
   }
+  final rawAssistantTurnId = payload['assistantTurnId'];
+  if (rawAssistantTurnId != null &&
+      (type != CustomerRunEventType.runCompleted ||
+          rawAssistantTurnId is! String ||
+          rawAssistantTurnId.trim().isEmpty ||
+          rawAssistantTurnId != rawAssistantTurnId.trim() ||
+          rawAssistantTurnId.length > 200)) {
+    throw const FormatException('Invalid assistant turn id');
+  }
   return CustomerRunTerminalData(
     message: payload['message'] as String?,
     responseText: payload['responseText'] as String?,
@@ -454,6 +470,7 @@ CustomerRunTerminalData _terminalData(
             'Only a completed run may contain an approval pause pointer',
           )
         : CustomerApprovalPausePointer.fromJson(payload['approvalPause']),
+    assistantTurnId: rawAssistantTurnId as String?,
   );
 }
 

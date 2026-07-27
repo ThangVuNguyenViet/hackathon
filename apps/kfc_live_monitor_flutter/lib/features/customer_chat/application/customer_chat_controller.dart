@@ -35,6 +35,8 @@ class CustomerChatController extends BeaconController {
   Timer? _handoffTimer;
   final Set<String> _seenRemoteTurns = {};
   final Set<String> _pendingOneShotAttachmentIds = {};
+  final Set<String> _reportedRecommendationAttachmentIds = {};
+  final Set<String> _pendingRecommendationAttachmentIds = {};
   String? _lastRemoteTurnId;
   var _disposed = false;
   var _messageSequence = 0;
@@ -83,6 +85,7 @@ class CustomerChatController extends BeaconController {
     }
     final isOneShot = attachment!.authority?.actionLifecycle == 'one_shot';
     if (isOneShot) _pendingOneShotAttachmentIds.add(attachment.id);
+    state.value = state.value.copyWith(pendingGenUiAction: action);
     try {
       await _runSubmission(_CustomerChatSubmission.action(action));
       if (isOneShot &&
@@ -91,6 +94,43 @@ class CustomerChatController extends BeaconController {
       }
     } finally {
       if (isOneShot) _pendingOneShotAttachmentIds.remove(attachment.id);
+      state.value = state.value.copyWith(clearPendingGenUiAction: true);
+    }
+  }
+
+  Future<void> reportRecommendationImpression({
+    required String assistantTurnId,
+    required KfcGenUiAttachment attachment,
+  }) async {
+    final repository = _repository;
+    if (repository is! RecommendationImpressionRepository) return;
+    final impressionRepository =
+        repository as RecommendationImpressionRepository;
+    if (attachment.widgetKind != KfcGenUiWidgetKind.recommendationOffer ||
+        !attachment.authorityMatches(
+          sessionId: state.value.sessionId,
+          customerId: state.value.customerId,
+        ) ||
+        _reportedRecommendationAttachmentIds.contains(attachment.id) ||
+        !_pendingRecommendationAttachmentIds.add(attachment.id)) {
+      return;
+    }
+    final impression = KfcRecommendationImpression.tryFromAttachment(
+      assistantTurnId: assistantTurnId,
+      attachment: attachment,
+      occurredAt: DateTime.now(),
+    );
+    if (impression == null) {
+      _pendingRecommendationAttachmentIds.remove(attachment.id);
+      return;
+    }
+    try {
+      await impressionRepository.recordRecommendationImpression(impression);
+      _reportedRecommendationAttachmentIds.add(attachment.id);
+    } catch (_) {
+      // Impression evidence is best effort and must never interrupt ordering.
+    } finally {
+      _pendingRecommendationAttachmentIds.remove(attachment.id);
     }
   }
 
@@ -369,6 +409,7 @@ class CustomerChatController extends BeaconController {
             _message(
               CustomerChatRole.assistant,
               draft.text,
+              id: draft.assistantTurnId,
               genUi: draft.genUi,
               modelCandidate: draft.modelCandidate,
             ),
@@ -470,12 +511,15 @@ class CustomerChatController extends BeaconController {
   CustomerChatMessage _message(
     CustomerChatRole role,
     String text, {
+    String? id,
     KfcGenUiAttachment? genUi,
     KfcAgentModelCandidate? modelCandidate,
   }) {
     _messageSequence += 1;
     return CustomerChatMessage(
-      id: 'customer_chat_msg_${DateTime.now().microsecondsSinceEpoch}_$_messageSequence',
+      id:
+          id ??
+          'customer_chat_msg_${DateTime.now().microsecondsSinceEpoch}_$_messageSequence',
       role: role,
       text: text,
       genUi: genUi,
@@ -515,8 +559,20 @@ class CustomerChatController extends BeaconController {
       'track_order' => 'Theo dõi đơn ${action.value ?? ''}'.trim(),
       'request_human' => 'Cho tôi gặp nhân viên ngay',
       'send_issue_summary' => 'Gửi tóm tắt lỗi cho nhân viên',
+      'recommendation_dismiss' => _publishedActionLabel(action),
+      final actionId when actionId.startsWith('recommendation_select:') =>
+        _publishedActionLabel(action),
       _ => action.value ?? action.actionId,
     };
+  }
+
+  String _publishedActionLabel(KfcGenUiAction action) {
+    final actionSpec = state.value
+        .actionAttachment(action.attachmentId)
+        ?.actions
+        .where((candidate) => candidate.id == action.actionId)
+        .firstOrNull;
+    return actionSpec?.label ?? action.actionId;
   }
 
   String _addItemsCustomerText(KfcGenUiAction action) {

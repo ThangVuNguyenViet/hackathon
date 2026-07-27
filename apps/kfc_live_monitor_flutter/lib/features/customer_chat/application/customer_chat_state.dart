@@ -12,6 +12,7 @@ class CustomerChatState {
     this.draftText = '',
     this.activeDraft,
     this.pendingApproval,
+    this.pendingGenUiAction,
     this.isResumingApproval = false,
     this.errorMessage,
     this.handoffStatus,
@@ -41,10 +42,12 @@ class CustomerChatState {
   final String draftText;
   final ActiveAssistantDraft? activeDraft;
   final CustomerApprovalPause? pendingApproval;
+  final KfcGenUiAction? pendingGenUiAction;
   final bool isResumingApproval;
   bool get isSending =>
       (activeDraft != null && !activeDraft!.isTerminal) ||
       pendingApproval != null ||
+      pendingGenUiAction != null ||
       isResumingApproval;
   final String? errorMessage;
   final String? handoffStatus;
@@ -74,6 +77,8 @@ class CustomerChatState {
     bool clearActiveDraft = false,
     CustomerApprovalPause? pendingApproval,
     bool clearPendingApproval = false,
+    KfcGenUiAction? pendingGenUiAction,
+    bool clearPendingGenUiAction = false,
     bool? isResumingApproval,
     String? errorMessage,
     bool clearError = false,
@@ -90,6 +95,9 @@ class CustomerChatState {
       pendingApproval: clearPendingApproval
           ? null
           : (pendingApproval ?? this.pendingApproval),
+      pendingGenUiAction: clearPendingGenUiAction
+          ? null
+          : (pendingGenUiAction ?? this.pendingGenUiAction),
       isResumingApproval: isResumingApproval ?? this.isResumingApproval,
       errorMessage: clearError ? null : (errorMessage ?? this.errorMessage),
       handoffStatus: clearHandoffStatus

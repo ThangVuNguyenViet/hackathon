@@ -280,6 +280,18 @@ void main() {
     },
   );
 
+  test('completed run preserves its authoritative assistant turn id', () {
+    final draft = ActiveAssistantDraft.accepted(runId: 'r1').reduce(
+      _event(1, 'run_completed', {
+        'status': 'completed',
+        'responseText': 'Đây là gợi ý của bạn.',
+        'assistantTurnId': 'recommendation-turn-1',
+      }),
+    );
+
+    expect(draft.assistantTurnId, 'recommendation-turn-1');
+  });
+
   test('streamed approval pointer rejects tokens and unknown fields', () {
     const pointer = {
       'capability': 'placeOrder',

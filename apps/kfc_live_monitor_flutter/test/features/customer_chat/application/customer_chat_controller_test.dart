@@ -23,6 +23,49 @@ void main() {
     expect(first.selectedModel, KfcAgentModelCandidate.openAi);
   });
 
+  test('recommendation impression is reported once per attachment', () async {
+    final repository = _RecordingRecommendationImpressionRepository();
+    final controller = CustomerChatController(
+      repository: repository,
+      initialState: const CustomerChatState(
+        sessionId: 'kfc:customer-1',
+        customerId: 'customer-1',
+      ),
+    );
+    addTearDown(controller.dispose);
+    final attachment = kfcGenUiFixture(KfcGenUiWidgetKind.recommendationOffer);
+
+    final first = controller.reportRecommendationImpression(
+      assistantTurnId: 'recommendation-turn-1',
+      attachment: attachment,
+    );
+    final duplicate = controller.reportRecommendationImpression(
+      assistantTurnId: 'recommendation-turn-1',
+      attachment: attachment,
+    );
+    await Future<void>.delayed(Duration.zero);
+
+    expect(repository.impressions, hasLength(1));
+    repository.complete();
+    await Future.wait([first, duplicate]);
+
+    await controller.reportRecommendationImpression(
+      assistantTurnId: 'recommendation-turn-1',
+      attachment: attachment,
+    );
+    expect(repository.impressions, hasLength(1));
+    expect(
+      repository.impressions.single.renderedActions.map(
+        (action) => action.position,
+      ),
+      [1, 2, 3],
+    );
+    expect(
+      repository.impressions.single.eventId,
+      'impression:fixture_recommendation_offer',
+    );
+  });
+
   test(
     'switching models affects the next run and preserves shared transcript provenance',
     () async {
@@ -1423,6 +1466,27 @@ class _StopRepository extends FixtureCustomerChatRepository {
       runId: runId,
       status: CustomerRunStatus.cancelling,
     );
+  }
+}
+
+class _RecordingRecommendationImpressionRepository
+    extends FixtureCustomerChatRepository {
+  _RecordingRecommendationImpressionRepository()
+    : super(eventDelay: Duration.zero);
+
+  final impressions = <KfcRecommendationImpression>[];
+  final _completion = Completer<void>();
+
+  @override
+  Future<void> recordRecommendationImpression(
+    KfcRecommendationImpression impression,
+  ) async {
+    impressions.add(impression);
+    await _completion.future;
+  }
+
+  void complete() {
+    if (!_completion.isCompleted) _completion.complete();
   }
 }
 

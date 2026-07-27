@@ -4,6 +4,7 @@ import 'kfc_agent_model_candidate.dart';
 part 'kfc_genui_action_authority.dart';
 part 'kfc_customer_chat_models.dart';
 part 'kfc_payment_method_authority.dart';
+part 'kfc_recommendation_offer_models.dart';
 
 enum KfcGenUiWidgetKind {
   smartMenuPicker('smartMenuPicker'),
@@ -17,7 +18,8 @@ enum KfcGenUiWidgetKind {
   paymentOrderStatus('paymentOrderStatus'),
   orderTrackingStatus('orderTrackingStatus'),
   supportHandoff('supportHandoff'),
-  paymentMethodPicker('paymentMethodPicker');
+  paymentMethodPicker('paymentMethodPicker'),
+  recommendationOffer('recommendationOffer');
 
   const KfcGenUiWidgetKind(this.wireName);
 
@@ -277,6 +279,11 @@ class KfcGenUiAttachment {
   final bool hasValidActionEncoding;
   final KfcGenUiInteractionFinality interactionFinality;
 
+  KfcRecommendationOfferData? get recommendationOfferData =>
+      widgetKind == KfcGenUiWidgetKind.recommendationOffer
+      ? KfcRecommendationOfferData.tryFromJson(data)
+      : null;
+
   bool get canSubmitActions =>
       status == KfcGenUiStatus.active &&
       actions.isNotEmpty &&
@@ -294,7 +301,21 @@ class KfcGenUiAttachment {
   }
 
   bool get _hasValidActionManifest =>
-      actions.every(_isValidActionSpecForAttachment);
+      actions.every(_isValidActionSpecForAttachment) &&
+      _hasCompleteRecommendationActionManifest;
+
+  bool get _hasCompleteRecommendationActionManifest {
+    if (widgetKind != KfcGenUiWidgetKind.recommendationOffer) return true;
+    final offer = recommendationOfferData;
+    if (offer == null || actions.length != offer.offers.length + 1) {
+      return false;
+    }
+    final actionIds = actions.map((action) => action.id).toSet();
+    return actionIds.contains('recommendation_dismiss') &&
+        offer.offers.every(
+          (item) => actionIds.contains(item.selectionActionId),
+        );
+  }
 
   bool _isValidActionSpecForAttachment(KfcGenUiActionSpec action) {
     if (action.id.isEmpty ||
@@ -307,6 +328,9 @@ class KfcGenUiAttachment {
       return false;
     }
     if (!_isKnownActionForWidget(action.id)) return false;
+    if (widgetKind == KfcGenUiWidgetKind.recommendationOffer) {
+      return _isValidRecommendationActionSpec(action);
+    }
     if (!_dynamicActionIds.contains(action.id)) {
       return _isValidStaticActionSpec(action);
     }
@@ -352,7 +376,26 @@ class KfcGenUiAttachment {
       }.contains(actionId),
       KfcGenUiWidgetKind.paymentMethodPicker =>
         actionId == 'select_payment_method',
+      KfcGenUiWidgetKind.recommendationOffer =>
+        actionId == 'recommendation_dismiss' ||
+            _recommendationActionId(actionId) != null,
     };
+  }
+
+  bool _isValidRecommendationActionSpec(KfcGenUiActionSpec action) {
+    if (action.value != null || action.payload.isNotEmpty) return false;
+    if (action.id == 'recommendation_dismiss') return true;
+    final recommendationActionId = _recommendationActionId(action.id);
+    final offer = recommendationOfferData;
+    return recommendationActionId != null &&
+        offer != null &&
+        offer.offers
+                .where(
+                  (item) =>
+                      item.recommendationActionId == recommendationActionId,
+                )
+                .length ==
+            1;
   }
 
   bool _isValidStaticActionSpec(KfcGenUiActionSpec action) {
@@ -480,6 +523,10 @@ class KfcGenUiAttachment {
         .toList(growable: false);
     if (candidates.length != 1) return null;
     final spec = candidates.single;
+    if (widgetKind == KfcGenUiWidgetKind.recommendationOffer) {
+      if (payload.isNotEmpty || verifiedValue != null) return null;
+      return KfcGenUiAction.fromSpec(attachment: this, spec: spec);
+    }
     if (actionId == 'submit_address') {
       if (data['addressDraft'] is! Map ||
           spec.payload.isNotEmpty ||

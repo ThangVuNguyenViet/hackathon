@@ -139,6 +139,59 @@ void main() {
     },
   );
 
+  test('backend records the exact rendered recommendation slate', () async {
+    final requests = <http.Request>[];
+    final repository = BackendCustomerChatRepository(
+      baseUrl: 'http://localhost:18090',
+      client: MockClient((request) async {
+        requests.add(request);
+        return http.Response(
+          jsonEncode({'status': 'recorded'}),
+          201,
+          headers: const {'content-type': 'application/json; charset=utf-8'},
+        );
+      }),
+    );
+
+    await repository.recordRecommendationImpression(
+      const KfcRecommendationImpression(
+        recommendationId: 'recommendation-1',
+        eventId: 'recommendation-impression:attachment-1',
+        occurredAt: '2026-07-28T01:00:00.000Z',
+        assistantTurnId: 'recommendation-turn-1',
+        attachmentId: 'attachment-1',
+        renderedActions: [
+          KfcRenderedRecommendationAction(
+            actionId: 'recommendation-action-1',
+            position: 1,
+          ),
+        ],
+        cartRevision: 'cart-revision-1',
+        actionDigest:
+            'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+      ),
+    );
+
+    expect(requests.single.method, 'POST');
+    expect(
+      requests.single.url.path,
+      '/v1/recommendations/recommendation-1/impressions',
+    );
+    expect(jsonDecode(requests.single.body), {
+      'schemaVersion': 'kfc-recommendation-event-v1',
+      'eventId': 'recommendation-impression:attachment-1',
+      'occurredAt': '2026-07-28T01:00:00.000Z',
+      'assistantTurnId': 'recommendation-turn-1',
+      'attachmentId': 'attachment-1',
+      'renderedActions': [
+        {'actionId': 'recommendation-action-1', 'position': 1},
+      ],
+      'cartRevision': 'cart-revision-1',
+      'actionDigest':
+          'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+    });
+  });
+
   test(
     'confirmation resume sends the exact one-shot capability once',
     () async {
