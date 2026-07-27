@@ -24,9 +24,7 @@ import {
 import type {
   AppendRecommendationEventInput,
   AppendRecommendationEventResult,
-  CommitRecommendationDecisionResult,
   RecommendationDecisionRecord,
-  ReserveRecommendationDecisionResult,
 } from '../persistence/repository.js';
 import { presentationBindingForDecision } from '../persistence/types.js';
 import {
@@ -70,20 +68,6 @@ const terminalOutcomeTypes = new Set<RecommendationOutcomeRequest['eventType']>(
   ['checkout_completed', 'order_abandoned', 'order_cancelled'],
 );
 
-function reservationReasonCode(
-  result: ReserveRecommendationDecisionResult,
-): string {
-  return `decision_reserve_${result.status}`;
-}
-
-function commitReasonCode(result: CommitRecommendationDecisionResult): string {
-  return `decision_commit_${result.status}`;
-}
-
-function appendReasonCode(result: AppendRecommendationEventResult): string {
-  return `event_append_${result.status}`;
-}
-
 async function appendRecommendationEventTraced(input: {
   trace: RecommendationTrace;
   dependencies: RecommendationApplicationServiceDependencies;
@@ -104,8 +88,7 @@ async function appendRecommendationEventTraced(input: {
     () =>
       input.dependencies.persistence.appendRecommendationEvent(input.append),
     (result) => ({
-      eventCount: 1,
-      reasonCodes: [appendReasonCode(result)],
+      eventCount: result.status === 'recorded' ? 1 : 0,
     }),
   );
 }
@@ -516,9 +499,7 @@ export function createRecommendationApplicationService(
                 ownerToken,
                 createdAt: reservationCreatedAt,
               }),
-            (result) => ({
-              reasonCodes: [reservationReasonCode(result)],
-            }),
+            () => ({}),
           );
           if (reservation.status === 'replay') {
             return { status: 'replay', response: reservation.record.response };
@@ -635,8 +616,7 @@ export function createRecommendationApplicationService(
                 }),
               }),
             (result) => ({
-              eventCount: 2,
-              reasonCodes: [commitReasonCode(result)],
+              eventCount: result.status === 'committed' ? 2 : 0,
             }),
           );
           if (commit.status === 'stale') return { status: 'state_conflict' };

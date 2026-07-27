@@ -87,6 +87,22 @@ class RecordingApplicationTracer implements AgentTracer {
   async flush(): Promise<void> {}
 }
 
+class ControlledAppendStore extends MemoryStore {
+  private forcedStatus: 'conflict' | 'stale' | undefined;
+
+  forceNextAppend(status: 'conflict' | 'stale'): void {
+    this.forcedStatus = status;
+  }
+
+  override async appendRecommendationEvent(
+    input: AppendRecommendationEventInput,
+  ): Promise<AppendRecommendationEventResult> {
+    const status = this.forcedStatus;
+    this.forcedStatus = undefined;
+    return status ? { status } : super.appendRecommendationEvent(input);
+  }
+}
+
 const serverInstant = '2026-07-27T09:30:00Z';
 const completedServerInstant = '2026-07-27T09:30:00.1Z';
 
@@ -301,9 +317,10 @@ function dependencies(
 async function application(
   decisionEngine: RecommendationDecisionEngine = new RecordingEngine(),
   store: MemoryStore | D1Store = new MemoryStore(),
+  overrides: Partial<RecommendationApplicationServiceDependencies> = {},
 ) {
   const service = createRecommendationApplicationService(
-    dependencies(store, decisionEngine),
+    dependencies(store, decisionEngine, overrides),
   );
   const inspection = createRecommendationInspectionService({
     persistence: store,
@@ -491,8 +508,18 @@ async function smartFlowFixture(input: { interveningDecision?: boolean } = {}) {
   };
 }
 
-async function localEventFixture(suffix: string) {
-  const { service, inspection, store } = await application();
+async function localEventFixture(
+  suffix: string,
+  options: {
+    store?: MemoryStore | D1Store;
+    agentTracer?: AgentTracer;
+  } = {},
+) {
+  const { service, inspection, store } = await application(
+    new RecordingEngine(),
+    options.store ?? new MemoryStore(),
+    options.agentTracer ? { agentTracer: options.agentTracer } : {},
+  );
   const request = requestFor({ suffix, placement: 'local_favorite' });
   const customerId = `customer-${suffix}`;
   const decision = await service.decide({
@@ -733,6 +760,16 @@ describe('Recommendation application service', () => {
       request_id: request.requestId,
       trace_ref: decision.response.traceRef,
     });
+    expect(tracer.roots[0]!.children[0]!.outputs).not.toHaveProperty(
+      'reasonCodes',
+    );
+    expect(tracer.roots[0]!.children[1]!.outputs).toMatchObject({
+      eventCount: 2,
+      durationMs: expect.any(Number),
+    });
+    expect(tracer.roots[0]!.children[1]!.outputs).not.toHaveProperty(
+      'reasonCodes',
+    );
     expect(tracer.roots[0]!.outputs).toMatchObject({
       potentialCount: 1,
       displayedCount: 1,
@@ -752,7 +789,6 @@ describe('Recommendation application service', () => {
     });
     expect(tracer.roots[1]!.children[0]!.outputs).toMatchObject({
       eventCount: 1,
-      reasonCodes: ['event_append_recorded'],
       durationMs: expect.any(Number),
     });
     expect(tracer.roots[2]!.input.metadata).toMatchObject({
@@ -770,9 +806,77 @@ describe('Recommendation application service', () => {
     });
     expect(tracer.roots[2]!.children[0]!.outputs).toMatchObject({
       eventCount: 1,
-      reasonCodes: ['event_append_recorded'],
       durationMs: expect.any(Number),
     });
+  });
+
+  it('records exact persistence effects for every append result', async () => {
+    const tracer = new RecordingApplicationTracer();
+    const store = new ControlledAppendStore();
+    const { service, request, decision, impression } = await localEventFixture(
+      'observability-append-effects',
+      { store, agentTracer: tracer },
+    );
+    const recommendationId = decision.response.recommendationId;
+    const conflictEventId =
+      'recommendation-event-observability-append-conflict';
+    const staleEventId = 'recommendation-event-observability-append-stale';
+
+    const recorded = await service.recordImpression(
+      recommendationId,
+      impression,
+    );
+    const replay = await service.recordImpression(
+      recommendationId,
+      impression,
+    );
+    store.forceNextAppend('conflict');
+    const conflict = await service.recordOutcome(
+      recommendationId,
+      outcomeFor({
+        eventId: conflictEventId,
+        eventType: 'ignored',
+        actionId: null,
+        cartRevision: request.cartRevision,
+      }),
+    );
+    store.forceNextAppend('stale');
+    const stale = await service.recordOutcome(
+      recommendationId,
+      outcomeFor({
+        eventId: staleEventId,
+        eventType: 'ignored',
+        actionId: null,
+        cartRevision: request.cartRevision,
+      }),
+    );
+
+    expect([
+      recorded.status,
+      replay.status,
+      conflict.status,
+      stale.status,
+    ]).toEqual([
+      'recorded',
+      'replay',
+      'idempotency_conflict',
+      'state_conflict',
+    ]);
+
+    const persistenceEffectsFor = (eventId: string) =>
+      tracer.roots
+        .filter(
+        (candidate) => candidate.input.metadata?.event_id === eventId,
+        )
+        .map((root) => {
+          expect(root.children).toHaveLength(1);
+          expect(root.children[0]!.outputs).not.toHaveProperty('reasonCodes');
+          return root.children[0]!.outputs?.eventCount;
+        });
+
+    expect(persistenceEffectsFor(impression.eventId)).toEqual([1, 0]);
+    expect(persistenceEffectsFor(conflictEventId)).toEqual([0]);
+    expect(persistenceEffectsFor(staleEventId)).toEqual([0]);
   });
 
   it('serves a real anonymous Local Favorite and persists exact server-authored decision events', async () => {

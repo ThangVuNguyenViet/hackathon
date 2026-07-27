@@ -639,9 +639,7 @@ export class DefaultRecommendationDecisionEngine implements RecommendationDecisi
             }),
       (shadow) => ({
         candidateCount: shadow.eligibleActionIds.length,
-        reasonCodes: skippedStageReason
-          ? [skippedStageReason]
-          : [`shadow_rank_${shadow.status}`],
+        ...(skippedStageReason ? { reasonCodes: [skippedStageReason] } : {}),
       }),
     );
     const merchandisingResolution = await tracedStage(

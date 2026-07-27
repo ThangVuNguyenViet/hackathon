@@ -219,6 +219,9 @@ describe('LangSmith agent tracer boundary', () => {
           'popular_here',
           'already_in_cart',
           'event_append_recorded',
+          'decision_reserve_pending',
+          'decision_commit_committed',
+          'shadow_rank_succeeded',
           privateText,
         ],
         decisionSource: 'ranked',
@@ -243,7 +246,7 @@ describe('LangSmith agent tracer boundary', () => {
       scoredCount: 4,
       displayedCount: 1,
       policyCount: 2,
-      reasonCodes: ['popular_here', 'already_in_cart', 'event_append_recorded'],
+      reasonCodes: ['popular_here', 'already_in_cart'],
     });
   });
 

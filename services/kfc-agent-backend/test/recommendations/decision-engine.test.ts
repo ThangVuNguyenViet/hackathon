@@ -361,7 +361,7 @@ describe('recommendation decision engine', () => {
       },
       { scoredCount: expect.any(Number), durationMs: expect.any(Number) },
       {
-        reasonCodes: ['shadow_rank_not_applicable'],
+        candidateCount: expect.any(Number),
         durationMs: expect.any(Number),
       },
       { policyCount: expect.any(Number), durationMs: expect.any(Number) },
