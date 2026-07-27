@@ -132,8 +132,11 @@ export interface DirectAgentTurnService {
 
 const canonicalScenarioCount = 11;
 
-function customerTurn(turn: ScenarioTurn): DirectAgentScenarioTurn {
-  return { kind: 'customer', text: turn.text };
+function customerTurn(turn: ScenarioTurn | string): DirectAgentScenarioTurn {
+  return {
+    kind: 'customer',
+    text: typeof turn === 'string' ? turn : turn.text,
+  };
 }
 
 export async function loadCanonicalDirectAgentScenarios(
@@ -176,15 +179,9 @@ export const DIRECT_AGENT_MANUAL_REGRESSION_BANK: DirectAgentScenario[] = [
     source: 'manual-regression',
     coverage: 'customer-safe-presentation',
     turns: [
-      { kind: 'customer', text: 'Cho mình xem menu có gì?' },
-      {
-        kind: 'customer',
-        text: 'Mình muốn chọn một món đồ uống riêng trong menu.',
-      },
-      {
-        kind: 'customer',
-        text: 'Ngoài Pepsi ra còn nước nào khác không?',
-      },
+      customerTurn('Cho mình xem menu có gì?'),
+      customerTurn('Mình muốn chọn một món đồ uống riêng trong menu.'),
+      customerTurn('Ngoài Pepsi ra còn nước nào khác không?'),
     ],
     referenceAssistantTurns: [],
     observations: [
@@ -197,10 +194,9 @@ export const DIRECT_AGENT_MANUAL_REGRESSION_BANK: DirectAgentScenario[] = [
     source: 'manual-regression',
     coverage: 'customer-safe-presentation',
     turns: [
-      {
-        kind: 'customer',
-        text: 'Gợi ý cho mình một món gà không cay và không thêm phô mai.',
-      },
+      customerTurn(
+        'Gợi ý cho mình một món gà không cay và không thêm phô mai.',
+      ),
     ],
     referenceAssistantTurns: [],
     observations: [
@@ -212,12 +208,7 @@ export const DIRECT_AGENT_MANUAL_REGRESSION_BANK: DirectAgentScenario[] = [
     title: 'Customer-safe scoped no-match language',
     source: 'manual-regression',
     coverage: 'customer-safe-presentation',
-    turns: [
-      {
-        kind: 'customer',
-        text: 'Mình muốn gọi Combo Hợp Gu 99K.',
-      },
-    ],
+    turns: [customerTurn('Mình muốn gọi Combo Hợp Gu 99K.')],
     referenceAssistantTurns: [],
     observations: [
       'Evaluate whether an over-constrained empty lookup is corrected before response and never becomes an unsupported catalog-wide absence claim.',
