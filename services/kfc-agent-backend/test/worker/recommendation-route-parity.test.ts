@@ -19,6 +19,7 @@ import worker, {
   dispatchWorkerRecommendationRoute,
   type WorkerEnv,
 } from '../../src/worker.js';
+import { toResponse } from '../../src/workerHttp.js';
 import { SqliteD1Database } from '../support/sqlite-d1.js';
 
 const adminToken = 'recommendation-parity-admin';
@@ -260,6 +261,120 @@ describe.sequential('Fastify and Worker recommendation route parity', () => {
         raw: `{"errorCode":"${errorCode}"}`,
       });
     }
+  });
+
+  it('rejects non-JSON recommendation writes byte-for-byte and accepts a JSON charset', async () => {
+    for (const [path, payload, errorCode] of [
+      [
+        '/v1/recommendations/decide',
+        decisionRequest('parity-text-content-type'),
+        'invalid_recommendation_request',
+      ],
+      [
+        '/v1/recommendations/recommendation-content-type/impressions',
+        {},
+        'invalid_recommendation_impression',
+      ],
+      [
+        '/v1/recommendations/recommendation-content-type/outcomes',
+        outcomeFor(
+          'parity-text-content-type',
+          decisionRequest('parity-text-content-type'),
+        ),
+        'invalid_recommendation_outcome',
+      ],
+    ] as const) {
+      await expect(
+        expectParity({
+          method: 'POST',
+          path,
+          payload,
+          headers: { 'content-type': 'text/plain' },
+        }),
+      ).resolves.toEqual({
+        status: 400,
+        body: { errorCode },
+        raw: `{"errorCode":"${errorCode}"}`,
+      });
+    }
+
+    const request = decisionRequest('parity-json-charset');
+    const accepted = await expectParity({
+      method: 'POST',
+      path: '/v1/recommendations/decide',
+      payload: request,
+      headers: {
+        'content-type': 'application/json; charset=utf-8',
+      },
+    });
+    expect(accepted).toMatchObject({
+      status: 200,
+      body: { requestId: request.requestId, status: 'recommended' },
+    });
+  });
+
+  it('rejects a missing recommendation content type byte-for-byte', async () => {
+    const body = JSON.stringify(
+      decisionRequest('parity-missing-content-type'),
+    );
+    const [fastifyResponse, workerResponse] = await Promise.all([
+      server.inject({
+        method: 'POST',
+        url: '/v1/recommendations/decide',
+        payload: Buffer.from(body),
+      }),
+      worker.fetch(
+        new Request('https://worker.example/v1/recommendations/decide', {
+          method: 'POST',
+          body: new TextEncoder().encode(body),
+        }),
+        env,
+      ),
+    ]);
+
+    expect({
+      status: workerResponse.status,
+      body: await workerResponse.text(),
+      contentType: workerResponse.headers.get('content-type'),
+      cacheControl: workerResponse.headers.get('cache-control'),
+    }).toEqual({
+      status: fastifyResponse.statusCode,
+      body: fastifyResponse.body,
+      contentType: fastifyResponse.headers['content-type'],
+      cacheControl: fastifyResponse.headers['cache-control'],
+    });
+    expect([fastifyResponse.statusCode, fastifyResponse.body]).toEqual([
+      400,
+      '{"errorCode":"invalid_recommendation_request"}',
+    ]);
+  });
+
+  it('preserves unrelated Worker text response cache behavior', () => {
+    const response = toResponse({
+      status: 200,
+      body: 'verified',
+      contentType: 'text/plain',
+    });
+
+    expect(response.headers.get('content-type')).toBe('text/plain');
+    expect(response.headers.get('cache-control')).toBeNull();
+  });
+
+  it('preserves unrelated Worker route cache behavior', async () => {
+    const response = await worker.fetch(
+      new Request(
+        'https://worker.example/chat/kfc/runs/run-missing/cancel',
+        { method: 'POST' },
+      ),
+      env,
+    );
+
+    expect(response.status).toBe(404);
+    expect(await response.text()).toBe('{"errorCode":"run_not_found"}');
+    expect(response.headers.get('content-type')).toBe('application/json');
+    expect(response.headers.get('cache-control')).toBe(
+      'no-store, no-cache, max-age=0',
+    );
   });
 
   it('maps decision validation, success, replay, pending, and conflict statuses byte-for-byte', async () => {

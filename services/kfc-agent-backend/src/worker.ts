@@ -273,6 +273,18 @@ export async function dispatchWorkerRecommendationRoute(
   const readRecommendationJson = async (): Promise<
     { ok: true; body: unknown } | { ok: false; response: Response }
   > => {
+    const mediaType = request.headers
+      .get('content-type')
+      ?.split(';', 1)[0]
+      ?.trim()
+      .toLowerCase();
+    if (mediaType !== 'application/json') {
+      const response = invalidRecommendationJsonResponse(
+        request.method,
+        url.pathname,
+      );
+      if (response) return { ok: false, response: toResponse(response) };
+    }
     try {
       return { ok: true, body: await readJson(request) };
     } catch (error) {

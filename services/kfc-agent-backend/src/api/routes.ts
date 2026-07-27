@@ -27,7 +27,7 @@ export function registerRoutes(
 
   server.setErrorHandler((error, request, reply) => {
     const pathname = request.url.split('?', 1)[0] ?? request.url;
-    const response = invalidJsonBodyError(error)
+    const response = invalidRecommendationBodyTransportError(error)
       ? invalidRecommendationJsonResponse(request.method, pathname)
       : undefined;
     if (response) return send(reply, response);
@@ -417,12 +417,13 @@ function requiresDemoAdmin(rawUrl: string): boolean {
   return pathname.startsWith('/admin/') || pathname.startsWith('/dashboard/');
 }
 
-function invalidJsonBodyError(error: unknown): boolean {
+function invalidRecommendationBodyTransportError(error: unknown): boolean {
   return (
     typeof error === 'object' &&
     error !== null &&
     'code' in error &&
-    error.code === 'FST_ERR_CTP_INVALID_JSON_BODY'
+    (error.code === 'FST_ERR_CTP_INVALID_JSON_BODY' ||
+      error.code === 'FST_ERR_CTP_INVALID_MEDIA_TYPE')
   );
 }
 

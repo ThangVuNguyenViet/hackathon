@@ -285,20 +285,33 @@ describe('recommendation Fastify routes', () => {
     );
   });
 
-  it('leaves malformed JSON semantics unchanged on unrelated routes', async () => {
-    const response = await configuredServer().inject({
+  it('leaves body transport errors unchanged on unrelated routes', async () => {
+    const server = configuredServer();
+    const malformed = await server.inject({
       method: 'POST',
-      url: '/kfc/chat',
+      url: '/chat/kfc/message',
       headers: { 'content-type': 'application/json' },
       payload: '{"broken":',
     });
+    const unsupported = await server.inject({
+      method: 'POST',
+      url: '/chat/kfc/message',
+      headers: { 'content-type': 'application/xml' },
+      payload: '<message />',
+    });
 
-    expect(response.statusCode).toBe(400);
-    expect(response.json()).toMatchObject({
+    expect(malformed.statusCode).toBe(400);
+    expect(malformed.json()).toMatchObject({
       code: 'FST_ERR_CTP_INVALID_JSON_BODY',
       error: 'Bad Request',
     });
-    expect(response.body).not.toContain('invalid_recommendation_');
+    expect(unsupported.statusCode).toBe(415);
+    expect(unsupported.json()).toMatchObject({
+      code: 'FST_ERR_CTP_INVALID_MEDIA_TYPE',
+      error: 'Unsupported Media Type',
+    });
+    expect(malformed.body).not.toContain('invalid_recommendation_');
+    expect(unsupported.body).not.toContain('invalid_recommendation_');
   });
 
   it('returns only the canonical decision envelope and replays it byte-for-byte', async () => {
