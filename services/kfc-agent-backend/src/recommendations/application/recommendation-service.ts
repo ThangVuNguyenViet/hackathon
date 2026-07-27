@@ -326,6 +326,16 @@ export function createRecommendationApplicationService(
   dependencies: RecommendationApplicationServiceDependencies,
 ): RecommendationApplicationService {
   return {
+    async hasPriorCompletedHistory(verifiedCustomerRef: string) {
+      const history =
+        await dependencies.historyRepository.load(verifiedCustomerRef);
+      return Boolean(
+        history?.linked &&
+        history.verifiedCustomerRef === verifiedCustomerRef &&
+        history.completedOrders.length > 0,
+      );
+    },
+
     async decide(input: RecommendationDecisionApplicationInput) {
       const parsed = parseRecommendationDecisionApplicationInput(input);
       const requestFingerprint = await digestCommerceAction(parsed);

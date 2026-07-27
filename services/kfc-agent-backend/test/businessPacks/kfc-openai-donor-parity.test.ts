@@ -12,6 +12,8 @@ import { loadGeneratedFixtures } from '../../src/fixtures/loadFixtures.js';
 import { createMockClients } from '../../src/mock/createMockClients.js';
 import { agentToolDescriptions } from '../../src/ordering/toolCatalog.js';
 import { MemoryStore } from '../../src/persistence/memoryStore.js';
+import { createBundledRecommendationApplicationService } from '../../src/recommendations/application/recommendation-service.js';
+import { LocalMerchandisingPolicyRepository } from '../../src/recommendations/merchandising/local-policy-repository.js';
 import { configuredTestAgent } from '../support/configured-agent-model.js';
 
 function toolOutputText(value: unknown): string {
@@ -95,12 +97,42 @@ describe('portable Direct SDK behavior retained by the KFC LangChain pack', () =
     expect(KFC_AGENT_INSTRUCTIONS).toContain(
       'do not answer as if a dropped modifier requirement matched',
     );
+    expect(KFC_AGENT_INSTRUCTIONS).toContain(
+      'Be slightly proactive only after genuine food, menu, or ordering intent',
+    );
+    expect(KFC_AGENT_INSTRUCTIONS).toContain(
+      'Offer at most one recommendation at a time',
+    );
+    expect(KFC_AGENT_INSTRUCTIONS).toContain(
+      'starter, modifier upsell, then smart cross-sell',
+    );
+    expect(KFC_AGENT_INSTRUCTIONS).toContain(
+      'Do not interrupt checkout, fulfillment, payment, or unresolved safety-sensitive work',
+    );
+    expect(KFC_AGENT_INSTRUCTIONS).toContain(
+      'Never invent availability, popularity, history, promotions, prices, compatibility, or CMS copy',
+    );
+    expect(KFC_AGENT_INSTRUCTIONS).toContain(
+      'Treat an empty or suppressed recommendation as silent',
+    );
+    expect(KFC_AGENT_INSTRUCTIONS).toContain(
+      'Never express a recommendation as a cart mutation in prose',
+    );
+    expect(KFC_AGENT_INSTRUCTIONS).toContain(
+      'Never repeat a proactive recommendation placement',
+    );
 
     expect(agentToolDescriptions.getModifierOptions).toContain(
       'Do not transfer evidence between options, branches, or items',
     );
-    expect(agentToolDescriptions.recommendAddOns).toContain(
-      'does not prove that item is absent from the full menu',
+    expect(agentToolDescriptions.recommendStarter).toContain(
+      'verified identity and completed-order history',
+    );
+    expect(agentToolDescriptions.recommendModifierUpsell).toContain(
+      'exact current cart line',
+    );
+    expect(agentToolDescriptions.recommendSmartCrossSell).toContain(
+      'after the prior recommendation stage resolves',
     );
     expect(agentToolDescriptions.findStores).toContain(
       'does not verify delivery coverage, fee, ETA, or item serviceability',
@@ -384,5 +416,60 @@ describe('portable Direct SDK behavior retained by the KFC LangChain pack', () =
     expect(exhaustedToolMessage?.content).toContain(
       '"instruction":"Stop retrying and answer honestly from verified evidence.',
     );
+  });
+
+  it('recalculates once-only recommendation tool availability before every model call', async () => {
+    const store = new MemoryStore();
+    const recommendations = createBundledRecommendationApplicationService({
+      persistence: store,
+      contextSource: {
+        async load() {
+          return { storeTimezone: 'Asia/Ho_Chi_Minh' };
+        },
+      },
+      clock: {
+        now() {
+          return '2026-07-27T09:00:00Z';
+        },
+      },
+      merchandisingPolicyRepository: new LocalMerchandisingPolicyRepository(),
+    });
+    const model = fakeModel()
+      .respondWithTools([
+        {
+          name: 'recommendStarter',
+          args: { requestKind: 'proactive' },
+          id: 'starter-once',
+        },
+      ])
+      .respond(new AIMessage('Mình đã chọn một gợi ý phù hợp cho bạn.'));
+    const boundToolNames: string[][] = [];
+    const bindTools = model.bindTools.bind(model);
+    vi.spyOn(model, 'bindTools').mockImplementation((tools) => {
+      boundToolNames.push(
+        tools
+          .map((candidate) => candidate.name)
+          .filter((name): name is string => Boolean(name)),
+      );
+      return bindTools(tools);
+    });
+
+    await runAgentTurn({
+      sessionId: 'session-kfc-recommendation-once',
+      customerId: 'customer-1',
+      channel: 'kfc',
+      text: 'Tôi muốn xem món ngon',
+      clients: createMockClients(await loadGeneratedFixtures(process.cwd())),
+      store,
+      dashboard: new DashboardEventBus(),
+      agentModelBinding: configuredTestAgent(model),
+      recommendations,
+    });
+    expect(boundToolNames[0]).toContain('recommendStarter');
+    expect(boundToolNames[0]).not.toContain('recommendModifierUpsell');
+    expect(boundToolNames[0]).not.toContain('recommendSmartCrossSell');
+    expect(boundToolNames[1]).not.toContain('recommendStarter');
+    expect(boundToolNames[1]).not.toContain('recommendModifierUpsell');
+    expect(boundToolNames[1]).not.toContain('recommendSmartCrossSell');
   });
 });

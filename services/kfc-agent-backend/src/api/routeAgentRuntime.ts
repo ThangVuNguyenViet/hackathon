@@ -58,6 +58,7 @@ import { kfcVietnamPack } from '../businessPacks/kfcVietnam/kfcVietnamPack.js';
 import type { AgentTurnOutput } from '../agent/agentTurn.js';
 import type { ConfiguredAgentModelBinding } from '../config/agentModelProfile.js';
 import type { AgentTracer } from '../observability/agentTracing.js';
+import type { RecommendationApplicationService } from '../recommendations/application/service-types.js';
 import {
   createMockClients,
   type MockClientOptions,
@@ -242,6 +243,9 @@ export function createRouteAgentRuntime(
     dashboard: DashboardEventBus;
     showcase: ShowcaseService | undefined;
     streamingRunObservers: StreamingRunObservers;
+    recommendations?: {
+      application: RecommendationApplicationService;
+    };
   } & RouteCommerceRuntime,
 ) {
   const {
@@ -250,6 +254,7 @@ export function createRouteAgentRuntime(
     dashboard,
     showcase,
     streamingRunObservers,
+    recommendations,
     getFixtures,
     withConfiguredCommerce,
     createWebhookClients,
@@ -397,6 +402,7 @@ export function createRouteAgentRuntime(
           input.sessionId,
           trustedMetadata,
         ),
+        recommendations: recommendations?.application,
         store,
         dashboard,
         agentModelBinding: selectedAgentModelBinding,

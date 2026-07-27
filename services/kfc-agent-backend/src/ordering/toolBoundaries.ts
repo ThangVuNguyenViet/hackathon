@@ -3,6 +3,7 @@ import type { ToolName } from './types.js';
 export type ToolBoundary =
   | 'catalog'
   | 'pos'
+  | 'recommendation'
   | 'store_routing'
   | 'fulfillment'
   | 'promotion'
@@ -20,7 +21,9 @@ export const toolBoundaries: Record<ToolName, ToolBoundary> = {
   getModifierOptions: 'catalog',
   updateCart: 'pos',
   previewCart: 'pos',
-  recommendAddOns: 'pos',
+  recommendStarter: 'recommendation',
+  recommendModifierUpsell: 'recommendation',
+  recommendSmartCrossSell: 'recommendation',
   findStores: 'store_routing',
   checkStoreAvailability: 'fulfillment',
   quoteFulfillment: 'fulfillment',

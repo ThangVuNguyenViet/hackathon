@@ -449,8 +449,7 @@ export function applyAgentCollectionToVerifiedState(
   };
 
   switch (result.toolName) {
-    case 'searchMenu':
-    case 'recommendAddOns': {
+    case 'searchMenu': {
       const snapshot =
         result.verifiedCollection as VerifiedCollectionSnapshot<MenuItem>;
       state.activeMenuCollection = snapshot;
@@ -725,7 +724,9 @@ export function applyToolResultToState(
     case 'listMembershipTools':
     case 'acquireVoucher':
     case 'redeemReward':
-    case 'recommendAddOns':
+    case 'recommendStarter':
+    case 'recommendModifierUpsell':
+    case 'recommendSmartCrossSell':
     case 'findStores':
       return;
     case 'getSavedAddresses':

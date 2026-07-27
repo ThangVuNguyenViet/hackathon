@@ -330,9 +330,6 @@ const verifiedCollectionStoreSchema = z
     searchMenu: z
       .record(verifiedCollectionSnapshotSchema(menuItemSchema))
       .optional(),
-    recommendAddOns: z
-      .record(verifiedCollectionSnapshotSchema(menuItemSchema))
-      .optional(),
     findStores: z
       .record(verifiedCollectionSnapshotSchema(storeCollectionItemSchema))
       .optional(),
@@ -380,7 +377,6 @@ const verifiedCollectionStoreSchema = z
 
 const collectionToolNames = [
   'searchMenu',
-  'recommendAddOns',
   'findStores',
   'searchPromotions',
   'listMembershipRewards',

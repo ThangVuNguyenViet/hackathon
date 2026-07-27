@@ -19,6 +19,7 @@ import type {
 } from '../fixtures/schema.js';
 import type { OfficialSourceAuthority } from '../domain/officialSourceAuthority.js';
 import type { ExactCartAvailabilityObservationV2 } from './exactCartAvailabilityAuthority.js';
+import type { RecommendationDecisionResponse } from '../recommendations/domain/contracts.js';
 
 export type FixtureMode =
   | 'public_crawl_seed'
@@ -243,13 +244,25 @@ export interface HandoffState {
   reasons: string[];
 }
 
+export type RecommendationToolResult =
+  | {
+      status: 'recommended';
+      recommendation: RecommendationDecisionResponse;
+    }
+  | {
+      status: 'silent';
+      recommendation: null;
+    };
+
 export const TOOL_NAMES = [
   'searchMenu',
   'getItemDetails',
   'getModifierOptions',
   'updateCart',
   'previewCart',
-  'recommendAddOns',
+  'recommendStarter',
+  'recommendModifierUpsell',
+  'recommendSmartCrossSell',
   'findStores',
   'checkStoreAvailability',
   'quoteFulfillment',
@@ -283,7 +296,6 @@ export type ToolName = (typeof TOOL_NAMES)[number];
 
 export type CollectionToolName =
   | 'searchMenu'
-  | 'recommendAddOns'
   | 'findStores'
   | 'searchPromotions'
   | 'listMembershipRewards'
@@ -304,7 +316,9 @@ export interface ToolResultByName {
   getModifierOptions: GeneratedMenuModifier;
   updateCart: Cart;
   previewCart: Cart;
-  recommendAddOns: MenuItem[];
+  recommendStarter: RecommendationToolResult;
+  recommendModifierUpsell: RecommendationToolResult;
+  recommendSmartCrossSell: RecommendationToolResult;
   findStores: Array<{
     storeId: string;
     name: string;
@@ -354,7 +368,6 @@ export type AgentToolResultByName = Omit<
   CollectionToolName
 > & {
   searchMenu: VerifiedCollectionResult<MenuItem>;
-  recommendAddOns: VerifiedCollectionResult<MenuItem>;
   findStores: VerifiedCollectionResult<{
     storeId: string;
     name: string;
@@ -372,7 +385,6 @@ export type AgentToolResultByName = Omit<
 
 export interface VerifiedCollectionStore {
   searchMenu?: Record<string, VerifiedCollectionSnapshot<MenuItem>>;
-  recommendAddOns?: Record<string, VerifiedCollectionSnapshot<MenuItem>>;
   findStores?: Record<
     string,
     VerifiedCollectionSnapshot<ToolResultByName['findStores'][number]>

@@ -27,6 +27,7 @@ import type {
   SummarizeConversationExchanges,
 } from '../session/conversationContext.js';
 import type { LocalToolEvidenceEvent } from './localToolEvidence.js';
+import type { RecommendationApplicationService } from '../recommendations/application/service-types.js';
 
 export type ReplyIntent =
   | 'ask_fulfillment_method'
@@ -50,6 +51,8 @@ export interface AgentTurnInput {
    */
   guestCheckoutAuthority?: GuestCheckoutAuthority;
   clients: ExternalClients;
+  /** Server-owned recommendation authority. Request JSON and model output cannot populate it. */
+  recommendations?: RecommendationApplicationService;
   store: ConversationStore;
   dashboard: DashboardEventBus;
   externalMessageId?: string | null;

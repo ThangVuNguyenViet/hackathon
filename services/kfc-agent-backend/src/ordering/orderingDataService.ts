@@ -462,18 +462,6 @@ export class OrderingDataService {
     return item ? this.modifierByItemId.get(item.itemId) : undefined;
   }
 
-  recommendAddOns(): MenuItemWithProvenance[] {
-    return this.fixtures.menuItems
-      .filter((item) => item.available)
-      .map((item) =>
-        menuItemWithModifierData(
-          item,
-          this.modifierByItemId.get(item.itemId),
-          false,
-        ),
-      );
-  }
-
   searchStores(input: StoreSearchInput): StoreWithProvenance[] {
     const query = [input.query, input.city, input.district]
       .filter(Boolean)

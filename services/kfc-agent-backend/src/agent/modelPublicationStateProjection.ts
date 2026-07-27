@@ -29,7 +29,6 @@ const terminalOrderStatuses = new Set<Order['status']>([
 
 const projectedCollectionToolNames = [
   'searchMenu',
-  'recommendAddOns',
   'findStores',
   'searchPromotions',
   'listMembershipRewards',
@@ -375,7 +374,6 @@ function projectCollectionItems(
 ): unknown[] | undefined {
   switch (toolName) {
     case 'searchMenu':
-    case 'recommendAddOns':
       return items.map((item) => projectMenuItem(item as MenuItem));
     case 'findStores':
       return items.map((item) => {

@@ -60,6 +60,8 @@ export type EventApplicationResult =
     };
 
 export interface RecommendationApplicationService {
+  hasPriorCompletedHistory(verifiedCustomerRef: string): Promise<boolean>;
+
   decide(
     input: RecommendationDecisionApplicationInput,
   ): Promise<RecommendationDecisionApplicationResult>;

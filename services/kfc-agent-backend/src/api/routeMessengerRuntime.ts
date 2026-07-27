@@ -145,12 +145,16 @@ import type { RouteCommerceRuntime } from './routeCommerceRuntime.js';
 import type { RouteAgentRuntime } from './routeAgentRuntime.js';
 import { messengerGuestAuthorityForClaimedRun } from './routeMessengerGuestAuthority.js';
 import type { VerifiedMessengerGuestCheckoutIngress } from '../security/guestCheckoutAuthority.js';
+import type { RecommendationApplicationService } from '../recommendations/application/service-types.js';
 
 export function createRouteMessengerRuntime(
   input: {
     options: RouteOptions;
     store: ConversationStore;
     dashboard: DashboardEventBus;
+    recommendations?: {
+      application: RecommendationApplicationService;
+    };
   } & RouteCommerceRuntime &
     RouteAgentRuntime,
 ) {
@@ -158,6 +162,7 @@ export function createRouteMessengerRuntime(
     options,
     store,
     dashboard,
+    recommendations,
     getFixtures,
     withConfiguredCommerce,
     createWebhookClients,
@@ -670,6 +675,7 @@ export function createRouteMessengerRuntime(
           externalMessageId: linkedTurns[0]!.externalMessageId,
           metadata: null,
           clients,
+          recommendations: recommendations?.application,
           store,
           dashboard,
           agentModelBinding: options.agent,

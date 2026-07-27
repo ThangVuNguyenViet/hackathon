@@ -3,7 +3,6 @@ import type {
   ExternalCallContext,
   MenuClient,
   OmsClient,
-  RecommendationClient,
 } from './interfaces.js';
 import type {
   Cart,
@@ -17,8 +16,6 @@ import {
   type CatalogItemFact,
   type CatalogObservation,
 } from '../catalog/catalogObservation.js';
-import { createVerifiedCommerceProjection } from '../commerce/verifiedCommerceProjection.js';
-import { rankEligibleRecommendations } from '../ordering/recommendationRanking.js';
 import type { MenuSearchProviderItem } from '../ordering/types.js';
 
 function ok<T>(value: T): ToolResult<T> {
@@ -130,7 +127,6 @@ export function createCatalogObservationClients(
   options: CatalogObservationClientOptions,
 ): {
   menu: MenuClient;
-  recommendation: RecommendationClient;
   cart: CartClient;
   oms: OmsClient;
 } {
@@ -216,61 +212,6 @@ export function createCatalogObservationClients(
     },
   };
 
-  const recommendation: RecommendationClient = {
-    async recommendAddOns(cart, externalCallContext) {
-      const observation = await discoveryObservation(externalCallContext);
-      try {
-        createVerifiedCommerceProjection({
-          environment: observation.environment,
-          observation,
-          subjectId: options.sessionId,
-          journeyId: options.sessionId,
-          factGroups: [
-            {
-              key: 'catalog',
-              environment: observation.environment,
-              providerFingerprint: observation.providerFingerprint,
-              subjectId: options.sessionId,
-              journeyId: options.sessionId,
-              revision: observation.id,
-              verifiedAt: observation.observedAt,
-              expiresAt:
-                observation.expiresAt ??
-                new Date(
-                  Date.parse(observation.observedAt) + 300_000,
-                ).toISOString(),
-              dependencies: [],
-              value: observation.items,
-            },
-          ],
-        });
-      } catch (error) {
-        return fail(
-          error instanceof Error
-            ? error.message
-            : 'Catalog projection is stale',
-        );
-      }
-      const inCart = new Set(cart.items.map((item) => item.itemCode));
-      return ok(
-        rankEligibleRecommendations(
-          observation.items.map((item) => ({
-            itemCode: item.itemCode,
-            eligible: !inCart.has(item.itemCode),
-            value: toMenuItem(item),
-            score: {
-              requestMatch: 0,
-              partySizeFit: 0,
-              budgetFit: -item.priceVnd,
-              preferenceMatch: 0,
-              cartDisruption: 0,
-            },
-          })),
-        ).map((candidate) => candidate.value),
-      );
-    },
-  };
-
   const cart: CartClient = {
     createCart: (sessionId, externalCallContext) =>
       options.cart.createCart(sessionId, externalCallContext),
@@ -340,7 +281,6 @@ export function createCatalogObservationClients(
 
   return {
     menu,
-    recommendation,
     cart,
     oms,
   };

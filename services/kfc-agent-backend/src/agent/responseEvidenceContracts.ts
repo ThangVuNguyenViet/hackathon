@@ -82,7 +82,17 @@ const toolResponseEvidenceContracts = {
     requiredScopes: [],
     privateData: false,
   },
-  recommendAddOns: {
+  recommendStarter: {
+    claimKinds: ['product', 'modifier', 'price', 'source', 'status'],
+    requiredScopes: [],
+    privateData: false,
+  },
+  recommendModifierUpsell: {
+    claimKinds: ['product', 'modifier', 'price', 'source', 'status'],
+    requiredScopes: [],
+    privateData: false,
+  },
+  recommendSmartCrossSell: {
     claimKinds: ['product', 'modifier', 'price', 'source', 'status'],
     requiredScopes: [],
     privateData: false,

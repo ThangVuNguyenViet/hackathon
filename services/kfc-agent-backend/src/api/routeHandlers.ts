@@ -152,6 +152,7 @@ export function createRouteHandlers(options: RouteOptions = {}): RouteHandlers {
     dashboard,
     showcase,
     streamingRunObservers,
+    recommendations,
     ...commerceRuntime,
   });
   const { kfcAgentResponse } = agentRuntime;
@@ -159,6 +160,7 @@ export function createRouteHandlers(options: RouteOptions = {}): RouteHandlers {
     options,
     store,
     dashboard,
+    recommendations,
     ...commerceRuntime,
     ...agentRuntime,
   });

@@ -41,6 +41,10 @@ import {
   validateTrustedActionToolAuthority,
   type TrustedActionToolAuthority,
 } from './trustedActionToolAuthority.js';
+import {
+  executeRecommendationTool,
+  type RecommendationToolExecutionAuthority,
+} from '../recommendations/application/tool-execution.js';
 
 export interface ExecutorContext {
   externalCallContext: ExternalCallContext;
@@ -58,6 +62,7 @@ export interface ExecutorContext {
   trustedActionAuthority?: TrustedActionToolAuthority;
   currentRunIdentity?: string;
   durableRequestIdentity?: string;
+  recommendation?: RecommendationToolExecutionAuthority;
   runGuard?: {
     isCurrent(): Promise<boolean>;
     recordIrreversibleBoundary?(
@@ -499,22 +504,64 @@ export async function executeToolCall(
         request.toolName,
         await clients.cart.previewCart(cart, context.externalCallContext),
       );
-    case 'recommendAddOns':
-      if (!cart)
+    case 'recommendStarter':
+    case 'recommendModifierUpsell':
+    case 'recommendSmartCrossSell': {
+      if (!context.recommendation) {
         return result(
           request,
           false,
           undefined,
-          'Cart is required before recommendAddOns',
+          'Recommendation service is not configured',
+          'recommendation_not_configured',
+        );
+      }
+      if (!cart) {
+        return result(
+          request,
+          false,
+          undefined,
+          'Cart is required before a recommendation',
           'cart_required',
         );
-      return resultFromToolResult(
-        request.toolName,
-        await clients.recommendation.recommendAddOns(
+      }
+      if (!sessionId || !context.durableRequestIdentity) {
+        return result(
+          request,
+          false,
+          undefined,
+          'Durable recommendation request context is required',
+          'recommendation_request_context_required',
+        );
+      }
+      if (request.toolName === 'recommendModifierUpsell') {
+        const args = toolArgumentSchemas.recommendModifierUpsell.parse(
+          request.arguments,
+        );
+        return executeRecommendationTool({
+          toolName: request.toolName,
+          requestKind: args.requestKind,
+          parentCartLineId: args.parentCartLineId,
+          sessionId,
+          durableRequestIdentity: context.durableRequestIdentity,
+          state: context.state,
           cart,
-          context.externalCallContext,
-        ),
+          authority: context.recommendation,
+        });
+      }
+      const args = toolArgumentSchemas[request.toolName].parse(
+        request.arguments,
       );
+      return executeRecommendationTool({
+        toolName: request.toolName,
+        requestKind: args.requestKind,
+        sessionId,
+        durableRequestIdentity: context.durableRequestIdentity,
+        state: context.state,
+        cart,
+        authority: context.recommendation,
+      });
+    }
     case 'findStores': {
       const args = toolArgumentSchemas.findStores.parse(request.arguments);
       return resultFromToolResult(

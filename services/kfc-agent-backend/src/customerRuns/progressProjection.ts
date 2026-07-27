@@ -33,7 +33,9 @@ export function projectToolProgressFamily(
     case 'searchMenu':
     case 'getItemDetails':
     case 'getModifierOptions':
-    case 'recommendAddOns':
+    case 'recommendStarter':
+    case 'recommendModifierUpsell':
+    case 'recommendSmartCrossSell':
       return 'checking_menu';
     case 'searchPromotions':
     case 'explainPromotion':

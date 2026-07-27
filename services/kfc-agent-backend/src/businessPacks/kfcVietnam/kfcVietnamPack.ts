@@ -75,6 +75,12 @@ import {
 import { langChainConversationSummarizer } from '../../session/langChainConversationSummary.js';
 import { bindConfiguredSessionAgentModel } from '../../persistence/sessionAgentModelBinding.js';
 import { requireTrustedConfiguredAgentModelBinding } from '../../config/agentModelProfile.js';
+import { createBundledRecommendationToolAuthority } from '../../recommendations/application/bundled-tool-authority.js';
+import {
+  availableRecommendationToolNames,
+  isRecommendationToolName,
+} from '../../recommendations/application/tool-availability.js';
+import { recommendationCartLineId } from '../../recommendations/application/tool-execution.js';
 
 const DEFAULT_CONVERSATION_CONTEXT_TOKEN_BUDGET = 8_192;
 
@@ -95,6 +101,9 @@ export const KFC_AGENT_INSTRUCTIONS = [
   'Với yêu cầu gợi ý cho nhóm hoặc theo ngân sách, chỉ dùng partySize và giá từ catalog làm evidence. Ngân sách tổng là mức tối đa, không phải trần giá cho từng món; có thể dùng minPriceVnd và maxPriceVnd để thu hẹp khoảng giá ứng viên, còn maxPriceExclusiveVnd là ranh giới loại trừ cho yêu cầu thấp hơn nghiêm ngặt. Tự kết hợp giá và số lượng từ kết quả đã xác minh, thu thập đủ dữ liệu trước khi đề xuất một thay đổi giỏ hoàn chỉnh; không dùng bộ lập kế hoạch tất định.',
   'Copy every returned customer-facing product and variant name character-for-character. Normalized or diacritic-insensitive search is retrieval only and never authorizes reconstructing a name.',
   'For a requested modifier, retain modifierQueries while broadening product terms. An unconstrained search can verify that a product exists, but do not answer as if a dropped modifier requirement matched; inspect that exact item with getModifierOptions first.',
+  'Be slightly proactive only after genuine food, menu, or ordering intent. Offer at most one recommendation at a time, in this placement sequence: starter, modifier upsell, then smart cross-sell. Do not interrupt checkout, fulfillment, payment, or unresolved safety-sensitive work. Never repeat a proactive recommendation placement.',
+  'Use only the recommendation facts and reason codes returned by the recommendation tool. Never invent availability, popularity, history, promotions, prices, compatibility, or CMS copy. Treat an empty or suppressed recommendation as silent: do not mention it, retry it, or replace it with an improvised recommendation.',
+  'Never express a recommendation as a cart mutation in prose. A recommendation is an offer for the customer to accept through the verified interaction surface; it does not authorize updateCart or any other effect.',
   'Khi khách giao chọn một giỏ hàng hoàn chỉnh bằng lời nhắn, đáp ứng mọi thành phần và số lượng rõ ràng khi catalog cho phép, rồi trình bày một đề xuất gộp để khách xác nhận bằng GenUI. Khi nhận GenUI cart action đã xác minh, áp dụng action đó trong một lần gọi updateCart. Cart mà công cụ trả về là trạng thái có thẩm quyền.',
   'updateCart là thay đổi có thể đảo ngược và không cần hỏi lại sau khi đã có GenUI cart action xác minh. Không dùng quy tắc này để bỏ qua xác nhận hoặc thẩm quyền của hành động không thể đảo ngược.',
   'Chỉ gọi updateCart cho GenUI cart action đã được máy chủ xác minh trong lượt hiện tại. Lời nhắn văn bản, kể cả yêu cầu rõ ràng, chỉ cho phép chuẩn bị đề xuất để khách xác nhận; câu hỏi về khả năng đáp ứng, giá, tồn kho hoặc tư vấn cũng không cấp quyền thay đổi giỏ. Máy chủ sẽ lấy chính xác món và số lượng từ action đã xác minh, không từ đối số bạn tự mở rộng.',
@@ -112,7 +121,17 @@ export const KFC_AGENT_INSTRUCTIONS = [
 
 function verifiedContext(state: AgentState): Record<string, unknown> {
   return {
-    ...(state.cart ? { cart: state.cart } : {}),
+    ...(state.cart
+      ? {
+          cart: state.cart,
+          recommendationCartLines: state.cart.items.map((item, index) => ({
+            parentCartLineId: recommendationCartLineId(item.itemCode, index),
+            itemCode: item.itemCode,
+            name: item.name,
+            quantity: item.quantity,
+          })),
+        }
+      : {}),
     ...(state.address ? { address: state.address } : {}),
     ...(state.fulfillment ? { fulfillment: state.fulfillment } : {}),
     ...(state.orderPreview ? { orderPreview: state.orderPreview } : {}),
@@ -492,6 +511,10 @@ function modelMayUseTool(
 ): boolean {
   const command = input.trustedCustomerAction?.command.kind;
   switch (toolName) {
+    case 'recommendStarter':
+    case 'recommendModifierUpsell':
+    case 'recommendSmartCrossSell':
+      return Boolean(input.recommendations);
     case 'updateCart':
       return hasTrustedCartMutationAction(input);
     case 'placeOrder':
@@ -548,6 +571,7 @@ async function executeModelTool(input: {
   args: Record<string, unknown>;
   callId: string;
   durableTurnId: string;
+  durableTurnCreatedAt: string;
   operationOccurrence: number;
   externalCallContext: ExternalCallContext;
   currentTurnToolTrace: ToolTraceEntry[];
@@ -622,6 +646,15 @@ async function executeModelTool(input: {
           request: { toolName: input.toolName, arguments: args },
         })
       : undefined;
+  const recommendationAuthority =
+    isRecommendationToolName(input.toolName) && input.turnInput.recommendations
+      ? await createBundledRecommendationToolAuthority({
+          turnInput: input.turnInput,
+          state: input.state,
+          application: input.turnInput.recommendations,
+          durableDecisionTime: input.durableTurnCreatedAt,
+        })
+      : undefined;
   let rawResult: ToolCallResult;
   let modelResult: ToolCallResult | AgentToolCallResult;
   if (input.toolName === 'handoff' && input.state.handoff) {
@@ -690,6 +723,9 @@ async function executeModelTool(input: {
         },
         currentRunIdentity,
         durableRequestIdentity,
+        ...(recommendationAuthority
+          ? { recommendation: recommendationAuthority }
+          : {}),
         ...(trustedActionAuthority
           ? {
               trustedActionAuthority,
@@ -705,6 +741,18 @@ async function executeModelTool(input: {
     args,
     input.currentTurnToolTrace,
   );
+  if (recommendationAuthority) {
+    const latest = await loadPriorVerifiedState(
+      input.turnInput.store,
+      input.turnInput.sessionId,
+      {
+        packRef: KFC_VIETNAM_PACK_REF,
+        schemaVersion: '1',
+        parseState: parseKfcVerifiedState,
+      },
+    );
+    input.state.recommendationState = latest.recommendationState;
+  }
   modelResult = await modelFacingResult(input.state, rawResult);
   const completedAt = new Date();
   await input.turnInput.recordLocalToolEvidence?.({
@@ -961,6 +1009,7 @@ function createKfcTools(input: {
   externalCallContext: ExternalCallContext;
   currentTurnToolTrace: ToolTraceEntry[];
   durableTurnId: string;
+  durableTurnCreatedAt: string;
 }) {
   let executionQueue: Promise<void> = Promise.resolve();
   const operationOccurrences = new Map<ToolName, number>();
@@ -1006,6 +1055,54 @@ function createKfcTools(input: {
         },
       ),
     );
+}
+
+function requestToolName(toolValue: unknown): ToolName | undefined {
+  if (
+    typeof toolValue !== 'object' ||
+    toolValue === null ||
+    !('name' in toolValue) ||
+    typeof toolValue.name !== 'string'
+  ) {
+    return undefined;
+  }
+  return toolNames.includes(toolValue.name as ToolName)
+    ? (toolValue.name as ToolName)
+    : undefined;
+}
+
+function recommendationToolAvailabilityMiddleware(input: {
+  turnInput: AgentTurnInput;
+  state: AgentState;
+}) {
+  return createMiddleware({
+    name: 'KfcRecommendationToolAvailabilityMiddleware',
+    wrapModelCall: async (request, handler) => {
+      const latest = await loadPriorVerifiedState(
+        input.turnInput.store,
+        input.turnInput.sessionId,
+        {
+          packRef: KFC_VIETNAM_PACK_REF,
+          schemaVersion: '1',
+          parseState: parseKfcVerifiedState,
+        },
+      );
+      const available = new Set(
+        availableRecommendationToolNames(
+          latest.recommendationState ?? input.state.recommendationState,
+        ),
+      );
+      return handler({
+        ...request,
+        tools: request.tools.filter((candidate) => {
+          const name = requestToolName(candidate);
+          return (
+            !name || !isRecommendationToolName(name) || available.has(name)
+          );
+        }),
+      });
+    },
+  });
 }
 
 function parseKfcVerifiedState(value: unknown): Partial<VerifiedStateSnapshot> {
@@ -1257,6 +1354,7 @@ export const kfcVietnamPack: BusinessPack<
           args: {},
           callId: `trusted-action:${input.trustedCustomerAction!.actionDigest}`,
           durableTurnId: currentUserTurn.id,
+          durableTurnCreatedAt: currentUserTurn.createdAt,
           operationOccurrence: 0,
           externalCallContext,
           currentTurnToolTrace,
@@ -1277,8 +1375,19 @@ export const kfcVietnamPack: BusinessPack<
           externalCallContext,
           currentTurnToolTrace,
           durableTurnId: currentUserTurn.id,
+          durableTurnCreatedAt: currentUserTurn.createdAt,
         }),
-        middleware: [kfcTypedRecoveryMiddleware],
+        middleware: [
+          kfcTypedRecoveryMiddleware,
+          ...(input.recommendations
+            ? [
+                recommendationToolAvailabilityMiddleware({
+                  turnInput: input,
+                  state,
+                }),
+              ]
+            : []),
+        ],
         systemPrompt: systemPrompt(state),
         signal: externalCallContext.signal,
         ...(callbacks || runWithContext

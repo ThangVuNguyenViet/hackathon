@@ -144,7 +144,22 @@ export const toolArgumentSchemas = {
     })
     .strict(),
   previewCart: z.object({}).strict(),
-  recommendAddOns: z.object({}).strict(),
+  recommendStarter: z
+    .object({
+      requestKind: z.enum(['proactive', 'customer_requested']),
+    })
+    .strict(),
+  recommendModifierUpsell: z
+    .object({
+      requestKind: z.enum(['proactive', 'customer_requested']),
+      parentCartLineId: z.string().min(1),
+    })
+    .strict(),
+  recommendSmartCrossSell: z
+    .object({
+      requestKind: z.enum(['proactive', 'customer_requested']),
+    })
+    .strict(),
   findStores: z
     .object({
       query: z.string().min(1).optional(),
@@ -269,7 +284,22 @@ export const agentToolArgumentSchemas = {
   getModifierOptions: z.object({ code: z.string().min(1) }).strict(),
   updateCart: z.object({}).strict(),
   previewCart: z.object({}).strict(),
-  recommendAddOns: z.object({}).strict(),
+  recommendStarter: z
+    .object({
+      requestKind: z.enum(['proactive', 'customer_requested']),
+    })
+    .strict(),
+  recommendModifierUpsell: z
+    .object({
+      requestKind: z.enum(['proactive', 'customer_requested']),
+      parentCartLineId: z.string().min(1),
+    })
+    .strict(),
+  recommendSmartCrossSell: z
+    .object({
+      requestKind: z.enum(['proactive', 'customer_requested']),
+    })
+    .strict(),
   findStores: z
     .object({
       query: z.string().min(1).nullable(),
@@ -390,8 +420,12 @@ export const agentToolDescriptions: Record<ToolName, string> = {
   updateCart:
     'Apply the current verified GenUI cart action. The server derives the authorized item identifiers, quantities, and modifiers from that typed action and ignores wider model-authored changes. Plain-text messages, including explicit requests, can prepare a proposal but do not authorize this tool. Item quantity means menu portions, not pieces described inside the item. Treat the returned cart as authoritative; this permission never extends to irreversible actions.',
   previewCart: 'Return the current verified cart and server-calculated totals.',
-  recommendAddOns:
-    'Return verified add-on candidates for the current cart without mutating it. If a requested add-on is not returned, that does not prove that item is absent from the full menu; searchMenu can check for a standalone item.',
+  recommendStarter:
+    'Request the one eligible starter recommendation for this order flow. The server chooses Local Favorite or For You from verified identity and completed-order history. Use proactive after genuine food, menu, or order intent, or customer_requested when the customer explicitly asks for a recommendation.',
+  recommendModifierUpsell:
+    'Request the one eligible modifier upsell for the exact current cart line. Use only a parentCartLineId returned by verified current cart state. Use proactive after that line is added, or customer_requested when the customer explicitly asks.',
+  recommendSmartCrossSell:
+    'Request the one eligible Smart Cross-sell slate after the prior recommendation stage resolves. Use proactive for the normal once-only flow, or customer_requested when the customer explicitly asks.',
   findStores:
     'Return store candidates for the supplied structured location filters. Treat each returned row only as evidence for its own address. Empty results or rows outside the requested location do not prove either a matching store or exhaustive absence. This query does not prove that no KFC store exists in the location. A nearby or named store does not verify inventory or capacity and does not verify delivery coverage, fee, ETA, or item serviceability; use quoteFulfillment with complete delivery details for fulfillment facts.',
   checkStoreAvailability:

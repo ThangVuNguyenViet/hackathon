@@ -610,11 +610,6 @@ export function createMockClients(
         });
       },
     },
-    recommendation: {
-      async recommendAddOns() {
-        return ok(data.recommendAddOns().map(toMenuItem));
-      },
-    },
     promotion: {
       async searchPromotions(query) {
         return ok(data.searchPromotionOffers({ query }));

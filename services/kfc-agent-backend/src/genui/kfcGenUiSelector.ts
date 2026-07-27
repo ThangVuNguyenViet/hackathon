@@ -281,10 +281,7 @@ function selectKfcGenUiAttachmentUnbound(
   const prefersFulfillmentSurface =
     state.trustedPresentation?.preferredSurface === 'fulfillment';
   const hasCurrentMenuEvidence = turnToolNames.some(
-    (name) =>
-      name === 'searchMenu' ||
-      name === 'recommendAddOns' ||
-      name === 'getItemDetails',
+    (name) => name === 'searchMenu' || name === 'getItemDetails',
   );
   const currentModifierItemCode = state.menuModifierOptions?.itemCode;
   const keepsModifierSurface = Boolean(

@@ -97,13 +97,6 @@ export interface CartChange {
   modifiers?: ModifierSelectionInput[];
 }
 
-export interface RecommendationClient {
-  recommendAddOns(
-    cart: Cart,
-    externalCallContext: ExternalCallContext,
-  ): Promise<ToolResult<MenuItem[]>>;
-}
-
 export interface PromotionClient {
   searchPromotions(
     query: string,
@@ -443,7 +436,6 @@ export interface ExternalClients {
   };
   menu: MenuClient;
   cart: CartClient;
-  recommendation: RecommendationClient;
   promotion: PromotionClient;
   membership: MembershipClient;
   inventory: InventoryClient;
