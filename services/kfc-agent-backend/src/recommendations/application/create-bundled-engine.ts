@@ -1,4 +1,3 @@
-import { LocalMerchandisingPolicyRepository } from '../merchandising/local-policy-repository.js';
 import { RankerRepository } from '../ranking/ranker-repository.js';
 import {
   BundledCommerceFactsRepository,
@@ -20,15 +19,14 @@ export function createRecommendationDecisionEngine(
 export function createBundledRecommendationDecisionEngine(
   options: Pick<
     RecommendationDecisionEngineDependencies,
-    'shadowScorer' | 'shadowOutputMode'
-  > = {},
+    'merchandisingPolicyRepository' | 'shadowScorer' | 'shadowOutputMode'
+  >,
 ): RecommendationDecisionEngine {
   return createRecommendationDecisionEngine({
     commerceFactsRepository: new BundledCommerceFactsRepository(),
     rankingStatisticsRepository: new BundledRankingStatisticsRepository(),
     promotionFactsRepository: new BundledPromotionFactsRepository(),
     rankerRepository: new RankerRepository(),
-    merchandisingPolicyRepository: new LocalMerchandisingPolicyRepository(),
     ...options,
   });
 }

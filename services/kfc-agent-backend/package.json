@@ -22,6 +22,8 @@
     "fixtures:build": "tsx scripts/build-fixtures.ts",
     "policies:build": "tsx scripts/build-policy-fixtures.ts",
     "policies:check": "tsx scripts/build-policy-fixtures.ts --check",
+    "sanity:policies:seed": "set -a; [ ! -f ../../.env ] || . ../../.env; set +a; tsx scripts/seed-sanity-recommendation-policies.ts",
+    "sanity:policies:check": "set -a; [ ! -f ../../.env ] || . ../../.env; set +a; tsx scripts/seed-sanity-recommendation-policies.ts --check",
     "worker:dev": "wrangler dev --env-file ../../.env",
     "worker:deploy": "wrangler deploy",
     "worker:deploy:dry-run": "wrangler deploy --dry-run",

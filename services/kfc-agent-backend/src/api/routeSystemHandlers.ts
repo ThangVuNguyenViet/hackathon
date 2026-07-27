@@ -290,6 +290,15 @@ export function createSystemRouteHandlers(context: RouteHandlerContext) {
         outputMode: 'baseline' as const,
         message: 'Recommendation shadow scoring is not configured',
       };
+      const recommendationSanity = options.readiness?.recommendationSanity
+        ? await options.readiness.recommendationSanity()
+        : {
+            ok: false as const,
+            required: true as const,
+            configured: false,
+            authority: 'sanity' as const,
+            message: 'Sanity merchandising authority is not configured',
+          };
       const checks = messengerToken
         ? {
             database,
@@ -303,6 +312,7 @@ export function createSystemRouteHandlers(context: RouteHandlerContext) {
             observability,
             commerce,
             recommendationShadow,
+            recommendationSanity,
           }
         : {
             database,
@@ -315,6 +325,7 @@ export function createSystemRouteHandlers(context: RouteHandlerContext) {
             observability,
             commerce,
             recommendationShadow,
+            recommendationSanity,
           };
       const ok = Object.values(checks).every((check) => check.ok);
 
@@ -357,6 +368,13 @@ export function createSystemRouteHandlers(context: RouteHandlerContext) {
                     ranker: 'deterministic-safety-rerank-v1',
                     ledger: 'kfc-scenario-ledger-v1',
                     recommendationShadow,
+                    recommendationSanity: {
+                      authority: recommendationSanity.authority,
+                      configured: recommendationSanity.configured,
+                      reachable: recommendationSanity.reachable ?? false,
+                      snapshotDigest:
+                        recommendationSanity.snapshotDigest ?? null,
+                    },
                   },
                 },
               }

@@ -32,6 +32,7 @@ import {
 import type { RecommendationDecisionContext } from '../../src/recommendations/eligibility/types.js';
 import { compareCanonicalUtcInstants } from '../../src/recommendations/domain/canonical-instant.js';
 import { StoredDemoCustomerHistoryRepository } from '../../src/recommendations/history/stored-demo-history-repository.js';
+import { LocalMerchandisingPolicyRepository } from '../../src/recommendations/merchandising/local-policy-repository.js';
 import type {
   AppendRecommendationEventInput,
   AppendRecommendationEventResult,
@@ -273,6 +274,7 @@ async function bundledApplication(store = new MemoryStore()) {
     persistence: store,
     contextSource: serverContextSource,
     clock: fixedClock,
+    merchandisingPolicyRepository: new LocalMerchandisingPolicyRepository(),
   });
   const inspection = createRecommendationInspectionService({
     persistence: store,
@@ -499,7 +501,9 @@ async function multiFlowSessionFixture(firstFlowComplete: boolean) {
   }
   await service.decide({
     request: firstRequest,
-    ...(firstFlowComplete ? { requestKind: 'customer_requested' as const } : {}),
+    ...(firstFlowComplete
+      ? { requestKind: 'customer_requested' as const }
+      : {}),
   });
 
   const secondRequest = parseRecommendationDecisionRequest({
@@ -620,9 +624,7 @@ describe('Recommendation application service', () => {
     }
     const clock: RecommendationClock = {
       now: () =>
-        engineCompleted
-          ? '2026-07-27T09:30:01Z'
-          : '2026-07-27T09:30:00Z',
+        engineCompleted ? '2026-07-27T09:30:01Z' : '2026-07-27T09:30:00Z',
     };
     const store = new MemoryStore();
     const service = createRecommendationApplicationService(
@@ -861,10 +863,7 @@ describe('Recommendation application service', () => {
     });
 
     await expect(
-      service.recordImpression(
-        explicit.response.recommendationId,
-        impression,
-      ),
+      service.recordImpression(explicit.response.recommendationId, impression),
     ).resolves.toMatchObject({ status: 'recorded' });
     await expect(
       service.recordOutcome(explicit.response.recommendationId, outcome),
@@ -1113,10 +1112,12 @@ describe('Recommendation application service', () => {
       '2026-07-27T09:30:00.111Z',
     ]);
     expect(
-      recordedAt.slice(1).every(
-        (instant, index) =>
-          compareCanonicalUtcInstants(recordedAt[index]!, instant) === -1,
-      ),
+      recordedAt
+        .slice(1)
+        .every(
+          (instant, index) =>
+            compareCanonicalUtcInstants(recordedAt[index]!, instant) === -1,
+        ),
     ).toBe(true);
   });
 

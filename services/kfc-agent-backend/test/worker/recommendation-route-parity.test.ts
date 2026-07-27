@@ -2,8 +2,6 @@ import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import type { FastifyInstance } from 'fastify';
 import { buildServer } from '../../src/api/server.js';
 import { createRouteHandlers } from '../../src/api/routeHandlers.js';
-import { buildServerOptionsFromEnv } from '../../src/api/serverOptions.js';
-import { loadEnv } from '../../src/config/env.js';
 import { digestCommerceAction } from '../../src/ordering/commerceDigest.js';
 import { D1Store } from '../../src/persistence/d1Store.js';
 import { MemoryStore } from '../../src/persistence/memoryStore.js';
@@ -22,6 +20,11 @@ import worker, {
 } from '../../src/worker.js';
 import { toResponse } from '../../src/workerHttp.js';
 import { SqliteD1Database } from '../support/sqlite-d1.js';
+import {
+  buildDeterministicRecommendationServerOptions,
+  deterministicSanityClient,
+  deterministicSanityEnv,
+} from '../support/recommendationSanity.js';
 
 const adminToken = 'recommendation-parity-admin';
 
@@ -112,6 +115,8 @@ describe.sequential('Fastify and Worker recommendation route parity', () => {
   const env: WorkerEnv = {
     DB: database,
     KFC_DEMO_ADMIN_TOKEN: adminToken,
+    ...deterministicSanityEnv,
+    SANITY_CLIENT: deterministicSanityClient,
   };
   let server: FastifyInstance;
 
@@ -119,9 +124,9 @@ describe.sequential('Fastify and Worker recommendation route parity', () => {
     vi.useFakeTimers({ toFake: ['Date'] });
     vi.setSystemTime(new Date('2026-07-27T09:30:00Z'));
     server = buildServer({
-      ...buildServerOptionsFromEnv(
-        loadEnv({ KFC_DEMO_ADMIN_TOKEN: adminToken }),
-      ),
+      ...buildDeterministicRecommendationServerOptions({
+        KFC_DEMO_ADMIN_TOKEN: adminToken,
+      }),
       store: memory,
     });
   });
@@ -153,8 +158,7 @@ describe.sequential('Fastify and Worker recommendation route parity', () => {
         ...(input.payload === undefined && input.rawPayload === undefined
           ? {}
           : {
-              payload:
-                input.rawPayload ?? JSON.stringify(input.payload),
+              payload: input.rawPayload ?? JSON.stringify(input.payload),
             }),
       }),
       worker.fetch(
@@ -164,8 +168,7 @@ describe.sequential('Fastify and Worker recommendation route parity', () => {
           ...(input.payload === undefined && input.rawPayload === undefined
             ? {}
             : {
-                body:
-                  input.rawPayload ?? JSON.stringify(input.payload),
+                body: input.rawPayload ?? JSON.stringify(input.payload),
               }),
         }),
         env,
@@ -347,9 +350,7 @@ describe.sequential('Fastify and Worker recommendation route parity', () => {
   });
 
   it('rejects a missing recommendation content type byte-for-byte', async () => {
-    const body = JSON.stringify(
-      decisionRequest('parity-missing-content-type'),
-    );
+    const body = JSON.stringify(decisionRequest('parity-missing-content-type'));
     const [fastifyResponse, workerResponse] = await Promise.all([
       server.inject({
         method: 'POST',
@@ -395,10 +396,9 @@ describe.sequential('Fastify and Worker recommendation route parity', () => {
 
   it('preserves unrelated Worker route cache behavior', async () => {
     const response = await worker.fetch(
-      new Request(
-        'https://worker.example/chat/kfc/runs/run-missing/cancel',
-        { method: 'POST' },
-      ),
+      new Request('https://worker.example/chat/kfc/runs/run-missing/cancel', {
+        method: 'POST',
+      }),
       env,
     );
 
@@ -713,9 +713,9 @@ describe.sequential('Fastify and Worker recommendation route parity', () => {
       }
     }
 
-    const options = buildServerOptionsFromEnv(
-      loadEnv({ KFC_DEMO_ADMIN_TOKEN: adminToken }),
-    );
+    const options = buildDeterministicRecommendationServerOptions({
+      KFC_DEMO_ADMIN_TOKEN: adminToken,
+    });
     const decisionDatabase = new SqliteD1Database();
     const decisionD1 = new StaleDecisionD1Store(decisionDatabase);
     const decisionServer = buildServer({
@@ -821,7 +821,7 @@ describe.sequential('Fastify and Worker recommendation route parity', () => {
       body: { errorCode: 'demo_admin_unauthorized' },
     });
     const noTokenServer = buildServer({
-      ...buildServerOptionsFromEnv(loadEnv({})),
+      ...buildDeterministicRecommendationServerOptions(),
       store: new MemoryStore(),
     });
     try {

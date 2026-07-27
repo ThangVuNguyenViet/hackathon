@@ -8,6 +8,9 @@ META_INBOX_URL_TEMPLATE = "https://business.facebook.com/latest/inbox/all?asset_
 KFC_RECOMMENDATION_SHADOW_URL = ""
 KFC_RECOMMENDATION_SHADOW_MODEL_REVISION = ""
 KFC_RECOMMENDATION_OUTPUT_MODE = "baseline"
+SANITY_PROJECT_ID = ""
+SANITY_DATASET = ""
+SANITY_API_VERSION = ""
 
 [observability]
 enabled = true

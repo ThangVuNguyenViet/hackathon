@@ -201,19 +201,15 @@ describe('merchandising policy snapshots', () => {
       await new LocalMerchandisingPolicyRepository().loadPublishedSnapshot();
     const fake = {
       fetch: async () =>
-        [...local.snapshot.policies]
-          .reverse()
-          .map((entry, index) => ({
-            ...entry,
-            _id: entry.policyId,
-            _rev: `rev-${index + 1}`,
-          })),
+        [...local.snapshot.policies].reverse().map((entry, index) => ({
+          ...entry,
+          _id: `recommendationPolicy.${entry.policyId}`,
+          _rev: `rev-${index + 1}`,
+          _updatedAt: `2026-07-26T00:00:0${index}Z`,
+        })),
     };
     const live = await new SanityMerchandisingPolicyRepository(
       fake as never,
-      'sanity-snapshot-001',
-      'sanity-policies-revision-001',
-      '2026-07-26T00:00:00Z',
     ).loadPublishedSnapshot();
 
     expect(live.snapshot.complete).toBe(true);
@@ -230,17 +226,80 @@ describe('merchandising policy snapshots', () => {
 
     const invalidClient = {
       fetch: async () => [
-        { ...policy(), _id: 'policy-001', _rev: 'rev-1', unexpected: true },
+        {
+          ...policy(),
+          _id: 'policy-001',
+          _rev: 'rev-1',
+          _updatedAt: '2026-07-26T00:00:00Z',
+          unexpected: true,
+        },
       ],
     };
     await expect(
       new SanityMerchandisingPolicyRepository(
         invalidClient as never,
-        'sanity-snapshot-001',
-        'revision-001',
-        '2026-07-26T00:00:00Z',
       ).loadPublishedSnapshot(),
     ).rejects.toThrow();
+  });
+
+  it('applies replacement and suppression from the injected published Sanity snapshot', async () => {
+    const sanityDocuments = [
+      policy({
+        policyId: 'sanity-replacement',
+        action: 'replace_slate',
+        targetIds: ['20751', '20748', '20732'],
+        boostWeight: null,
+      }),
+      policy({
+        policyId: 'sanity-suppression',
+        action: 'suppress_placement',
+        targetIds: [],
+        boostWeight: null,
+        priority: 100,
+        includedStoreIds: ['KFCVN0036'],
+      }),
+    ].map((entry, index) => ({
+      ...entry,
+      _id: `recommendationPolicy.${entry.policyId}`,
+      _rev: `sanity-revision-${index + 1}`,
+      _updatedAt: `2026-07-26T00:00:0${index}Z`,
+    }));
+    const loaded = await new SanityMerchandisingPolicyRepository({
+      fetch: async () => sanityDocuments,
+    } as never).loadPublishedSnapshot();
+    const ranked = [
+      candidate('20732', 10),
+      candidate('20748', 5),
+      candidate('20751', 1),
+    ];
+
+    const replacement = resolveMerchandisingPolicies({
+      context: context(),
+      rankedCandidates: ranked,
+      policies: loaded.snapshot.policies,
+      cartCategoryIds: ['chicken'],
+    });
+    const suppressionContext = context({
+      request: parseRecommendationDecisionRequest({
+        ...context().request,
+        storeId: 'KFCVN0036',
+      }),
+    });
+    const storeSuppression = resolveMerchandisingPolicies({
+      context: suppressionContext,
+      rankedCandidates: ranked,
+      policies: loaded.snapshot.policies,
+      cartCategoryIds: ['chicken'],
+    });
+
+    expect(
+      replacement.rankedCandidates.map((entry) => entry.candidate.targetId),
+    ).toEqual(['20751', '20748', '20732']);
+    expect(storeSuppression).toMatchObject({
+      suppressed: true,
+      replacement: null,
+      rankedCandidates: [],
+    });
   });
 
   it('matches every typed applicability constraint and sorts by priority, specificity, time, then ID', () => {
@@ -526,9 +585,11 @@ describe('merchandising policy snapshots', () => {
     expect(
       result.rankedCandidates.map((entry) => entry.candidate.targetId),
     ).toEqual(['20751', '20748', '20732']);
-    expect(
-      result.effects.map((effect) => effect.targetActionId),
-    ).toEqual(['product:20751', 'product:20748', 'product:20732']);
+    expect(result.effects.map((effect) => effect.targetActionId)).toEqual([
+      'product:20751',
+      'product:20748',
+      'product:20732',
+    ]);
   });
 
   it('skips an otherwise valid-size Smart Cross-sell replacement with a missing eligible target', () => {

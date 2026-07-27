@@ -60,43 +60,54 @@ function buildBaseWorkerRouteOptions(
   env: WorkerEnv,
   request?: Request,
 ): RouteOptions {
-  return buildServerOptionsFromEnv({
-    PORT: 0,
-    ...workerModelEnv(env),
-    ...openAiDiagnosticEnv(env, request),
-    LANGSMITH_API_KEY: env.LANGSMITH_API_KEY ?? '',
-    LANGSMITH_PROJECT: env.LANGSMITH_PROJECT ?? 'kfc-agent-backend-worker',
-    LANGSMITH_ENDPOINT:
-      env.LANGSMITH_ENDPOINT ?? 'https://api.smith.langchain.com',
-    LANGSMITH_TRACING_SAMPLING_RATE: Number(
-      env.LANGSMITH_TRACING_SAMPLING_RATE ?? '1',
-    ),
-    KFC_SHOWCASE_DATASET:
-      env.KFC_SHOWCASE_DATASET ?? 'kfc-showcase-scenarios-v1',
-    RELEASE_GIT_SHA: env.RELEASE_GIT_SHA ?? 'unknown',
-    RELEASE_DEPLOYMENT_ID: env.RELEASE_DEPLOYMENT_ID ?? 'unknown',
-    RELEASE_BUILT_AT: env.RELEASE_BUILT_AT ?? '',
-    RELEASE_DIRTY: env.RELEASE_DIRTY ?? '',
-    MESSENGER_VERIFY_TOKEN: env.MESSENGER_VERIFY_TOKEN ?? '',
-    META_PAGE_ID: env.META_PAGE_ID ?? '',
-    META_APP_SECRET: env.META_APP_SECRET ?? '',
-    META_PAGE_ACCESS_TOKEN: env.META_PAGE_ACCESS_TOKEN ?? '',
-    META_INBOX_URL_TEMPLATE: env.META_INBOX_URL_TEMPLATE ?? '',
-    MESSENGER_GRAPH_API_BASE_URL: env.MESSENGER_GRAPH_API_BASE_URL ?? '',
-    ZALO_OA_ID: env.ZALO_OA_ID ?? '',
-    ZALO_ACCESS_TOKEN: env.ZALO_ACCESS_TOKEN ?? '',
-    ZALO_INBOX_URL_TEMPLATE: env.ZALO_INBOX_URL_TEMPLATE ?? '',
-    ZALO_REFRESH_TOKEN: env.ZALO_REFRESH_TOKEN ?? '',
-    ZALO_APP_ID: env.ZALO_APP_ID ?? '',
-    ZALO_APP_SECRET: env.ZALO_APP_SECRET ?? '',
-    ZALO_API_BASE_URL: env.ZALO_API_BASE_URL ?? '',
-    KFC_DEMO_ADMIN_TOKEN: env.KFC_DEMO_ADMIN_TOKEN ?? '',
-    KFC_RECOMMENDATION_SHADOW_URL: env.KFC_RECOMMENDATION_SHADOW_URL ?? '',
-    KFC_RECOMMENDATION_SHADOW_MODEL_REVISION:
-      env.KFC_RECOMMENDATION_SHADOW_MODEL_REVISION ?? '',
-    KFC_RECOMMENDATION_OUTPUT_MODE:
-      env.KFC_RECOMMENDATION_OUTPUT_MODE ?? 'baseline',
-  });
+  return buildServerOptionsFromEnv(
+    {
+      PORT: 0,
+      ...workerModelEnv(env),
+      ...openAiDiagnosticEnv(env, request),
+      LANGSMITH_API_KEY: env.LANGSMITH_API_KEY ?? '',
+      LANGSMITH_PROJECT: env.LANGSMITH_PROJECT ?? 'kfc-agent-backend-worker',
+      LANGSMITH_ENDPOINT:
+        env.LANGSMITH_ENDPOINT ?? 'https://api.smith.langchain.com',
+      LANGSMITH_TRACING_SAMPLING_RATE: Number(
+        env.LANGSMITH_TRACING_SAMPLING_RATE ?? '1',
+      ),
+      KFC_SHOWCASE_DATASET:
+        env.KFC_SHOWCASE_DATASET ?? 'kfc-showcase-scenarios-v1',
+      RELEASE_GIT_SHA: env.RELEASE_GIT_SHA ?? 'unknown',
+      RELEASE_DEPLOYMENT_ID: env.RELEASE_DEPLOYMENT_ID ?? 'unknown',
+      RELEASE_BUILT_AT: env.RELEASE_BUILT_AT ?? '',
+      RELEASE_DIRTY: env.RELEASE_DIRTY ?? '',
+      MESSENGER_VERIFY_TOKEN: env.MESSENGER_VERIFY_TOKEN ?? '',
+      META_PAGE_ID: env.META_PAGE_ID ?? '',
+      META_APP_SECRET: env.META_APP_SECRET ?? '',
+      META_PAGE_ACCESS_TOKEN: env.META_PAGE_ACCESS_TOKEN ?? '',
+      META_INBOX_URL_TEMPLATE: env.META_INBOX_URL_TEMPLATE ?? '',
+      MESSENGER_GRAPH_API_BASE_URL: env.MESSENGER_GRAPH_API_BASE_URL ?? '',
+      ZALO_OA_ID: env.ZALO_OA_ID ?? '',
+      ZALO_ACCESS_TOKEN: env.ZALO_ACCESS_TOKEN ?? '',
+      ZALO_INBOX_URL_TEMPLATE: env.ZALO_INBOX_URL_TEMPLATE ?? '',
+      ZALO_REFRESH_TOKEN: env.ZALO_REFRESH_TOKEN ?? '',
+      ZALO_APP_ID: env.ZALO_APP_ID ?? '',
+      ZALO_APP_SECRET: env.ZALO_APP_SECRET ?? '',
+      ZALO_API_BASE_URL: env.ZALO_API_BASE_URL ?? '',
+      KFC_DEMO_ADMIN_TOKEN: env.KFC_DEMO_ADMIN_TOKEN ?? '',
+      KFC_RECOMMENDATION_SHADOW_URL: env.KFC_RECOMMENDATION_SHADOW_URL ?? '',
+      KFC_RECOMMENDATION_SHADOW_MODEL_REVISION:
+        env.KFC_RECOMMENDATION_SHADOW_MODEL_REVISION ?? '',
+      KFC_RECOMMENDATION_OUTPUT_MODE:
+        env.KFC_RECOMMENDATION_OUTPUT_MODE ?? 'baseline',
+      SANITY_PROJECT_ID: env.SANITY_PROJECT_ID ?? '',
+      SANITY_DATASET: env.SANITY_DATASET ?? '',
+      SANITY_API_VERSION: env.SANITY_API_VERSION ?? '',
+      SANITY_READ_TOKEN: env.SANITY_READ_TOKEN ?? '',
+    },
+    {
+      sanityClientFactory: env.SANITY_CLIENT
+        ? () => env.SANITY_CLIENT!
+        : undefined,
+    },
+  );
 }
 
 function fetchReadiness(

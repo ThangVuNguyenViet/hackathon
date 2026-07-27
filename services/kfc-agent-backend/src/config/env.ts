@@ -53,6 +53,10 @@ const appEnvSchema = z.object({
   KFC_RECOMMENDATION_OUTPUT_MODE: z
     .enum(['baseline', 'learned_technical'])
     .default('baseline'),
+  SANITY_PROJECT_ID: z.string().optional().default(''),
+  SANITY_DATASET: z.string().optional().default(''),
+  SANITY_API_VERSION: z.string().optional().default(''),
+  SANITY_READ_TOKEN: z.string().optional().default(''),
 });
 
 export type AppEnv = z.infer<typeof appEnvSchema>;

@@ -25,15 +25,24 @@ import type {
   RecommendationOutputMode,
   RecommendationShadowScorer,
 } from '../recommendations/shadow/contracts.js';
+import type { MerchandisingPolicyRepository } from '../recommendations/merchandising/repository.js';
+import {
+  checkRecommendationSanityReadiness,
+  createSanityMerchandisingPolicyRepository,
+  recommendationSanityConfig,
+  type SanityClientFactory,
+  unconfiguredRecommendationSanityReadiness,
+} from '../config/recommendationSanity.js';
 
 export const KFC_RECOMMENDATION_STORE_TIMEZONE = 'Asia/Ho_Chi_Minh';
 
 export function createBundledRecommendationRouteServicesFactory(
   storeTimezone = KFC_RECOMMENDATION_STORE_TIMEZONE,
   shadow: {
+    merchandisingPolicyRepository: MerchandisingPolicyRepository;
     scorer?: RecommendationShadowScorer;
     outputMode?: RecommendationOutputMode;
-  } = {},
+  },
 ): RecommendationRouteServicesFactory {
   return {
     create(store) {
@@ -47,6 +56,7 @@ export function createBundledRecommendationRouteServicesFactory(
           clock: {
             now: () => new Date().toISOString(),
           },
+          merchandisingPolicyRepository: shadow.merchandisingPolicyRepository,
           shadowScorer: shadow.scorer,
           shadowOutputMode: shadow.outputMode,
         }),
@@ -74,7 +84,12 @@ function modelIdentity(profile: AgentModelProfile): AgentModelIdentity {
   };
 }
 
-export function buildServerOptionsFromEnv(env: AppEnv): BuildServerOptions {
+export function buildServerOptionsFromEnv(
+  env: AppEnv,
+  dependencies: {
+    sanityClientFactory?: SanityClientFactory;
+  } = {},
+): BuildServerOptions {
   const openAiApiKey = optionalValue(env.OPENAI_API_KEY);
   const openAiBaseUrl = optionalValue(env.OPENAI_BASE_URL);
   const openCodeApiKey = optionalValue(env.OPENCODE_API_KEY);
@@ -161,14 +176,43 @@ export function buildServerOptionsFromEnv(env: AppEnv): BuildServerOptions {
         modelRevision: env.KFC_RECOMMENDATION_SHADOW_MODEL_REVISION,
       })
     : undefined;
+  let merchandisingPolicyRepository: MerchandisingPolicyRepository | undefined;
+  let recommendationSanityReadiness =
+    unconfiguredRecommendationSanityReadiness();
+  try {
+    const sanityConfig = recommendationSanityConfig({
+      projectId: env.SANITY_PROJECT_ID,
+      dataset: env.SANITY_DATASET,
+      apiVersion: env.SANITY_API_VERSION,
+      readToken: env.SANITY_READ_TOKEN,
+    });
+    if (sanityConfig) {
+      merchandisingPolicyRepository = createSanityMerchandisingPolicyRepository(
+        sanityConfig,
+        dependencies.sanityClientFactory,
+      );
+      recommendationSanityReadiness = {
+        ok: true,
+        required: true,
+        configured: true,
+        authority: 'sanity',
+      };
+    }
+  } catch {
+    recommendationSanityReadiness =
+      unconfiguredRecommendationSanityReadiness(true);
+  }
   return {
-    recommendations: createBundledRecommendationRouteServicesFactory(
-      KFC_RECOMMENDATION_STORE_TIMEZONE,
-      {
-        scorer: shadowScorer,
-        outputMode: env.KFC_RECOMMENDATION_OUTPUT_MODE,
-      },
-    ),
+    recommendations: merchandisingPolicyRepository
+      ? createBundledRecommendationRouteServicesFactory(
+          KFC_RECOMMENDATION_STORE_TIMEZONE,
+          {
+            merchandisingPolicyRepository,
+            scorer: shadowScorer,
+            outputMode: env.KFC_RECOMMENDATION_OUTPUT_MODE,
+          },
+        )
+      : undefined,
     demoAdminToken: optionalValue(env.KFC_DEMO_ADMIN_TOKEN),
     messengerVerifyToken: optionalValue(env.MESSENGER_VERIFY_TOKEN),
     metaAppSecret: optionalValue(env.META_APP_SECRET),
@@ -226,6 +270,10 @@ export function buildServerOptionsFromEnv(env: AppEnv): BuildServerOptions {
         mode: 'fixture',
       },
       recommendationShadow: shadowReadiness,
+      recommendationSanity: merchandisingPolicyRepository
+        ? () =>
+            checkRecommendationSanityReadiness(merchandisingPolicyRepository)
+        : async () => recommendationSanityReadiness,
     },
   };
 }

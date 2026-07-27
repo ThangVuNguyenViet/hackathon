@@ -1,10 +1,9 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import type { FastifyInstance } from 'fastify';
 import { buildServer } from '../../src/api/server.js';
-import { buildServerOptionsFromEnv } from '../../src/api/serverOptions.js';
 import type { LifecycleInstance } from '../../src/commerce/lifecycleProvider.js';
-import { loadEnv } from '../../src/config/env.js';
 import { MemoryStore } from '../../src/persistence/memoryStore.js';
+import { buildDeterministicRecommendationServerOptions } from '../support/recommendationSanity.js';
 import { parseRecommendationDecisionRequest } from '../../src/recommendations/domain/schemas.js';
 import { renderBindingForDecisionDigests } from '../../src/recommendations/persistence/types.js';
 
@@ -67,7 +66,9 @@ async function configuredServer() {
     },
   });
   const server = buildServer({
-    ...buildServerOptionsFromEnv(loadEnv({ KFC_DEMO_ADMIN_TOKEN: adminToken })),
+    ...buildDeterministicRecommendationServerOptions({
+      KFC_DEMO_ADMIN_TOKEN: adminToken,
+    }),
     store,
     lifecycle: {
       environment: 'sandbox',

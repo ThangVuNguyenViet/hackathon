@@ -29,7 +29,9 @@ import type {
 } from '../../src/recommendations/shadow/contracts.js';
 import { HttpRecommendationShadowScorer } from '../../src/recommendations/shadow/http-shadow-scorer.js';
 
-const bundledEngine = createBundledRecommendationDecisionEngine();
+const bundledEngine = createBundledRecommendationDecisionEngine({
+  merchandisingPolicyRepository: new LocalMerchandisingPolicyRepository(),
+});
 
 function snapshotBinding(name: string) {
   return {

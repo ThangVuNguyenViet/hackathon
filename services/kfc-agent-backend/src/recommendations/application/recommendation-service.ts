@@ -48,6 +48,7 @@ import type {
   RecommendationOutputMode,
   RecommendationShadowScorer,
 } from '../shadow/contracts.js';
+import type { MerchandisingPolicyRepository } from '../merchandising/repository.js';
 
 const recommendationIdSchema = z.string().trim().min(1);
 const mutationOutcomeTypes = new Set<RecommendationOutcomeRequest['eventType']>(
@@ -635,6 +636,7 @@ export function createBundledRecommendationApplicationService(
     RecommendationApplicationServiceDependencies,
     'decisionEngine' | 'historyRepository' | 'packState'
   > & {
+    merchandisingPolicyRepository: MerchandisingPolicyRepository;
     shadowScorer?: RecommendationShadowScorer;
     shadowOutputMode?: RecommendationOutputMode;
   },
@@ -642,6 +644,7 @@ export function createBundledRecommendationApplicationService(
   return createRecommendationApplicationService({
     ...dependencies,
     decisionEngine: createBundledRecommendationDecisionEngine({
+      merchandisingPolicyRepository: dependencies.merchandisingPolicyRepository,
       shadowScorer: dependencies.shadowScorer,
       shadowOutputMode: dependencies.shadowOutputMode,
     }),

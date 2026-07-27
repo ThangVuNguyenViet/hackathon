@@ -1,4 +1,5 @@
 export { DashboardSocket } from './workerDashboardSocket.js';
+import type { SanityClient } from '@sanity/client';
 import { initializeWorkerStore } from './workerStore.js';
 import {
   checkWorkerReadiness,
@@ -196,6 +197,12 @@ export interface WorkerEnv {
   KFC_RECOMMENDATION_SHADOW_URL?: string;
   KFC_RECOMMENDATION_SHADOW_MODEL_REVISION?: string;
   KFC_RECOMMENDATION_OUTPUT_MODE?: 'baseline' | 'learned_technical';
+  SANITY_PROJECT_ID?: string;
+  SANITY_DATASET?: string;
+  SANITY_API_VERSION?: string;
+  SANITY_READ_TOKEN?: string;
+  /** Test-only injection seam; Cloudflare runtime uses the configured client. */
+  SANITY_CLIENT?: SanityClient;
   RELEASE_GIT_SHA?: string;
   RELEASE_DEPLOYMENT_ID?: string;
   RELEASE_BUILT_AT?: string;

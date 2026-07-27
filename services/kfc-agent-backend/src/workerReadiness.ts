@@ -3,6 +3,13 @@ import type { MonitorModelIdentity } from './config/monitorModelProfile.js';
 import { loadBundledGeneratedFixtures } from './fixtures/bundledFixtures.js';
 import type { WorkerEnv } from './worker.js';
 import { recommendationShadowReadiness } from './config/recommendationShadow.js';
+import {
+  checkRecommendationSanityReadiness,
+  createSanityMerchandisingPolicyRepository,
+  recommendationSanityConfig,
+  type RecommendationSanityReadiness,
+  unconfiguredRecommendationSanityReadiness,
+} from './config/recommendationSanity.js';
 
 export type WorkerAgentReadiness = (
   | {
@@ -53,6 +60,10 @@ export async function checkWorkerReadiness(
         samplingRate: number;
       };
       outputMode?: 'baseline' | 'learned_technical';
+      authority?: 'sanity';
+      reachable?: boolean;
+      policyCount?: number;
+      snapshotDigest?: string;
     }
   >;
   release: {
@@ -147,6 +158,8 @@ export async function checkWorkerReadiness(
         : 1,
     },
   };
+  const recommendationSanity =
+    await checkWorkerRecommendationSanityReadiness(env);
   const checks: Record<
     string,
     {
@@ -184,6 +197,7 @@ export async function checkWorkerReadiness(
       modelRevision: env.KFC_RECOMMENDATION_SHADOW_MODEL_REVISION ?? '',
       outputMode: env.KFC_RECOMMENDATION_OUTPUT_MODE ?? 'baseline',
     }),
+    recommendationSanity,
   };
   if (deep) {
     checks.messengerToken = await checkMessengerToken(env);
@@ -225,12 +239,40 @@ export async function checkWorkerReadiness(
               ranker: 'deterministic-safety-rerank-v1',
               ledger: 'kfc-scenario-ledger-v1',
               recommendationShadow: checks.recommendationShadow,
+              recommendationSanity: {
+                authority: recommendationSanity.authority,
+                configured: recommendationSanity.configured,
+                reachable: recommendationSanity.reachable ?? false,
+                snapshotDigest: recommendationSanity.snapshotDigest ?? null,
+              },
             },
           },
         }
       : {}),
     timestamp: new Date().toISOString(),
   };
+}
+
+async function checkWorkerRecommendationSanityReadiness(
+  env: WorkerEnv,
+): Promise<RecommendationSanityReadiness> {
+  let config;
+  try {
+    config = recommendationSanityConfig({
+      projectId: env.SANITY_PROJECT_ID,
+      dataset: env.SANITY_DATASET,
+      apiVersion: env.SANITY_API_VERSION,
+      readToken: env.SANITY_READ_TOKEN,
+    });
+  } catch {
+    return unconfiguredRecommendationSanityReadiness(true);
+  }
+  if (!config) return unconfiguredRecommendationSanityReadiness();
+  const repository = createSanityMerchandisingPolicyRepository(
+    config,
+    env.SANITY_CLIENT ? () => env.SANITY_CLIENT! : undefined,
+  );
+  return checkRecommendationSanityReadiness(repository);
 }
 
 export async function runWorkerReadinessCheck(

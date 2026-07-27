@@ -1,9 +1,7 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import type { FastifyInstance } from 'fastify';
 import { buildServer } from '../../src/api/server.js';
-import { buildServerOptionsFromEnv } from '../../src/api/serverOptions.js';
 import { createRouteHandlers } from '../../src/api/routeHandlers.js';
-import { loadEnv } from '../../src/config/env.js';
 import { digestCommerceAction } from '../../src/ordering/commerceDigest.js';
 import { MemoryStore } from '../../src/persistence/memoryStore.js';
 import type {
@@ -15,6 +13,7 @@ import type {
 import { parseRecommendationDecisionApplicationInput } from '../../src/recommendations/application/context-factory.js';
 import { parseRecommendationDecisionRequest } from '../../src/recommendations/domain/schemas.js';
 import { renderBindingForDecisionDigests } from '../../src/recommendations/persistence/types.js';
+import { buildDeterministicRecommendationServerOptions } from '../support/recommendationSanity.js';
 
 const adminToken = 'recommendation-admin-token';
 const servers: FastifyInstance[] = [];
@@ -82,7 +81,9 @@ function forYouRequest(suffix: string) {
 
 function configuredOptions(store: MemoryStore = new MemoryStore()) {
   return {
-    ...buildServerOptionsFromEnv(loadEnv({ KFC_DEMO_ADMIN_TOKEN: adminToken })),
+    ...buildDeterministicRecommendationServerOptions({
+      KFC_DEMO_ADMIN_TOKEN: adminToken,
+    }),
     store,
   };
 }
@@ -280,9 +281,9 @@ describe('recommendation Fastify routes', () => {
     });
 
     expect(response.statusCode).toBe(204);
-    expect(response.headers['access-control-allow-headers']?.split(',')).toContain(
-      'X-KFC-Demo-Admin-Token',
-    );
+    expect(
+      response.headers['access-control-allow-headers']?.split(','),
+    ).toContain('X-KFC-Demo-Admin-Token');
   });
 
   it('leaves body transport errors unchanged on unrelated routes', async () => {

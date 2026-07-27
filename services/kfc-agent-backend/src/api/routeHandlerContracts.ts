@@ -65,6 +65,7 @@ import type {
   ConfiguredAgentModelBinding,
 } from '../config/agentModelProfile.js';
 import type { RecommendationShadowReadiness } from '../config/recommendationShadow.js';
+import type { RecommendationSanityReadiness } from '../config/recommendationSanity.js';
 import type { MonitorModelIdentity } from '../config/monitorModelProfile.js';
 import type { AgentTracer } from '../observability/agentTracing.js';
 import {
@@ -420,6 +421,7 @@ export interface ReadinessOptions {
     mode: 'fixture';
   };
   recommendationShadow?: RecommendationShadowReadiness;
+  recommendationSanity?: () => Promise<RecommendationSanityReadiness>;
   release?: {
     gitSha: string;
     deploymentId: string;
