@@ -86,8 +86,8 @@ and shadow-model boundaries and produce the acceptance evidence in section 15.
 10. Empty and suppressed decisions consume the proactive placement attempt.
 11. Natural-language acceptance cannot mutate the basket.
 12. Synthetic evidence is always labelled as simulated.
-13. No recommendation compatibility layer preserves `recommendAddOns`; the
-    three typed recommendation tools replace it.
+13. No recommendation compatibility layer preserves the removed generic
+    add-on tool; the three typed recommendation tools replace it.
 
 ## 4. Target architecture
 
@@ -613,7 +613,7 @@ not change the authoritative baseline decision.
 
 ## 11. Agent integration
 
-Delete `recommendAddOns` from:
+Delete the legacy generic add-on tool from:
 
 - `RecommendationClient`;
 - `TOOL_NAMES` and all tool result maps;
@@ -943,7 +943,7 @@ provenance; default customer output remains baseline.
 2. Add slightly proactive prompt policy.
 3. Add backend `recommendationOffer` selection and trusted actions.
 4. Add Flutter parsing, rendering, action forwarding, and interaction states.
-5. Remove every `recommendAddOns` path.
+5. Remove every legacy generic add-on recommendation path.
 
 Exit: the flagship journey works through real chat HTTP and D1.
 

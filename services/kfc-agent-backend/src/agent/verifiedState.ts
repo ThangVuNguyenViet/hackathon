@@ -415,6 +415,7 @@ export function buildVerifiedStateSnapshot(
     recommendationState: state.recommendationState
       ? parseRecommendationState(state.recommendationState)
       : undefined,
+    productOrderFlow: state.productOrderFlow,
     toolTrace: (state.toolTrace ?? []).map((trace) =>
       verifiedStateToolTraceForPersistence(trace),
     ),

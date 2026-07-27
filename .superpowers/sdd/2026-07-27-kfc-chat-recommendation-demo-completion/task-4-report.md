@@ -129,3 +129,112 @@ Observed: no output.
   presentation contract.
 - Runtime recommendation availability still depends on the server's configured
   Sanity-backed recommendation service, as established by Task 3.
+
+## Fix Round 1
+
+### Findings addressed
+
+- The published prompt now separately requires at most one recommendation and
+  at most one recommendation attachment at a time.
+- The interruption rule now covers every unresolved customer request, with
+  checkout, fulfillment, payment, and safety-sensitive work retained as
+  examples rather than the limit of the rule.
+- Removed the session-derived order-flow fallback. Recommendation execution now
+  requires a server-owned durable product-order-flow binding.
+- Bound that identity to the existing verified checkout lifecycle:
+  - it remains stable through cart edits and order submission;
+  - when a verified cart supersedes its submitted order, it rotates once using
+    that predecessor order ID;
+  - later edits in the same next order retain the new identity;
+  - a later submitted order causes the following product order flow to rotate
+    again.
+- Persisted and rehydrated the strict versioned product-order-flow binding with
+  the KFC pack state.
+- Reset recommendation progression only when that durable product-order-flow
+  identity changes, and made per-model-call availability prefer the in-memory
+  new-flow state until the new binding reaches the durable envelope.
+- Updated every historical repository document and plan outside the excluded
+  `.superpowers` evidence workspace so the removed identifier has no remaining
+  repository reference.
+
+### TDD RED evidence
+
+Prompt publication:
+
+```text
+npm test -- --run test/businessPacks/kfc-openai-donor-parity.test.ts
+1 test failed, 4 passed: the prompt lacked the one-attachment requirement.
+```
+
+Product-order-flow lifecycle:
+
+```text
+npm test -- --run test/recommendations/product-order-flow.test.ts
+Failed to load product-order-flow.js because the durable lifecycle module did
+not exist.
+```
+
+Executor binding:
+
+```text
+npm test -- --run test/ordering/recommendation-tools.test.ts
+1 test failed, 5 passed: the request used the session-derived fallback instead
+of the server-bound product order flow.
+```
+
+### Focused GREEN evidence
+
+Command:
+
+```bash
+npm test -- --run \
+  test/businessPacks/kfc-openai-donor-parity.test.ts \
+  test/recommendations/product-order-flow.test.ts \
+  test/ordering/recommendation-tools.test.ts \
+  test/agent/verified-state-projection.test.ts \
+  test/recommendations/recommendation-tool-availability.test.ts
+```
+
+Observed:
+
+```text
+Test Files  5 passed (5)
+Tests       17 passed (17)
+```
+
+Repository-wide legacy-name gate:
+
+```bash
+rg -n "recommendAddOns" . \
+  --glob '!.git/**' \
+  --glob '!.superpowers/**'
+```
+
+Observed: no output.
+
+### Full verification
+
+Command:
+
+```bash
+npm run check && npm test
+```
+
+Observed after the final fix:
+
+- format check passed;
+- ESLint passed with zero warnings;
+- TypeScript no-emit typecheck passed;
+- Vitest passed 78 files and 632 tests.
+
+### Fix-round self-review
+
+- Confirmed no tool request can derive order-flow identity from session ID.
+- Confirmed the order-flow identity is derived only from server-verified cart
+  and submitted-order state, never customer prose or model arguments.
+- Confirmed the strict binding crosses persistence and hydration.
+- Confirmed a new product order flow re-enables the starter placement while
+  ordinary edits in the same flow do not.
+- Confirmed the prompt publication test covers the exact attachment and
+  unresolved-request policies.
+- Confirmed the repository-wide excluded-path command returns no matches.

@@ -18,12 +18,18 @@ describe('verified state projection', () => {
   it('round-trips durable recommendation state through the version-1 KFC pack projection', async () => {
     const store = new MemoryStore();
     const recommendationState = initialRecommendationState('order-flow-001');
+    const productOrderFlow = {
+      schemaVersion: 'kfc-product-order-flow-v1' as const,
+      orderFlowId: 'order-flow-001',
+      cartId: 'cart-001',
+      predecessorOrderId: null,
+    };
     await persistVerifiedStateProjection({
       store,
       sessionId: 'session-a',
       packRef: kfcRef,
       schemaVersion: '1',
-      state: { recommendationState },
+      state: { recommendationState, productOrderFlow },
     });
 
     await expect(
@@ -34,7 +40,7 @@ describe('verified state projection', () => {
         schemaVersion: '1',
         parseState,
       }),
-    ).resolves.toEqual({ recommendationState });
+    ).resolves.toEqual({ recommendationState, productOrderFlow });
   });
 
   it('parses old version-1 KFC envelopes that lack recommendation state', async () => {

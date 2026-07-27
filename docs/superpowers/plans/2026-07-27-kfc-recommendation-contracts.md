@@ -42,7 +42,7 @@ Pydantic 2, `jsonschema`, Node `crypto`.
   provenance.
 - A decision request must reject mixed Commerce Environments across snapshot
   bindings.
-- No production module or contract mentions or preserves `recommendAddOns`.
+- No production module or contract preserves the removed generic add-on tool.
 - Do not change LangChain `createAgent`, existing commerce behavior, D1,
   Sanity, GenUI, Flutter, or model runtime in this plan.
 - Follow strict TDD: write one behavioral test, run it and observe the expected

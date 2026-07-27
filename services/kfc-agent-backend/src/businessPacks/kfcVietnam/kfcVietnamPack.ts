@@ -81,6 +81,8 @@ import {
   isRecommendationToolName,
 } from '../../recommendations/application/tool-availability.js';
 import { recommendationCartLineId } from '../../recommendations/application/tool-execution.js';
+import { bindProductOrderFlow } from '../../recommendations/application/product-order-flow.js';
+import { initialRecommendationState } from '../../recommendations/state/state-machine.js';
 
 const DEFAULT_CONVERSATION_CONTEXT_TOKEN_BUDGET = 8_192;
 
@@ -101,7 +103,7 @@ export const KFC_AGENT_INSTRUCTIONS = [
   'Với yêu cầu gợi ý cho nhóm hoặc theo ngân sách, chỉ dùng partySize và giá từ catalog làm evidence. Ngân sách tổng là mức tối đa, không phải trần giá cho từng món; có thể dùng minPriceVnd và maxPriceVnd để thu hẹp khoảng giá ứng viên, còn maxPriceExclusiveVnd là ranh giới loại trừ cho yêu cầu thấp hơn nghiêm ngặt. Tự kết hợp giá và số lượng từ kết quả đã xác minh, thu thập đủ dữ liệu trước khi đề xuất một thay đổi giỏ hoàn chỉnh; không dùng bộ lập kế hoạch tất định.',
   'Copy every returned customer-facing product and variant name character-for-character. Normalized or diacritic-insensitive search is retrieval only and never authorizes reconstructing a name.',
   'For a requested modifier, retain modifierQueries while broadening product terms. An unconstrained search can verify that a product exists, but do not answer as if a dropped modifier requirement matched; inspect that exact item with getModifierOptions first.',
-  'Be slightly proactive only after genuine food, menu, or ordering intent. Offer at most one recommendation at a time, in this placement sequence: starter, modifier upsell, then smart cross-sell. Do not interrupt checkout, fulfillment, payment, or unresolved safety-sensitive work. Never repeat a proactive recommendation placement.',
+  'Be slightly proactive only after genuine food, menu, or ordering intent. Offer at most one recommendation at a time. Attach at most one recommendation attachment at a time, in this placement sequence: starter, modifier upsell, then smart cross-sell. Never interrupt any unresolved customer request, including checkout, fulfillment, payment, or unresolved safety-sensitive work. Never repeat a proactive recommendation placement.',
   'Use only the recommendation facts and reason codes returned by the recommendation tool. Never invent availability, popularity, history, promotions, prices, compatibility, or CMS copy. Treat an empty or suppressed recommendation as silent: do not mention it, retry it, or replace it with an improvised recommendation.',
   'Never express a recommendation as a cart mutation in prose. A recommendation is an offer for the customer to accept through the verified interaction surface; it does not authorize updateCart or any other effect.',
   'Khi khách giao chọn một giỏ hàng hoàn chỉnh bằng lời nhắn, đáp ứng mọi thành phần và số lượng rõ ràng khi catalog cho phép, rồi trình bày một đề xuất gộp để khách xác nhận bằng GenUI. Khi nhận GenUI cart action đã xác minh, áp dụng action đó trong một lần gọi updateCart. Cart mà công cụ trả về là trạng thái có thẩm quyền.',
@@ -147,6 +149,20 @@ function verifiedContext(state: AgentState): Record<string, unknown> {
         }
       : {}),
   };
+}
+
+async function bindCurrentProductOrderFlow(state: AgentState): Promise<void> {
+  if (!state.cart) throw new Error('kfc_cart_unavailable');
+  const binding = await bindProductOrderFlow({
+    sessionId: state.sessionId,
+    cart: state.cart,
+    order: state.order,
+    prior: state.productOrderFlow,
+  });
+  if (state.recommendationState?.orderFlowId !== binding.orderFlowId) {
+    state.recommendationState = initialRecommendationState(binding.orderFlowId);
+  }
+  state.productOrderFlow = binding;
 }
 
 const VERIFIED_QUEUED_HANDOFF_RESPONSE =
@@ -1089,7 +1105,10 @@ function recommendationToolAvailabilityMiddleware(input: {
       );
       const available = new Set(
         availableRecommendationToolNames(
-          latest.recommendationState ?? input.state.recommendationState,
+          latest.productOrderFlow?.orderFlowId ===
+            input.state.productOrderFlow?.orderFlowId
+            ? (latest.recommendationState ?? input.state.recommendationState)
+            : input.state.recommendationState,
         ),
       );
       return handler({
@@ -1359,6 +1378,9 @@ export const kfcVietnamPack: BusinessPack<
           externalCallContext,
           currentTurnToolTrace,
         });
+      }
+      if (input.recommendations) {
+        await bindCurrentProductOrderFlow(state);
       }
       await input.observeRun?.({ kind: 'planning' });
       const callbacks = localToolEvidenceCallbacks(

@@ -77,9 +77,9 @@ and the evidence and qualification loop.
 - Add tests for runtime wiring, public reads, replacement, suppression, and
   readiness/provenance reporting.
 
-## Task 4: Replace `recommendAddOns` with Three LangChain Tools
+## Task 4: Replace the Legacy Generic Add-On Tool
 
-- Remove `recommendAddOns` completely from types, client, schemas, executor,
+- Remove the legacy generic add-on tool completely from types, client, schemas, executor,
   tool boundary, fixtures, prompt, publication, GenUI selection, and tests.
   Add no compatibility alias.
 - Add:

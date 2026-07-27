@@ -87,7 +87,6 @@ Later, real KFC/OMS/payment/channel clients can replace fixture-backed clients w
 - `searchMenu(query)`
 - `getMenuItem(itemIdOrCode)`
 - `getModifierTree(itemIdOrCode)`
-- `recommendAddOns(cart, constraints?)`
 - `searchStores(input)`
 - `getStoreAvailability(storeId, disposition)`
 - `checkItemsAvailable(storeId, disposition, itemIds, requestedAt?)`
@@ -98,6 +97,9 @@ Later, real KFC/OMS/payment/channel clients can replace fixture-backed clients w
 - `getAllergenEvidence(query)`
 
 Every method that returns business facts must include enough provenance for traceability: source fixture file, source URL or API when available, and whether the value is public crawl evidence or mock-only external simulation.
+
+Recommendation decisions now use the placement-specific recommendation
+application service rather than a generic `OrderingDataService` catalog method.
 
 ## Client Surface
 

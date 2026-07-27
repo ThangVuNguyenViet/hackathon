@@ -105,8 +105,12 @@ export async function createBundledRecommendationToolAuthority(input: {
   const storeId =
     input.state.fulfillment?.storeId ?? fixtures.stores[0]?.storeId;
   if (!storeId) throw new Error('recommendation_store_context_unavailable');
+  if (!input.state.productOrderFlow) {
+    throw new Error('recommendation_order_flow_context_unavailable');
+  }
   return {
     application: input.application,
+    orderFlowId: input.state.productOrderFlow.orderFlowId,
     verifiedCustomer: await verifiedCustomer(input),
     storeId,
     fulfilmentMode:

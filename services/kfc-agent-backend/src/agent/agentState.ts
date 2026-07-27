@@ -30,6 +30,7 @@ import type {
 } from '../ordering/types.js';
 import type { ExactCartAvailabilityObservationV2 } from '../ordering/exactCartAvailabilityAuthority.js';
 import type { RecommendationState } from '../recommendations/domain/contracts.js';
+import type { ProductOrderFlowBinding } from '../recommendations/application/product-order-flow.js';
 
 export interface RetrievedEvidence {
   eventId: string;
@@ -94,5 +95,7 @@ export interface AgentState {
   handoff?: HandoffState;
   /** Pack-owned durable progression for recommendation decisions. */
   recommendationState?: RecommendationState;
+  /** Server-owned durable identity for one product ordering journey. */
+  productOrderFlow?: ProductOrderFlowBinding;
   toolTrace?: ToolTraceEntry[];
 }

@@ -104,10 +104,13 @@ describe('portable Direct SDK behavior retained by the KFC LangChain pack', () =
       'Offer at most one recommendation at a time',
     );
     expect(KFC_AGENT_INSTRUCTIONS).toContain(
+      'Attach at most one recommendation attachment at a time',
+    );
+    expect(KFC_AGENT_INSTRUCTIONS).toContain(
       'starter, modifier upsell, then smart cross-sell',
     );
     expect(KFC_AGENT_INSTRUCTIONS).toContain(
-      'Do not interrupt checkout, fulfillment, payment, or unresolved safety-sensitive work',
+      'Never interrupt any unresolved customer request',
     );
     expect(KFC_AGENT_INSTRUCTIONS).toContain(
       'Never invent availability, popularity, history, promotions, prices, compatibility, or CMS copy',

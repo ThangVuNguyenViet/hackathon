@@ -28,7 +28,7 @@ No runtime implementation was changed during this ticket.
 
 ### Menu
 
-`services/kfc-agent-backend/src/fixtures/schema.ts` requires a valid URL-shaped `imageUrl` on every `GeneratedMenuItem`. `OrderingDataService.searchMenu`, `getMenuItem`, and `recommendAddOns` return the full item, and `createMockClients.toMenuItem` explicitly copies `imageUrl` into the domain `MenuItem`.
+`services/kfc-agent-backend/src/fixtures/schema.ts` requires a valid URL-shaped `imageUrl` on every `GeneratedMenuItem`. `OrderingDataService.searchMenu` and `getMenuItem` return the full item, and `createMockClients.toMenuItem` explicitly copies `imageUrl` into the domain `MenuItem`. The historical generic add-on catalog method has been removed.
 
 What is missing:
 
@@ -58,7 +58,7 @@ Membership reward and wallet schemas contain `imageUrl`, but permit an empty str
 The client contracts expose:
 
 - `searchMenu` and `getItemDetails` as `ToolResult<MenuItem...>`;
-- `recommendAddOns` as `ToolResult<MenuItem[]>`;
+- the historical generic add-on recommendation read as `ToolResult<MenuItem[]>` (removed);
 - `getModifierOptions` as `ToolResult<GeneratedMenuModifier>`;
 - promotion and membership methods as their fixture-backed types.
 
@@ -74,7 +74,11 @@ The tool executor returns these full values. However, `ToolTraceEntry` persists 
 
 ### Product detail and add-ons disappear
 
-There are no `applyToolResultToState` cases for `getItemDetails` or `recommendAddOns`. `shouldPreserveCurrentMenuSearchResults` also recognizes only a successful `searchMenu` call. Therefore:
+At the time of this audit, there were no `applyToolResultToState` cases for
+`getItemDetails` or the historical generic add-on recommendation read.
+`shouldPreserveCurrentMenuSearchResults` also recognized only a successful
+`searchMenu` call. The generic recommendation read has since been removed.
+Therefore, the historical finding was:
 
 - a detail or recommendation tool cannot independently populate a fresh image-bearing menu surface;
 - any Smart Menu Picker shown after those tools depends on older `menuSearchResults` being retained for another reason;

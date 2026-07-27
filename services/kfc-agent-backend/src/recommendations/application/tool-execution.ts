@@ -23,6 +23,7 @@ import type { RecommendationToolName } from './tool-availability.js';
 
 export interface RecommendationToolExecutionAuthority {
   application: RecommendationApplicationService;
+  orderFlowId: string;
   verifiedCustomer: {
     ref: string;
     hasPriorCompletedHistory: boolean;
@@ -83,9 +84,7 @@ async function requestFor(
     schemaVersion: 'kfc-recommendation-v1',
     requestId: `recommendation-request:${operationDigest.slice(0, 24)}`,
     idempotencyKey: `recommendation-tool:${operationDigest}`,
-    orderFlowId:
-      input.state?.recommendationState?.orderFlowId ??
-      `order-flow:${input.sessionId}`,
+    orderFlowId: input.authority.orderFlowId,
     sessionId: input.sessionId,
     placement: placementFor(input),
     verifiedCustomerRef: input.authority.verifiedCustomer?.ref ?? null,

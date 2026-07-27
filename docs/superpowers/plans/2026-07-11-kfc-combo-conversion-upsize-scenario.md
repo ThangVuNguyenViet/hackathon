@@ -175,9 +175,9 @@ git commit -m "test(kfc): prove combo conversion and drink upsize"
 
 ```ts
 turnExpectations: [
-  { turnIndex: 1, requiredGroups: [['searchMenu', 'recommendAddOns']], forbiddenTools: ['updateCart'] },
+  { turnIndex: 1, requiredGroups: [['searchMenu', 'recommendStarter']], forbiddenTools: ['updateCart'] },
   { turnIndex: 3, requiredGroups: [['searchPromotions', 'explainPromotion', 'validateVoucher']], forbiddenTools: ['updateCart'] },
-  { turnIndex: 5, requiredGroups: [['searchMenu'], ['updateCart'], ['getItemDetails', 'recommendAddOns'], ['previewCart']] },
+  { turnIndex: 5, requiredGroups: [['searchMenu'], ['updateCart'], ['getItemDetails', 'recommendModifierUpsell'], ['previewCart']] },
   { turnIndex: 7, requiredGroups: [['updateCart'], ['getModifierOptions'], ['previewCart']] },
   { turnIndex: 9, requiredGroups: [['updateCart'], ['previewCart']] },
 ],

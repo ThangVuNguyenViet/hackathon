@@ -160,5 +160,6 @@ export type VerifiedStateSnapshot = Pick<
   | 'invoiceRequest'
   | 'handoff'
   | 'recommendationState'
+  | 'productOrderFlow'
   | 'toolTrace'
 >;

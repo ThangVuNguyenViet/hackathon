@@ -32,7 +32,7 @@ Planner iterations never create distinct customer labels. Repeated planning rema
 
 | Family | Active label | Allowed evidence | Current tool/outcome examples |
 |---|---|---|---|
-| `checking_menu` | `Đang kiểm tra menu…` | A permitted menu, item-detail, modifier, or recommendation lookup has started. | `searchMenu`, `getItemDetails`, `getModifierOptions`, `recommendAddOns` |
+| `checking_menu` | `Đang kiểm tra menu…` | A permitted menu, item-detail, modifier, or recommendation lookup has started. | `searchMenu`, `getItemDetails`, `getModifierOptions`, `recommendStarter`, `recommendModifierUpsell`, `recommendSmartCrossSell` |
 | `checking_promotions` | `Đang kiểm tra ưu đãi…` | Promotion discovery, explanation, or voucher validation has started without an application success claim. | `searchPromotions`, `explainPromotion`, `validateVoucher` |
 | `checking_food_information` | `Đang kiểm tra thông tin món…` | Ingredient, allergen, or food-content evidence lookup has started. | `answerAllergenQuestion`; food-information use of `searchContentPolicy` |
 | `checking_fulfillment` | `Đang kiểm tra địa chỉ và giao hàng…` | Store discovery, item availability, or fulfillment quote has started. | `findStores`, `checkStoreAvailability`, `quoteFulfillment` |

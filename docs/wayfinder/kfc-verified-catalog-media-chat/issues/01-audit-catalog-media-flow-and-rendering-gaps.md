@@ -16,7 +16,7 @@ What is the exact current path for menu items, modifier trees, promotions, recom
 The decision-level findings are:
 
 - Menu `imageUrl` is already typed and preserved through `searchMenu`, graph `menuSearchResults`, Smart Menu Picker data, assistant-turn metadata, KFC HTTP responses, and Memory/Postgres/D1 replay. Flutter receives the value in an untyped data map but never renders it.
-- `getItemDetails` and `recommendAddOns` return image-bearing `MenuItem` values, but `applyToolResultToState` has no cases for them; only `searchMenu` populates `menuSearchResults`. Their fresh results cannot independently create an image-bearing GenUI Snapshot.
+- `getItemDetails` and the historical generic add-on recommendation path returned image-bearing `MenuItem` values, but `applyToolResultToState` had no cases for them; only `searchMenu` populated `menuSearchResults`. Their fresh results could not independently create an image-bearing GenUI Snapshot. The generic path has since been removed.
 - Modifier fixtures expose only `imageName`; the graph has no modifier-result state, the GenUI catalog has no modifier-choice data surface, and Flutter has no modifier renderer.
 - Promotion offers have no media field and graph state reduces successful promotion results to `matchedOfferIds`; no promotion-discovery GenUI exists.
 - Membership fixture image fields never enter graph state or GenUI. The separate media inventory also found zero currently eligible membership images.

@@ -97,10 +97,12 @@ function recommendationContext(input: {
     ref: string;
     hasPriorCompletedHistory: boolean;
   } | null;
+  orderFlowId?: string;
 }) {
   return {
     application: input.application,
     verifiedCustomer: input.verifiedCustomer ?? null,
+    orderFlowId: input.orderFlowId ?? 'order-flow-001',
     storeId: 'KFCVN0002',
     fulfilmentMode: 'pickup' as const,
     decisionTime: instant,
@@ -130,6 +132,53 @@ function applicationReturning(
 }
 
 describe('recommendation ordering tools', () => {
+  it('uses the server-bound durable product order flow when recommendation state is absent', async () => {
+    const application = applicationReturning(
+      response('local_favorite', 'empty', 'product-order-flow-001'),
+    );
+    const clients = createMockClients(await loadGeneratedFixtures(process.cwd()));
+    const result = await executeToolCall(
+      clients,
+      {
+        toolName: 'recommendStarter',
+        arguments: { requestKind: 'proactive' },
+      },
+      {
+        externalCallContext: {
+          signal: new AbortController().signal,
+          deadlineAt: Date.now() + 60_000,
+        },
+        sessionId: 'session-001',
+        cart: {
+          id: 'cart-001',
+          items: [],
+          subtotalVnd: 0,
+          discountVnd: 0,
+          deliveryFeeVnd: 0,
+          totalVnd: 0,
+          voucherCode: null,
+        },
+        durableRequestIdentity: 'turn-001',
+        recommendation: recommendationContext({
+          application,
+          orderFlowId: 'product-order-flow-001',
+        }),
+      },
+    );
+
+    expect(result).toMatchObject({
+      ok: true,
+      value: { status: 'silent' },
+    });
+    expect(application.decide).toHaveBeenCalledWith(
+      expect.objectContaining({
+        request: expect.objectContaining({
+          orderFlowId: 'product-order-flow-001',
+        }),
+      }),
+    );
+  });
+
   it('selects For You only for verified completed history and injects all decision context', async () => {
     const application = applicationReturning(response('for_you'));
     const clients = createMockClients(await loadGeneratedFixtures(process.cwd()));
@@ -255,7 +304,7 @@ describe('recommendation ordering tools', () => {
     'returns a typed silent result after a %s decision consumes the placement',
     async (status) => {
       const application = applicationReturning(
-        response('smart_cross_sell', status, 'order-flow:session-001'),
+        response('smart_cross_sell', status),
       );
       const clients = createMockClients(
         await loadGeneratedFixtures(process.cwd()),

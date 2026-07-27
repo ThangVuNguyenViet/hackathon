@@ -248,7 +248,9 @@ Core tools:
 - `getItemDetails`
 - `updateCart`
 - `previewCart`
-- `recommendAddOns`
+- `recommendStarter`
+- `recommendModifierUpsell`
+- `recommendSmartCrossSell`
 - `validateVoucher`
 - `lookupLoyalty`
 - `previewLoyaltyRedemption`

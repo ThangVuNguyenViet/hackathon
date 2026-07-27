@@ -72,6 +72,7 @@ export function assembleLoadedTurnState(input: {
       invoiceRequest: prior.invoiceRequest,
       handoff: prior.handoff,
       recommendationState: prior.recommendationState,
+      productOrderFlow: prior.productOrderFlow,
       toolTrace: prior.toolTrace ?? [],
     }),
     customerTurnCount: countCustomerTurns(semanticTurns),
