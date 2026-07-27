@@ -638,6 +638,51 @@ describe('durable recommendation state machine', () => {
     ).toEqual(next);
   });
 
+  it('keeps selected then cart mutation telemetry post-complete without reopening proactive state', () => {
+    const state = {
+      ...initialRecommendationState('order-flow-001'),
+      revision: 5,
+      stage: 'complete' as const,
+      attemptedPlacements: [
+        'local_favorite' as const,
+        'modifier_upsell' as const,
+        'smart_cross_sell' as const,
+      ],
+      pendingRecommendation: null,
+      nextEligiblePlacement: null,
+    };
+    const selected = applyCustomerRequestedRecommendationOutcome(
+      state,
+      outcome({
+        eventId: 'event-customer-requested-selected-001',
+        placement: 'for_you',
+        eventType: 'selected',
+      }),
+      ['action-for_you-001'],
+    );
+    const mutated = applyCustomerRequestedRecommendationOutcome(
+      selected,
+      outcome({
+        eventId: 'event-customer-requested-cart-succeeded-001',
+        placement: 'for_you',
+        eventType: 'cart_mutation_succeeded',
+        cartRevision: 'cart-revision-after-selection',
+      }),
+      ['action-for_you-001'],
+    );
+
+    expect(mutated).toMatchObject({
+      revision: 7,
+      stage: 'complete',
+      pendingRecommendation: null,
+      nextEligiblePlacement: null,
+      recordedOutcomeEventIds: [
+        'event-customer-requested-selected-001',
+        'event-customer-requested-cart-succeeded-001',
+      ],
+    });
+  });
+
   it('rejects decisions for a proactive placement that is not currently eligible', () => {
     expect(() =>
       applyRecommendationDecision(

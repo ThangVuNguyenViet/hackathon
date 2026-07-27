@@ -15,6 +15,7 @@ import type {
 } from '../../src/recommendations/persistence/repository.js';
 import { parseRecommendationDecisionApplicationInput } from '../../src/recommendations/application/context-factory.js';
 import { parseRecommendationDecisionRequest } from '../../src/recommendations/domain/schemas.js';
+import { renderBindingForDecisionDigests } from '../../src/recommendations/persistence/types.js';
 import worker, {
   dispatchWorkerRecommendationRoute,
   type WorkerEnv,
@@ -263,6 +264,38 @@ describe.sequential('Fastify and Worker recommendation route parity', () => {
     }
   });
 
+  it.each([
+    ['empty', ''],
+    ['whitespace-only', ' \n\t '],
+  ] as const)(
+    'maps %s JSON bodies for every recommendation write byte-for-byte',
+    async (_label, rawPayload) => {
+      for (const [path, errorCode] of [
+        ['/v1/recommendations/decide', 'invalid_recommendation_request'],
+        [
+          '/v1/recommendations/recommendation-empty/impressions',
+          'invalid_recommendation_impression',
+        ],
+        [
+          '/v1/recommendations/recommendation-empty/outcomes',
+          'invalid_recommendation_outcome',
+        ],
+      ] as const) {
+        await expect(
+          expectParity({
+            method: 'POST',
+            path,
+            rawPayload,
+          }),
+        ).resolves.toEqual({
+          status: 400,
+          body: { errorCode },
+          raw: `{"errorCode":"${errorCode}"}`,
+        });
+      }
+    },
+  );
+
   it('rejects non-JSON recommendation writes byte-for-byte and accepts a JSON charset', async () => {
     for (const [path, payload, errorCode] of [
       [
@@ -477,23 +510,23 @@ describe.sequential('Fastify and Worker recommendation route parity', () => {
       headers: { 'x-kfc-demo-admin-token': adminToken },
     });
     const inspectionBody = inspection.body as {
-      recommendation: { actionDigest: string };
+      recommendation: { requestFingerprint: string; actionDigest: string };
     };
     const primaryOffer = decision.body.primaryOffer as {
       actions: Array<{ actionId: string }>;
     };
+    const actionDigest = inspectionBody.recommendation.actionDigest;
     const impression = {
       schemaVersion: 'kfc-recommendation-event-v1',
       eventId: 'recommendation-event-impression-parity-events',
       occurredAt: '2026-07-27T09:10:00Z',
-      assistantTurnId: 'assistant-turn-parity-events',
-      attachmentId: 'attachment-parity-events',
+      ...renderBindingForDecisionDigests(inspectionBody.recommendation),
       renderedActions: primaryOffer.actions.map((action, index) => ({
         actionId: action.actionId,
         position: index + 1,
       })),
       cartRevision: request.cartRevision,
-      actionDigest: inspectionBody.recommendation.actionDigest,
+      actionDigest,
     };
     const impressionPath = `/v1/recommendations/${encodeURIComponent(recommendationId)}/impressions`;
     expect(

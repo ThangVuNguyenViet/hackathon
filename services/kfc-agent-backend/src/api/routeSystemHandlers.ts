@@ -43,6 +43,7 @@ import type {
   AgentMode,
   Channel,
   ConversationProfile,
+  ConversationTurn,
   ConversationTurnMetadata,
   CustomerAccessContext,
   MonitorSessionIntelligence,
@@ -144,6 +145,27 @@ import {
 import type { RouteHandlerContext } from './routeHandlerContext.js';
 
 const proofProviderTimeoutMs = 3_000;
+
+async function projectKfcProofTurn(turn: ConversationTurn) {
+  return {
+    id: turn.id,
+    ordinal: turn.ordinal,
+    channel: turn.channel,
+    role: turn.role,
+    deliveryStatus: turn.deliveryStatus,
+    createdAt: turn.createdAt,
+    content: {
+      characterCount: [...turn.text].length,
+      sha256: await sha256Fingerprint(turn.text),
+    },
+    externalMessageIdDigest:
+      turn.externalMessageId === null
+        ? null
+        : await sha256Fingerprint(turn.externalMessageId),
+    metadataDigest:
+      turn.metadata === null ? null : await sha256Fingerprint(turn.metadata),
+  };
+}
 
 export function createSystemRouteHandlers(context: RouteHandlerContext) {
   const {
@@ -526,6 +548,7 @@ export function createSystemRouteHandlers(context: RouteHandlerContext) {
             Promise.resolve(null),
         ]);
       const lifecycle = projectKfcLifecycleProofEvidence(lifecycleSource);
+      const proofTurns = await Promise.all(turns.map(projectKfcProofTurn));
       const missing = [
         ...(turns.length > 0 ? [] : ['conversation_turns']),
         ...lifecycle.missing,
@@ -546,7 +569,7 @@ export function createSystemRouteHandlers(context: RouteHandlerContext) {
           schemaVersion: 1,
           artifactKind: 'kfc-simple-agent-proof',
           runtime: 'simple-model-tool-loop',
-          turns,
+          turns: proofTurns,
           packState,
           agent: options.agent?.identity ?? null,
           complete: missing.length === 0,

@@ -14,6 +14,7 @@ import type {
 } from '../../src/recommendations/persistence/repository.js';
 import { parseRecommendationDecisionApplicationInput } from '../../src/recommendations/application/context-factory.js';
 import { parseRecommendationDecisionRequest } from '../../src/recommendations/domain/schemas.js';
+import { renderBindingForDecisionDigests } from '../../src/recommendations/persistence/types.js';
 
 const adminToken = 'recommendation-admin-token';
 const servers: FastifyInstance[] = [];
@@ -129,7 +130,7 @@ async function inspection(server: FastifyInstance, recommendationId: string) {
   });
   expect(response.statusCode).toBe(200);
   return response.json<{
-    recommendation: { actionDigest: string };
+    recommendation: { requestFingerprint: string; actionDigest: string };
     technical: unknown;
   }>();
 }
@@ -138,20 +139,19 @@ function impressionFor(
   suffix: string,
   request: ReturnType<typeof decisionRequest>,
   decision: Awaited<ReturnType<typeof decide>>['response'],
-  actionDigest: string,
+  digests: { requestFingerprint: string; actionDigest: string },
 ) {
   return {
     schemaVersion: 'kfc-recommendation-event-v1',
     eventId: `recommendation-event-impression-${suffix}`,
     occurredAt: '2026-07-27T09:10:00Z',
-    assistantTurnId: `assistant-turn-${suffix}`,
-    attachmentId: `attachment-${suffix}`,
+    ...renderBindingForDecisionDigests(digests),
     renderedActions: decision.primaryOffer.actions.map((action, index) => ({
       actionId: action.actionId,
       position: index + 1,
     })),
     cartRevision: request.cartRevision,
-    actionDigest,
+    actionDigest: digests.actionDigest,
   };
 }
 
@@ -299,6 +299,12 @@ describe('recommendation Fastify routes', () => {
       headers: { 'content-type': 'application/xml' },
       payload: '<message />',
     });
+    const empty = await server.inject({
+      method: 'POST',
+      url: '/chat/kfc/message',
+      headers: { 'content-type': 'application/json' },
+      payload: '',
+    });
 
     expect(malformed.statusCode).toBe(400);
     expect(malformed.json()).toMatchObject({
@@ -310,8 +316,14 @@ describe('recommendation Fastify routes', () => {
       code: 'FST_ERR_CTP_INVALID_MEDIA_TYPE',
       error: 'Unsupported Media Type',
     });
+    expect(empty.statusCode).toBe(400);
+    expect(empty.json()).toMatchObject({
+      code: 'FST_ERR_CTP_EMPTY_JSON_BODY',
+      error: 'Bad Request',
+    });
     expect(malformed.body).not.toContain('invalid_recommendation_');
     expect(unsupported.body).not.toContain('invalid_recommendation_');
+    expect(empty.body).not.toContain('invalid_recommendation_');
   });
 
   it('returns only the canonical decision envelope and replays it byte-for-byte', async () => {
@@ -435,7 +447,7 @@ describe('recommendation Fastify routes', () => {
       'impression-dedupe',
       impressionDecision.request,
       impressionDecision.response,
-      impressionInspection.recommendation.actionDigest,
+      impressionInspection.recommendation,
     );
     const firstImpression = await server.inject({
       method: 'POST',

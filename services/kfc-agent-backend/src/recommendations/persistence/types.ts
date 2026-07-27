@@ -26,6 +26,31 @@ const finiteNumberSchema = z.number().finite();
 const nonNegativeIntegerSchema = z.number().int().nonnegative();
 const nonBlankStringSchema = z.string().min(1);
 
+export interface RecommendationRenderBinding {
+  assistantTurnId: string;
+  attachmentId: string;
+}
+
+export const recommendationRenderBindingSchema = z
+  .object({
+    assistantTurnId: opaqueIdSchema,
+    attachmentId: opaqueIdSchema,
+  })
+  .strict();
+
+export function renderBindingForDecisionDigests(input: {
+  requestFingerprint: string;
+  actionDigest: string;
+}): RecommendationRenderBinding {
+  const token = `${sha256Schema.parse(input.requestFingerprint).slice(0, 48)}${sha256Schema
+    .parse(input.actionDigest)
+    .slice(0, 48)}`;
+  return recommendationRenderBindingSchema.parse({
+    assistantTurnId: `recommendation-turn:${token}`,
+    attachmentId: `recommendation-attachment:${token}`,
+  });
+}
+
 const decisionRequestedPayloadSchema = z
   .object({
     requestFingerprint: sha256Schema,
@@ -212,6 +237,7 @@ export interface RecommendationDecisionRecord {
   technical: RecommendationDecisionTechnicalEvidence;
   requestFingerprint: string;
   actionDigest: string;
+  renderBinding: RecommendationRenderBinding;
   stateRevisionBefore: number;
   stateRevisionAfter: number;
   recordedAt: string;
@@ -224,6 +250,7 @@ export const recommendationDecisionRecordSchema = z
     technical: recommendationDecisionTechnicalEvidenceSchema,
     requestFingerprint: sha256Schema,
     actionDigest: sha256Schema,
+    renderBinding: recommendationRenderBindingSchema,
     stateRevisionBefore: nonNegativeIntegerSchema,
     stateRevisionAfter: nonNegativeIntegerSchema,
     recordedAt: instantSchema,
@@ -248,6 +275,18 @@ export const recommendationDecisionRecordSchema = z
         message: 'Decision state revision must advance monotonically',
       });
     }
+    const expectedRenderBinding = renderBindingForDecisionDigests(record);
+    if (
+      record.renderBinding.assistantTurnId !==
+        expectedRenderBinding.assistantTurnId ||
+      record.renderBinding.attachmentId !== expectedRenderBinding.attachmentId
+    ) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['renderBinding'],
+        message: 'Render binding must be derived from the decision digests',
+      });
+    }
   });
 
 export function parseRecommendationDecisionRecord(
@@ -260,6 +299,7 @@ export interface RecommendationDecisionStoragePayload {
   request: RecommendationDecisionRequest;
   response: RecommendationDecisionResponse;
   technical: RecommendationDecisionTechnicalEvidence;
+  renderBinding: RecommendationRenderBinding;
 }
 
 export function serializeRecommendationDecisionStoragePayload(
@@ -270,6 +310,7 @@ export function serializeRecommendationDecisionStoragePayload(
     responseJson: JSON.stringify(parsed.response),
     technicalJson: JSON.stringify({
       request: parsed.request,
+      renderBinding: parsed.renderBinding,
       technical: parsed.technical,
     }),
   };
@@ -284,7 +325,8 @@ export function parseRecommendationDecisionStoragePayload(input: {
     typeof technicalStorage !== 'object' ||
     technicalStorage === null ||
     Array.isArray(technicalStorage) ||
-    Object.keys(technicalStorage).sort().join(',') !== 'request,technical'
+    Object.keys(technicalStorage).sort().join(',') !==
+      'renderBinding,request,technical'
   ) {
     throw new Error('recommendation_technical_storage_invalid');
   }
@@ -293,6 +335,9 @@ export function parseRecommendationDecisionStoragePayload(input: {
     request: recommendationDecisionRequestSchema.parse(stored.request),
     response: recommendationDecisionResponseSchema.parse(
       JSON.parse(input.responseJson) as unknown,
+    ),
+    renderBinding: recommendationRenderBindingSchema.parse(
+      stored.renderBinding,
     ),
     technical: recommendationDecisionTechnicalEvidenceSchema.parse(
       stored.technical,

@@ -87,9 +87,12 @@ import {
   assertDecisionEventsCorrelate,
   assertCompletedRecommendationReservationReplay,
   assertRecommendationPackState,
+  compareRecommendationDecisionsLatestFirst,
+  compareRecommendationEventsChronologically,
   currentRecommendationPackStateRevision,
   sameRecommendationDecisionRecord,
   sameRecommendationEventReplaySemantics,
+  sameRecommendationImpressionBinding,
 } from '../recommendations/persistence/repository.js';
 import {
   parseRecommendationDecisionRecord,
@@ -1122,8 +1125,26 @@ export class MemoryStore
         input.nextPackState,
         event.orderFlowId,
       );
-      if (nextRevision <= currentRevision) return { status: 'stale' };
-      this.packStates.set(key, structuredClone(input.nextPackState));
+      const unchangedRepeatImpression =
+        nextRevision === currentRevision &&
+        input.nextPackState.integrity.digest === expectedPackStateDigest &&
+        event.eventType === 'impression_rendered' &&
+        event.recommendationId !== null &&
+        [...this.recommendationEvents.values()].some(({ event: candidate }) =>
+          sameRecommendationImpressionBinding(
+            parsePersistedRecommendationEvent(structuredClone(candidate)),
+            event,
+          ),
+        );
+      if (
+        nextRevision < currentRevision ||
+        (nextRevision === currentRevision && !unchangedRepeatImpression)
+      ) {
+        return { status: 'stale' };
+      }
+      if (!unchangedRepeatImpression) {
+        this.packStates.set(key, structuredClone(input.nextPackState));
+      }
       this.recommendationEvents.set(event.eventId, {
         eventFingerprint,
         event: structuredClone(event),
@@ -1179,11 +1200,7 @@ export class MemoryStore
           (input.sessionId === undefined ||
             event.sessionId === input.sessionId),
       )
-      .sort(
-        (left, right) =>
-          left.occurredAt.localeCompare(right.occurredAt) ||
-          left.eventId.localeCompare(right.eventId),
-      )
+      .sort(compareRecommendationEventsChronologically)
       .map((event) => structuredClone(event));
   }
 
@@ -1199,13 +1216,7 @@ export class MemoryStore
         return parsed;
       })
       .filter((candidate) => candidate.request.orderFlowId === orderFlowId)
-      .sort(
-        (left, right) =>
-          right.recordedAt.localeCompare(left.recordedAt) ||
-          right.response.recommendationId.localeCompare(
-            left.response.recommendationId,
-          ),
-      )[0];
+      .sort(compareRecommendationDecisionsLatestFirst)[0];
     return record ? cloneRecommendationDecisionRecord(record) : undefined;
   }
 

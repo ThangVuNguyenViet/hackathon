@@ -18,9 +18,12 @@ import {
   assertDecisionEventsCorrelate,
   assertCompletedRecommendationReservationReplay,
   assertRecommendationPackState,
+  compareRecommendationDecisionsLatestFirst,
+  compareRecommendationEventsChronologically,
   currentRecommendationPackStateRevision,
   sameRecommendationDecisionRecord,
   sameRecommendationEventReplaySemantics,
+  sameRecommendationImpressionBinding,
 } from '../recommendations/persistence/repository.js';
 import {
   parseRecommendationDecisionRecord,
@@ -351,35 +354,84 @@ export class D1StoreRecommendationOperations extends D1StoreConversationOperatio
       currentPackState,
       event.orderFlowId,
     );
-    if (nextRevision <= currentRevision) return { status: 'stale' };
+    const unchangedRepeatImpression =
+      nextRevision === currentRevision &&
+      input.nextPackState.integrity.digest === expectedPackStateDigest &&
+      event.eventType === 'impression_rendered' &&
+      event.recommendationId !== null &&
+      (
+        await this.listRecommendationEvents({
+          recommendationId: event.recommendationId,
+        })
+      ).some((candidate) =>
+        sameRecommendationImpressionBinding(candidate, event),
+      );
+    if (
+      nextRevision < currentRevision ||
+      (nextRevision === currentRevision && !unchangedRepeatImpression)
+    ) {
+      return { status: 'stale' };
+    }
 
     const nextEnvelopeJson = JSON.stringify(input.nextPackState);
-    const packCas = this.db
-      .prepare(
-        `UPDATE pack_state_projections
-         SET envelope_json = ?, updated_at = ?
-         WHERE session_id = ?
-           AND pack_id = ?
-           AND pack_version = ?
-           AND json_extract(envelope_json, '$.integrity.digest') = ?
-           AND json_extract(
-             envelope_json,
-             '$.state.recommendationState.revision'
-           ) = ?
-           AND NOT EXISTS (
-             SELECT 1 FROM recommendation_events WHERE event_id = ?
-           )`,
-      )
-      .bind(
-        nextEnvelopeJson,
-        event.recordedAt,
-        event.sessionId,
-        input.nextPackState.packRef.packId,
-        input.nextPackState.packRef.version,
-        expectedPackStateDigest,
-        currentRevision,
-        event.eventId,
-      );
+    const packCas = unchangedRepeatImpression
+      ? this.db
+          .prepare(
+            `UPDATE pack_state_projections
+             SET envelope_json = envelope_json
+             WHERE session_id = ?
+               AND pack_id = ?
+               AND pack_version = ?
+               AND json_extract(envelope_json, '$.integrity.digest') = ?
+               AND json_extract(
+                 envelope_json,
+                 '$.state.recommendationState.revision'
+               ) = ?
+               AND EXISTS (
+                 SELECT 1
+                 FROM recommendation_events
+                 WHERE recommendation_id = ?
+                   AND event_type = 'impression_rendered'
+               )
+               AND NOT EXISTS (
+                 SELECT 1 FROM recommendation_events WHERE event_id = ?
+               )`,
+          )
+          .bind(
+            event.sessionId,
+            input.nextPackState.packRef.packId,
+            input.nextPackState.packRef.version,
+            expectedPackStateDigest,
+            currentRevision,
+            event.recommendationId,
+            event.eventId,
+          )
+      : this.db
+          .prepare(
+            `UPDATE pack_state_projections
+             SET envelope_json = ?, updated_at = ?
+             WHERE session_id = ?
+               AND pack_id = ?
+               AND pack_version = ?
+               AND json_extract(envelope_json, '$.integrity.digest') = ?
+               AND json_extract(
+                 envelope_json,
+                 '$.state.recommendationState.revision'
+               ) = ?
+               AND NOT EXISTS (
+                 SELECT 1 FROM recommendation_events WHERE event_id = ?
+               )`,
+          )
+          .bind(
+            nextEnvelopeJson,
+            event.recordedAt,
+            event.sessionId,
+            input.nextPackState.packRef.packId,
+            input.nextPackState.packRef.version,
+            expectedPackStateDigest,
+            currentRevision,
+            event.eventId,
+          );
     const eventInsert = this.db
       .prepare(
         `INSERT INTO recommendation_events (${eventColumns})
@@ -461,23 +513,26 @@ export class D1StoreRecommendationOperations extends D1StoreConversationOperatio
       )
       .bind(...values)
       .all<RecommendationEventRow>();
-    return (rows.results ?? []).map(eventFromRow).map(({ event }) => event);
+    return (rows.results ?? [])
+      .map(eventFromRow)
+      .map(({ event }) => event)
+      .sort(compareRecommendationEventsChronologically);
   }
 
   async latestRecommendationDecisionForOrderFlow(
     orderFlowId: string,
   ): Promise<RecommendationDecisionRecord | undefined> {
-    const row = await this.db
+    const rows = await this.db
       .prepare(
         `SELECT ${decisionColumns}
          FROM recommendation_decisions
-         WHERE order_flow_id = ?
-         ORDER BY recorded_at DESC, recommendation_id DESC
-         LIMIT 1`,
+         WHERE order_flow_id = ?`,
       )
       .bind(orderFlowId)
-      .first<RecommendationDecisionRow>();
-    return row ? decisionFromRow(row) : undefined;
+      .all<RecommendationDecisionRow>();
+    return (rows.results ?? [])
+      .map(decisionFromRow)
+      .sort(compareRecommendationDecisionsLatestFirst)[0];
   }
 
   async getRecommendationDemoCustomerHistory(
@@ -814,6 +869,7 @@ function decisionFromRow(
     technical: storage.technical,
     requestFingerprint: row.request_fingerprint,
     actionDigest: row.action_digest,
+    renderBinding: storage.renderBinding,
     stateRevisionBefore: Number(row.state_revision_before),
     stateRevisionAfter: Number(row.state_revision_after),
     recordedAt: row.recorded_at,

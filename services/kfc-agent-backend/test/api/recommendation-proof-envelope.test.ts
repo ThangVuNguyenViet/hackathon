@@ -6,6 +6,7 @@ import type { LifecycleInstance } from '../../src/commerce/lifecycleProvider.js'
 import { loadEnv } from '../../src/config/env.js';
 import { MemoryStore } from '../../src/persistence/memoryStore.js';
 import { parseRecommendationDecisionRequest } from '../../src/recommendations/domain/schemas.js';
+import { renderBindingForDecisionDigests } from '../../src/recommendations/persistence/types.js';
 
 const adminToken = 'recommendation-proof-admin-token';
 const servers: FastifyInstance[] = [];
@@ -54,11 +55,16 @@ async function configuredServer() {
     sessionId,
     channel: 'kfc',
     role: 'user',
-    text: 'I would like a meal.',
+    text: 'Literal private meal request 8472.',
     externalMessageId: null,
-    externalUserId: 'customer-proof',
+    externalUserId: 'private-external-user-8472',
     deliveryStatus: 'sent',
-    metadata: null,
+    metadata: {
+      rawEvent: {
+        email: 'private-8472@example.test',
+        deliveryNote: 'Ring the private side door.',
+      },
+    },
   });
   const server = buildServer({
     ...buildServerOptionsFromEnv(loadEnv({ KFC_DEMO_ADMIN_TOKEN: adminToken })),
@@ -148,6 +154,46 @@ async function proofEnvelope(server: FastifyInstance, sessionId: string) {
 }
 
 describe('KFC recommendation proof envelope', () => {
+  it('projects proof turns as privacy-safe metadata and digests without literal prose or private fields', async () => {
+    const { server, sessionId } = await configuredServer();
+
+    const response = await proofEnvelope(server, sessionId);
+    const body = response.json<{
+      complete: boolean;
+      turns: Array<Record<string, unknown>>;
+    }>();
+    expect(body.complete).toBe(true);
+    expect(body.turns).toHaveLength(1);
+    expect(body.turns[0]).toMatchObject({
+      ordinal: 1,
+      channel: 'kfc',
+      role: 'user',
+      deliveryStatus: 'sent',
+      content: {
+        characterCount: 34,
+        sha256: expect.stringMatching(/^[a-f0-9]{64}$/u),
+      },
+      externalMessageIdDigest: null,
+      metadataDigest: expect.stringMatching(/^[a-f0-9]{64}$/u),
+    });
+    for (const privateField of [
+      'text',
+      'externalUserId',
+      'externalMessageId',
+      'metadata',
+    ]) {
+      expect(body.turns[0]).not.toHaveProperty(privateField);
+    }
+    for (const privateValue of [
+      'Literal private meal request 8472.',
+      'private-external-user-8472',
+      'private-8472@example.test',
+      'Ring the private side door.',
+    ]) {
+      expect(response.body).not.toContain(privateValue);
+    }
+  });
+
   it('returns an explicit empty recommendation projection without making an otherwise complete KFC proof incomplete', async () => {
     const { server, sessionId } = await configuredServer();
 
@@ -221,7 +267,10 @@ describe('KFC recommendation proof envelope', () => {
       headers: { 'x-kfc-demo-admin-token': adminToken },
     });
     expect(inspectionResponse.statusCode).toBe(200);
-    const inspection = inspectionResponse.json<{ recommendation: { actionDigest: string } }>();
+    const inspection = inspectionResponse.json<{
+      recommendation: { requestFingerprint: string; actionDigest: string };
+    }>();
+    const actionDigest = inspection.recommendation.actionDigest;
     const impressionResponse = await server.inject({
       method: 'POST',
       url: `/v1/recommendations/${encodeURIComponent(decision.recommendationId)}/impressions`,
@@ -229,14 +278,13 @@ describe('KFC recommendation proof envelope', () => {
         schemaVersion: 'kfc-recommendation-event-v1',
         eventId: 'proof-impression',
         occurredAt: '2026-07-27T09:10:00Z',
-        assistantTurnId: 'proof-assistant-turn',
-        attachmentId: 'proof-attachment',
+        ...renderBindingForDecisionDigests(inspection.recommendation),
         renderedActions: decision.primaryOffer.actions.map((action, index) => ({
           actionId: action.actionId,
           position: index + 1,
         })),
         cartRevision: request.cartRevision,
-        actionDigest: inspection.recommendation.actionDigest,
+        actionDigest,
       },
     });
     expect(impressionResponse.statusCode).toBe(201);

@@ -38,6 +38,7 @@ import type {
   CommitRecommendationDecisionInput,
   CommitRecommendationDecisionResult,
 } from '../../src/recommendations/persistence/repository.js';
+import { renderBindingForDecisionDigests } from '../../src/recommendations/persistence/types.js';
 import { MemoryStore } from '../../src/persistence/memoryStore.js';
 import { createPackStateEnvelope } from '../../src/runtime/businessPack.js';
 import { initialRecommendationState } from '../../src/recommendations/state/state-machine.js';
@@ -389,15 +390,15 @@ async function localEventFixture(suffix: string) {
       position: index + 1,
     }),
   );
+  const actionDigest = projection!.recommendation.actionDigest;
   const impression = parseRecommendationImpressionRequest({
     schemaVersion: 'kfc-recommendation-event-v1',
     eventId: `recommendation-event-${suffix}-impression`,
     occurredAt: '2026-07-27T09:10:00Z',
-    assistantTurnId: `assistant-turn-${suffix}`,
-    attachmentId: `attachment-${suffix}`,
+    ...renderBindingForDecisionDigests(projection!.recommendation),
     renderedActions,
     cartRevision: request.cartRevision,
-    actionDigest: projection!.recommendation.actionDigest,
+    actionDigest,
   });
   return {
     service,
@@ -715,6 +716,7 @@ describe('Recommendation application service', () => {
       smart.response.recommendationId,
     );
     const smartActions = smart.response.primaryOffer!.actions;
+    const actionDigest = smartProjection!.recommendation.actionDigest;
     await expect(
       service.recordImpression(
         smart.response.recommendationId,
@@ -722,14 +724,13 @@ describe('Recommendation application service', () => {
           schemaVersion: 'kfc-recommendation-event-v1',
           eventId: 'recommendation-event-smart-impression-flow',
           occurredAt: '2026-07-27T09:09:00Z',
-          assistantTurnId: 'assistant-turn-smart-flow',
-          attachmentId: 'attachment-smart-flow',
+          ...renderBindingForDecisionDigests(smartProjection!.recommendation),
           renderedActions: smartActions.map((action, index) => ({
             actionId: action.actionId,
             position: index + 1,
           })),
           cartRevision: smartRequest.cartRevision,
-          actionDigest: smartProjection!.recommendation.actionDigest,
+          actionDigest,
         }),
       ),
     ).resolves.toMatchObject({ status: 'recorded' });
@@ -834,15 +835,15 @@ describe('Recommendation application service', () => {
       explicit.response.recommendationId,
     );
     const action = explicit.response.primaryOffer!.actions[0]!;
+    const actionDigest = projection!.recommendation.actionDigest;
     const impression = parseRecommendationImpressionRequest({
       schemaVersion: 'kfc-recommendation-event-v1',
       eventId: 'recommendation-event-complete-explicit-impression',
       occurredAt: '2026-07-27T09:31:00Z',
-      assistantTurnId: 'assistant-turn-complete-explicit',
-      attachmentId: 'attachment-complete-explicit',
+      ...renderBindingForDecisionDigests(projection!.recommendation),
       renderedActions: [{ actionId: action.actionId, position: 1 }],
       cartRevision: explicitRequest.cartRevision,
-      actionDigest: projection!.recommendation.actionDigest,
+      actionDigest,
     });
     const outcome = outcomeFor({
       eventId: 'recommendation-event-complete-explicit-ignored',
@@ -877,6 +878,69 @@ describe('Recommendation application service', () => {
         recordedOutcomeEventIds: [outcome.eventId],
       },
     });
+  });
+
+  it('records selected then cart mutation telemetry after complete until a terminal outcome', async () => {
+    const { service, inspection, explicitRequest, explicit } =
+      await completedCustomerRequestFixture();
+    const actionId = explicit.response.primaryOffer!.actions[0]!.actionId;
+    const selected = outcomeFor({
+      eventId: 'recommendation-event-complete-explicit-selected',
+      eventType: 'selected',
+      actionId,
+      cartRevision: explicitRequest.cartRevision,
+    });
+    const mutation = outcomeFor({
+      eventId: 'recommendation-event-complete-explicit-cart-succeeded',
+      eventType: 'cart_mutation_succeeded',
+      actionId,
+      cartRevision: 'cart-revision-after-explicit-selection',
+    });
+
+    await expect(
+      service.recordOutcome(explicit.response.recommendationId, selected),
+    ).resolves.toMatchObject({ status: 'recorded' });
+    await expect(
+      service.recordOutcome(explicit.response.recommendationId, mutation),
+    ).resolves.toMatchObject({ status: 'recorded' });
+    await expect(
+      inspection.orderFlow(explicitRequest.orderFlowId),
+    ).resolves.toMatchObject({
+      state: {
+        revision: 7,
+        stage: 'complete',
+        pendingRecommendation: null,
+        nextEligiblePlacement: null,
+        recordedOutcomeEventIds: [selected.eventId, mutation.eventId],
+      },
+      eventCounts: {
+        selected: 1,
+        cart_mutation_succeeded: 1,
+      },
+    });
+
+    await expect(
+      service.recordOutcome(
+        explicit.response.recommendationId,
+        outcomeFor({
+          eventId: 'recommendation-event-complete-explicit-checkout',
+          eventType: 'checkout_completed',
+          actionId: null,
+          cartRevision: null,
+        }),
+      ),
+    ).resolves.toMatchObject({ status: 'recorded' });
+    await expect(
+      service.recordOutcome(
+        explicit.response.recommendationId,
+        outcomeFor({
+          eventId: 'recommendation-event-complete-explicit-after-terminal',
+          eventType: 'cart_mutation_succeeded',
+          actionId,
+          cartRevision: 'cart-revision-after-terminal',
+        }),
+      ),
+    ).resolves.toEqual({ status: 'stale_recommendation' });
   });
 
   it('replays canonical decisions and conflicts changed requests before engine work', async () => {
@@ -1048,6 +1112,77 @@ describe('Recommendation application service', () => {
     ).toBe(true);
   });
 
+  it('does not let a future client occurredAt move a later server decision time', async () => {
+    const engine = new RecordingEngine();
+    const store = new MemoryStore();
+    const { service, inspection } = await application(engine, store);
+    const sessionId = 'session-future-client-time';
+    const firstRequest = parseRecommendationDecisionRequest({
+      ...requestFor({
+        suffix: 'future-client-first',
+        placement: 'local_favorite',
+      }),
+      sessionId,
+      orderFlowId: 'order-flow-future-client-first',
+    });
+    const first = await service.decide({ request: firstRequest });
+    if (first.status !== 'decided') throw new Error('first decision expected');
+    const firstInspection = await inspection.recommendation(
+      first.response.recommendationId,
+    );
+    const actionDigest = firstInspection!.recommendation.actionDigest;
+    await expect(
+      service.recordImpression(
+        first.response.recommendationId,
+        parseRecommendationImpressionRequest({
+          schemaVersion: 'kfc-recommendation-event-v1',
+          eventId: 'recommendation-event-future-client-time',
+          occurredAt: '2099-01-01T00:00:00Z',
+          ...renderBindingForDecisionDigests(firstInspection!.recommendation),
+          renderedActions: first.response.primaryOffer!.actions.map(
+            (action, index) => ({
+              actionId: action.actionId,
+              position: index + 1,
+            }),
+          ),
+          cartRevision: firstRequest.cartRevision,
+          actionDigest,
+        }),
+      ),
+    ).resolves.toMatchObject({ status: 'recorded' });
+
+    const secondRequest = parseRecommendationDecisionRequest({
+      ...requestFor({
+        suffix: 'future-client-second',
+        placement: 'local_favorite',
+      }),
+      sessionId,
+      orderFlowId: 'order-flow-future-client-second',
+    });
+    await store.putPackState(
+      sessionId,
+      await createPackStateEnvelope({
+        packRef: kfcRecommendationPackStateDefinition.packRef,
+        schemaVersion: kfcRecommendationPackStateDefinition.schemaVersion,
+        state: {
+          recommendationState: initialRecommendationState(
+            secondRequest.orderFlowId,
+          ),
+        },
+      }),
+    );
+    await service.decide({ request: secondRequest });
+
+    const secondRequested = (
+      await store.listRecommendationEvents({ sessionId })
+    ).find(
+      (event) =>
+        event.requestId === secondRequest.requestId &&
+        event.eventType === 'decision_requested',
+    );
+    expect(secondRequested?.recordedAt).toBe('2026-07-27T09:30:00.11Z');
+  });
+
   it('selects the later revision-one session flow when recommendation IDs sort opposite insertion order', async () => {
     const { inspection, sessionId, secondRequest } =
       await multiFlowSessionFixture(false);
@@ -1108,6 +1243,36 @@ describe('Recommendation application service', () => {
     ).toBe(2);
   });
 
+  it('atomically records a distinct repeat impression without changing state revision', async () => {
+    const { service, decision, impression, inspection } =
+      await localEventFixture('impression-repeat-distinct');
+    await service.recordImpression(
+      decision.response.recommendationId,
+      impression,
+    );
+    const repeat = parseRecommendationImpressionRequest({
+      ...impression,
+      eventId: 'recommendation-event-impression-repeat-distinct-second',
+      occurredAt: '2026-07-27T09:10:00.1Z',
+    });
+
+    await expect(
+      service.recordImpression(decision.response.recommendationId, repeat),
+    ).resolves.toMatchObject({
+      status: 'recorded',
+      event: { eventId: repeat.eventId, eventType: 'impression_rendered' },
+    });
+    const afterRepeat = await inspection.recommendation(
+      decision.response.recommendationId,
+    );
+    expect(afterRepeat?.state.revision).toBe(2);
+    expect(
+      afterRepeat?.events
+        .filter((event) => event.eventType === 'impression_rendered')
+        .map((event) => event.eventId),
+    ).toEqual([impression.eventId, repeat.eventId]);
+  });
+
   it('rejects a conflicting impression event fingerprint', async () => {
     const { service, decision, impression } = await localEventFixture(
       'impression-conflict',
@@ -1157,6 +1322,26 @@ describe('Recommendation application service', () => {
       ),
     ).resolves.toEqual({ status: 'render_binding_conflict' });
   });
+
+  it.each(['assistantTurnId', 'attachmentId'] as const)(
+    'rejects a fresh impression whose %s does not match the server-owned render binding',
+    async (field) => {
+      const { service, decision, impression } = await localEventFixture(
+        `impression-wrong-${field}`,
+      );
+
+      await expect(
+        service.recordImpression(
+          decision.response.recommendationId,
+          parseRecommendationImpressionRequest({
+            ...impression,
+            eventId: `recommendation-event-wrong-${field}`,
+            [field]: `wrong-${field}`,
+          }),
+        ),
+      ).resolves.toEqual({ status: 'render_binding_conflict' });
+    },
+  );
 
   it('persists exact empty outcome payloads and fingerprints discarded ingress prose', async () => {
     const { service, decision, request } =
@@ -1344,6 +1529,7 @@ describe('Recommendation application service', () => {
     );
     eventStore.stale = true;
     const action = decided.response.primaryOffer!.actions[0]!;
+    const actionDigest = projection!.recommendation.actionDigest;
     await expect(
       service.recordImpression(
         decided.response.recommendationId,
@@ -1351,11 +1537,10 @@ describe('Recommendation application service', () => {
           schemaVersion: 'kfc-recommendation-event-v1',
           eventId: 'recommendation-event-stale-impression',
           occurredAt: '2026-07-27T09:10:00Z',
-          assistantTurnId: 'assistant-turn-stale',
-          attachmentId: 'attachment-stale',
+          ...renderBindingForDecisionDigests(projection!.recommendation),
           renderedActions: [{ actionId: action.actionId, position: 1 }],
           cartRevision: request.cartRevision,
-          actionDigest: projection!.recommendation.actionDigest,
+          actionDigest,
         }),
       ),
     ).resolves.toEqual({ status: 'state_conflict' });

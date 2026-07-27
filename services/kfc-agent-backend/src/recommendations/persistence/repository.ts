@@ -5,6 +5,7 @@ import {
   validatePackStateEnvelope,
 } from '../../runtime/businessPack.js';
 import type { RecommendationEvent } from '../domain/contracts.js';
+import { compareCanonicalUtcInstants } from '../domain/canonical-instant.js';
 import type {
   RecommendationDecisionRecord,
   RecommendationDemoCustomerHistoryRecord,
@@ -122,6 +123,66 @@ export function sameRecommendationEventReplaySemantics(
   });
 }
 
+export function sameRecommendationImpressionBinding(
+  left: RecommendationEvent,
+  right: RecommendationEvent,
+): boolean {
+  if (
+    left.eventType !== 'impression_rendered' ||
+    right.eventType !== 'impression_rendered'
+  ) {
+    return false;
+  }
+  const binding = (event: RecommendationEvent) => ({
+    schemaVersion: event.schemaVersion,
+    eventType: event.eventType,
+    recommendationId: event.recommendationId,
+    requestId: event.requestId,
+    orderFlowId: event.orderFlowId,
+    sessionId: event.sessionId,
+    placement: event.placement,
+    actor: event.actor,
+    actionId: event.actionId,
+    cartRevision: event.cartRevision,
+    versionBindings: event.versionBindings,
+    payload: event.payload,
+  });
+  return canonicalJson(binding(left)) === canonicalJson(binding(right));
+}
+
+export function compareRecommendationEventsChronologically(
+  left: RecommendationEvent,
+  right: RecommendationEvent,
+): number {
+  const comparison = compareCanonicalUtcInstants(
+    left.occurredAt,
+    right.occurredAt,
+  );
+  if (comparison === null) {
+    throw new Error('recommendation_event_occurred_at_invalid');
+  }
+  return comparison || left.eventId.localeCompare(right.eventId);
+}
+
+export function compareRecommendationDecisionsLatestFirst(
+  left: RecommendationDecisionRecord,
+  right: RecommendationDecisionRecord,
+): number {
+  const comparison = compareCanonicalUtcInstants(
+    right.recordedAt,
+    left.recordedAt,
+  );
+  if (comparison === null) {
+    throw new Error('recommendation_decision_recorded_at_invalid');
+  }
+  return (
+    comparison ||
+    right.response.recommendationId.localeCompare(
+      left.response.recommendationId,
+    )
+  );
+}
+
 export function assertCompletedRecommendationReservationReplay(input: {
   requested: Pick<
     ReserveRecommendationDecisionInput,
@@ -165,6 +226,7 @@ export function assertCompletedRecommendationReservationReplay(input: {
         ...record,
         request: payload.request,
         response: payload.response,
+        renderBinding: payload.renderBinding,
         technical: payload.technical,
       },
       record,

@@ -18,7 +18,10 @@ import type {
   RecommendationDemoCustomerHistoryRecord,
   RecommendationPersistence,
 } from '../../src/recommendations/persistence/repository.js';
-import { parsePersistedRecommendationEvent } from '../../src/recommendations/persistence/types.js';
+import {
+  parsePersistedRecommendationEvent,
+  renderBindingForDecisionDigests,
+} from '../../src/recommendations/persistence/types.js';
 import {
   applyRecommendationDecision,
   applyRecommendationImpression,
@@ -114,6 +117,7 @@ function responseFor(
 function recordFor(suffix: string): RecommendationDecisionRecord {
   const request = requestFor(suffix);
   const response = responseFor(request, suffix);
+  const actionDigest = 'b'.repeat(64);
   return {
     request,
     response,
@@ -131,7 +135,11 @@ function recordFor(suffix: string): RecommendationDecisionRecord {
       emptyReason: null,
     },
     requestFingerprint: 'a'.repeat(64),
-    actionDigest: 'b'.repeat(64),
+    actionDigest,
+    renderBinding: renderBindingForDecisionDigests({
+      requestFingerprint: 'a'.repeat(64),
+      actionDigest,
+    }),
     stateRevisionBefore: 0,
     stateRevisionAfter: 1,
     recordedAt: '2026-07-27T09:00:03Z',
@@ -484,6 +492,122 @@ describe('RecommendationPersistence shared contract', () => {
         status: 'replay',
         record,
       });
+    }
+  });
+
+  it('rejects a forged server render binding before persisting the decision', async () => {
+    for (const { name, store } of await fixtures()) {
+      const record = recordFor(`${name.toLowerCase()}-forged-render-binding`);
+      const forged = {
+        ...record,
+        renderBinding: {
+          ...record.renderBinding,
+          attachmentId: 'recommendation-attachment:forged',
+        },
+      };
+      await reserve(store, record);
+
+      await expect(
+        store.commitRecommendationDecision({
+          ownerToken: `owner-${record.request.requestId}`,
+          expectedPackStateDigest: null,
+          nextPackState: await envelopeFor(record),
+          record: forged,
+          events: decisionEvents(record),
+        }),
+        name,
+      ).rejects.toThrow();
+      await expect(
+        store.getRecommendationDecision(record.response.recommendationId),
+        name,
+      ).resolves.toBeUndefined();
+    }
+  });
+
+  it('orders mixed-precision canonical Instants identically in Memory and D1', async () => {
+    for (const { name, store } of await fixtures()) {
+      const first = {
+        ...recordFor(`${name.toLowerCase()}-mixed-precision-first`),
+        recordedAt: '2026-07-27T09:00:00.1Z',
+      };
+      const secondBase = recordFor(
+        `${name.toLowerCase()}-mixed-precision-second`,
+      );
+      const secondRequest = parseRecommendationDecisionRequest({
+        ...secondBase.request,
+        orderFlowId: first.request.orderFlowId,
+      });
+      const second = {
+        ...secondBase,
+        request: secondRequest,
+        response: responseFor(
+          secondRequest,
+          `${name.toLowerCase()}-mixed-precision-second`,
+        ),
+        recordedAt: '2026-07-27T09:00:00.11Z',
+      };
+      const firstEvents = decisionEvents(first).map((event, index) =>
+        parseRecommendationEvent({
+          ...event,
+          occurredAt:
+            index === 0
+              ? '2026-07-27T09:00:00.01Z'
+              : '2026-07-27T09:00:00.1Z',
+          recordedAt:
+            index === 0
+              ? '2026-07-27T09:00:00.01Z'
+              : '2026-07-27T09:00:00.1Z',
+        }),
+      );
+      const secondEvents = decisionEvents(second).map((event, index) =>
+        parseRecommendationEvent({
+          ...event,
+          occurredAt:
+            index === 0
+              ? '2026-07-27T09:00:00.11Z'
+              : '2026-07-27T09:00:00.111Z',
+          recordedAt:
+            index === 0
+              ? '2026-07-27T09:00:00.11Z'
+              : '2026-07-27T09:00:00.111Z',
+        }),
+      );
+      await reserve(store, first);
+      await reserve(store, second);
+      await store.commitRecommendationDecision({
+        ownerToken: `owner-${first.request.requestId}`,
+        expectedPackStateDigest: null,
+        nextPackState: await envelopeFor(first),
+        record: first,
+        events: firstEvents,
+      });
+      await store.commitRecommendationDecision({
+        ownerToken: `owner-${second.request.requestId}`,
+        expectedPackStateDigest: null,
+        nextPackState: await envelopeFor(second),
+        record: second,
+        events: secondEvents,
+      });
+
+      await expect(
+        store.latestRecommendationDecisionForOrderFlow(
+          first.request.orderFlowId,
+        ),
+        name,
+      ).resolves.toEqual(second);
+      expect(
+        (
+          await store.listRecommendationEvents({
+            orderFlowId: first.request.orderFlowId,
+          })
+        ).map((event) => event.occurredAt),
+        name,
+      ).toEqual([
+        '2026-07-27T09:00:00.01Z',
+        '2026-07-27T09:00:00.1Z',
+        '2026-07-27T09:00:00.11Z',
+        '2026-07-27T09:00:00.111Z',
+      ]);
     }
   });
 
@@ -915,6 +1039,126 @@ describe('RecommendationPersistence shared contract', () => {
         }),
         name,
       ).resolves.toEqual([decisionEvents(record)[1], event]);
+    }
+  });
+
+  it('atomically appends only a non-material repeat impression with unchanged state', async () => {
+    for (const { name, store } of await fixtures()) {
+      const record = recordFor(`${name.toLowerCase()}-repeat-impression`);
+      await reserve(store, record);
+      await commit(store, record);
+      const decisionEnvelope = await envelopeFor(record);
+      const decisionState = Reflect.get(
+        decisionEnvelope.state as object,
+        'recommendationState',
+      );
+      const actionId = record.response.primaryOffer!.actions[0]!.actionId;
+      const first = parseRecommendationEvent({
+        ...decisionEvents(record)[1],
+        eventId: `event-repeat-impression-first-${record.request.requestId}`,
+        eventType: 'impression_rendered',
+        occurredAt: '2026-07-27T09:00:04Z',
+        recordedAt: '2026-07-27T09:00:05Z',
+        actor: 'client',
+        actionId: null,
+        payload: {
+          ...record.renderBinding,
+          renderedActions: [{ actionId, position: 1 }],
+          actionDigest: record.actionDigest,
+        },
+      });
+      const impressedEnvelope = await createPackStateEnvelope({
+        packRef: decisionEnvelope.packRef,
+        schemaVersion: decisionEnvelope.schemaVersion,
+        state: {
+          recommendationState: applyRecommendationImpression(
+            decisionState,
+            parseRecommendationEvent({
+              ...first,
+              payload: { renderedActionIds: [actionId] },
+            }),
+          ),
+        },
+      });
+      await expect(
+        store.appendRecommendationEvent({
+          eventFingerprint: '3'.repeat(64),
+          event: first,
+          expectedPackStateDigest: decisionEnvelope.integrity.digest,
+          nextPackState: impressedEnvelope,
+        }),
+        name,
+      ).resolves.toEqual({ status: 'recorded', event: first });
+      const repeat = parseRecommendationEvent({
+        ...first,
+        eventId: `event-repeat-impression-second-${record.request.requestId}`,
+        occurredAt: '2026-07-27T09:00:05.1Z',
+        recordedAt: '2026-07-27T09:00:06Z',
+      });
+      const repeatInput = {
+        eventFingerprint: '4'.repeat(64),
+        event: repeat,
+        expectedPackStateDigest: impressedEnvelope.integrity.digest,
+        nextPackState: impressedEnvelope,
+      };
+
+      await expect(
+        store.appendRecommendationEvent(repeatInput),
+        name,
+      ).resolves.toEqual({ status: 'recorded', event: repeat });
+      await expect(
+        store.getPackState(record.request.sessionId, impressedEnvelope.packRef),
+        name,
+      ).resolves.toEqual(impressedEnvelope);
+      await expect(
+        store.appendRecommendationEvent({
+          ...repeatInput,
+          eventFingerprint: '5'.repeat(64),
+        }),
+        name,
+      ).resolves.toEqual({ status: 'conflict' });
+      await expect(
+        store.appendRecommendationEvent({
+          ...repeatInput,
+          eventFingerprint: '6'.repeat(64),
+          event: parseRecommendationEvent({
+            ...repeat,
+            eventId: `${repeat.eventId}-stale`,
+          }),
+          expectedPackStateDigest: 'f'.repeat(64),
+        }),
+        name,
+      ).resolves.toEqual({ status: 'stale' });
+      await expect(
+        store.appendRecommendationEvent({
+          ...repeatInput,
+          eventFingerprint: '7'.repeat(64),
+          event: parseRecommendationEvent({
+            ...repeat,
+            eventId: `${repeat.eventId}-outcome`,
+            eventType: 'selected',
+            actor: 'customer',
+            actionId,
+            payload: {},
+          }),
+        }),
+        name,
+      ).resolves.toEqual({ status: 'stale' });
+      await expect(
+        store.appendRecommendationEvent({
+          ...repeatInput,
+          eventFingerprint: '8'.repeat(64),
+          event: parseRecommendationEvent({
+            ...repeat,
+            eventId: `${repeat.eventId}-changed-binding`,
+            payload: {
+              ...repeat.payload,
+              attachmentId: 'recommendation-attachment:changed',
+            },
+          }),
+        }),
+        name,
+      ).resolves.toEqual({ status: 'stale' });
     }
   });
 

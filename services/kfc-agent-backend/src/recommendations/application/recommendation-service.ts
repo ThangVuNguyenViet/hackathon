@@ -21,6 +21,7 @@ import {
   strictlyLaterCanonicalUtcInstant,
 } from '../domain/canonical-instant.js';
 import type { RecommendationDecisionRecord } from '../persistence/repository.js';
+import { renderBindingForDecisionDigests } from '../persistence/types.js';
 import {
   applyCustomerRequestedRecommendationDecision,
   applyCustomerRequestedRecommendationOutcome,
@@ -51,20 +52,6 @@ const mutationOutcomeTypes = new Set<RecommendationOutcomeRequest['eventType']>(
 const terminalOutcomeTypes = new Set<RecommendationOutcomeRequest['eventType']>(
   ['checkout_completed', 'order_abandoned', 'order_cancelled'],
 );
-const recommendationOutcomeTypes = new Set<
-  RecommendationOutcomeRequest['eventType']
->([
-  'selected',
-  'explicitly_dismissed',
-  'ignored',
-  'superseded',
-  'cart_mutation_succeeded',
-  'cart_mutation_failed',
-  'checkout_completed',
-  'order_abandoned',
-  'order_cancelled',
-]);
-
 async function decisionEventId(
   requestId: string,
   eventType: 'decision_requested' | 'decision_completed',
@@ -132,17 +119,16 @@ function maximumPersistedEventInstant(
 ): string | undefined {
   let maximum: string | undefined;
   for (const event of events) {
-    for (const instant of [event.occurredAt, event.recordedAt]) {
-      if (maximum === undefined) {
-        maximum = instant;
-        continue;
-      }
-      const comparison = compareCanonicalUtcInstants(instant, maximum);
-      if (comparison === null) {
-        throw new Error('canonical_utc_instant_invalid');
-      }
-      if (comparison > 0) maximum = instant;
+    const instant = event.recordedAt;
+    if (maximum === undefined) {
+      maximum = instant;
+      continue;
     }
+    const comparison = compareCanonicalUtcInstants(instant, maximum);
+    if (comparison === null) {
+      throw new Error('canonical_utc_instant_invalid');
+    }
+    if (comparison > 0) maximum = instant;
   }
   return maximum;
 }
@@ -255,7 +241,7 @@ async function isCurrentRecommendation(
     recommendationId: record.response.recommendationId,
   });
   return events.some((event) =>
-    recommendationOutcomeTypes.has(
+    terminalOutcomeTypes.has(
       event.eventType as RecommendationOutcomeRequest['eventType'],
     ),
   )
@@ -416,6 +402,10 @@ export function createRecommendationApplicationService(
         technical: decision.technical,
         requestFingerprint,
         actionDigest,
+        renderBinding: renderBindingForDecisionDigests({
+          requestFingerprint,
+          actionDigest,
+        }),
         stateRevisionBefore: loaded.state.revision,
         stateRevisionAfter: nextState.revision,
         recordedAt: completedAt,
@@ -505,6 +495,8 @@ export function createRecommendationApplicationService(
       );
       if (
         request.actionDigest !== record.actionDigest ||
+        request.assistantTurnId !== record.renderBinding.assistantTurnId ||
+        request.attachmentId !== record.renderBinding.attachmentId ||
         canonicalJson(request.renderedActions) !==
           canonicalJson(expectedRendered)
       ) {

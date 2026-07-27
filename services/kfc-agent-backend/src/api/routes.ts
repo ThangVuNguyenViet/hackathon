@@ -423,6 +423,7 @@ function invalidRecommendationBodyTransportError(error: unknown): boolean {
     error !== null &&
     'code' in error &&
     (error.code === 'FST_ERR_CTP_INVALID_JSON_BODY' ||
+      error.code === 'FST_ERR_CTP_EMPTY_JSON_BODY' ||
       error.code === 'FST_ERR_CTP_INVALID_MEDIA_TYPE')
   );
 }
