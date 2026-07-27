@@ -427,6 +427,56 @@ export default {
       return toResponse(result);
     };
 
+    if (
+      request.method === 'POST' &&
+      url.pathname === '/v1/recommendations/decide'
+    ) {
+      return toResponse(
+        await handlers.recommendationDecide(await readJson(request)),
+      );
+    }
+    const recommendationImpressionMatch = url.pathname.match(
+      /^\/v1\/recommendations\/([^/]+)\/impressions$/,
+    );
+    if (request.method === 'POST' && recommendationImpressionMatch) {
+      return toResponse(
+        await handlers.recommendationImpression(
+          decodeURIComponent(recommendationImpressionMatch[1]!),
+          await readJson(request),
+        ),
+      );
+    }
+    const recommendationOutcomeMatch = url.pathname.match(
+      /^\/v1\/recommendations\/([^/]+)\/outcomes$/,
+    );
+    if (request.method === 'POST' && recommendationOutcomeMatch) {
+      return toResponse(
+        await handlers.recommendationOutcome(
+          decodeURIComponent(recommendationOutcomeMatch[1]!),
+          await readJson(request),
+        ),
+      );
+    }
+    const recommendationInspectionMatch = url.pathname.match(
+      /^\/admin\/recommendations\/([^/]+)\/inspection$/,
+    );
+    if (request.method === 'GET' && recommendationInspectionMatch) {
+      return toResponse(
+        await handlers.recommendationInspection(
+          decodeURIComponent(recommendationInspectionMatch[1]!),
+        ),
+      );
+    }
+    const recommendationOrderFlowMatch = url.pathname.match(
+      /^\/admin\/recommendations\/order-flows\/([^/]+)\/state$/,
+    );
+    if (request.method === 'GET' && recommendationOrderFlowMatch) {
+      return toResponse(
+        await handlers.recommendationOrderFlowState(
+          decodeURIComponent(recommendationOrderFlowMatch[1]!),
+        ),
+      );
+    }
     const lifecycleCreateMatch = url.pathname.match(
       /^\/admin\/lifecycle\/sessions\/([^/]+)\/instances$/,
     );

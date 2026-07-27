@@ -10,6 +10,7 @@ import { createSystemRouteHandlers } from './routeSystemHandlers.js';
 import { createChatRouteHandlers } from './routeChatHandlers.js';
 import { createChannelRouteHandlers } from './routeChannelHandlers.js';
 import { createDashboardRouteHandlers } from './routeDashboardHandlers.js';
+import { createRecommendationRouteHandlers } from './routeRecommendationHandlers.js';
 import { resolveDemoAgentModelBinding } from './demoAgentModelSelection.js';
 import {
   isRecord,
@@ -104,6 +105,7 @@ import {
   type RunCommitFence,
   type WebhookDelivery,
 } from '../persistence/memoryStore.js';
+import type { RecommendationPersistence } from '../recommendations/persistence/repository.js';
 import {
   buildBoundedRecentTurns,
   sessionIdForConversationEvent,
@@ -119,6 +121,9 @@ import {
 
 export function createRouteHandlers(options: RouteOptions = {}): RouteHandlers {
   const store = options.store ?? new MemoryStore();
+  const recommendations = options.recommendations?.create(
+    store as ConversationStore & RecommendationPersistence,
+  );
   const dashboard = options.dashboard ?? new DashboardEventBus();
   const showcase = options.showcase
     ? new ShowcaseService({
@@ -287,6 +292,7 @@ export function createRouteHandlers(options: RouteOptions = {}): RouteHandlers {
     showcase,
     streamingRunObservers,
     customerRuns,
+    recommendations,
     ...commerceRuntime,
     ...agentRuntime,
     ...messengerRuntime,
@@ -298,6 +304,7 @@ export function createRouteHandlers(options: RouteOptions = {}): RouteHandlers {
     ...createChatRouteHandlers(context),
     ...createChannelRouteHandlers(context),
     ...createDashboardRouteHandlers(context),
+    ...createRecommendationRouteHandlers(context),
   };
   return routeHandlers;
 }

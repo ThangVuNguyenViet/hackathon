@@ -49,6 +49,63 @@ export function registerRoutes(
       .parse(request.query);
     return send(reply, await handlers.ready(query.deep === '1'));
   });
+  server.post('/v1/recommendations/decide', async (request, reply) =>
+    send(reply, await handlers.recommendationDecide(request.body)),
+  );
+  server.post(
+    '/v1/recommendations/:recommendationId/impressions',
+    async (request, reply) => {
+      const params = z
+        .object({ recommendationId: z.string().min(1) })
+        .parse(request.params);
+      return send(
+        reply,
+        await handlers.recommendationImpression(
+          params.recommendationId,
+          request.body,
+        ),
+      );
+    },
+  );
+  server.post(
+    '/v1/recommendations/:recommendationId/outcomes',
+    async (request, reply) => {
+      const params = z
+        .object({ recommendationId: z.string().min(1) })
+        .parse(request.params);
+      return send(
+        reply,
+        await handlers.recommendationOutcome(
+          params.recommendationId,
+          request.body,
+        ),
+      );
+    },
+  );
+  server.get(
+    '/admin/recommendations/:recommendationId/inspection',
+    async (request, reply) => {
+      const params = z
+        .object({ recommendationId: z.string().min(1) })
+        .parse(request.params);
+      return send(
+        reply,
+        await handlers.recommendationInspection(params.recommendationId),
+      );
+    },
+  );
+  server.get(
+    '/admin/recommendations/order-flows/:orderFlowId/state',
+    async (request, reply) => {
+      const params = z
+        .object({ orderFlowId: z.string().min(1) })
+        .parse(request.params);
+      return send(
+        reply,
+        await handlers.recommendationOrderFlowState(params.orderFlowId),
+      );
+    },
+  );
   if (options.lifecycle?.environment === 'sandbox') {
     server.post(
       '/admin/lifecycle/sessions/:sessionId/instances',

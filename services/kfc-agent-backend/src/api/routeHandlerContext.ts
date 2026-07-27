@@ -1,6 +1,10 @@
 import type { CustomerRunCoordinator } from '../customerRuns/runtime.js';
 import type { DashboardEventBus } from '../dashboard/eventBus.js';
 import type { ConversationStore } from '../persistence/memoryStore.js';
+import type {
+  RecommendationApplicationService,
+  RecommendationInspectionService,
+} from '../recommendations/application/service-types.js';
 import type { ShowcaseService } from '../showcase/showcase.js';
 import type { RouteOptions } from './routeHandlerContracts.js';
 import type { RouteCommerceRuntime } from './routeCommerceRuntime.js';
@@ -17,6 +21,12 @@ export type RouteHandlerContext = {
   showcase: ShowcaseService | undefined;
   streamingRunObservers: StreamingRunObservers;
   customerRuns: CustomerRunCoordinator;
+  recommendations:
+    | {
+        application: RecommendationApplicationService;
+        inspection: RecommendationInspectionService;
+      }
+    | undefined;
 } & RouteCommerceRuntime &
   RouteAgentRuntime &
   RouteMessengerRuntime;

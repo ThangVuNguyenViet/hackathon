@@ -132,6 +132,7 @@ export function buildWorkerRouteOptions(
 
   const routeOptions: RouteOptions = {
     ...options,
+    recommendations: options.recommendations,
     fixtures,
     store,
     dashboard,

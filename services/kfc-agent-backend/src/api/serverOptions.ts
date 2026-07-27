@@ -15,6 +15,37 @@ import {
 import { ModelMonitorJudge } from '../llm/monitorJudge.js';
 import { LangSmithAgentTracer } from '../observability/langsmithAgentTracer.js';
 import { LangSmithShowcaseScenarioSource } from '../showcase/showcase.js';
+import { kfcRecommendationPackStateDefinition } from '../recommendations/application/context-factory.js';
+import { createRecommendationInspectionService } from '../recommendations/application/inspection-service.js';
+import { createBundledRecommendationApplicationService } from '../recommendations/application/recommendation-service.js';
+import type { RecommendationRouteServicesFactory } from './routeHandlerContracts.js';
+
+export const KFC_RECOMMENDATION_STORE_TIMEZONE = 'Asia/Ho_Chi_Minh';
+
+export function createBundledRecommendationRouteServicesFactory(
+  storeTimezone = KFC_RECOMMENDATION_STORE_TIMEZONE,
+): RecommendationRouteServicesFactory {
+  return {
+    create(store) {
+      const persistence = store;
+      return {
+        application: createBundledRecommendationApplicationService({
+          persistence,
+          contextSource: {
+            load: async () => ({ storeTimezone }),
+          },
+          clock: {
+            now: () => new Date().toISOString(),
+          },
+        }),
+        inspection: createRecommendationInspectionService({
+          persistence,
+          packState: kfcRecommendationPackStateDefinition,
+        }),
+      };
+    },
+  };
+}
 
 function optionalValue(value: string | undefined): string | undefined {
   const normalized = value?.trim();
@@ -108,6 +139,7 @@ export function buildServerOptionsFromEnv(env: AppEnv): BuildServerOptions {
     : undefined;
   const langsmithApiKey = optionalValue(env.LANGSMITH_API_KEY);
   return {
+    recommendations: createBundledRecommendationRouteServicesFactory(),
     demoAdminToken: optionalValue(env.KFC_DEMO_ADMIN_TOKEN),
     messengerVerifyToken: optionalValue(env.MESSENGER_VERIFY_TOKEN),
     metaAppSecret: optionalValue(env.META_APP_SECRET),

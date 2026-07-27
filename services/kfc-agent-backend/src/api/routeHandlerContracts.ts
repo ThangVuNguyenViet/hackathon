@@ -89,6 +89,11 @@ import {
   type ConversationStore,
   type WebhookDelivery,
 } from '../persistence/memoryStore.js';
+import type { RecommendationPersistence } from '../recommendations/persistence/repository.js';
+import type {
+  RecommendationApplicationService,
+  RecommendationInspectionService,
+} from '../recommendations/application/service-types.js';
 import {
   buildBoundedRecentTurns,
   sessionIdForConversationEvent,
@@ -419,6 +424,13 @@ export interface ReadinessOptions {
   };
 }
 
+export interface RecommendationRouteServicesFactory {
+  create(store: ConversationStore & RecommendationPersistence): {
+    application: RecommendationApplicationService;
+    inspection: RecommendationInspectionService;
+  };
+}
+
 export interface RouteOptions {
   fixturesRoot?: string;
   demoAdminToken?: string;
@@ -465,6 +477,7 @@ export interface RouteOptions {
     releaseSha: string;
     agent: AgentModelIdentity;
   };
+  recommendations?: RecommendationRouteServicesFactory;
 }
 
 export interface HandlerResponse<T = unknown> {
@@ -549,6 +562,17 @@ export interface RouteHandlers {
   dashboardEvents(sessionId: string): HandlerResponse;
   dashboardSessions(): Promise<HandlerResponse>;
   dashboardTurns(sessionId: string): Promise<HandlerResponse>;
+  recommendationDecide(body: unknown): Promise<HandlerResponse>;
+  recommendationImpression(
+    recommendationId: string,
+    body: unknown,
+  ): Promise<HandlerResponse>;
+  recommendationOutcome(
+    recommendationId: string,
+    body: unknown,
+  ): Promise<HandlerResponse>;
+  recommendationInspection(recommendationId: string): Promise<HandlerResponse>;
+  recommendationOrderFlowState(orderFlowId: string): Promise<HandlerResponse>;
 }
 
 export function defaultFixturesRoot(): string {
