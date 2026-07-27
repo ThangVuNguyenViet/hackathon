@@ -4,6 +4,30 @@ This context defines the domain language for the KFC conversational ordering ass
 
 ## Language
 
+**Business**:
+An organization whose customers the assistant serves under a distinct identity, knowledge scope, policies, capabilities, and customer experience. KFC Vietnam and PVCFC are separate Businesses.
+_Avoid_: Vendor, provider, integration
+
+**Provider**:
+A technical system that supplies one or more capabilities or bodies of knowledge to a Business. A Provider is replaceable without changing which Business the assistant serves.
+_Avoid_: Business, brand, tenant, upstream vendor
+
+**Adapter**:
+The translation boundary that presents a Provider through the assistant's stable capability language while containing provider-specific schemas, credentials, and failure semantics.
+_Avoid_: Business logic, provider, generic client
+
+**Business Pack**:
+The complete Business-specific definition layered onto the shared assistant runtime: its knowledge, capabilities, conversational policies, state model, customer presentation, and executable quality contract. A Business Pack may represent a domain unlike every other Business Pack.
+_Avoid_: Theme, tenant config, generic commerce adapter
+
+**Shared Assistant Runtime**:
+The Business-independent machinery for conversation execution, identity isolation, evidence handling, Provider boundaries, safety, persistence, and orchestration. It does not define a Business's products, transactions, tools, or customer-facing claims.
+_Avoid_: Universal business model, KFC core, shared tool catalog
+
+**Behavior-Compatible Migration**:
+A change that preserves the established customer-visible outcomes and safety guarantees of a Business Pack while allowing its internal scenario contracts, tool names, dataset identities, and evidence representation to evolve under updated executable tests.
+_Avoid_: Exact contract preservation, untested refactor, customer-visible redesign
+
 **Commerce Environment**:
 An isolated `production` or `sandbox` provider deployment with its own configuration, credentials, identities, state, evidence, and persistence under the same customer contract. A successful configured sandbox response is authoritative within sandbox and is not a lower-authority data class.
 _Avoid_: Real-data flag, simulation label, shared production/sandbox state

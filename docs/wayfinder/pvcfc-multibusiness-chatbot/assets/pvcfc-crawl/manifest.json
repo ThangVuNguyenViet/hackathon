@@ -1,0 +1,2078 @@
+{
+  "schema_version": "1.0.0",
+  "corpus_id": "pvcfc-public-web-2026-07-21",
+  "business": "PVCFC",
+  "authority_scope": "Public first-party PVCFC web content only; no private-system authority.",
+  "capture_date": "2026-07-21",
+  "generated_at": "2026-07-21T09:12:25.637144Z",
+  "retrieval_tool": {
+    "name": "TinyFish CLI",
+    "version": "0.2.0"
+  },
+  "fixture_policy": {
+    "immutable_raw_artifacts": true,
+    "hash_algorithm": "SHA-256",
+    "public_forms_are_not_private_api_contracts": true,
+    "synthetic_private_records_permitted_in_this_corpus": false,
+    "refresh_requires_new_corpus_id_and_hashes": true
+  },
+  "coverage": {
+    "artifact_count": 24,
+    "source_capture_count": 71,
+    "languages_observed": [
+      "vi",
+      "en"
+    ],
+    "first_party_hosts": [
+      "bikipvang.pvcfc.com.vn",
+      "shop.pvcfc.com.vn",
+      "thamquannhamay.pvcfc.com.vn",
+      "www.pvcfc.com.vn"
+    ]
+  },
+  "artifacts": [
+    {
+      "path": "raw/agent-contact.json",
+      "bytes": 1900,
+      "sha256": "6954e1a41b6f520cfb8a365e42cde984b57212e8cc1c17c9e9f9337b5f830e82",
+      "filesystem_modified_at": "2026-07-21T07:48:14.151596Z",
+      "capture_type": "tinyfish_agent",
+      "source_url": "https://www.pvcfc.com.vn/lien-he",
+      "run_id": "ce829e47-29ae-43c1-b49e-4107b52ee794",
+      "status": "COMPLETED",
+      "started_at": "2026-07-21T07:46:33.836Z",
+      "finished_at": "2026-07-21T07:48:14.078Z",
+      "step_count": 7,
+      "error": null,
+      "result_sha256": "40aab48c3d824d345a252dd7760534ed0e4edaa6f5e41e01e852d8277a28ff24"
+    },
+    {
+      "path": "raw/agent-factory-visit.json",
+      "bytes": 3527,
+      "sha256": "4c5f0fb48261bd21415db200c8379a6963de26f87f45592420343a3ad3f55b5e",
+      "filesystem_modified_at": "2026-07-21T09:08:14.960470Z",
+      "capture_type": "tinyfish_agent",
+      "source_url": "https://thamquannhamay.pvcfc.com.vn/",
+      "run_id": "0da2fdf6-793f-4a9b-9834-2827d7a63c2c",
+      "status": "COMPLETED",
+      "started_at": "2026-07-21T07:55:06Z",
+      "finished_at": "2026-07-21T07:57:31Z",
+      "step_count": 5,
+      "error": null,
+      "result_sha256": "c8108050fec63160e48ab1a87cb990a6cb598851fb3e12e714ab221985d9a474"
+    },
+    {
+      "path": "raw/agent-investor.json",
+      "bytes": 6523,
+      "sha256": "7280d7a854c67787ab45695ec0ae0a98f5fe283b53a500bda452315a0073c245",
+      "filesystem_modified_at": "2026-07-21T07:49:58.476082Z",
+      "capture_type": "tinyfish_agent",
+      "source_url": "https://www.pvcfc.com.vn/quan-he-dau-tu",
+      "run_id": "53546675-e1df-49e2-93e7-c70c66aa1ced",
+      "status": "COMPLETED",
+      "started_at": "2026-07-21T07:48:17.278Z",
+      "finished_at": "2026-07-21T07:49:58.388Z",
+      "step_count": 2,
+      "error": null,
+      "result_sha256": "aa727b45728c6608a2c2cdb845dacb84595b0f74d1ee1f7cfa2c7b8dd28e9dd0"
+    },
+    {
+      "path": "raw/agent-shop.json",
+      "bytes": 4086,
+      "sha256": "ca6c22e623dfcabe4cdca4dd18107b48cdf97366d590aeb49cfa6bc3da3bae8c",
+      "filesystem_modified_at": "2026-07-21T09:08:13.940912Z",
+      "capture_type": "tinyfish_agent",
+      "source_url": "https://shop.pvcfc.com.vn/",
+      "run_id": "21c2201b-7253-40fb-9400-8d2841bc3399",
+      "status": "COMPLETED",
+      "started_at": "2026-07-21T07:50:54Z",
+      "finished_at": "2026-07-21T07:59:27Z",
+      "step_count": 25,
+      "error": null,
+      "result_sha256": "b974ed781bd904aa6af08688d7582a2fc448d18cad873ba2bdad80b166d470d7"
+    },
+    {
+      "path": "raw/agent-sustainability-reports.json",
+      "bytes": 1904,
+      "sha256": "954079b20355581823d94d2e81a66e238bbaf7c0dd9e1f2eadf8489ac2f5f454",
+      "filesystem_modified_at": "2026-07-21T07:50:50.229343Z",
+      "capture_type": "tinyfish_agent",
+      "source_url": "https://www.pvcfc.com.vn/bao-cao-phat-trien-ben-vung",
+      "run_id": "e3cea56f-9a9d-4be1-a36c-b8e1b6b072ab",
+      "status": "COMPLETED",
+      "started_at": "2026-07-21T07:50:01.648Z",
+      "finished_at": "2026-07-21T07:50:50.153Z",
+      "step_count": 3,
+      "error": null,
+      "result_sha256": "8c5b2eb46411fe96456e3b4f2a7f7ee792d3d211a6823fab2645f8e50e0726a2"
+    },
+    {
+      "path": "raw/agronomy.json",
+      "bytes": 87194,
+      "sha256": "dd1453f5dd7158f339520ec252c6e5601470b240f443f1e5ca57435e454c70a5",
+      "filesystem_modified_at": "2026-07-21T07:43:44.926193Z",
+      "capture_type": "tinyfish_fetch",
+      "success_count": 6,
+      "error_count": 0,
+      "sources": [
+        {
+          "requested_url": "https://www.pvcfc.com.vn/ky-thuat-va-hieu-qua",
+          "canonical_url": "https://www.pvcfc.com.vn/ky-thuat-va-hieu-qua",
+          "title": "Kỹ thuật & hiệu quả sử dụng bộ sản phẩm PBCM",
+          "language": "vi",
+          "content_chars": 372,
+          "content_sha256": "e30153e4a71115ac83bf30e7d035ae4245e58ce23c31076976d158f680eb2359",
+          "link_count": 95,
+          "image_count": 16
+        },
+        {
+          "requested_url": "https://www.pvcfc.com.vn/tu-van-ky-thuat",
+          "canonical_url": "https://www.pvcfc.com.vn/tu-van-ky-thuat",
+          "title": "Tư vấn kỹ thuật",
+          "language": "vi",
+          "content_chars": 372,
+          "content_sha256": "e30153e4a71115ac83bf30e7d035ae4245e58ce23c31076976d158f680eb2359",
+          "link_count": 108,
+          "image_count": 16
+        },
+        {
+          "requested_url": "https://www.pvcfc.com.vn/nghien-cuu-va-phat-trien",
+          "canonical_url": "https://www.pvcfc.com.vn/nghien-cuu-va-phat-trien",
+          "title": "Nghiên cứu phát triển",
+          "language": "vi",
+          "content_chars": 372,
+          "content_sha256": "e30153e4a71115ac83bf30e7d035ae4245e58ce23c31076976d158f680eb2359",
+          "link_count": 100,
+          "image_count": 16
+        },
+        {
+          "requested_url": "https://www.pvcfc.com.vn/phan-bon-la-gi",
+          "canonical_url": "https://www.pvcfc.com.vn/phan-bon-la-gi",
+          "title": "Phân bón là gì? Công dụng và cách sử dụng phân bón đúng kỹ thuật",
+          "language": "vi",
+          "author": "PVCFC",
+          "published_at": "2025-12-15T06:55:00.0000000",
+          "content_chars": 13792,
+          "content_sha256": "7a3e3b574bd1d5af8db17918710e3ea281f9accabefbcf42a1be8629c635f55e",
+          "link_count": 91,
+          "image_count": 25
+        },
+        {
+          "requested_url": "https://www.pvcfc.com.vn/cach-bon-phan-cho-cay-trong",
+          "canonical_url": "https://www.pvcfc.com.vn/cach-bon-phan-cho-cay-trong",
+          "title": "Hướng dẫn cách bón phân cho cây trồng đúng kỹ thuật",
+          "language": "vi",
+          "author": "PVCFC",
+          "published_at": "2026-04-02T15:41:00.0000000",
+          "content_chars": 13074,
+          "content_sha256": "c6e0aaad32addc7f12acfde00056857d323b2152c1cb07b8f1da28181192817b",
+          "link_count": 99,
+          "image_count": 25
+        },
+        {
+          "requested_url": "https://www.pvcfc.com.vn/phan-bon-cho-cay-lua",
+          "canonical_url": "https://www.pvcfc.com.vn/phan-bon-cho-cay-lua",
+          "title": "Các loại phân bón cho cây lúa theo từng giai đoạn phát triển",
+          "language": "vi",
+          "author": "PVCFC",
+          "published_at": "2025-12-16T03:11:00.0000000",
+          "content_chars": 7212,
+          "content_sha256": "4e30cf5ff1c28345c303ac96fdb3b9432d73205b654361bdf616d0b007759e87",
+          "link_count": 93,
+          "image_count": 21
+        }
+      ],
+      "errors": []
+    },
+    {
+      "path": "raw/contact-pricing-distribution.json",
+      "bytes": 46856,
+      "sha256": "9abee9a005ca778ee5f4db1d9e955a7803df1fc7499e276683b401ba9a03b965",
+      "filesystem_modified_at": "2026-07-21T07:43:51.217779Z",
+      "capture_type": "tinyfish_fetch",
+      "success_count": 5,
+      "error_count": 0,
+      "sources": [
+        {
+          "requested_url": "https://www.pvcfc.com.vn/lien-he",
+          "canonical_url": "https://www.pvcfc.com.vn/lien-he",
+          "title": "Liên hệ",
+          "language": "vi",
+          "content_chars": 372,
+          "content_sha256": "e30153e4a71115ac83bf30e7d035ae4245e58ce23c31076976d158f680eb2359",
+          "link_count": 71,
+          "image_count": 12
+        },
+        {
+          "requested_url": "https://www.pvcfc.com.vn/bang-gia-phan-bon",
+          "canonical_url": "https://www.pvcfc.com.vn/bang-gia-phan-bon",
+          "title": "Bảng giá phân bón",
+          "language": "vi",
+          "content_chars": 372,
+          "content_sha256": "e30153e4a71115ac83bf30e7d035ae4245e58ce23c31076976d158f680eb2359",
+          "link_count": 78,
+          "image_count": 10
+        },
+        {
+          "requested_url": "https://www.pvcfc.com.vn/gia-phan-bon",
+          "canonical_url": "https://www.pvcfc.com.vn/gia-phan-bon",
+          "title": "Cập nhật bảng giá phân bón mới nhất",
+          "language": "vi",
+          "author": "PVCFC",
+          "published_at": "2025-12-24T03:09:00.0000000",
+          "content_chars": 5131,
+          "content_sha256": "824e2c0d9f7dca451368098dfcdb80154fde3bd0cf7ab4763608358b0371953e",
+          "link_count": 89,
+          "image_count": 20
+        },
+        {
+          "requested_url": "https://www.pvcfc.com.vn/dai-ly-va-cua-hang-phan-bon-uy-tin",
+          "canonical_url": "https://www.pvcfc.com.vn/dai-ly-va-cua-hang-phan-bon-uy-tin",
+          "title": "Top 15+ Đại lý và cửa hàng phân bón uy tín từ Bắc đến Nam",
+          "language": "vi",
+          "author": "PVCFC",
+          "published_at": "2025-12-15T09:00:00.0000000",
+          "content_chars": 8297,
+          "content_sha256": "fee1c2db6b6d1a31731bfe2a8a0e4659b8311a1bcfba979dcb003feb30472960",
+          "link_count": 90,
+          "image_count": 22
+        },
+        {
+          "requested_url": "https://www.pvcfc.com.vn/khuyen-mai",
+          "canonical_url": "https://www.pvcfc.com.vn/khuyen-mai",
+          "title": "Khuyến mãi",
+          "language": "vi",
+          "content_chars": 372,
+          "content_sha256": "e30153e4a71115ac83bf30e7d035ae4245e58ce23c31076976d158f680eb2359",
+          "link_count": 101,
+          "image_count": 16
+        }
+      ],
+      "errors": []
+    },
+    {
+      "path": "raw/core-company-products.json",
+      "bytes": 134504,
+      "sha256": "a48cb5a2df323472984237b3528598bdc4066adb843d81aee36892b42d8b6c51",
+      "filesystem_modified_at": "2026-07-21T07:43:41.125392Z",
+      "capture_type": "tinyfish_fetch",
+      "success_count": 6,
+      "error_count": 0,
+      "sources": [
+        {
+          "requested_url": "https://www.pvcfc.com.vn/gioi-thieu",
+          "canonical_url": "https://www.pvcfc.com.vn/gioi-thieu",
+          "title": "Giới thiệu",
+          "language": "vi",
+          "content_chars": 1410,
+          "content_sha256": "4fe786000df81452bac81fd873e56e648e88a3af3d21e59907cb49b30f5e4262",
+          "link_count": 73,
+          "image_count": 115
+        },
+        {
+          "requested_url": "https://www.pvcfc.com.vn/san-pham",
+          "canonical_url": "https://www.pvcfc.com.vn/san-pham",
+          "title": "Bộ Sản Phẩm Phân Bón Cà Mau",
+          "language": "vi",
+          "content_chars": 1796,
+          "content_sha256": "30445b8bfe8b88f1138f41589c04e53c6c7edba8ba0c03a4e97ea78f5488bcdd",
+          "link_count": 251,
+          "image_count": 59
+        },
+        {
+          "requested_url": "https://www.pvcfc.com.vn/phan-don",
+          "canonical_url": "https://www.pvcfc.com.vn/phan-don",
+          "title": "Sản Phẩm Phân Đơn - Phân Bón Cà Mau",
+          "language": "vi",
+          "content_chars": 1629,
+          "content_sha256": "849fc03d3102681ccc8d03d6d4aede4bd8730b92d39ca8565eb78edab36e40a6",
+          "link_count": 245,
+          "image_count": 59
+        },
+        {
+          "requested_url": "https://www.pvcfc.com.vn/npk",
+          "canonical_url": "https://www.pvcfc.com.vn/npk",
+          "title": "Sản Phẩm Phân NPK - Phân Bón Cà Mau",
+          "language": "vi",
+          "content_chars": 1400,
+          "content_sha256": "921eae16b9be2b9e9b8fe135fc9cb2e12489032c5fa6c8ffc020b2eaff9964cd",
+          "link_count": 249,
+          "image_count": 59
+        },
+        {
+          "requested_url": "https://www.pvcfc.com.vn/phan-huu-co",
+          "canonical_url": "https://www.pvcfc.com.vn/phan-huu-co",
+          "title": "Sản Phẩm Phân Hữu Cơ - Phân Bón Cà Mau",
+          "language": "vi",
+          "content_chars": 1201,
+          "content_sha256": "8dae76cdeb3d9e898534a55b7669e4490b589c546cff433c1135a6c750c46012",
+          "link_count": 241,
+          "image_count": 59
+        },
+        {
+          "requested_url": "https://www.pvcfc.com.vn/phan-bon-khac",
+          "canonical_url": "https://www.pvcfc.com.vn/phan-bon-khac",
+          "title": "Sản Phẩm Khác - Phân Bón Cà Mau",
+          "language": "vi",
+          "content_chars": 1363,
+          "content_sha256": "a8624ad7e06a3b28054715462367176e001ff654a4f7b3afe8a5f2bfd55a8e2c",
+          "link_count": 235,
+          "image_count": 57
+        }
+      ],
+      "errors": []
+    },
+    {
+      "path": "raw/discovery-files.json",
+      "bytes": 3075,
+      "sha256": "6d075e6f016809ad16eff2607d3edc382737888f10c1b1a5ccdf94a37ac9f754",
+      "filesystem_modified_at": "2026-07-21T07:42:47.424711Z",
+      "capture_type": "tinyfish_fetch",
+      "success_count": 1,
+      "error_count": 1,
+      "sources": [
+        {
+          "requested_url": "https://www.pvcfc.com.vn/robots.txt",
+          "canonical_url": "https://www.pvcfc.com.vn/robots.txt",
+          "content_chars": 2634,
+          "content_sha256": "dcb705aa11bd93993fe67b402b821cf934cdaeaf26af107a2d494743b6f1f9b4",
+          "link_count": 0,
+          "image_count": 0
+        }
+      ],
+      "errors": [
+        {
+          "url": "https://www.pvcfc.com.vn/sitemap.xml",
+          "error": "page_not_found"
+        }
+      ]
+    },
+    {
+      "path": "raw/english.json",
+      "bytes": 38915,
+      "sha256": "3428d92d12c6a7ae76b50b2079b414964b03a231f831dc8ac638a1a763f576b8",
+      "filesystem_modified_at": "2026-07-21T07:44:55.558808Z",
+      "capture_type": "tinyfish_fetch",
+      "success_count": 3,
+      "error_count": 2,
+      "sources": [
+        {
+          "requested_url": "https://www.pvcfc.com.vn/en-US/",
+          "canonical_url": "https://www.pvcfc.com.vn/en-US/",
+          "title": "Home",
+          "language": "en",
+          "content_chars": 496,
+          "content_sha256": "35c343324eb239c3256bea23cc6d5983c52ff3a7f30294b7f798721ecd622877",
+          "link_count": 116,
+          "image_count": 33
+        },
+        {
+          "requested_url": "https://www.pvcfc.com.vn/en-US/camau-fertilizers-product",
+          "canonical_url": "https://www.pvcfc.com.vn/en-US/camau-fertilizers-product",
+          "title": "Camau Fertilizer's product",
+          "language": "en",
+          "content_chars": 445,
+          "content_sha256": "35ec1d566456602e61305ec28868108e86a0565b71ad7f68682af292cc67ae5a",
+          "link_count": 197,
+          "image_count": 58
+        },
+        {
+          "requested_url": "https://www.pvcfc.com.vn/en-US/investor-relations",
+          "canonical_url": "https://www.pvcfc.com.vn/en-US/investor-relations",
+          "title": "Investor Relations",
+          "language": "en",
+          "content_chars": 358,
+          "content_sha256": "96f3e359d79b1a0f7c597cdf74dedb1f630c14e1ce4f0f0a98551ec23bba9e67",
+          "link_count": 90,
+          "image_count": 43
+        }
+      ],
+      "errors": [
+        {
+          "url": "https://www.pvcfc.com.vn/en-US/about-us",
+          "error": "page_not_found"
+        },
+        {
+          "url": "https://www.pvcfc.com.vn/en-US/contact-us",
+          "error": "page_not_found"
+        }
+      ]
+    },
+    {
+      "path": "raw/homepage.json",
+      "bytes": 11114,
+      "sha256": "d9171b060c39c7ad1daaa107a21ce44ac81f965bd2cc3ea18bbbaee9ebc166f5",
+      "filesystem_modified_at": "2026-07-21T07:42:43.999835Z",
+      "capture_type": "tinyfish_fetch",
+      "success_count": 1,
+      "error_count": 0,
+      "sources": [
+        {
+          "requested_url": "https://www.pvcfc.com.vn/",
+          "canonical_url": "https://www.pvcfc.com.vn/",
+          "title": "Tổng Công Ty Phân Bón Dầu Khí Cà Mau",
+          "language": "vi",
+          "content_chars": 493,
+          "content_sha256": "29e24f5865a50da850be7701457c2a10ee9b688826d49cdc2619806367becc2a",
+          "link_count": 117,
+          "image_count": 39
+        }
+      ],
+      "errors": []
+    },
+    {
+      "path": "raw/investor.json",
+      "bytes": 35543,
+      "sha256": "0cfbce78257989a41a13412303141b469132628b24ed16ce3afaed6a930df316",
+      "filesystem_modified_at": "2026-07-21T07:44:45.243115Z",
+      "capture_type": "tinyfish_fetch",
+      "success_count": 4,
+      "error_count": 1,
+      "sources": [
+        {
+          "requested_url": "https://www.pvcfc.com.vn/quan-he-dau-tu",
+          "canonical_url": "https://www.pvcfc.com.vn/quan-he-dau-tu",
+          "title": "Quan hệ nhà đầu tư",
+          "language": "vi",
+          "content_chars": 372,
+          "content_sha256": "e30153e4a71115ac83bf30e7d035ae4245e58ce23c31076976d158f680eb2359",
+          "link_count": 90,
+          "image_count": 43
+        },
+        {
+          "requested_url": "https://www.pvcfc.com.vn/bao-cao-thuong-nien",
+          "canonical_url": "https://www.pvcfc.com.vn/bao-cao-thuong-nien",
+          "title": "Báo cáo thường niên",
+          "language": "vi",
+          "content_chars": 372,
+          "content_sha256": "e30153e4a71115ac83bf30e7d035ae4245e58ce23c31076976d158f680eb2359",
+          "link_count": 97,
+          "image_count": 22
+        },
+        {
+          "requested_url": "https://www.pvcfc.com.vn/bao-cao-tai-chinh",
+          "canonical_url": "https://www.pvcfc.com.vn/bao-cao-tai-chinh",
+          "title": "Báo cáo tài chính",
+          "language": "vi",
+          "content_chars": 372,
+          "content_sha256": "e30153e4a71115ac83bf30e7d035ae4245e58ce23c31076976d158f680eb2359",
+          "link_count": 107,
+          "image_count": 10
+        },
+        {
+          "requested_url": "https://www.pvcfc.com.vn/quan-he-nha-dau-tu/hoat-dong-gap-mat-nha-dau-tu/dai-hoi-dong-co-dong",
+          "canonical_url": "https://www.pvcfc.com.vn/dai-hoi-dong-co-dong",
+          "title": "Đại hội đồng cổ đông",
+          "language": "vi",
+          "content_chars": 372,
+          "content_sha256": "e30153e4a71115ac83bf30e7d035ae4245e58ce23c31076976d158f680eb2359",
+          "link_count": 174,
+          "image_count": 10
+        }
+      ],
+      "errors": [
+        {
+          "url": "https://www.pvcfc.com.vn/cong-bo-thong-tin",
+          "error": "page_not_found"
+        }
+      ]
+    },
+    {
+      "path": "raw/legal-site-map.json",
+      "bytes": 43413,
+      "sha256": "be1b9b14d73e2dd04eaf00327238236f8edc015f79a69f960e5e584dd4b5b43b",
+      "filesystem_modified_at": "2026-07-21T07:44:58.421401Z",
+      "capture_type": "tinyfish_fetch",
+      "success_count": 3,
+      "error_count": 0,
+      "sources": [
+        {
+          "requested_url": "https://www.pvcfc.com.vn/dieu-khoan-su-dung",
+          "canonical_url": "https://www.pvcfc.com.vn/dieu-khoan-su-dung",
+          "title": "Điều khoản sử dụng",
+          "language": "vi",
+          "author": "PVCFC",
+          "published_at": "2025-09-16T07:12:00.0000000",
+          "content_chars": 8382,
+          "content_sha256": "92807c6a7e8022eaaef9df125a255c726cd5bc3dddc41c47e9d0e1364658a654",
+          "link_count": 69,
+          "image_count": 0
+        },
+        {
+          "requested_url": "https://www.pvcfc.com.vn/chinh-sach-bao-mat",
+          "canonical_url": "https://www.pvcfc.com.vn/chinh-sach-bao-mat",
+          "title": "Chính sách bảo mật",
+          "language": "vi",
+          "author": "PVCFC",
+          "published_at": "2025-09-16T09:57:00.0000000",
+          "content_chars": 3168,
+          "content_sha256": "46840cc4f211455e9635940e4fe9fa8d23e11fdd1479f3fd66625d5b7c43312e",
+          "link_count": 68,
+          "image_count": 0
+        },
+        {
+          "requested_url": "https://www.pvcfc.com.vn/sitemap.aspx",
+          "canonical_url": "https://www.pvcfc.com.vn/sitemap.aspx",
+          "title": "Sơ đồ site - PVCFC",
+          "language": "vi",
+          "content_chars": 372,
+          "content_sha256": "e30153e4a71115ac83bf30e7d035ae4245e58ce23c31076976d158f680eb2359",
+          "link_count": 425,
+          "image_count": 0
+        }
+      ],
+      "errors": []
+    },
+    {
+      "path": "raw/news-corporate.json",
+      "bytes": 45316,
+      "sha256": "2cbd0d016ec887c42e3a24f6015cb8101b5e95ff5bd2816ec6f16f32043c6fe6",
+      "filesystem_modified_at": "2026-07-21T07:44:52.576624Z",
+      "capture_type": "tinyfish_fetch",
+      "success_count": 5,
+      "error_count": 0,
+      "sources": [
+        {
+          "requested_url": "https://www.pvcfc.com.vn/tin-tuc",
+          "canonical_url": "https://www.pvcfc.com.vn/tin-tuc",
+          "title": "Tin tức",
+          "language": "vi",
+          "content_chars": 408,
+          "content_sha256": "fa721c66e2e036eec056b19f2be8f2220d149f6c30d4ab17a313ddbbaa056564",
+          "link_count": 192,
+          "image_count": 42
+        },
+        {
+          "requested_url": "https://www.pvcfc.com.vn/tin-hoat-dong-cong-ty",
+          "canonical_url": "https://www.pvcfc.com.vn/tin-hoat-dong-cong-ty",
+          "title": "Hoạt động công ty",
+          "language": "vi",
+          "content_chars": 372,
+          "content_sha256": "e30153e4a71115ac83bf30e7d035ae4245e58ce23c31076976d158f680eb2359",
+          "link_count": 108,
+          "image_count": 16
+        },
+        {
+          "requested_url": "https://www.pvcfc.com.vn/bao-chi-noi-ve-pvcfc",
+          "canonical_url": "https://www.pvcfc.com.vn/bao-chi-noi-ve-pvcfc",
+          "title": "Báo chí nói về PVCFC",
+          "language": "vi",
+          "content_chars": 372,
+          "content_sha256": "e30153e4a71115ac83bf30e7d035ae4245e58ce23c31076976d158f680eb2359",
+          "link_count": 101,
+          "image_count": 16
+        },
+        {
+          "requested_url": "https://www.pvcfc.com.vn/moi-thau",
+          "canonical_url": "https://www.pvcfc.com.vn/moi-thau",
+          "title": "Mời thầu",
+          "language": "vi",
+          "content_chars": 447,
+          "content_sha256": "e09f575362ad58d8242b56b6000c2488e256fba09e1bb6f75763b4d823632dba",
+          "link_count": 79,
+          "image_count": 14
+        },
+        {
+          "requested_url": "https://www.pvcfc.com.vn/tuyen-dung",
+          "canonical_url": "https://www.pvcfc.com.vn/tuyen-dung",
+          "title": "Tuyển dụng",
+          "language": "vi",
+          "content_chars": 372,
+          "content_sha256": "e30153e4a71115ac83bf30e7d035ae4245e58ce23c31076976d158f680eb2359",
+          "link_count": 78,
+          "image_count": 19
+        }
+      ],
+      "errors": []
+    },
+    {
+      "path": "raw/official-subdomains.json",
+      "bytes": 37899,
+      "sha256": "edb3b28813e1bf9329424d281a8d775d8b9c76a90e6a2ad13b7de01ce76673a2",
+      "filesystem_modified_at": "2026-07-21T07:45:47.792521Z",
+      "capture_type": "tinyfish_fetch",
+      "success_count": 2,
+      "error_count": 2,
+      "sources": [
+        {
+          "requested_url": "https://bikipvang.pvcfc.com.vn/",
+          "canonical_url": "https://bikipvang.pvcfc.com.vn/",
+          "title": "Bí Kíp Vàng - Phân Bón Cà Mau",
+          "language": "vi",
+          "published_at": "2023-12-13T15:03:39+00:00",
+          "content_chars": 3708,
+          "content_sha256": "a5cc6deaa230ab434b21030e6e92d91fd445652344c19d4c781f2b9aa72538f2",
+          "link_count": 166,
+          "image_count": 70
+        },
+        {
+          "requested_url": "https://bikipvang.pvcfc.com.vn/cay-lua/",
+          "canonical_url": "https://bikipvang.pvcfc.com.vn/cay-lua/",
+          "title": "CÂY LÚA - Phân Bón Cà Mau",
+          "language": "vi",
+          "published_at": "2023-12-18T13:29:25+00:00",
+          "content_chars": 1013,
+          "content_sha256": "12941aad52395a4ae40c48b834f3a897990c2ad4aec88384221459e286c60252",
+          "link_count": 122,
+          "image_count": 35
+        }
+      ],
+      "errors": [
+        {
+          "url": "https://thamquannhamay.pvcfc.com.vn/",
+          "error": "proxy_error"
+        },
+        {
+          "url": "https://shop.pvcfc.com.vn/",
+          "error": "proxy_error"
+        }
+      ]
+    },
+    {
+      "path": "raw/product-details-basic.json",
+      "bytes": 53889,
+      "sha256": "96d70c269ae60c9fec7806ccf19ee94e276f905fcfa62d6e272a26b00a23bd64",
+      "filesystem_modified_at": "2026-07-21T07:45:26.376121Z",
+      "capture_type": "tinyfish_fetch",
+      "success_count": 6,
+      "error_count": 0,
+      "sources": [
+        {
+          "requested_url": "https://www.pvcfc.com.vn/ure-hat-duc",
+          "canonical_url": "https://www.pvcfc.com.vn/ure-hat-duc",
+          "title": "URÊ HẠT ĐỤC",
+          "language": "vi",
+          "content_chars": 1588,
+          "content_sha256": "35d29ab6bfb3271d55ba245afd8db358e17b44373d4cb0caeaa9223fafbfa4db",
+          "link_count": 106,
+          "image_count": 34
+        },
+        {
+          "requested_url": "https://www.pvcfc.com.vn/n46plus-ca-mau",
+          "canonical_url": "https://www.pvcfc.com.vn/n46plus-ca-mau",
+          "title": "N46.PLUS CÀ MAU",
+          "language": "vi",
+          "content_chars": 1088,
+          "content_sha256": "83ec9a5e5e4db6cf972dbe6ce8d1206d1a547a1341414b0f58f47ee228effbdc",
+          "link_count": 99,
+          "image_count": 32
+        },
+        {
+          "requested_url": "https://www.pvcfc.com.vn/urea-bio",
+          "canonical_url": "https://www.pvcfc.com.vn/urea-bio",
+          "title": "UREA BIO",
+          "language": "vi",
+          "content_chars": 685,
+          "content_sha256": "dc8757aca0642799abd166abc64a8bbaf9bb6b07f686a033cbafde343baec667",
+          "link_count": 95,
+          "image_count": 33
+        },
+        {
+          "requested_url": "https://www.pvcfc.com.vn/nhumatete-28-5",
+          "canonical_url": "https://www.pvcfc.com.vn/nhumatete-28-5",
+          "title": "N.Humate+TE 28-5",
+          "language": "vi",
+          "content_chars": 650,
+          "content_sha256": "bfd299f2833abb3d6a04624b2a5002823be7c9831e8953f0f43523e33c7cc401",
+          "link_count": 98,
+          "image_count": 31
+        },
+        {
+          "requested_url": "https://www.pvcfc.com.vn/kali-ca-mau-61-br-bot-do-",
+          "canonical_url": "https://www.pvcfc.com.vn/kali-ca-mau-61-br-bot-do-",
+          "title": "KALI CÀ MAU 61  <br>( BỘT ĐỎ )",
+          "language": "vi",
+          "content_chars": 1857,
+          "content_sha256": "53ddde61ccfc900eea193b61c478a52a038cd8f2a3c0c01d5a97fcf93875c8cb",
+          "link_count": 89,
+          "image_count": 30
+        },
+        {
+          "requested_url": "https://www.pvcfc.com.vn/dap-ca-mau-18-46-hat-vang",
+          "canonical_url": "https://www.pvcfc.com.vn/dap-ca-mau-18-46-hat-vang",
+          "title": "DAP CÀ MAU 18-46 ( HẠT VÀNG )",
+          "language": "vi",
+          "content_chars": 1276,
+          "content_sha256": "37bbe2b9d418f49f3fda2fbc295586150ac4aa452e59ef33ea9cf4de6b15b7ed",
+          "link_count": 95,
+          "image_count": 28
+        }
+      ],
+      "errors": []
+    },
+    {
+      "path": "raw/product-details-npk.json",
+      "bytes": 32442,
+      "sha256": "3b21cbff05bb406ee701a213ee44d9b013d4cc08c7c8b9546dc441175322784b",
+      "filesystem_modified_at": "2026-07-21T07:45:29.344879Z",
+      "capture_type": "tinyfish_fetch",
+      "success_count": 4,
+      "error_count": 0,
+      "sources": [
+        {
+          "requested_url": "https://www.pvcfc.com.vn/npk-16-16-8-te",
+          "canonical_url": "https://www.pvcfc.com.vn/npk-16-16-8-te",
+          "title": "Phân NPK Cà Mau 16-16-8+TE",
+          "language": "vi",
+          "content_chars": 591,
+          "content_sha256": "273a463062203fd0b6e498374020c8c440beff83c9008eee1fc3b7c449b20343",
+          "link_count": 98,
+          "image_count": 29
+        },
+        {
+          "requested_url": "https://www.pvcfc.com.vn/npk-ca-mau-20-5-5",
+          "canonical_url": "https://www.pvcfc.com.vn/npk-ca-mau-20-5-5",
+          "title": "NPK CÀ MAU<br>20-5-5",
+          "language": "vi",
+          "content_chars": 553,
+          "content_sha256": "5d606dda78c4d4293e3eda93f6878a8be9644be56eb96e7c9e776f8d039d3d87",
+          "link_count": 98,
+          "image_count": 32
+        },
+        {
+          "requested_url": "https://www.pvcfc.com.vn/npk-ca-mau-gold-20-20-15te-1",
+          "canonical_url": "https://www.pvcfc.com.vn/npk-ca-mau-gold-20-20-15te-1",
+          "title": "NPK Cà Mau Gold 20-20-15+TE",
+          "language": "vi",
+          "content_chars": 563,
+          "content_sha256": "8b63d692c9bee3107dc4525fffed16f5e7ad9d38b50a52714941ee5cbd8ce500",
+          "link_count": 99,
+          "image_count": 31
+        },
+        {
+          "requested_url": "https://www.pvcfc.com.vn/npk-haosite-18-6-6te",
+          "canonical_url": "https://www.pvcfc.com.vn/npk-haosite-18-6-6te",
+          "title": "NPK HAOSITE 18-6-6+TE",
+          "language": "vi",
+          "content_chars": 513,
+          "content_sha256": "ca9af349e49a629e4692ae2ca82eed77bee42f12bd82dbca2c3e9b4eb6bc660d",
+          "link_count": 89,
+          "image_count": 28
+        }
+      ],
+      "errors": []
+    },
+    {
+      "path": "raw/product-details-organic.json",
+      "bytes": 36268,
+      "sha256": "fa367434cdba3846cc852ed7d83e1071918d1c406dc8b0e1e81e7611be36a895",
+      "filesystem_modified_at": "2026-07-21T07:45:32.087093Z",
+      "capture_type": "tinyfish_fetch",
+      "success_count": 5,
+      "error_count": 0,
+      "sources": [
+        {
+          "requested_url": "https://www.pvcfc.com.vn/om-ca-mau-eco",
+          "canonical_url": "https://www.pvcfc.com.vn/om-ca-mau-eco",
+          "title": "OM CA MAU ECO",
+          "language": "vi",
+          "content_chars": 727,
+          "content_sha256": "e34746a5d6798f844ab2d91651e783e563590ac5cb3ca9d808fde127d4ca45c4",
+          "link_count": 86,
+          "image_count": 25
+        },
+        {
+          "requested_url": "https://www.pvcfc.com.vn/om-camau-green",
+          "canonical_url": "https://www.pvcfc.com.vn/om-camau-green",
+          "title": "OM CAMAU GREEN",
+          "language": "vi",
+          "content_chars": 760,
+          "content_sha256": "19ce3d956cd0c50d1f157dbbae171fce321ff6908ecc841239f800d1cbfce8c2",
+          "link_count": 94,
+          "image_count": 28
+        },
+        {
+          "requested_url": "https://www.pvcfc.com.vn/om-camau-happy",
+          "canonical_url": "https://www.pvcfc.com.vn/om-camau-happy",
+          "title": "OM CAMAU-HAPPY",
+          "language": "vi",
+          "content_chars": 535,
+          "content_sha256": "a0a4ea0a0a97f36e87b5129d6ab8db3f68dc1fdaa6b78365867aced1ba8a01ad",
+          "link_count": 88,
+          "image_count": 26
+        },
+        {
+          "requested_url": "https://www.pvcfc.com.vn/om-camau-innova",
+          "canonical_url": "https://www.pvcfc.com.vn/om-camau-innova",
+          "title": "OM CAMAU-INNOVA",
+          "language": "vi",
+          "content_chars": 537,
+          "content_sha256": "463e005c5d198613b0b39a6f9ca1545c0c6506bfc36cd6b19767f10e20ee821d",
+          "link_count": 88,
+          "image_count": 26
+        },
+        {
+          "requested_url": "https://www.pvcfc.com.vn/om-camau-rich-1",
+          "canonical_url": "https://www.pvcfc.com.vn/om-camau-rich-1",
+          "title": "OM CAMAU-RICH",
+          "language": "vi",
+          "content_chars": 535,
+          "content_sha256": "a0a4ea0a0a97f36e87b5129d6ab8db3f68dc1fdaa6b78365867aced1ba8a01ad",
+          "link_count": 88,
+          "image_count": 26
+        }
+      ],
+      "errors": []
+    },
+    {
+      "path": "raw/search-general.json",
+      "bytes": 3388,
+      "sha256": "169caa31bb09bb5366d4d4d60720f28d9d2861caecdb43aafd8e185a91e8a74d",
+      "filesystem_modified_at": "2026-07-21T07:42:48.967405Z",
+      "capture_type": "tinyfish_search",
+      "query": "site:pvcfc.com.vn",
+      "result_count": 10,
+      "results": [
+        {
+          "position": 1,
+          "title": "Bí Kíp Vàng - Phân Bón Cà Mau",
+          "url": "https://bikipvang.pvcfc.com.vn/",
+          "site_name": "bikipvang.pvcfc.com.vn",
+          "snippet": "Bí Kíp Vàng trở thành kênh quen thuộc để bà con san sẻ kiến thức, thu hái mùa vụ thắng lớn, góp phần phát triển nông nghiệp bền vững."
+        },
+        {
+          "position": 2,
+          "title": "pvcfc.elearning",
+          "url": "https://elearning.pvcfc.com.vn/",
+          "site_name": "elearning.pvcfc.com.vn",
+          "snippet": "PVCFC.ELEARNING. Hệ thống đào tạo trực tuyến. avatar. Đăng nhập tài khoản. Ghi nhớ tài khoản. Đăng nhập. Phần mềm hỗ trợ tốt nhất trên trình duyệt Chrome, ..."
+        },
+        {
+          "position": 3,
+          "title": "CÂY LÚA - Phân Bón Cà Mau - Bí Kíp Vàng",
+          "url": "https://bikipvang.pvcfc.com.vn/cay-lua/",
+          "site_name": "bikipvang.pvcfc.com.vn",
+          "snippet": "CÂY LÚA · LÚA NON LÊN NHANH, XANH MÁT VỤ MÙA · ĐÓN ĐÒNG “ĐÚNG LÚC”, BÓN PHÂN “ĐÚNG CÁCH” · VỤ HÈ THU ĐÃ TỚI BÍ KÍP MỚI – XEM NGAY · GIẢM CÔNG BÓN CHĂM TĂNG NĂNG ..."
+        },
+        {
+          "position": 4,
+          "title": "Lưu trữ #bikipvang2025 - Phân Bón Cà Mau - Bí Kíp Vàng",
+          "url": "https://bikipvang.pvcfc.com.vn/tag/bikipvang2025/",
+          "site_name": "bikipvang.pvcfc.com.vn",
+          "snippet": "NPK CÀ MAU: GIẢI PHÁP TIẾT KIỆM CHI PHÍ CHO VỤ LÚA HÈ THU · LÚA THIẾU DINH DƯỠNG – CẦN KHẮC PHỤC NGAY! · KHỞI ĐỘNG VỤ ĐÔNG XUÂN, CHỌN PHÂN BÓN CÀ MAU · SẠ LÚA ĐÔNG ..."
+        },
+        {
+          "position": 5,
+          "title": "Lưu trữ #caylua - Phân Bón Cà Mau - Bí Kíp Vàng",
+          "url": "https://bikipvang.pvcfc.com.vn/tag/caylua/",
+          "site_name": "bikipvang.pvcfc.com.vn",
+          "snippet": "Bưởi là cây trồng có giá trị kinh tế cao nhưng lại thuộc nhóm “khó chăm”, nhất là khâu bón phân. Không phải bón nhiều... Xem thêm."
+        },
+        {
+          "position": 6,
+          "title": "CTCP - TỔNG CÔNG TY PHÂN BÓN DẦU KHÍ CÀ MAU (tên ...",
+          "url": "https://thamquannhamay.pvcfc.com.vn/",
+          "site_name": "thamquannhamay.pvcfc.com.vn",
+          "snippet": "Địa chỉ: Số 647 - 649, đường Ngô Quyền, Phường An Xuyên, Tỉnh Cà Mau."
+        },
+        {
+          "position": 7,
+          "title": "Lưu trữ #cayanqua - Phân Bón Cà Mau - Bí Kíp Vàng",
+          "url": "https://bikipvang.pvcfc.com.vn/tag/cayanqua/",
+          "site_name": "bikipvang.pvcfc.com.vn",
+          "snippet": "173 - 179 đường Trương Văn Bang, phường Cát Lái, Thành phố Hồ Chí Minh. 028.5417.0555; 028.5417.0550; info ..."
+        },
+        {
+          "position": 8,
+          "title": "Lưu trữ #caycongnghiep - Phân Bón Cà Mau - Bí Kíp Vàng",
+          "url": "https://bikipvang.pvcfc.com.vn/tag/caycongnghiep/",
+          "site_name": "bikipvang.pvcfc.com.vn",
+          "snippet": "173 - 179 đường Trương Văn Bang, phường Cát Lái, Thành phố Hồ Chí Minh. 028.5417.0555; 028.5417.0550; info ..."
+        },
+        {
+          "position": 9,
+          "title": "Lưu trữ #chonPBCMchondoitacbenlau - Phân Bón Cà Mau",
+          "url": "https://bikipvang.pvcfc.com.vn/tag/chonpbcmchondoitacbenlau/",
+          "site_name": "bikipvang.pvcfc.com.vn",
+          "snippet": "173 - 179 đường Trương Văn Bang, phường Cát Lái, Thành phố Hồ Chí Minh. 028.5417.0555; 028.5417.0550; info ..."
+        },
+        {
+          "position": 10,
+          "title": "Phân Bón Cà Mau",
+          "url": "https://shop.pvcfc.com.vn/",
+          "site_name": "shop.pvcfc.com.vn",
+          "snippet": "Phân Urê · NPK-ĐCM · Ure Bio · Dap · Hữu Cơ · Kali · N.Humate · NPK Tự Doanh. Xem thêm. Giá tham khảo. NPK Cà Mau 16-16-8 ..."
+        }
+      ]
+    },
+    {
+      "path": "raw/search-investor-sustainability-contact.json",
+      "bytes": 3858,
+      "sha256": "e90c55218a64733f20acffa78856836086a10d1ac573396597835b15be58ca19",
+      "filesystem_modified_at": "2026-07-21T07:42:51.942176Z",
+      "capture_type": "tinyfish_search",
+      "query": "site:pvcfc.com.vn quan hệ nhà đầu tư báo cáo bền vững liên hệ",
+      "result_count": 10,
+      "results": [
+        {
+          "position": 1,
+          "title": "Phần 5 – Phát triển Bền vững",
+          "url": "http://www.pvcfc.com.vn/phan-5-phat-trien-ben-vung",
+          "site_name": "www.pvcfc.com.vn",
+          "snippet": "Trong báo cáo thường niên, HĐQT cần phải trình bày về những thay đổi liên quan đến khí hậu có tác động đáng kể như thế nào đến rủi ro và cơ hội, hoạt động hiện ..."
+        },
+        {
+          "position": 2,
+          "title": "Quan hệ nhà đầu tư",
+          "url": "https://www.pvcfc.com.vn/quan-he-dau-tu",
+          "site_name": "www.pvcfc.com.vn",
+          "snippet": "Hoạt động Quan hệ Nhà đầu tư giữ vai trò then chốt trong việc xây dựng và duy trì niềm tin của cổ đông, nhà đầu tư đối với PVCFC thông qua việc công bố thông ..."
+        },
+        {
+          "position": 3,
+          "title": "ACGS 2025 - Quản trị công ty",
+          "url": "https://www.pvcfc.com.vn/acgs-2025",
+          "site_name": "www.pvcfc.com.vn",
+          "snippet": "PVCFC công bố báo cáo phát triển bền vững riêng biệt từ năm 2023. Báo cáo được đăng tải tại website chính thức của PVCFC. Website của PVCFC. Có. B.5, Khi lợi ..."
+        },
+        {
+          "position": 4,
+          "title": "A. Quyền và đối xử công bằng của các cổ đông",
+          "url": "https://www.pvcfc.com.vn/a-quyen-cua-co-dong",
+          "site_name": "www.pvcfc.com.vn",
+          "snippet": "B.2.2, Công ty có thu hút các bên liên quan bên ngoài để trao đổi quan điểm và thu thập phản hồi về các vấn đề bền vững quan trọng đối với hoạt động kinh doanh ..."
+        },
+        {
+          "position": 5,
+          "title": "C: Tính bền vững và khả năng phục hồi",
+          "url": "https://www.pvcfc.com.vn/c-tinh-ben-vung-va-kha-nang-phuc-hoi",
+          "site_name": "www.pvcfc.com.vn",
+          "snippet": "... quan hệ nhà đầu tư? PVCFC công bố thông tin liên hệ về quan hệ nhà đầu tư thông qua Website PVCFC: Quan hệ nhà đầu tư. Liên hệ: Đỗ Thành Hưng 02903819000_máy ..."
+        },
+        {
+          "position": 6,
+          "title": "Phần 3 – Công bố Thông tin và Minh bạch",
+          "url": "https://www.pvcfc.com.vn/phan-3-cong-bo-thong-tin-va-minh-bach",
+          "site_name": "www.pvcfc.com.vn",
+          "snippet": "Hệ thống công bố thông tin của công ty phải bảo đảm để cổ đông, nhà đầu tư, và các bên có quyền lợi liên quan tiếp cận được thông tin một cách công bằng"
+        },
+        {
+          "position": 7,
+          "title": "Câu hỏi phạt",
+          "url": "https://www.pvcfc.com.vn/b-doi-xu-cong-bang-voi-co-dong",
+          "site_name": "www.pvcfc.com.vn",
+          "snippet": "- Giám sát việc thực hiện các mục tiêu phát triển bền vững, bao gồm quản trị rủi ro khí hậu, lộ trình giảm phát thải và phân tích rủi ro chuyển ..."
+        },
+        {
+          "position": 8,
+          "title": "Câu hỏi thưởng",
+          "url": "https://www.pvcfc.com.vn/a-quyen-cua-co-dong-1",
+          "site_name": "www.pvcfc.com.vn",
+          "snippet": "Quan hệ nhà đầu tư Phát triển bền vững Liên hệ Tiếng Việt Tiếng Việt English. PVCFC không có bất lao động, bảo hiểm xã hội, an toàn vệ sinh lao ..."
+        },
+        {
+          "position": 9,
+          "title": "Phát triển bền vững",
+          "url": "https://www.pvcfc.com.vn/phat-trien-ben-vung",
+          "site_name": "www.pvcfc.com.vn",
+          "snippet": "Định hướng chiến lược PTBV của PVCFC bao gồm các nhóm định hướng sáng kiến chiến lược theo các trụ cột về Môi trường, Xã hội, Quản trị phù hợp với chiến lược ..."
+        },
+        {
+          "position": 10,
+          "title": "CHÍNH SÁCH",
+          "url": "https://www.pvcfc.com.vn/Data/Sites/1/media/quan-he-nha-dau-tu/Chinh-sach/2.1%20Chinh_sach_Cong_bo_thong_tin_va_Minh_bach.pdf",
+          "site_name": "www.pvcfc.com.vn",
+          "snippet": "- Tài liệu thuyết trình cho nhà đầu tư, briefing chuyên viên phân tích và roadshow. - Báo cáo thường niên và Báo cáo phát triển bền vững. - Công bố khẩn cấp ..."
+        }
+      ]
+    },
+    {
+      "path": "raw/search-products-agronomy.json",
+      "bytes": 3885,
+      "sha256": "f05b9b0070e055a977ec5fdad817877200ec1bc0d0a69821f6fbbe5aff011991",
+      "filesystem_modified_at": "2026-07-21T07:42:50.558695Z",
+      "capture_type": "tinyfish_search",
+      "query": "site:pvcfc.com.vn sản phẩm phân bón kỹ thuật cây trồng",
+      "result_count": 10,
+      "results": [
+        {
+          "position": 1,
+          "title": "Hướng dẫn cách bón phân cho cây trồng đúng kỹ thuật",
+          "url": "https://www.pvcfc.com.vn/cach-bon-phan-cho-cay-trong",
+          "site_name": "www.pvcfc.com.vn",
+          "snippet": "Phân bón hữu cơ có nguồn gốc từ chất thải động vật, thực vật hoặc phụ phẩm nông nghiệp như phân chuồng, phân trùng quế. Loại phân này giúp cải ..."
+        },
+        {
+          "position": 2,
+          "title": "Phân bón là gì? Công dụng và cách sử ...",
+          "url": "https://www.pvcfc.com.vn/phan-bon-la-gi",
+          "site_name": "www.pvcfc.com.vn",
+          "snippet": "Các sản phẩm thuộc nhóm phân hóa học bao gồm phân lân, phân kali, phân đạm, phân vi lượng, phân đa nguyên tố... Đây là các chất hoá học được sản ..."
+        },
+        {
+          "position": 3,
+          "title": "Bộ Sản Phẩm Phân Bón Cà Mau",
+          "url": "https://www.pvcfc.com.vn/san-pham",
+          "site_name": "www.pvcfc.com.vn",
+          "snippet": "1. Cung cấp đạm cho cây trồng · 2. Có thể bón kết hợp với các loại phân bón khác, · 3. Hàm lượng chất gây bạc màu Biuret thấp (0,99%) · 4. Thích hợp với mọi loại ..."
+        },
+        {
+          "position": 4,
+          "title": "Phân bón NPK là gì? Cách bón phân NPK đúng cách cho ...",
+          "url": "https://www.pvcfc.com.vn/phan-bon-npk-la-gi",
+          "site_name": "www.pvcfc.com.vn",
+          "snippet": "Phân bón NPK cung cấp ba dưỡng chất thiết yếu là đạm, lân và kali, giúp cây khỏe, rễ mạnh và trái tốt. Tìm hiểu cách chọn và bón phân NPK ..."
+        },
+        {
+          "position": 5,
+          "title": "Tìm hiểu về các loại phân bón hóa học phổ biến hiện nay",
+          "url": "https://www.pvcfc.com.vn/cac-loai-phan-bon-hoa-hoc",
+          "site_name": "www.pvcfc.com.vn",
+          "snippet": "Phân bón NPK chứa đầy đủ ba nguyên Đạm (N), Lân (P) và Kali (K), giúp cây phát triển toàn diện từ rễ, thân, lá đến hóa và quả. Phân bón NP hỗ ..."
+        },
+        {
+          "position": 6,
+          "title": "Thời điểm bón phân chuẩn giúp tăng năng suất cây trồng",
+          "url": "https://www.pvcfc.com.vn/thoi-diem-bon-phan-chuan-giup-tang-nang-suat-cay-trong",
+          "site_name": "www.pvcfc.com.vn",
+          "snippet": "Thông thường, phân kali được bón nhiều ở giai đoạn trước khi ra hoa, khi cây bắt đầu đậu trái và trong giai đoạn nuôi trái, tạo hạt. Như vậy, ..."
+        },
+        {
+          "position": 7,
+          "title": "Top 15+ Đại lý và cửa hàng phân bón uy tín từ Bắc đến Nam",
+          "url": "https://www.pvcfc.com.vn/dai-ly-va-cua-hang-phan-bon-uy-tin",
+          "site_name": "www.pvcfc.com.vn",
+          "snippet": "Đây là đại lý lớn bậc nhất Cần Thơ chuyên cung cấp đủ loại phân từ bình dân đến cao cấp cho mọi loại cây trồng như lúa, rau. cây ăn trái. Không ..."
+        },
+        {
+          "position": 8,
+          "title": "Phân hữu cơ khoáng: Giải pháp cân bằng dinh dưỡng & ...",
+          "url": "https://www.pvcfc.com.vn/phan-huu-co-khoang",
+          "site_name": "www.pvcfc.com.vn",
+          "snippet": "Hữu cơ khoáng chuyên dùng cho từng cây trồng: Được thiết kế công thức riêng cho từng nhóm cây như lúa, rau màu, cây ăn trái, cà phê, hồ tiêu…"
+        },
+        {
+          "position": 9,
+          "title": "Cập nhật bảng giá phân bón mới nhất",
+          "url": "https://www.pvcfc.com.vn/gia-phan-bon",
+          "site_name": "www.pvcfc.com.vn",
+          "snippet": "Cập nhật bảng giá các loại phân bón mới nhất giúp bà con tiết kiệm phần nào thời gian tra cứu và chi phí trong trồng trọt."
+        },
+        {
+          "position": 10,
+          "title": "Các loại phân bón cho cây lúa theo từng giai đoạn phát triển",
+          "url": "https://www.pvcfc.com.vn/phan-bon-cho-cay-lua",
+          "site_name": "www.pvcfc.com.vn",
+          "snippet": "Phân bón cho cây lúa thường phổ biến là NPK, Đạm Ure, DAP… Tùy theo từng giai đoạn phát triển bà con sẽ chọn các loại phân bón khác nhau để ..."
+        }
+      ]
+    },
+    {
+      "path": "raw/services-digital.json",
+      "bytes": 38659,
+      "sha256": "7af89e71abbbe235dfcb343cf72aa1d3bf47c43ed3e409f4066a5267663e9f62",
+      "filesystem_modified_at": "2026-07-21T07:43:48.500674Z",
+      "capture_type": "tinyfish_fetch",
+      "success_count": 7,
+      "error_count": 0,
+      "sources": [
+        {
+          "requested_url": "https://www.pvcfc.com.vn/dich-vu-giai-phap",
+          "canonical_url": "https://www.pvcfc.com.vn/dich-vu-giai-phap",
+          "title": "Dịch vụ - Giải pháp",
+          "language": "vi",
+          "content_chars": 372,
+          "content_sha256": "e30153e4a71115ac83bf30e7d035ae4245e58ce23c31076976d158f680eb2359",
+          "link_count": 99,
+          "image_count": 16
+        },
+        {
+          "requested_url": "https://www.pvcfc.com.vn/anh-hai-ca-mau",
+          "canonical_url": "https://www.pvcfc.com.vn/anh-hai-ca-mau",
+          "title": "Anh Hai Cà Mau",
+          "language": "vi",
+          "content_chars": 372,
+          "content_sha256": "e30153e4a71115ac83bf30e7d035ae4245e58ce23c31076976d158f680eb2359",
+          "link_count": 81,
+          "image_count": 11
+        },
+        {
+          "requested_url": "https://www.pvcfc.com.vn/2-nong",
+          "canonical_url": "https://www.pvcfc.com.vn/2-nong",
+          "title": "2 Nông",
+          "language": "vi",
+          "content_chars": 372,
+          "content_sha256": "e30153e4a71115ac83bf30e7d035ae4245e58ce23c31076976d158f680eb2359",
+          "link_count": 87,
+          "image_count": 13
+        },
+        {
+          "requested_url": "https://www.pvcfc.com.vn/nong-nghiep-do-thi",
+          "canonical_url": "https://www.pvcfc.com.vn/nong-nghiep-do-thi",
+          "title": "Nông nghiệp đô thị",
+          "language": "vi",
+          "content_chars": 372,
+          "content_sha256": "e30153e4a71115ac83bf30e7d035ae4245e58ce23c31076976d158f680eb2359",
+          "link_count": 90,
+          "image_count": 14
+        },
+        {
+          "requested_url": "https://www.pvcfc.com.vn/dms",
+          "canonical_url": "https://www.pvcfc.com.vn/dms",
+          "title": "DMS",
+          "language": "vi",
+          "content_chars": 372,
+          "content_sha256": "e30153e4a71115ac83bf30e7d035ae4245e58ce23c31076976d158f680eb2359",
+          "link_count": 81,
+          "image_count": 11
+        },
+        {
+          "requested_url": "https://www.pvcfc.com.vn/crm",
+          "canonical_url": "https://www.pvcfc.com.vn/crm",
+          "title": "CRM",
+          "language": "vi",
+          "content_chars": 372,
+          "content_sha256": "e30153e4a71115ac83bf30e7d035ae4245e58ce23c31076976d158f680eb2359",
+          "link_count": 78,
+          "image_count": 10
+        },
+        {
+          "requested_url": "https://www.pvcfc.com.vn/rfid",
+          "canonical_url": "https://www.pvcfc.com.vn/rfid",
+          "title": "RFID",
+          "language": "vi",
+          "content_chars": 372,
+          "content_sha256": "e30153e4a71115ac83bf30e7d035ae4245e58ce23c31076976d158f680eb2359",
+          "link_count": 78,
+          "image_count": 10
+        }
+      ],
+      "errors": []
+    },
+    {
+      "path": "raw/sitemaps.json",
+      "bytes": 525898,
+      "sha256": "f5b518092060cbe3d82b87d7d99afc6c5f0bab3f1045223d5c3324858f885acb",
+      "filesystem_modified_at": "2026-07-21T07:43:34.962896Z",
+      "capture_type": "tinyfish_fetch",
+      "success_count": 3,
+      "error_count": 0,
+      "sources": [
+        {
+          "requested_url": "https://www.pvcfc.com.vn/sitemap.ashx",
+          "canonical_url": "https://www.pvcfc.com.vn/sitemap.ashx",
+          "content_chars": 17487,
+          "content_sha256": "02aad1f83f994abda2baee530b618ce72c583c26057ee88ec94044838bdb06a1",
+          "link_count": 0,
+          "image_count": 0
+        },
+        {
+          "requested_url": "https://www.pvcfc.com.vn/product/productsitemap.ashx",
+          "canonical_url": "https://www.pvcfc.com.vn/product/productsitemap.ashx",
+          "content_chars": 5400,
+          "content_sha256": "255af41424a92a6a495f7c0f813fffe3121b7e1fa0fa1c72448516740957295f",
+          "link_count": 0,
+          "image_count": 0
+        },
+        {
+          "requested_url": "https://www.pvcfc.com.vn/news/newssitemap.ashx",
+          "canonical_url": "https://www.pvcfc.com.vn/news/newssitemap.ashx",
+          "content_chars": 482872,
+          "content_sha256": "398700dfd0b2cc3201922a4c714532c9dbbd63acc64f126a093aaf7ccf6fd689",
+          "link_count": 0,
+          "image_count": 0
+        }
+      ],
+      "errors": []
+    },
+    {
+      "path": "raw/sustainability.json",
+      "bytes": 43695,
+      "sha256": "444158454523c414a1cd45e0c9116b2ef8f6d84f7936425e98709d318cf8dc78",
+      "filesystem_modified_at": "2026-07-21T07:44:49.506270Z",
+      "capture_type": "tinyfish_fetch",
+      "success_count": 5,
+      "error_count": 0,
+      "sources": [
+        {
+          "requested_url": "https://www.pvcfc.com.vn/phat-trien-ben-vung",
+          "canonical_url": "https://www.pvcfc.com.vn/phat-trien-ben-vung",
+          "title": "Phát triển bền vững",
+          "language": "vi",
+          "content_chars": 1231,
+          "content_sha256": "18199fc2366d83614f574cbdebeb14138933290c2b4642239831e94bf7fd096e",
+          "link_count": 135,
+          "image_count": 82
+        },
+        {
+          "requested_url": "https://www.pvcfc.com.vn/bao-cao-phat-trien-ben-vung",
+          "canonical_url": "https://www.pvcfc.com.vn/bao-cao-phat-trien-ben-vung",
+          "title": "Báo cáo Phát triển bền vững",
+          "language": "vi",
+          "content_chars": 372,
+          "content_sha256": "e30153e4a71115ac83bf30e7d035ae4245e58ce23c31076976d158f680eb2359",
+          "link_count": 82,
+          "image_count": 15
+        },
+        {
+          "requested_url": "https://www.pvcfc.com.vn/2024-ptbv",
+          "canonical_url": "https://www.pvcfc.com.vn/2024-ptbv",
+          "title": "Năm 2024",
+          "language": "vi",
+          "content_chars": 372,
+          "content_sha256": "e30153e4a71115ac83bf30e7d035ae4245e58ce23c31076976d158f680eb2359",
+          "link_count": 75,
+          "image_count": 9
+        },
+        {
+          "requested_url": "https://www.pvcfc.com.vn/bao-cao-ket-qua-do-dac-moi-truong",
+          "canonical_url": "https://www.pvcfc.com.vn/bao-cao-ket-qua-do-dac-moi-truong",
+          "title": "Báo cáo kết quả đo đạc môi trường",
+          "language": "vi",
+          "content_chars": 372,
+          "content_sha256": "e30153e4a71115ac83bf30e7d035ae4245e58ce23c31076976d158f680eb2359",
+          "link_count": 105,
+          "image_count": 10
+        },
+        {
+          "requested_url": "https://www.pvcfc.com.vn/An-sinh-xa-hoi",
+          "canonical_url": "https://www.pvcfc.com.vn/An-sinh-xa-hoi",
+          "title": "An sinh xã hội",
+          "language": "vi",
+          "content_chars": 372,
+          "content_sha256": "e30153e4a71115ac83bf30e7d035ae4245e58ce23c31076976d158f680eb2359",
+          "link_count": 108,
+          "image_count": 16
+        }
+      ],
+      "errors": []
+    }
+  ],
+  "source_index": [
+    {
+      "artifact": "raw/agent-contact.json",
+      "requested_url": "https://www.pvcfc.com.vn/lien-he",
+      "canonical_url": "https://www.pvcfc.com.vn/lien-he",
+      "capture_type": "tinyfish_agent",
+      "status": "COMPLETED"
+    },
+    {
+      "artifact": "raw/agent-factory-visit.json",
+      "requested_url": "https://thamquannhamay.pvcfc.com.vn/",
+      "canonical_url": "https://thamquannhamay.pvcfc.com.vn/",
+      "capture_type": "tinyfish_agent",
+      "status": "COMPLETED"
+    },
+    {
+      "artifact": "raw/agent-investor.json",
+      "requested_url": "https://www.pvcfc.com.vn/quan-he-dau-tu",
+      "canonical_url": "https://www.pvcfc.com.vn/quan-he-dau-tu",
+      "capture_type": "tinyfish_agent",
+      "status": "COMPLETED"
+    },
+    {
+      "artifact": "raw/agent-shop.json",
+      "requested_url": "https://shop.pvcfc.com.vn/",
+      "canonical_url": "https://shop.pvcfc.com.vn/",
+      "capture_type": "tinyfish_agent",
+      "status": "COMPLETED"
+    },
+    {
+      "artifact": "raw/agent-sustainability-reports.json",
+      "requested_url": "https://www.pvcfc.com.vn/bao-cao-phat-trien-ben-vung",
+      "canonical_url": "https://www.pvcfc.com.vn/bao-cao-phat-trien-ben-vung",
+      "capture_type": "tinyfish_agent",
+      "status": "COMPLETED"
+    },
+    {
+      "artifact": "raw/agronomy.json",
+      "capture_type": "tinyfish_fetch",
+      "requested_url": "https://www.pvcfc.com.vn/ky-thuat-va-hieu-qua",
+      "canonical_url": "https://www.pvcfc.com.vn/ky-thuat-va-hieu-qua",
+      "title": "Kỹ thuật & hiệu quả sử dụng bộ sản phẩm PBCM",
+      "language": "vi",
+      "content_chars": 372,
+      "content_sha256": "e30153e4a71115ac83bf30e7d035ae4245e58ce23c31076976d158f680eb2359",
+      "link_count": 95,
+      "image_count": 16
+    },
+    {
+      "artifact": "raw/agronomy.json",
+      "capture_type": "tinyfish_fetch",
+      "requested_url": "https://www.pvcfc.com.vn/tu-van-ky-thuat",
+      "canonical_url": "https://www.pvcfc.com.vn/tu-van-ky-thuat",
+      "title": "Tư vấn kỹ thuật",
+      "language": "vi",
+      "content_chars": 372,
+      "content_sha256": "e30153e4a71115ac83bf30e7d035ae4245e58ce23c31076976d158f680eb2359",
+      "link_count": 108,
+      "image_count": 16
+    },
+    {
+      "artifact": "raw/agronomy.json",
+      "capture_type": "tinyfish_fetch",
+      "requested_url": "https://www.pvcfc.com.vn/nghien-cuu-va-phat-trien",
+      "canonical_url": "https://www.pvcfc.com.vn/nghien-cuu-va-phat-trien",
+      "title": "Nghiên cứu phát triển",
+      "language": "vi",
+      "content_chars": 372,
+      "content_sha256": "e30153e4a71115ac83bf30e7d035ae4245e58ce23c31076976d158f680eb2359",
+      "link_count": 100,
+      "image_count": 16
+    },
+    {
+      "artifact": "raw/agronomy.json",
+      "capture_type": "tinyfish_fetch",
+      "requested_url": "https://www.pvcfc.com.vn/phan-bon-la-gi",
+      "canonical_url": "https://www.pvcfc.com.vn/phan-bon-la-gi",
+      "title": "Phân bón là gì? Công dụng và cách sử dụng phân bón đúng kỹ thuật",
+      "language": "vi",
+      "author": "PVCFC",
+      "published_at": "2025-12-15T06:55:00.0000000",
+      "content_chars": 13792,
+      "content_sha256": "7a3e3b574bd1d5af8db17918710e3ea281f9accabefbcf42a1be8629c635f55e",
+      "link_count": 91,
+      "image_count": 25
+    },
+    {
+      "artifact": "raw/agronomy.json",
+      "capture_type": "tinyfish_fetch",
+      "requested_url": "https://www.pvcfc.com.vn/cach-bon-phan-cho-cay-trong",
+      "canonical_url": "https://www.pvcfc.com.vn/cach-bon-phan-cho-cay-trong",
+      "title": "Hướng dẫn cách bón phân cho cây trồng đúng kỹ thuật",
+      "language": "vi",
+      "author": "PVCFC",
+      "published_at": "2026-04-02T15:41:00.0000000",
+      "content_chars": 13074,
+      "content_sha256": "c6e0aaad32addc7f12acfde00056857d323b2152c1cb07b8f1da28181192817b",
+      "link_count": 99,
+      "image_count": 25
+    },
+    {
+      "artifact": "raw/agronomy.json",
+      "capture_type": "tinyfish_fetch",
+      "requested_url": "https://www.pvcfc.com.vn/phan-bon-cho-cay-lua",
+      "canonical_url": "https://www.pvcfc.com.vn/phan-bon-cho-cay-lua",
+      "title": "Các loại phân bón cho cây lúa theo từng giai đoạn phát triển",
+      "language": "vi",
+      "author": "PVCFC",
+      "published_at": "2025-12-16T03:11:00.0000000",
+      "content_chars": 7212,
+      "content_sha256": "4e30cf5ff1c28345c303ac96fdb3b9432d73205b654361bdf616d0b007759e87",
+      "link_count": 93,
+      "image_count": 21
+    },
+    {
+      "artifact": "raw/contact-pricing-distribution.json",
+      "capture_type": "tinyfish_fetch",
+      "requested_url": "https://www.pvcfc.com.vn/lien-he",
+      "canonical_url": "https://www.pvcfc.com.vn/lien-he",
+      "title": "Liên hệ",
+      "language": "vi",
+      "content_chars": 372,
+      "content_sha256": "e30153e4a71115ac83bf30e7d035ae4245e58ce23c31076976d158f680eb2359",
+      "link_count": 71,
+      "image_count": 12
+    },
+    {
+      "artifact": "raw/contact-pricing-distribution.json",
+      "capture_type": "tinyfish_fetch",
+      "requested_url": "https://www.pvcfc.com.vn/bang-gia-phan-bon",
+      "canonical_url": "https://www.pvcfc.com.vn/bang-gia-phan-bon",
+      "title": "Bảng giá phân bón",
+      "language": "vi",
+      "content_chars": 372,
+      "content_sha256": "e30153e4a71115ac83bf30e7d035ae4245e58ce23c31076976d158f680eb2359",
+      "link_count": 78,
+      "image_count": 10
+    },
+    {
+      "artifact": "raw/contact-pricing-distribution.json",
+      "capture_type": "tinyfish_fetch",
+      "requested_url": "https://www.pvcfc.com.vn/gia-phan-bon",
+      "canonical_url": "https://www.pvcfc.com.vn/gia-phan-bon",
+      "title": "Cập nhật bảng giá phân bón mới nhất",
+      "language": "vi",
+      "author": "PVCFC",
+      "published_at": "2025-12-24T03:09:00.0000000",
+      "content_chars": 5131,
+      "content_sha256": "824e2c0d9f7dca451368098dfcdb80154fde3bd0cf7ab4763608358b0371953e",
+      "link_count": 89,
+      "image_count": 20
+    },
+    {
+      "artifact": "raw/contact-pricing-distribution.json",
+      "capture_type": "tinyfish_fetch",
+      "requested_url": "https://www.pvcfc.com.vn/dai-ly-va-cua-hang-phan-bon-uy-tin",
+      "canonical_url": "https://www.pvcfc.com.vn/dai-ly-va-cua-hang-phan-bon-uy-tin",
+      "title": "Top 15+ Đại lý và cửa hàng phân bón uy tín từ Bắc đến Nam",
+      "language": "vi",
+      "author": "PVCFC",
+      "published_at": "2025-12-15T09:00:00.0000000",
+      "content_chars": 8297,
+      "content_sha256": "fee1c2db6b6d1a31731bfe2a8a0e4659b8311a1bcfba979dcb003feb30472960",
+      "link_count": 90,
+      "image_count": 22
+    },
+    {
+      "artifact": "raw/contact-pricing-distribution.json",
+      "capture_type": "tinyfish_fetch",
+      "requested_url": "https://www.pvcfc.com.vn/khuyen-mai",
+      "canonical_url": "https://www.pvcfc.com.vn/khuyen-mai",
+      "title": "Khuyến mãi",
+      "language": "vi",
+      "content_chars": 372,
+      "content_sha256": "e30153e4a71115ac83bf30e7d035ae4245e58ce23c31076976d158f680eb2359",
+      "link_count": 101,
+      "image_count": 16
+    },
+    {
+      "artifact": "raw/core-company-products.json",
+      "capture_type": "tinyfish_fetch",
+      "requested_url": "https://www.pvcfc.com.vn/gioi-thieu",
+      "canonical_url": "https://www.pvcfc.com.vn/gioi-thieu",
+      "title": "Giới thiệu",
+      "language": "vi",
+      "content_chars": 1410,
+      "content_sha256": "4fe786000df81452bac81fd873e56e648e88a3af3d21e59907cb49b30f5e4262",
+      "link_count": 73,
+      "image_count": 115
+    },
+    {
+      "artifact": "raw/core-company-products.json",
+      "capture_type": "tinyfish_fetch",
+      "requested_url": "https://www.pvcfc.com.vn/san-pham",
+      "canonical_url": "https://www.pvcfc.com.vn/san-pham",
+      "title": "Bộ Sản Phẩm Phân Bón Cà Mau",
+      "language": "vi",
+      "content_chars": 1796,
+      "content_sha256": "30445b8bfe8b88f1138f41589c04e53c6c7edba8ba0c03a4e97ea78f5488bcdd",
+      "link_count": 251,
+      "image_count": 59
+    },
+    {
+      "artifact": "raw/core-company-products.json",
+      "capture_type": "tinyfish_fetch",
+      "requested_url": "https://www.pvcfc.com.vn/phan-don",
+      "canonical_url": "https://www.pvcfc.com.vn/phan-don",
+      "title": "Sản Phẩm Phân Đơn - Phân Bón Cà Mau",
+      "language": "vi",
+      "content_chars": 1629,
+      "content_sha256": "849fc03d3102681ccc8d03d6d4aede4bd8730b92d39ca8565eb78edab36e40a6",
+      "link_count": 245,
+      "image_count": 59
+    },
+    {
+      "artifact": "raw/core-company-products.json",
+      "capture_type": "tinyfish_fetch",
+      "requested_url": "https://www.pvcfc.com.vn/npk",
+      "canonical_url": "https://www.pvcfc.com.vn/npk",
+      "title": "Sản Phẩm Phân NPK - Phân Bón Cà Mau",
+      "language": "vi",
+      "content_chars": 1400,
+      "content_sha256": "921eae16b9be2b9e9b8fe135fc9cb2e12489032c5fa6c8ffc020b2eaff9964cd",
+      "link_count": 249,
+      "image_count": 59
+    },
+    {
+      "artifact": "raw/core-company-products.json",
+      "capture_type": "tinyfish_fetch",
+      "requested_url": "https://www.pvcfc.com.vn/phan-huu-co",
+      "canonical_url": "https://www.pvcfc.com.vn/phan-huu-co",
+      "title": "Sản Phẩm Phân Hữu Cơ - Phân Bón Cà Mau",
+      "language": "vi",
+      "content_chars": 1201,
+      "content_sha256": "8dae76cdeb3d9e898534a55b7669e4490b589c546cff433c1135a6c750c46012",
+      "link_count": 241,
+      "image_count": 59
+    },
+    {
+      "artifact": "raw/core-company-products.json",
+      "capture_type": "tinyfish_fetch",
+      "requested_url": "https://www.pvcfc.com.vn/phan-bon-khac",
+      "canonical_url": "https://www.pvcfc.com.vn/phan-bon-khac",
+      "title": "Sản Phẩm Khác - Phân Bón Cà Mau",
+      "language": "vi",
+      "content_chars": 1363,
+      "content_sha256": "a8624ad7e06a3b28054715462367176e001ff654a4f7b3afe8a5f2bfd55a8e2c",
+      "link_count": 235,
+      "image_count": 57
+    },
+    {
+      "artifact": "raw/discovery-files.json",
+      "capture_type": "tinyfish_fetch",
+      "requested_url": "https://www.pvcfc.com.vn/robots.txt",
+      "canonical_url": "https://www.pvcfc.com.vn/robots.txt",
+      "content_chars": 2634,
+      "content_sha256": "dcb705aa11bd93993fe67b402b821cf934cdaeaf26af107a2d494743b6f1f9b4",
+      "link_count": 0,
+      "image_count": 0
+    },
+    {
+      "artifact": "raw/english.json",
+      "capture_type": "tinyfish_fetch",
+      "requested_url": "https://www.pvcfc.com.vn/en-US/",
+      "canonical_url": "https://www.pvcfc.com.vn/en-US/",
+      "title": "Home",
+      "language": "en",
+      "content_chars": 496,
+      "content_sha256": "35c343324eb239c3256bea23cc6d5983c52ff3a7f30294b7f798721ecd622877",
+      "link_count": 116,
+      "image_count": 33
+    },
+    {
+      "artifact": "raw/english.json",
+      "capture_type": "tinyfish_fetch",
+      "requested_url": "https://www.pvcfc.com.vn/en-US/camau-fertilizers-product",
+      "canonical_url": "https://www.pvcfc.com.vn/en-US/camau-fertilizers-product",
+      "title": "Camau Fertilizer's product",
+      "language": "en",
+      "content_chars": 445,
+      "content_sha256": "35ec1d566456602e61305ec28868108e86a0565b71ad7f68682af292cc67ae5a",
+      "link_count": 197,
+      "image_count": 58
+    },
+    {
+      "artifact": "raw/english.json",
+      "capture_type": "tinyfish_fetch",
+      "requested_url": "https://www.pvcfc.com.vn/en-US/investor-relations",
+      "canonical_url": "https://www.pvcfc.com.vn/en-US/investor-relations",
+      "title": "Investor Relations",
+      "language": "en",
+      "content_chars": 358,
+      "content_sha256": "96f3e359d79b1a0f7c597cdf74dedb1f630c14e1ce4f0f0a98551ec23bba9e67",
+      "link_count": 90,
+      "image_count": 43
+    },
+    {
+      "artifact": "raw/homepage.json",
+      "capture_type": "tinyfish_fetch",
+      "requested_url": "https://www.pvcfc.com.vn/",
+      "canonical_url": "https://www.pvcfc.com.vn/",
+      "title": "Tổng Công Ty Phân Bón Dầu Khí Cà Mau",
+      "language": "vi",
+      "content_chars": 493,
+      "content_sha256": "29e24f5865a50da850be7701457c2a10ee9b688826d49cdc2619806367becc2a",
+      "link_count": 117,
+      "image_count": 39
+    },
+    {
+      "artifact": "raw/investor.json",
+      "capture_type": "tinyfish_fetch",
+      "requested_url": "https://www.pvcfc.com.vn/quan-he-dau-tu",
+      "canonical_url": "https://www.pvcfc.com.vn/quan-he-dau-tu",
+      "title": "Quan hệ nhà đầu tư",
+      "language": "vi",
+      "content_chars": 372,
+      "content_sha256": "e30153e4a71115ac83bf30e7d035ae4245e58ce23c31076976d158f680eb2359",
+      "link_count": 90,
+      "image_count": 43
+    },
+    {
+      "artifact": "raw/investor.json",
+      "capture_type": "tinyfish_fetch",
+      "requested_url": "https://www.pvcfc.com.vn/bao-cao-thuong-nien",
+      "canonical_url": "https://www.pvcfc.com.vn/bao-cao-thuong-nien",
+      "title": "Báo cáo thường niên",
+      "language": "vi",
+      "content_chars": 372,
+      "content_sha256": "e30153e4a71115ac83bf30e7d035ae4245e58ce23c31076976d158f680eb2359",
+      "link_count": 97,
+      "image_count": 22
+    },
+    {
+      "artifact": "raw/investor.json",
+      "capture_type": "tinyfish_fetch",
+      "requested_url": "https://www.pvcfc.com.vn/bao-cao-tai-chinh",
+      "canonical_url": "https://www.pvcfc.com.vn/bao-cao-tai-chinh",
+      "title": "Báo cáo tài chính",
+      "language": "vi",
+      "content_chars": 372,
+      "content_sha256": "e30153e4a71115ac83bf30e7d035ae4245e58ce23c31076976d158f680eb2359",
+      "link_count": 107,
+      "image_count": 10
+    },
+    {
+      "artifact": "raw/investor.json",
+      "capture_type": "tinyfish_fetch",
+      "requested_url": "https://www.pvcfc.com.vn/quan-he-nha-dau-tu/hoat-dong-gap-mat-nha-dau-tu/dai-hoi-dong-co-dong",
+      "canonical_url": "https://www.pvcfc.com.vn/dai-hoi-dong-co-dong",
+      "title": "Đại hội đồng cổ đông",
+      "language": "vi",
+      "content_chars": 372,
+      "content_sha256": "e30153e4a71115ac83bf30e7d035ae4245e58ce23c31076976d158f680eb2359",
+      "link_count": 174,
+      "image_count": 10
+    },
+    {
+      "artifact": "raw/legal-site-map.json",
+      "capture_type": "tinyfish_fetch",
+      "requested_url": "https://www.pvcfc.com.vn/dieu-khoan-su-dung",
+      "canonical_url": "https://www.pvcfc.com.vn/dieu-khoan-su-dung",
+      "title": "Điều khoản sử dụng",
+      "language": "vi",
+      "author": "PVCFC",
+      "published_at": "2025-09-16T07:12:00.0000000",
+      "content_chars": 8382,
+      "content_sha256": "92807c6a7e8022eaaef9df125a255c726cd5bc3dddc41c47e9d0e1364658a654",
+      "link_count": 69,
+      "image_count": 0
+    },
+    {
+      "artifact": "raw/legal-site-map.json",
+      "capture_type": "tinyfish_fetch",
+      "requested_url": "https://www.pvcfc.com.vn/chinh-sach-bao-mat",
+      "canonical_url": "https://www.pvcfc.com.vn/chinh-sach-bao-mat",
+      "title": "Chính sách bảo mật",
+      "language": "vi",
+      "author": "PVCFC",
+      "published_at": "2025-09-16T09:57:00.0000000",
+      "content_chars": 3168,
+      "content_sha256": "46840cc4f211455e9635940e4fe9fa8d23e11fdd1479f3fd66625d5b7c43312e",
+      "link_count": 68,
+      "image_count": 0
+    },
+    {
+      "artifact": "raw/legal-site-map.json",
+      "capture_type": "tinyfish_fetch",
+      "requested_url": "https://www.pvcfc.com.vn/sitemap.aspx",
+      "canonical_url": "https://www.pvcfc.com.vn/sitemap.aspx",
+      "title": "Sơ đồ site - PVCFC",
+      "language": "vi",
+      "content_chars": 372,
+      "content_sha256": "e30153e4a71115ac83bf30e7d035ae4245e58ce23c31076976d158f680eb2359",
+      "link_count": 425,
+      "image_count": 0
+    },
+    {
+      "artifact": "raw/news-corporate.json",
+      "capture_type": "tinyfish_fetch",
+      "requested_url": "https://www.pvcfc.com.vn/tin-tuc",
+      "canonical_url": "https://www.pvcfc.com.vn/tin-tuc",
+      "title": "Tin tức",
+      "language": "vi",
+      "content_chars": 408,
+      "content_sha256": "fa721c66e2e036eec056b19f2be8f2220d149f6c30d4ab17a313ddbbaa056564",
+      "link_count": 192,
+      "image_count": 42
+    },
+    {
+      "artifact": "raw/news-corporate.json",
+      "capture_type": "tinyfish_fetch",
+      "requested_url": "https://www.pvcfc.com.vn/tin-hoat-dong-cong-ty",
+      "canonical_url": "https://www.pvcfc.com.vn/tin-hoat-dong-cong-ty",
+      "title": "Hoạt động công ty",
+      "language": "vi",
+      "content_chars": 372,
+      "content_sha256": "e30153e4a71115ac83bf30e7d035ae4245e58ce23c31076976d158f680eb2359",
+      "link_count": 108,
+      "image_count": 16
+    },
+    {
+      "artifact": "raw/news-corporate.json",
+      "capture_type": "tinyfish_fetch",
+      "requested_url": "https://www.pvcfc.com.vn/bao-chi-noi-ve-pvcfc",
+      "canonical_url": "https://www.pvcfc.com.vn/bao-chi-noi-ve-pvcfc",
+      "title": "Báo chí nói về PVCFC",
+      "language": "vi",
+      "content_chars": 372,
+      "content_sha256": "e30153e4a71115ac83bf30e7d035ae4245e58ce23c31076976d158f680eb2359",
+      "link_count": 101,
+      "image_count": 16
+    },
+    {
+      "artifact": "raw/news-corporate.json",
+      "capture_type": "tinyfish_fetch",
+      "requested_url": "https://www.pvcfc.com.vn/moi-thau",
+      "canonical_url": "https://www.pvcfc.com.vn/moi-thau",
+      "title": "Mời thầu",
+      "language": "vi",
+      "content_chars": 447,
+      "content_sha256": "e09f575362ad58d8242b56b6000c2488e256fba09e1bb6f75763b4d823632dba",
+      "link_count": 79,
+      "image_count": 14
+    },
+    {
+      "artifact": "raw/news-corporate.json",
+      "capture_type": "tinyfish_fetch",
+      "requested_url": "https://www.pvcfc.com.vn/tuyen-dung",
+      "canonical_url": "https://www.pvcfc.com.vn/tuyen-dung",
+      "title": "Tuyển dụng",
+      "language": "vi",
+      "content_chars": 372,
+      "content_sha256": "e30153e4a71115ac83bf30e7d035ae4245e58ce23c31076976d158f680eb2359",
+      "link_count": 78,
+      "image_count": 19
+    },
+    {
+      "artifact": "raw/official-subdomains.json",
+      "capture_type": "tinyfish_fetch",
+      "requested_url": "https://bikipvang.pvcfc.com.vn/",
+      "canonical_url": "https://bikipvang.pvcfc.com.vn/",
+      "title": "Bí Kíp Vàng - Phân Bón Cà Mau",
+      "language": "vi",
+      "published_at": "2023-12-13T15:03:39+00:00",
+      "content_chars": 3708,
+      "content_sha256": "a5cc6deaa230ab434b21030e6e92d91fd445652344c19d4c781f2b9aa72538f2",
+      "link_count": 166,
+      "image_count": 70
+    },
+    {
+      "artifact": "raw/official-subdomains.json",
+      "capture_type": "tinyfish_fetch",
+      "requested_url": "https://bikipvang.pvcfc.com.vn/cay-lua/",
+      "canonical_url": "https://bikipvang.pvcfc.com.vn/cay-lua/",
+      "title": "CÂY LÚA - Phân Bón Cà Mau",
+      "language": "vi",
+      "published_at": "2023-12-18T13:29:25+00:00",
+      "content_chars": 1013,
+      "content_sha256": "12941aad52395a4ae40c48b834f3a897990c2ad4aec88384221459e286c60252",
+      "link_count": 122,
+      "image_count": 35
+    },
+    {
+      "artifact": "raw/product-details-basic.json",
+      "capture_type": "tinyfish_fetch",
+      "requested_url": "https://www.pvcfc.com.vn/ure-hat-duc",
+      "canonical_url": "https://www.pvcfc.com.vn/ure-hat-duc",
+      "title": "URÊ HẠT ĐỤC",
+      "language": "vi",
+      "content_chars": 1588,
+      "content_sha256": "35d29ab6bfb3271d55ba245afd8db358e17b44373d4cb0caeaa9223fafbfa4db",
+      "link_count": 106,
+      "image_count": 34
+    },
+    {
+      "artifact": "raw/product-details-basic.json",
+      "capture_type": "tinyfish_fetch",
+      "requested_url": "https://www.pvcfc.com.vn/n46plus-ca-mau",
+      "canonical_url": "https://www.pvcfc.com.vn/n46plus-ca-mau",
+      "title": "N46.PLUS CÀ MAU",
+      "language": "vi",
+      "content_chars": 1088,
+      "content_sha256": "83ec9a5e5e4db6cf972dbe6ce8d1206d1a547a1341414b0f58f47ee228effbdc",
+      "link_count": 99,
+      "image_count": 32
+    },
+    {
+      "artifact": "raw/product-details-basic.json",
+      "capture_type": "tinyfish_fetch",
+      "requested_url": "https://www.pvcfc.com.vn/urea-bio",
+      "canonical_url": "https://www.pvcfc.com.vn/urea-bio",
+      "title": "UREA BIO",
+      "language": "vi",
+      "content_chars": 685,
+      "content_sha256": "dc8757aca0642799abd166abc64a8bbaf9bb6b07f686a033cbafde343baec667",
+      "link_count": 95,
+      "image_count": 33
+    },
+    {
+      "artifact": "raw/product-details-basic.json",
+      "capture_type": "tinyfish_fetch",
+      "requested_url": "https://www.pvcfc.com.vn/nhumatete-28-5",
+      "canonical_url": "https://www.pvcfc.com.vn/nhumatete-28-5",
+      "title": "N.Humate+TE 28-5",
+      "language": "vi",
+      "content_chars": 650,
+      "content_sha256": "bfd299f2833abb3d6a04624b2a5002823be7c9831e8953f0f43523e33c7cc401",
+      "link_count": 98,
+      "image_count": 31
+    },
+    {
+      "artifact": "raw/product-details-basic.json",
+      "capture_type": "tinyfish_fetch",
+      "requested_url": "https://www.pvcfc.com.vn/kali-ca-mau-61-br-bot-do-",
+      "canonical_url": "https://www.pvcfc.com.vn/kali-ca-mau-61-br-bot-do-",
+      "title": "KALI CÀ MAU 61  <br>( BỘT ĐỎ )",
+      "language": "vi",
+      "content_chars": 1857,
+      "content_sha256": "53ddde61ccfc900eea193b61c478a52a038cd8f2a3c0c01d5a97fcf93875c8cb",
+      "link_count": 89,
+      "image_count": 30
+    },
+    {
+      "artifact": "raw/product-details-basic.json",
+      "capture_type": "tinyfish_fetch",
+      "requested_url": "https://www.pvcfc.com.vn/dap-ca-mau-18-46-hat-vang",
+      "canonical_url": "https://www.pvcfc.com.vn/dap-ca-mau-18-46-hat-vang",
+      "title": "DAP CÀ MAU 18-46 ( HẠT VÀNG )",
+      "language": "vi",
+      "content_chars": 1276,
+      "content_sha256": "37bbe2b9d418f49f3fda2fbc295586150ac4aa452e59ef33ea9cf4de6b15b7ed",
+      "link_count": 95,
+      "image_count": 28
+    },
+    {
+      "artifact": "raw/product-details-npk.json",
+      "capture_type": "tinyfish_fetch",
+      "requested_url": "https://www.pvcfc.com.vn/npk-16-16-8-te",
+      "canonical_url": "https://www.pvcfc.com.vn/npk-16-16-8-te",
+      "title": "Phân NPK Cà Mau 16-16-8+TE",
+      "language": "vi",
+      "content_chars": 591,
+      "content_sha256": "273a463062203fd0b6e498374020c8c440beff83c9008eee1fc3b7c449b20343",
+      "link_count": 98,
+      "image_count": 29
+    },
+    {
+      "artifact": "raw/product-details-npk.json",
+      "capture_type": "tinyfish_fetch",
+      "requested_url": "https://www.pvcfc.com.vn/npk-ca-mau-20-5-5",
+      "canonical_url": "https://www.pvcfc.com.vn/npk-ca-mau-20-5-5",
+      "title": "NPK CÀ MAU<br>20-5-5",
+      "language": "vi",
+      "content_chars": 553,
+      "content_sha256": "5d606dda78c4d4293e3eda93f6878a8be9644be56eb96e7c9e776f8d039d3d87",
+      "link_count": 98,
+      "image_count": 32
+    },
+    {
+      "artifact": "raw/product-details-npk.json",
+      "capture_type": "tinyfish_fetch",
+      "requested_url": "https://www.pvcfc.com.vn/npk-ca-mau-gold-20-20-15te-1",
+      "canonical_url": "https://www.pvcfc.com.vn/npk-ca-mau-gold-20-20-15te-1",
+      "title": "NPK Cà Mau Gold 20-20-15+TE",
+      "language": "vi",
+      "content_chars": 563,
+      "content_sha256": "8b63d692c9bee3107dc4525fffed16f5e7ad9d38b50a52714941ee5cbd8ce500",
+      "link_count": 99,
+      "image_count": 31
+    },
+    {
+      "artifact": "raw/product-details-npk.json",
+      "capture_type": "tinyfish_fetch",
+      "requested_url": "https://www.pvcfc.com.vn/npk-haosite-18-6-6te",
+      "canonical_url": "https://www.pvcfc.com.vn/npk-haosite-18-6-6te",
+      "title": "NPK HAOSITE 18-6-6+TE",
+      "language": "vi",
+      "content_chars": 513,
+      "content_sha256": "ca9af349e49a629e4692ae2ca82eed77bee42f12bd82dbca2c3e9b4eb6bc660d",
+      "link_count": 89,
+      "image_count": 28
+    },
+    {
+      "artifact": "raw/product-details-organic.json",
+      "capture_type": "tinyfish_fetch",
+      "requested_url": "https://www.pvcfc.com.vn/om-ca-mau-eco",
+      "canonical_url": "https://www.pvcfc.com.vn/om-ca-mau-eco",
+      "title": "OM CA MAU ECO",
+      "language": "vi",
+      "content_chars": 727,
+      "content_sha256": "e34746a5d6798f844ab2d91651e783e563590ac5cb3ca9d808fde127d4ca45c4",
+      "link_count": 86,
+      "image_count": 25
+    },
+    {
+      "artifact": "raw/product-details-organic.json",
+      "capture_type": "tinyfish_fetch",
+      "requested_url": "https://www.pvcfc.com.vn/om-camau-green",
+      "canonical_url": "https://www.pvcfc.com.vn/om-camau-green",
+      "title": "OM CAMAU GREEN",
+      "language": "vi",
+      "content_chars": 760,
+      "content_sha256": "19ce3d956cd0c50d1f157dbbae171fce321ff6908ecc841239f800d1cbfce8c2",
+      "link_count": 94,
+      "image_count": 28
+    },
+    {
+      "artifact": "raw/product-details-organic.json",
+      "capture_type": "tinyfish_fetch",
+      "requested_url": "https://www.pvcfc.com.vn/om-camau-happy",
+      "canonical_url": "https://www.pvcfc.com.vn/om-camau-happy",
+      "title": "OM CAMAU-HAPPY",
+      "language": "vi",
+      "content_chars": 535,
+      "content_sha256": "a0a4ea0a0a97f36e87b5129d6ab8db3f68dc1fdaa6b78365867aced1ba8a01ad",
+      "link_count": 88,
+      "image_count": 26
+    },
+    {
+      "artifact": "raw/product-details-organic.json",
+      "capture_type": "tinyfish_fetch",
+      "requested_url": "https://www.pvcfc.com.vn/om-camau-innova",
+      "canonical_url": "https://www.pvcfc.com.vn/om-camau-innova",
+      "title": "OM CAMAU-INNOVA",
+      "language": "vi",
+      "content_chars": 537,
+      "content_sha256": "463e005c5d198613b0b39a6f9ca1545c0c6506bfc36cd6b19767f10e20ee821d",
+      "link_count": 88,
+      "image_count": 26
+    },
+    {
+      "artifact": "raw/product-details-organic.json",
+      "capture_type": "tinyfish_fetch",
+      "requested_url": "https://www.pvcfc.com.vn/om-camau-rich-1",
+      "canonical_url": "https://www.pvcfc.com.vn/om-camau-rich-1",
+      "title": "OM CAMAU-RICH",
+      "language": "vi",
+      "content_chars": 535,
+      "content_sha256": "a0a4ea0a0a97f36e87b5129d6ab8db3f68dc1fdaa6b78365867aced1ba8a01ad",
+      "link_count": 88,
+      "image_count": 26
+    },
+    {
+      "artifact": "raw/services-digital.json",
+      "capture_type": "tinyfish_fetch",
+      "requested_url": "https://www.pvcfc.com.vn/dich-vu-giai-phap",
+      "canonical_url": "https://www.pvcfc.com.vn/dich-vu-giai-phap",
+      "title": "Dịch vụ - Giải pháp",
+      "language": "vi",
+      "content_chars": 372,
+      "content_sha256": "e30153e4a71115ac83bf30e7d035ae4245e58ce23c31076976d158f680eb2359",
+      "link_count": 99,
+      "image_count": 16
+    },
+    {
+      "artifact": "raw/services-digital.json",
+      "capture_type": "tinyfish_fetch",
+      "requested_url": "https://www.pvcfc.com.vn/anh-hai-ca-mau",
+      "canonical_url": "https://www.pvcfc.com.vn/anh-hai-ca-mau",
+      "title": "Anh Hai Cà Mau",
+      "language": "vi",
+      "content_chars": 372,
+      "content_sha256": "e30153e4a71115ac83bf30e7d035ae4245e58ce23c31076976d158f680eb2359",
+      "link_count": 81,
+      "image_count": 11
+    },
+    {
+      "artifact": "raw/services-digital.json",
+      "capture_type": "tinyfish_fetch",
+      "requested_url": "https://www.pvcfc.com.vn/2-nong",
+      "canonical_url": "https://www.pvcfc.com.vn/2-nong",
+      "title": "2 Nông",
+      "language": "vi",
+      "content_chars": 372,
+      "content_sha256": "e30153e4a71115ac83bf30e7d035ae4245e58ce23c31076976d158f680eb2359",
+      "link_count": 87,
+      "image_count": 13
+    },
+    {
+      "artifact": "raw/services-digital.json",
+      "capture_type": "tinyfish_fetch",
+      "requested_url": "https://www.pvcfc.com.vn/nong-nghiep-do-thi",
+      "canonical_url": "https://www.pvcfc.com.vn/nong-nghiep-do-thi",
+      "title": "Nông nghiệp đô thị",
+      "language": "vi",
+      "content_chars": 372,
+      "content_sha256": "e30153e4a71115ac83bf30e7d035ae4245e58ce23c31076976d158f680eb2359",
+      "link_count": 90,
+      "image_count": 14
+    },
+    {
+      "artifact": "raw/services-digital.json",
+      "capture_type": "tinyfish_fetch",
+      "requested_url": "https://www.pvcfc.com.vn/dms",
+      "canonical_url": "https://www.pvcfc.com.vn/dms",
+      "title": "DMS",
+      "language": "vi",
+      "content_chars": 372,
+      "content_sha256": "e30153e4a71115ac83bf30e7d035ae4245e58ce23c31076976d158f680eb2359",
+      "link_count": 81,
+      "image_count": 11
+    },
+    {
+      "artifact": "raw/services-digital.json",
+      "capture_type": "tinyfish_fetch",
+      "requested_url": "https://www.pvcfc.com.vn/crm",
+      "canonical_url": "https://www.pvcfc.com.vn/crm",
+      "title": "CRM",
+      "language": "vi",
+      "content_chars": 372,
+      "content_sha256": "e30153e4a71115ac83bf30e7d035ae4245e58ce23c31076976d158f680eb2359",
+      "link_count": 78,
+      "image_count": 10
+    },
+    {
+      "artifact": "raw/services-digital.json",
+      "capture_type": "tinyfish_fetch",
+      "requested_url": "https://www.pvcfc.com.vn/rfid",
+      "canonical_url": "https://www.pvcfc.com.vn/rfid",
+      "title": "RFID",
+      "language": "vi",
+      "content_chars": 372,
+      "content_sha256": "e30153e4a71115ac83bf30e7d035ae4245e58ce23c31076976d158f680eb2359",
+      "link_count": 78,
+      "image_count": 10
+    },
+    {
+      "artifact": "raw/sitemaps.json",
+      "capture_type": "tinyfish_fetch",
+      "requested_url": "https://www.pvcfc.com.vn/sitemap.ashx",
+      "canonical_url": "https://www.pvcfc.com.vn/sitemap.ashx",
+      "content_chars": 17487,
+      "content_sha256": "02aad1f83f994abda2baee530b618ce72c583c26057ee88ec94044838bdb06a1",
+      "link_count": 0,
+      "image_count": 0
+    },
+    {
+      "artifact": "raw/sitemaps.json",
+      "capture_type": "tinyfish_fetch",
+      "requested_url": "https://www.pvcfc.com.vn/product/productsitemap.ashx",
+      "canonical_url": "https://www.pvcfc.com.vn/product/productsitemap.ashx",
+      "content_chars": 5400,
+      "content_sha256": "255af41424a92a6a495f7c0f813fffe3121b7e1fa0fa1c72448516740957295f",
+      "link_count": 0,
+      "image_count": 0
+    },
+    {
+      "artifact": "raw/sitemaps.json",
+      "capture_type": "tinyfish_fetch",
+      "requested_url": "https://www.pvcfc.com.vn/news/newssitemap.ashx",
+      "canonical_url": "https://www.pvcfc.com.vn/news/newssitemap.ashx",
+      "content_chars": 482872,
+      "content_sha256": "398700dfd0b2cc3201922a4c714532c9dbbd63acc64f126a093aaf7ccf6fd689",
+      "link_count": 0,
+      "image_count": 0
+    },
+    {
+      "artifact": "raw/sustainability.json",
+      "capture_type": "tinyfish_fetch",
+      "requested_url": "https://www.pvcfc.com.vn/phat-trien-ben-vung",
+      "canonical_url": "https://www.pvcfc.com.vn/phat-trien-ben-vung",
+      "title": "Phát triển bền vững",
+      "language": "vi",
+      "content_chars": 1231,
+      "content_sha256": "18199fc2366d83614f574cbdebeb14138933290c2b4642239831e94bf7fd096e",
+      "link_count": 135,
+      "image_count": 82
+    },
+    {
+      "artifact": "raw/sustainability.json",
+      "capture_type": "tinyfish_fetch",
+      "requested_url": "https://www.pvcfc.com.vn/bao-cao-phat-trien-ben-vung",
+      "canonical_url": "https://www.pvcfc.com.vn/bao-cao-phat-trien-ben-vung",
+      "title": "Báo cáo Phát triển bền vững",
+      "language": "vi",
+      "content_chars": 372,
+      "content_sha256": "e30153e4a71115ac83bf30e7d035ae4245e58ce23c31076976d158f680eb2359",
+      "link_count": 82,
+      "image_count": 15
+    },
+    {
+      "artifact": "raw/sustainability.json",
+      "capture_type": "tinyfish_fetch",
+      "requested_url": "https://www.pvcfc.com.vn/2024-ptbv",
+      "canonical_url": "https://www.pvcfc.com.vn/2024-ptbv",
+      "title": "Năm 2024",
+      "language": "vi",
+      "content_chars": 372,
+      "content_sha256": "e30153e4a71115ac83bf30e7d035ae4245e58ce23c31076976d158f680eb2359",
+      "link_count": 75,
+      "image_count": 9
+    },
+    {
+      "artifact": "raw/sustainability.json",
+      "capture_type": "tinyfish_fetch",
+      "requested_url": "https://www.pvcfc.com.vn/bao-cao-ket-qua-do-dac-moi-truong",
+      "canonical_url": "https://www.pvcfc.com.vn/bao-cao-ket-qua-do-dac-moi-truong",
+      "title": "Báo cáo kết quả đo đạc môi trường",
+      "language": "vi",
+      "content_chars": 372,
+      "content_sha256": "e30153e4a71115ac83bf30e7d035ae4245e58ce23c31076976d158f680eb2359",
+      "link_count": 105,
+      "image_count": 10
+    },
+    {
+      "artifact": "raw/sustainability.json",
+      "capture_type": "tinyfish_fetch",
+      "requested_url": "https://www.pvcfc.com.vn/An-sinh-xa-hoi",
+      "canonical_url": "https://www.pvcfc.com.vn/An-sinh-xa-hoi",
+      "title": "An sinh xã hội",
+      "language": "vi",
+      "content_chars": 372,
+      "content_sha256": "e30153e4a71115ac83bf30e7d035ae4245e58ce23c31076976d158f680eb2359",
+      "link_count": 108,
+      "image_count": 16
+    }
+  ]
+}
