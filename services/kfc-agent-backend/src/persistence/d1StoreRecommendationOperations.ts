@@ -18,6 +18,7 @@ import {
   assertDecisionEventsCorrelate,
   assertCompletedRecommendationReservationReplay,
   assertRecommendationPackState,
+  currentRecommendationPackStateRevision,
   sameRecommendationDecisionRecord,
   sameRecommendationEvent,
 } from '../recommendations/persistence/repository.js';
@@ -203,7 +204,7 @@ export class D1StoreRecommendationOperations extends D1StoreConversationOperatio
     const currentRevision =
       currentPackState === undefined
         ? 0
-        : await assertRecommendationPackState(
+        : await currentRecommendationPackStateRevision(
             currentPackState,
             record.request.orderFlowId,
           );
@@ -610,10 +611,19 @@ export class D1StoreRecommendationOperations extends D1StoreConversationOperatio
            AND pack_id = ?
            AND pack_version = ?
            AND json_extract(envelope_json, '$.integrity.digest') = ?
-           AND json_extract(
-             envelope_json,
-             '$.state.recommendationState.revision'
-           ) = ?
+           AND (
+             json_extract(
+               envelope_json,
+               '$.state.recommendationState.revision'
+             ) = ?
+             OR (
+               ? = 0
+               AND json_extract(
+                 envelope_json,
+                 '$.state.recommendationState.revision'
+               ) IS NULL
+             )
+           )
            AND ${commonPredicate}`,
       )
       .bind(
@@ -623,6 +633,7 @@ export class D1StoreRecommendationOperations extends D1StoreConversationOperatio
         input.nextPackState.packRef.packId,
         input.nextPackState.packRef.version,
         input.expectedPackStateDigest,
+        input.expectedStateRevision,
         input.expectedStateRevision,
         ...commonValues,
       );

@@ -87,6 +87,7 @@ import {
   assertDecisionEventsCorrelate,
   assertCompletedRecommendationReservationReplay,
   assertRecommendationPackState,
+  currentRecommendationPackStateRevision,
   sameRecommendationDecisionRecord,
   sameRecommendationEvent,
 } from '../recommendations/persistence/repository.js';
@@ -1042,7 +1043,7 @@ export class MemoryStore
       const currentRevision =
         currentPackState === undefined
           ? 0
-          : await assertRecommendationPackState(
+          : await currentRecommendationPackStateRevision(
               currentPackState,
               record.request.orderFlowId,
             );

@@ -484,6 +484,51 @@ describe('Recommendation application service', () => {
     expect(requested.recordedAt).not.toBe(request.decisionTime);
   });
 
+  it('initializes recommendation state in an existing KFC envelope without replacing other state', async () => {
+    const engine = new RecordingEngine();
+    const store = new MemoryStore();
+    const request = requestFor({
+      suffix: 'existing-pack-local',
+      placement: 'local_favorite',
+    });
+    await store.putPackState(
+      request.sessionId,
+      await createPackStateEnvelope({
+        packRef: kfcRecommendationPackStateDefinition.packRef,
+        schemaVersion: kfcRecommendationPackStateDefinition.schemaVersion,
+        state: { cancellationStatusChecked: true },
+      }),
+    );
+    const { service } = await application(engine, store);
+
+    const result = await service.decide({ request });
+
+    expect(result).toMatchObject({
+      status: 'decided',
+      response: {
+        requestId: request.requestId,
+        orderFlowId: request.orderFlowId,
+      },
+    });
+    await expect(
+      store.getPackState(
+        request.sessionId,
+        kfcRecommendationPackStateDefinition.packRef,
+      ),
+    ).resolves.toMatchObject({
+      state: {
+        cancellationStatusChecked: true,
+        recommendationState: {
+          orderFlowId: request.orderFlowId,
+          revision: 1,
+        },
+      },
+    });
+    await expect(
+      store.listRecommendationEvents({ sessionId: request.sessionId }),
+    ).resolves.toHaveLength(2);
+  });
+
   it('loads only linked synthetic history for a real returning For You decision', async () => {
     const { service } = await bundledApplication();
     const linked = requestFor({

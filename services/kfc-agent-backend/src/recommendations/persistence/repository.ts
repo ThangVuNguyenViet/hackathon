@@ -205,3 +205,19 @@ export async function assertRecommendationPackState(
   }
   return state.recommendationState.revision;
 }
+
+export async function currentRecommendationPackStateRevision(
+  envelope: PackStateEnvelope,
+  orderFlowId: string,
+): Promise<number> {
+  const state = await validatePackStateEnvelope(envelope, {
+    packRef: KFC_RECOMMENDATION_PACK_REF,
+    schemaVersion: '1',
+    parseState: (value) => kfcVerifiedStateSnapshotSchema.parse(value),
+  });
+  if (!state.recommendationState) return 0;
+  if (state.recommendationState.orderFlowId !== orderFlowId) {
+    throw new Error('recommendation_pack_state_mismatch');
+  }
+  return state.recommendationState.revision;
+}

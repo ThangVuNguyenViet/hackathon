@@ -423,6 +423,111 @@ describe('RecommendationPersistence shared contract', () => {
     }
   });
 
+  it('atomically adds the first recommendation state to an existing KFC envelope', async () => {
+    for (const { name, store } of await fixtures()) {
+      const record = recordFor(`${name.toLowerCase()}-existing-pack`);
+      const existingPackState = await createPackStateEnvelope({
+        packRef: { packId: 'kfc-vietnam', version: '1.0.0' },
+        schemaVersion: '1',
+        state: { cancellationStatusChecked: true },
+      });
+      const nextPackState = await createPackStateEnvelope({
+        packRef: existingPackState.packRef,
+        schemaVersion: existingPackState.schemaVersion,
+        state: {
+          cancellationStatusChecked: true,
+          recommendationState: applyRecommendationDecision(
+            initialRecommendationState(record.request.orderFlowId),
+            record.response,
+            record.request.decisionTime,
+          ),
+        },
+      });
+      await store.putPackState(record.request.sessionId, existingPackState);
+      await reserve(store, record);
+
+      await expect(
+        store.commitRecommendationDecision({
+          ownerToken: `owner-${record.request.requestId}`,
+          expectedPackStateDigest: existingPackState.integrity.digest,
+          nextPackState,
+          record,
+          events: decisionEvents(record),
+        }),
+        name,
+      ).resolves.toEqual({ status: 'committed', record });
+      await expect(
+        store.getPackState(record.request.sessionId, existingPackState.packRef),
+        name,
+      ).resolves.toEqual(nextPackState);
+      await expect(
+        store.getRecommendationDecision(record.response.recommendationId),
+        name,
+      ).resolves.toEqual(record);
+      await expect(
+        store.listRecommendationEvents({ sessionId: record.request.sessionId }),
+        name,
+      ).resolves.toEqual(decisionEvents(record));
+    }
+  });
+
+  it('does not match an absent recommendation state to a nonzero expected revision', async () => {
+    for (const { name, store } of await fixtures()) {
+      const baseRecord = recordFor(`${name.toLowerCase()}-absent-nonzero`);
+      const record = {
+        ...baseRecord,
+        stateRevisionBefore: 1,
+        stateRevisionAfter: 2,
+      };
+      const existingPackState = await createPackStateEnvelope({
+        packRef: { packId: 'kfc-vietnam', version: '1.0.0' },
+        schemaVersion: '1',
+        state: { cancellationStatusChecked: true },
+      });
+      const stateAfterFirstDecision = applyRecommendationDecision(
+        initialRecommendationState(record.request.orderFlowId),
+        record.response,
+        record.request.decisionTime,
+      );
+      const nextPackState = await createPackStateEnvelope({
+        packRef: existingPackState.packRef,
+        schemaVersion: existingPackState.schemaVersion,
+        state: {
+          cancellationStatusChecked: true,
+          recommendationState: {
+            ...stateAfterFirstDecision,
+            revision: 2,
+          },
+        },
+      });
+      await store.putPackState(record.request.sessionId, existingPackState);
+      await reserve(store, record);
+
+      await expect(
+        store.commitRecommendationDecision({
+          ownerToken: `owner-${record.request.requestId}`,
+          expectedPackStateDigest: existingPackState.integrity.digest,
+          nextPackState,
+          record,
+          events: decisionEvents(record),
+        }),
+        name,
+      ).resolves.toEqual({ status: 'stale' });
+      await expect(
+        store.getPackState(record.request.sessionId, existingPackState.packRef),
+        name,
+      ).resolves.toEqual(existingPackState);
+      await expect(
+        store.getRecommendationDecision(record.response.recommendationId),
+        name,
+      ).resolves.toBeUndefined();
+      await expect(
+        store.listRecommendationEvents({ sessionId: record.request.sessionId }),
+        name,
+      ).resolves.toEqual([]);
+    }
+  });
+
   it('fails closed on corrupt completed-reservation payloads in both stores', async () => {
     const memory = new MemoryStore();
     const memoryRecord = recordFor('memory-corrupt-reservation');
