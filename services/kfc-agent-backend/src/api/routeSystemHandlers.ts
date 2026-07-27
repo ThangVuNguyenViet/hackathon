@@ -114,6 +114,7 @@ import {
   lifecycleTransitionSchema,
   lifecycleEventPayloadSchema,
   kfcProofPreconditionsSchema,
+  KfcRecommendationProofProjection,
   lifecycleErrorResponse,
   ReadinessCheckResult,
   ReadinessOptions,
@@ -169,6 +170,7 @@ export function createSystemRouteHandlers(context: RouteHandlerContext) {
     emitSessionModeEvent,
     emitSessionControlIntelligence,
     resumedOwnershipSummary,
+    recommendations,
     clearPersistedHandoff,
     persistedHandoffStatus,
     shouldEvaluateDashboardMonitorContext,
@@ -514,17 +516,30 @@ export function createSystemRouteHandlers(context: RouteHandlerContext) {
       return { status: missing.length === 0 ? 200 : 409, body };
     },
     async kfcProofEnvelope(sessionId: string) {
-      const [turns, packState, lifecycleSource] = await Promise.all([
-        store.listTurns(sessionId),
-        store.getPackState(sessionId, kfcVietnamPack.ref),
-        options.lifecycle?.proofForSession?.(sessionId) ??
-          Promise.resolve({ instance: null, audit: [] }),
-      ]);
+      const [turns, packState, lifecycleSource, recommendationSession] =
+        await Promise.all([
+          store.listTurns(sessionId),
+          store.getPackState(sessionId, kfcVietnamPack.ref),
+          options.lifecycle?.proofForSession?.(sessionId) ??
+            Promise.resolve({ instance: null, audit: [] }),
+          recommendations?.inspection.session(sessionId) ??
+            Promise.resolve(null),
+        ]);
       const lifecycle = projectKfcLifecycleProofEvidence(lifecycleSource);
       const missing = [
         ...(turns.length > 0 ? [] : ['conversation_turns']),
         ...lifecycle.missing,
       ];
+      const recommendationProjection:
+        KfcRecommendationProofProjection | undefined = recommendationSession
+        ? (() => {
+            const {
+              correlations: { sessionId: _sessionId, ...correlations },
+              ...projection
+            } = recommendationSession;
+            return { ...projection, correlations };
+          })()
+        : undefined;
       return {
         status: missing.length === 0 ? 200 : 409,
         body: {
@@ -538,6 +553,9 @@ export function createSystemRouteHandlers(context: RouteHandlerContext) {
           missing,
           sessionId,
           lifecycle,
+          ...(recommendationProjection
+            ? { recommendations: recommendationProjection }
+            : {}),
         },
       };
     },

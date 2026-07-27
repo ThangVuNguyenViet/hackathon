@@ -94,6 +94,12 @@ import type {
   RecommendationApplicationService,
   RecommendationInspectionService,
 } from '../recommendations/application/service-types.js';
+import type {
+  Placement,
+  RecommendationDecisionResponse,
+  RecommendationEvent,
+  RecommendationState,
+} from '../recommendations/domain/contracts.js';
 import {
   buildBoundedRecentTurns,
   sessionIdForConversationEvent,
@@ -429,6 +435,26 @@ export interface RecommendationRouteServicesFactory {
     application: RecommendationApplicationService;
     inspection: RecommendationInspectionService;
   };
+}
+
+export interface KfcRecommendationProofProjection {
+  state: RecommendationState | null;
+  latestDecision: {
+    recommendationId: string;
+    requestId: string;
+    placement: Placement;
+    status: RecommendationDecisionResponse['status'];
+    traceRef: string;
+    recordedAt: string;
+  } | null;
+  pendingAction: RecommendationState['pendingRecommendation'];
+  correlations: {
+    orderFlowId: string | null;
+    recommendationId: string | null;
+    requestId: string | null;
+    traceRef: string | null;
+  };
+  eventCounts: Partial<Record<RecommendationEvent['eventType'], number>>;
 }
 
 export interface RouteOptions {
