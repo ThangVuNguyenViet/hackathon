@@ -30,7 +30,12 @@ import { workerSessionResetHook } from './workerLifecycle.js';
 import {
   createRouteHandlers,
   type HandlerResponse,
+  type RouteHandlers,
 } from './api/routeHandlers.js';
+import {
+  invalidRecommendationJsonResponse,
+  recommendationJsonResponse,
+} from './api/routeRecommendationHandlers.js';
 import {
   isAgentTraceFlushTask,
   type AgentTracer,
@@ -253,6 +258,94 @@ function workerAgentReadiness(env: WorkerEnv): WorkerAgentReadiness {
   };
 }
 
+export async function dispatchWorkerRecommendationRoute(
+  request: Request,
+  handlers: Pick<
+    RouteHandlers,
+    | 'recommendationDecide'
+    | 'recommendationImpression'
+    | 'recommendationOutcome'
+    | 'recommendationInspection'
+    | 'recommendationOrderFlowState'
+  >,
+): Promise<Response | undefined> {
+  const url = new URL(request.url);
+  const readRecommendationJson = async (): Promise<
+    { ok: true; body: unknown } | { ok: false; response: Response }
+  > => {
+    try {
+      return { ok: true, body: await readJson(request) };
+    } catch (error) {
+      if (!(error instanceof SyntaxError)) throw error;
+      const response = invalidRecommendationJsonResponse(
+        request.method,
+        url.pathname,
+      );
+      if (!response) throw error;
+      return { ok: false, response: toResponse(response) };
+    }
+  };
+
+  if (
+    request.method === 'POST' &&
+    url.pathname === '/v1/recommendations/decide'
+  ) {
+    const body = await readRecommendationJson();
+    return body.ok
+      ? toResponse(await handlers.recommendationDecide(body.body))
+      : body.response;
+  }
+  const recommendationImpressionMatch = url.pathname.match(
+    /^\/v1\/recommendations\/([^/]+)\/impressions$/u,
+  );
+  if (request.method === 'POST' && recommendationImpressionMatch) {
+    const body = await readRecommendationJson();
+    return body.ok
+      ? toResponse(
+          await handlers.recommendationImpression(
+            decodeURIComponent(recommendationImpressionMatch[1]!),
+            body.body,
+          ),
+        )
+      : body.response;
+  }
+  const recommendationOutcomeMatch = url.pathname.match(
+    /^\/v1\/recommendations\/([^/]+)\/outcomes$/u,
+  );
+  if (request.method === 'POST' && recommendationOutcomeMatch) {
+    const body = await readRecommendationJson();
+    return body.ok
+      ? toResponse(
+          await handlers.recommendationOutcome(
+            decodeURIComponent(recommendationOutcomeMatch[1]!),
+            body.body,
+          ),
+        )
+      : body.response;
+  }
+  const recommendationInspectionMatch = url.pathname.match(
+    /^\/admin\/recommendations\/([^/]+)\/inspection$/u,
+  );
+  if (request.method === 'GET' && recommendationInspectionMatch) {
+    return toResponse(
+      await handlers.recommendationInspection(
+        decodeURIComponent(recommendationInspectionMatch[1]!),
+      ),
+    );
+  }
+  const recommendationOrderFlowMatch = url.pathname.match(
+    /^\/admin\/recommendations\/order-flows\/([^/]+)\/state$/u,
+  );
+  if (request.method === 'GET' && recommendationOrderFlowMatch) {
+    return toResponse(
+      await handlers.recommendationOrderFlowState(
+        decodeURIComponent(recommendationOrderFlowMatch[1]!),
+      ),
+    );
+  }
+  return undefined;
+}
+
 export default {
   async fetch(
     request: Request,
@@ -266,7 +359,17 @@ export default {
     const url = new URL(request.url);
     if (requiresDemoAdmin(url.pathname)) {
       const auth = authorizeDemoAdmin(request, env);
-      if (!auth.ok) return json({ errorCode: auth.errorCode }, auth.status);
+      if (!auth.ok) {
+        if (url.pathname.startsWith('/admin/recommendations/')) {
+          return toResponse(
+            recommendationJsonResponse({
+              status: auth.status,
+              body: { errorCode: auth.errorCode },
+            }),
+          );
+        }
+        return json({ errorCode: auth.errorCode }, auth.status);
+      }
     }
     if (
       request.method === 'GET' &&
@@ -427,56 +530,11 @@ export default {
       return toResponse(result);
     };
 
-    if (
-      request.method === 'POST' &&
-      url.pathname === '/v1/recommendations/decide'
-    ) {
-      return toResponse(
-        await handlers.recommendationDecide(await readJson(request)),
-      );
-    }
-    const recommendationImpressionMatch = url.pathname.match(
-      /^\/v1\/recommendations\/([^/]+)\/impressions$/,
+    const recommendationResponse = await dispatchWorkerRecommendationRoute(
+      request,
+      handlers,
     );
-    if (request.method === 'POST' && recommendationImpressionMatch) {
-      return toResponse(
-        await handlers.recommendationImpression(
-          decodeURIComponent(recommendationImpressionMatch[1]!),
-          await readJson(request),
-        ),
-      );
-    }
-    const recommendationOutcomeMatch = url.pathname.match(
-      /^\/v1\/recommendations\/([^/]+)\/outcomes$/,
-    );
-    if (request.method === 'POST' && recommendationOutcomeMatch) {
-      return toResponse(
-        await handlers.recommendationOutcome(
-          decodeURIComponent(recommendationOutcomeMatch[1]!),
-          await readJson(request),
-        ),
-      );
-    }
-    const recommendationInspectionMatch = url.pathname.match(
-      /^\/admin\/recommendations\/([^/]+)\/inspection$/,
-    );
-    if (request.method === 'GET' && recommendationInspectionMatch) {
-      return toResponse(
-        await handlers.recommendationInspection(
-          decodeURIComponent(recommendationInspectionMatch[1]!),
-        ),
-      );
-    }
-    const recommendationOrderFlowMatch = url.pathname.match(
-      /^\/admin\/recommendations\/order-flows\/([^/]+)\/state$/,
-    );
-    if (request.method === 'GET' && recommendationOrderFlowMatch) {
-      return toResponse(
-        await handlers.recommendationOrderFlowState(
-          decodeURIComponent(recommendationOrderFlowMatch[1]!),
-        ),
-      );
-    }
+    if (recommendationResponse) return recommendationResponse;
     const lifecycleCreateMatch = url.pathname.match(
       /^\/admin\/lifecycle\/sessions\/([^/]+)\/instances$/,
     );

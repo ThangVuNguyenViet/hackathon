@@ -170,13 +170,26 @@ export async function readJson(request: Request): Promise<unknown> {
 }
 
 export function toResponse(response: HandlerResponse): Response {
+  const headers = new Headers(corsHeaders());
+  const textResponse = response.contentType?.startsWith('text/') === true;
+  if (!textResponse) {
+    headers.set('Cache-Control', 'no-store, no-cache, max-age=0');
+  }
+  for (const [name, value] of Object.entries(response.headers ?? {})) {
+    headers.set(name, value);
+  }
   if (response.contentType?.startsWith('text/')) {
+    headers.set('Content-Type', response.contentType);
     return new Response(String(response.body), {
       status: response.status,
-      headers: { ...corsHeaders(), 'Content-Type': response.contentType },
+      headers,
     });
   }
-  return json(response.body, response.status);
+  headers.set('Content-Type', response.contentType ?? 'application/json');
+  return new Response(JSON.stringify(response.body), {
+    status: response.status,
+    headers,
+  });
 }
 
 export function customerRunEventResponse(

@@ -121,9 +121,10 @@ import {
 
 export function createRouteHandlers(options: RouteOptions = {}): RouteHandlers {
   const store = options.store ?? new MemoryStore();
-  const recommendations = options.recommendations?.create(
-    store as ConversationStore & RecommendationPersistence,
-  );
+  const recommendations =
+    options.recommendations && isRecommendationPersistence(store)
+      ? options.recommendations.create(store)
+      : undefined;
   const dashboard = options.dashboard ?? new DashboardEventBus();
   const showcase = options.showcase
     ? new ShowcaseService({
@@ -307,4 +308,25 @@ export function createRouteHandlers(options: RouteOptions = {}): RouteHandlers {
     ...createRecommendationRouteHandlers(context),
   };
   return routeHandlers;
+}
+
+const recommendationPersistenceMethods = [
+  'reserveRecommendationDecision',
+  'commitRecommendationDecision',
+  'appendRecommendationEvent',
+  'getRecommendationDecision',
+  'getRecommendationDecisionByRequest',
+  'listRecommendationEvents',
+  'latestRecommendationDecisionForOrderFlow',
+  'getRecommendationDemoCustomerHistory',
+] as const satisfies ReadonlyArray<keyof RecommendationPersistence>;
+
+function isRecommendationPersistence(
+  store: ConversationStore,
+): store is ConversationStore & RecommendationPersistence {
+  return recommendationPersistenceMethods.every(
+    (method) =>
+      typeof (store as Partial<RecommendationPersistence>)[method] ===
+      'function',
+  );
 }

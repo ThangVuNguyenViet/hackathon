@@ -8,6 +8,10 @@ import {
   type HandlerResponse,
   type RouteOptions,
 } from './routeHandlers.js';
+import {
+  invalidRecommendationJsonResponse,
+  recommendationJsonResponse,
+} from './routeRecommendationHandlers.js';
 
 export type {
   ReadinessCheckResult,
@@ -20,6 +24,15 @@ export function registerRoutes(
   options: RouteOptions = {},
 ): void {
   const handlers = createRouteHandlers(options);
+
+  server.setErrorHandler((error, request, reply) => {
+    const pathname = request.url.split('?', 1)[0] ?? request.url;
+    const response = invalidJsonBodyError(error)
+      ? invalidRecommendationJsonResponse(request.method, pathname)
+      : undefined;
+    if (response) return send(reply, response);
+    return reply.send(error);
+  });
 
   server.addHook('onRequest', async (request, reply) => {
     if (
@@ -37,10 +50,21 @@ export function registerRoutes(
         : authorization,
       tokenHeader: Array.isArray(token) ? token[0] : token,
     });
-    if (!decision.ok)
+    if (!decision.ok) {
+      if (request.url.startsWith('/admin/recommendations/')) {
+        return send(
+          reply,
+          recommendationJsonResponse({
+            status: decision.status,
+            body: { errorCode: decision.errorCode },
+          }),
+        );
+      }
       return reply
         .code(decision.status)
         .send({ errorCode: decision.errorCode });
+    }
+    return undefined;
   });
 
   server.get('/ready', async (request, reply) => {
@@ -393,9 +417,19 @@ function requiresDemoAdmin(rawUrl: string): boolean {
   return pathname.startsWith('/admin/') || pathname.startsWith('/dashboard/');
 }
 
+function invalidJsonBodyError(error: unknown): boolean {
+  return (
+    typeof error === 'object' &&
+    error !== null &&
+    'code' in error &&
+    error.code === 'FST_ERR_CTP_INVALID_JSON_BODY'
+  );
+}
+
 function send(
   reply: {
     code(statusCode: number): {
+      header(name: string, value: string): unknown;
       type(contentType: string): unknown;
       send(payload: unknown): unknown;
     };
@@ -404,6 +438,9 @@ function send(
   response: HandlerResponse,
 ) {
   const coded = reply.code(response.status);
+  for (const [name, value] of Object.entries(response.headers ?? {})) {
+    coded.header(name, value);
+  }
   if (response.contentType) coded.type(response.contentType);
   return coded.send(response.body);
 }

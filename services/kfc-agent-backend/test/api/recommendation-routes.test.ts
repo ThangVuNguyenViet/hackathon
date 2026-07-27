@@ -232,6 +232,75 @@ describe('recommendation Fastify routes', () => {
     expect(calls).toBe(1);
   });
 
+  it('does not construct recommendation services for a store without the durable port', async () => {
+    const store = new MemoryStore();
+    const conversationOnlyStore = new Proxy(store, {
+      get(target, property, receiver) {
+        if (property === 'getRecommendationDecision') return undefined;
+        const value = Reflect.get(target, property, receiver);
+        return typeof value === 'function' ? value.bind(target) : value;
+      },
+    });
+    const base = configuredOptions(store).recommendations;
+    expect(base).toBeDefined();
+    let calls = 0;
+    const server = buildServer({
+      store: conversationOnlyStore,
+      recommendations: {
+        create(resolvedStore) {
+          calls += 1;
+          return base!.create(resolvedStore);
+        },
+      },
+    });
+    servers.push(server);
+
+    const response = await server.inject({
+      method: 'POST',
+      url: '/v1/recommendations/decide',
+      payload: decisionRequest('missing-durable-port'),
+    });
+
+    expect(calls).toBe(0);
+    expect([response.statusCode, response.json()]).toEqual([
+      503,
+      { errorCode: 'recommendation_service_not_configured' },
+    ]);
+  });
+
+  it('allows the demo-admin token header in CORS preflight', async () => {
+    const response = await configuredServer().inject({
+      method: 'OPTIONS',
+      url: '/admin/recommendations/recommendation-any/inspection',
+      headers: {
+        origin: 'https://admin.example',
+        'access-control-request-method': 'GET',
+        'access-control-request-headers': 'X-KFC-Demo-Admin-Token',
+      },
+    });
+
+    expect(response.statusCode).toBe(204);
+    expect(response.headers['access-control-allow-headers']?.split(',')).toContain(
+      'X-KFC-Demo-Admin-Token',
+    );
+  });
+
+  it('leaves malformed JSON semantics unchanged on unrelated routes', async () => {
+    const response = await configuredServer().inject({
+      method: 'POST',
+      url: '/kfc/chat',
+      headers: { 'content-type': 'application/json' },
+      payload: '{"broken":',
+    });
+
+    expect(response.statusCode).toBe(400);
+    expect(response.json()).toMatchObject({
+      code: 'FST_ERR_CTP_INVALID_JSON_BODY',
+      error: 'Bad Request',
+    });
+    expect(response.body).not.toContain('invalid_recommendation_');
+  });
+
   it('returns only the canonical decision envelope and replays it byte-for-byte', async () => {
     const server = configuredServer();
     const request = forYouRequest('canonical-replay');

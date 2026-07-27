@@ -484,6 +484,7 @@ export interface HandlerResponse<T = unknown> {
   status: number;
   body: T;
   contentType?: string;
+  headers?: Record<string, string>;
 }
 
 export interface MessengerWebhookEventProcessingResult {

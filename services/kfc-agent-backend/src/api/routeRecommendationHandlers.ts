@@ -13,48 +13,86 @@ import {
 import type { RouteHandlerContext } from './routeHandlerContext.js';
 import type { HandlerResponse } from './routeHandlerContracts.js';
 
-const notConfigured = (): HandlerResponse => ({
-  status: 503,
-  body: { errorCode: 'recommendation_service_not_configured' },
+export const recommendationJsonResponse = <T>(
+  response: Omit<HandlerResponse<T>, 'contentType' | 'headers'>,
+): HandlerResponse<T> => ({
+  ...response,
+  contentType: 'application/json; charset=utf-8',
+  headers: { 'cache-control': 'no-store, no-cache, max-age=0' },
 });
 
+const notConfigured = (): HandlerResponse =>
+  recommendationJsonResponse({
+    status: 503,
+    body: { errorCode: 'recommendation_service_not_configured' },
+  });
+
 const recommendationIdSchema = z.string().trim().min(1);
+
+export function invalidRecommendationJsonResponse(
+  method: string,
+  pathname: string,
+): HandlerResponse | undefined {
+  if (method !== 'POST') return undefined;
+  if (pathname === '/v1/recommendations/decide') {
+    return recommendationJsonResponse({
+      status: 400,
+      body: { errorCode: 'invalid_recommendation_request' },
+    });
+  }
+  if (/^\/v1\/recommendations\/[^/]+\/impressions$/u.test(pathname)) {
+    return recommendationJsonResponse({
+      status: 400,
+      body: { errorCode: 'invalid_recommendation_impression' },
+    });
+  }
+  if (/^\/v1\/recommendations\/[^/]+\/outcomes$/u.test(pathname)) {
+    return recommendationJsonResponse({
+      status: 400,
+      body: { errorCode: 'invalid_recommendation_outcome' },
+    });
+  }
+  return undefined;
+}
 
 function eventResponse(result: EventApplicationResult): HandlerResponse {
   switch (result.status) {
     case 'recorded':
-      return {
+      return recommendationJsonResponse({
         status: 201,
         body: { event: result.event, deduplicated: false },
-      };
+      });
     case 'replay':
-      return {
+      return recommendationJsonResponse({
         status: 200,
         body: { event: result.event, deduplicated: true },
-      };
+      });
     case 'not_found':
-      return { status: 404, body: { errorCode: 'recommendation_not_found' } };
+      return recommendationJsonResponse({
+        status: 404,
+        body: { errorCode: 'recommendation_not_found' },
+      });
     case 'idempotency_conflict':
     case 'state_conflict':
-      return {
+      return recommendationJsonResponse({
         status: 409,
         body: { errorCode: 'recommendation_event_conflict' },
-      };
+      });
     case 'stale_recommendation':
-      return {
+      return recommendationJsonResponse({
         status: 409,
         body: { errorCode: 'stale_recommendation' },
-      };
+      });
     case 'cart_revision_conflict':
-      return {
+      return recommendationJsonResponse({
         status: 409,
         body: { errorCode: 'recommendation_cart_revision_conflict' },
-      };
+      });
     case 'render_binding_conflict':
-      return {
+      return recommendationJsonResponse({
         status: 409,
         body: { errorCode: 'recommendation_render_binding_conflict' },
-      };
+      });
   }
 }
 
@@ -69,10 +107,10 @@ export function createRecommendationRouteHandlers(
         request = parseRecommendationDecisionRequest(body);
       } catch (error) {
         if (error instanceof z.ZodError) {
-          return {
+          return recommendationJsonResponse({
             status: 400,
             body: { errorCode: 'invalid_recommendation_request' },
-          };
+          });
         }
         throw error;
       }
@@ -82,22 +120,25 @@ export function createRecommendationRouteHandlers(
       switch (result.status) {
         case 'decided':
         case 'replay':
-          return { status: 200, body: result.response };
+          return recommendationJsonResponse({
+            status: 200,
+            body: result.response,
+          });
         case 'pending':
-          return {
+          return recommendationJsonResponse({
             status: 425,
             body: { errorCode: 'recommendation_request_pending' },
-          };
+          });
         case 'idempotency_conflict':
-          return {
+          return recommendationJsonResponse({
             status: 409,
             body: { errorCode: 'recommendation_idempotency_conflict' },
-          };
+          });
         case 'state_conflict':
-          return {
+          return recommendationJsonResponse({
             status: 409,
             body: { errorCode: 'recommendation_state_conflict' },
-          };
+          });
       }
     },
 
@@ -113,10 +154,10 @@ export function createRecommendationRouteHandlers(
         request = parseRecommendationImpressionRequest(body);
       } catch (error) {
         if (error instanceof z.ZodError) {
-          return {
+          return recommendationJsonResponse({
             status: 400,
             body: { errorCode: 'invalid_recommendation_impression' },
-          };
+          });
         }
         throw error;
       }
@@ -140,10 +181,10 @@ export function createRecommendationRouteHandlers(
         request = parseRecommendationOutcomeRequest(body);
       } catch (error) {
         if (error instanceof z.ZodError) {
-          return {
+          return recommendationJsonResponse({
             status: 400,
             body: { errorCode: 'invalid_recommendation_outcome' },
-          };
+          });
         }
         throw error;
       }
@@ -164,8 +205,11 @@ export function createRecommendationRouteHandlers(
           recommendationId,
         );
       return result
-        ? { status: 200, body: result }
-        : { status: 404, body: { errorCode: 'recommendation_not_found' } };
+        ? recommendationJsonResponse({ status: 200, body: result })
+        : recommendationJsonResponse({
+            status: 404,
+            body: { errorCode: 'recommendation_not_found' },
+          });
     },
 
     async recommendationOrderFlowState(
@@ -175,8 +219,11 @@ export function createRecommendationRouteHandlers(
       const result =
         await context.recommendations.inspection.orderFlow(orderFlowId);
       return result
-        ? { status: 200, body: result }
-        : { status: 404, body: { errorCode: 'recommendation_not_found' } };
+        ? recommendationJsonResponse({ status: 200, body: result })
+        : recommendationJsonResponse({
+            status: 404,
+            body: { errorCode: 'recommendation_not_found' },
+          });
     },
   };
 }

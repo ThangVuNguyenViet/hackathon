@@ -1,14 +1,24 @@
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import type { FastifyInstance } from 'fastify';
 import { buildServer } from '../../src/api/server.js';
+import { createRouteHandlers } from '../../src/api/routeHandlers.js';
 import { buildServerOptionsFromEnv } from '../../src/api/serverOptions.js';
 import { loadEnv } from '../../src/config/env.js';
 import { digestCommerceAction } from '../../src/ordering/commerceDigest.js';
 import { D1Store } from '../../src/persistence/d1Store.js';
 import { MemoryStore } from '../../src/persistence/memoryStore.js';
+import type {
+  AppendRecommendationEventInput,
+  AppendRecommendationEventResult,
+  CommitRecommendationDecisionInput,
+  CommitRecommendationDecisionResult,
+} from '../../src/recommendations/persistence/repository.js';
 import { parseRecommendationDecisionApplicationInput } from '../../src/recommendations/application/context-factory.js';
 import { parseRecommendationDecisionRequest } from '../../src/recommendations/domain/schemas.js';
-import worker, { type WorkerEnv } from '../../src/worker.js';
+import worker, {
+  dispatchWorkerRecommendationRoute,
+  type WorkerEnv,
+} from '../../src/worker.js';
 import { SqliteD1Database } from '../support/sqlite-d1.js';
 
 const adminToken = 'recommendation-parity-admin';
@@ -80,8 +90,18 @@ function outcomeFor(
 }
 
 type PairResponse = {
-  fastify: { status: number; body: string };
-  worker: { status: number; body: string };
+  fastify: {
+    status: number;
+    body: string;
+    contentType: string | undefined;
+    cacheControl: string | undefined;
+  };
+  worker: {
+    status: number;
+    body: string;
+    contentType: string | null;
+    cacheControl: string | null;
+  };
 };
 
 describe.sequential('Fastify and Worker recommendation route parity', () => {
@@ -114,10 +134,11 @@ describe.sequential('Fastify and Worker recommendation route parity', () => {
     method: 'GET' | 'POST';
     path: string;
     payload?: unknown;
+    rawPayload?: string;
     headers?: Record<string, string>;
   }): Promise<PairResponse> {
     const headers = {
-      ...(input.payload === undefined
+      ...(input.payload === undefined && input.rawPayload === undefined
         ? {}
         : { 'content-type': 'application/json' }),
       ...input.headers,
@@ -127,17 +148,23 @@ describe.sequential('Fastify and Worker recommendation route parity', () => {
         method: input.method,
         url: input.path,
         headers,
-        ...(input.payload === undefined
+        ...(input.payload === undefined && input.rawPayload === undefined
           ? {}
-          : { payload: JSON.stringify(input.payload) }),
+          : {
+              payload:
+                input.rawPayload ?? JSON.stringify(input.payload),
+            }),
       }),
       worker.fetch(
         new Request(`https://worker.example${input.path}`, {
           method: input.method,
           headers,
-          ...(input.payload === undefined
+          ...(input.payload === undefined && input.rawPayload === undefined
             ? {}
-            : { body: JSON.stringify(input.payload) }),
+            : {
+                body:
+                  input.rawPayload ?? JSON.stringify(input.payload),
+              }),
         }),
         env,
       ),
@@ -146,10 +173,14 @@ describe.sequential('Fastify and Worker recommendation route parity', () => {
       fastify: {
         status: fastifyResponse.statusCode,
         body: fastifyResponse.body,
+        contentType: fastifyResponse.headers['content-type'],
+        cacheControl: fastifyResponse.headers['cache-control'],
       },
       worker: {
         status: workerResponse.status,
         body: await workerResponse.text(),
+        contentType: workerResponse.headers.get('content-type'),
+        cacheControl: workerResponse.headers.get('cache-control'),
       },
     };
   }
@@ -163,6 +194,73 @@ describe.sequential('Fastify and Worker recommendation route parity', () => {
       raw: result.fastify.body,
     };
   }
+
+  async function dispatchWithHandlers(input: {
+    server: FastifyInstance;
+    handlers: ReturnType<typeof createRouteHandlers>;
+    path: string;
+    payload: unknown;
+  }): Promise<PairResponse> {
+    const body = JSON.stringify(input.payload);
+    const headers = { 'content-type': 'application/json' };
+    const [fastifyResponse, workerResponse] = await Promise.all([
+      input.server.inject({
+        method: 'POST',
+        url: input.path,
+        headers,
+        payload: body,
+      }),
+      dispatchWorkerRecommendationRoute(
+        new Request(`https://worker.example${input.path}`, {
+          method: 'POST',
+          headers,
+          body,
+        }),
+        input.handlers,
+      ),
+    ]);
+    expect(workerResponse).toBeDefined();
+    return {
+      fastify: {
+        status: fastifyResponse.statusCode,
+        body: fastifyResponse.body,
+        contentType: fastifyResponse.headers['content-type'],
+        cacheControl: fastifyResponse.headers['cache-control'],
+      },
+      worker: {
+        status: workerResponse!.status,
+        body: await workerResponse!.text(),
+        contentType: workerResponse!.headers.get('content-type'),
+        cacheControl: workerResponse!.headers.get('cache-control'),
+      },
+    };
+  }
+
+  it('maps malformed JSON for every recommendation write byte-for-byte', async () => {
+    for (const [path, errorCode] of [
+      ['/v1/recommendations/decide', 'invalid_recommendation_request'],
+      [
+        '/v1/recommendations/recommendation-malformed/impressions',
+        'invalid_recommendation_impression',
+      ],
+      [
+        '/v1/recommendations/recommendation-malformed/outcomes',
+        'invalid_recommendation_outcome',
+      ],
+    ] as const) {
+      await expect(
+        expectParity({
+          method: 'POST',
+          path,
+          rawPayload: '{"broken":',
+        }),
+      ).resolves.toEqual({
+        status: 400,
+        body: { errorCode },
+        raw: `{"errorCode":"${errorCode}"}`,
+      });
+    }
+  });
 
   it('maps decision validation, success, replay, pending, and conflict statuses byte-for-byte', async () => {
     await expect(
@@ -325,6 +423,16 @@ describe.sequential('Fastify and Worker recommendation route parity', () => {
       body: { errorCode: 'invalid_recommendation_impression' },
     });
 
+    const invalidOutcome = await expectParity({
+      method: 'POST',
+      path: '/v1/recommendations/recommendation-missing/outcomes',
+      payload: {},
+    });
+    expect(invalidOutcome).toMatchObject({
+      status: 400,
+      body: { errorCode: 'invalid_recommendation_outcome' },
+    });
+
     const missing = await expectParity({
       method: 'POST',
       path: '/v1/recommendations/recommendation-missing/outcomes',
@@ -417,6 +525,134 @@ describe.sequential('Fastify and Worker recommendation route parity', () => {
       status: 409,
       body: { errorCode: 'recommendation_event_conflict' },
     });
+  });
+
+  it('maps decision and event persistence state conflicts through the Worker adapter byte-for-byte', async () => {
+    class StaleDecisionMemoryStore extends MemoryStore {
+      override async commitRecommendationDecision(
+        _input: CommitRecommendationDecisionInput,
+      ): Promise<CommitRecommendationDecisionResult> {
+        return { status: 'stale' };
+      }
+    }
+    class StaleDecisionD1Store extends D1Store {
+      override async commitRecommendationDecision(
+        _input: CommitRecommendationDecisionInput,
+      ): Promise<CommitRecommendationDecisionResult> {
+        return { status: 'stale' };
+      }
+    }
+    class StaleEventMemoryStore extends MemoryStore {
+      stale = false;
+
+      override async appendRecommendationEvent(
+        input: AppendRecommendationEventInput,
+      ): Promise<AppendRecommendationEventResult> {
+        return this.stale
+          ? { status: 'stale' }
+          : super.appendRecommendationEvent(input);
+      }
+    }
+    class StaleEventD1Store extends D1Store {
+      stale = false;
+
+      override async appendRecommendationEvent(
+        input: AppendRecommendationEventInput,
+      ): Promise<AppendRecommendationEventResult> {
+        return this.stale
+          ? { status: 'stale' }
+          : super.appendRecommendationEvent(input);
+      }
+    }
+
+    const options = buildServerOptionsFromEnv(
+      loadEnv({ KFC_DEMO_ADMIN_TOKEN: adminToken }),
+    );
+    const decisionDatabase = new SqliteD1Database();
+    const decisionD1 = new StaleDecisionD1Store(decisionDatabase);
+    const decisionServer = buildServer({
+      ...options,
+      store: new StaleDecisionMemoryStore(),
+    });
+    const eventDatabase = new SqliteD1Database();
+    const eventD1 = new StaleEventD1Store(eventDatabase);
+    const eventMemory = new StaleEventMemoryStore();
+    const eventServer = buildServer({ ...options, store: eventMemory });
+
+    try {
+      await Promise.all([decisionD1.initialize(), eventD1.initialize()]);
+      const decisionConflict = await dispatchWithHandlers({
+        server: decisionServer,
+        handlers: createRouteHandlers({ ...options, store: decisionD1 }),
+        path: '/v1/recommendations/decide',
+        payload: decisionRequest('parity-decision-state-conflict'),
+      });
+      expect(decisionConflict.worker).toEqual(decisionConflict.fastify);
+      expect(decisionConflict.fastify).toMatchObject({
+        status: 409,
+        body: '{"errorCode":"recommendation_state_conflict"}',
+      });
+
+      const eventHandlers = createRouteHandlers({
+        ...options,
+        store: eventD1,
+      });
+      const request = decisionRequest('parity-event-state-conflict');
+      const decided = await dispatchWithHandlers({
+        server: eventServer,
+        handlers: eventHandlers,
+        path: '/v1/recommendations/decide',
+        payload: request,
+      });
+      expect(decided.worker).toEqual(decided.fastify);
+      const recommendationId = String(
+        (
+          JSON.parse(decided.fastify.body) as {
+            recommendationId: string;
+          }
+        ).recommendationId,
+      );
+      eventMemory.stale = true;
+      eventD1.stale = true;
+      const eventConflict = await dispatchWithHandlers({
+        server: eventServer,
+        handlers: eventHandlers,
+        path: `/v1/recommendations/${encodeURIComponent(recommendationId)}/outcomes`,
+        payload: outcomeFor('parity-event-state-conflict', request),
+      });
+      expect(eventConflict.worker).toEqual(eventConflict.fastify);
+      expect(eventConflict.fastify).toMatchObject({
+        status: 409,
+        body: '{"errorCode":"recommendation_event_conflict"}',
+      });
+    } finally {
+      await Promise.all([decisionServer.close(), eventServer.close()]);
+      decisionDatabase.close();
+      eventDatabase.close();
+    }
+  });
+
+  it('maps an unconfigured recommendation service through the Worker adapter byte-for-byte', async () => {
+    const unconfiguredServer = buildServer({ store: new MemoryStore() });
+    const database = new SqliteD1Database();
+    const d1 = new D1Store(database);
+    try {
+      await d1.initialize();
+      const result = await dispatchWithHandlers({
+        server: unconfiguredServer,
+        handlers: createRouteHandlers({ store: d1 }),
+        path: '/v1/recommendations/decide',
+        payload: decisionRequest('parity-unconfigured'),
+      });
+      expect(result.worker).toEqual(result.fastify);
+      expect(result.fastify).toMatchObject({
+        status: 503,
+        body: '{"errorCode":"recommendation_service_not_configured"}',
+      });
+    } finally {
+      await unconfiguredServer.close();
+      database.close();
+    }
   });
 
   it('applies identical demo-admin authorization and returns identical protected projections', async () => {
