@@ -1,5 +1,8 @@
 import { describe, expect, it } from 'vitest';
-import { customerCommandFromVerifiedAction } from '../../src/domain/customerCommand.js';
+import {
+  createTrustedCustomerActionEnvelope,
+  customerCommandFromVerifiedAction,
+} from '../../src/domain/customerCommand.js';
 
 describe('customerCommandFromVerifiedAction', () => {
   it('maps one complete cart draft to one atomic command', () => {
@@ -112,5 +115,53 @@ describe('customerCommandFromVerifiedAction', () => {
         payload: { ...address, internal: 'not allowed' },
       }),
     ).toBeUndefined();
+  });
+
+  it('admits recommendation commands with stored IDs only', () => {
+    const envelope = {
+      source: 'kfc_genui_action' as const,
+      assistantTurnId: 'assistant-turn-recommendation',
+      attachmentId: 'attachment-recommendation',
+      actionDigest: 'a'.repeat(64),
+      verifiedRevision: 'b'.repeat(64),
+      lifecycle: 'one_shot' as const,
+    };
+    expect(
+      createTrustedCustomerActionEnvelope({
+        ...envelope,
+        command: {
+          kind: 'recommendation_select',
+          recommendationId: 'recommendation-1',
+          recommendationActionId: 'recommendation-action-1',
+        },
+      }).command,
+    ).toEqual({
+      kind: 'recommendation_select',
+      recommendationId: 'recommendation-1',
+      recommendationActionId: 'recommendation-action-1',
+    });
+    expect(
+      createTrustedCustomerActionEnvelope({
+        ...envelope,
+        command: {
+          kind: 'recommendation_dismiss',
+          recommendationId: 'recommendation-1',
+        },
+      }).command,
+    ).toEqual({
+      kind: 'recommendation_dismiss',
+      recommendationId: 'recommendation-1',
+    });
+    expect(() =>
+      createTrustedCustomerActionEnvelope({
+        ...envelope,
+        command: {
+          kind: 'recommendation_select',
+          recommendationId: 'recommendation-1',
+          recommendationActionId: 'recommendation-action-1',
+          sellableItemId: 'forged-target',
+        },
+      } as never),
+    ).toThrow();
   });
 });

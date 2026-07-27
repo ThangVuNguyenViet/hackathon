@@ -725,9 +725,15 @@ export function applyToolResultToState(
     case 'listMembershipTools':
     case 'acquireVoucher':
     case 'redeemReward':
+      return;
     case 'recommendStarter':
     case 'recommendModifierUpsell':
     case 'recommendSmartCrossSell':
+      state.recommendationDecision =
+        result.value.status === 'recommended'
+          ? result.value.recommendation
+          : undefined;
+      return;
     case 'findStores':
       return;
     case 'getSavedAddresses':

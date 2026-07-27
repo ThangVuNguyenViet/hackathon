@@ -44,13 +44,29 @@ export async function persistCompletedTurn(input: {
   const successfulToolNames = input.currentTurnToolTrace
     .filter((entry) => entry.ok)
     .map((entry) => entry.toolName);
+  const recommendationPresentation =
+    responseProfile === 'genui' &&
+    input.turnInput.recommendations &&
+    input.state.recommendationDecision
+      ? await input.turnInput.recommendations.presentationFor(
+          input.state.recommendationDecision.recommendationId,
+          {
+            sessionId: input.turnInput.sessionId,
+            customerId: input.turnInput.customerId,
+          },
+        )
+      : null;
   const genUi =
     responseProfile === 'genui'
       ? selectKfcGenUiAttachment({
           state: input.state,
           turnToolNames: successfulToolNames,
+          ...(recommendationPresentation ? { recommendationPresentation } : {}),
         })
       : undefined;
+  const recommendationPublished =
+    genUi?.widgetKind === 'recommendationOffer' &&
+    recommendationPresentation?.binding.attachmentId === genUi.id;
   const presentation =
     responseProfile === 'genui'
       ? buildChannelPresentation({
@@ -79,6 +95,9 @@ export async function persistCompletedTurn(input: {
     ...(genUi ? { genUi: kfcGenUiAttachmentForPersistence(genUi) } : {}),
   };
   const assistantTurn = {
+    ...(recommendationPublished
+      ? { id: recommendationPresentation.binding.assistantTurnId }
+      : {}),
     sessionId: input.turnInput.sessionId,
     channel: input.turnInput.channel,
     role: 'assistant',

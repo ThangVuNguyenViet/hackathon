@@ -20,6 +20,7 @@ import type {
 } from '../../src/recommendations/persistence/repository.js';
 import {
   parsePersistedRecommendationEvent,
+  presentationBindingForDecision,
   renderBindingForDecisionDigests,
 } from '../../src/recommendations/persistence/types.js';
 import {
@@ -144,9 +145,14 @@ function recordFor(suffix: string): RecommendationDecisionRecord {
     },
     requestFingerprint: 'a'.repeat(64),
     actionDigest,
-    renderBinding: renderBindingForDecisionDigests({
+    renderBinding: presentationBindingForDecision({
+      request,
+      response,
       requestFingerprint: 'a'.repeat(64),
       actionDigest,
+      decisionDigest: 'c'.repeat(64),
+      versionBindingDigest: 'd'.repeat(64),
+      customerId: null,
     }),
     stateRevisionBefore: 0,
     stateRevisionAfter: 1,
@@ -164,10 +170,20 @@ function recordForExistingFlow(
     orderFlowId: existing.request.orderFlowId,
     sessionId: existing.request.sessionId,
   });
+  const response = responseFor(request, suffix);
   return {
     ...source,
     request,
-    response: responseFor(request, suffix),
+    response,
+    renderBinding: presentationBindingForDecision({
+      request,
+      response,
+      requestFingerprint: source.requestFingerprint,
+      actionDigest: source.actionDigest,
+      decisionDigest: source.renderBinding.decisionDigest,
+      versionBindingDigest: source.renderBinding.versionBindingDigest,
+      customerId: null,
+    }),
   };
 }
 
@@ -1070,7 +1086,7 @@ describe('RecommendationPersistence shared contract', () => {
         actor: 'client',
         actionId: null,
         payload: {
-          ...record.renderBinding,
+          ...renderBindingForDecisionDigests(record),
           renderedActions: [{ actionId, position: 1 }],
           actionDigest: record.actionDigest,
         },

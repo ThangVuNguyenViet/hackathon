@@ -21,7 +21,7 @@ import {
   strictlyLaterCanonicalUtcInstant,
 } from '../domain/canonical-instant.js';
 import type { RecommendationDecisionRecord } from '../persistence/repository.js';
-import { renderBindingForDecisionDigests } from '../persistence/types.js';
+import { presentationBindingForDecision } from '../persistence/types.js';
 import {
   applyCustomerRequestedRecommendationDecision,
   applyCustomerRequestedRecommendationOutcome,
@@ -43,6 +43,7 @@ import type {
   RecommendationApplicationService,
   RecommendationApplicationServiceDependencies,
   RecommendationDecisionApplicationInput,
+  RecommendationPresentation,
 } from './service-types.js';
 import type {
   RecommendationOutputMode,
@@ -266,6 +267,44 @@ async function existingEvent(
   ).find((event) => event.eventId === eventId);
 }
 
+async function hasExactPresentationDigests(
+  record: RecommendationDecisionRecord,
+): Promise<boolean> {
+  const [actionDigest, decisionDigest, versionBindingDigest] =
+    await Promise.all([
+      digestCommerceAction(record.response.primaryOffer?.actions ?? []),
+      digestCommerceAction(record.response),
+      digestCommerceAction(record.response.versionBindings),
+    ]);
+  return (
+    record.actionDigest === actionDigest &&
+    record.renderBinding.actionDigest === actionDigest &&
+    record.renderBinding.decisionDigest === decisionDigest &&
+    record.renderBinding.versionBindingDigest === versionBindingDigest
+  );
+}
+
+function presentationFromRecord(
+  record: RecommendationDecisionRecord,
+  customerId: string,
+): RecommendationPresentation {
+  return {
+    response: structuredClone(record.response),
+    binding: {
+      recommendationId: record.renderBinding.recommendationId,
+      assistantTurnId: record.renderBinding.assistantTurnId,
+      attachmentId: record.renderBinding.attachmentId,
+      renderedActions: structuredClone(record.renderBinding.renderedActions),
+      actionDigest: record.renderBinding.actionDigest,
+      decisionDigest: record.renderBinding.decisionDigest,
+      versionBindingDigest: record.renderBinding.versionBindingDigest,
+      sessionId: record.renderBinding.sessionId,
+      customerId,
+      cartRevision: record.renderBinding.cartRevision,
+    },
+  };
+}
+
 async function qualifyingStarterDecision(
   dependencies: RecommendationApplicationServiceDependencies,
   loaded: LoadedRecommendationPackState,
@@ -411,15 +450,24 @@ export function createRecommendationApplicationService(
       const actionDigest = await digestCommerceAction(
         decision.response.primaryOffer?.actions ?? [],
       );
+      const decisionDigest = await digestCommerceAction(decision.response);
+      const versionBindingDigest = await digestCommerceAction(
+        decision.response.versionBindings,
+      );
       const record: RecommendationDecisionRecord = {
         request: parsed.request,
         response: decision.response,
         technical: decision.technical,
         requestFingerprint,
         actionDigest,
-        renderBinding: renderBindingForDecisionDigests({
+        renderBinding: presentationBindingForDecision({
+          request: parsed.request,
+          response: decision.response,
           requestFingerprint,
           actionDigest,
+          decisionDigest,
+          versionBindingDigest,
+          customerId: parsed.trusted.presentationCustomerId ?? null,
         }),
         stateRevisionBefore: loaded.state.revision,
         stateRevisionAfter: nextState.revision,
@@ -440,6 +488,74 @@ export function createRecommendationApplicationService(
       };
     },
 
+    async presentationFor(recommendationId, principal) {
+      const normalizedRecommendationId =
+        recommendationIdSchema.parse(recommendationId);
+      const record = await dependencies.persistence.getRecommendationDecision(
+        normalizedRecommendationId,
+      );
+      if (
+        !record ||
+        record.response.status !== 'recommended' ||
+        !record.response.primaryOffer ||
+        record.renderBinding.sessionId !== principal.sessionId ||
+        record.renderBinding.customerId !== principal.customerId ||
+        !(await hasExactPresentationDigests(record))
+      ) {
+        return null;
+      }
+      return presentationFromRecord(record, principal.customerId);
+    },
+
+    async resolveTrustedAction(input) {
+      const normalizedRecommendationId = recommendationIdSchema.parse(
+        input.recommendationId,
+      );
+      const record = await dependencies.persistence.getRecommendationDecision(
+        normalizedRecommendationId,
+      );
+      if (
+        !record ||
+        record.response.status !== 'recommended' ||
+        !record.response.primaryOffer
+      ) {
+        return { status: 'not_found' };
+      }
+      if (
+        record.renderBinding.sessionId !== input.sessionId ||
+        record.renderBinding.customerId !== input.customerId ||
+        !(await hasExactPresentationDigests(record))
+      ) {
+        return { status: 'untrusted_principal' };
+      }
+      if (
+        record.request.cartRevision !== input.cartRevision ||
+        record.renderBinding.cartRevision !== input.cartRevision
+      ) {
+        return { status: 'cart_revision_conflict' };
+      }
+      const action = record.response.primaryOffer.actions.find(
+        (candidate) =>
+          candidate.actionId === input.recommendationActionId &&
+          candidate.cartRevision === input.cartRevision,
+      );
+      if (!action) return { status: 'action_not_found' };
+      const loaded = await loadRecommendationPackState({
+        persistence: dependencies.persistence,
+        packState: dependencies.packState,
+        sessionId: record.request.sessionId,
+        orderFlowId: record.request.orderFlowId,
+      });
+      if (!(await isCurrentRecommendation(dependencies, loaded, record))) {
+        return { status: 'stale_recommendation' };
+      }
+      return {
+        status: 'resolved',
+        action: structuredClone(action),
+        presentation: presentationFromRecord(record, input.customerId),
+      };
+    },
+
     async recordImpression(
       recommendationId: string,
       input: RecommendationImpressionRequest,
@@ -457,10 +573,12 @@ export function createRecommendationApplicationService(
       ) {
         return { status: 'stale_recommendation' };
       }
-      const existing = await existingEvent(
-        dependencies,
-        record,
-        request.eventId,
+      const recommendationEvents =
+        await dependencies.persistence.listRecommendationEvents({
+          recommendationId: record.response.recommendationId,
+        });
+      const existing = recommendationEvents.find(
+        (candidate) => candidate.eventId === request.eventId,
       );
       const event = correlatedEventBase(record, {
         eventId: request.eventId,
@@ -493,6 +611,29 @@ export function createRecommendationApplicationService(
             nextPackState: loaded.envelope!,
           }),
         );
+      }
+      const existingImpression = recommendationEvents.find(
+        (candidate) => candidate.eventType === 'impression_rendered',
+      );
+      if (existingImpression) {
+        const existingBinding = {
+          assistantTurnId: existingImpression.payload.assistantTurnId,
+          attachmentId: existingImpression.payload.attachmentId,
+          renderedActions: existingImpression.payload.renderedActions,
+          actionDigest: existingImpression.payload.actionDigest,
+          cartRevision: existingImpression.cartRevision,
+        };
+        const requestedBinding = {
+          assistantTurnId: request.assistantTurnId,
+          attachmentId: request.attachmentId,
+          renderedActions: request.renderedActions,
+          actionDigest: request.actionDigest,
+          cartRevision: request.cartRevision,
+        };
+        return canonicalJson(existingBinding) ===
+          canonicalJson(requestedBinding)
+          ? { status: 'replay', event: existingImpression }
+          : { status: 'render_binding_conflict' };
       }
       if (!(await isCurrentRecommendation(dependencies, loaded, record))) {
         return { status: 'stale_recommendation' };

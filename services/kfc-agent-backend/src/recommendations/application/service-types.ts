@@ -5,7 +5,9 @@ import type {
   RecommendationDecisionResponse,
   RecommendationEvent,
   RecommendationImpressionRequest,
+  RecommendationAction,
   RecommendationOutcomeRequest,
+  RenderedRecommendationAction,
   RecommendationState,
 } from '../domain/contracts.js';
 import type { CustomerHistoryRepository } from '../history/repository.js';
@@ -21,6 +23,8 @@ import type {
 
 export interface RecommendationTrustedContext {
   parentCartLineId?: string | null;
+  /** Server-owned chat identity used only for a later GenUI publication binding. */
+  presentationCustomerId?: string | null;
   remainingBudgetVnd?: number | null;
   verifiedCohorts?: string[];
   verifiedDietaryEvidence?: {
@@ -28,6 +32,39 @@ export interface RecommendationTrustedContext {
     excludedSellableItemIds: string[];
   } | null;
 }
+
+export interface RecommendationPresentationBinding {
+  recommendationId: string;
+  assistantTurnId: string;
+  attachmentId: string;
+  renderedActions: RenderedRecommendationAction[];
+  actionDigest: string;
+  decisionDigest: string;
+  versionBindingDigest: string;
+  sessionId: string;
+  customerId: string;
+  cartRevision: string;
+}
+
+export interface RecommendationPresentation {
+  response: RecommendationDecisionResponse;
+  binding: RecommendationPresentationBinding;
+}
+
+export type RecommendationTrustedActionResolution =
+  | {
+      status: 'resolved';
+      action: RecommendationAction;
+      presentation: RecommendationPresentation;
+    }
+  | {
+      status:
+        | 'not_found'
+        | 'untrusted_principal'
+        | 'stale_recommendation'
+        | 'cart_revision_conflict'
+        | 'action_not_found';
+    };
 
 export interface RecommendationDecisionApplicationInput {
   request: RecommendationDecisionRequest;
@@ -65,6 +102,19 @@ export interface RecommendationApplicationService {
   decide(
     input: RecommendationDecisionApplicationInput,
   ): Promise<RecommendationDecisionApplicationResult>;
+
+  presentationFor(
+    recommendationId: string,
+    principal: { sessionId: string; customerId: string },
+  ): Promise<RecommendationPresentation | null>;
+
+  resolveTrustedAction(input: {
+    recommendationId: string;
+    recommendationActionId: string;
+    sessionId: string;
+    customerId: string;
+    cartRevision: string;
+  }): Promise<RecommendationTrustedActionResolution>;
 
   recordImpression(
     recommendationId: string,

@@ -18,6 +18,7 @@ export const KFC_GENUI_WIDGET_KINDS = [
   'orderTrackingStatus',
   'supportHandoff',
   'paymentMethodPicker',
+  'recommendationOffer',
 ] as const;
 
 export type KfcGenUiWidgetKind = (typeof KFC_GENUI_WIDGET_KINDS)[number];

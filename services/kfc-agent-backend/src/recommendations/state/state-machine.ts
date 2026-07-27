@@ -353,9 +353,14 @@ export function applyRecommendationOutcome(
     'ignored',
     'superseded',
   ].includes(outcome.eventType);
+  const completesMutation = [
+    'cart_mutation_succeeded',
+    'cart_mutation_failed',
+  ].includes(outcome.eventType);
+  const advancesPlacement = clearsPending || completesMutation;
 
   if (starterPlacement(outcome.placement)) {
-    if (outcome.eventType === 'cart_mutation_succeeded') {
+    if (advancesPlacement) {
       return parseRecommendationState({
         ...next,
         stage: 'modifier_eligible',
@@ -363,12 +368,10 @@ export function applyRecommendationOutcome(
         nextEligiblePlacement: 'modifier_upsell',
       });
     }
-    if (clearsPending)
-      return parseRecommendationState({ ...next, pendingRecommendation: null });
     return next;
   }
   if (outcome.placement === 'modifier_upsell') {
-    if (clearsPending || outcome.eventType === 'selected') {
+    if (advancesPlacement) {
       return parseRecommendationState({
         ...next,
         stage: 'smart_cross_sell_eligible',
@@ -378,7 +381,7 @@ export function applyRecommendationOutcome(
     }
     return next;
   }
-  if (clearsPending || outcome.eventType === 'selected') {
+  if (advancesPlacement) {
     return parseRecommendationState({
       ...next,
       stage: 'complete',

@@ -80,8 +80,12 @@ import {
   availableRecommendationToolNames,
   isRecommendationToolName,
 } from '../../recommendations/application/tool-availability.js';
-import { recommendationCartLineId } from '../../recommendations/application/tool-execution.js';
+import {
+  recommendationCartLineId,
+  recommendationCartRevision,
+} from '../../recommendations/application/tool-execution.js';
 import { bindProductOrderFlow } from '../../recommendations/application/product-order-flow.js';
+import { parseRecommendationOutcomeRequest } from '../../recommendations/domain/schemas.js';
 import { initialRecommendationState } from '../../recommendations/state/state-machine.js';
 
 const DEFAULT_CONVERSATION_CONTEXT_TOKEN_BUDGET = 8_192;
@@ -163,6 +167,124 @@ async function bindCurrentProductOrderFlow(state: AgentState): Promise<void> {
     state.recommendationState = initialRecommendationState(binding.orderFlowId);
   }
   state.productOrderFlow = binding;
+}
+
+async function refreshRecommendationState(
+  input: AgentTurnInput,
+  state: AgentState,
+): Promise<void> {
+  const latest = await loadPriorVerifiedState(input.store, input.sessionId, {
+    packRef: KFC_VIETNAM_PACK_REF,
+    schemaVersion: '1',
+    parseState: parseKfcVerifiedState,
+  });
+  if (latest.recommendationState) {
+    state.recommendationState = latest.recommendationState;
+  }
+}
+
+function laterInstant(instant: string, milliseconds: number): string {
+  const parsed = Date.parse(instant);
+  if (!Number.isFinite(parsed)) {
+    throw new Error('trusted_recommendation_action_time_invalid');
+  }
+  return new Date(parsed + milliseconds).toISOString();
+}
+
+async function recordTrustedRecommendationOutcome(input: {
+  turnInput: AgentTurnInput;
+  state: AgentState;
+  eventType:
+    | 'selected'
+    | 'explicitly_dismissed'
+    | 'cart_mutation_succeeded'
+    | 'cart_mutation_failed';
+  recommendationId: string;
+  actionId: string | null;
+  cartRevision: string;
+  occurredAt: string;
+}): Promise<void> {
+  const recommendations = input.turnInput.recommendations;
+  const actionDigest = input.turnInput.trustedCustomerAction?.actionDigest;
+  if (!recommendations || !actionDigest) {
+    throw new Error('trusted_recommendation_action_authority_unavailable');
+  }
+  const eventDigest = await stateRevision({
+    actionDigest,
+    eventType: input.eventType,
+  });
+  const result = await recommendations.recordOutcome(
+    input.recommendationId,
+    parseRecommendationOutcomeRequest({
+      schemaVersion: 'kfc-recommendation-event-v1',
+      eventId: `recommendation-event:${eventDigest.slice(0, 24)}`,
+      eventType: input.eventType,
+      occurredAt: input.occurredAt,
+      actor: 'customer',
+      actionId: input.actionId,
+      cartRevision: input.cartRevision,
+      payload: {},
+    }),
+  );
+  if (result.status !== 'recorded' && result.status !== 'replay') {
+    throw new Error(`trusted_recommendation_outcome_${result.status}`);
+  }
+  await refreshRecommendationState(input.turnInput, input.state);
+}
+
+async function prepareTrustedRecommendationAction(input: {
+  turnInput: AgentTurnInput;
+  state: AgentState;
+  occurredAt: string;
+}): Promise<void> {
+  const command = input.turnInput.trustedCustomerAction?.command;
+  if (
+    command?.kind !== 'recommendation_select' &&
+    command?.kind !== 'recommendation_dismiss'
+  ) {
+    return;
+  }
+  const recommendations = input.turnInput.recommendations;
+  const cart = input.state.cart;
+  if (!recommendations || !cart) {
+    throw new Error('trusted_recommendation_action_authority_unavailable');
+  }
+  const recommendationActionId =
+    command.kind === 'recommendation_select'
+      ? command.recommendationActionId
+      : input.state.recommendationState?.pendingRecommendation?.actionIds[0];
+  if (!recommendationActionId) {
+    throw new Error('trusted_recommendation_action_not_pending');
+  }
+  const cartRevision = await recommendationCartRevision(cart);
+  const resolution = await recommendations.resolveTrustedAction({
+    recommendationId: command.recommendationId,
+    recommendationActionId,
+    sessionId: input.turnInput.sessionId,
+    customerId: input.turnInput.customerId,
+    cartRevision,
+  });
+  if (resolution.status !== 'resolved') {
+    throw new Error(`trusted_recommendation_action_${resolution.status}`);
+  }
+  if (command.kind === 'recommendation_dismiss') {
+    await recordTrustedRecommendationOutcome({
+      ...input,
+      eventType: 'explicitly_dismissed',
+      recommendationId: command.recommendationId,
+      actionId: null,
+      cartRevision,
+    });
+    return;
+  }
+  input.state.trustedRecommendationAction = resolution.action;
+  await recordTrustedRecommendationOutcome({
+    ...input,
+    eventType: 'selected',
+    recommendationId: command.recommendationId,
+    actionId: resolution.action.actionId,
+    cartRevision,
+  });
 }
 
 const VERIFIED_QUEUED_HANDOFF_RESPONSE =
@@ -504,19 +626,86 @@ function trustedCartChanges(
       const change = trustedModifierBatchChange(state, command);
       return change ? [change] : undefined;
     }
+    case 'recommendation_select': {
+      const action = state.trustedRecommendationAction;
+      if (
+        !action ||
+        action.actionId !== command.recommendationActionId ||
+        !state.cart
+      ) {
+        return undefined;
+      }
+      if (action.type === 'add_product') {
+        return [
+          {
+            itemCode: action.sellableItemId,
+            quantity: action.quantity,
+          },
+        ];
+      }
+      if (action.type === 'replace_cart_line') {
+        const replaced = state.cart.items.find(
+          (item, index) =>
+            recommendationCartLineId(item.itemCode, index) ===
+            action.replacedCartLineId,
+        );
+        if (
+          !replaced ||
+          action.replacement.cartRevision !== action.cartRevision
+        ) {
+          return undefined;
+        }
+        return [
+          { itemCode: replaced.itemCode, quantity: 0 },
+          {
+            itemCode: action.replacement.sellableItemId,
+            quantity: action.replacement.quantity,
+          },
+        ];
+      }
+      const parent = state.cart.items.find(
+        (item, index) =>
+          item.itemCode === action.parentSellableItemId &&
+          recommendationCartLineId(item.itemCode, index) ===
+            action.parentCartLineId,
+      );
+      const groupId = action.groupPath.at(-1);
+      if (!parent || !groupId) return undefined;
+      return [
+        {
+          itemCode: parent.itemCode,
+          quantity: parent.quantity,
+          modifiers: [
+            ...(existingCartModifiers(state, parent.itemCode) ?? []).filter(
+              (modifier) => modifier.groupId !== groupId,
+            ),
+            {
+              groupId,
+              modifierId: action.optionId,
+              quantity: action.quantity,
+            },
+          ],
+        },
+      ];
+    }
     default:
       return undefined;
   }
 }
 
-function hasTrustedCartMutationAction(input: AgentTurnInput): boolean {
+function hasTrustedCartMutationAction(
+  input: AgentTurnInput,
+  state: AgentState,
+): boolean {
   const kind = input.trustedCustomerAction?.command.kind;
   return (
     kind === 'cart_update' ||
     kind === 'cart_batch_update' ||
     kind === 'cart_draft_commit' ||
     kind === 'modifier_selection' ||
-    kind === 'modifier_batch_selection'
+    kind === 'modifier_batch_selection' ||
+    (kind === 'recommendation_select' &&
+      state.trustedRecommendationAction !== undefined)
   );
 }
 
@@ -532,7 +721,7 @@ function modelMayUseTool(
     case 'recommendSmartCrossSell':
       return Boolean(input.recommendations);
     case 'updateCart':
-      return hasTrustedCartMutationAction(input);
+      return hasTrustedCartMutationAction(input, state);
     case 'placeOrder':
       return command === 'confirm_order';
     case 'createPaymentLink':
@@ -1365,8 +1554,16 @@ export const kfcVietnamPack: BusinessPack<
         state.cart = created.value;
       }
       const currentTurnToolTrace: ToolTraceEntry[] = [];
-      if (hasTrustedCartMutationAction(input)) {
-        await executeModelTool({
+      if (input.recommendations) {
+        await bindCurrentProductOrderFlow(state);
+        await prepareTrustedRecommendationAction({
+          turnInput: input,
+          state,
+          occurredAt: currentUserTurn.createdAt,
+        });
+      }
+      if (hasTrustedCartMutationAction(input, state)) {
+        const trustedMutationResult = await executeModelTool({
           turnInput: input,
           state,
           toolName: 'updateCart',
@@ -1378,9 +1575,24 @@ export const kfcVietnamPack: BusinessPack<
           externalCallContext,
           currentTurnToolTrace,
         });
-      }
-      if (input.recommendations) {
-        await bindCurrentProductOrderFlow(state);
+        const recommendationCommand = input.trustedCustomerAction?.command;
+        const recommendationAction = state.trustedRecommendationAction;
+        if (
+          recommendationCommand?.kind === 'recommendation_select' &&
+          recommendationAction
+        ) {
+          await recordTrustedRecommendationOutcome({
+            turnInput: input,
+            state,
+            eventType: trustedMutationResult.ok
+              ? 'cart_mutation_succeeded'
+              : 'cart_mutation_failed',
+            recommendationId: recommendationCommand.recommendationId,
+            actionId: recommendationAction.actionId,
+            cartRevision: await recommendationCartRevision(state.cart!),
+            occurredAt: laterInstant(currentUserTurn.createdAt, 1),
+          });
+        }
       }
       await input.observeRun?.({ kind: 'planning' });
       const callbacks = localToolEvidenceCallbacks(

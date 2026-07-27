@@ -21,6 +21,15 @@ import {
   projectFulfillment,
   projectPaymentMethod,
 } from '../agent/modelPublicationStateProjection.js';
+import type {
+  RecommendationPresentation,
+  RecommendationPresentationBinding,
+} from '../recommendations/application/service-types.js';
+import type {
+  CustomerReasonCode,
+  DisplayFact,
+  RecommendationAction,
+} from '../recommendations/domain/contracts.js';
 
 const smartMenuActions: KfcGenUiAttachment['actions'] = [
   { id: 'add_items', label: 'Xác nhận món', intent: 'primary' },
@@ -113,7 +122,124 @@ export interface SelectKfcGenUiInput {
    * durable payment attempt when the provider check itself reports failure.
    */
   paymentStatusPresentation?: PaymentStatusPresentation;
+  /** Server-only exact recommendation publication binding. Never model-authored. */
+  recommendationPresentation?: RecommendationPresentation;
   issuedAt?: Date;
+}
+
+const recommendationReasonText: Record<CustomerReasonCode, string> = {
+  popular_here: 'Được nhiều khách chọn tại cửa hàng này',
+  ordered_before: 'Bạn đã từng đặt món này',
+  matches_your_history: 'Phù hợp với lịch sử đặt món của bạn',
+  completes_your_item: 'Phù hợp với món bạn đang chọn',
+  completes_your_meal: 'Giúp hoàn thiện bữa ăn',
+  active_offer: 'Đang có ưu đãi được xác minh',
+  merchandising_selection: 'Lựa chọn đang được giới thiệu',
+};
+
+function recommendationOfferKind(
+  action: RecommendationAction,
+): 'product' | 'modifier' {
+  return action.type === 'apply_modifier' ? 'modifier' : 'product';
+}
+
+function recommendationOfferPrice(
+  action: RecommendationAction,
+): RecommendationAction['priceImpact'] {
+  return action.type === 'replace_cart_line'
+    ? action.replacement.priceImpact
+    : action.priceImpact;
+}
+
+function recommendationPresentationMatches(
+  state: AgentState,
+  presentation: RecommendationPresentation,
+): boolean {
+  const { response, binding } = presentation;
+  const actions = response.primaryOffer?.actions ?? [];
+  return (
+    response.status === 'recommended' &&
+    actions.length > 0 &&
+    response.recommendationId === binding.recommendationId &&
+    (state.productOrderFlow === undefined ||
+      response.orderFlowId === state.productOrderFlow.orderFlowId) &&
+    binding.sessionId === state.sessionId &&
+    binding.customerId === state.customerId &&
+    binding.cartRevision === actions[0]?.cartRevision &&
+    actions.every(
+      (action, index) =>
+        action.cartRevision === binding.cartRevision &&
+        binding.renderedActions[index]?.actionId === action.actionId &&
+        binding.renderedActions[index]?.position === index + 1,
+    ) &&
+    binding.renderedActions.length === actions.length
+  );
+}
+
+function recommendationOfferAttachment(
+  state: AgentState,
+  presentation: RecommendationPresentation,
+): KfcGenUiAttachment | undefined {
+  if (!recommendationPresentationMatches(state, presentation)) {
+    return undefined;
+  }
+  const { response, binding } = presentation;
+  const actions = response.primaryOffer!.actions;
+  const displayFacts = new Map(
+    response.displayFacts.map((fact) => [fact.actionId, fact]),
+  );
+  const offers = actions.flatMap((action) => {
+    const fact: DisplayFact | undefined = displayFacts.get(action.actionId);
+    if (!fact) return [];
+    return [
+      {
+        recommendationActionId: action.actionId,
+        kind: recommendationOfferKind(action),
+        name: fact.name,
+        imageUrl: fact.imageUrl,
+        price: recommendationOfferPrice(action),
+        priceImpact: fact.priceImpact,
+      },
+    ];
+  });
+  if (offers.length !== actions.length) return undefined;
+  return {
+    id: binding.attachmentId,
+    lifecycleStage: 'recommendation',
+    widgetKind: 'recommendationOffer',
+    status: 'active',
+    title:
+      response.placement === 'smart_cross_sell'
+        ? 'Có thể bạn cũng thích'
+        : 'Gợi ý dành cho bạn',
+    data: {
+      recommendationId: response.recommendationId,
+      orderFlowId: response.orderFlowId,
+      placement: response.placement,
+      decisionSource: response.decisionSource,
+      offers,
+      reasonCodes: response.reasonCodes,
+      reasonText: response.reasonCodes.map(
+        (reason) => recommendationReasonText[reason],
+      ),
+      cartRevision: binding.cartRevision,
+      actionDigest: binding.actionDigest,
+      decisionDigest: binding.decisionDigest,
+      versionBindingDigest: binding.versionBindingDigest,
+    },
+    actions: [
+      ...actions.map((action) => ({
+        id: `recommendation_select:${action.actionId}`,
+        label: 'Thêm vào đơn',
+        intent: 'primary' as const,
+      })),
+      {
+        id: 'recommendation_dismiss',
+        label: 'Không, cảm ơn',
+        intent: 'secondary' as const,
+      },
+    ],
+  };
 }
 
 interface PaymentStatusEvidence {
@@ -239,6 +365,20 @@ function selectKfcGenUiAttachmentUnbound(
   input: SelectKfcGenUiInput,
 ): KfcGenUiAttachment | undefined {
   const { state, turnToolNames } = input;
+  if (
+    input.recommendationPresentation &&
+    turnToolNames.some(
+      (name) =>
+        name === 'recommendStarter' ||
+        name === 'recommendModifierUpsell' ||
+        name === 'recommendSmartCrossSell',
+    )
+  ) {
+    return recommendationOfferAttachment(
+      state,
+      input.recommendationPresentation,
+    );
+  }
   const currentPaymentOrder =
     input.paymentStatusPresentation && !state.order
       ? input.recentOrderPresentation

@@ -27,27 +27,70 @@ const nonNegativeIntegerSchema = z.number().int().nonnegative();
 const nonBlankStringSchema = z.string().min(1);
 
 export interface RecommendationRenderBinding {
+  recommendationId: string;
   assistantTurnId: string;
   attachmentId: string;
+  renderedActions: z.infer<typeof renderedRecommendationActionSchema>[];
+  actionDigest: string;
+  decisionDigest: string;
+  versionBindingDigest: string;
+  sessionId: string;
+  customerId: string | null;
+  cartRevision: string;
 }
 
 export const recommendationRenderBindingSchema = z
   .object({
+    recommendationId: opaqueIdSchema,
     assistantTurnId: opaqueIdSchema,
     attachmentId: opaqueIdSchema,
+    renderedActions: z.array(renderedRecommendationActionSchema).max(4),
+    actionDigest: sha256Schema,
+    decisionDigest: sha256Schema,
+    versionBindingDigest: sha256Schema,
+    sessionId: opaqueIdSchema,
+    customerId: opaqueIdSchema.nullable(),
+    cartRevision: opaqueIdSchema,
   })
   .strict();
 
 export function renderBindingForDecisionDigests(input: {
   requestFingerprint: string;
   actionDigest: string;
-}): RecommendationRenderBinding {
+}): Pick<RecommendationRenderBinding, 'assistantTurnId' | 'attachmentId'> {
   const token = `${sha256Schema.parse(input.requestFingerprint).slice(0, 48)}${sha256Schema
     .parse(input.actionDigest)
     .slice(0, 48)}`;
-  return recommendationRenderBindingSchema.parse({
+  return {
     assistantTurnId: `recommendation-turn:${token}`,
     attachmentId: `recommendation-attachment:${token}`,
+  };
+}
+
+export function presentationBindingForDecision(input: {
+  request: RecommendationDecisionRequest;
+  response: RecommendationDecisionResponse;
+  requestFingerprint: string;
+  actionDigest: string;
+  decisionDigest: string;
+  versionBindingDigest: string;
+  customerId: string | null;
+}): RecommendationRenderBinding {
+  const identity = renderBindingForDecisionDigests(input);
+  return recommendationRenderBindingSchema.parse({
+    recommendationId: input.response.recommendationId,
+    ...identity,
+    renderedActions:
+      input.response.primaryOffer?.actions.map((action, index) => ({
+        actionId: action.actionId,
+        position: index + 1,
+      })) ?? [],
+    actionDigest: input.actionDigest,
+    decisionDigest: input.decisionDigest,
+    versionBindingDigest: input.versionBindingDigest,
+    sessionId: input.request.sessionId,
+    customerId: input.customerId,
+    cartRevision: input.request.cartRevision,
   });
 }
 
@@ -349,7 +392,20 @@ export const recommendationDecisionRecordSchema = z
     if (
       record.renderBinding.assistantTurnId !==
         expectedRenderBinding.assistantTurnId ||
-      record.renderBinding.attachmentId !== expectedRenderBinding.attachmentId
+      record.renderBinding.attachmentId !==
+        expectedRenderBinding.attachmentId ||
+      record.renderBinding.recommendationId !==
+        record.response.recommendationId ||
+      record.renderBinding.sessionId !== record.request.sessionId ||
+      record.renderBinding.cartRevision !== record.request.cartRevision ||
+      record.renderBinding.actionDigest !== record.actionDigest ||
+      JSON.stringify(record.renderBinding.renderedActions) !==
+        JSON.stringify(
+          record.response.primaryOffer?.actions.map((action, index) => ({
+            actionId: action.actionId,
+            position: index + 1,
+          })) ?? [],
+        )
     ) {
       context.addIssue({
         code: z.ZodIssueCode.custom,

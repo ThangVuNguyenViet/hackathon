@@ -32,6 +32,7 @@ const nonBlankStringSchema = z.string().trim().min(1);
 const trustedContextSchema = z
   .object({
     parentCartLineId: nonBlankStringSchema.nullable().optional(),
+    presentationCustomerId: nonBlankStringSchema.nullable().optional(),
     remainingBudgetVnd: z.number().int().nonnegative().nullable().optional(),
     verifiedCohorts: z
       .array(nonBlankStringSchema)
@@ -104,6 +105,7 @@ export function parseRecommendationDecisionApplicationInput(
     requestKind: outer.requestKind,
     trusted: {
       parentCartLineId: trusted.parentCartLineId ?? null,
+      presentationCustomerId: trusted.presentationCustomerId ?? null,
       remainingBudgetVnd: trusted.remainingBudgetVnd ?? null,
       verifiedCohorts: [...(trusted.verifiedCohorts ?? [])].sort(),
       verifiedDietaryEvidence: trusted.verifiedDietaryEvidence

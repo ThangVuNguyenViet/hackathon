@@ -8,8 +8,175 @@ import {
 } from '../../src/genui/kfcGenUi.js';
 import { MemoryStore } from '../../src/persistence/memoryStore.js';
 import { createPackStateEnvelope } from '../../src/runtime/businessPack.js';
+import { recommendationCartRevision } from '../../src/recommendations/application/tool-execution.js';
 
 describe('KFC GenUI guest actions', () => {
+  it('derives ID-only recommendation select/dismiss commands and replays once', async () => {
+    const sessionId = 'kfc:recommendation-action-demo';
+    const customerId = 'recommendation-action-demo';
+    const store = new MemoryStore();
+    const cart = {
+      id: 'cart-recommendation-1',
+      items: [],
+      subtotalVnd: 0,
+      discountVnd: 0,
+      deliveryFeeVnd: 0,
+      totalVnd: 0,
+      voucherCode: null,
+    };
+    const cartRevision = await recommendationCartRevision(cart);
+    const verifiedState = { cart };
+    await store.putPackState(
+      sessionId,
+      await createPackStateEnvelope({
+        packRef: kfcVietnamPack.ref,
+        schemaVersion: kfcVietnamPack.stateSchemaVersion,
+        state: verifiedState,
+      }),
+    );
+    const attachment: KfcGenUiAttachment = {
+      id: 'recommendation-attachment-1',
+      lifecycleStage: 'recommendation',
+      widgetKind: 'recommendationOffer',
+      status: 'active',
+      title: 'Gợi ý dành cho bạn',
+      data: {
+        recommendationId: 'recommendation-1',
+        cartRevision,
+        actionDigest: 'b'.repeat(64),
+        decisionDigest: 'c'.repeat(64),
+        versionBindingDigest: 'd'.repeat(64),
+        offers: [
+          {
+            recommendationActionId: 'recommendation-action-1',
+            kind: 'product',
+            name: 'Gà giòn cay',
+            imageUrl: null,
+            price: { amount: 49_000, currency: 'VND' },
+            priceImpact: { amount: 49_000, currency: 'VND' },
+          },
+        ],
+      },
+      actions: [
+        {
+          id: 'recommendation_select:recommendation-action-1',
+          label: 'Thêm vào đơn',
+        },
+        { id: 'recommendation_dismiss', label: 'Không, cảm ơn' },
+      ],
+      expiresAt: '2099-01-01T00:00:00.000Z',
+      authority: {
+        schemaVersion: 'kfc-genui-v1',
+        sessionId,
+        customerId,
+        verifiedRevision: kfcGenUiVerifiedStateRevision(verifiedState),
+        actionLifecycle: 'one_shot',
+        issuedAt: '2026-07-27T00:00:00.000Z',
+        expiresAt: '2099-01-01T00:00:00.000Z',
+      },
+    };
+    const sourceTurn = await store.appendTurn({
+      id: 'recommendation-turn-1',
+      sessionId,
+      channel: 'kfc',
+      role: 'assistant',
+      text: 'Mình có một gợi ý cho bạn.',
+      externalMessageId: null,
+      externalUserId: customerId,
+      deliveryStatus: 'sent',
+      metadata: { genUi: attachment },
+    });
+    const kfcAgentResponse = vi.fn(async () => ({
+      status: 200,
+      body: { responseText: 'Đã thêm món.' },
+    }));
+    const binding = {
+      recommendationId: 'recommendation-1',
+      assistantTurnId: sourceTurn.id,
+      attachmentId: attachment.id,
+      renderedActions: [
+        { actionId: 'recommendation-action-1', position: 1 },
+      ],
+      actionDigest: 'b'.repeat(64),
+      decisionDigest: 'c'.repeat(64),
+      versionBindingDigest: 'd'.repeat(64),
+      sessionId,
+      customerId,
+      cartRevision,
+    };
+    const handlers = createChatRouteHandlers({
+      store,
+      kfcAgentResponse,
+      recommendations: {
+        application: {
+          resolveTrustedAction: vi.fn(async () => ({
+            status: 'resolved' as const,
+            action: {
+              type: 'add_product' as const,
+              actionId: 'recommendation-action-1',
+              sellableItemId: 'item-1' as never,
+              quantity: 1,
+              priceImpact: { amount: 49_000, currency: 'VND' as const },
+              cartRevision,
+            },
+            presentation: {
+              response: {} as never,
+              binding,
+            },
+          })),
+        },
+      },
+    } as unknown as RouteHandlerContext);
+
+    const request = {
+      sessionId,
+      customerId,
+      clientMessageId: 'recommendation-action-client-1',
+      action: {
+        attachmentId: attachment.id,
+        actionId: 'recommendation_select:recommendation-action-1',
+      },
+    };
+    const selected = await handlers.chatKfcGenUiAction(request);
+    expect(selected.status).toBe(200);
+    expect(kfcAgentResponse).toHaveBeenCalledWith(
+      expect.objectContaining({
+        trustedCustomerAction: {
+          source: 'kfc_genui_action',
+          assistantTurnId: sourceTurn.id,
+          attachmentId: attachment.id,
+          actionDigest: expect.stringMatching(/^[a-f0-9]{64}$/u),
+          verifiedRevision: attachment.authority!.verifiedRevision,
+          lifecycle: 'one_shot',
+          command: {
+            kind: 'recommendation_select',
+            recommendationId: 'recommendation-1',
+            recommendationActionId: 'recommendation-action-1',
+          },
+        },
+      }),
+    );
+
+    await expect(handlers.chatKfcGenUiAction(request)).resolves.toMatchObject({
+      status: 200,
+      body: { replayed: true },
+    });
+    expect(kfcAgentResponse).toHaveBeenCalledOnce();
+    await expect(
+      handlers.chatKfcGenUiAction({
+        ...request,
+        clientMessageId: 'recommendation-action-client-forged',
+        action: {
+          attachmentId: attachment.id,
+          actionId: 'recommendation_select:forged-action',
+        },
+      }),
+    ).resolves.toMatchObject({
+      status: 404,
+      body: { errorCode: 'action_not_found' },
+    });
+  });
+
   it('accepts a server-authorized anonymous menu selection without customer authentication', async () => {
     const sessionId = 'kfc:anonymous-demo-customer';
     const customerId = 'anonymous-demo-customer';

@@ -27,6 +27,61 @@ import {
   type WorkerExecutionContext,
 } from '../../src/worker.js';
 import { configuredTestAgent } from '../support/configured-agent-model.js';
+import type { RecommendationApplicationService } from '../../src/recommendations/application/service-types.js';
+import type { RecommendationAction } from '../../src/recommendations/domain/contracts.js';
+import { recommendationCartRevision } from '../../src/recommendations/application/tool-execution.js';
+import { bindProductOrderFlow } from '../../src/recommendations/application/product-order-flow.js';
+import { parseRecommendationState } from '../../src/recommendations/domain/schemas.js';
+
+function recommendationServiceForTrustedAction(
+  action: RecommendationAction,
+): RecommendationApplicationService {
+  return {
+    hasPriorCompletedHistory: vi.fn(async () => false),
+    decide: vi.fn(),
+    presentationFor: vi.fn(async () => null),
+    resolveTrustedAction: vi.fn(async () => ({
+      status: 'resolved' as const,
+      action,
+      presentation: {
+        response: {} as never,
+        binding: {
+          recommendationId: 'recommendation-trusted-action',
+          assistantTurnId: 'assistant-turn-recommendation',
+          attachmentId: 'attachment-recommendation',
+          renderedActions: [{ actionId: action.actionId, position: 1 }],
+          actionDigest: 'a'.repeat(64),
+          decisionDigest: 'b'.repeat(64),
+          versionBindingDigest: 'c'.repeat(64),
+          sessionId: 'unused',
+          customerId: 'customer-1',
+          cartRevision: action.cartRevision,
+        },
+      },
+    })),
+    recordImpression: vi.fn(),
+    recordOutcome: vi.fn(async (_recommendationId, request) => ({
+      status: 'recorded' as const,
+      event: {
+        schemaVersion: 'kfc-recommendation-event-v1' as const,
+        eventId: request.eventId as never,
+        eventType: request.eventType,
+        recommendationId: 'recommendation-trusted-action' as never,
+        requestId: 'recommendation-request-trusted-action' as never,
+        orderFlowId: 'order-flow-trusted-action' as never,
+        sessionId: 'session-trusted-action',
+        placement: 'local_favorite' as const,
+        occurredAt: request.occurredAt,
+        recordedAt: request.occurredAt,
+        actor: request.actor,
+        actionId: request.actionId,
+        cartRevision: request.cartRevision,
+        versionBindings: {} as never,
+        payload: {},
+      },
+    })),
+  };
+}
 
 function toolOutputText(value: unknown): string {
   if (typeof value === 'string') return value;
@@ -1198,6 +1253,473 @@ describe('KFC Vietnam business pack compatibility', () => {
     expect(applyChanges.mock.calls[0]?.[1]).toEqual([
       { itemCode, quantity: 1 },
     ]);
+  });
+
+  it('derives an exact product mutation from a stored recommendation action and records selected/succeeded', async () => {
+    const fixtures = await loadGeneratedFixtures(process.cwd());
+    const baseClients = createMockClients(fixtures);
+    const sessionId = 'session-kfc-recommendation-product';
+    const context = {
+      signal: new AbortController().signal,
+      deadlineAt: Date.now() + 60_000,
+    };
+    const created = await baseClients.cart.createCart(sessionId, context);
+    if (!created.ok || !created.value) throw new Error('Expected test cart');
+    const cartRevision = await recommendationCartRevision(created.value);
+    const itemCode = fixtures.menuItems[0]!.code;
+    const action = {
+      type: 'add_product' as const,
+      actionId: 'recommendation-action-product',
+      sellableItemId: itemCode as never,
+      quantity: 1,
+      priceImpact: {
+        amount: fixtures.menuItems[0]!.priceVnd,
+        currency: 'VND' as const,
+      },
+      cartRevision,
+    };
+    const recommendations = recommendationServiceForTrustedAction(action);
+    const store = new MemoryStore();
+    await store.putPackState(
+      sessionId,
+      await createPackStateEnvelope({
+        packRef: kfcVietnamPack.ref,
+        schemaVersion: kfcVietnamPack.stateSchemaVersion,
+        state: { cart: created.value },
+      }),
+    );
+    const applyChanges = vi.fn(baseClients.cart.applyChanges);
+
+    await kfcVietnamPack.run(
+      {
+        sessionId,
+        customerId: 'customer-1',
+        channel: 'kfc',
+        text: '',
+        trustedCustomerAction: {
+          source: 'kfc_genui_action',
+          assistantTurnId: 'assistant-turn-recommendation',
+          attachmentId: 'attachment-recommendation',
+          actionDigest: 'a'.repeat(64),
+          verifiedRevision: 'd'.repeat(64),
+          lifecycle: 'one_shot',
+          command: {
+            kind: 'recommendation_select',
+            recommendationId: 'recommendation-trusted-action',
+            recommendationActionId: action.actionId,
+          },
+        },
+        recommendations,
+        clients: {
+          ...baseClients,
+          cart: { ...baseClients.cart, applyChanges },
+        },
+        store,
+        dashboard: new DashboardEventBus(),
+        agentModelBinding: configuredTestAgent({} as BaseChatModel),
+      },
+      async () => 'Đã thêm món.',
+    );
+
+    expect(applyChanges).toHaveBeenCalledOnce();
+    expect(applyChanges.mock.calls[0]?.[1]).toEqual([
+      { itemCode, quantity: 1 },
+    ]);
+    expect(recommendations.recordOutcome).toHaveBeenNthCalledWith(
+      1,
+      'recommendation-trusted-action',
+      expect.objectContaining({
+        eventType: 'selected',
+        actionId: action.actionId,
+        cartRevision,
+      }),
+    );
+    expect(recommendations.recordOutcome).toHaveBeenNthCalledWith(
+      2,
+      'recommendation-trusted-action',
+      expect.objectContaining({
+        eventType: 'cart_mutation_succeeded',
+        actionId: action.actionId,
+      }),
+    );
+  });
+
+  it('derives an exact modifier mutation from a stored recommendation action', async () => {
+    const fixtures = await loadGeneratedFixtures(process.cwd());
+    const menuModifier = fixtures.menuModifiers.find(
+      (candidate) => candidate.modifierGroups[0]?.options[0],
+    );
+    if (!menuModifier) throw new Error('Expected modifier fixture');
+    const baseClients = createMockClients(fixtures);
+    const sessionId = 'session-kfc-recommendation-modifier';
+    const context = {
+      signal: new AbortController().signal,
+      deadlineAt: Date.now() + 60_000,
+    };
+    const created = await baseClients.cart.createCart(sessionId, context);
+    if (!created.ok || !created.value) throw new Error('Expected test cart');
+    const seeded = await baseClients.cart.applyChanges(
+      created.value,
+      [{ itemCode: menuModifier.itemCode, quantity: 1 }],
+      context,
+    );
+    if (!seeded.ok || !seeded.value) throw new Error('Expected seeded cart');
+    const group = menuModifier.modifierGroups[0]!;
+    const option = group.options[0]!;
+    const cartRevision = await recommendationCartRevision(seeded.value);
+    const action = {
+      type: 'apply_modifier' as const,
+      actionId: 'recommendation-action-modifier',
+      parentCartLineId:
+        `cart-line:1:${menuModifier.itemCode}` as never,
+      parentSellableItemId: menuModifier.itemCode as never,
+      optionId: option.modifierId as never,
+      groupPath: [group.groupId],
+      quantity: 1,
+      priceImpact: {
+        amount: Math.max(0, option.priceDeltaVnd),
+        currency: 'VND' as const,
+      },
+      cartRevision,
+    };
+    const recommendations = recommendationServiceForTrustedAction(action);
+    const store = new MemoryStore();
+    await store.putPackState(
+      sessionId,
+      await createPackStateEnvelope({
+        packRef: kfcVietnamPack.ref,
+        schemaVersion: kfcVietnamPack.stateSchemaVersion,
+        state: { cart: seeded.value },
+      }),
+    );
+    const applyChanges = vi.fn(baseClients.cart.applyChanges);
+
+    await kfcVietnamPack.run(
+      {
+        sessionId,
+        customerId: 'customer-1',
+        channel: 'kfc',
+        text: '',
+        trustedCustomerAction: {
+          source: 'kfc_genui_action',
+          assistantTurnId: 'assistant-turn-recommendation',
+          attachmentId: 'attachment-recommendation',
+          actionDigest: 'a'.repeat(64),
+          verifiedRevision: 'd'.repeat(64),
+          lifecycle: 'one_shot',
+          command: {
+            kind: 'recommendation_select',
+            recommendationId: 'recommendation-trusted-action',
+            recommendationActionId: action.actionId,
+          },
+        },
+        recommendations,
+        clients: {
+          ...baseClients,
+          cart: { ...baseClients.cart, applyChanges },
+        },
+        store,
+        dashboard: new DashboardEventBus(),
+        agentModelBinding: configuredTestAgent({} as BaseChatModel),
+      },
+      async () => 'Đã thêm tùy chọn.',
+    );
+
+    expect(applyChanges).toHaveBeenCalledOnce();
+    expect(applyChanges.mock.calls[0]?.[1]).toEqual([
+      {
+        itemCode: menuModifier.itemCode,
+        quantity: 1,
+        modifiers: [
+          {
+            groupId: group.groupId,
+            modifierId: option.modifierId,
+            quantity: 1,
+          },
+        ],
+      },
+    ]);
+  });
+
+  it('derives an exact cart-line replacement from the stored recommendation action', async () => {
+    const fixtures = await loadGeneratedFixtures(process.cwd());
+    const [currentItem, replacementItem] = fixtures.menuItems;
+    if (!currentItem || !replacementItem) {
+      throw new Error('Expected two menu fixtures');
+    }
+    const baseClients = createMockClients(fixtures);
+    const sessionId = 'session-kfc-recommendation-replacement';
+    const context = {
+      signal: new AbortController().signal,
+      deadlineAt: Date.now() + 60_000,
+    };
+    const created = await baseClients.cart.createCart(sessionId, context);
+    if (!created.ok || !created.value) throw new Error('Expected test cart');
+    const seeded = await baseClients.cart.applyChanges(
+      created.value,
+      [{ itemCode: currentItem.code, quantity: 1 }],
+      context,
+    );
+    if (!seeded.ok || !seeded.value) throw new Error('Expected seeded cart');
+    const cartRevision = await recommendationCartRevision(seeded.value);
+    const action = {
+      type: 'replace_cart_line' as const,
+      actionId: 'recommendation-action-replacement',
+      replacedCartLineId: `cart-line:1:${currentItem.code}` as never,
+      replacement: {
+        type: 'add_product' as const,
+        actionId: 'recommendation-action-replacement-product',
+        sellableItemId: replacementItem.code as never,
+        quantity: 1,
+        priceImpact: {
+          amount: replacementItem.priceVnd,
+          currency: 'VND' as const,
+        },
+        cartRevision,
+      },
+      priceImpact: {
+        amount: Math.max(0, replacementItem.priceVnd - currentItem.priceVnd),
+        currency: 'VND' as const,
+      },
+      cartRevision,
+    };
+    const recommendations = recommendationServiceForTrustedAction(action);
+    const store = new MemoryStore();
+    await store.putPackState(
+      sessionId,
+      await createPackStateEnvelope({
+        packRef: kfcVietnamPack.ref,
+        schemaVersion: kfcVietnamPack.stateSchemaVersion,
+        state: { cart: seeded.value },
+      }),
+    );
+    const applyChanges = vi.fn(baseClients.cart.applyChanges);
+
+    await kfcVietnamPack.run(
+      {
+        sessionId,
+        customerId: 'customer-1',
+        channel: 'kfc',
+        text: '',
+        trustedCustomerAction: {
+          source: 'kfc_genui_action',
+          assistantTurnId: 'assistant-turn-recommendation',
+          attachmentId: 'attachment-recommendation',
+          actionDigest: 'a'.repeat(64),
+          verifiedRevision: 'd'.repeat(64),
+          lifecycle: 'one_shot',
+          command: {
+            kind: 'recommendation_select',
+            recommendationId: 'recommendation-trusted-action',
+            recommendationActionId: action.actionId,
+          },
+        },
+        recommendations,
+        clients: {
+          ...baseClients,
+          cart: { ...baseClients.cart, applyChanges },
+        },
+        store,
+        dashboard: new DashboardEventBus(),
+        agentModelBinding: configuredTestAgent({} as BaseChatModel),
+      },
+      async () => 'Đã thay món.',
+    );
+
+    expect(applyChanges).toHaveBeenCalledOnce();
+    expect(applyChanges.mock.calls[0]?.[1]).toEqual([
+      { itemCode: currentItem.code, quantity: 0 },
+      { itemCode: replacementItem.code, quantity: 1 },
+    ]);
+  });
+
+  it('records a failed trusted recommendation mutation after selection', async () => {
+    const fixtures = await loadGeneratedFixtures(process.cwd());
+    const item = fixtures.menuItems[0]!;
+    const baseClients = createMockClients(fixtures);
+    const sessionId = 'session-kfc-recommendation-failure';
+    const context = {
+      signal: new AbortController().signal,
+      deadlineAt: Date.now() + 60_000,
+    };
+    const created = await baseClients.cart.createCart(sessionId, context);
+    if (!created.ok || !created.value) throw new Error('Expected test cart');
+    const cartRevision = await recommendationCartRevision(created.value);
+    const action = {
+      type: 'add_product' as const,
+      actionId: 'recommendation-action-failure',
+      sellableItemId: item.code as never,
+      quantity: 1,
+      priceImpact: { amount: item.priceVnd, currency: 'VND' as const },
+      cartRevision,
+    };
+    const recommendations = recommendationServiceForTrustedAction(action);
+    const store = new MemoryStore();
+    await store.putPackState(
+      sessionId,
+      await createPackStateEnvelope({
+        packRef: kfcVietnamPack.ref,
+        schemaVersion: kfcVietnamPack.stateSchemaVersion,
+        state: { cart: created.value },
+      }),
+    );
+    const applyChanges = vi.fn(async () => ({
+      ok: false,
+      errorCode: 'provider_rejected',
+      message: 'Cart mutation rejected',
+    }));
+
+    await kfcVietnamPack.run(
+      {
+        sessionId,
+        customerId: 'customer-1',
+        channel: 'kfc',
+        text: '',
+        trustedCustomerAction: {
+          source: 'kfc_genui_action',
+          assistantTurnId: 'assistant-turn-recommendation',
+          attachmentId: 'attachment-recommendation',
+          actionDigest: 'a'.repeat(64),
+          verifiedRevision: 'd'.repeat(64),
+          lifecycle: 'one_shot',
+          command: {
+            kind: 'recommendation_select',
+            recommendationId: 'recommendation-trusted-action',
+            recommendationActionId: action.actionId,
+          },
+        },
+        recommendations,
+        clients: {
+          ...baseClients,
+          cart: { ...baseClients.cart, applyChanges },
+        },
+        store,
+        dashboard: new DashboardEventBus(),
+        agentModelBinding: configuredTestAgent({} as BaseChatModel),
+      },
+      async () => 'Không thể thêm món.',
+    );
+
+    expect(recommendations.recordOutcome).toHaveBeenNthCalledWith(
+      1,
+      'recommendation-trusted-action',
+      expect.objectContaining({ eventType: 'selected' }),
+    );
+    expect(recommendations.recordOutcome).toHaveBeenNthCalledWith(
+      2,
+      'recommendation-trusted-action',
+      expect.objectContaining({
+        eventType: 'cart_mutation_failed',
+        actionId: action.actionId,
+        cartRevision,
+      }),
+    );
+  });
+
+  it('dismisses the current stored recommendation without mutating the cart', async () => {
+    const fixtures = await loadGeneratedFixtures(process.cwd());
+    const baseClients = createMockClients(fixtures);
+    const sessionId = 'session-kfc-recommendation-dismiss';
+    const context = {
+      signal: new AbortController().signal,
+      deadlineAt: Date.now() + 60_000,
+    };
+    const created = await baseClients.cart.createCart(sessionId, context);
+    if (!created.ok || !created.value) throw new Error('Expected test cart');
+    const cartRevision = await recommendationCartRevision(created.value);
+    const item = fixtures.menuItems[0]!;
+    const action = {
+      type: 'add_product' as const,
+      actionId: 'recommendation-action-dismissed',
+      sellableItemId: item.code as never,
+      quantity: 1,
+      priceImpact: { amount: item.priceVnd, currency: 'VND' as const },
+      cartRevision,
+    };
+    const recommendations = recommendationServiceForTrustedAction(action);
+    const productOrderFlow = await bindProductOrderFlow({
+      sessionId,
+      cart: created.value,
+    });
+    const store = new MemoryStore();
+    await store.putPackState(
+      sessionId,
+      await createPackStateEnvelope({
+        packRef: kfcVietnamPack.ref,
+        schemaVersion: kfcVietnamPack.stateSchemaVersion,
+        state: {
+          cart: created.value,
+          productOrderFlow,
+          recommendationState: parseRecommendationState({
+            schemaVersion: 'kfc-recommendation-state-v1',
+            revision: 1,
+            orderFlowId: productOrderFlow.orderFlowId,
+            stage: 'starter_resolved',
+            attemptedPlacements: ['for_you'],
+            shownActionIds: [action.actionId],
+            rejectedActionIds: [],
+            pendingRecommendation: {
+              recommendationId: 'recommendation-trusted-action',
+              requestId: 'recommendation-request-trusted-action',
+              placement: 'for_you',
+              actionIds: [action.actionId],
+              cartRevision,
+              traceRef: 'recommendation-trace-trusted-action',
+              decidedAt: '2026-07-27T09:00:00Z',
+            },
+            recordedOutcomeEventIds: [],
+            nextEligiblePlacement: null,
+          }),
+        },
+      }),
+    );
+    const applyChanges = vi.fn(baseClients.cart.applyChanges);
+
+    await kfcVietnamPack.run(
+      {
+        sessionId,
+        customerId: 'customer-1',
+        channel: 'kfc',
+        text: '',
+        trustedCustomerAction: {
+          source: 'kfc_genui_action',
+          assistantTurnId: 'assistant-turn-recommendation',
+          attachmentId: 'attachment-recommendation',
+          actionDigest: 'e'.repeat(64),
+          verifiedRevision: 'f'.repeat(64),
+          lifecycle: 'one_shot',
+          command: {
+            kind: 'recommendation_dismiss',
+            recommendationId: 'recommendation-trusted-action',
+          },
+        },
+        recommendations,
+        clients: {
+          ...baseClients,
+          cart: { ...baseClients.cart, applyChanges },
+        },
+        store,
+        dashboard: new DashboardEventBus(),
+        agentModelBinding: configuredTestAgent({} as BaseChatModel),
+      },
+      async ({ tools }) => {
+        expect(
+          tools.some((candidate) => candidate.name === 'updateCart'),
+        ).toBe(false);
+        return 'Đã bỏ qua gợi ý.';
+      },
+    );
+
+    expect(applyChanges).not.toHaveBeenCalled();
+    expect(recommendations.recordOutcome).toHaveBeenCalledOnce();
+    expect(recommendations.recordOutcome).toHaveBeenCalledWith(
+      'recommendation-trusted-action',
+      expect.objectContaining({
+        eventType: 'explicitly_dismissed',
+        actionId: null,
+        cartRevision,
+      }),
+    );
   });
 
   it('commits one multi-group modifier draft with one updateCart mutation', async () => {

@@ -126,6 +126,8 @@ function applicationReturning(
   return {
     hasPriorCompletedHistory: vi.fn(),
     decide: vi.fn(async () => ({ status: 'decided' as const, response: value })),
+    presentationFor: vi.fn(async () => null),
+    resolveTrustedAction: vi.fn(async () => ({ status: 'not_found' as const })),
     recordImpression: vi.fn(),
     recordOutcome: vi.fn(),
   };
@@ -228,7 +230,7 @@ describe('recommendation ordering tools', () => {
     });
     expect(application.decide).toHaveBeenCalledWith({
       requestKind: 'proactive',
-      trusted: {},
+      trusted: { presentationCustomerId: 'customer-001' },
       request: expect.objectContaining({
         schemaVersion: 'kfc-recommendation-v1',
         sessionId: 'session-001',

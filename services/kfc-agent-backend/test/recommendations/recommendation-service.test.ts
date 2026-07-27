@@ -1252,7 +1252,7 @@ describe('Recommendation application service', () => {
     ).toBe(2);
   });
 
-  it('atomically records a distinct repeat impression without changing state revision', async () => {
+  it('replays a distinct repeat impression without recording it twice', async () => {
     const { service, decision, impression, inspection } =
       await localEventFixture('impression-repeat-distinct');
     await service.recordImpression(
@@ -1268,8 +1268,11 @@ describe('Recommendation application service', () => {
     await expect(
       service.recordImpression(decision.response.recommendationId, repeat),
     ).resolves.toMatchObject({
-      status: 'recorded',
-      event: { eventId: repeat.eventId, eventType: 'impression_rendered' },
+      status: 'replay',
+      event: {
+        eventId: impression.eventId,
+        eventType: 'impression_rendered',
+      },
     });
     const afterRepeat = await inspection.recommendation(
       decision.response.recommendationId,
@@ -1279,7 +1282,7 @@ describe('Recommendation application service', () => {
       afterRepeat?.events
         .filter((event) => event.eventType === 'impression_rendered')
         .map((event) => event.eventId),
-    ).toEqual([impression.eventId, repeat.eventId]);
+    ).toEqual([impression.eventId]);
   });
 
   it('rejects a conflicting impression event fingerprint', async () => {
@@ -1736,6 +1739,177 @@ describe('Recommendation application service', () => {
       },
       eventCounts: {},
     });
+  });
+
+  it('keeps the exact customer/turn/render binding server-only', async () => {
+    const { service, inspection } = await application();
+    const request = requestFor({
+      suffix: 'presentation-binding',
+      placement: 'local_favorite',
+    });
+    const decision = await service.decide({
+      request,
+      trusted: { presentationCustomerId: 'customer-presentation-1' },
+    });
+    if (decision.status !== 'decided') throw new Error('decision expected');
+
+    const presentation = await service.presentationFor(
+      decision.response.recommendationId,
+      {
+        sessionId: request.sessionId,
+        customerId: 'customer-presentation-1',
+      },
+    );
+
+    expect(presentation).toMatchObject({
+      response: {
+        recommendationId: decision.response.recommendationId,
+        orderFlowId: request.orderFlowId,
+      },
+      binding: {
+        recommendationId: decision.response.recommendationId,
+        sessionId: request.sessionId,
+        customerId: 'customer-presentation-1',
+        cartRevision: request.cartRevision,
+        renderedActions: [
+          {
+            actionId:
+              decision.response.primaryOffer!.actions[0]!.actionId,
+            position: 1,
+          },
+        ],
+      },
+    });
+    expect(presentation?.binding.assistantTurnId).toMatch(
+      /^recommendation-turn:/u,
+    );
+    expect(presentation?.binding.attachmentId).toMatch(
+      /^recommendation-attachment:/u,
+    );
+    expect(presentation?.binding.actionDigest).toMatch(/^[a-f0-9]{64}$/u);
+    expect(presentation?.binding.decisionDigest).toMatch(/^[a-f0-9]{64}$/u);
+    expect(presentation?.binding.versionBindingDigest).toMatch(
+      /^[a-f0-9]{64}$/u,
+    );
+    await expect(
+      service.presentationFor(decision.response.recommendationId, {
+        sessionId: request.sessionId,
+        customerId: 'forged-customer',
+      }),
+    ).resolves.toBeNull();
+    expect(
+      JSON.stringify(
+        await inspection.recommendation(
+          decision.response.recommendationId,
+        ),
+      ),
+    ).not.toContain('customer-presentation-1');
+
+    const actionId = decision.response.primaryOffer!.actions[0]!.actionId;
+    await expect(
+      service.resolveTrustedAction({
+        recommendationId: decision.response.recommendationId,
+        recommendationActionId: actionId,
+        sessionId: request.sessionId,
+        customerId: 'customer-presentation-1',
+        cartRevision: request.cartRevision,
+      }),
+    ).resolves.toMatchObject({
+      status: 'resolved',
+      action: { actionId },
+    });
+    await expect(
+      service.resolveTrustedAction({
+        recommendationId: decision.response.recommendationId,
+        recommendationActionId: actionId,
+        sessionId: request.sessionId,
+        customerId: 'customer-presentation-1',
+        cartRevision: 'cart-revision-forged',
+      }),
+    ).resolves.toEqual({ status: 'cart_revision_conflict' });
+    await expect(
+      service.resolveTrustedAction({
+        recommendationId: decision.response.recommendationId,
+        recommendationActionId: 'recommendation-action-forged',
+        sessionId: request.sessionId,
+        customerId: 'customer-presentation-1',
+        cartRevision: request.cartRevision,
+      }),
+    ).resolves.toEqual({ status: 'action_not_found' });
+
+    await expect(
+      service.recordOutcome(
+        decision.response.recommendationId,
+        parseRecommendationOutcomeRequest({
+          schemaVersion: 'kfc-recommendation-event-v1',
+          eventId: 'recommendation-event-presentation-dismissed',
+          eventType: 'explicitly_dismissed',
+          occurredAt: '2026-07-27T09:10:00Z',
+          actor: 'customer',
+          actionId: null,
+          cartRevision: request.cartRevision,
+          payload: {},
+        }),
+      ),
+    ).resolves.toMatchObject({ status: 'recorded' });
+    await expect(
+      service.resolveTrustedAction({
+        recommendationId: decision.response.recommendationId,
+        recommendationActionId: actionId,
+        sessionId: request.sessionId,
+        customerId: 'customer-presentation-1',
+        cartRevision: request.cartRevision,
+      }),
+    ).resolves.toEqual({ status: 'stale_recommendation' });
+  });
+
+  it('persists a silent decision without manufacturing rendered actions', async () => {
+    const emptyEngine: RecommendationDecisionEngine = {
+      async decide(context) {
+        const recommended = responseFor(context);
+        return {
+          response: parseRecommendationDecisionResponse({
+            ...recommended,
+            status: 'empty',
+            primaryOffer: null,
+            displayFacts: [],
+            reasonCodes: [],
+            merchandisingEffects: [],
+            counts: {
+              potential: 0,
+              eligible: 0,
+              ineligible: 0,
+              scored: 0,
+              displayed: 0,
+              complete: true,
+            },
+          }),
+          technical: {
+            ...technical(),
+            emptyReason: 'no_eligible_candidates',
+          },
+        };
+      },
+    };
+    const { service, store } = await application(emptyEngine);
+    const request = requestFor({
+      suffix: 'silent-render-binding',
+      placement: 'local_favorite',
+    });
+
+    const result = await service.decide({ request });
+
+    expect(result).toMatchObject({
+      status: 'decided',
+      response: { status: 'empty' },
+    });
+    const stored =
+      result.status === 'decided' || result.status === 'replay'
+        ? await store.getRecommendationDecision(
+            result.response.recommendationId,
+          )
+        : undefined;
+    expect(stored?.renderBinding.renderedActions).toEqual([]);
   });
 
   it('strictly rejects unknown application context before reserving or invoking the engine', async () => {

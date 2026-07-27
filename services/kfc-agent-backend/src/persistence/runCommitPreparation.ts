@@ -39,7 +39,7 @@ export function prepareAssistantTurnCommit(
   const turn: ConversationTurn = {
     ...structuredClone(input.assistantTurn),
     metadata: structuredClone(input.assistantTurn.metadata ?? null),
-    id: `turn_${crypto.randomUUID()}`,
+    id: input.assistantTurn.id ?? `turn_${crypto.randomUUID()}`,
     ordinal,
     createdAt,
   };

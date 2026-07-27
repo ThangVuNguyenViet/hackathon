@@ -53,6 +53,11 @@ export function recommendationCartLineId(
   return `cart-line:${index + 1}:${itemCode}`;
 }
 
+export async function recommendationCartRevision(cart: Cart): Promise<string> {
+  const digest = await digestCommerceAction(cart);
+  return `cart-revision:${digest.slice(0, 24)}`;
+}
+
 function placementFor(input: ExecuteRecommendationToolInput): Placement {
   switch (input.toolName) {
     case 'recommendStarter':
@@ -69,8 +74,7 @@ function placementFor(input: ExecuteRecommendationToolInput): Placement {
 async function requestFor(
   input: ExecuteRecommendationToolInput,
 ): Promise<RecommendationDecisionRequest> {
-  const cartRevisionDigest = await digestCommerceAction(input.cart);
-  const cartRevision = `cart-revision:${cartRevisionDigest.slice(0, 24)}`;
+  const cartRevision = await recommendationCartRevision(input.cart);
   const operationDigest = await digestCommerceAction({
     sessionId: input.sessionId,
     durableRequestIdentity: input.durableRequestIdentity,
@@ -141,8 +145,11 @@ export async function executeRecommendationTool(
     requestKind: input.requestKind,
     trusted:
       input.toolName === 'recommendModifierUpsell'
-        ? { parentCartLineId: input.parentCartLineId }
-        : {},
+        ? {
+            parentCartLineId: input.parentCartLineId,
+            presentationCustomerId: input.state?.customerId ?? null,
+          }
+        : { presentationCustomerId: input.state?.customerId ?? null },
   });
   if (
     applicationResult.status !== 'decided' &&

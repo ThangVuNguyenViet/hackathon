@@ -29,7 +29,11 @@ import type {
   VerifiedCollectionStore,
 } from '../ordering/types.js';
 import type { ExactCartAvailabilityObservationV2 } from '../ordering/exactCartAvailabilityAuthority.js';
-import type { RecommendationState } from '../recommendations/domain/contracts.js';
+import type {
+  RecommendationAction,
+  RecommendationDecisionResponse,
+  RecommendationState,
+} from '../recommendations/domain/contracts.js';
 import type { ProductOrderFlowBinding } from '../recommendations/application/product-order-flow.js';
 
 export interface RetrievedEvidence {
@@ -95,6 +99,10 @@ export interface AgentState {
   handoff?: HandoffState;
   /** Pack-owned durable progression for recommendation decisions. */
   recommendationState?: RecommendationState;
+  /** Turn-local verified decision used only to bind the current GenUI publication. */
+  recommendationDecision?: RecommendationDecisionResponse;
+  /** Server-reloaded exact action for one current trusted recommendation command. */
+  trustedRecommendationAction?: RecommendationAction;
   /** Server-owned durable identity for one product ordering journey. */
   productOrderFlow?: ProductOrderFlowBinding;
   toolTrace?: ToolTraceEntry[];

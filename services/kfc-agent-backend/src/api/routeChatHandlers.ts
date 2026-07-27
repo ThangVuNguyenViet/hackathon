@@ -60,6 +60,7 @@ import {
   isKfcGenUiAttachment,
   kfcGenUiVerifiedStateRevision,
 } from '../genui/kfcGenUi.js';
+import { recommendationCartRevision } from '../recommendations/application/tool-execution.js';
 import { runAgentTurn } from '../agent/kfcAgent.js';
 import { loadVerifiedStateProjection } from '../agent/verifiedState.js';
 import { kfcVietnamPack } from '../businessPacks/kfcVietnam/kfcVietnamPack.js';
@@ -306,6 +307,7 @@ export function createChatRouteHandlers(context: RouteHandlerContext) {
     processMessengerEventInternal,
     recoverStaleMessengerDeliveriesInternal,
     processMessengerAgentRunInternal,
+    recommendations,
   } = context;
   return {
     async chatKfcMessage(body: unknown) {
@@ -641,7 +643,44 @@ export function createChatRouteHandlers(context: RouteHandlerContext) {
         value: trustedValue,
         payload: trustedPayload,
       };
-      const command = customerCommandFromVerifiedAction(trustedAction);
+      const recommendationId =
+        attachment.widgetKind === 'recommendationOffer' &&
+        typeof attachment.data.recommendationId === 'string'
+          ? attachment.data.recommendationId
+          : undefined;
+      const selectedRecommendationActionId = actionSpec.id.startsWith(
+        'recommendation_select:',
+      )
+        ? actionSpec.id.slice('recommendation_select:'.length)
+        : undefined;
+      const displayedRecommendationActionIds = new Set(
+        (Array.isArray(attachment.data.offers) ? attachment.data.offers : [])
+          .filter(isRecord)
+          .map((offer) => offer.recommendationActionId)
+          .filter(
+            (actionId): actionId is string => typeof actionId === 'string',
+          ),
+      );
+      const isRecommendationAction =
+        attachment.widgetKind === 'recommendationOffer' &&
+        recommendationId !== undefined &&
+        parsed.data.action.value === undefined &&
+        parsed.data.action.payload === undefined;
+      const command = isRecommendationAction
+        ? selectedRecommendationActionId &&
+          displayedRecommendationActionIds.has(selectedRecommendationActionId)
+          ? {
+              kind: 'recommendation_select' as const,
+              recommendationId,
+              recommendationActionId: selectedRecommendationActionId,
+            }
+          : actionSpec.id === 'recommendation_dismiss'
+            ? {
+                kind: 'recommendation_dismiss' as const,
+                recommendationId,
+              }
+            : undefined
+        : customerCommandFromVerifiedAction(trustedAction);
       if (!command) {
         return { status: 422, body: { errorCode: 'invalid_action_payload' } };
       }
@@ -741,6 +780,68 @@ export function createChatRouteHandlers(context: RouteHandlerContext) {
           status: 409,
           body: { errorCode: 'stale_action_revision' },
         };
+      }
+      if (
+        command.kind === 'recommendation_select' ||
+        command.kind === 'recommendation_dismiss'
+      ) {
+        const currentCart = (latestVerifiedState as Partial<AgentState>).cart;
+        const validationActionId =
+          command.kind === 'recommendation_select'
+            ? command.recommendationActionId
+            : displayedRecommendationActionIds.values().next().value;
+        if (!recommendations || !currentCart || !validationActionId) {
+          await store.failIrreversibleOperation(
+            reservationInput,
+            reservation,
+            'Recommendation action authority is unavailable',
+          );
+          return {
+            status: 409,
+            body: { errorCode: 'stale_recommendation_action' },
+          };
+        }
+        const resolution =
+          await recommendations.application.resolveTrustedAction({
+            recommendationId: command.recommendationId,
+            recommendationActionId: validationActionId,
+            sessionId: parsed.data.sessionId,
+            customerId: parsed.data.customerId,
+            cartRevision: await recommendationCartRevision(currentCart),
+          });
+        const binding =
+          resolution.status === 'resolved'
+            ? resolution.presentation.binding
+            : undefined;
+        if (
+          resolution.status !== 'resolved' ||
+          !binding ||
+          binding.assistantTurnId !== sourceTurn.id ||
+          binding.attachmentId !== attachment.id ||
+          binding.recommendationId !== command.recommendationId ||
+          binding.actionDigest !== attachment.data.actionDigest ||
+          binding.decisionDigest !== attachment.data.decisionDigest ||
+          binding.versionBindingDigest !==
+            attachment.data.versionBindingDigest ||
+          binding.cartRevision !== attachment.data.cartRevision
+        ) {
+          await store.failIrreversibleOperation(
+            reservationInput,
+            reservation,
+            `Recommendation action rejected: ${resolution.status}`,
+          );
+          const notFound =
+            resolution.status === 'not_found' ||
+            resolution.status === 'action_not_found';
+          return {
+            status: notFound ? 404 : 409,
+            body: {
+              errorCode: notFound
+                ? 'recommendation_action_not_found'
+                : 'stale_recommendation_action',
+            },
+          };
+        }
       }
       let trustedCustomerAction: ReturnType<
         typeof createTrustedCustomerActionEnvelope

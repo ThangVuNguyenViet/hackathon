@@ -13,6 +13,7 @@ import { createMockClients } from '../../src/mock/createMockClients.js';
 import { agentToolDescriptions } from '../../src/ordering/toolCatalog.js';
 import { MemoryStore } from '../../src/persistence/memoryStore.js';
 import { createBundledRecommendationApplicationService } from '../../src/recommendations/application/recommendation-service.js';
+import { parseRecommendationImpressionRequest } from '../../src/recommendations/domain/schemas.js';
 import { LocalMerchandisingPolicyRepository } from '../../src/recommendations/merchandising/local-policy-repository.js';
 import { configuredTestAgent } from '../support/configured-agent-model.js';
 
@@ -457,9 +458,11 @@ describe('portable Direct SDK behavior retained by the KFC LangChain pack', () =
       return bindTools(tools);
     });
 
-    await runAgentTurn({
-      sessionId: 'session-kfc-recommendation-once',
-      customerId: 'customer-1',
+    const sessionId = 'session-kfc-recommendation-once';
+    const customerId = 'customer-1';
+    const output = await runAgentTurn({
+      sessionId,
+      customerId,
       channel: 'kfc',
       text: 'Tôi muốn xem món ngon',
       clients: createMockClients(await loadGeneratedFixtures(process.cwd())),
@@ -474,5 +477,65 @@ describe('portable Direct SDK behavior retained by the KFC LangChain pack', () =
     expect(boundToolNames[1]).not.toContain('recommendStarter');
     expect(boundToolNames[1]).not.toContain('recommendModifierUpsell');
     expect(boundToolNames[1]).not.toContain('recommendSmartCrossSell');
+    expect(output.genUi).toMatchObject({
+      widgetKind: 'recommendationOffer',
+      actions: expect.arrayContaining([
+        expect.objectContaining({
+          id: expect.stringMatching(/^recommendation_select:/),
+        }),
+        expect.objectContaining({ id: 'recommendation_dismiss' }),
+      ]),
+    });
+    const recommendationId = output.genUi?.data.recommendationId;
+    if (typeof recommendationId !== 'string') {
+      throw new Error('recommendation offer identity expected');
+    }
+    const presentation = await recommendations.presentationFor(
+      recommendationId,
+      { sessionId, customerId },
+    );
+    if (!presentation) throw new Error('recommendation presentation expected');
+    const assistantTurn = (await store.listTurns(sessionId)).at(-1);
+    expect(assistantTurn?.id).toBe(
+      presentation.binding.assistantTurnId,
+    );
+    expect(output.assistantTurnId).toBe(
+      presentation.binding.assistantTurnId,
+    );
+    expect(output.genUi?.id).toBe(presentation.binding.attachmentId);
+
+    const impression = parseRecommendationImpressionRequest({
+      schemaVersion: 'kfc-recommendation-event-v1',
+      eventId: 'recommendation-impression-agent-turn-001',
+      occurredAt: '2026-07-27T09:00:01Z',
+      assistantTurnId: output.assistantTurnId,
+      attachmentId: output.genUi?.id,
+      renderedActions: presentation.binding.renderedActions,
+      cartRevision: presentation.binding.cartRevision,
+      actionDigest: presentation.binding.actionDigest,
+    });
+    await expect(
+      recommendations.recordImpression(recommendationId, impression),
+    ).resolves.toMatchObject({ status: 'recorded' });
+    await expect(
+      recommendations.recordImpression(
+        recommendationId,
+        parseRecommendationImpressionRequest({
+        ...impression,
+        eventId: 'recommendation-impression-agent-turn-002',
+        occurredAt: '2026-07-27T09:00:02Z',
+        }),
+      ),
+    ).resolves.toMatchObject({
+      status: 'replay',
+      event: { eventId: impression.eventId },
+    });
+    expect(
+      (
+        await store.listRecommendationEvents({
+          recommendationId,
+        })
+      ).filter((event) => event.eventType === 'impression_rendered'),
+    ).toHaveLength(1);
   });
 });

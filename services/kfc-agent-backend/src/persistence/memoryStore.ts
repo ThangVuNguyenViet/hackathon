@@ -1158,6 +1158,9 @@ export class MemoryStore
   ): Promise<RecommendationDecisionRecord | undefined> {
     const record = this.recommendationDecisions.get(recommendationId);
     if (!record) return undefined;
+    if (record.response.recommendationId !== recommendationId) {
+      throw new Error('recommendation_decision_storage_identity_mismatch');
+    }
     const parsed = cloneRecommendationDecisionRecord(record);
     if (parsed.response.recommendationId !== recommendationId) {
       throw new Error('recommendation_decision_storage_identity_mismatch');

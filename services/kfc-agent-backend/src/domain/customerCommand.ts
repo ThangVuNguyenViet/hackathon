@@ -155,6 +155,21 @@ const modifierBatchSelectionCommandSchema = z
   })
   .strict();
 
+const recommendationSelectCommandSchema = z
+  .object({
+    kind: z.literal('recommendation_select'),
+    recommendationId: identifierSchema,
+    recommendationActionId: identifierSchema,
+  })
+  .strict();
+
+const recommendationDismissCommandSchema = z
+  .object({
+    kind: z.literal('recommendation_dismiss'),
+    recommendationId: identifierSchema,
+  })
+  .strict();
+
 const acceptFulfillmentCommandSchema = z
   .object({
     kind: z.literal('accept_fulfillment'),
@@ -168,6 +183,8 @@ const customerCommandSchema = z.discriminatedUnion('kind', [
   cartDraftCommitCommandSchema,
   modifierSelectionCommandSchema,
   modifierBatchSelectionCommandSchema,
+  recommendationSelectCommandSchema,
+  recommendationDismissCommandSchema,
   z.object({ kind: z.literal('confirm_order') }).strict(),
   z.object({ kind: z.literal('start_fulfillment') }).strict(),
   acceptFulfillmentCommandSchema,
