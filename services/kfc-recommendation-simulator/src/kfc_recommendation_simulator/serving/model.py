@@ -13,10 +13,11 @@ import pandas as pd
 from mlflow.models import ModelSignature
 from mlflow.types.schema import ColSpec, Schema
 
-from ..benchmark_data import CATEGORICAL_FEATURES, NUMERIC_FEATURES
-from ..modifier_benchmark import (
+from ..feature_contracts import (
+    CATEGORICAL_FEATURES,
     MODIFIER_CATEGORICAL_FEATURES,
     MODIFIER_NUMERIC_FEATURES,
+    NUMERIC_FEATURES,
 )
 from ..rankers import ProbabilityCalibrator, Ranker, load_ranker
 

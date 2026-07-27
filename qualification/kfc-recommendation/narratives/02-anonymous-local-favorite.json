@@ -1,0 +1,32 @@
+{
+  "id": "recommendation-02-anonymous-local-favorite",
+  "title": "Anonymous customer local favorite",
+  "channel": "kfc",
+  "goal": "Explore a first-time customer's open-ended food-ordering request and whether a locally relevant starter suggestion helps without claiming personal history.",
+  "preconditions": [
+    "Use a fresh D1 session with the deterministic synthetic customer authority demo-qualification-02-anonymous.",
+    "No verified completed-order history is available for this customer.",
+    "The role-player improvises from the current conversation and observed actions."
+  ],
+  "useCases": [
+    "anonymous-customer",
+    "local-favorite",
+    "no-false-personalization"
+  ],
+  "finalState": "independent_evaluator_judges",
+  "turns": [
+    {
+      "index": 1,
+      "speaker": "User",
+      "text": "Lần đầu mình đặt ở đây, có món nào hợp để bắt đầu không?",
+      "useCases": [
+        "anonymous-customer",
+        "local-favorite"
+      ]
+    }
+  ],
+  "risks": [
+    "The assistant must not imply that it knows an anonymous customer's order history.",
+    "The suggestion must remain grounded in the published merchandising and commerce evidence."
+  ]
+}

@@ -1,0 +1,19 @@
+{
+  "name": "kfc-recommendation-sanity",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "schema:validate": "sanity schemas validate",
+    "schema:deploy": "sanity schemas deploy --workspace default",
+    "policies:seed": "sanity exec scripts/seed-policies.ts --with-user-token",
+    "policies:check": "sanity exec scripts/seed-policies.ts -- --check"
+  },
+  "dependencies": {
+    "sanity": "6.6.0"
+  },
+  "devDependencies": {
+    "@sanity/cli": "7.13.0",
+    "typescript": "5.9.3"
+  }
+}

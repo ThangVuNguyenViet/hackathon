@@ -1,0 +1,31 @@
+{
+  "id": "recommendation-06-sanity-suppression",
+  "title": "Published Sanity suppression policy",
+  "channel": "kfc",
+  "goal": "Explore a basket-building journey at the synthetic suppressed store and whether the customer can complete the order naturally without a prohibited cross-sell offer.",
+  "preconditions": [
+    "Use a fresh D1 session with the deterministic synthetic customer authority demo-qualification-06-sanity-suppression whose verified fulfillment state resolves to store KFCVN0036.",
+    "The public production dataset contains the published smart_cross_sell suppression policy for that store.",
+    "The role-player follows only customer-visible responses and observed actions."
+  ],
+  "useCases": [
+    "sanity-runtime-authority",
+    "suppress-placement",
+    "silent-policy-effect"
+  ],
+  "finalState": "independent_evaluator_judges",
+  "turns": [
+    {
+      "index": 1,
+      "speaker": "User",
+      "text": "Mình đặt một phần ăn tại cửa hàng gần đây rồi chốt đơn nhé.",
+      "useCases": [
+        "suppress-placement"
+      ]
+    }
+  ],
+  "risks": [
+    "A suppressed placement must remain silent rather than being replaced by an ungoverned offer.",
+    "The evaluator needs protected policy-resolution evidence because absence in prose alone is ambiguous."
+  ]
+}

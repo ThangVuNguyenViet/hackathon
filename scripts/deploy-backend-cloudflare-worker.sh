@@ -95,6 +95,38 @@ if [[ -z "${!monitor_credential_env:-}" ]]; then
   echo "ERROR: $monitor_credential_env must be set for KFC_MONITOR_CANDIDATE=$KFC_MONITOR_CANDIDATE." >&2
   exit 64
 fi
+for name in \
+  KFC_RECOMMENDATION_SHADOW_URL \
+  KFC_RECOMMENDATION_SHADOW_MODEL_REVISION \
+  SANITY_PROJECT_ID \
+  SANITY_DATASET \
+  SANITY_API_VERSION; do
+  if [[ -z "${!name:-}" ]]; then
+    echo "ERROR: $name must be set for recommendation qualification." >&2
+    exit 64
+  fi
+done
+KFC_RECOMMENDATION_OUTPUT_MODE="${KFC_RECOMMENDATION_OUTPUT_MODE:-baseline}"
+if [[ ! "$KFC_RECOMMENDATION_SHADOW_URL" =~ ^https://[^[:space:]]+$ ]]; then
+  echo "ERROR: KFC_RECOMMENDATION_SHADOW_URL must be an HTTPS URL." >&2
+  exit 64
+fi
+if [[ ! "$KFC_RECOMMENDATION_SHADOW_MODEL_REVISION" =~ ^[a-f0-9]{40,64}$ ]]; then
+  echo "ERROR: KFC_RECOMMENDATION_SHADOW_MODEL_REVISION must be an immutable hexadecimal revision." >&2
+  exit 64
+fi
+if [[ "$KFC_RECOMMENDATION_OUTPUT_MODE" != "baseline" ]]; then
+  echo "ERROR: Live qualification requires KFC_RECOMMENDATION_OUTPUT_MODE=baseline." >&2
+  exit 64
+fi
+if [[ "$SANITY_DATASET" != "production" ]]; then
+  echo "ERROR: Live qualification requires the public Sanity production dataset." >&2
+  exit 64
+fi
+if [[ ! "$SANITY_API_VERSION" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}$ ]]; then
+  echo "ERROR: SANITY_API_VERSION must be a YYYY-MM-DD version." >&2
+  exit 64
+fi
 WRANGLER_CONFIG="${KFC_WRANGLER_CONFIG:-$SERVICE_DIR/wrangler.toml}"
 KFC_D1_DATABASE_NAME="${KFC_D1_DATABASE_NAME:-kfc-agent-demo}"
 export KFC_D1_DATABASE_NAME
@@ -150,6 +182,9 @@ mkdir -p "$(dirname "$DEPLOYMENT_OUTPUT_FILE")"
   if [[ -n "${KFC_DEMO_ADMIN_TOKEN:-}" ]]; then
     printf '%s' "$KFC_DEMO_ADMIN_TOKEN" | npx wrangler versions secret put KFC_DEMO_ADMIN_TOKEN --name "$WORKER_NAME"
   fi
+  if [[ -n "${SANITY_READ_TOKEN:-}" ]]; then
+    printf '%s' "$SANITY_READ_TOKEN" | npx wrangler versions secret put SANITY_READ_TOKEN --name "$WORKER_NAME"
+  fi
   npx wrangler deploy --config "$WRANGLER_CONFIG" --name "$WORKER_NAME" --outdir "$build_output_dir/bundle" \
     --var "RELEASE_GIT_SHA:$GIT_SHA" \
     --var "RELEASE_DEPLOYMENT_ID:$RELEASE_DEPLOYMENT_ID" \
@@ -161,6 +196,12 @@ mkdir -p "$(dirname "$DEPLOYMENT_OUTPUT_FILE")"
     --var "KFC_AGENT_CANDIDATE:$KFC_AGENT_CANDIDATE" \
     --var "KFC_MONITOR_CANDIDATE:$KFC_MONITOR_CANDIDATE" \
     --var "KFC_SHOWCASE_DATASET:$KFC_SHOWCASE_DATASET" \
+    --var "KFC_RECOMMENDATION_SHADOW_URL:$KFC_RECOMMENDATION_SHADOW_URL" \
+    --var "KFC_RECOMMENDATION_SHADOW_MODEL_REVISION:$KFC_RECOMMENDATION_SHADOW_MODEL_REVISION" \
+    --var "KFC_RECOMMENDATION_OUTPUT_MODE:$KFC_RECOMMENDATION_OUTPUT_MODE" \
+    --var "SANITY_PROJECT_ID:$SANITY_PROJECT_ID" \
+    --var "SANITY_DATASET:$SANITY_DATASET" \
+    --var "SANITY_API_VERSION:$SANITY_API_VERSION" \
     | tee "$deploy_log"
 )
 
@@ -173,8 +214,8 @@ if [[ -z "$WORKER_URL" ]]; then
 fi
 
 deployed_at="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
-printf '{"gitSha":"%s","deploymentId":"%s","releaseBuiltAt":"%s","dirty":false,"deployedAt":"%s","workerName":"%s","workerUrl":"%s","agentCandidate":"%s","monitorCandidate":"%s"}\n' \
-  "$GIT_SHA" "$RELEASE_DEPLOYMENT_ID" "$RELEASE_BUILT_AT" "$deployed_at" "$WORKER_NAME" "$WORKER_URL" "$KFC_AGENT_CANDIDATE" "$KFC_MONITOR_CANDIDATE" > "$DEPLOYMENT_OUTPUT_FILE"
+printf '{"gitSha":"%s","deploymentId":"%s","releaseBuiltAt":"%s","dirty":false,"deployedAt":"%s","workerName":"%s","workerUrl":"%s","agentCandidate":"%s","monitorCandidate":"%s","recommendationShadowUrl":"%s","recommendationShadowModelRevision":"%s","recommendationOutputMode":"%s","sanityProjectId":"%s","sanityDataset":"%s","sanityApiVersion":"%s"}\n' \
+  "$GIT_SHA" "$RELEASE_DEPLOYMENT_ID" "$RELEASE_BUILT_AT" "$deployed_at" "$WORKER_NAME" "$WORKER_URL" "$KFC_AGENT_CANDIDATE" "$KFC_MONITOR_CANDIDATE" "$KFC_RECOMMENDATION_SHADOW_URL" "$KFC_RECOMMENDATION_SHADOW_MODEL_REVISION" "$KFC_RECOMMENDATION_OUTPUT_MODE" "$SANITY_PROJECT_ID" "$SANITY_DATASET" "$SANITY_API_VERSION" > "$DEPLOYMENT_OUTPUT_FILE"
 
 echo
 echo "Cloudflare Worker URL:"

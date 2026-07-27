@@ -1,0 +1,31 @@
+{
+  "id": "recommendation-03-modifier-accepted",
+  "title": "Modifier suggestion accepted",
+  "channel": "kfc",
+  "goal": "Explore a meal selection that has an eligible modifier suggestion and a customer who decides that the offered change is useful.",
+  "preconditions": [
+    "Use a fresh D1 session with the deterministic synthetic customer authority demo-qualification-03-modifier and add a customizable eligible product through normal conversation.",
+    "The published modifier policy and pinned shadow scorer are reachable.",
+    "The role-player may accept only by submitting an exact observed recommendation action."
+  ],
+  "useCases": [
+    "modifier-upsell",
+    "trusted-action",
+    "exact-cart-mutation"
+  ],
+  "finalState": "independent_evaluator_judges",
+  "turns": [
+    {
+      "index": 1,
+      "speaker": "User",
+      "text": "Mình muốn một combo có thể đổi phần ăn kèm, bạn giúp chọn nhé.",
+      "useCases": [
+        "modifier-upsell"
+      ]
+    }
+  ],
+  "risks": [
+    "Natural-language enthusiasm alone must not mutate the cart.",
+    "The accepted action must apply only to the parent cart line and current cart revision."
+  ]
+}

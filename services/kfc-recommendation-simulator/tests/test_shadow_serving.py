@@ -3,6 +3,8 @@ from __future__ import annotations
 import hashlib
 import json
 import shutil
+import subprocess
+import sys
 import tempfile
 import unittest
 from dataclasses import replace
@@ -323,6 +325,31 @@ class ShadowServingTest(unittest.TestCase):
         shutil.copytree(self._model_path, copy)
         return copy
 
+    def test_serving_module_import_does_not_require_simulator_only_dependencies(
+        self,
+    ) -> None:
+        script = """
+import builtins
+
+original_import = builtins.__import__
+
+def import_without_duckdb(name, *args, **kwargs):
+    if name == "duckdb":
+        raise ModuleNotFoundError("duckdb deliberately unavailable")
+    return original_import(name, *args, **kwargs)
+
+builtins.__import__ = import_without_duckdb
+from kfc_recommendation_simulator.serving.model import QualifiedShadowModel
+assert QualifiedShadowModel
+"""
+        result = subprocess.run(
+            [sys.executable, "-c", script],
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+        self.assertEqual(0, result.returncode, result.stderr)
+
     def test_signature_exposes_eligible_features_and_complete_score_output(
         self,
     ) -> None:
@@ -482,6 +509,15 @@ class ShadowServingTest(unittest.TestCase):
                 )
 
     def test_saved_pyfunc_reloads_with_complete_typed_mlflow_signature(self) -> None:
+        self.assertTrue(
+            (
+                self._model_path
+                / "code"
+                / "kfc_recommendation_simulator"
+                / "__init__.py"
+            ).is_file(),
+            "the saved model must import without the source checkout on sys.path",
+        )
         loaded = mlflow.pyfunc.load_model(self._model_path)
         python_model = loaded.unwrap_python_model()
         self.assertIsInstance(

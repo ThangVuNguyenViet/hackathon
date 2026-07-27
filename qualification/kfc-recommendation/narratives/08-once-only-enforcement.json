@@ -1,0 +1,31 @@
+{
+  "id": "recommendation-08-once-only-enforcement",
+  "title": "Once-only proactive placement enforcement",
+  "channel": "kfc",
+  "goal": "Explore a longer food-ordering conversation with repeated opportunities for assistance after proactive placements have already been consumed.",
+  "preconditions": [
+    "Use a fresh D1 session with the deterministic synthetic customer authority demo-qualification-08-once-only and continue the conversation after proactive recommendation placements are consumed.",
+    "No session or order-flow state is reset during the attempt.",
+    "The role-player may accept or decline observed offers according to the evolving customer intent."
+  ],
+  "useCases": [
+    "once-only-placement",
+    "durable-recommendation-state",
+    "no-repeated-pressure"
+  ],
+  "finalState": "independent_evaluator_judges",
+  "turns": [
+    {
+      "index": 1,
+      "speaker": "User",
+      "text": "Mình sẽ hỏi thêm vài điều về đơn sau khi đã chọn món, cứ hỗ trợ tự nhiên nhé.",
+      "useCases": [
+        "once-only-placement"
+      ]
+    }
+  ],
+  "risks": [
+    "Repeated conversational turns must not reset or replay proactive placements.",
+    "An absence claim requires durable state and event evidence, not transcript wording alone."
+  ]
+}

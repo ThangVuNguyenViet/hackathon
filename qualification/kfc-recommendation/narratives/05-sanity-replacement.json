@@ -1,0 +1,31 @@
+{
+  "id": "recommendation-05-sanity-replacement",
+  "title": "Published Sanity replacement policy",
+  "channel": "kfc",
+  "goal": "Explore a returning customer's starter recommendation while the published merchandising authority replaces the ordinary slate with its authored synthetic POC selection.",
+  "preconditions": [
+    "Use a fresh D1 session with the deterministic synthetic customer authority demo-qualification-05-sanity-replacement.",
+    "The public production dataset contains the published for_you replacement policy.",
+    "The role-player has no access to protected technical evidence until the run is finished."
+  ],
+  "useCases": [
+    "sanity-runtime-authority",
+    "replace-slate",
+    "returning-customer"
+  ],
+  "finalState": "independent_evaluator_judges",
+  "turns": [
+    {
+      "index": 1,
+      "speaker": "User",
+      "text": "Tối nay mình muốn chọn nhanh một món hợp với những lần trước.",
+      "useCases": [
+        "returning-customer"
+      ]
+    }
+  ],
+  "risks": [
+    "The replacement must come from the currently published snapshot rather than a local fallback.",
+    "Customer output must not reveal protected policy or model internals."
+  ]
+}

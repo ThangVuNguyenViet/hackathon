@@ -1,0 +1,31 @@
+{
+  "id": "recommendation-04-modifier-empty-skipped",
+  "title": "Empty modifier placement is skipped",
+  "channel": "kfc",
+  "goal": "Explore a food-ordering journey whose selected cart line has no eligible modifier recommendation, while the conversation remains natural and can continue to later ordering needs.",
+  "preconditions": [
+    "Use a fresh D1 session with the deterministic synthetic customer authority demo-qualification-04-modifier-empty and select a product without an eligible modifier recommendation.",
+    "The published Sanity production snapshot is reachable.",
+    "The role-player responds only to customer-visible output and does not inspect technical evidence during the run."
+  ],
+  "useCases": [
+    "modifier-empty",
+    "silent-placement-consumption",
+    "natural-conversation"
+  ],
+  "finalState": "independent_evaluator_judges",
+  "turns": [
+    {
+      "index": 1,
+      "speaker": "User",
+      "text": "Cho mình một món đơn giản, không cần tùy chỉnh gì thêm.",
+      "useCases": [
+        "modifier-empty"
+      ]
+    }
+  ],
+  "risks": [
+    "An empty placement must not generate a fabricated offer.",
+    "Skipping the placement must not prevent legitimate later ordering help."
+  ]
+}

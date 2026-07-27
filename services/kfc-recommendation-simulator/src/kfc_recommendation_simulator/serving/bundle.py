@@ -201,7 +201,7 @@ def save_qualified_shadow_model(
             ),
             artifacts={**result_artifacts, **model_artifacts},
             signature=build_serving_signature(),
-            code_paths=[str(Path(__file__).resolve().parents[2])],
+            code_paths=[str(Path(__file__).resolve().parents[1])],
         )
     signature = build_serving_signature().to_dict()
     manifest = {

@@ -40,6 +40,12 @@ function workerEnvFile(lines: readonly string[]) {
       'LANGSMITH_PROJECT=test-project',
       'LANGSMITH_ENDPOINT=https://example.test',
       'META_APP_SECRET=test-meta',
+      'KFC_RECOMMENDATION_SHADOW_URL=https://space.example.test',
+      `KFC_RECOMMENDATION_SHADOW_MODEL_REVISION=${'a'.repeat(40)}`,
+      'KFC_RECOMMENDATION_OUTPUT_MODE=baseline',
+      'SANITY_PROJECT_ID=abc123xy',
+      'SANITY_DATASET=production',
+      'SANITY_API_VERSION=2026-07-27',
       ...lines,
     ].join('\n'),
   );
@@ -61,9 +67,7 @@ describe('deployment model candidate configuration', () => {
   it('documents Worker-only backend deployment without stale Cloud Run references', () => {
     const source = readFileSync(deploymentRunbook, 'utf8');
 
-    expect(source).toContain(
-      './scripts/deploy-backend-cloudflare-worker.sh',
-    );
+    expect(source).toContain('./scripts/deploy-backend-cloudflare-worker.sh');
     expect(source).not.toContain('deploy-backend-cloud-run.sh');
     expect(source).not.toContain('Google Cloud Run');
   });
@@ -83,9 +87,7 @@ describe('deployment model candidate configuration', () => {
     const workerSource = readFileSync(workerScript, 'utf8');
 
     expect(workerSource).toContain('--var "KFC_AGENT_CANDIDATE:');
-    expect(workerSource).toContain(
-      'versions secret put OPENCODE_API_KEY',
-    );
+    expect(workerSource).toContain('versions secret put OPENCODE_API_KEY');
     expect(workerSource).not.toContain('--var "KFC_AGENT_PROVIDER:');
     expect(workerSource).not.toContain('--var "KFC_AGENT_MODEL:');
   });
@@ -112,6 +114,37 @@ describe('deployment model candidate configuration', () => {
     const worker = runWorkerPreflight([
       'KFC_AGENT_CANDIDATE=minimax-m3',
       `OPENCODE_API_KEY=${secret}`,
+    ]);
+
+    expect(worker.status, worker.stderr).toBe(0);
+    expect(`${worker.stdout}${worker.stderr}`).not.toContain(secret);
+  });
+
+  it('rejects an acceptance deployment without complete public recommendation bindings', () => {
+    const worker = runWorkerPreflight([
+      'OPENAI_API_KEY=test-openai',
+      'KFC_RECOMMENDATION_SHADOW_URL=',
+      'KFC_RECOMMENDATION_SHADOW_MODEL_REVISION=',
+      'SANITY_PROJECT_ID=',
+      'SANITY_DATASET=',
+      'SANITY_API_VERSION=',
+    ]);
+
+    expect(worker.status).toBe(64);
+    expect(worker.stderr).toContain('KFC_RECOMMENDATION_SHADOW_URL');
+  });
+
+  it('accepts complete public recommendation bindings without logging credentials', () => {
+    const secret = 'test-sanity-read-secret-do-not-log';
+    const worker = runWorkerPreflight([
+      'OPENAI_API_KEY=test-openai',
+      'KFC_RECOMMENDATION_SHADOW_URL=https://space.example.test',
+      `KFC_RECOMMENDATION_SHADOW_MODEL_REVISION=${'a'.repeat(40)}`,
+      'KFC_RECOMMENDATION_OUTPUT_MODE=baseline',
+      'SANITY_PROJECT_ID=abc123xy',
+      'SANITY_DATASET=production',
+      'SANITY_API_VERSION=2026-07-27',
+      `SANITY_READ_TOKEN=${secret}`,
     ]);
 
     expect(worker.status, worker.stderr).toBe(0);

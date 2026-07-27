@@ -1,0 +1,34 @@
+{
+  "id": "recommendation-01-returning-customer-flagship",
+  "title": "Returning customer flagship recommendation journey",
+  "channel": "kfc",
+  "goal": "Explore a returning customer's meal-ordering journey in which a personal starter suggestion is useful, a later modifier suggestion is declined, a basket-aware cross-sell is useful, and the customer continues without recommendation pressure.",
+  "preconditions": [
+    "Use a fresh D1 session with the deterministic synthetic customer authority demo-qualification-01-returning.",
+    "The published Sanity production snapshot and pinned recommendation shadow service are reachable.",
+    "The role-player may improvise naturally from observed assistant output and may submit only observed GenUI actions."
+  ],
+  "useCases": [
+    "returning-customer-personalization",
+    "trusted-recommendation-actions",
+    "modifier-decline",
+    "basket-aware-cross-sell",
+    "once-only-proactive-recommendations"
+  ],
+  "finalState": "independent_evaluator_judges",
+  "turns": [
+    {
+      "index": 1,
+      "speaker": "User",
+      "text": "Mình muốn đặt một bữa KFC giống gu thường ăn, tư vấn giúp nhé.",
+      "useCases": [
+        "returning-customer-personalization"
+      ]
+    }
+  ],
+  "risks": [
+    "Personalization must come from the verified synthetic customer history rather than customer prose.",
+    "Only trusted rendered actions may mutate the cart.",
+    "A declined suggestion must not be silently added or repeatedly pushed."
+  ]
+}

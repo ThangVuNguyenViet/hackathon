@@ -1,0 +1,15 @@
+{
+  "schemaVersion": "kfc-recommendation-independent-evaluation-v1",
+  "scenarioId": "replace-with-the-narrative-id",
+  "verdict": "replace-with-successful-partial-unsuccessful-or-insufficient_evidence",
+  "evaluatorTaskId": "replace-with-the-fresh-controller-owned-codex-task-id",
+  "evidencePacketSha256": "replace-with-the-actual-evidence-packet-sha256",
+  "citations": [
+    {
+      "artifact": "evidence-packet.json",
+      "pointer": "replace-with-an-exact-json-pointer-or-evidence-location",
+      "note": "replace-with-the-evaluator-observation"
+    }
+  ],
+  "concerns": []
+}

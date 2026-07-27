@@ -15,7 +15,7 @@ from sklearn.isotonic import IsotonicRegression
 from sklearn.linear_model import LogisticRegression
 from sklearn.metrics import brier_score_loss
 
-from .benchmark_data import CATEGORICAL_FEATURES, NUMERIC_FEATURES
+from .feature_contracts import CATEGORICAL_FEATURES, NUMERIC_FEATURES
 
 COUNT_FEATURES = {
     "feature_customer_order_count",

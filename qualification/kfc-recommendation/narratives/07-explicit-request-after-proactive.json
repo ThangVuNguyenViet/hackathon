@@ -1,0 +1,31 @@
+{
+  "id": "recommendation-07-explicit-request-after-proactive",
+  "title": "Explicit recommendation request after proactive completion",
+  "channel": "kfc",
+  "goal": "Explore a customer who completes the available proactive recommendation journey and later explicitly asks for another recommendation relevant to the current basket.",
+  "preconditions": [
+    "Use a fresh D1 session with the deterministic synthetic customer authority demo-qualification-07-explicit-request and naturally reach completion of the available proactive recommendation placements.",
+    "The customer later initiates a new explicit recommendation request.",
+    "The role-player improvises the request from the observed cart and conversation."
+  ],
+  "useCases": [
+    "proactive-completion",
+    "customer-requested-recommendation",
+    "customer-authority"
+  ],
+  "finalState": "independent_evaluator_judges",
+  "turns": [
+    {
+      "index": 1,
+      "speaker": "User",
+      "text": "Sau khi chọn xong, nếu mình chủ động hỏi thì bạn vẫn tư vấn món hợp với giỏ hiện tại nhé.",
+      "useCases": [
+        "customer-requested-recommendation"
+      ]
+    }
+  ],
+  "risks": [
+    "Once-only proactive controls must not be confused with a later customer-authored request.",
+    "An explicit request still must respect eligibility, merchandising, and trusted mutation boundaries."
+  ]
+}

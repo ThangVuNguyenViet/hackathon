@@ -40,6 +40,10 @@ from .benchmark_orchestration import (
     IsolatedStage,
     run_isolated_stage,
 )
+from .feature_contracts import (
+    MODIFIER_CATEGORICAL_FEATURES,
+    MODIFIER_NUMERIC_FEATURES,
+)
 from .rankers import (
     FeatureSchema,
     LightGBMArtifactRanker,
@@ -49,19 +53,6 @@ from .rankers import (
 PLACEMENT = "modifier_upsell"
 CANDIDATE_NAMES = ("lightgbm", "xgboost", "keras")
 TREE_CANDIDATES = ("lightgbm", "xgboost")
-MODIFIER_CATEGORICAL_FEATURES = (
-    "candidate_id",
-    "product_code",
-    "modifier_path",
-    "feature_cart_anchor",
-    "feature_store_id",
-    "feature_mission",
-    "feature_time_window",
-)
-MODIFIER_NUMERIC_FEATURES = (
-    "feature_remaining_budget_vnd",
-    "feature_price_to_remaining_budget_ratio",
-)
 FEATURE_SCHEMA_VERSION = "modifier-upsell-feature-schema-v1"
 REASON_CODES = {
     "candidate_id": "compatible_modifier_action",
