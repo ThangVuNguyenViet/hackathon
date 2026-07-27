@@ -46,8 +46,9 @@ import {
   type CustomerRunEvent,
 } from '../customerRuns/contracts.js';
 import { D1StoreAgentRunTextDeliveryOperations } from './d1StoreAgentRunTextDeliveryOperations.js';
+import type { RecommendationPersistence } from '../recommendations/persistence/repository.js';
 export { D1DatabaseLike, DashboardSessionSummary } from './d1StoreSupport.js';
 
 export class D1Store
   extends D1StoreAgentRunTextDeliveryOperations
-  implements ConversationStore {}
+  implements ConversationStore, RecommendationPersistence {}

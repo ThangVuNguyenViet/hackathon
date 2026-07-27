@@ -66,6 +66,35 @@ import {
   type CompareAndSwapConversationSummaryResult,
 } from './contracts.js';
 import type { PackRef, PackStateEnvelope } from '../runtime/businessPack.js';
+import type { RecommendationEvent } from '../recommendations/domain/contracts.js';
+import {
+  instantSchema,
+  parseRecommendationEvent,
+  sha256Schema,
+} from '../recommendations/domain/schemas.js';
+import type {
+  AppendRecommendationEventInput,
+  AppendRecommendationEventResult,
+  CommitRecommendationDecisionInput,
+  CommitRecommendationDecisionResult,
+  ListRecommendationEventsInput,
+  RecommendationDecisionRecord,
+  RecommendationDemoCustomerHistoryRecord,
+  RecommendationPersistence,
+  ReserveRecommendationDecisionInput,
+  ReserveRecommendationDecisionResult,
+} from '../recommendations/persistence/repository.js';
+import {
+  assertDecisionEventsCorrelate,
+  assertRecommendationPackState,
+  sameRecommendationDecisionRecord,
+  sameRecommendationEvent,
+} from '../recommendations/persistence/repository.js';
+import {
+  parseRecommendationDecisionRecord,
+  parseRecommendationDemoCustomerHistoryRecord,
+} from '../recommendations/persistence/types.js';
+import { digestCommerceAction } from '../ordering/commerceDigest.js';
 import {
   completeMemoryIrreversibleOperation,
   failMemoryIrreversibleOperation,
@@ -124,9 +153,77 @@ function memoryPackStateKey(sessionId: string, packRef: PackRef): string {
   return `${sessionId}\u0000${packRef.packId}\u0000${packRef.version}`;
 }
 
+interface MemoryRecommendationReservation {
+  sessionId: string;
+  idempotencyKey: string;
+  requestId: string;
+  requestFingerprint: string;
+  ownerToken: string;
+  createdAt: string;
+  status: 'pending' | 'completed';
+  recommendationId?: string;
+}
+
+interface MemoryRecommendationEventRecord {
+  eventFingerprint: string;
+  event: RecommendationEvent;
+}
+
+function memoryRecommendationReservationKey(
+  sessionId: string,
+  idempotencyKey: string,
+): string {
+  return `${sessionId}\u0000${idempotencyKey}`;
+}
+
+function seedMemoryRecommendationDemoCustomerHistory(): Map<
+  string,
+  RecommendationDemoCustomerHistoryRecord
+> {
+  const records = [
+    {
+      verifiedCustomerRef: 'demo-returning-linked',
+      fixtureLabel: 'Mock/synthetic POC returning customer',
+      linked: true,
+      completedOrders: [
+        {
+          orderId: 'synthetic-poc-order-001',
+          completedAt: '2026-07-20T09:00:00Z',
+          lines: [
+            {
+              sellableItemId: '20751',
+              categoryId: '20000',
+              quantity: 1,
+            },
+          ],
+        },
+      ],
+      favoriteSellableItemIds: ['20751'],
+      updatedAt: '2026-07-27T00:00:00Z',
+    },
+    {
+      verifiedCustomerRef: 'demo-linked-zero-history',
+      fixtureLabel: 'Mock/synthetic POC linked customer with zero history',
+      linked: true,
+      completedOrders: [],
+      favoriteSellableItemIds: [],
+      updatedAt: '2026-07-27T00:00:00Z',
+    },
+    {
+      verifiedCustomerRef: 'demo-anonymous-unlinked',
+      fixtureLabel: 'Mock/synthetic POC anonymous unlinked journey',
+      linked: false,
+      completedOrders: [],
+      favoriteSellableItemIds: [],
+      updatedAt: '2026-07-27T00:00:00Z',
+    },
+  ].map(parseRecommendationDemoCustomerHistoryRecord);
+  return new Map(records.map((record) => [record.verifiedCustomerRef, record]));
+}
+
 export class MemoryStore
   extends MemoryStoreNonAgentTextDeliveryOperations
-  implements ConversationStore
+  implements ConversationStore, RecommendationPersistence
 {
   private readonly customerRuns = new Map<string, CustomerRun>();
   private readonly customerRunRequestIndex = new Map<string, string>();
@@ -137,6 +234,28 @@ export class MemoryStore
     ConversationSummary
   >();
   private readonly packStates = new Map<string, PackStateEnvelope>();
+  private readonly recommendationReservations = new Map<
+    string,
+    MemoryRecommendationReservation
+  >();
+  private readonly recommendationReservationRequestIndex = new Map<
+    string,
+    string
+  >();
+  private readonly recommendationDecisions = new Map<
+    string,
+    RecommendationDecisionRecord
+  >();
+  private readonly recommendationDecisionRequestIndex = new Map<
+    string,
+    string
+  >();
+  private readonly recommendationEvents = new Map<
+    string,
+    MemoryRecommendationEventRecord
+  >();
+  private readonly recommendationDemoCustomerHistory =
+    seedMemoryRecommendationDemoCustomerHistory();
   private readonly catalogPins = new Map<string, CatalogPinProjection>();
   private readonly sandboxProofSessions = new Map<
     string,
@@ -768,10 +887,312 @@ export class MemoryStore
     sessionId: string,
     envelope: PackStateEnvelope,
   ): Promise<void> {
-    this.packStates.set(
-      memoryPackStateKey(sessionId, envelope.packRef),
-      structuredClone(envelope),
+    await this.withStoreLock(async () =>
+      this.packStates.set(
+        memoryPackStateKey(sessionId, envelope.packRef),
+        structuredClone(envelope),
+      ),
     );
+  }
+
+  async reserveRecommendationDecision(
+    input: ReserveRecommendationDecisionInput,
+  ): Promise<ReserveRecommendationDecisionResult> {
+    const parsed = {
+      sessionId: nonBlank(input.sessionId, 'session_id_invalid'),
+      idempotencyKey: nonBlank(input.idempotencyKey, 'idempotency_key_invalid'),
+      requestId: nonBlank(input.requestId, 'request_id_invalid'),
+      requestFingerprint: sha256Schema.parse(input.requestFingerprint),
+      ownerToken: nonBlank(input.ownerToken, 'owner_token_invalid'),
+      createdAt: instantSchema.parse(input.createdAt),
+    };
+    return this.withStoreLock(async () => {
+      const key = memoryRecommendationReservationKey(
+        parsed.sessionId,
+        parsed.idempotencyKey,
+      );
+      const existing = this.recommendationReservations.get(key);
+      if (existing) {
+        if (
+          existing.requestId !== parsed.requestId ||
+          existing.requestFingerprint !== parsed.requestFingerprint
+        ) {
+          return { status: 'conflict' };
+        }
+        if (existing.status === 'completed' && existing.recommendationId) {
+          const record = this.recommendationDecisions.get(
+            existing.recommendationId,
+          );
+          if (!record) throw new Error('recommendation_replay_record_missing');
+          return {
+            status: 'replay',
+            record: cloneRecommendationDecisionRecord(record),
+          };
+        }
+        return { status: 'pending' };
+      }
+      if (
+        this.recommendationReservationRequestIndex.has(parsed.requestId) ||
+        this.recommendationDecisionRequestIndex.has(parsed.requestId)
+      ) {
+        return { status: 'conflict' };
+      }
+      this.recommendationReservations.set(key, {
+        ...parsed,
+        status: 'pending',
+      });
+      this.recommendationReservationRequestIndex.set(parsed.requestId, key);
+      return { status: 'reserved' };
+    });
+  }
+
+  async commitRecommendationDecision(
+    input: CommitRecommendationDecisionInput,
+  ): Promise<CommitRecommendationDecisionResult> {
+    const ownerToken = nonBlank(input.ownerToken, 'owner_token_invalid');
+    const expectedPackStateDigest =
+      input.expectedPackStateDigest === null
+        ? null
+        : sha256Schema.parse(input.expectedPackStateDigest);
+    const record = parseRecommendationDecisionRecord(
+      structuredClone(input.record),
+    );
+    const events = input.events.map((event) =>
+      parseRecommendationEvent(structuredClone(event)),
+    );
+    assertDecisionEventsCorrelate(record, events);
+    await assertRecommendationPackState(
+      input.nextPackState,
+      record.request.orderFlowId,
+      record.stateRevisionAfter,
+    );
+    const eventRecords = await Promise.all(
+      events.map(async (event) => ({
+        eventFingerprint: await digestCommerceAction(event),
+        event,
+      })),
+    );
+
+    return this.withStoreLock(async () => {
+      const existingByRecommendation = this.recommendationDecisions.get(
+        record.response.recommendationId,
+      );
+      const existingRecommendationId =
+        this.recommendationDecisionRequestIndex.get(record.request.requestId);
+      const existingByRequest = existingRecommendationId
+        ? this.recommendationDecisions.get(existingRecommendationId)
+        : undefined;
+      const existing = existingByRecommendation ?? existingByRequest;
+      if (existing) {
+        return sameRecommendationDecisionRecord(existing, record)
+          ? {
+              status: 'replay',
+              record: cloneRecommendationDecisionRecord(existing),
+            }
+          : { status: 'stale' };
+      }
+
+      const reservationKey = memoryRecommendationReservationKey(
+        record.request.sessionId,
+        record.request.idempotencyKey,
+      );
+      const reservation = this.recommendationReservations.get(reservationKey);
+      if (
+        !reservation ||
+        reservation.status !== 'pending' ||
+        reservation.ownerToken !== ownerToken ||
+        reservation.requestId !== record.request.requestId ||
+        reservation.requestFingerprint !== record.requestFingerprint
+      ) {
+        return { status: 'stale' };
+      }
+
+      const packStateKey = memoryPackStateKey(
+        record.request.sessionId,
+        input.nextPackState.packRef,
+      );
+      const currentPackState = this.packStates.get(packStateKey);
+      if (
+        (expectedPackStateDigest === null && currentPackState !== undefined) ||
+        (expectedPackStateDigest !== null &&
+          currentPackState?.integrity.digest !== expectedPackStateDigest)
+      ) {
+        return { status: 'stale' };
+      }
+      const currentRevision =
+        currentPackState === undefined
+          ? 0
+          : await assertRecommendationPackState(
+              currentPackState,
+              record.request.orderFlowId,
+            );
+      if (
+        currentRevision !== record.stateRevisionBefore ||
+        eventRecords.some(({ event }) =>
+          this.recommendationEvents.has(event.eventId),
+        )
+      ) {
+        return { status: 'stale' };
+      }
+
+      this.packStates.set(packStateKey, structuredClone(input.nextPackState));
+      this.recommendationDecisions.set(
+        record.response.recommendationId,
+        cloneRecommendationDecisionRecord(record),
+      );
+      this.recommendationDecisionRequestIndex.set(
+        record.request.requestId,
+        record.response.recommendationId,
+      );
+      for (const eventRecord of eventRecords) {
+        this.recommendationEvents.set(eventRecord.event.eventId, {
+          eventFingerprint: eventRecord.eventFingerprint,
+          event: structuredClone(eventRecord.event),
+        });
+      }
+      this.recommendationReservations.set(reservationKey, {
+        ...reservation,
+        status: 'completed',
+        recommendationId: record.response.recommendationId,
+      });
+      return {
+        status: 'committed',
+        record: cloneRecommendationDecisionRecord(record),
+      };
+    });
+  }
+
+  async appendRecommendationEvent(
+    input: AppendRecommendationEventInput,
+  ): Promise<AppendRecommendationEventResult> {
+    const eventFingerprint = sha256Schema.parse(input.eventFingerprint);
+    const expectedPackStateDigest = sha256Schema.parse(
+      input.expectedPackStateDigest,
+    );
+    const event = parseRecommendationEvent(structuredClone(input.event));
+    await assertRecommendationPackState(input.nextPackState, event.orderFlowId);
+    return this.withStoreLock(async () => {
+      const existing = this.recommendationEvents.get(event.eventId);
+      if (existing) {
+        return existing.eventFingerprint === eventFingerprint &&
+          sameRecommendationEvent(existing.event, event)
+          ? { status: 'replay', event: structuredClone(existing.event) }
+          : { status: 'conflict' };
+      }
+      const key = memoryPackStateKey(
+        event.sessionId,
+        input.nextPackState.packRef,
+      );
+      const current = this.packStates.get(key);
+      if (current?.integrity.digest !== expectedPackStateDigest) {
+        return { status: 'stale' };
+      }
+      const currentRevision = await assertRecommendationPackState(
+        current,
+        event.orderFlowId,
+      );
+      const nextRevision = await assertRecommendationPackState(
+        input.nextPackState,
+        event.orderFlowId,
+      );
+      if (nextRevision <= currentRevision) return { status: 'stale' };
+      this.packStates.set(key, structuredClone(input.nextPackState));
+      this.recommendationEvents.set(event.eventId, {
+        eventFingerprint,
+        event: structuredClone(event),
+      });
+      return { status: 'recorded', event: structuredClone(event) };
+    });
+  }
+
+  async getRecommendationDecision(
+    recommendationId: string,
+  ): Promise<RecommendationDecisionRecord | undefined> {
+    const record = this.recommendationDecisions.get(recommendationId);
+    if (!record) return undefined;
+    const parsed = cloneRecommendationDecisionRecord(record);
+    if (parsed.response.recommendationId !== recommendationId) {
+      throw new Error('recommendation_decision_storage_identity_mismatch');
+    }
+    return parsed;
+  }
+
+  async getRecommendationDecisionByRequest(
+    requestId: string,
+  ): Promise<RecommendationDecisionRecord | undefined> {
+    const recommendationId =
+      this.recommendationDecisionRequestIndex.get(requestId);
+    if (!recommendationId) return undefined;
+    const record = await this.getRecommendationDecision(recommendationId);
+    if (record?.request.requestId !== requestId) {
+      throw new Error('recommendation_decision_storage_identity_mismatch');
+    }
+    return record;
+  }
+
+  async listRecommendationEvents(
+    input: ListRecommendationEventsInput,
+  ): Promise<RecommendationEvent[]> {
+    return [...this.recommendationEvents.entries()]
+      .map(([eventId, { event }]) => {
+        const parsed = parseRecommendationEvent(structuredClone(event));
+        if (parsed.eventId !== eventId) {
+          throw new Error('recommendation_event_storage_identity_mismatch');
+        }
+        return parsed;
+      })
+      .filter(
+        (event) =>
+          (input.orderFlowId === undefined ||
+            event.orderFlowId === input.orderFlowId) &&
+          (input.recommendationId === undefined ||
+            event.recommendationId === input.recommendationId) &&
+          (input.sessionId === undefined ||
+            event.sessionId === input.sessionId),
+      )
+      .sort(
+        (left, right) =>
+          left.occurredAt.localeCompare(right.occurredAt) ||
+          left.eventId.localeCompare(right.eventId),
+      )
+      .map((event) => structuredClone(event));
+  }
+
+  async latestRecommendationDecisionForOrderFlow(
+    orderFlowId: string,
+  ): Promise<RecommendationDecisionRecord | undefined> {
+    const record = [...this.recommendationDecisions.entries()]
+      .map(([recommendationId, candidate]) => {
+        const parsed = cloneRecommendationDecisionRecord(candidate);
+        if (parsed.response.recommendationId !== recommendationId) {
+          throw new Error('recommendation_decision_storage_identity_mismatch');
+        }
+        return parsed;
+      })
+      .filter((candidate) => candidate.request.orderFlowId === orderFlowId)
+      .sort(
+        (left, right) =>
+          right.recordedAt.localeCompare(left.recordedAt) ||
+          right.response.recommendationId.localeCompare(
+            left.response.recommendationId,
+          ),
+      )[0];
+    return record ? cloneRecommendationDecisionRecord(record) : undefined;
+  }
+
+  async getRecommendationDemoCustomerHistory(
+    verifiedCustomerRef: string,
+  ): Promise<RecommendationDemoCustomerHistoryRecord | undefined> {
+    const record =
+      this.recommendationDemoCustomerHistory.get(verifiedCustomerRef);
+    if (!record) return undefined;
+    const parsed = parseRecommendationDemoCustomerHistoryRecord(
+      structuredClone(record),
+    );
+    if (parsed.verifiedCustomerRef !== verifiedCustomerRef) {
+      throw new Error('recommendation_history_storage_identity_mismatch');
+    }
+    return parsed;
   }
 
   async getCatalogPin(
@@ -869,6 +1290,18 @@ export class MemoryStore
     return scored;
   }
 }
+
+function nonBlank(value: string, error: string): string {
+  if (!value.trim()) throw new Error(error);
+  return value;
+}
+
+function cloneRecommendationDecisionRecord(
+  record: RecommendationDecisionRecord,
+): RecommendationDecisionRecord {
+  return parseRecommendationDecisionRecord(structuredClone(record));
+}
+
 function webhookDeliveryKey(
   channel: WebhookDeliveryChannel,
   externalEventId: string,

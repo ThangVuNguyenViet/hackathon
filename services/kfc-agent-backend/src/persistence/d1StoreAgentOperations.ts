@@ -99,13 +99,13 @@ import {
   updateD1AgentRunIfExecutionCurrent,
 } from './d1StoreAgentRunOwnership.js';
 
-import { D1StoreConversationOperations } from './d1StoreConversationOperations.js';
+import { D1StoreRecommendationOperations } from './d1StoreRecommendationOperations.js';
 import {
   claimD1AgentRun,
   createD1AgentRun,
 } from './d1StoreAgentRunCreation.js';
 
-export class D1StoreAgentOperations extends D1StoreConversationOperations {
+export class D1StoreAgentOperations extends D1StoreRecommendationOperations {
   async createAgentRun(input: CreateAgentRunInput): Promise<AgentRun> {
     return createD1AgentRun({ db: this.db, operation: input });
   }
