@@ -114,10 +114,12 @@ Explicit finish is fail-closed. Completion requires all of the following:
 
 Finish is a two-phase transition. The session first gathers and validates the
 evidence while remaining nonterminal. It commits `completed` only after the
-output writer accepts the final `{"type":"finished"}` acknowledgment. A failed
-acknowledgment or terminal-artifact finalization records `control_error`,
-commits `abandoned`, and makes one recovery finalization pass over the final
-trace; an evidence-completeness failure remains `failed`.
+stdout write callback confirms the final `{"type":"finished"}`
+acknowledgment. The stream's immediate `true`/`false` return is not treated as
+completion. A synchronous write error, asynchronous callback/stream error, or
+terminal-artifact finalization error records `control_error`, commits
+`abandoned`, and makes one recovery finalization pass over the final trace; an
+evidence-completeness failure remains `failed`.
 
 Failed attempts are evidence. Never reuse a run ID or delete its directory.
 Start a retry with a distinct run ID and incremented `--attempt`.

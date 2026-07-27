@@ -1,9 +1,14 @@
 import { createHash } from 'node:crypto';
+import { EventEmitter } from 'node:events';
 import { mkdtemp, readFile, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import type { LiveScenarioHttpClient } from '../../src/liveEvidence/liveScenarioHttpClient.js';
+import {
+  createJsonLineWriter,
+  type JsonLineWritable,
+} from '../../src/liveEvidence/jsonLineWriter.js';
 import { runLiveScenarioCommandStream } from '../../src/liveEvidence/liveScenarioProtocol.js';
 import { startLiveScenarioSession } from '../../src/liveEvidence/liveScenarioSession.js';
 
@@ -115,6 +120,20 @@ describe('live scenario terminal evidence', () => {
       await fixture('finished-ack-failure'),
     );
     const output: string[] = [];
+    const stdout = new EventEmitter() as EventEmitter & JsonLineWritable;
+    stdout.write = (chunk, callback) => {
+      const value = JSON.parse(chunk) as { type: string };
+      setImmediate(() => {
+        if (value.type === 'finished') {
+          callback(new Error('finished_ack_write_failed'));
+          return;
+        }
+        output.push(chunk.trimEnd());
+        callback();
+      });
+      return true;
+    };
+    const writeLine = createJsonLineWriter(stdout);
 
     await expect(
       runLiveScenarioCommandStream({
@@ -129,13 +148,7 @@ describe('live scenario terminal evidence', () => {
             note: 'The evidence itself is complete.',
           }),
         ]),
-        writeLine(line) {
-          const value = JSON.parse(line) as { type: string };
-          if (value.type === 'finished') {
-            throw new Error('finished_ack_write_failed');
-          }
-          output.push(line);
-        },
+        writeLine,
       }),
     ).rejects.toThrow('finished_ack_write_failed');
 
@@ -177,6 +190,7 @@ describe('live scenario terminal evidence', () => {
     expect(output.map((line) => JSON.parse(line))).toEqual([
       expect.objectContaining({ type: 'assistant', text: 'unused' }),
     ]);
+    expect(stdout.listenerCount('error')).toBe(0);
     for (const fileName of [
       'environment.json',
       'trace.jsonl',

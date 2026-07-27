@@ -15,6 +15,7 @@ import {
 import { createLiveScenarioHttpClient } from '../src/liveEvidence/liveScenarioHttpClient.js';
 import { runLiveScenarioCommandStream } from '../src/liveEvidence/liveScenarioProtocol.js';
 import { startLiveScenarioSession } from '../src/liveEvidence/liveScenarioSession.js';
+import { createJsonLineWriter } from '../src/liveEvidence/jsonLineWriter.js';
 
 const execFileAsync = promisify(execFile);
 const { repoRoot } = resolveLiveScenarioPaths(import.meta.url);
@@ -48,11 +49,12 @@ async function main(): Promise<void> {
     configuredSecrets,
     gateway,
   });
+  const writeOutputLine = createJsonLineWriter(process.stdout);
 
   let protocolStarted = false;
   try {
-    process.stdout.write(
-      `${serializeEvidenceJsonLine(
+    await writeOutputLine(
+      serializeEvidenceJsonLine(
         {
           type: 'session_ready',
           runId: args.runId,
@@ -73,7 +75,7 @@ async function main(): Promise<void> {
           },
         },
         sanitizeOutput,
-      )}\n`,
+      ),
     );
 
     const lines = createInterface({
@@ -85,9 +87,7 @@ async function main(): Promise<void> {
       session,
       lines,
       sanitize: sanitizeOutput,
-      writeLine(line) {
-        process.stdout.write(`${line}\n`);
-      },
+      writeLine: writeOutputLine,
     });
   } catch (error) {
     if (!protocolStarted) {
