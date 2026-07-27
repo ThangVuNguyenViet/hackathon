@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { createChatRouteHandlers } from '../../src/api/routeChatHandlers.js';
 import type { RouteHandlerContext } from '../../src/api/routeHandlerContext.js';
 import { kfcVietnamPack } from '../../src/businessPacks/kfcVietnam/kfcVietnamPack.js';
@@ -7,14 +7,41 @@ import {
   type KfcGenUiAttachment,
 } from '../../src/genui/kfcGenUi.js';
 import { MemoryStore } from '../../src/persistence/memoryStore.js';
+import { D1Store } from '../../src/persistence/d1Store.js';
 import { createPackStateEnvelope } from '../../src/runtime/businessPack.js';
 import { recommendationCartRevision } from '../../src/recommendations/application/tool-execution.js';
+import { SqliteD1Database } from '../support/sqlite-d1.js';
+
+const actionDatabases: SqliteD1Database[] = [];
+
+afterEach(() => {
+  for (const database of actionDatabases.splice(0)) database.close();
+});
+
+const actionStores = [
+  {
+    name: 'MemoryStore',
+    create: async () => new MemoryStore(),
+  },
+  {
+    name: 'D1Store',
+    create: async () => {
+      const database = new SqliteD1Database();
+      actionDatabases.push(database);
+      const store = new D1Store(database);
+      await store.initialize();
+      return store;
+    },
+  },
+] as const;
 
 describe('KFC GenUI guest actions', () => {
-  it('derives ID-only recommendation select/dismiss commands and replays once', async () => {
+  it.each(actionStores)(
+    'derives ID-only recommendation select/dismiss commands and replays once with $name',
+    async ({ create }) => {
     const sessionId = 'kfc:recommendation-action-demo';
     const customerId = 'recommendation-action-demo';
-    const store = new MemoryStore();
+    const store = await create();
     const cart = {
       id: 'cart-recommendation-1',
       items: [],
@@ -86,10 +113,37 @@ describe('KFC GenUI guest actions', () => {
       deliveryStatus: 'sent',
       metadata: { genUi: attachment },
     });
-    const kfcAgentResponse = vi.fn(async () => ({
-      status: 200,
-      body: { responseText: 'Đã thêm món.' },
-    }));
+    const updatedCartAttachment: KfcGenUiAttachment = {
+      id: 'cart-after-recommendation-action',
+      lifecycleStage: 'cart',
+      widgetKind: 'cartBuilder',
+      status: 'active',
+      title: 'Đơn hàng của bạn',
+      data: { itemCount: 1 },
+      actions: [],
+    };
+    const kfcAgentResponse = vi.fn(
+      async (input: {
+        completeTrustedCustomerAction?: (receipt: {
+          status: 'succeeded' | 'failed' | 'dismissed';
+          recommendationId: string;
+          recommendationActionId: string | null;
+        }) => Promise<void>;
+      }) => {
+        await input.completeTrustedCustomerAction?.({
+          status: 'succeeded',
+          recommendationId: 'recommendation-1',
+          recommendationActionId: 'recommendation-action-1',
+        });
+        return {
+          status: 200,
+          body: {
+            responseText: 'Đã thêm món.',
+            genUi: updatedCartAttachment,
+          },
+        };
+      },
+    );
     const binding = {
       recommendationId: 'recommendation-1',
       assistantTurnId: sourceTurn.id,
@@ -138,7 +192,17 @@ describe('KFC GenUI guest actions', () => {
       },
     };
     const selected = await handlers.chatKfcGenUiAction(request);
-    expect(selected.status).toBe(200);
+    expect(selected).toMatchObject({
+      status: 200,
+      body: {
+        responseText: 'Đã thêm món.',
+        genUi: { id: updatedCartAttachment.id, widgetKind: 'cartBuilder' },
+        trustedActionResult: {
+          status: 'succeeded',
+          recommendationId: 'recommendation-1',
+        },
+      },
+    });
     expect(kfcAgentResponse).toHaveBeenCalledWith(
       expect.objectContaining({
         trustedCustomerAction: {
@@ -159,7 +223,12 @@ describe('KFC GenUI guest actions', () => {
 
     await expect(handlers.chatKfcGenUiAction(request)).resolves.toMatchObject({
       status: 200,
-      body: { replayed: true },
+      body: {
+        responseText: 'Đã thêm món.',
+        genUi: { id: updatedCartAttachment.id, widgetKind: 'cartBuilder' },
+        trustedActionResult: { status: 'succeeded' },
+        replayed: true,
+      },
     });
     expect(kfcAgentResponse).toHaveBeenCalledOnce();
     await expect(
@@ -175,12 +244,15 @@ describe('KFC GenUI guest actions', () => {
       status: 404,
       body: { errorCode: 'action_not_found' },
     });
-  });
+    },
+  );
 
-  it('durably replays a committed recommendation action when later model work throws', async () => {
+  it.each(actionStores)(
+    'durably replays a committed recommendation action from $name when later model work throws',
+    async ({ create }) => {
     const sessionId = 'kfc:recommendation-action-model-failure';
     const customerId = 'recommendation-action-model-failure';
-    const store = new MemoryStore();
+    const store = await create();
     const cart = {
       id: 'cart-recommendation-model-failure',
       items: [],
@@ -315,6 +387,7 @@ describe('KFC GenUI guest actions', () => {
     await expect(handlers.chatKfcGenUiAction(request)).resolves.toMatchObject({
       status: 200,
       body: {
+        responseText: 'Đã cập nhật lựa chọn gợi ý của bạn.',
         trustedActionResult: {
           status: 'succeeded',
           recommendationId: 'recommendation-model-failure',
@@ -324,12 +397,14 @@ describe('KFC GenUI guest actions', () => {
     await expect(handlers.chatKfcGenUiAction(request)).resolves.toMatchObject({
       status: 200,
       body: {
+        responseText: 'Đã cập nhật lựa chọn gợi ý của bạn.',
         replayed: true,
         trustedActionResult: { status: 'succeeded' },
       },
     });
     expect(kfcAgentResponse).toHaveBeenCalledOnce();
-  });
+    },
+  );
 
   it('accepts a server-authorized anonymous menu selection without customer authentication', async () => {
     const sessionId = 'kfc:anonymous-demo-customer';

@@ -486,6 +486,9 @@ export type IrreversibleOperationReservation =
 export type IrreversibleOperationCompletion =
   { status: 'completed'; result: Record<string, unknown> } | { status: 'lost' };
 
+export type IrreversibleOperationFinalization =
+  { status: 'finalized'; result: Record<string, unknown> } | { status: 'lost' };
+
 export interface IrreversibleOperationOwner {
   attempt: number;
   leaseToken: string;
@@ -795,6 +798,15 @@ export interface ConversationStore {
     owner: IrreversibleOperationOwner,
     result: Record<string, unknown>,
   ): Promise<IrreversibleOperationCompletion>;
+  /**
+   * Replaces an already-completed fallback receipt with the final
+   * customer-visible result for the same exact reservation owner.
+   */
+  finalizeIrreversibleOperation?(
+    input: IrreversibleOperationInput,
+    owner: IrreversibleOperationOwner,
+    result: Record<string, unknown>,
+  ): Promise<IrreversibleOperationFinalization>;
   failIrreversibleOperation?(
     input: IrreversibleOperationInput,
     owner: IrreversibleOperationOwner,

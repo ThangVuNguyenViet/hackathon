@@ -52,6 +52,7 @@ import {
   type SessionResetHook,
   type IrreversibleOperationReservation,
   type IrreversibleOperationCompletion,
+  type IrreversibleOperationFinalization,
   type AppendConversationTurnInput,
   type IsRunCommitFenceCurrentInput,
   type CommitAssistantTurnIfRunCurrentInput,
@@ -104,6 +105,7 @@ import { digestCommerceAction } from '../ordering/commerceDigest.js';
 import {
   completeMemoryIrreversibleOperation,
   failMemoryIrreversibleOperation,
+  finalizeMemoryIrreversibleOperation,
   markMemoryIrreversibleOperationOutcomeUnknownIfExpired,
   type MemoryIrreversibleOperationRecord,
 } from './memoryStoreIrreversibleOperations.js';
@@ -378,6 +380,23 @@ export class MemoryStore
   ): Promise<IrreversibleOperationCompletion> {
     return this.withStoreLock(async () =>
       completeMemoryIrreversibleOperation({
+        operation: input,
+        owner,
+        result,
+        operations: this.irreversibleOperations,
+        activeAuthorityGeneration: (sessionId) =>
+          captureActiveMemorySessionAuthority(this.sessionControls, sessionId),
+      }),
+    );
+  }
+
+  async finalizeIrreversibleOperation(
+    input: IrreversibleOperationInput,
+    owner: IrreversibleOperationOwner,
+    result: Record<string, unknown>,
+  ): Promise<IrreversibleOperationFinalization> {
+    return this.withStoreLock(async () =>
+      finalizeMemoryIrreversibleOperation({
         operation: input,
         owner,
         result,

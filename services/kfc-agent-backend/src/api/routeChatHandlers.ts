@@ -62,6 +62,7 @@ import {
 } from '../genui/kfcGenUi.js';
 import { recommendationCartRevision } from '../recommendations/application/tool-execution.js';
 import { runAgentTurn } from '../agent/kfcAgent.js';
+import type { TrustedCustomerActionCommitReceipt } from '../agent/agentTurn.js';
 import { loadVerifiedStateProjection } from '../agent/verifiedState.js';
 import { kfcVietnamPack } from '../businessPacks/kfcVietnam/kfcVietnamPack.js';
 import type { AgentState } from '../agent/agentState.js';
@@ -155,6 +156,19 @@ import {
 
 import type { RouteHandlerContext } from './routeHandlerContext.js';
 import { resolveDemoAgentModelBinding } from './demoAgentModelSelection.js';
+
+function trustedActionAcknowledgement(
+  receipt: TrustedCustomerActionCommitReceipt,
+): string {
+  switch (receipt.status) {
+    case 'succeeded':
+      return 'Đã cập nhật lựa chọn gợi ý của bạn.';
+    case 'failed':
+      return 'Mình chưa thể cập nhật lựa chọn gợi ý. Bạn có thể thử lại.';
+    case 'dismissed':
+      return 'Đã bỏ qua gợi ý này.';
+  }
+}
 
 const clientItemSelectionSchema = z
   .object({
@@ -705,6 +719,7 @@ export function createChatRouteHandlers(context: RouteHandlerContext) {
       if (
         !store.reserveIrreversibleOperation ||
         !store.completeIrreversibleOperation ||
+        !store.finalizeIrreversibleOperation ||
         !store.failIrreversibleOperation
       ) {
         return {
@@ -867,6 +882,12 @@ export function createChatRouteHandlers(context: RouteHandlerContext) {
           body: { errorCode: 'invalid_action_payload' },
         };
       }
+      let trustedActionCommit:
+        | {
+            receipt: TrustedCustomerActionCommitReceipt;
+            result: Record<string, unknown>;
+          }
+        | undefined;
       const invoke = () =>
         kfcAgentResponse({
           sessionId: parsed.data.sessionId,
@@ -884,24 +905,65 @@ export function createChatRouteHandlers(context: RouteHandlerContext) {
           },
           trustedCustomerAction,
           completeTrustedCustomerAction: async (receipt) => {
+            const result = {
+              status: 200,
+              body: {
+                responseText: trustedActionAcknowledgement(receipt),
+                trustedActionResult: receipt,
+              },
+            };
             const completed = await store.completeIrreversibleOperation!(
               reservationInput,
               reservation,
-              {
-                status: 200,
-                body: {
-                  responseText: '',
-                  trustedActionResult: receipt,
-                },
-              },
+              result,
             );
             if (completed.status !== 'completed') {
               throw new Error('trusted_genui_action_completion_lost');
             }
+            trustedActionCommit = {
+              receipt,
+              result: completed.result,
+            };
           },
         });
       try {
         const response = await invoke();
+        if (trustedActionCommit) {
+          const responseBody = isRecord(response.body) ? response.body : {};
+          if (
+            response.status >= 200 &&
+            response.status < 300 &&
+            typeof responseBody.responseText === 'string' &&
+            responseBody.responseText.trim()
+          ) {
+            const finalized = await store.finalizeIrreversibleOperation!(
+              reservationInput,
+              reservation,
+              {
+                status: response.status,
+                body: {
+                  ...responseBody,
+                  trustedActionResult: trustedActionCommit.receipt,
+                },
+              },
+            );
+            if (finalized.status === 'finalized') {
+              const finalizedStatus = finalized.result.status;
+              const finalizedBody = finalized.result.body;
+              return {
+                status:
+                  typeof finalizedStatus === 'number' ? finalizedStatus : 200,
+                body: isRecord(finalizedBody) ? finalizedBody : {},
+              };
+            }
+          }
+          const committedStatus = trustedActionCommit.result.status;
+          const committedBody = trustedActionCommit.result.body;
+          return {
+            status: typeof committedStatus === 'number' ? committedStatus : 200,
+            body: isRecord(committedBody) ? committedBody : {},
+          };
+        }
         if (
           response.status === 409 &&
           isRecord(response.body) &&

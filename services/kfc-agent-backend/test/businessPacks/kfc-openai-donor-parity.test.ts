@@ -514,6 +514,11 @@ describe('portable Direct SDK behavior retained by the KFC LangChain pack', () =
       cartRevision: presentation.binding.cartRevision,
       actionDigest: presentation.binding.actionDigest,
     });
+    await store.updateTurnDeliveryStatus(
+      presentation.binding.assistantTurnId,
+      'sent',
+      null,
+    );
     await expect(
       recommendations.recordImpression(recommendationId, impression),
     ).resolves.toMatchObject({ status: 'recorded' });

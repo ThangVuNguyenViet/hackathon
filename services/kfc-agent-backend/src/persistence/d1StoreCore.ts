@@ -24,6 +24,7 @@ import type {
   HistorySearchResult,
   IrreversibleOperationInput,
   IrreversibleOperationCompletion,
+  IrreversibleOperationFinalization,
   IrreversibleOperationOwner,
   IrreversibleOperationReservation,
   MarkIrreversibleOperationOutcomeUnknownIfExpiredInput,
@@ -343,6 +344,43 @@ export abstract class D1StoreCore {
           result: JSON.parse(current.result_json) as Record<string, unknown>,
         }
       : { status: 'lost' };
+  }
+
+  async finalizeIrreversibleOperation(
+    input: IrreversibleOperationInput,
+    owner: IrreversibleOperationOwner,
+    result: Record<string, unknown>,
+  ): Promise<IrreversibleOperationFinalization> {
+    const updated = await this.db
+      .prepare(
+        `UPDATE irreversible_operations
+      SET result_json = ?
+      WHERE request_id = ? AND session_id = ? AND operation = ? AND binding_fingerprint = ?
+        AND status = 'completed'
+        AND attempt_count = ?
+        AND lease_token = ?
+        AND session_authority_generation = ?
+        AND EXISTS (
+          SELECT 1
+          FROM (${d1ActiveSessionAuthoritySource}) AS authority
+          WHERE authority.session_authority_generation =
+            irreversible_operations.session_authority_generation
+        )`,
+      )
+      .bind(
+        JSON.stringify(result),
+        input.requestId,
+        input.sessionId,
+        input.operation,
+        input.bindingFingerprint,
+        owner.attempt,
+        owner.leaseToken,
+        owner.sessionAuthorityGeneration,
+        input.sessionId,
+      )
+      .run();
+    if (Number(updated.meta.changes ?? 0) === 0) return { status: 'lost' };
+    return { status: 'finalized', result: structuredClone(result) };
   }
 
   async failIrreversibleOperation(

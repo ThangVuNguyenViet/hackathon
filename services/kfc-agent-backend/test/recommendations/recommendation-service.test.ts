@@ -41,9 +41,11 @@ import type {
 } from '../../src/recommendations/persistence/repository.js';
 import { renderBindingForDecisionDigests } from '../../src/recommendations/persistence/types.js';
 import { MemoryStore } from '../../src/persistence/memoryStore.js';
+import { D1Store } from '../../src/persistence/d1Store.js';
 import { createPackStateEnvelope } from '../../src/runtime/businessPack.js';
 import { initialRecommendationState } from '../../src/recommendations/state/state-machine.js';
 import type { KfcGenUiAttachment } from '../../src/genui/kfcGenUi.js';
+import { SqliteD1Database } from '../support/sqlite-d1.js';
 
 const serverInstant = '2026-07-27T09:30:00Z';
 const completedServerInstant = '2026-07-27T09:30:00.1Z';
@@ -241,7 +243,7 @@ class RecordingEngine implements RecommendationDecisionEngine {
 }
 
 function dependencies(
-  store: MemoryStore,
+  store: MemoryStore | D1Store,
   decisionEngine: RecommendationDecisionEngine,
   overrides: Partial<RecommendationApplicationServiceDependencies> = {},
 ): RecommendationApplicationServiceDependencies {
@@ -258,7 +260,7 @@ function dependencies(
 
 async function application(
   decisionEngine: RecommendationDecisionEngine = new RecordingEngine(),
-  store = new MemoryStore(),
+  store: MemoryStore | D1Store = new MemoryStore(),
 ) {
   const service = createRecommendationApplicationService(
     dependencies(store, decisionEngine),
@@ -301,9 +303,10 @@ function outcomeFor(input: {
 }
 
 async function publishRecommendationTurn(
-  store: MemoryStore,
+  store: MemoryStore | D1Store,
   recommendationId: string,
   customerId: string,
+  deliveryStatus: 'pending' | 'sent' | 'failed' = 'sent',
 ) {
   const record = await store.getRecommendationDecision(recommendationId);
   if (!record) throw new Error('recommendation expected');
@@ -352,7 +355,7 @@ async function publishRecommendationTurn(
     text: 'Mình có một gợi ý cho bạn.',
     externalMessageId: null,
     externalUserId: customerId,
-    deliveryStatus: 'sent',
+    deliveryStatus,
     metadata: { genUi: attachment },
   });
 }
@@ -1376,6 +1379,104 @@ describe('Recommendation application service', () => {
       ),
     ).resolves.toEqual({ status: 'render_binding_conflict' });
   });
+
+  it.each(['pending', 'failed'] as const)(
+    'rejects an impression when its bound Memory assistant publication is %s',
+    async (deliveryStatus) => {
+      const store = new MemoryStore();
+      const { service } = await application(new RecordingEngine(), store);
+      const request = requestFor({
+        suffix: `impression-memory-${deliveryStatus}`,
+        placement: 'local_favorite',
+      });
+      const customerId = `customer-memory-${deliveryStatus}`;
+      const decision = await service.decide({
+        request,
+        trusted: { presentationCustomerId: customerId },
+      });
+      if (decision.status !== 'decided') throw new Error('decision expected');
+      await publishRecommendationTurn(
+        store,
+        decision.response.recommendationId,
+        customerId,
+        deliveryStatus,
+      );
+      const record = await store.getRecommendationDecision(
+        decision.response.recommendationId,
+      );
+      if (!record) throw new Error('stored decision expected');
+
+      await expect(
+        service.recordImpression(
+          decision.response.recommendationId,
+          parseRecommendationImpressionRequest({
+            schemaVersion: 'kfc-recommendation-event-v1',
+            eventId: `recommendation-event-memory-${deliveryStatus}`,
+            occurredAt: '2026-07-27T09:10:00Z',
+            assistantTurnId: record.renderBinding.assistantTurnId,
+            attachmentId: record.renderBinding.attachmentId,
+            renderedActions: record.renderBinding.renderedActions,
+            cartRevision: record.renderBinding.cartRevision,
+            actionDigest: record.renderBinding.actionDigest,
+          }),
+        ),
+      ).resolves.toEqual({ status: 'render_binding_conflict' });
+    },
+  );
+
+  it.each(['pending', 'failed', 'sent'] as const)(
+    'accepts a D1 assistant publication only after delivery is %s',
+    async (deliveryStatus) => {
+      const database = new SqliteD1Database();
+      const store = new D1Store(database);
+      try {
+        await store.initialize();
+        const { service } = await application(new RecordingEngine(), store);
+        const request = requestFor({
+          suffix: `impression-d1-${deliveryStatus}`,
+          placement: 'local_favorite',
+        });
+        const customerId = `customer-d1-${deliveryStatus}`;
+        const decision = await service.decide({
+          request,
+          trusted: { presentationCustomerId: customerId },
+        });
+        if (decision.status !== 'decided') throw new Error('decision expected');
+        await publishRecommendationTurn(
+          store,
+          decision.response.recommendationId,
+          customerId,
+          deliveryStatus,
+        );
+        const record = await store.getRecommendationDecision(
+          decision.response.recommendationId,
+        );
+        if (!record) throw new Error('stored decision expected');
+
+        const result = await service.recordImpression(
+          decision.response.recommendationId,
+          parseRecommendationImpressionRequest({
+            schemaVersion: 'kfc-recommendation-event-v1',
+            eventId: `recommendation-event-d1-${deliveryStatus}`,
+            occurredAt: '2026-07-27T09:10:00Z',
+            assistantTurnId: record.renderBinding.assistantTurnId,
+            attachmentId: record.renderBinding.attachmentId,
+            renderedActions: record.renderBinding.renderedActions,
+            cartRevision: record.renderBinding.cartRevision,
+            actionDigest: record.renderBinding.actionDigest,
+          }),
+        );
+        expect(result).toMatchObject({
+          status:
+            deliveryStatus === 'sent'
+              ? 'recorded'
+              : 'render_binding_conflict',
+        });
+      } finally {
+        database.close();
+      }
+    },
+  );
 
   it('replays a distinct repeat impression without recording it twice', async () => {
     const { service, decision, impression, inspection } =

@@ -319,6 +319,7 @@ async function hasCommittedRecommendationPublication(
   if (
     !turn ||
     turn.role !== 'assistant' ||
+    turn.deliveryStatus !== 'sent' ||
     turn.externalUserId !== customerId ||
     !isKfcGenUiAttachment(attachment) ||
     attachment.widgetKind !== 'recommendationOffer' ||

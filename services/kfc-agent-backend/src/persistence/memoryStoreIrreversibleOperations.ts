@@ -1,6 +1,7 @@
 import {
   assertSameIrreversibleOperation,
   type IrreversibleOperationCompletion,
+  type IrreversibleOperationFinalization,
   type IrreversibleOperationInput,
   type IrreversibleOperationOwner,
   type MarkIrreversibleOperationOutcomeUnknownIfExpiredInput,
@@ -103,6 +104,38 @@ export function completeMemoryIrreversibleOperation(input: {
   existing.leaseExpiresAt = 0;
   return {
     status: 'completed',
+    result: structuredClone(existing.result),
+  };
+}
+
+export function finalizeMemoryIrreversibleOperation(input: {
+  operation: IrreversibleOperationInput;
+  owner: IrreversibleOperationOwner;
+  result: Record<string, unknown>;
+  operations: Map<string, MemoryIrreversibleOperationRecord>;
+  activeAuthorityGeneration(sessionId: string): number | undefined;
+}): IrreversibleOperationFinalization {
+  const existing = input.operations.get(input.operation.requestId);
+  if (!existing) {
+    throw new Error(
+      `Irreversible operation reservation not found: ${input.operation.requestId}`,
+    );
+  }
+  assertSameIrreversibleOperation(existing.input, input.operation);
+  if (
+    existing.status !== 'completed' ||
+    existing.attempt !== input.owner.attempt ||
+    existing.leaseToken !== input.owner.leaseToken ||
+    existing.sessionAuthorityGeneration !==
+      input.owner.sessionAuthorityGeneration ||
+    input.activeAuthorityGeneration(input.operation.sessionId) !==
+      input.owner.sessionAuthorityGeneration
+  ) {
+    return { status: 'lost' };
+  }
+  existing.result = structuredClone(input.result);
+  return {
+    status: 'finalized',
     result: structuredClone(existing.result),
   };
 }
