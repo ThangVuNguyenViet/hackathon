@@ -12,6 +12,7 @@ import {
   createEvidenceSanitizer,
   type EvidenceSanitizer,
 } from './evidenceRedaction.js';
+import type { RuntimeSourceSnapshot } from './runtimeSourceSnapshot.js';
 
 const TRACE_SCHEMA_VERSION = 'kfc-live-scenario-trace-v1';
 const MANIFEST_SCHEMA_VERSION = 'kfc-live-scenario-manifest-v1';
@@ -64,6 +65,7 @@ interface Manifest {
     sourceSha256: string;
   };
   model: AgentModelIdentity;
+  runtimeSourceSnapshot?: RuntimeSourceSnapshot;
   evidence: {
     trace: 'trace.jsonl';
     transcript: 'transcript.md';
@@ -105,6 +107,7 @@ export async function startLiveScenarioSession(input: {
   };
   scenarioPath: string;
   identity: AgentModelIdentity;
+  runtimeSourceSnapshot?: RuntimeSourceSnapshot;
   configuredSecrets?: readonly string[];
   runPreflight(): Promise<ModelCapabilityPreflightResult>;
   executeTurn: LiveScenarioTurnExecutor;
@@ -159,6 +162,9 @@ export async function startLiveScenarioSession(input: {
       sourceSha256: scenarioSourceSha256,
     },
     model: { ...input.identity },
+    ...(input.runtimeSourceSnapshot
+      ? { runtimeSourceSnapshot: { ...input.runtimeSourceSnapshot } }
+      : {}),
     evidence: {
       trace: 'trace.jsonl',
       transcript: 'transcript.md',

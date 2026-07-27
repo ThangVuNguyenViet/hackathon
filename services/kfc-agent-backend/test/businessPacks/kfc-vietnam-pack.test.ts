@@ -687,14 +687,16 @@ describe('KFC Vietnam business pack compatibility', () => {
           }),
         ),
         tracer,
-        deferTrace(task) {
+        deferWork(task) {
           deferred.push(task);
         },
       });
 
       expect(output.responseText).toBe('Xin chào! Tôi có thể giúp gì cho bạn?');
-      expect(deferred).toHaveLength(1);
-      await expect(deferred[0]!()).resolves.toBeUndefined();
+      expect(deferred).toHaveLength(2);
+      await expect(Promise.all(deferred.map((task) => task()))).resolves.toEqual(
+        [undefined, undefined],
+      );
       expect(diagnostics).toHaveBeenCalledWith(
         'agent_trace_callbacks_failed',
         expect.any(Object),
@@ -744,7 +746,7 @@ describe('KFC Vietnam business pack compatibility', () => {
         new FakeListChatModel({ responses: ['Xin chào!'] }),
       ),
       tracer,
-      deferTrace(task) {
+      deferWork(task) {
         deferred.push(task);
       },
     });

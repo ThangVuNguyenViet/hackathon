@@ -7,6 +7,14 @@ import type {
 
 export type AsyncTokenCounter = (text: string) => Promise<number>;
 
+export function conversationTokenCounter(model: {
+  getNumTokens?: (text: string) => Promise<number>;
+}): AsyncTokenCounter {
+  return typeof model.getNumTokens === 'function'
+    ? (text) => model.getNumTokens!(text)
+    : async (text) => Math.ceil(text.length / 4);
+}
+
 export interface ConversationExchange {
   turns: ConversationTurn[];
   throughOrdinal: number;

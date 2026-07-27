@@ -14,6 +14,9 @@ export const scenarioScriptJsonSchema = z
   .object({
     id: z.string().min(1),
     title: z.string().min(1),
+    packId: z
+      .enum(['kfc-vietnam', 'pvcfc-customer-service'])
+      .default('kfc-vietnam'),
     channel: z.enum(['messenger_mock', 'zalo_mock', 'kfc']),
     goal: z.string().min(1),
     preconditions: z.array(z.string().min(1)).min(1),

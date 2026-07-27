@@ -22,6 +22,6 @@ describe('live scenario runner', () => {
       'await Promise.allSettled(deferredTraceTasks.map((task) => task()))',
     );
     expect(source).not.toContain('await deferredTraceTasks.settle()');
-    expect(source).toContain('deferTrace: runDetachedWork');
+    expect(source).toContain('deferWork: runDetachedWork');
   });
 });

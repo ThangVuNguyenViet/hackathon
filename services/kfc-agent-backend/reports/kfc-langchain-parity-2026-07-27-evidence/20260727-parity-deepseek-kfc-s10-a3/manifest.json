@@ -1,0 +1,64 @@
+{
+  "schemaVersion": "kfc-live-scenario-manifest-v1",
+  "runId": "20260727-parity-deepseek-kfc-s10-a3",
+  "attempt": 3,
+  "status": "completed",
+  "startedAt": "2026-07-27T17:04:55.996Z",
+  "correlation": {
+    "externalSessionId": "live-20260727-parity-deepseek-kfc-s10-a3",
+    "durableSessionId": "live-20260727-parity-deepseek-kfc-s10-a3",
+    "scenarioId": "10-so-sanh-mon-va-giai-thich",
+    "probeRunId": "20260727-parity-deepseek-kfc-s10-a3"
+  },
+  "scenario": {
+    "id": "10-so-sanh-mon-va-giai-thich",
+    "title": "10: So sánh món và giải thích lựa chọn",
+    "goal": "So sánh hai combo bằng dữ liệu thành phần và giá đã xác minh, sau đó tư vấn lựa chọn không cay trong giới hạn dữ liệu mà không thay đổi giỏ hàng.",
+    "preconditions": [
+      "Hai mã combo 20698 và 20709 cùng dữ liệu giá, thành phần và tùy chọn hiện hành có thể được tra cứu.",
+      "Khách đang tham khảo, chưa yêu cầu thêm món hoặc thay đổi giỏ hàng; dữ liệu độ cay có thể không đầy đủ cho mọi thành phần."
+    ],
+    "risks": [
+      "Product comparisons must stay grounded in verified product information.",
+      "Advisory conversation must not mutate a cart or make unsupported health claims."
+    ],
+    "finalState": "advisory_complete",
+    "sourceFile": "10-so-sanh-mon-va-giai-thich.json",
+    "sourcePath": "/Users/vietthangvunguyen/Workspace/hackathon/.worktrees/kfc-kiss-model-agnostic/ai-talent-tracks/fnb/conversations/10-so-sanh-mon-va-giai-thich.json",
+    "sourceSha256": "bf27b56ebd0edc62cce5123bdf6f039edcb32c30d088ead64eeb3720fded0807"
+  },
+  "model": {
+    "candidateId": "deepseek-v4-flash",
+    "provider": "opencode",
+    "model": "deepseek-v4-flash",
+    "profile": "opencode:deepseek-v4-flash:chat-completions",
+    "transport": "openai_compatible_chat"
+  },
+  "runtimeSourceSnapshot": {
+    "algorithm": "sha256",
+    "digest": "e8946270d43cb14384ed9d1cb08c858debcbf32cb38a3260817cabf369cd7781",
+    "files": 255,
+    "roots": [
+      "fixtures/business-packs",
+      "fixtures/generated",
+      "package-lock.json",
+      "package.json",
+      "scripts/run-live-scenario.ts",
+      "src"
+    ]
+  },
+  "evidence": {
+    "trace": "trace.jsonl",
+    "transcript": "transcript.md",
+    "preflight": "preflight.json",
+    "reviewPacket": "codex-review-packet.md",
+    "artifactSha256": {
+      "preflight.json": "74796d6891a6d6bef5ce6d39c55c8099c557001b5f1744731db0e13b51044739",
+      "trace.jsonl": "52da9b7db7cf3ae79d58e1c4c4943ff5feead3f9d50edffeaeb48085d7f469e0",
+      "transcript.md": "003705e680a4f091b12f38ff6e3fa2f53057d1bb84e1410bb46128eec4c3e8a6",
+      "codex-review-packet.md": "74b2b180fe925df36cb296a14b300bbeaeadc0f13f13fb51d3d3a0de012bccce"
+    }
+  },
+  "completedAt": "2026-07-27T17:06:10.910Z",
+  "finishNote": "Sealed-snapshot advisory canary complete. The first answer grounded both combos and correctly stated that neither whole combo can be certified non-spicy because each contains an ingredient with unknown spice evidence. No corrective challenge was needed and no cart mutation occurred. Manifest runtimeSourceSnapshot verified present."
+}

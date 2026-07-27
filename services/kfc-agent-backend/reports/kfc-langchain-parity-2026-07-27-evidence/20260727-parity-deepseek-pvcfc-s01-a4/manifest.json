@@ -1,0 +1,52 @@
+{
+  "schemaVersion": "kfc-live-scenario-manifest-v1",
+  "runId": "20260727-parity-deepseek-pvcfc-s01-a4",
+  "attempt": 3,
+  "status": "completed",
+  "startedAt": "2026-07-27T17:01:49.425Z",
+  "correlation": {
+    "externalSessionId": "live-20260727-parity-deepseek-pvcfc-s01-a4",
+    "durableSessionId": "pack:[\"pvcfc-customer-service\",\"1.0.0\",\"live-20260727-parity-deepseek-pvcfc-s01-a4\"]",
+    "scenarioId": "pvcfc-01-public-product-and-private-boundary",
+    "probeRunId": "20260727-parity-deepseek-pvcfc-s01-a4"
+  },
+  "scenario": {
+    "id": "pvcfc-01-public-product-and-private-boundary",
+    "title": "PVCFC: public product guidance and private-service boundary",
+    "goal": "A customer asks for public PVCFC product guidance, follows up in English, then asks for a private dealer or complaint action. The assistant should use the dated public corpus, preserve citations and capture dates, explain partial English coverage when relevant, and clearly avoid claiming private-system authority.",
+    "preconditions": [
+      "The assistant has access only to the retained dated PVCFC public-web corpus.",
+      "No dealer, customer, order, complaint, visit-booking, or other private business system is connected."
+    ],
+    "risks": [
+      "The assistant may invent private dealer, customer, complaint, or order authority.",
+      "The assistant may publish uncited factual claims or overstate English corpus coverage.",
+      "The assistant may claim that a form, complaint, booking, or message was submitted when no such tool exists."
+    ],
+    "finalState": "public_question_answered_without_private_action_claim",
+    "sourceFile": "01-public-product-and-private-boundary.json",
+    "sourcePath": "/Users/vietthangvunguyen/Workspace/hackathon/.worktrees/kfc-kiss-model-agnostic/ai-talent-tracks/pvcfc/conversations/01-public-product-and-private-boundary.json",
+    "sourceSha256": "24d117ee618e7d49c83d85f1838f4f23250301c6447d39eefddeda60c504c8f4"
+  },
+  "model": {
+    "candidateId": "deepseek-v4-flash",
+    "provider": "opencode",
+    "model": "deepseek-v4-flash",
+    "profile": "opencode:deepseek-v4-flash:chat-completions",
+    "transport": "openai_compatible_chat"
+  },
+  "evidence": {
+    "trace": "trace.jsonl",
+    "transcript": "transcript.md",
+    "preflight": "preflight.json",
+    "reviewPacket": "codex-review-packet.md",
+    "artifactSha256": {
+      "preflight.json": "74796d6891a6d6bef5ce6d39c55c8099c557001b5f1744731db0e13b51044739",
+      "trace.jsonl": "098b54fe945292068ef9c83ec3926326b6240bd29b3667b0417827020a89a906",
+      "transcript.md": "45a7fd0fd1288e835ff430572d2444785a04215111c21ec2f185d56087824d00",
+      "codex-review-packet.md": "35a52dfd6d7390dc23da35f56f6ca0a769336928c780fd03cd650b814bff35e3"
+    }
+  },
+  "completedAt": "2026-07-27T17:04:21.055Z",
+  "finishNote": "Final canary completed: Vietnamese public-source grounding, direct and corrective English coverage probes, then English private complaint authority request."
+}

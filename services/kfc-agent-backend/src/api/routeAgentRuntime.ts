@@ -401,7 +401,7 @@ export function createRouteAgentRuntime(
         dashboard,
         agentModelBinding: selectedAgentModelBinding,
         tracer: options.agentTracer,
-        deferTrace: options.defer,
+        deferWork: options.defer,
         accessContext,
         observeRun: input.observeRun ?? streamingObserver?.observe,
         runGuard,

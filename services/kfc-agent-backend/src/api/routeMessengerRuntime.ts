@@ -676,7 +676,7 @@ export function createRouteMessengerRuntime(
           guestCheckoutAuthority,
           runGuard,
           tracer: options.agentTracer,
-          deferTrace: options.defer,
+          deferWork: options.defer,
         });
         if (output.suppressed || !(await isCurrentRun())) {
           await suppressRun('run_not_current_before_delivery');

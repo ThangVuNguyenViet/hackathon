@@ -211,11 +211,17 @@ describe('createAgentChatModel', () => {
     });
 
     expect(openai.model._llmType()).toBe('openai');
+    expect(Reflect.get(Reflect.get(openai.model, 'caller'), 'maxRetries')).toBe(
+      0,
+    );
     expect(Reflect.get(openai.model, 'useResponsesApi')).toBe(true);
     expect(Reflect.get(openai.model, 'modelKwargs')).toEqual({
       parallel_tool_calls: false,
     });
     expect(deepseek.model._llmType()).toBe('openai');
+    expect(
+      Reflect.get(Reflect.get(deepseek.model, 'caller'), 'maxRetries'),
+    ).toBe(0);
     expect(Reflect.get(deepseek.model, 'useResponsesApi')).toBe(false);
     expect(Reflect.get(deepseek.model, 'modelKwargs')).toEqual({
       thinking: { type: 'disabled' },
@@ -224,6 +230,9 @@ describe('createAgentChatModel', () => {
       baseURL: 'https://opencode.ai/zen/go/v1',
     });
     expect(qwen.model._llmType()).toBe('anthropic');
+    expect(Reflect.get(Reflect.get(qwen.model, 'caller'), 'maxRetries')).toBe(
+      0,
+    );
     expect(Reflect.get(qwen.model, 'maxTokens')).toBe(4_096);
     expect(Reflect.get(qwen.model, 'clientOptions')).toMatchObject({
       baseURL: 'https://opencode.ai/zen/go',
@@ -231,6 +240,9 @@ describe('createAgentChatModel', () => {
     expect(Reflect.get(qwen.model, 'thinking')).toEqual({ type: 'disabled' });
     expect(Reflect.get(minimax.model, 'maxTokens')).toBe(4_096);
     expect(google.model._llmType()).toBe('google');
+    expect(Reflect.get(Reflect.get(google.model, 'caller'), 'maxRetries')).toBe(
+      0,
+    );
     expect(openai.identity).toEqual({
       candidateId: 'openai-gpt-4.1-mini',
       provider: 'openai',

@@ -29,6 +29,7 @@ describe('KFC local live-evidence hook', () => {
           },
         },
       ])
+      .respond(new AIMessage('Mình đã tìm thấy Pepsi cho bạn.'))
       .respond(new AIMessage('Mình đã tìm thấy Pepsi cho bạn.'));
 
     const output = await runAgentTurn({
@@ -180,6 +181,7 @@ describe('KFC local live-evidence hook', () => {
           },
         },
       ])
+      .respond(new AIMessage('Mình đã kiểm tra cả hai lựa chọn.'))
       .respond(new AIMessage('Mình đã kiểm tra cả hai lựa chọn.'));
 
     await runAgentTurn({

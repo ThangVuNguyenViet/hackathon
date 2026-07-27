@@ -143,6 +143,82 @@ describe('PVCFC public customer service pack', () => {
     expect(output.responseText).toContain('Thông tin tìm thấy');
   });
 
+  it('records complete local PVCFC tool evidence for live review', async () => {
+    const events: unknown[] = [];
+    const input = {
+      ...(await turnInput('publication-live-evidence')),
+      recordLocalToolEvidence(event: unknown) {
+        events.push(event);
+      },
+    };
+
+    await pvcfcCustomerServicePack.run(input, async ({ tools }) => {
+      await tools[0]!.invoke({
+        type: 'tool_call',
+        name: 'searchPublicKnowledge',
+        id: 'pvcfc-public-search-1',
+        args: {
+          query: 'sản phẩm phân bón',
+          language: 'vi',
+        },
+      });
+      return 'Draft grounded in current public evidence.';
+    });
+
+    expect(events).toEqual([
+      expect.objectContaining({
+        phase: 'started',
+        callId: expect.any(String),
+        toolName: 'searchPublicKnowledge',
+        arguments: {
+          query: 'sản phẩm phân bón',
+          language: 'vi',
+        },
+      }),
+      expect.objectContaining({
+        phase: 'completed',
+        callId: expect.any(String),
+        toolName: 'searchPublicKnowledge',
+        rawResult: expect.objectContaining({
+          corpusId: 'pvcfc-public-web-2026-07-21',
+          capturedOn: '2026-07-21',
+          results: expect.any(Array),
+        }),
+        modelFacingResult: expect.objectContaining({
+          corpusId: 'pvcfc-public-web-2026-07-21',
+        }),
+      }),
+    ]);
+    expect((events[0] as { callId: string }).callId).toBe(
+      (events[1] as { callId: string }).callId,
+    );
+  });
+
+  it('presents English evidence concisely and discloses partial coverage', async () => {
+    const input = {
+      ...(await turnInput('publication-english')),
+      text: 'Please answer in English.',
+    };
+
+    const output = await pvcfcCustomerServicePack.run(
+      input,
+      async ({ tools }) => {
+        await tools[0]!.invoke({
+          query: 'fertilizer products',
+          language: 'en',
+        });
+        return 'Draft response.';
+      },
+    );
+
+    expect(output.responseText).toContain('English coverage is partial');
+    expect(output.responseText).toContain('Public source:');
+    expect(output.responseText).toContain('captured: 2026-07-21');
+    expect(output.responseText).toContain('Authority boundary:');
+    expect(output.responseText).not.toContain('Giới hạn thẩm quyền');
+    expect(output.responseText.length).toBeLessThan(2_000);
+  });
+
   it('keeps private-authority requests on a non-factual limitation response', async () => {
     const input = {
       ...(await turnInput('publication-private-authority')),
@@ -183,6 +259,44 @@ describe('PVCFC public customer service pack', () => {
     expect(output.responseText).toContain('thao tác riêng');
   });
 
+  it('retains the tool-selected response language for a later private-action refusal', async () => {
+    const store = new MemoryStore();
+    const first = {
+      ...(await turnInput('publication-language-continuity')),
+      store,
+      text: 'Please show public PVCFC information in English.',
+    };
+    const publicOutput = await pvcfcCustomerServicePack.run(
+      first,
+      async ({ tools }) => {
+        await tools[0]!.invoke({
+          query: 'PVCFC fertilizer products',
+          language: 'en',
+        });
+        return 'Draft response.';
+      },
+    );
+    expect(publicOutput.responseText).toContain(
+      'English coverage is partial',
+    );
+
+    const privateOutput = await pvcfcCustomerServicePack.run(
+      {
+        ...first,
+        text: 'Open a private complaint and give me the case number.',
+      },
+      async () => 'I cannot perform that private action.',
+    );
+
+    expect(privateOutput.responseText).toContain('Authority boundary:');
+    expect(privateOutput.responseText).toContain(
+      'I do not have current-turn public evidence',
+    );
+    expect(privateOutput.responseText).not.toContain(
+      'Giới hạn thẩm quyền',
+    );
+  });
+
   it('exposes dated public-source retrieval with Vietnamese default and partial English fallback', async () => {
     const input = await turnInput('customer-thread-1');
 
@@ -191,8 +305,13 @@ describe('PVCFC public customer service pack', () => {
       async ({ systemPrompt, messages, tools }) => {
         expect(systemPrompt).toContain(PVCFC_CUSTOMER_SERVICE_INSTRUCTIONS);
         expect(systemPrompt).toContain('2026-07-21');
-        expect(systemPrompt).toContain('Vietnamese');
-        expect(systemPrompt).toContain('partial English');
+        expect(systemPrompt).toContain(
+          'language of the latest customer message',
+        );
+        expect(systemPrompt).toContain('English is available only as a partial');
+        expect(systemPrompt).toContain(
+          'call searchPublicKnowledge in that same turn',
+        );
         expect(messages.at(-1)?.content).toBe(input.text);
         expect(tools.map(({ name }) => name)).toEqual([
           'searchPublicKnowledge',
@@ -291,11 +410,15 @@ describe('PVCFC public customer service pack', () => {
       '2026-07-18T00:00:00.000Z',
     );
     const summarized: string[][] = [];
+    const deferred: Array<() => Promise<void>> = [];
     const input = {
       ...(await turnInput('week-resume')),
       sessionId,
       text: 'current-user',
       store,
+      deferWork(task: () => Promise<void>) {
+        deferred.push(task);
+      },
       conversationContext: {
         tokenBudget: 5,
         async countTokens(text: string) {
@@ -324,7 +447,6 @@ describe('PVCFC public customer service pack', () => {
     await pvcfcCustomerServicePack.run(input, async ({ messages }) => {
       const contents = messages.map(({ content }) => String(content));
       expect(contents).toEqual([
-        expect.stringContaining('older-summary'),
         'week-resume-user',
         'week-resume-assistant',
         'current-user',
@@ -333,12 +455,27 @@ describe('PVCFC public customer service pack', () => {
       return 'Đã tiếp tục cuộc trò chuyện.';
     });
 
+    expect(deferred).toHaveLength(1);
+    expect(summarized).toEqual([]);
+    await deferred[0]!();
     expect(summarized).toEqual([['older-user|older-assistant']]);
     await expect(
       store.getConversationSummary(sessionId),
     ).resolves.toMatchObject({
       text: 'older-summary',
       throughOrdinal: 2,
+    });
+
+    const followUp = {
+      ...input,
+      text: 'after-background',
+      externalMessageId: 'week-resume-follow-up',
+    };
+    await pvcfcCustomerServicePack.run(followUp, async ({ messages }) => {
+      const contents = messages.map(({ content }) => String(content));
+      expect(contents[0]).toContain('older-summary');
+      expect(contents.at(-1)).toBe('after-background');
+      return 'Đã tiếp tục sau khi compact.';
     });
   });
 

@@ -107,8 +107,8 @@ export interface AgentTurnInput {
       | { kind: 'response_composition' },
   ) => Promise<void>;
   tracer?: AgentTracer;
-  /** Schedules best-effort trace delivery outside the product response path. */
-  deferTrace?: (task: () => Promise<void>) => void;
+  /** Schedules best-effort maintenance outside the product response path. */
+  deferWork?: (task: () => Promise<void>) => void;
   /**
    * Local qualification-only evidence sink. It is deliberately absent from
    * durable state and remote tracing; callers must redact evidence at rest.

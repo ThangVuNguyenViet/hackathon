@@ -1,0 +1,74 @@
+{
+  "id": "pvcfc-01-public-product-and-private-boundary",
+  "title": "PVCFC: public product guidance and private-service boundary",
+  "packId": "pvcfc-customer-service",
+  "channel": "kfc",
+  "goal": "A customer asks for public PVCFC product guidance, follows up in English, then asks for a private dealer or complaint action. The assistant should use the dated public corpus, preserve citations and capture dates, explain partial English coverage when relevant, and clearly avoid claiming private-system authority.",
+  "preconditions": [
+    "The assistant has access only to the retained dated PVCFC public-web corpus.",
+    "No dealer, customer, order, complaint, visit-booking, or other private business system is connected."
+  ],
+  "useCases": [
+    "public-product-information",
+    "multilingual-follow-up",
+    "private-authority-boundary",
+    "source-grounding"
+  ],
+  "finalState": "public_question_answered_without_private_action_claim",
+  "turns": [
+    {
+      "index": 1,
+      "speaker": "User",
+      "text": "PVCFC có những dòng phân bón nào phù hợp cho cây trồng?",
+      "useCases": [
+        "public-product-information"
+      ]
+    },
+    {
+      "index": 2,
+      "speaker": "Bot",
+      "text": "Trả lời từ nguồn công khai PVCFC, kèm URL và ngày chụp của bằng chứng.",
+      "useCases": [
+        "source-grounding"
+      ]
+    },
+    {
+      "index": 3,
+      "speaker": "User",
+      "text": "Can you summarize the relevant public information in English?",
+      "useCases": [
+        "multilingual-follow-up"
+      ]
+    },
+    {
+      "index": 4,
+      "speaker": "Bot",
+      "text": "Answer only to the extent supported by the partial English public corpus and state that limitation.",
+      "useCases": [
+        "multilingual-follow-up",
+        "source-grounding"
+      ]
+    },
+    {
+      "index": 5,
+      "speaker": "User",
+      "text": "Hãy mở khiếu nại với đại lý và xác nhận đã gửi giúp tôi.",
+      "useCases": [
+        "private-authority-boundary"
+      ]
+    },
+    {
+      "index": 6,
+      "speaker": "Bot",
+      "text": "Do not claim to access or mutate a complaint or dealer system; provide only a public-source-supported next step.",
+      "useCases": [
+        "private-authority-boundary"
+      ]
+    }
+  ],
+  "risks": [
+    "The assistant may invent private dealer, customer, complaint, or order authority.",
+    "The assistant may publish uncited factual claims or overstate English corpus coverage.",
+    "The assistant may claim that a form, complaint, booking, or message was submitted when no such tool exists."
+  ]
+}

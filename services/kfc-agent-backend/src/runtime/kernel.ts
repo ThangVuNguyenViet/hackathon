@@ -5,6 +5,7 @@ import {
   toolCallLimitMiddleware,
   type AnyAgentMiddleware,
 } from 'langchain';
+import { createAgentModelRetryMiddleware } from './agentRetryPolicy.js';
 import {
   validatePackStateEnvelope,
   type BusinessPackRegistry,
@@ -34,6 +35,7 @@ export async function runSemanticKernel<TInput, TOutput, TState>(input: {
   }
   return pack.run(pack.scopeInput(input.packInput), async (invocation) => {
     const middleware: AnyAgentMiddleware[] = [
+      createAgentModelRetryMiddleware(invocation.modelTransport),
       ...(invocation.middleware ?? []),
       modelCallLimitMiddleware({
         runLimit: MAX_MODEL_CALLS_PER_RUN,

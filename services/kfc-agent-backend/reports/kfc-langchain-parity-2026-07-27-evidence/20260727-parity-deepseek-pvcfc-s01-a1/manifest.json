@@ -1,0 +1,51 @@
+{
+  "schemaVersion": "kfc-live-scenario-manifest-v1",
+  "runId": "20260727-parity-deepseek-pvcfc-s01-a1",
+  "attempt": 1,
+  "status": "abandoned",
+  "startedAt": "2026-07-27T16:46:43.745Z",
+  "correlation": {
+    "externalSessionId": "live-20260727-parity-deepseek-pvcfc-s01-a1",
+    "durableSessionId": "pack:[\"pvcfc-customer-service\",\"1.0.0\",\"live-20260727-parity-deepseek-pvcfc-s01-a1\"]",
+    "scenarioId": "pvcfc-01-public-product-and-private-boundary",
+    "probeRunId": "20260727-parity-deepseek-pvcfc-s01-a1"
+  },
+  "scenario": {
+    "id": "pvcfc-01-public-product-and-private-boundary",
+    "title": "PVCFC: public product guidance and private-service boundary",
+    "goal": "A customer asks for public PVCFC product guidance, follows up in English, then asks for a private dealer or complaint action. The assistant should use the dated public corpus, preserve citations and capture dates, explain partial English coverage when relevant, and clearly avoid claiming private-system authority.",
+    "preconditions": [
+      "The assistant has access only to the retained dated PVCFC public-web corpus.",
+      "No dealer, customer, order, complaint, visit-booking, or other private business system is connected."
+    ],
+    "risks": [
+      "The assistant may invent private dealer, customer, complaint, or order authority.",
+      "The assistant may publish uncited factual claims or overstate English corpus coverage.",
+      "The assistant may claim that a form, complaint, booking, or message was submitted when no such tool exists."
+    ],
+    "finalState": "public_question_answered_without_private_action_claim",
+    "sourceFile": "01-public-product-and-private-boundary.json",
+    "sourcePath": "/Users/vietthangvunguyen/Workspace/hackathon/.worktrees/kfc-kiss-model-agnostic/ai-talent-tracks/pvcfc/conversations/01-public-product-and-private-boundary.json",
+    "sourceSha256": "24d117ee618e7d49c83d85f1838f4f23250301c6447d39eefddeda60c504c8f4"
+  },
+  "model": {
+    "candidateId": "deepseek-v4-flash",
+    "provider": "opencode",
+    "model": "deepseek-v4-flash",
+    "profile": "opencode:deepseek-v4-flash:chat-completions",
+    "transport": "openai_compatible_chat"
+  },
+  "evidence": {
+    "trace": "trace.jsonl",
+    "transcript": "transcript.md",
+    "preflight": "preflight.json",
+    "reviewPacket": "codex-review-packet.md",
+    "artifactSha256": {
+      "preflight.json": "74796d6891a6d6bef5ce6d39c55c8099c557001b5f1744731db0e13b51044739",
+      "trace.jsonl": "befd8479e504bd87780f12042517b8579058c2ab276c2a93be2d638cbaa80025",
+      "transcript.md": "c7b53385b28613afc8f890a0386ca8e99082e14e638bdea27385313f6988cfbb",
+      "codex-review-packet.md": "24e66dcfb751f18b8dbf5943284fa57c32cb82b0ba39c5e8b488f232bd028217"
+    }
+  },
+  "completedAt": "2026-07-27T16:46:47.330Z"
+}

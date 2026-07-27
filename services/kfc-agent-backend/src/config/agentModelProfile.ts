@@ -327,7 +327,9 @@ function createAgentChatModel(input: {
       temperature: 0,
       useResponsesApi: descriptor.useResponsesApi,
       supportsStrictToolCalling: false,
-      maxRetries: 1,
+      // The createAgent middleware owns retries across every provider so
+      // adapter-level retries cannot multiply latency invisibly.
+      maxRetries: 0,
       ...(descriptor.thinking || descriptor.transport === 'openai_responses'
         ? {
             modelKwargs: {
@@ -350,7 +352,7 @@ function createAgentChatModel(input: {
       apiKey,
       model: descriptor.model,
       temperature: 0,
-      maxRetries: 1,
+      maxRetries: 0,
       maxTokens: descriptor.requestMaxOutputTokens,
       ...(descriptor.thinking ? { thinking: descriptor.thinking } : {}),
       clientOptions: { baseURL: descriptor.baseUrl },
@@ -359,7 +361,7 @@ function createAgentChatModel(input: {
   return new ChatGoogle({
     apiKey,
     model: descriptor.model,
-    maxRetries: 1,
+    maxRetries: 0,
     thinkingLevel: descriptor.thinkingLevel,
   });
 }

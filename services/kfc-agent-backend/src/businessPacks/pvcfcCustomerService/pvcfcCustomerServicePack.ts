@@ -4,7 +4,7 @@ import {
   SystemMessage,
   type BaseMessage,
 } from '@langchain/core/messages';
-import { tool } from 'langchain';
+import { tool, type ToolRuntime } from 'langchain';
 import { z } from 'zod';
 import publicKnowledgeIndex from '../../../fixtures/business-packs/pvcfc-customer-service/pvcfc-public-web-2026-07-21/derived/public-knowledge-index.json' with { type: 'json' };
 import type { AgentTurnInput, AgentTurnOutput } from '../../agent/agentTurn.js';
@@ -12,15 +12,17 @@ import type { AgentState } from '../../agent/agentState.js';
 import {
   createPackStateEnvelope,
   scopePackSessionId,
+  validatePackStateEnvelope,
   type BusinessPack,
 } from '../../runtime/businessPack.js';
 import { textOnlyPresentation } from '../../presentation/channelPresentation.js';
 import {
-  advanceConversationSummary,
   assembleConversationContext,
   completeConversationExchanges,
+  conversationTokenCounter,
   type AssembledConversationContext,
 } from '../../session/conversationContext.js';
+import { scheduleConversationCompaction } from '../../session/conversationCompaction.js';
 import { langChainConversationSummarizer } from '../../session/langChainConversationSummary.js';
 import { bindConfiguredSessionAgentModel } from '../../persistence/sessionAgentModelBinding.js';
 import { requireTrustedConfiguredAgentModelBinding } from '../../config/agentModelProfile.js';
@@ -37,7 +39,8 @@ const DEFAULT_CONVERSATION_CONTEXT_TOKEN_BUDGET = 8_192;
 export const PVCFC_CUSTOMER_SERVICE_INSTRUCTIONS = [
   'Bạn là trợ lý thông tin công khai của PVCFC.',
   `Mọi tuyên bố thực tế phải dựa trên kết quả searchPublicKnowledge từ corpus ${CORPUS_ID}, captured on ${CAPTURED_ON}, và kèm URL nguồn cùng ngày chụp.`,
-  'Vietnamese is the default response language. An English response is available only as a partial English fallback; say clearly when the English public corpus does not cover the question.',
+  'Always answer in the language of the latest customer message. English is available only as a partial fallback; say clearly when the English public corpus does not cover the question.',
+  'For every customer turn that asks for public facts, call searchPublicKnowledge in that same turn, even when earlier turns already searched. Set the tool language to the latest customer language. Prior citations are conversation context, not current-turn publication evidence.',
   'Nguồn này chỉ là nội dung web công khai của PVCFC. It carries no private order authority, no private customer authority, no dealer authority, no complaint authority, and no visit-booking authority.',
   'Không khẳng định đã tra cứu hay thay đổi đơn hàng, hồ sơ khách hàng, đại lý, khiếu nại hoặc lịch tham quan. Có thể chỉ dẫn khách đến biểu mẫu hay kênh liên hệ công khai, nhưng không được nói rằng đã gửi biểu mẫu.',
   'Nếu kết quả không đủ, nói rõ giới hạn của corpus và không suy đoán.',
@@ -53,6 +56,7 @@ interface PublicKnowledgeDocument {
 }
 
 interface PublicKnowledgeEvidence {
+  language: 'vi' | 'en';
   title: string;
   excerpt: string;
   sourceUrl: string;
@@ -62,6 +66,7 @@ interface PublicKnowledgeEvidence {
 interface PvcfcPackState {
   corpusId: typeof CORPUS_ID;
   lastCitations: string[];
+  lastResponseLanguage: 'vi' | 'en';
 }
 
 const index = publicKnowledgeIndex as {
@@ -76,6 +81,7 @@ const stateSchema = z
   .object({
     corpusId: z.literal(CORPUS_ID),
     lastCitations: z.array(z.string().url()).max(10),
+    lastResponseLanguage: z.enum(['vi', 'en']).default('vi'),
   })
   .strict();
 
@@ -87,44 +93,93 @@ function parsePvcfcState(value: unknown): PvcfcPackState {
 
 function createPublicKnowledgeTool(
   currentTurnEvidence: Map<string, PublicKnowledgeEvidence>,
+  recordLocalToolEvidence?: AgentTurnInput['recordLocalToolEvidence'],
 ) {
   return tool(
-    ({ query, language = 'vi' }) => {
-      const queryTerms = normalizedTerms(query);
-      const matches = index.documents
-        .filter((document) => document.language === language)
-        .map((document) => ({
-          document,
-          score: retrievalScore(queryTerms, document),
-        }))
-        .filter(({ score }) => score > 0)
-        .sort(
-          (left, right) =>
-            right.score - left.score ||
-            left.document.id.localeCompare(right.document.id),
-        );
-      const results = matches.slice(0, 5).map(({ document }) => {
-        const evidence = {
-          title: document.title,
-          excerpt: relevantExcerpt(document.text, queryTerms),
-          sourceUrl: document.sourceUrl,
-          capturedOn: document.capturedOn,
+    async (
+      { query, language = 'vi' },
+      runtime: ToolRuntime,
+    ): Promise<string> => {
+      const callId =
+        runtime.toolCallId ?? `pvcfc-public:${crypto.randomUUID()}`;
+      const args = { query, language };
+      const requestedAt = new Date();
+      await recordLocalToolEvidence?.({
+        phase: 'started',
+        callId,
+        toolName: 'searchPublicKnowledge',
+        arguments: args,
+        requestedAt: requestedAt.toISOString(),
+      });
+      const executionStartedAt = new Date();
+      try {
+        const queryTerms = normalizedTerms(query);
+        const matches = index.documents
+          .filter((document) => document.language === language)
+          .map((document) => ({
+            document,
+            score: retrievalScore(queryTerms, document),
+          }))
+          .filter(({ score }) => score > 0)
+          .sort(
+            (left, right) =>
+              right.score - left.score ||
+              left.document.id.localeCompare(right.document.id),
+          );
+        const results = matches.slice(0, 5).map(({ document }) => {
+          const evidence = {
+            language: document.language,
+            title: document.title,
+            excerpt: relevantExcerpt(document.text, queryTerms),
+            sourceUrl: document.sourceUrl,
+            capturedOn: document.capturedOn,
+          };
+          currentTurnEvidence.set(
+            JSON.stringify([evidence.sourceUrl, evidence.capturedOn]),
+            evidence,
+          );
+          return evidence;
+        });
+        const result = {
+          corpusId: index.corpusId,
+          capturedOn: index.capturedOn,
+          language,
+          englishCoverage: index.englishCoverage,
+          total: matches.length,
+          complete: matches.length <= results.length,
+          results,
         };
-        currentTurnEvidence.set(
-          JSON.stringify([evidence.sourceUrl, evidence.capturedOn]),
-          evidence,
-        );
-        return evidence;
-      });
-      return JSON.stringify({
-        corpusId: index.corpusId,
-        capturedOn: index.capturedOn,
-        language,
-        englishCoverage: index.englishCoverage,
-        total: matches.length,
-        complete: matches.length <= results.length,
-        results,
-      });
+        const completedAt = new Date();
+        await recordLocalToolEvidence?.({
+          phase: 'completed',
+          callId,
+          toolName: 'searchPublicKnowledge',
+          arguments: args,
+          rawResult: result,
+          modelFacingResult: result,
+          executionStartedAt: executionStartedAt.toISOString(),
+          completedAt: completedAt.toISOString(),
+          executionDurationMs:
+            completedAt.getTime() - executionStartedAt.getTime(),
+        });
+        return JSON.stringify(result);
+      } catch (error) {
+        const completedAt = new Date();
+        await recordLocalToolEvidence?.({
+          phase: 'failed',
+          callId,
+          toolName: 'searchPublicKnowledge',
+          arguments: args,
+          error,
+          requestedAt: requestedAt.toISOString(),
+          executionStartedAt: executionStartedAt.toISOString(),
+          completedAt: completedAt.toISOString(),
+          totalDurationMs: completedAt.getTime() - requestedAt.getTime(),
+          executionDurationMs:
+            completedAt.getTime() - executionStartedAt.getTime(),
+        });
+        throw error;
+      }
     },
     {
       name: 'searchPublicKnowledge',
@@ -140,29 +195,60 @@ function createPublicKnowledgeTool(
 
 const PUBLIC_ONLY_AUTHORITY_NOTICE =
   'Giới hạn thẩm quyền: Gói này chỉ cung cấp thông tin công khai; không thể đọc hoặc thay đổi hồ sơ riêng về đại lý, khách hàng, đơn hàng, khiếu nại hoặc tham quan, và không thể thực hiện bất kỳ thao tác riêng nào.';
+const PUBLIC_ONLY_AUTHORITY_NOTICE_EN =
+  'Authority boundary: This pack provides public information only. It cannot read or change private dealer, customer, order, complaint, or visit-booking records, and it cannot perform private actions.';
 
 const NO_CURRENT_TURN_EVIDENCE_RESPONSE = [
   'Tôi chưa có bằng chứng công khai từ searchPublicKnowledge trong lượt này để trả lời nội dung đó. Tôi không thể xác nhận thông tin thực tế; vui lòng dùng kênh hỗ trợ chính thức của PVCFC.',
   PUBLIC_ONLY_AUTHORITY_NOTICE,
 ].join('\n\n');
+const NO_CURRENT_TURN_EVIDENCE_RESPONSE_EN = [
+  'I do not have current-turn public evidence from searchPublicKnowledge that could verify or perform that request. Please use an official PVCFC support channel.',
+  PUBLIC_ONLY_AUTHORITY_NOTICE_EN,
+].join('\n\n');
 
 function enforcePublicKnowledgePublication(
   currentTurnEvidence: readonly PublicKnowledgeEvidence[],
+  responseLanguage: 'vi' | 'en',
 ): string {
   if (currentTurnEvidence.length === 0) {
-    return NO_CURRENT_TURN_EVIDENCE_RESPONSE;
+    return responseLanguage === 'en'
+      ? NO_CURRENT_TURN_EVIDENCE_RESPONSE_EN
+      : NO_CURRENT_TURN_EVIDENCE_RESPONSE;
   }
 
+  const evidence = currentTurnEvidence.slice(0, 3);
+  if (responseLanguage === 'en') {
+    return [
+      'Public information found in the available dated corpus (English coverage is partial):',
+      ...evidence.map(
+        ({ title, excerpt, sourceUrl, capturedOn }) =>
+          `- ${title}: ${conciseExcerpt(excerpt)}\n  Public source: ${sourceUrl} (captured: ${capturedOn})`,
+      ),
+      PUBLIC_ONLY_AUTHORITY_NOTICE_EN,
+    ].join('\n\n');
+  }
   return [
     'Thông tin tìm thấy trong nguồn công khai hiện có:',
-    ...currentTurnEvidence
-      .slice(0, 3)
-      .map(
-        ({ title, excerpt, sourceUrl, capturedOn }) =>
-          `- ${title}: ${excerpt}\n  Nguồn công khai: ${sourceUrl} (ngày chụp: ${capturedOn})`,
-      ),
+    ...evidence.map(
+      ({ title, excerpt, sourceUrl, capturedOn }) =>
+        `- ${title}: ${conciseExcerpt(excerpt)}\n  Nguồn công khai: ${sourceUrl} (ngày chụp: ${capturedOn})`,
+    ),
     PUBLIC_ONLY_AUTHORITY_NOTICE,
   ].join('\n\n');
+}
+
+function conciseExcerpt(excerpt: string): string {
+  const normalized = excerpt
+    .replaceAll(/[#*_`]+/gu, '')
+    .replaceAll(/\s+/gu, ' ')
+    .trim();
+  const sentences = normalized.match(/.*?[.!?…](?:\s|$)/gu) ?? [];
+  const complete = sentences.slice(0, 2).join(' ').trim();
+  const candidate = complete || normalized;
+  return candidate.length <= 360
+    ? candidate
+    : `${candidate.slice(0, 357).trimEnd()}…`;
 }
 
 function normalizedTerms(text: string): string[] {
@@ -292,60 +378,61 @@ export const pvcfcCustomerServicePack: BusinessPack<
     const tokenBudget =
       contextPolicy?.tokenBudget ?? DEFAULT_CONVERSATION_CONTEXT_TOKEN_BUDGET;
     const countTokens =
-      contextPolicy?.countTokens ??
-      ((text: string) => model.getNumTokens(text));
-    let persistedSummary = await input.store.getConversationSummary(
+      contextPolicy?.countTokens ?? conversationTokenCounter(model);
+    const persistedSummary = await input.store.getConversationSummary(
       input.sessionId,
     );
-    let context = await assembleConversationContext({
+    const context = await assembleConversationContext({
       ...(persistedSummary ? { summary: persistedSummary } : {}),
       exchanges,
       tokenBudget,
       countTokens,
     });
-    if (context.omittedExchanges.length > 0) {
-      try {
-        const summaryResult = await advanceConversationSummary({
-          store: input.store,
-          sessionId: input.sessionId,
-          exchanges: context.omittedExchanges,
-          summarize:
-            contextPolicy?.summarize ?? langChainConversationSummarizer(model),
-        });
-        persistedSummary = summaryResult.summary;
-        context = await assembleConversationContext({
-          ...(persistedSummary ? { summary: persistedSummary } : {}),
-          exchanges,
-          tokenBudget,
-          countTokens,
-        });
-      } catch {
-        // Summary maintenance is optional. A failed generation cannot publish
-        // a new watermark or block the current public-information turn.
-      }
-    }
     const currentTurnEvidence = new Map<string, PublicKnowledgeEvidence>();
+    const priorEnvelope = await input.store.getPackState(
+      input.sessionId,
+      PVCFC_CUSTOMER_SERVICE_PACK_REF,
+    );
+    const priorState = priorEnvelope
+      ? await validatePackStateEnvelope(priorEnvelope, {
+          packRef: PVCFC_CUSTOMER_SERVICE_PACK_REF,
+          schemaVersion: '1',
+          parseState: parsePvcfcState,
+        })
+      : undefined;
     await invokeModel({
       model,
+      modelTransport: agent.identity.transport,
       systemPrompt: PVCFC_CUSTOMER_SERVICE_INSTRUCTIONS,
       messages: conversationMessages({
         context,
         currentUserText: input.text,
       }),
-      tools: [createPublicKnowledgeTool(currentTurnEvidence)],
+      tools: [
+        createPublicKnowledgeTool(
+          currentTurnEvidence,
+          input.recordLocalToolEvidence,
+        ),
+      ],
       responseErrors: {
         invalid: 'pvcfc_agent_model_response_invalid',
         empty: 'pvcfc_agent_model_response_empty',
       },
     });
     const evidence = [...currentTurnEvidence.values()];
-    const responseText = enforcePublicKnowledgePublication(evidence);
+    const responseLanguage =
+      evidence[0]?.language ?? priorState?.lastResponseLanguage ?? 'vi';
+    const responseText = enforcePublicKnowledgePublication(
+      evidence,
+      responseLanguage,
+    );
     const envelope = await createPackStateEnvelope({
       packRef: PVCFC_CUSTOMER_SERVICE_PACK_REF,
       schemaVersion: '1',
       state: {
         corpusId: CORPUS_ID,
         lastCitations: evidence.map(({ sourceUrl }) => sourceUrl).slice(0, 10),
+        lastResponseLanguage: responseLanguage,
       } satisfies PvcfcPackState,
     });
     const committed = await input.store.commitAssistantTurn({
@@ -365,6 +452,20 @@ export const pvcfcCustomerServicePack: BusinessPack<
       },
     });
     const state = initialState(input);
+    scheduleConversationCompaction({
+      store: input.store,
+      sessionId: input.sessionId,
+      tokenBudget,
+      countTokens,
+      summarize:
+        contextPolicy?.summarize ?? langChainConversationSummarizer(model),
+      deferWork: input.deferWork,
+      onError: (error) =>
+        console.error('conversation_compaction_failed', {
+          sessionId: input.sessionId,
+          errorClass: error instanceof Error ? error.name : 'UnknownError',
+        }),
+    });
     return {
       state,
       responseText,

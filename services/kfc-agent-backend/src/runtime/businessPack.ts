@@ -3,6 +3,7 @@ import type { BaseMessage } from '@langchain/core/messages';
 import type { Callbacks } from '@langchain/core/callbacks/manager';
 import type { StructuredToolInterface } from '@langchain/core/tools';
 import type { AnyAgentMiddleware } from 'langchain';
+import type { AgentModelTransport } from '../config/agentModelProfile.js';
 
 export interface PackRef {
   packId: string;
@@ -22,6 +23,7 @@ export interface PackStateEnvelope<TState = unknown> {
 
 export interface BusinessPackInvocation {
   model: BaseChatModel;
+  modelTransport?: AgentModelTransport;
   systemPrompt: string;
   messages: BaseMessage[];
   tools: StructuredToolInterface[];

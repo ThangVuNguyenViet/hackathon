@@ -262,6 +262,49 @@ describe('portable Direct SDK behavior retained by the KFC LangChain pack', () =
     expect(output.responseText).not.toContain('Pepsi Không Đường (Lớn)');
   });
 
+  it('normalizes a provider string null without losing an exact menu item', async () => {
+    const fixtures = await loadGeneratedFixtures(process.cwd());
+    const model = fakeModel()
+      .respondWithTools([
+        {
+          name: 'searchMenu',
+          args: {
+            mode: 'search',
+            queries: ['Combo Gà No 279k'],
+            category: 'null',
+            minPriceVnd: null,
+            maxPriceVnd: null,
+            maxPriceExclusiveVnd: null,
+            partySize: null,
+            modifierQueries: [],
+          },
+          id: 'provider-string-null-search',
+        },
+      ])
+      .respond(new AIMessage('Mình tìm thấy Combo Gà No 279k.'))
+      .respond(new AIMessage('Mình tìm thấy Combo Gà No 279k.'));
+
+    const output = await runAgentTurn({
+      sessionId: 'session-kfc-provider-string-null',
+      customerId: 'customer-1',
+      channel: 'kfc',
+      text: 'Tìm lại Combo Gà No 279k',
+      clients: createMockClients(fixtures),
+      store: new MemoryStore(),
+      dashboard: new DashboardEventBus(),
+      agentModelBinding: configuredTestAgent(model),
+    });
+
+    expect(output.responseText).toContain('Combo Gà No 279k');
+    expect(model.calls[1]?.messages.at(-1)?.content).toContain(
+      '"code":"20706"',
+    );
+    expect(model.calls[1]?.messages.at(-1)?.content).not.toContain(
+      '\\"category\\":\\"null\\"',
+    );
+    expect(model.callCount).toBe(3);
+  });
+
   it('supplies materially changed recovery after an empty safe read', async () => {
     const fixtures = await loadGeneratedFixtures(process.cwd());
     const baseClients = createMockClients(fixtures);
@@ -344,6 +387,7 @@ describe('portable Direct SDK behavior retained by the KFC LangChain pack', () =
           id: 'empty-search-3',
         },
       ])
+      .respond(new AIMessage('Không tìm thấy kết quả đã xác minh.'))
       .respond(new AIMessage('Không tìm thấy kết quả đã xác minh.'));
 
     await runAgentTurn({
@@ -357,7 +401,7 @@ describe('portable Direct SDK behavior retained by the KFC LangChain pack', () =
       agentModelBinding: configuredTestAgent(model),
     });
 
-    expect(model.callCount).toBe(4);
+    expect(model.callCount).toBe(5);
     const toolMessage = model.calls[1]?.messages.at(-1);
     expect(toolMessage?.content).toContain('"recovery"');
     expect(toolMessage?.content).toContain(
@@ -383,6 +427,9 @@ describe('portable Direct SDK behavior retained by the KFC LangChain pack', () =
     expect(exhaustedToolMessage?.content).toContain('"exhausted":true');
     expect(exhaustedToolMessage?.content).toContain(
       '"instruction":"Stop retrying and answer honestly from verified evidence.',
+    );
+    expect(model.calls[4]?.messages.at(-1)?.content).toContain(
+      'Review the immediately preceding draft',
     );
   });
 });

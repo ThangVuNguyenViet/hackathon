@@ -1,0 +1,51 @@
+{
+  "schemaVersion": "kfc-live-scenario-manifest-v1",
+  "runId": "20260727-parity-deepseek-kfc-s10-a1",
+  "attempt": 1,
+  "status": "completed",
+  "startedAt": "2026-07-27T16:56:17.586Z",
+  "correlation": {
+    "externalSessionId": "live-20260727-parity-deepseek-kfc-s10-a1",
+    "durableSessionId": "live-20260727-parity-deepseek-kfc-s10-a1",
+    "scenarioId": "10-so-sanh-mon-va-giai-thich",
+    "probeRunId": "20260727-parity-deepseek-kfc-s10-a1"
+  },
+  "scenario": {
+    "id": "10-so-sanh-mon-va-giai-thich",
+    "title": "10: So sánh món và giải thích lựa chọn",
+    "goal": "So sánh hai combo bằng dữ liệu thành phần và giá đã xác minh, sau đó tư vấn lựa chọn không cay trong giới hạn dữ liệu mà không thay đổi giỏ hàng.",
+    "preconditions": [
+      "Hai mã combo 20698 và 20709 cùng dữ liệu giá, thành phần và tùy chọn hiện hành có thể được tra cứu.",
+      "Khách đang tham khảo, chưa yêu cầu thêm món hoặc thay đổi giỏ hàng; dữ liệu độ cay có thể không đầy đủ cho mọi thành phần."
+    ],
+    "risks": [
+      "Product comparisons must stay grounded in verified product information.",
+      "Advisory conversation must not mutate a cart or make unsupported health claims."
+    ],
+    "finalState": "advisory_complete",
+    "sourceFile": "10-so-sanh-mon-va-giai-thich.json",
+    "sourcePath": "/Users/vietthangvunguyen/Workspace/hackathon/.worktrees/kfc-kiss-model-agnostic/ai-talent-tracks/fnb/conversations/10-so-sanh-mon-va-giai-thich.json",
+    "sourceSha256": "bf27b56ebd0edc62cce5123bdf6f039edcb32c30d088ead64eeb3720fded0807"
+  },
+  "model": {
+    "candidateId": "deepseek-v4-flash",
+    "provider": "opencode",
+    "model": "deepseek-v4-flash",
+    "profile": "opencode:deepseek-v4-flash:chat-completions",
+    "transport": "openai_compatible_chat"
+  },
+  "evidence": {
+    "trace": "trace.jsonl",
+    "transcript": "transcript.md",
+    "preflight": "preflight.json",
+    "reviewPacket": "codex-review-packet.md",
+    "artifactSha256": {
+      "preflight.json": "74796d6891a6d6bef5ce6d39c55c8099c557001b5f1744731db0e13b51044739",
+      "trace.jsonl": "86d908dfa129f049e40c04f5a3f9b64a9921f92cdba7ed2ca39fc7761950c678",
+      "transcript.md": "179e098a7bfc3c933e8c8566b23aa34cfccfee97a5e63c44d672b033a186722a",
+      "codex-review-packet.md": "0fa6e8dbdf8994b55119948699971d14caf0c0c2d405d9f29ec6627036e3fab1"
+    }
+  },
+  "completedAt": "2026-07-27T16:58:04.001Z",
+  "finishNote": "Advisory exploration complete. The first answer made unsupported spice claims for both products; after a customer challenge, the agent explicitly separated verified composition/modifier evidence from unknown spice information and avoided cart mutation."
+}

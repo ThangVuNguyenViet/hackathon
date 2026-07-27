@@ -3,6 +3,10 @@ import { resolve } from 'node:path';
 import { runAgentTurn } from '../src/agent/kfcAgent.js';
 import { createAgentTraceContext } from '../src/agent/agentTraceContext.js';
 import {
+  pvcfcCustomerServicePackBinding,
+  runPvcfcCustomerServiceTurn,
+} from '../src/businessPacks/registry.js';
+import {
   createConfiguredAgentChatModel,
   resolveAgentModelProfile,
 } from '../src/config/agentModelProfile.js';
@@ -21,10 +25,14 @@ import {
   createEvidenceSanitizer,
   serializeEvidenceJsonLine,
 } from '../src/liveEvidence/evidenceRedaction.js';
+import { createRuntimeSourceSnapshot } from '../src/liveEvidence/runtimeSourceSnapshot.js';
 import { createMockClients } from '../src/mock/createMockClients.js';
 import { LangSmithAgentTracer } from '../src/observability/langsmithAgentTracer.js';
 import { MemoryStore } from '../src/persistence/memoryStore.js';
-import { legacySessionIdOutsidePackNamespace } from '../src/runtime/businessPack.js';
+import {
+  legacySessionIdOutsidePackNamespace,
+  scopePackSessionId,
+} from '../src/runtime/businessPack.js';
 import { runDetachedWork } from '../src/runtime/deferredWork.js';
 import { loadScenarioScript } from '../src/scenarios/scenarioScript.js';
 
@@ -65,6 +73,24 @@ async function main(): Promise<void> {
     probeRunId: args.runId,
   });
   const externalSessionId = `live-${args.runId}`;
+  const durableSessionId =
+    narrative.packId === 'pvcfc-customer-service'
+      ? scopePackSessionId(
+          pvcfcCustomerServicePackBinding.ref,
+          externalSessionId,
+        )
+      : legacySessionIdOutsidePackNamespace(externalSessionId);
+  const runtimeSourceSnapshot = await createRuntimeSourceSnapshot({
+    baseDirectory: serviceRoot,
+    roots: [
+      'fixtures/business-packs',
+      'fixtures/generated',
+      'package-lock.json',
+      'package.json',
+      'scripts/run-live-scenario.ts',
+      'src',
+    ],
+  });
 
   const session = await startLiveScenarioSession({
     artifactsRoot: args.artifactsRoot,
@@ -72,14 +98,19 @@ async function main(): Promise<void> {
     attempt: args.attempt,
     correlation: {
       externalSessionId,
-      durableSessionId: legacySessionIdOutsidePackNamespace(externalSessionId),
+      durableSessionId,
     },
     scenarioPath: args.scenarioPath,
     identity: binding.identity,
+    runtimeSourceSnapshot,
     configuredSecrets,
     runPreflight: () => runModelCapabilityPreflight(binding),
     executeTurn: async ({ text, recordToolEvent }) => {
-      const output = await runAgentTurn({
+      const executeTurn =
+        narrative.packId === 'pvcfc-customer-service'
+          ? runPvcfcCustomerServiceTurn
+          : runAgentTurn;
+      const output = await executeTurn({
         sessionId: externalSessionId,
         customerId: 'synthetic-live-role-player',
         channel: narrative.channel,
@@ -91,7 +122,7 @@ async function main(): Promise<void> {
         traceContext,
         tracer,
         recordLocalToolEvidence: recordToolEvent,
-        deferTrace: runDetachedWork,
+        deferWork: runDetachedWork,
       });
       return { responseText: output.responseText };
     },
