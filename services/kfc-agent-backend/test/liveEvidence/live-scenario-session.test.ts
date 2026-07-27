@@ -134,6 +134,7 @@ describe('live scenario HTTP/D1 evidence session', () => {
       actionId: 'recommendation_select:action-1',
     });
     await session.finish('Role-player completed the improvised flow.');
+    await session.commitFinish();
     await session.finalizeTerminal();
 
     expect(gateway.submitUserMessage).toHaveBeenCalledWith({
@@ -286,6 +287,7 @@ describe('live scenario HTTP/D1 evidence session', () => {
 
     await session.submitUserMessage('Narrative prose remains.');
     await session.finish();
+    await session.commitFinish();
     await session.finalizeTerminal();
 
     const directory = join(root, 'artifacts', 'redacted');

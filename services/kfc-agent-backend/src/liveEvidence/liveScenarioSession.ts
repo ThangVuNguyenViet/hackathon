@@ -112,6 +112,7 @@ export interface LiveScenarioSession {
   ): Promise<void>;
   interrupt(reason: 'stdin_eof' | 'control_error'): Promise<void>;
   finish(note?: string): Promise<void>;
+  commitFinish(): Promise<void>;
   finalizeTerminal(): Promise<void>;
 }
 
@@ -162,6 +163,7 @@ export async function startLiveScenarioSession(input: {
   let traceSequence = 0;
   let commandSequence = 0;
   let d1: D1Evidence | undefined;
+  let finishPrepared = false;
   let terminalArtifactsWritten = false;
   const startedAt = now().toISOString();
   const manifest: Manifest = {
@@ -323,17 +325,26 @@ export async function startLiveScenarioSession(input: {
       });
     },
     async interrupt(reason) {
-      if (terminalArtifactsWritten || isTerminal(manifest.status)) return;
-      try {
-        d1 = sanitize(
-          await input.gateway.d1Evidence(input.correlation.sessionId),
-        ) as D1Evidence;
-        await recordTrace('d1_evidence_collected', evidenceSummary(d1));
-      } catch (error) {
-        await recordTrace('d1_evidence_collection_failed', {
-          error: serializedError(error),
-        });
+      if (
+        terminalArtifactsWritten ||
+        manifest.status === 'failed' ||
+        manifest.status === 'abandoned'
+      ) {
+        return;
       }
+      if (d1 === undefined) {
+        try {
+          d1 = sanitize(
+            await input.gateway.d1Evidence(input.correlation.sessionId),
+          ) as D1Evidence;
+          await recordTrace('d1_evidence_collected', evidenceSummary(d1));
+        } catch (error) {
+          await recordTrace('d1_evidence_collection_failed', {
+            error: serializedError(error),
+          });
+        }
+      }
+      finishPrepared = false;
       manifest.status = 'abandoned';
       manifest.completedAt = now().toISOString();
       await recordTrace('session_interrupted', { reason });
@@ -344,7 +355,6 @@ export async function startLiveScenarioSession(input: {
         await input.gateway.d1Evidence(input.correlation.sessionId),
       ) as D1Evidence;
       await recordTrace('d1_evidence_collected', evidenceSummary(d1));
-      manifest.completedAt = now().toISOString();
       if (note?.trim()) manifest.finishNote = note.trim();
       const missingEvidence = liveScenarioEvidenceMissing({
         environment,
@@ -355,6 +365,7 @@ export async function startLiveScenarioSession(input: {
         d1,
       });
       if (missingEvidence.length > 0) {
+        manifest.completedAt = now().toISOString();
         manifest.status = 'failed';
         await recordTrace('session_failed', {
           reason: 'evidence_incomplete',
@@ -362,7 +373,19 @@ export async function startLiveScenarioSession(input: {
         });
         throw new LiveScenarioEvidenceIncompleteError();
       }
+      finishPrepared = true;
+    },
+    async commitFinish() {
+      if (
+        terminalArtifactsWritten ||
+        isTerminal(manifest.status) ||
+        !finishPrepared
+      ) {
+        throw new Error('live_scenario_finish_not_prepared');
+      }
+      finishPrepared = false;
       manifest.status = 'completed';
+      manifest.completedAt = now().toISOString();
       await recordTrace('session_finished', {
         ...(manifest.finishNote ? { note: manifest.finishNote } : {}),
       });
@@ -418,7 +441,7 @@ export async function startLiveScenarioSession(input: {
   }
 
   function assertOpen(): void {
-    if (isTerminal(manifest.status)) {
+    if (isTerminal(manifest.status) || finishPrepared) {
       throw new Error('live_scenario_session_closed');
     }
   }

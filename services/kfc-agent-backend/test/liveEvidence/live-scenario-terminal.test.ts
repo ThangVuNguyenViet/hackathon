@@ -110,6 +110,172 @@ describe('live scenario terminal evidence', () => {
     }
   });
 
+  it('abandons complete evidence when the final acknowledgment cannot be written', async () => {
+    const session = await startLiveScenarioSession(
+      await fixture('finished-ack-failure'),
+    );
+    const output: string[] = [];
+
+    await expect(
+      runLiveScenarioCommandStream({
+        session,
+        lines: lines([
+          JSON.stringify({
+            type: 'user',
+            text: 'Complete before the acknowledgment fails.',
+          }),
+          JSON.stringify({
+            type: 'finish',
+            note: 'The evidence itself is complete.',
+          }),
+        ]),
+        writeLine(line) {
+          const value = JSON.parse(line) as { type: string };
+          if (value.type === 'finished') {
+            throw new Error('finished_ack_write_failed');
+          }
+          output.push(line);
+        },
+      }),
+    ).rejects.toThrow('finished_ack_write_failed');
+
+    const manifest = JSON.parse(
+      await readFile(join(session.runDirectory, 'manifest.json'), 'utf8'),
+    ) as {
+      status: string;
+      evidence: { artifactSha256: Record<string, string> };
+    };
+    const packet = JSON.parse(
+      await readFile(
+        join(session.runDirectory, 'evidence-packet.json'),
+        'utf8',
+      ),
+    ) as {
+      status: string;
+      timeline: Array<Record<string, unknown>>;
+    };
+    expect(manifest.status).toBe('abandoned');
+    expect(packet.status).toBe('abandoned');
+    expect(packet.timeline).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          type: 'protocol_error',
+          error: 'control_error',
+          errorClass: 'Error',
+        }),
+        expect.objectContaining({
+          type: 'session_interrupted',
+          reason: 'control_error',
+        }),
+      ]),
+    );
+    expect(packet.timeline).not.toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ type: 'session_finished' }),
+      ]),
+    );
+    expect(output.map((line) => JSON.parse(line))).toEqual([
+      expect.objectContaining({ type: 'assistant', text: 'unused' }),
+    ]);
+    for (const fileName of [
+      'environment.json',
+      'trace.jsonl',
+      'transcript.md',
+      'evidence-packet.json',
+      'codex-review-packet.md',
+    ]) {
+      expect(manifest.evidence.artifactSha256[fileName]).toBe(
+        createHash('sha256')
+          .update(await readFile(join(session.runDirectory, fileName)))
+          .digest('hex'),
+      );
+    }
+  });
+
+  it('recovers a finalization failure as abandoned immutable evidence', async () => {
+    const realSession = await startLiveScenarioSession(
+      await fixture('finalization-failure'),
+    );
+    let finalizationAttempts = 0;
+    const session = {
+      ...realSession,
+      async finalizeTerminal() {
+        finalizationAttempts += 1;
+        if (finalizationAttempts === 1) {
+          throw new Error('terminal_artifact_write_failed');
+        }
+        await realSession.finalizeTerminal();
+      },
+    };
+    const output: string[] = [];
+
+    await expect(
+      runLiveScenarioCommandStream({
+        session,
+        lines: lines([
+          JSON.stringify({
+            type: 'user',
+            text: 'Complete before finalization fails once.',
+          }),
+          JSON.stringify({ type: 'finish' }),
+        ]),
+        writeLine(line) {
+          output.push(line);
+        },
+      }),
+    ).rejects.toThrow('terminal_artifact_write_failed');
+
+    const manifest = JSON.parse(
+      await readFile(join(session.runDirectory, 'manifest.json'), 'utf8'),
+    ) as {
+      status: string;
+      evidence: { artifactSha256: Record<string, string> };
+    };
+    const packet = JSON.parse(
+      await readFile(
+        join(session.runDirectory, 'evidence-packet.json'),
+        'utf8',
+      ),
+    ) as {
+      status: string;
+      timeline: Array<Record<string, unknown>>;
+    };
+    expect(finalizationAttempts).toBe(2);
+    expect(output.map((line) => JSON.parse(line))).toEqual([
+      expect.objectContaining({ type: 'assistant', text: 'unused' }),
+      { type: 'finished' },
+    ]);
+    expect(manifest.status).toBe('abandoned');
+    expect(packet.status).toBe('abandoned');
+    expect(packet.timeline).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ type: 'session_finished' }),
+        expect.objectContaining({
+          type: 'protocol_error',
+          error: 'control_error',
+          errorClass: 'Error',
+        }),
+        expect.objectContaining({
+          type: 'session_interrupted',
+          reason: 'control_error',
+        }),
+      ]),
+    );
+    for (const fileName of [
+      'environment.json',
+      'trace.jsonl',
+      'transcript.md',
+      'evidence-packet.json',
+      'codex-review-packet.md',
+    ]) {
+      expect(manifest.evidence.artifactSha256[fileName]).toBe(
+        createHash('sha256')
+          .update(await readFile(join(session.runDirectory, fileName)))
+          .digest('hex'),
+      );
+    }
+  });
+
   it('finalizes immutable failed evidence after an incomplete finish control error', async () => {
     const input = await fixture('incomplete');
     input.gateway.d1Evidence = async () => ({

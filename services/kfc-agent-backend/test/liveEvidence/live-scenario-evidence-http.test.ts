@@ -103,6 +103,7 @@ describe('live scenario evidence packet over HTTP', () => {
 
     await session.submitUserMessage('Improvised remote turn.');
     await session.finish();
+    await session.commitFinish();
     await session.finalizeTerminal();
 
     const packet = JSON.parse(

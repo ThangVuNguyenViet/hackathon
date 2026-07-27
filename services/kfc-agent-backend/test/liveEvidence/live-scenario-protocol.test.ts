@@ -31,6 +31,7 @@ describe('live scenario JSONL protocol', () => {
       }),
       recordAssistantRendered: vi.fn(),
       finish: vi.fn().mockResolvedValue(undefined),
+      commitFinish: vi.fn().mockResolvedValue(undefined),
       finalizeTerminal: vi.fn().mockResolvedValue(undefined),
       recordProtocolError: vi.fn(),
       interrupt: vi.fn(),
@@ -83,6 +84,7 @@ describe('live scenario JSONL protocol', () => {
       }),
     );
     expect(session.finish).toHaveBeenCalledWith('Goal explored');
+    expect(session.commitFinish).toHaveBeenCalledTimes(1);
     expect(session.finalizeTerminal).toHaveBeenCalledTimes(1);
     expect(session.interrupt).not.toHaveBeenCalled();
     expect(output.map((line) => JSON.parse(line))).toEqual([
@@ -118,6 +120,7 @@ describe('live scenario JSONL protocol', () => {
       submitAction: vi.fn(),
       recordAssistantRendered: vi.fn(),
       finish: vi.fn(),
+      commitFinish: vi.fn(),
       finalizeTerminal: vi.fn(),
       recordProtocolError: vi.fn(),
       interrupt: vi.fn(),
@@ -159,6 +162,7 @@ describe('live scenario JSONL protocol', () => {
       submitAction: vi.fn(),
       recordAssistantRendered: vi.fn(),
       finish: vi.fn(),
+      commitFinish: vi.fn(),
       finalizeTerminal: vi.fn(),
       recordProtocolError: vi.fn(),
       interrupt: vi.fn(),

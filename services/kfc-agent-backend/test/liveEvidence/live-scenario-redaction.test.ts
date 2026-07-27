@@ -126,6 +126,7 @@ describe('live scenario artifact redaction', () => {
       `access_token=${assignmentSecret}; X-Meta-Token: ${headerSecret}`,
     );
     await session.finish(`password: ${configuredSecret}`);
+    await session.commitFinish();
     await session.finalizeTerminal();
 
     const artifacts: string[] = [];
