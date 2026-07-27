@@ -1,5 +1,6 @@
 import { kfcVerifiedStateSnapshotSchema } from '../../businessPacks/kfcVietnam/kfcVerifiedStateSchema.js';
 import {
+  canonicalJson,
   type PackStateEnvelope,
   validatePackStateEnvelope,
 } from '../../runtime/businessPack.js';
@@ -8,6 +9,7 @@ import type {
   RecommendationDecisionRecord,
   RecommendationDemoCustomerHistoryRecord,
 } from './types.js';
+import { parseRecommendationDecisionStoragePayload } from './types.js';
 
 export type {
   RecommendationDecisionRecord,
@@ -100,14 +102,66 @@ export function sameRecommendationDecisionRecord(
   left: RecommendationDecisionRecord,
   right: RecommendationDecisionRecord,
 ): boolean {
-  return JSON.stringify(left) === JSON.stringify(right);
+  return canonicalJson(left) === canonicalJson(right);
 }
 
 export function sameRecommendationEvent(
   left: RecommendationEvent,
   right: RecommendationEvent,
 ): boolean {
-  return JSON.stringify(left) === JSON.stringify(right);
+  return canonicalJson(left) === canonicalJson(right);
+}
+
+export function assertCompletedRecommendationReservationReplay(input: {
+  requested: Pick<
+    ReserveRecommendationDecisionInput,
+    'sessionId' | 'idempotencyKey' | 'requestId' | 'requestFingerprint'
+  >;
+  stored: {
+    sessionId: string;
+    idempotencyKey: string;
+    requestId: string;
+    requestFingerprint: string;
+    recommendationId: string | undefined;
+    responseJson: string | undefined;
+    technicalJson: string | undefined;
+  };
+  record: RecommendationDecisionRecord;
+}): void {
+  const { requested, stored, record } = input;
+  if (
+    stored.sessionId !== requested.sessionId ||
+    stored.idempotencyKey !== requested.idempotencyKey ||
+    stored.requestId !== requested.requestId ||
+    stored.requestFingerprint !== requested.requestFingerprint ||
+    !stored.recommendationId ||
+    !stored.responseJson ||
+    !stored.technicalJson
+  ) {
+    throw new Error('recommendation_completed_reservation_invalid');
+  }
+  const payload = parseRecommendationDecisionStoragePayload({
+    responseJson: stored.responseJson,
+    technicalJson: stored.technicalJson,
+  });
+  if (
+    stored.recommendationId !== record.response.recommendationId ||
+    record.request.sessionId !== requested.sessionId ||
+    record.request.idempotencyKey !== requested.idempotencyKey ||
+    record.request.requestId !== requested.requestId ||
+    record.requestFingerprint !== requested.requestFingerprint ||
+    !sameRecommendationDecisionRecord(
+      {
+        ...record,
+        request: payload.request,
+        response: payload.response,
+        technical: payload.technical,
+      },
+      record,
+    )
+  ) {
+    throw new Error('recommendation_completed_reservation_mismatch');
+  }
 }
 
 export function assertDecisionEventsCorrelate(

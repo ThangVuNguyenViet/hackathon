@@ -1,7 +1,6 @@
 import type { RecommendationEvent } from '../recommendations/domain/contracts.js';
 import {
   instantSchema,
-  parseRecommendationEvent,
   sha256Schema,
 } from '../recommendations/domain/schemas.js';
 import type {
@@ -17,13 +16,17 @@ import type {
 } from '../recommendations/persistence/repository.js';
 import {
   assertDecisionEventsCorrelate,
+  assertCompletedRecommendationReservationReplay,
   assertRecommendationPackState,
   sameRecommendationDecisionRecord,
   sameRecommendationEvent,
 } from '../recommendations/persistence/repository.js';
 import {
   parseRecommendationDecisionRecord,
+  parseRecommendationDecisionStoragePayload,
   parseRecommendationDemoCustomerHistoryRecord,
+  parsePersistedRecommendationEvent,
+  serializeRecommendationDecisionStoragePayload,
 } from '../recommendations/persistence/types.js';
 import { digestCommerceAction } from '../ordering/commerceDigest.js';
 import type { PackStateEnvelope } from '../runtime/businessPack.js';
@@ -121,11 +124,27 @@ export class D1StoreRecommendationOperations extends D1StoreConversationOperatio
     ) {
       return { status: 'conflict' };
     }
-    if (existing.status === 'completed' && existing.recommendation_id) {
+    if (existing.status === 'completed') {
+      if (!existing.recommendation_id) {
+        throw new Error('recommendation_completed_reservation_invalid');
+      }
       const record = await this.getRecommendationDecision(
         existing.recommendation_id,
       );
       if (!record) throw new Error('recommendation_replay_record_missing');
+      assertCompletedRecommendationReservationReplay({
+        requested: parsed,
+        stored: {
+          sessionId: existing.session_id,
+          idempotencyKey: existing.idempotency_key,
+          requestId: existing.request_id,
+          requestFingerprint: existing.request_fingerprint,
+          recommendationId: existing.recommendation_id ?? undefined,
+          responseJson: existing.response_json ?? undefined,
+          technicalJson: existing.technical_json ?? undefined,
+        },
+        record,
+      });
       return { status: 'replay', record };
     }
     return { status: 'pending' };
@@ -144,7 +163,7 @@ export class D1StoreRecommendationOperations extends D1StoreConversationOperatio
       structuredClone(input.record),
     );
     const events = input.events.map((event) =>
-      parseRecommendationEvent(structuredClone(event)),
+      parsePersistedRecommendationEvent(structuredClone(event)),
     );
     assertDecisionEventsCorrelate(record, events);
     await assertRecommendationPackState(
@@ -192,11 +211,8 @@ export class D1StoreRecommendationOperations extends D1StoreConversationOperatio
       return { status: 'stale' };
     }
 
-    const storageTechnicalJson = JSON.stringify({
-      request: record.request,
-      technical: record.technical,
-    });
-    const responseJson = JSON.stringify(record.response);
+    const { responseJson, technicalJson: storageTechnicalJson } =
+      serializeRecommendationDecisionStoragePayload(record);
     const nextEnvelopeJson = JSON.stringify(input.nextPackState);
     const packCas = this.packStateCasStatement({
       sessionId: record.request.sessionId,
@@ -305,7 +321,9 @@ export class D1StoreRecommendationOperations extends D1StoreConversationOperatio
     const expectedPackStateDigest = sha256Schema.parse(
       input.expectedPackStateDigest,
     );
-    const event = parseRecommendationEvent(structuredClone(input.event));
+    const event = parsePersistedRecommendationEvent(
+      structuredClone(input.event),
+    );
     const nextRevision = await assertRecommendationPackState(
       input.nextPackState,
       event.orderFlowId,
@@ -775,10 +793,13 @@ function nonBlank(value: string, error: string): string {
 function decisionFromRow(
   row: RecommendationDecisionRow,
 ): RecommendationDecisionRecord {
-  const storage = parseStoredTechnical(row.technical_json);
+  const storage = parseRecommendationDecisionStoragePayload({
+    responseJson: row.response_json,
+    technicalJson: row.technical_json,
+  });
   const record = parseRecommendationDecisionRecord({
     request: storage.request,
-    response: JSON.parse(row.response_json) as unknown,
+    response: storage.response,
     technical: storage.technical,
     requestFingerprint: row.request_fingerprint,
     actionDigest: row.action_digest,
@@ -798,27 +819,10 @@ function decisionFromRow(
   return record;
 }
 
-function parseStoredTechnical(value: string): {
-  request: unknown;
-  technical: unknown;
-} {
-  const parsed = JSON.parse(value) as unknown;
-  if (
-    typeof parsed !== 'object' ||
-    parsed === null ||
-    Array.isArray(parsed) ||
-    Object.keys(parsed).sort().join(',') !== 'request,technical'
-  ) {
-    throw new Error('recommendation_technical_storage_invalid');
-  }
-  const record = parsed as Record<string, unknown>;
-  return { request: record.request, technical: record.technical };
-}
-
 function eventFromRow(row: RecommendationEventRow): PersistedEvent {
   return {
     eventFingerprint: sha256Schema.parse(row.event_fingerprint),
-    event: parseRecommendationEvent({
+    event: parsePersistedRecommendationEvent({
       schemaVersion: row.schema_version,
       eventId: row.event_id,
       eventType: row.event_type,

@@ -69,7 +69,6 @@ import type { PackRef, PackStateEnvelope } from '../runtime/businessPack.js';
 import type { RecommendationEvent } from '../recommendations/domain/contracts.js';
 import {
   instantSchema,
-  parseRecommendationEvent,
   sha256Schema,
 } from '../recommendations/domain/schemas.js';
 import type {
@@ -86,6 +85,7 @@ import type {
 } from '../recommendations/persistence/repository.js';
 import {
   assertDecisionEventsCorrelate,
+  assertCompletedRecommendationReservationReplay,
   assertRecommendationPackState,
   sameRecommendationDecisionRecord,
   sameRecommendationEvent,
@@ -93,6 +93,8 @@ import {
 import {
   parseRecommendationDecisionRecord,
   parseRecommendationDemoCustomerHistoryRecord,
+  parsePersistedRecommendationEvent,
+  serializeRecommendationDecisionStoragePayload,
 } from '../recommendations/persistence/types.js';
 import { digestCommerceAction } from '../ordering/commerceDigest.js';
 import {
@@ -162,6 +164,8 @@ interface MemoryRecommendationReservation {
   createdAt: string;
   status: 'pending' | 'completed';
   recommendationId?: string;
+  responseJson?: string;
+  technicalJson?: string;
 }
 
 interface MemoryRecommendationEventRecord {
@@ -919,11 +923,27 @@ export class MemoryStore
         ) {
           return { status: 'conflict' };
         }
-        if (existing.status === 'completed' && existing.recommendationId) {
+        if (existing.status === 'completed') {
+          if (!existing.recommendationId) {
+            throw new Error('recommendation_completed_reservation_invalid');
+          }
           const record = this.recommendationDecisions.get(
             existing.recommendationId,
           );
           if (!record) throw new Error('recommendation_replay_record_missing');
+          assertCompletedRecommendationReservationReplay({
+            requested: parsed,
+            stored: {
+              sessionId: existing.sessionId,
+              idempotencyKey: existing.idempotencyKey,
+              requestId: existing.requestId,
+              requestFingerprint: existing.requestFingerprint,
+              recommendationId: existing.recommendationId,
+              responseJson: existing.responseJson,
+              technicalJson: existing.technicalJson,
+            },
+            record,
+          });
           return {
             status: 'replay',
             record: cloneRecommendationDecisionRecord(record),
@@ -958,7 +978,7 @@ export class MemoryStore
       structuredClone(input.record),
     );
     const events = input.events.map((event) =>
-      parseRecommendationEvent(structuredClone(event)),
+      parsePersistedRecommendationEvent(structuredClone(event)),
     );
     assertDecisionEventsCorrelate(record, events);
     await assertRecommendationPackState(
@@ -1054,6 +1074,7 @@ export class MemoryStore
         ...reservation,
         status: 'completed',
         recommendationId: record.response.recommendationId,
+        ...serializeRecommendationDecisionStoragePayload(record),
       });
       return {
         status: 'committed',
@@ -1069,14 +1090,19 @@ export class MemoryStore
     const expectedPackStateDigest = sha256Schema.parse(
       input.expectedPackStateDigest,
     );
-    const event = parseRecommendationEvent(structuredClone(input.event));
+    const event = parsePersistedRecommendationEvent(
+      structuredClone(input.event),
+    );
     await assertRecommendationPackState(input.nextPackState, event.orderFlowId);
     return this.withStoreLock(async () => {
       const existing = this.recommendationEvents.get(event.eventId);
       if (existing) {
+        const storedEvent = parsePersistedRecommendationEvent(
+          structuredClone(existing.event),
+        );
         return existing.eventFingerprint === eventFingerprint &&
-          sameRecommendationEvent(existing.event, event)
-          ? { status: 'replay', event: structuredClone(existing.event) }
+          sameRecommendationEvent(storedEvent, event)
+          ? { status: 'replay', event: structuredClone(storedEvent) }
           : { status: 'conflict' };
       }
       const key = memoryPackStateKey(
@@ -1135,7 +1161,9 @@ export class MemoryStore
   ): Promise<RecommendationEvent[]> {
     return [...this.recommendationEvents.entries()]
       .map(([eventId, { event }]) => {
-        const parsed = parseRecommendationEvent(structuredClone(event));
+        const parsed = parsePersistedRecommendationEvent(
+          structuredClone(event),
+        );
         if (parsed.eventId !== eventId) {
           throw new Error('recommendation_event_storage_identity_mismatch');
         }

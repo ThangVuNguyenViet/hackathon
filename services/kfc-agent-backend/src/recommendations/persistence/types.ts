@@ -2,22 +2,121 @@ import { z } from 'zod';
 import type {
   RecommendationDecisionRequest,
   RecommendationDecisionResponse,
+  RecommendationEvent,
 } from '../domain/contracts.js';
 import {
   customerReasonCodeSchema,
+  decisionSourceSchema,
+  decisionStatusSchema,
   instantSchema,
   merchandisingEffectSchema,
+  parseRecommendationEvent,
   recommendationActionSchema,
+  recommendationCountsSchema,
   recommendationDecisionRequestSchema,
   recommendationDecisionResponseSchema,
+  renderedRecommendationActionSchema,
   sha256Schema,
 } from '../domain/schemas.js';
+import { opaqueIdSchema } from '../domain/identities.js';
 import type { RecommendationDecisionTechnicalEvidence } from '../application/types.js';
 import type { RecommendationDecisionContext } from '../eligibility/types.js';
 
 const finiteNumberSchema = z.number().finite();
 const nonNegativeIntegerSchema = z.number().int().nonnegative();
 const nonBlankStringSchema = z.string().min(1);
+
+const decisionRequestedPayloadSchema = z
+  .object({
+    requestFingerprint: sha256Schema,
+    cartRevision: opaqueIdSchema,
+  })
+  .strict();
+
+const decisionCompletedPayloadSchema = z
+  .object({
+    status: decisionStatusSchema,
+    source: decisionSourceSchema,
+    counts: recommendationCountsSchema,
+    actionDigest: sha256Schema,
+    traceRef: opaqueIdSchema,
+  })
+  .strict();
+
+const impressionRenderedPayloadSchema = z
+  .object({
+    assistantTurnId: opaqueIdSchema,
+    attachmentId: opaqueIdSchema,
+    renderedActions: z
+      .array(renderedRecommendationActionSchema)
+      .min(1)
+      .max(4)
+      .refine(
+        (actions) =>
+          new Set(actions.map((action) => action.actionId)).size ===
+            actions.length &&
+          new Set(actions.map((action) => action.position)).size ===
+            actions.length,
+        'Rendered action IDs and positions must be unique',
+      ),
+    actionDigest: sha256Schema,
+  })
+  .strict();
+
+const emptyOutcomePayloadSchema = z.object({}).strict();
+const outcomeEventTypes = new Set<RecommendationEvent['eventType']>([
+  'selected',
+  'explicitly_dismissed',
+  'ignored',
+  'superseded',
+  'cart_mutation_succeeded',
+  'cart_mutation_failed',
+  'checkout_completed',
+  'order_abandoned',
+  'order_cancelled',
+]);
+
+export function parsePersistedRecommendationEvent(
+  value: unknown,
+): RecommendationEvent {
+  const event = parseRecommendationEvent(value);
+  if (event.eventType === 'candidate_eligibility_summary') {
+    throw new Error('recommendation_candidate_summary_persistence_unsupported');
+  }
+  if (event.eventType === 'decision_requested') {
+    const payload = decisionRequestedPayloadSchema.parse(event.payload);
+    if (
+      event.recommendationId !== null ||
+      event.cartRevision === null ||
+      payload.cartRevision !== event.cartRevision
+    ) {
+      throw new Error('recommendation_decision_requested_payload_mismatch');
+    }
+    return { ...event, payload };
+  }
+  if (event.eventType === 'decision_completed') {
+    if (event.recommendationId === null) {
+      throw new Error('recommendation_decision_completed_identity_missing');
+    }
+    return {
+      ...event,
+      payload: decisionCompletedPayloadSchema.parse(event.payload),
+    };
+  }
+  if (event.eventType === 'impression_rendered') {
+    return {
+      ...event,
+      payload: impressionRenderedPayloadSchema.parse(event.payload),
+    };
+  }
+  if (outcomeEventTypes.has(event.eventType)) {
+    return {
+      ...event,
+      payload: emptyOutcomePayloadSchema.parse(event.payload),
+    };
+  }
+  throw new Error('recommendation_event_persistence_unsupported');
+}
 
 const recommendationCandidateSchema = z
   .object({
@@ -155,6 +254,50 @@ export function parseRecommendationDecisionRecord(
   value: unknown,
 ): RecommendationDecisionRecord {
   return recommendationDecisionRecordSchema.parse(value);
+}
+
+export interface RecommendationDecisionStoragePayload {
+  request: RecommendationDecisionRequest;
+  response: RecommendationDecisionResponse;
+  technical: RecommendationDecisionTechnicalEvidence;
+}
+
+export function serializeRecommendationDecisionStoragePayload(
+  record: RecommendationDecisionRecord,
+): { responseJson: string; technicalJson: string } {
+  const parsed = parseRecommendationDecisionRecord(record);
+  return {
+    responseJson: JSON.stringify(parsed.response),
+    technicalJson: JSON.stringify({
+      request: parsed.request,
+      technical: parsed.technical,
+    }),
+  };
+}
+
+export function parseRecommendationDecisionStoragePayload(input: {
+  responseJson: string;
+  technicalJson: string;
+}): RecommendationDecisionStoragePayload {
+  const technicalStorage = JSON.parse(input.technicalJson) as unknown;
+  if (
+    typeof technicalStorage !== 'object' ||
+    technicalStorage === null ||
+    Array.isArray(technicalStorage) ||
+    Object.keys(technicalStorage).sort().join(',') !== 'request,technical'
+  ) {
+    throw new Error('recommendation_technical_storage_invalid');
+  }
+  const stored = technicalStorage as Record<string, unknown>;
+  return {
+    request: recommendationDecisionRequestSchema.parse(stored.request),
+    response: recommendationDecisionResponseSchema.parse(
+      JSON.parse(input.responseJson) as unknown,
+    ),
+    technical: recommendationDecisionTechnicalEvidenceSchema.parse(
+      stored.technical,
+    ),
+  };
 }
 
 const completedOrderSchema = z

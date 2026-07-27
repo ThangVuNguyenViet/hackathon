@@ -17,9 +17,11 @@ import type {
   RecommendationDemoCustomerHistoryRecord,
   RecommendationPersistence,
 } from '../../src/recommendations/persistence/repository.js';
+import { parsePersistedRecommendationEvent } from '../../src/recommendations/persistence/types.js';
 import {
   applyRecommendationDecision,
   applyRecommendationImpression,
+  applyRecommendationOutcome,
   initialRecommendationState,
 } from '../../src/recommendations/state/state-machine.js';
 import type { ConversationStore } from '../../src/persistence/contracts.js';
@@ -152,6 +154,44 @@ function recordForExistingFlow(
   };
 }
 
+function recordWithFeatureSummary(
+  record: RecommendationDecisionRecord,
+  featureSummary: Record<string, number | string | boolean | null>,
+): RecommendationDecisionRecord {
+  const action = record.response.primaryOffer!.actions[0]!;
+  const candidate = {
+    action,
+    targetId: `target-${record.request.requestId}`,
+    sellableItemId: 'item-001',
+    categoryId: 'category-001',
+    name: 'Synthetic technical candidate',
+    imageUrl: null,
+    basePriceVnd: 45_000,
+    activeDiscountRatio: 0,
+    promotionId: null,
+    parentCartLineId: null,
+    modifierGroupPath: [],
+  };
+  const ranked = {
+    candidate,
+    score: 1,
+    reasonCodes: [],
+    featureSummary,
+  };
+  return {
+    ...record,
+    technical: {
+      ...record.technical,
+      potentialCandidates: [candidate],
+      eligiblePrePolicyRanking: [ranked],
+      merchandisingResolution: {
+        ...record.technical.merchandisingResolution,
+        rankedCandidates: [ranked],
+      },
+    },
+  };
+}
+
 function decisionEvents(
   record: RecommendationDecisionRecord,
 ): [RecommendationEvent, RecommendationEvent] {
@@ -174,7 +214,10 @@ function decisionEvents(
       recommendationId: null,
       occurredAt: '2026-07-27T09:00:01Z',
       recordedAt: '2026-07-27T09:00:01Z',
-      payload: { requestFingerprint: record.requestFingerprint },
+      payload: {
+        requestFingerprint: record.requestFingerprint,
+        cartRevision: record.request.cartRevision,
+      },
     }),
     parseRecommendationEvent({
       ...shared,
@@ -186,6 +229,9 @@ function decisionEvents(
       payload: {
         actionDigest: record.actionDigest,
         status: record.response.status,
+        source: record.response.decisionSource,
+        counts: record.response.counts,
+        traceRef: record.response.traceRef,
       },
     }),
   ];
@@ -237,6 +283,61 @@ async function commit(
 }
 
 describe('RecommendationPersistence shared contract', () => {
+  it('accepts only the approved bounded persisted-event payload families', () => {
+    const record = recordFor('persisted-payload-shapes');
+    const [requested, completed] = decisionEvents(record);
+    expect(parsePersistedRecommendationEvent(requested)).toEqual(requested);
+    expect(parsePersistedRecommendationEvent(completed)).toEqual(completed);
+
+    const actionId = record.response.primaryOffer!.actions[0]!.actionId;
+    const impression = parseRecommendationEvent({
+      ...completed,
+      eventId: 'event-impression-payload-shape',
+      eventType: 'impression_rendered',
+      actor: 'client',
+      actionId,
+      payload: {
+        assistantTurnId: 'assistant-turn-001',
+        attachmentId: 'attachment-001',
+        renderedActions: [{ actionId, position: 1 }],
+        actionDigest: record.actionDigest,
+      },
+    });
+    expect(parsePersistedRecommendationEvent(impression)).toEqual(impression);
+
+    for (const eventType of [
+      'selected',
+      'explicitly_dismissed',
+      'ignored',
+      'superseded',
+      'cart_mutation_succeeded',
+      'cart_mutation_failed',
+      'checkout_completed',
+      'order_abandoned',
+      'order_cancelled',
+    ] as const) {
+      const outcome = parseRecommendationEvent({
+        ...completed,
+        eventId: `event-${eventType}-payload-shape`,
+        eventType,
+        actor: 'customer',
+        actionId,
+        payload: {},
+      });
+      expect(parsePersistedRecommendationEvent(outcome)).toEqual(outcome);
+    }
+
+    const unapprovedCandidateSummary = parseRecommendationEvent({
+      ...completed,
+      eventId: 'event-candidate-summary-payload-shape',
+      eventType: 'candidate_eligibility_summary',
+      payload: {},
+    });
+    expect(() =>
+      parsePersistedRecommendationEvent(unapprovedCandidateSummary),
+    ).toThrow('recommendation_candidate_summary_persistence_unsupported');
+  });
+
   it('reserves once, reports a pending duplicate, and rejects changed fingerprints and request-ID reuse', async () => {
     for (const { name, store } of await fixtures()) {
       const record = recordFor(`${name.toLowerCase()}-reserve`);
@@ -318,6 +419,127 @@ describe('RecommendationPersistence shared contract', () => {
       await expect(commit(store, record), name).resolves.toEqual({
         status: 'replay',
         record,
+      });
+    }
+  });
+
+  it('fails closed on corrupt completed-reservation payloads in both stores', async () => {
+    const memory = new MemoryStore();
+    const memoryRecord = recordFor('memory-corrupt-reservation');
+    await reserve(memory, memoryRecord);
+    await commit(memory, memoryRecord);
+    const memoryReservations = (
+      memory as unknown as {
+        recommendationReservations: Map<
+          string,
+          {
+            responseJson?: string;
+          }
+        >;
+      }
+    ).recommendationReservations;
+    const memoryReservation = [...memoryReservations.values()][0]!;
+    memoryReservation.responseJson = '{}';
+    await expect(reserve(memory, memoryRecord)).rejects.toThrow();
+
+    const database = new SqliteD1Database();
+    const d1 = new D1Store(database);
+    try {
+      await d1.initialize();
+      const d1Record = recordFor('d1-corrupt-reservation');
+      await reserve(d1, d1Record);
+      await commit(d1, d1Record);
+      database.sqlite
+        .prepare(
+          `UPDATE recommendation_request_reservations
+           SET technical_json = '{}'
+           WHERE session_id = ? AND idempotency_key = ?`,
+        )
+        .run(
+          d1Record.request.sessionId,
+          d1Record.request.idempotencyKey,
+        );
+      await expect(reserve(d1, d1Record)).rejects.toThrow();
+    } finally {
+      database.close();
+    }
+  });
+
+  it('fails closed when a completed reservation links to another decision', async () => {
+    const memory = new MemoryStore();
+    const memoryFirst = recordFor('memory-reservation-link-first');
+    const memorySecond = recordFor('memory-reservation-link-second');
+    await reserve(memory, memoryFirst);
+    await commit(memory, memoryFirst);
+    await reserve(memory, memorySecond);
+    await commit(memory, memorySecond);
+    const memoryReservations = (
+      memory as unknown as {
+        recommendationReservations: Map<
+          string,
+          {
+            requestId: string;
+            recommendationId?: string;
+          }
+        >;
+      }
+    ).recommendationReservations;
+    const memoryFirstReservation = [...memoryReservations.values()].find(
+      (reservation) =>
+        reservation.requestId === memoryFirst.request.requestId,
+    )!;
+    memoryFirstReservation.recommendationId =
+      memorySecond.response.recommendationId;
+    await expect(reserve(memory, memoryFirst)).rejects.toThrow(
+      'recommendation_completed_reservation_mismatch',
+    );
+
+    const database = new SqliteD1Database();
+    const d1 = new D1Store(database);
+    try {
+      await d1.initialize();
+      const d1First = recordFor('d1-reservation-link-first');
+      const d1Second = recordFor('d1-reservation-link-second');
+      await reserve(d1, d1First);
+      await commit(d1, d1First);
+      await reserve(d1, d1Second);
+      await commit(d1, d1Second);
+      database.sqlite
+        .prepare(
+          `UPDATE recommendation_request_reservations
+           SET recommendation_id = ?
+           WHERE session_id = ? AND idempotency_key = ?`,
+        )
+        .run(
+          d1Second.response.recommendationId,
+          d1First.request.sessionId,
+          d1First.request.idempotencyKey,
+        );
+      await expect(reserve(d1, d1First)).rejects.toThrow(
+        'recommendation_completed_reservation_mismatch',
+      );
+    } finally {
+      database.close();
+    }
+  });
+
+  it('replays a semantically identical decision when technical feature keys are reordered', async () => {
+    for (const { name, store } of await fixtures()) {
+      const base = recordFor(`${name.toLowerCase()}-technical-order`);
+      const first = recordWithFeatureSummary(base, {
+        alpha: 1,
+        beta: 'two',
+      });
+      const reordered = recordWithFeatureSummary(base, {
+        beta: 'two',
+        alpha: 1,
+      });
+      await reserve(store, first);
+      await commit(store, first);
+
+      await expect(commit(store, reordered), name).resolves.toEqual({
+        status: 'replay',
+        record: first,
       });
     }
   });
@@ -464,9 +686,15 @@ describe('RecommendationPersistence shared contract', () => {
         actor: 'client',
         actionId: record.response.primaryOffer!.actions[0]!.actionId,
         payload: {
-          renderedActionIds: [
-            record.response.primaryOffer!.actions[0]!.actionId,
+          assistantTurnId: 'assistant-turn-001',
+          attachmentId: 'attachment-001',
+          renderedActions: [
+            {
+              actionId: record.response.primaryOffer!.actions[0]!.actionId,
+              position: 1,
+            },
           ],
+          actionDigest: record.actionDigest,
         },
       });
       const nextEnvelope = await createPackStateEnvelope({
@@ -521,6 +749,118 @@ describe('RecommendationPersistence shared contract', () => {
     }
   });
 
+  it('replays a semantically identical event when payload keys are reordered', async () => {
+    for (const { name, store } of await fixtures()) {
+      const record = recordFor(`${name.toLowerCase()}-event-key-order`);
+      await reserve(store, record);
+      await commit(store, record);
+      const currentEnvelope = await envelopeFor(record);
+      const actionId = record.response.primaryOffer!.actions[0]!.actionId;
+      const event = parseRecommendationEvent({
+        ...decisionEvents(record)[1],
+        eventId: `event-impression-key-order-${record.request.requestId}`,
+        eventType: 'impression_rendered',
+        occurredAt: '2026-07-27T09:00:04Z',
+        recordedAt: '2026-07-27T09:00:05Z',
+        actor: 'client',
+        actionId,
+        payload: {
+          assistantTurnId: 'assistant-turn-001',
+          attachmentId: 'attachment-001',
+          renderedActions: [{ actionId, position: 1 }],
+          actionDigest: record.actionDigest,
+        },
+      });
+      const nextEnvelope = await createPackStateEnvelope({
+        packRef: currentEnvelope.packRef,
+        schemaVersion: '1',
+        state: {
+          recommendationState: applyRecommendationImpression(
+            Reflect.get(
+              currentEnvelope.state as object,
+              'recommendationState',
+            ),
+            event,
+          ),
+        },
+      });
+      const first = {
+        eventFingerprint: 'd'.repeat(64),
+        event,
+        expectedPackStateDigest: currentEnvelope.integrity.digest,
+        nextPackState: nextEnvelope,
+      };
+      await store.appendRecommendationEvent(first);
+      const reorderedEvent = parseRecommendationEvent({
+        ...event,
+        payload: {
+          actionDigest: record.actionDigest,
+          renderedActions: [{ actionId, position: 1 }],
+          attachmentId: 'attachment-001',
+          assistantTurnId: 'assistant-turn-001',
+        },
+      });
+
+      await expect(
+        store.appendRecommendationEvent({
+          ...first,
+          event: reorderedEvent,
+        }),
+        name,
+      ).resolves.toEqual({ status: 'replay', event });
+    }
+  });
+
+  it('records an approved empty-payload outcome event with its state transition', async () => {
+    for (const { name, store } of await fixtures()) {
+      const record = recordFor(`${name.toLowerCase()}-outcome`);
+      await reserve(store, record);
+      await commit(store, record);
+      const currentEnvelope = await envelopeFor(record);
+      const actionId = record.response.primaryOffer!.actions[0]!.actionId;
+      const event = parseRecommendationEvent({
+        ...decisionEvents(record)[1],
+        eventId: `event-selected-${record.request.requestId}`,
+        eventType: 'selected',
+        occurredAt: '2026-07-27T09:00:04Z',
+        recordedAt: '2026-07-27T09:00:05Z',
+        actor: 'customer',
+        actionId,
+        payload: {},
+      });
+      const nextEnvelope = await createPackStateEnvelope({
+        packRef: currentEnvelope.packRef,
+        schemaVersion: '1',
+        state: {
+          recommendationState: applyRecommendationOutcome(
+            Reflect.get(
+              currentEnvelope.state as object,
+              'recommendationState',
+            ),
+            event,
+            [actionId],
+          ),
+        },
+      });
+
+      await expect(
+        store.appendRecommendationEvent({
+          eventFingerprint: 'e'.repeat(64),
+          event,
+          expectedPackStateDigest: currentEnvelope.integrity.digest,
+          nextPackState: nextEnvelope,
+        }),
+        name,
+      ).resolves.toEqual({ status: 'recorded', event });
+      await expect(
+        store.listRecommendationEvents({
+          recommendationId: record.response.recommendationId,
+        }),
+        name,
+      ).resolves.toEqual([decisionEvents(record)[1], event]);
+    }
+  });
+
   it('strictly rejects malformed records instead of persisting customer prose or non-finite evidence', async () => {
     for (const { name, store } of await fixtures()) {
       const record = recordFor(`${name.toLowerCase()}-strict`);
@@ -548,6 +888,60 @@ describe('RecommendationPersistence shared contract', () => {
         store.getRecommendationDecision(record.response.recommendationId),
         name,
       ).resolves.toBeUndefined();
+    }
+  });
+
+  it('rejects arbitrary customer prose in persisted recommendation event payloads', async () => {
+    for (const { name, store } of await fixtures()) {
+      const record = recordFor(`${name.toLowerCase()}-event-prose`);
+      await reserve(store, record);
+      const events = decisionEvents(record);
+      events[0] = parseRecommendationEvent({
+        ...events[0],
+        payload: { customerMessage: 'please remember my exact words' },
+      });
+
+      await expect(
+        store.commitRecommendationDecision({
+          ownerToken: `owner-${record.request.requestId}`,
+          expectedPackStateDigest: null,
+          nextPackState: await envelopeFor(record),
+          record,
+          events,
+        }),
+        name,
+      ).rejects.toThrow();
+      await expect(
+        store.getRecommendationDecision(record.response.recommendationId),
+        name,
+      ).resolves.toBeUndefined();
+    }
+  });
+
+  it('rejects unapproved candidate eligibility summaries in both stores', async () => {
+    for (const { name, store } of await fixtures()) {
+      const record = recordFor(`${name.toLowerCase()}-candidate-summary`);
+      await reserve(store, record);
+      const events = decisionEvents(record);
+      events[0] = parseRecommendationEvent({
+        ...events[0],
+        eventType: 'candidate_eligibility_summary',
+        recommendationId: record.response.recommendationId,
+        payload: {},
+      });
+
+      await expect(
+        store.commitRecommendationDecision({
+          ownerToken: `owner-${record.request.requestId}`,
+          expectedPackStateDigest: null,
+          nextPackState: await envelopeFor(record),
+          record,
+          events,
+        }),
+        name,
+      ).rejects.toThrow(
+        'recommendation_candidate_summary_persistence_unsupported',
+      );
     }
   });
 
@@ -624,14 +1018,14 @@ describe('RecommendationPersistence shared contract', () => {
       ...persistedMemoryEvent,
       event: parseRecommendationEvent({
         ...memoryEvent,
-        eventId: `${memoryEvent.eventId}-wrong`,
+        payload: { customerMessage: 'corrupt stored prose' },
       }),
     });
     await expect(
       memory.listRecommendationEvents({
         sessionId: memoryRecord.request.sessionId,
       }),
-    ).rejects.toThrow('recommendation_event_storage_identity_mismatch');
+    ).rejects.toThrow();
     const memoryHistory =
       memoryInternals.recommendationDemoCustomerHistory.get(
         'demo-returning-linked',
@@ -657,7 +1051,7 @@ describe('RecommendationPersistence shared contract', () => {
       database.sqlite
         .prepare(
           `UPDATE recommendation_events
-           SET payload_json = '[]'
+           SET payload_json = '{"customerMessage":"corrupt stored prose"}'
            WHERE event_id = ?`,
         )
         .run(decisionEvents(d1Record)[0].eventId);
