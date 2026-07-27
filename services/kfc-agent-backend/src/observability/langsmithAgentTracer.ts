@@ -39,6 +39,7 @@ export interface LangSmithAgentTracerOptions {
 
 const traceFailureError = 'agent_trace_failed_closed';
 const opaqueCorrelationIdPattern = /^[A-Za-z0-9][A-Za-z0-9._:/-]{0,255}$/u;
+const sha256Pattern = /^[a-f0-9]{64}$/u;
 const safeTagPattern =
   /^(?:candidate|channel|pack|pack-version|profile|transport):[A-Za-z0-9][A-Za-z0-9._:/-]{0,255}$/u;
 
@@ -58,10 +59,37 @@ function privacySafeLangSmithMetadata(
     'response_profile',
     'channel',
     'scenarioId',
+    'request_id',
+    'order_flow_id',
+    'recommendation_id',
+    'event_id',
+    'trace_ref',
+    'policy_id',
+    'model_id',
+    'model_revision',
+    'ranker_version',
+    'sanity_snapshot_id',
+    'feature_schema_version',
+    'experiment_id',
+    'logging_policy_id',
   ] as const) {
     if (
       typeof metadata[key] === 'string' &&
       opaqueCorrelationIdPattern.test(metadata[key])
+    ) {
+      safe[key] = metadata[key];
+    }
+  }
+  for (const key of [
+    'request_digest',
+    'action_digest',
+    'decision_digest',
+    'version_binding_digest',
+    'sanity_snapshot_digest',
+  ] as const) {
+    if (
+      typeof metadata[key] === 'string' &&
+      sha256Pattern.test(metadata[key])
     ) {
       safe[key] = metadata[key];
     }
@@ -107,6 +135,91 @@ const safeProviderErrorClasses = new Set([
 ]);
 const safeSpanStatuses = new Set(['completed', 'interrupted', 'paused']);
 const safeExecutionOutcomes = new Set(['error', 'success']);
+const safeRecommendationStatuses = new Set([
+  'committed',
+  'conflict',
+  'created',
+  'cart_revision_conflict',
+  'decided',
+  'empty',
+  'idempotency_conflict',
+  'ineligible_context',
+  'invalid_context',
+  'not_found',
+  'pending',
+  'recorded',
+  'recommended',
+  'render_binding_conflict',
+  'replay',
+  'stale',
+  'stale_recommendation',
+  'state_conflict',
+  'suppressed',
+]);
+const safeDecisionSources = new Set([
+  'fallback',
+  'merchandising_replacement',
+  'ranked',
+  'suppressed',
+]);
+const safeShadowStatuses = new Set([
+  'failed',
+  'not_applicable',
+  'not_configured',
+  'succeeded',
+]);
+const safeRecommendationOutputModes = new Set([
+  'baseline',
+  'learned_technical',
+]);
+const safeRecommendationEventTypes = new Set([
+  'candidate_eligibility_summary',
+  'cart_mutation_failed',
+  'cart_mutation_succeeded',
+  'checkout_completed',
+  'decision_completed',
+  'decision_requested',
+  'explicitly_dismissed',
+  'ignored',
+  'impression_rendered',
+  'order_abandoned',
+  'order_cancelled',
+  'selected',
+  'superseded',
+]);
+const safePersistenceOperations = new Set([
+  'decision_commit',
+  'decision_reserve',
+  'event_append',
+]);
+const safeRecommendationReasonCodes = new Set([
+  'active_offer',
+  'already_in_cart',
+  'catalog_unavailable',
+  'completes_your_item',
+  'completes_your_meal',
+  'eligible',
+  'invalid_context',
+  'matches_your_history',
+  'merchandising_selection',
+  'merchandising_suppressed',
+  'modifier_group_at_capacity',
+  'modifier_parent_mismatch',
+  'no_eligible_candidates',
+  'no_positive_price_modifier',
+  'non_sellable_product',
+  'ordered_before',
+  'parent_cart_line_required',
+  'placement_already_attempted',
+  'placement_not_yet_eligible',
+  'popular_here',
+  'previously_rejected',
+  'previously_shown',
+  'store_unavailable',
+  'verified_dietary_exclusion',
+  'verified_history_required',
+  'zero_history_required',
+]);
 const safeGraphDestinations = new Set([
   '__end__',
   'call_model',
@@ -157,6 +270,27 @@ export function privacySafeLangSmithOutputs(
   outputs: Record<string, unknown>,
 ): Record<string, unknown> {
   const safe: Record<string, unknown> = {};
+  if (
+    typeof outputs.durationMs === 'number' &&
+    Number.isFinite(outputs.durationMs) &&
+    outputs.durationMs >= 0 &&
+    outputs.durationMs <= 86_400_000
+  ) {
+    safe.durationMs = outputs.durationMs;
+  }
+  for (const key of [
+    'potentialCount',
+    'candidateCount',
+    'eligibleCount',
+    'ineligibleCount',
+    'scoredCount',
+    'displayedCount',
+    'policyCount',
+    'eventCount',
+  ] as const) {
+    const value = safeBoundedInteger(outputs[key], 1_000_000);
+    if (value !== undefined) safe[key] = value;
+  }
   const attempt = safeBoundedInteger(outputs.attempt, 6);
   if (attempt !== undefined) safe.attempt = attempt;
   const toolCallCount = safeBoundedInteger(
@@ -184,6 +318,28 @@ export function privacySafeLangSmithOutputs(
   copySafeEnum(safe, outputs, 'status', safeSpanStatuses);
   copySafeEnum(safe, outputs, 'executionOutcome', safeExecutionOutcomes);
   copySafeEnum(safe, outputs, 'destination', safeGraphDestinations);
+  copySafeEnum(
+    safe,
+    outputs,
+    'recommendationStatus',
+    safeRecommendationStatuses,
+  );
+  copySafeEnum(safe, outputs, 'decisionSource', safeDecisionSources);
+  copySafeEnum(safe, outputs, 'shadowStatus', safeShadowStatuses);
+  copySafeEnum(safe, outputs, 'outputMode', safeRecommendationOutputModes);
+  copySafeEnum(safe, outputs, 'eventType', safeRecommendationEventTypes);
+  copySafeEnum(
+    safe,
+    outputs,
+    'persistenceOperation',
+    safePersistenceOperations,
+  );
+  if (Array.isArray(outputs.reasonCodes)) {
+    safe.reasonCodes = outputs.reasonCodes.filter(
+      (reason): reason is string =>
+        typeof reason === 'string' && safeRecommendationReasonCodes.has(reason),
+    );
+  }
   return safe;
 }
 
@@ -194,6 +350,7 @@ export function privacySafeLangSmithInputs(
   for (const key of [
     'messageCharacterCount',
     'historyExchangeCount',
+    'candidateCount',
   ] as const) {
     const value = safeBoundedInteger(inputs[key], 1_000_000);
     if (value !== undefined) safe[key] = value;

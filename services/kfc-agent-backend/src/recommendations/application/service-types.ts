@@ -21,6 +21,7 @@ import type {
   RecommendationDecisionEngine,
   RecommendationDecisionTechnicalEvidence,
 } from './types.js';
+import type { AgentTracer } from '../../observability/agentTracing.js';
 
 export interface RecommendationTrustedContext {
   parentCartLineId?: string | null;
@@ -170,6 +171,7 @@ export interface RecommendationApplicationServiceDependencies {
   contextSource: RecommendationServerContextSource;
   packState: RecommendationPackStateDefinition;
   clock: RecommendationClock;
+  agentTracer?: AgentTracer;
 }
 
 export interface RecommendationInspectionServiceDependencies {

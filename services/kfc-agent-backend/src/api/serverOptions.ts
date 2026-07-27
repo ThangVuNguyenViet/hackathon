@@ -14,6 +14,7 @@ import {
 } from '../config/monitorModelProfile.js';
 import { ModelMonitorJudge } from '../llm/monitorJudge.js';
 import { LangSmithAgentTracer } from '../observability/langsmithAgentTracer.js';
+import type { AgentTracer } from '../observability/agentTracing.js';
 import { LangSmithShowcaseScenarioSource } from '../showcase/showcase.js';
 import { kfcRecommendationPackStateDefinition } from '../recommendations/application/context-factory.js';
 import { createRecommendationInspectionService } from '../recommendations/application/inspection-service.js';
@@ -43,6 +44,7 @@ export function createBundledRecommendationRouteServicesFactory(
     scorer?: RecommendationShadowScorer;
     outputMode?: RecommendationOutputMode;
   },
+  agentTracer?: AgentTracer,
 ): RecommendationRouteServicesFactory {
   return {
     create(store) {
@@ -59,6 +61,7 @@ export function createBundledRecommendationRouteServicesFactory(
           merchandisingPolicyRepository: shadow.merchandisingPolicyRepository,
           shadowScorer: shadow.scorer,
           shadowOutputMode: shadow.outputMode,
+          agentTracer,
         }),
         inspection: createRecommendationInspectionService({
           persistence,
@@ -165,6 +168,14 @@ export function buildServerOptionsFromEnv(
       })
     : undefined;
   const langsmithApiKey = optionalValue(env.LANGSMITH_API_KEY);
+  const agentTracer = langsmithApiKey
+    ? new LangSmithAgentTracer({
+        projectName: env.LANGSMITH_PROJECT,
+        apiKey: langsmithApiKey,
+        apiUrl: env.LANGSMITH_ENDPOINT,
+        samplingRate: env.LANGSMITH_TRACING_SAMPLING_RATE,
+      })
+    : undefined;
   const shadowReadiness = recommendationShadowReadiness({
     shadowUrl: env.KFC_RECOMMENDATION_SHADOW_URL,
     modelRevision: env.KFC_RECOMMENDATION_SHADOW_MODEL_REVISION,
@@ -211,6 +222,7 @@ export function buildServerOptionsFromEnv(
             scorer: shadowScorer,
             outputMode: env.KFC_RECOMMENDATION_OUTPUT_MODE,
           },
+          agentTracer,
         )
       : undefined,
     demoAdminToken: optionalValue(env.KFC_DEMO_ADMIN_TOKEN),
@@ -227,14 +239,7 @@ export function buildServerOptionsFromEnv(
     agent: agentBinding,
     agentCandidates,
     monitorJudge,
-    agentTracer: langsmithApiKey
-      ? new LangSmithAgentTracer({
-          projectName: env.LANGSMITH_PROJECT,
-          apiKey: langsmithApiKey,
-          apiUrl: env.LANGSMITH_ENDPOINT,
-          samplingRate: env.LANGSMITH_TRACING_SAMPLING_RATE,
-        })
-      : undefined,
+    agentTracer,
     showcase: langsmithApiKey
       ? {
           source: new LangSmithShowcaseScenarioSource({

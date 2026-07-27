@@ -556,7 +556,10 @@ export default {
       request,
       handlers,
     );
-    if (recommendationResponse) return recommendationResponse;
+    if (recommendationResponse) {
+      scheduleAgentBackground(context, deferredAgentTasks, options.agentTracer);
+      return recommendationResponse;
+    }
     const lifecycleCreateMatch = url.pathname.match(
       /^\/admin\/lifecycle\/sessions\/([^/]+)\/instances$/,
     );

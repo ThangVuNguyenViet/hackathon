@@ -14,6 +14,19 @@ import { parseRecommendationDecisionApplicationInput } from '../../src/recommend
 import { parseRecommendationDecisionRequest } from '../../src/recommendations/domain/schemas.js';
 import { renderBindingForDecisionDigests } from '../../src/recommendations/persistence/types.js';
 import { buildDeterministicRecommendationServerOptions } from '../support/recommendationSanity.js';
+import type {
+  AgentTraceSpan,
+  AgentTraceSpanInput,
+  AgentTracer,
+} from '../../src/observability/agentTracing.js';
+
+const noOpTraceSpan: AgentTraceSpan = {
+  async startSpan(_input: AgentTraceSpanInput) {
+    return noOpTraceSpan;
+  },
+  async end() {},
+  async fail() {},
+};
 
 const adminToken = 'recommendation-admin-token';
 const servers: FastifyInstance[] = [];
@@ -174,6 +187,33 @@ function outcomeFor(
 }
 
 describe('recommendation Fastify routes', () => {
+  it('completes a recommendation response when trace export fails', async () => {
+    let flushCount = 0;
+    const tracer: AgentTracer = {
+      async startTurn() {
+        return noOpTraceSpan;
+      },
+      async flush() {
+        flushCount += 1;
+        throw new Error('private trace transport failure');
+      },
+    };
+    const server = buildServer({
+      ...configuredOptions(),
+      agentTracer: tracer,
+    });
+    servers.push(server);
+
+    const response = await server.inject({
+      method: 'POST',
+      url: '/v1/recommendations/decide',
+      payload: decisionRequest('trace-export-failure'),
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(flushCount).toBe(1);
+  });
+
   it('returns exact 503 errors for every unconfigured recommendation route', async () => {
     const server = unconfiguredServer();
     const requests = [

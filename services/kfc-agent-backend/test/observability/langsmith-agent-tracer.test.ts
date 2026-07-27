@@ -192,6 +192,60 @@ describe('LangSmith agent tracer boundary', () => {
     });
   });
 
+  it('publishes bounded recommendation evidence without customer or model feature data', () => {
+    const privateText = 'Zinger price 99000 for 4111111111111111 at 18 Le Loi';
+
+    expect(
+      privacySafeLangSmithInputs({
+        candidateCount: 12,
+        customerMessage: privateText,
+        productName: 'Zinger',
+        endpointUrl: 'https://ranking.example/private',
+        featureValues: { affinity: 0.91 },
+      }),
+    ).toEqual({ candidateCount: 12 });
+    expect(
+      privacySafeLangSmithOutputs({
+        durationMs: 12.345,
+        potentialCount: 12,
+        eligibleCount: 4,
+        ineligibleCount: 8,
+        scoredCount: 4,
+        displayedCount: 1,
+        policyCount: 2,
+        reasonCodes: ['popular_here', 'already_in_cart', privateText],
+        decisionSource: 'ranked',
+        shadowStatus: 'succeeded',
+        outputMode: 'baseline',
+        eventType: 'impression_rendered',
+        persistenceOperation: 'decision_commit',
+        recommendationStatus: 'cart_revision_conflict',
+        customerMessage: privateText,
+        rawError: privateText,
+        productName: 'Zinger',
+        price: 99_000,
+        token: 'private-token',
+        featureValues: { affinity: 0.91 },
+        featureContributions: [{ name: 'affinity', value: 0.91 }],
+      }),
+    ).toEqual({
+      durationMs: 12.345,
+      potentialCount: 12,
+      eligibleCount: 4,
+      ineligibleCount: 8,
+      scoredCount: 4,
+      displayedCount: 1,
+      policyCount: 2,
+      reasonCodes: ['popular_here', 'already_in_cart'],
+      recommendationStatus: 'cart_revision_conflict',
+      decisionSource: 'ranked',
+      shadowStatus: 'succeeded',
+      outputMode: 'baseline',
+      eventType: 'impression_rendered',
+      persistenceOperation: 'decision_commit',
+    });
+  });
+
   it('keeps the neutral kernel free of KFC and LangSmith imports', async () => {
     const kernel = await readFile(
       resolve(process.cwd(), 'src/runtime/kernel.ts'),

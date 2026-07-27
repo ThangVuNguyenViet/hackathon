@@ -28,6 +28,30 @@ import type {
   RecommendationShadowScorer,
 } from '../../src/recommendations/shadow/contracts.js';
 import { HttpRecommendationShadowScorer } from '../../src/recommendations/shadow/http-shadow-scorer.js';
+import type {
+  AgentTraceSpan,
+  AgentTraceSpanInput,
+} from '../../src/observability/agentTracing.js';
+import { RecommendationTrace } from '../../src/recommendations/observability/recommendation-tracing.js';
+
+class RecordingTraceSpan implements AgentTraceSpan {
+  readonly children: RecordingTraceSpan[] = [];
+  outputs?: Record<string, unknown>;
+
+  constructor(readonly input: AgentTraceSpanInput) {}
+
+  async startSpan(input: AgentTraceSpanInput): Promise<AgentTraceSpan> {
+    const child = new RecordingTraceSpan(input);
+    this.children.push(child);
+    return child;
+  }
+
+  async end(outputs?: Record<string, unknown>): Promise<void> {
+    this.outputs = outputs;
+  }
+
+  async fail(): Promise<void> {}
+}
 
 const bundledEngine = createBundledRecommendationDecisionEngine({
   merchandisingPolicyRepository: new LocalMerchandisingPolicyRepository(),
@@ -306,7 +330,44 @@ async function modifierCartCategoryPolicyRepository() {
   );
 }
 
-describe('pure recommendation decision engine', () => {
+describe('recommendation decision engine', () => {
+  it('emits nested enumeration, eligibility, rank, shadow, and Sanity stages', async () => {
+    const root = new RecordingTraceSpan({
+      name: 'recommendation.decide',
+      runType: 'chain',
+      inputs: {},
+    });
+
+    const result = await bundledEngine.decide(
+      makeContext(),
+      new RecommendationTrace(root),
+    );
+
+    expect(result.response.status).toBe('recommended');
+    expect(root.children.map((child) => child.input.name)).toEqual([
+      'recommendation.enumeration',
+      'recommendation.eligibility',
+      'recommendation.baseline_rank',
+      'recommendation.shadow_rank',
+      'recommendation.sanity_resolution',
+    ]);
+    expect(root.children.map((child) => child.outputs)).toMatchObject([
+      { candidateCount: expect.any(Number), durationMs: expect.any(Number) },
+      {
+        candidateCount: expect.any(Number),
+        eligibleCount: expect.any(Number),
+        ineligibleCount: expect.any(Number),
+        durationMs: expect.any(Number),
+      },
+      { scoredCount: expect.any(Number), durationMs: expect.any(Number) },
+      {
+        shadowStatus: 'not_applicable',
+        durationMs: expect.any(Number),
+      },
+      { policyCount: expect.any(Number), durationMs: expect.any(Number) },
+    ]);
+  });
+
   it('recommends one real anonymous Local Favorite with complete evidence', async () => {
     const result = await decide(makeContext());
 

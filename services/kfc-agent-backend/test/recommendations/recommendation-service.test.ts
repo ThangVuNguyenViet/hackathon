@@ -46,6 +46,46 @@ import { createPackStateEnvelope } from '../../src/runtime/businessPack.js';
 import { initialRecommendationState } from '../../src/recommendations/state/state-machine.js';
 import type { KfcGenUiAttachment } from '../../src/genui/kfcGenUi.js';
 import { SqliteD1Database } from '../support/sqlite-d1.js';
+import type {
+  AgentTraceSpan,
+  AgentTraceSpanInput,
+  AgentTracer,
+} from '../../src/observability/agentTracing.js';
+
+class RecordingApplicationTraceSpan implements AgentTraceSpan {
+  readonly children: RecordingApplicationTraceSpan[] = [];
+  outputs?: Record<string, unknown>;
+
+  constructor(
+    readonly input: Omit<AgentTraceSpanInput, 'runType'> | AgentTraceSpanInput,
+  ) {}
+
+  async startSpan(input: AgentTraceSpanInput): Promise<AgentTraceSpan> {
+    const child = new RecordingApplicationTraceSpan(input);
+    this.children.push(child);
+    return child;
+  }
+
+  async end(outputs?: Record<string, unknown>): Promise<void> {
+    this.outputs = outputs;
+  }
+
+  async fail(): Promise<void> {}
+}
+
+class RecordingApplicationTracer implements AgentTracer {
+  readonly roots: RecordingApplicationTraceSpan[] = [];
+
+  async startTurn(
+    input: Omit<AgentTraceSpanInput, 'runType'>,
+  ): Promise<AgentTraceSpan> {
+    const root = new RecordingApplicationTraceSpan(input);
+    this.roots.push(root);
+    return root;
+  }
+
+  async flush(): Promise<void> {}
+}
 
 const serverInstant = '2026-07-27T09:30:00Z';
 const completedServerInstant = '2026-07-27T09:30:00.1Z';
@@ -608,6 +648,110 @@ async function multiFlowSessionFixture(firstFlowComplete: boolean) {
 }
 
 describe('Recommendation application service', () => {
+  it('correlates decision persistence, impression, and outcome traces without changing results', async () => {
+    const tracer = new RecordingApplicationTracer();
+    const engine = new RecordingEngine();
+    const store = new MemoryStore();
+    const service = createRecommendationApplicationService(
+      dependencies(store, engine, { agentTracer: tracer }),
+    );
+    const inspection = createRecommendationInspectionService({
+      persistence: store,
+      packState: kfcRecommendationPackStateDefinition,
+    });
+    const request = requestFor({
+      suffix: 'observability-local',
+      placement: 'local_favorite',
+    });
+    const customerId = 'customer-observability-local';
+
+    const decision = await service.decide({
+      request,
+      trusted: { presentationCustomerId: customerId },
+    });
+    if (decision.status !== 'decided') throw new Error('decision expected');
+    await publishRecommendationTurn(
+      store,
+      decision.response.recommendationId,
+      customerId,
+    );
+    const projection = await inspection.recommendation(
+      decision.response.recommendationId,
+    );
+    if (!projection) throw new Error('inspection expected');
+    const impression = await service.recordImpression(
+      decision.response.recommendationId,
+      parseRecommendationImpressionRequest({
+        schemaVersion: 'kfc-recommendation-event-v1',
+        eventId: 'recommendation-event-observability-impression',
+        occurredAt: '2026-07-27T09:10:00Z',
+        ...renderBindingForDecisionDigests(projection.recommendation),
+        renderedActions: decision.response.primaryOffer!.actions.map(
+          (action, index) => ({
+            actionId: action.actionId,
+            position: index + 1,
+          }),
+        ),
+        cartRevision: request.cartRevision,
+        actionDigest: projection.recommendation.actionDigest,
+      }),
+    );
+    const outcome = await service.recordOutcome(
+      decision.response.recommendationId,
+      outcomeFor({
+        eventId: 'recommendation-event-observability-dismissed',
+        eventType: 'explicitly_dismissed',
+        actionId: null,
+        cartRevision: request.cartRevision,
+      }),
+    );
+
+    expect([decision.status, impression.status, outcome.status]).toEqual([
+      'decided',
+      'recorded',
+      'recorded',
+    ]);
+    if (impression.status !== 'recorded' || outcome.status !== 'recorded') {
+      throw new Error('recorded recommendation events expected');
+    }
+    expect(tracer.roots.map((root) => root.input.name)).toEqual([
+      'recommendation.decide',
+      'recommendation.impression',
+      'recommendation.outcome',
+    ]);
+    expect(tracer.roots[0]!.input.metadata).toMatchObject({
+      session_id: request.sessionId,
+      order_flow_id: request.orderFlowId,
+      request_id: request.requestId,
+    });
+    expect(tracer.roots[0]!.children.map((child) => child.input.name)).toEqual([
+      'recommendation.persistence',
+      'recommendation.persistence',
+    ]);
+    expect(tracer.roots[0]!.children[1]!.input.metadata).toMatchObject({
+      recommendation_id: decision.response.recommendationId,
+      request_id: request.requestId,
+      trace_ref: decision.response.traceRef,
+    });
+    expect(tracer.roots[0]!.outputs).toMatchObject({
+      recommendationStatus: 'decided',
+      potentialCount: 1,
+      displayedCount: 1,
+    });
+    expect(tracer.roots[1]!.input.metadata).toMatchObject({
+      recommendation_id: decision.response.recommendationId,
+      event_id: impression.event.eventId,
+    });
+    expect(tracer.roots[2]!.input.metadata).toMatchObject({
+      recommendation_id: decision.response.recommendationId,
+      event_id: outcome.event.eventId,
+    });
+    expect(tracer.roots[2]!.outputs).toMatchObject({
+      recommendationStatus: 'recorded',
+      eventType: 'explicitly_dismissed',
+    });
+  });
+
   it('serves a real anonymous Local Favorite and persists exact server-authored decision events', async () => {
     const { service, inspection } = await bundledApplication();
     const request = requestFor({
@@ -1468,9 +1612,7 @@ describe('Recommendation application service', () => {
         );
         expect(result).toMatchObject({
           status:
-            deliveryStatus === 'sent'
-              ? 'recorded'
-              : 'render_binding_conflict',
+            deliveryStatus === 'sent' ? 'recorded' : 'render_binding_conflict',
         });
       } finally {
         database.close();
@@ -2007,8 +2149,7 @@ describe('Recommendation application service', () => {
         cartRevision: request.cartRevision,
         renderedActions: [
           {
-            actionId:
-              decision.response.primaryOffer!.actions[0]!.actionId,
+            actionId: decision.response.primaryOffer!.actions[0]!.actionId,
             position: 1,
           },
         ],
@@ -2033,9 +2174,7 @@ describe('Recommendation application service', () => {
     ).resolves.toBeNull();
     expect(
       JSON.stringify(
-        await inspection.recommendation(
-          decision.response.recommendationId,
-        ),
+        await inspection.recommendation(decision.response.recommendationId),
       ),
     ).not.toContain('customer-presentation-1');
 

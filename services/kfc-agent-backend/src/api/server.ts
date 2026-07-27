@@ -23,7 +23,19 @@ export function buildServer(options: BuildServerOptions = {}): FastifyInstance {
   );
 
   server.addHook('onClose', async () => {
-    await options.agentTracer?.flush();
+    try {
+      await options.agentTracer?.flush();
+    } catch {
+      // Observability transport failures must not block server shutdown.
+    }
+  });
+
+  server.addHook('onResponse', async () => {
+    try {
+      await options.agentTracer?.flush();
+    } catch {
+      // Observability transport failures must not affect completed requests.
+    }
   });
 
   server.addHook('onRequest', async (request, reply) => {

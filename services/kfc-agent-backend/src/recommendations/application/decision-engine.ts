@@ -47,6 +47,19 @@ import type {
   RecommendationDecisionResult,
   RecommendationDecisionTechnicalEvidence,
 } from './types.js';
+import type {
+  RecommendationSpanInput,
+  RecommendationTrace,
+} from '../observability/recommendation-tracing.js';
+
+async function tracedStage<T>(
+  trace: RecommendationTrace | undefined,
+  input: RecommendationSpanInput,
+  operation: () => Promise<T>,
+  summarize: (value: T) => Record<string, unknown>,
+): Promise<T> {
+  return trace ? trace.span(input, operation, summarize) : operation();
+}
 
 const featureSchemaVersions: Record<Placement, string> = {
   local_favorite: 'contextual-popularity-feature-schema-v1',
@@ -466,13 +479,14 @@ async function completeResult(input: {
   return { response, technical: input.technical };
 }
 
-export class PureRecommendationDecisionEngine implements RecommendationDecisionEngine {
+export class DefaultRecommendationDecisionEngine implements RecommendationDecisionEngine {
   constructor(
     private readonly dependencies: RecommendationDecisionEngineDependencies,
   ) {}
 
   async decide(
     context: RecommendationDecisionContext,
+    trace?: RecommendationTrace,
   ): Promise<RecommendationDecisionResult> {
     const commerceFacts = this.dependencies.commerceFactsRepository.load();
     const rankingStatistics =
@@ -527,16 +541,48 @@ export class PureRecommendationDecisionEngine implements RecommendationDecisionE
       });
     }
 
-    const potentialCandidates = enumeratePotentialCandidates({
-      context,
-      commerceFacts,
-      promotionFacts,
-    });
-    const eligibilityDecisions = await evaluateEligibility({
-      context,
-      candidates: potentialCandidates,
-      commerceFacts,
-    });
+    const correlation = { request_id: context.request.requestId };
+    const potentialCandidates = await tracedStage(
+      trace,
+      {
+        name: 'recommendation.enumeration',
+        inputs: {},
+        metadata: correlation,
+      },
+      async () =>
+        enumeratePotentialCandidates({
+          context,
+          commerceFacts,
+          promotionFacts,
+        }),
+      (candidates) => ({ candidateCount: candidates.length }),
+    );
+    const eligibilityDecisions = await tracedStage(
+      trace,
+      {
+        name: 'recommendation.eligibility',
+        inputs: { candidateCount: potentialCandidates.length },
+        metadata: {
+          ...correlation,
+          policy_id: context.request.eligibilityPolicyVersion,
+        },
+      },
+      () =>
+        evaluateEligibility({
+          context,
+          candidates: potentialCandidates,
+          commerceFacts,
+        }),
+      (decisions) => ({
+        candidateCount: decisions.length,
+        eligibleCount: decisions.filter((decision) => decision.eligible).length,
+        ineligibleCount: decisions.filter((decision) => !decision.eligible)
+          .length,
+        reasonCodes: [
+          ...new Set(decisions.flatMap((decision) => decision.reasonCodes)),
+        ],
+      }),
+    );
     const eligibleActionIds = new Set(
       eligibilityDecisions
         .filter((decision) => decision.eligible)
@@ -572,27 +618,80 @@ export class PureRecommendationDecisionEngine implements RecommendationDecisionE
       });
     }
 
-    const eligiblePrePolicyRanking = ranker.rank({
-      context,
-      candidates: eligibleCandidates,
-      eligibilityDecisions,
-      rankingStatistics,
-    });
-    const comparison = await shadowComparison({
-      dependencies: this.dependencies,
-      context,
-      eligibleCandidates,
-      baselineRanking: eligiblePrePolicyRanking,
-      commerceFacts,
-      promotionFacts,
-      rankingStatistics,
-    });
-    const merchandisingResolution = resolveMerchandisingPolicies({
-      context,
-      rankedCandidates: eligiblePrePolicyRanking,
-      policies: merchandising.snapshot.policies,
-      cartCategoryIds: cartCategoryIds(context, commerceFacts),
-    });
+    const eligiblePrePolicyRanking = await tracedStage(
+      trace,
+      {
+        name: 'recommendation.baseline_rank',
+        inputs: { candidateCount: eligibleCandidates.length },
+        metadata: {
+          ...correlation,
+          ranker_version: ranker.version,
+          feature_schema_version:
+            featureSchemaVersions[context.request.placement],
+        },
+      },
+      async () =>
+        ranker.rank({
+          context,
+          candidates: eligibleCandidates,
+          eligibilityDecisions,
+          rankingStatistics,
+        }),
+      (ranking) => ({ scoredCount: ranking.length }),
+    );
+    const comparison = await tracedStage(
+      trace,
+      {
+        name: 'recommendation.shadow_rank',
+        inputs: { candidateCount: eligibleCandidates.length },
+        metadata: {
+          ...correlation,
+          ...(this.dependencies.shadowScorer
+            ? { model_revision: this.dependencies.shadowScorer.modelRevision }
+            : {}),
+          feature_schema_version:
+            featureSchemaVersions[context.request.placement],
+        },
+      },
+      () =>
+        shadowComparison({
+          dependencies: this.dependencies,
+          context,
+          eligibleCandidates,
+          baselineRanking: eligiblePrePolicyRanking,
+          commerceFacts,
+          promotionFacts,
+          rankingStatistics,
+        }),
+      (shadow) => ({
+        shadowStatus: shadow.status,
+        outputMode: shadow.outputMode,
+        candidateCount: shadow.eligibleActionIds.length,
+      }),
+    );
+    const merchandisingResolution = await tracedStage(
+      trace,
+      {
+        name: 'recommendation.sanity_resolution',
+        inputs: { candidateCount: eligiblePrePolicyRanking.length },
+        metadata: {
+          ...correlation,
+          sanity_snapshot_id: merchandising.binding.snapshotId,
+          sanity_snapshot_digest: merchandising.binding.digest,
+        },
+      },
+      async () =>
+        resolveMerchandisingPolicies({
+          context,
+          rankedCandidates: eligiblePrePolicyRanking,
+          policies: merchandising.snapshot.policies,
+          cartCategoryIds: cartCategoryIds(context, commerceFacts),
+        }),
+      (resolution) => ({
+        policyCount: merchandising.snapshot.policies.length,
+        reasonCodes: resolution.reasonCodes,
+      }),
+    );
 
     if (merchandisingResolution.suppressed) {
       const technical: RecommendationDecisionTechnicalEvidence = {

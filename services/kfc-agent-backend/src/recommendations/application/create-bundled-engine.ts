@@ -4,7 +4,7 @@ import {
   BundledPromotionFactsRepository,
   BundledRankingStatisticsRepository,
 } from '../snapshots/bundled-repositories.js';
-import { PureRecommendationDecisionEngine } from './decision-engine.js';
+import { DefaultRecommendationDecisionEngine } from './decision-engine.js';
 import type {
   RecommendationDecisionEngine,
   RecommendationDecisionEngineDependencies,
@@ -13,7 +13,7 @@ import type {
 export function createRecommendationDecisionEngine(
   dependencies: RecommendationDecisionEngineDependencies,
 ): RecommendationDecisionEngine {
-  return new PureRecommendationDecisionEngine(dependencies);
+  return new DefaultRecommendationDecisionEngine(dependencies);
 }
 
 export function createBundledRecommendationDecisionEngine(

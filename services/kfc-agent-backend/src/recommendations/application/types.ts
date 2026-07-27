@@ -20,6 +20,7 @@ import type {
   RecommendationShadowComparison,
   RecommendationShadowScorer,
 } from '../shadow/contracts.js';
+import type { RecommendationTrace } from '../observability/recommendation-tracing.js';
 
 export type RecommendationDecisionEmptyReason =
   | null
@@ -49,6 +50,7 @@ export interface RecommendationDecisionResult {
 export interface RecommendationDecisionEngine {
   decide(
     context: RecommendationDecisionContext,
+    trace?: RecommendationTrace,
   ): Promise<RecommendationDecisionResult>;
 }
 

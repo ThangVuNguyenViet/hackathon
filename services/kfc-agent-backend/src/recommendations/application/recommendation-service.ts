@@ -51,6 +51,7 @@ import type {
   RecommendationShadowScorer,
 } from '../shadow/contracts.js';
 import type { MerchandisingPolicyRepository } from '../merchandising/repository.js';
+import { runRecommendationTrace } from '../observability/recommendation-tracing.js';
 
 const recommendationIdSchema = z.string().trim().min(1);
 const mutationOutcomeTypes = new Set<RecommendationOutcomeRequest['eventType']>(
@@ -431,115 +432,188 @@ export function createRecommendationApplicationService(
 
     async decide(input: RecommendationDecisionApplicationInput) {
       const parsed = parseRecommendationDecisionApplicationInput(input);
-      const requestFingerprint = await digestCommerceAction(parsed);
-      const reservationCreatedAt = dependencies.clock.now();
-      const ownerDigest = await digestCommerceAction(
-        `${parsed.request.requestId}:${requestFingerprint}`,
-      );
-      const ownerToken = `recommendation-owner:${ownerDigest.slice(0, 24)}`;
-      const reservation =
-        await dependencies.persistence.reserveRecommendationDecision({
-          sessionId: parsed.request.sessionId,
-          idempotencyKey: parsed.request.idempotencyKey,
-          requestId: parsed.request.requestId,
-          requestFingerprint,
-          ownerToken,
-          createdAt: reservationCreatedAt,
-        });
-      if (reservation.status === 'replay') {
-        return { status: 'replay', response: reservation.record.response };
-      }
-      if (reservation.status === 'pending') return { status: 'pending' };
-      if (reservation.status === 'conflict') {
-        return { status: 'idempotency_conflict' };
-      }
-
-      const loaded = await loadRecommendationPackState({
-        persistence: dependencies.persistence,
-        packState: dependencies.packState,
-        sessionId: parsed.request.sessionId,
-        orderFlowId: parsed.request.orderFlowId,
-      });
-      const requestedAt = decisionRequestInstant(
-        dependencies.clock.now(),
-        await dependencies.persistence.listRecommendationEvents({
-          sessionId: parsed.request.sessionId,
-        }),
-      );
-      const starterDecision =
-        parsed.request.placement === 'modifier_upsell'
-          ? await qualifyingStarterDecision(dependencies, loaded)
-          : undefined;
-      const context = await createRecommendationDecisionContext({
-        parsed: {
-          ...parsed,
-          state: loaded.state,
-          starterDecision,
+      return runRecommendationTrace({
+        tracer: dependencies.agentTracer,
+        name: 'recommendation.decide',
+        inputs: {},
+        metadata: {
+          session_id: parsed.request.sessionId,
+          order_flow_id: parsed.request.orderFlowId,
+          request_id: parsed.request.requestId,
+          policy_id: parsed.request.eligibilityPolicyVersion,
+          experiment_id: parsed.request.experimentProfile.profileId,
         },
-        historyRepository: dependencies.historyRepository,
-        contextSource: dependencies.contextSource,
-      });
-      const decision = await dependencies.decisionEngine.decide(context);
-      const completedAt = strictlyLaterCanonicalUtcInstant(
-        dependencies.clock.now(),
-        requestedAt,
-      );
-      let nextState: RecommendationState;
-      try {
-        nextState = applyDecision(
-          loaded.state,
-          decision.response,
-          parsed.request.decisionTime,
-          parsed.requestKind,
-        );
-      } catch (error) {
-        if (
-          error instanceof Error &&
-          error.message === 'recommendation_decision_not_eligible'
-        ) {
-          return { status: 'state_conflict' };
-        }
-        throw error;
-      }
-      const actionDigest = await digestCommerceAction(
-        decision.response.primaryOffer?.actions ?? [],
-      );
-      const decisionDigest = await digestCommerceAction(decision.response);
-      const versionBindingDigest = await digestCommerceAction(
-        decision.response.versionBindings,
-      );
-      const record: RecommendationDecisionRecord = {
-        request: parsed.request,
-        response: decision.response,
-        technical: decision.technical,
-        requestFingerprint,
-        actionDigest,
-        renderBinding: presentationBindingForDecision({
-          request: parsed.request,
-          response: decision.response,
-          requestFingerprint,
-          actionDigest,
-          decisionDigest,
-          versionBindingDigest,
-          customerId: parsed.trusted.presentationCustomerId ?? null,
+        run: async (trace) => {
+          const requestFingerprint = await digestCommerceAction(parsed);
+          const reservationCreatedAt = dependencies.clock.now();
+          const ownerDigest = await digestCommerceAction(
+            `${parsed.request.requestId}:${requestFingerprint}`,
+          );
+          const ownerToken = `recommendation-owner:${ownerDigest.slice(0, 24)}`;
+          const reservation = await trace.span(
+            {
+              name: 'recommendation.persistence',
+              inputs: {},
+              metadata: {
+                request_id: parsed.request.requestId,
+                request_digest: requestFingerprint,
+              },
+            },
+            () =>
+              dependencies.persistence.reserveRecommendationDecision({
+                sessionId: parsed.request.sessionId,
+                idempotencyKey: parsed.request.idempotencyKey,
+                requestId: parsed.request.requestId,
+                requestFingerprint,
+                ownerToken,
+                createdAt: reservationCreatedAt,
+              }),
+            (result) => ({
+              persistenceOperation: 'decision_reserve',
+              recommendationStatus: result.status,
+            }),
+          );
+          if (reservation.status === 'replay') {
+            return { status: 'replay', response: reservation.record.response };
+          }
+          if (reservation.status === 'pending') return { status: 'pending' };
+          if (reservation.status === 'conflict') {
+            return { status: 'idempotency_conflict' };
+          }
+
+          const loaded = await loadRecommendationPackState({
+            persistence: dependencies.persistence,
+            packState: dependencies.packState,
+            sessionId: parsed.request.sessionId,
+            orderFlowId: parsed.request.orderFlowId,
+          });
+          const requestedAt = decisionRequestInstant(
+            dependencies.clock.now(),
+            await dependencies.persistence.listRecommendationEvents({
+              sessionId: parsed.request.sessionId,
+            }),
+          );
+          const starterDecision =
+            parsed.request.placement === 'modifier_upsell'
+              ? await qualifyingStarterDecision(dependencies, loaded)
+              : undefined;
+          const context = await createRecommendationDecisionContext({
+            parsed: {
+              ...parsed,
+              state: loaded.state,
+              starterDecision,
+            },
+            historyRepository: dependencies.historyRepository,
+            contextSource: dependencies.contextSource,
+          });
+          const decision = await dependencies.decisionEngine.decide(
+            context,
+            trace,
+          );
+          const completedAt = strictlyLaterCanonicalUtcInstant(
+            dependencies.clock.now(),
+            requestedAt,
+          );
+          let nextState: RecommendationState;
+          try {
+            nextState = applyDecision(
+              loaded.state,
+              decision.response,
+              parsed.request.decisionTime,
+              parsed.requestKind,
+            );
+          } catch (error) {
+            if (
+              error instanceof Error &&
+              error.message === 'recommendation_decision_not_eligible'
+            ) {
+              return { status: 'state_conflict' };
+            }
+            throw error;
+          }
+          const actionDigest = await digestCommerceAction(
+            decision.response.primaryOffer?.actions ?? [],
+          );
+          const decisionDigest = await digestCommerceAction(decision.response);
+          const versionBindingDigest = await digestCommerceAction(
+            decision.response.versionBindings,
+          );
+          const record: RecommendationDecisionRecord = {
+            request: parsed.request,
+            response: decision.response,
+            technical: decision.technical,
+            requestFingerprint,
+            actionDigest,
+            renderBinding: presentationBindingForDecision({
+              request: parsed.request,
+              response: decision.response,
+              requestFingerprint,
+              actionDigest,
+              decisionDigest,
+              versionBindingDigest,
+              customerId: parsed.trusted.presentationCustomerId ?? null,
+            }),
+            stateRevisionBefore: loaded.state.revision,
+            stateRevisionAfter: nextState.revision,
+            recordedAt: completedAt,
+          };
+          const commit = await trace.span(
+            {
+              name: 'recommendation.persistence',
+              inputs: {},
+              metadata: {
+                request_id: parsed.request.requestId,
+                recommendation_id: decision.response.recommendationId,
+                trace_ref: decision.response.traceRef,
+                request_digest: requestFingerprint,
+                action_digest: actionDigest,
+                decision_digest: decisionDigest,
+                version_binding_digest: versionBindingDigest,
+              },
+            },
+            async () =>
+              dependencies.persistence.commitRecommendationDecision({
+                ownerToken,
+                expectedPackStateDigest: loaded.expectedDigest,
+                nextPackState: await nextEnvelope(
+                  dependencies,
+                  loaded,
+                  nextState,
+                ),
+                record,
+                events: await decisionEvents({
+                  record,
+                  requestedAt,
+                  completedAt,
+                }),
+              }),
+            (result) => ({
+              persistenceOperation: 'decision_commit',
+              recommendationStatus: result.status,
+              eventCount: 2,
+            }),
+          );
+          if (commit.status === 'stale') return { status: 'state_conflict' };
+          return {
+            status: commit.status === 'committed' ? 'decided' : 'replay',
+            response: commit.record.response,
+          };
+        },
+        summarize: (result) => ({
+          recommendationStatus: result.status,
+          ...(result.status === 'decided' || result.status === 'replay'
+            ? {
+                potentialCount: result.response.counts.potential,
+                eligibleCount: result.response.counts.eligible,
+                ineligibleCount: result.response.counts.ineligible,
+                scoredCount: result.response.counts.scored,
+                displayedCount: result.response.counts.displayed,
+                reasonCodes: result.response.reasonCodes,
+                decisionSource: result.response.decisionSource,
+              }
+            : {}),
         }),
-        stateRevisionBefore: loaded.state.revision,
-        stateRevisionAfter: nextState.revision,
-        recordedAt: completedAt,
-      };
-      const commit =
-        await dependencies.persistence.commitRecommendationDecision({
-          ownerToken,
-          expectedPackStateDigest: loaded.expectedDigest,
-          nextPackState: await nextEnvelope(dependencies, loaded, nextState),
-          record,
-          events: await decisionEvents({ record, requestedAt, completedAt }),
-        });
-      if (commit.status === 'stale') return { status: 'state_conflict' };
-      return {
-        status: commit.status === 'committed' ? 'decided' : 'replay',
-        response: commit.record.response,
-      };
+      });
     },
 
     async presentationFor(recommendationId, principal) {
@@ -617,126 +691,152 @@ export function createRecommendationApplicationService(
       const normalizedRecommendationId =
         recommendationIdSchema.parse(recommendationId);
       const request = parseRecommendationImpressionRequest(input);
-      const record = await dependencies.persistence.getRecommendationDecision(
-        normalizedRecommendationId,
-      );
-      if (!record) return { status: 'not_found' };
-      if (
-        record.response.status !== 'recommended' ||
-        !record.response.primaryOffer
-      ) {
-        return { status: 'stale_recommendation' };
-      }
-      const recommendationEvents =
-        await dependencies.persistence.listRecommendationEvents({
-          recommendationId: record.response.recommendationId,
-        });
-      const existing = recommendationEvents.find(
-        (candidate) => candidate.eventId === request.eventId,
-      );
-      const event = correlatedEventBase(record, {
-        eventId: request.eventId,
-        eventType: 'impression_rendered',
-        occurredAt: request.occurredAt,
-        recordedAt: existing?.recordedAt ?? dependencies.clock.now(),
-        actor: 'client',
-        actionId: null,
-        cartRevision: request.cartRevision,
-        payload: {
-          assistantTurnId: request.assistantTurnId,
-          attachmentId: request.attachmentId,
-          renderedActions: request.renderedActions,
-          actionDigest: request.actionDigest,
+      return runRecommendationTrace({
+        tracer: dependencies.agentTracer,
+        name: 'recommendation.impression',
+        inputs: {},
+        metadata: {
+          recommendation_id: normalizedRecommendationId,
+          event_id: request.eventId,
+          action_digest: request.actionDigest,
         },
-      });
-      const eventFingerprint = await digestCommerceAction(request);
-      const loaded = await loadRecommendationPackState({
-        persistence: dependencies.persistence,
-        packState: dependencies.packState,
-        sessionId: record.request.sessionId,
-        orderFlowId: record.request.orderFlowId,
-      });
-      if (
-        !(await hasCommittedRecommendationPublication(dependencies, record))
-      ) {
-        return { status: 'render_binding_conflict' };
-      }
-      if (existing) {
-        return mapAppendResult(
-          await dependencies.persistence.appendRecommendationEvent({
-            eventFingerprint,
-            event,
-            expectedPackStateDigest: loaded.expectedDigest!,
-            nextPackState: loaded.envelope!,
-          }),
-        );
-      }
-      const existingImpression = recommendationEvents.find(
-        (candidate) => candidate.eventType === 'impression_rendered',
-      );
-      if (existingImpression) {
-        const existingBinding = {
-          assistantTurnId: existingImpression.payload.assistantTurnId,
-          attachmentId: existingImpression.payload.attachmentId,
-          renderedActions: existingImpression.payload.renderedActions,
-          actionDigest: existingImpression.payload.actionDigest,
-          cartRevision: existingImpression.cartRevision,
-        };
-        const requestedBinding = {
-          assistantTurnId: request.assistantTurnId,
-          attachmentId: request.attachmentId,
-          renderedActions: request.renderedActions,
-          actionDigest: request.actionDigest,
-          cartRevision: request.cartRevision,
-        };
-        return canonicalJson(existingBinding) ===
-          canonicalJson(requestedBinding)
-          ? { status: 'replay', event: existingImpression }
-          : { status: 'render_binding_conflict' };
-      }
-      if (!(await isCurrentRecommendation(dependencies, loaded, record))) {
-        return { status: 'stale_recommendation' };
-      }
-      if (
-        request.cartRevision !== record.request.cartRevision ||
-        record.response.primaryOffer.actions.some(
-          (action) => action.cartRevision !== request.cartRevision,
-        )
-      ) {
-        return { status: 'cart_revision_conflict' };
-      }
-      const expectedRendered = record.response.primaryOffer.actions.map(
-        (action, index) => ({ actionId: action.actionId, position: index + 1 }),
-      );
-      if (
-        request.actionDigest !== record.actionDigest ||
-        request.assistantTurnId !== record.renderBinding.assistantTurnId ||
-        request.attachmentId !== record.renderBinding.attachmentId ||
-        canonicalJson(request.renderedActions) !==
-          canonicalJson(expectedRendered)
-      ) {
-        return { status: 'render_binding_conflict' };
-      }
-      const transitionEvent = parseRecommendationEvent({
-        ...event,
-        payload: {
-          renderedActionIds: request.renderedActions.map(
-            (rendered) => rendered.actionId,
-          ),
+        run: async () => {
+          const record =
+            await dependencies.persistence.getRecommendationDecision(
+              normalizedRecommendationId,
+            );
+          if (!record) return { status: 'not_found' };
+          if (
+            record.response.status !== 'recommended' ||
+            !record.response.primaryOffer
+          ) {
+            return { status: 'stale_recommendation' };
+          }
+          const recommendationEvents =
+            await dependencies.persistence.listRecommendationEvents({
+              recommendationId: record.response.recommendationId,
+            });
+          const existing = recommendationEvents.find(
+            (candidate) => candidate.eventId === request.eventId,
+          );
+          const event = correlatedEventBase(record, {
+            eventId: request.eventId,
+            eventType: 'impression_rendered',
+            occurredAt: request.occurredAt,
+            recordedAt: existing?.recordedAt ?? dependencies.clock.now(),
+            actor: 'client',
+            actionId: null,
+            cartRevision: request.cartRevision,
+            payload: {
+              assistantTurnId: request.assistantTurnId,
+              attachmentId: request.attachmentId,
+              renderedActions: request.renderedActions,
+              actionDigest: request.actionDigest,
+            },
+          });
+          const eventFingerprint = await digestCommerceAction(request);
+          const loaded = await loadRecommendationPackState({
+            persistence: dependencies.persistence,
+            packState: dependencies.packState,
+            sessionId: record.request.sessionId,
+            orderFlowId: record.request.orderFlowId,
+          });
+          if (
+            !(await hasCommittedRecommendationPublication(dependencies, record))
+          ) {
+            return { status: 'render_binding_conflict' };
+          }
+          if (existing) {
+            return mapAppendResult(
+              await dependencies.persistence.appendRecommendationEvent({
+                eventFingerprint,
+                event,
+                expectedPackStateDigest: loaded.expectedDigest!,
+                nextPackState: loaded.envelope!,
+              }),
+            );
+          }
+          const existingImpression = recommendationEvents.find(
+            (candidate) => candidate.eventType === 'impression_rendered',
+          );
+          if (existingImpression) {
+            const existingBinding = {
+              assistantTurnId: existingImpression.payload.assistantTurnId,
+              attachmentId: existingImpression.payload.attachmentId,
+              renderedActions: existingImpression.payload.renderedActions,
+              actionDigest: existingImpression.payload.actionDigest,
+              cartRevision: existingImpression.cartRevision,
+            };
+            const requestedBinding = {
+              assistantTurnId: request.assistantTurnId,
+              attachmentId: request.attachmentId,
+              renderedActions: request.renderedActions,
+              actionDigest: request.actionDigest,
+              cartRevision: request.cartRevision,
+            };
+            return canonicalJson(existingBinding) ===
+              canonicalJson(requestedBinding)
+              ? { status: 'replay', event: existingImpression }
+              : { status: 'render_binding_conflict' };
+          }
+          if (!(await isCurrentRecommendation(dependencies, loaded, record))) {
+            return { status: 'stale_recommendation' };
+          }
+          if (
+            request.cartRevision !== record.request.cartRevision ||
+            record.response.primaryOffer.actions.some(
+              (action) => action.cartRevision !== request.cartRevision,
+            )
+          ) {
+            return { status: 'cart_revision_conflict' };
+          }
+          const expectedRendered = record.response.primaryOffer.actions.map(
+            (action, index) => ({
+              actionId: action.actionId,
+              position: index + 1,
+            }),
+          );
+          if (
+            request.actionDigest !== record.actionDigest ||
+            request.assistantTurnId !== record.renderBinding.assistantTurnId ||
+            request.attachmentId !== record.renderBinding.attachmentId ||
+            canonicalJson(request.renderedActions) !==
+              canonicalJson(expectedRendered)
+          ) {
+            return { status: 'render_binding_conflict' };
+          }
+          const transitionEvent = parseRecommendationEvent({
+            ...event,
+            payload: {
+              renderedActionIds: request.renderedActions.map(
+                (rendered) => rendered.actionId,
+              ),
+            },
+          });
+          const nextState = applyRecommendationImpression(
+            loaded.state,
+            transitionEvent,
+          );
+          return mapAppendResult(
+            await dependencies.persistence.appendRecommendationEvent({
+              eventFingerprint,
+              event,
+              expectedPackStateDigest: loaded.expectedDigest!,
+              nextPackState: await nextEnvelope(
+                dependencies,
+                loaded,
+                nextState,
+              ),
+            }),
+          );
         },
-      });
-      const nextState = applyRecommendationImpression(
-        loaded.state,
-        transitionEvent,
-      );
-      return mapAppendResult(
-        await dependencies.persistence.appendRecommendationEvent({
-          eventFingerprint,
-          event,
-          expectedPackStateDigest: loaded.expectedDigest!,
-          nextPackState: await nextEnvelope(dependencies, loaded, nextState),
+        summarize: (result) => ({
+          recommendationStatus: result.status,
+          eventType: 'impression_rendered',
+          eventCount:
+            result.status === 'recorded' || result.status === 'replay' ? 1 : 0,
         }),
-      );
+      });
     },
 
     async recordOutcome(
@@ -746,97 +846,122 @@ export function createRecommendationApplicationService(
       const normalizedRecommendationId =
         recommendationIdSchema.parse(recommendationId);
       const request = parseRecommendationOutcomeRequest(input);
-      const record = await dependencies.persistence.getRecommendationDecision(
-        normalizedRecommendationId,
-      );
-      if (!record) return { status: 'not_found' };
-      if (
-        record.response.status !== 'recommended' ||
-        !record.response.primaryOffer
-      ) {
-        return { status: 'stale_recommendation' };
-      }
-      const existing = await existingEvent(
-        dependencies,
-        record,
-        request.eventId,
-      );
-      const event = correlatedEventBase(record, {
-        eventId: request.eventId,
-        eventType: request.eventType,
-        occurredAt: request.occurredAt,
-        recordedAt: existing?.recordedAt ?? dependencies.clock.now(),
-        actor: request.actor,
-        actionId: request.actionId,
-        cartRevision: request.cartRevision,
-        payload: {},
-      });
-      const eventFingerprint = await digestCommerceAction(request);
-      const loaded = await loadRecommendationPackState({
-        persistence: dependencies.persistence,
-        packState: dependencies.packState,
-        sessionId: record.request.sessionId,
-        orderFlowId: record.request.orderFlowId,
-      });
-      if (existing) {
-        return mapAppendResult(
-          await dependencies.persistence.appendRecommendationEvent({
-            eventFingerprint,
-            event,
-            expectedPackStateDigest: loaded.expectedDigest!,
-            nextPackState: loaded.envelope!,
-          }),
-        );
-      }
-      const currentRecommendation = await isCurrentRecommendation(
-        dependencies,
-        loaded,
-        record,
-      );
-      if (!currentRecommendation) {
-        return { status: 'stale_recommendation' };
-      }
-      const actionIds = offeredActionIds(record);
-      if (request.actionId !== null && !actionIds.includes(request.actionId)) {
-        return { status: 'render_binding_conflict' };
-      }
-      if (request.cartRevision === null) {
-        if (!terminalOutcomeTypes.has(request.eventType)) {
-          return { status: 'cart_revision_conflict' };
-        }
-      } else if (
-        !mutationOutcomeTypes.has(request.eventType) &&
-        request.cartRevision !== record.request.cartRevision
-      ) {
-        return { status: 'cart_revision_conflict' };
-      }
-      let nextState: RecommendationState;
-      try {
-        nextState =
-          currentRecommendation === 'customer_requested'
-            ? applyCustomerRequestedRecommendationOutcome(
-                loaded.state,
+      return runRecommendationTrace({
+        tracer: dependencies.agentTracer,
+        name: 'recommendation.outcome',
+        inputs: {},
+        metadata: {
+          recommendation_id: normalizedRecommendationId,
+          event_id: request.eventId,
+        },
+        run: async () => {
+          const record =
+            await dependencies.persistence.getRecommendationDecision(
+              normalizedRecommendationId,
+            );
+          if (!record) return { status: 'not_found' };
+          if (
+            record.response.status !== 'recommended' ||
+            !record.response.primaryOffer
+          ) {
+            return { status: 'stale_recommendation' };
+          }
+          const existing = await existingEvent(
+            dependencies,
+            record,
+            request.eventId,
+          );
+          const event = correlatedEventBase(record, {
+            eventId: request.eventId,
+            eventType: request.eventType,
+            occurredAt: request.occurredAt,
+            recordedAt: existing?.recordedAt ?? dependencies.clock.now(),
+            actor: request.actor,
+            actionId: request.actionId,
+            cartRevision: request.cartRevision,
+            payload: {},
+          });
+          const eventFingerprint = await digestCommerceAction(request);
+          const loaded = await loadRecommendationPackState({
+            persistence: dependencies.persistence,
+            packState: dependencies.packState,
+            sessionId: record.request.sessionId,
+            orderFlowId: record.request.orderFlowId,
+          });
+          if (existing) {
+            return mapAppendResult(
+              await dependencies.persistence.appendRecommendationEvent({
+                eventFingerprint,
                 event,
-                actionIds,
-              )
-            : applyRecommendationOutcome(loaded.state, event, actionIds);
-      } catch (error) {
-        if (
-          error instanceof Error &&
-          error.message === 'recommendation_outcome_not_pending'
-        ) {
-          return { status: 'stale_recommendation' };
-        }
-        throw error;
-      }
-      return mapAppendResult(
-        await dependencies.persistence.appendRecommendationEvent({
-          eventFingerprint,
-          event,
-          expectedPackStateDigest: loaded.expectedDigest!,
-          nextPackState: await nextEnvelope(dependencies, loaded, nextState),
+                expectedPackStateDigest: loaded.expectedDigest!,
+                nextPackState: loaded.envelope!,
+              }),
+            );
+          }
+          const currentRecommendation = await isCurrentRecommendation(
+            dependencies,
+            loaded,
+            record,
+          );
+          if (!currentRecommendation) {
+            return { status: 'stale_recommendation' };
+          }
+          const actionIds = offeredActionIds(record);
+          if (
+            request.actionId !== null &&
+            !actionIds.includes(request.actionId)
+          ) {
+            return { status: 'render_binding_conflict' };
+          }
+          if (request.cartRevision === null) {
+            if (!terminalOutcomeTypes.has(request.eventType)) {
+              return { status: 'cart_revision_conflict' };
+            }
+          } else if (
+            !mutationOutcomeTypes.has(request.eventType) &&
+            request.cartRevision !== record.request.cartRevision
+          ) {
+            return { status: 'cart_revision_conflict' };
+          }
+          let nextState: RecommendationState;
+          try {
+            nextState =
+              currentRecommendation === 'customer_requested'
+                ? applyCustomerRequestedRecommendationOutcome(
+                    loaded.state,
+                    event,
+                    actionIds,
+                  )
+                : applyRecommendationOutcome(loaded.state, event, actionIds);
+          } catch (error) {
+            if (
+              error instanceof Error &&
+              error.message === 'recommendation_outcome_not_pending'
+            ) {
+              return { status: 'stale_recommendation' };
+            }
+            throw error;
+          }
+          return mapAppendResult(
+            await dependencies.persistence.appendRecommendationEvent({
+              eventFingerprint,
+              event,
+              expectedPackStateDigest: loaded.expectedDigest!,
+              nextPackState: await nextEnvelope(
+                dependencies,
+                loaded,
+                nextState,
+              ),
+            }),
+          );
+        },
+        summarize: (result) => ({
+          recommendationStatus: result.status,
+          eventType: request.eventType,
+          eventCount:
+            result.status === 'recorded' || result.status === 'replay' ? 1 : 0,
         }),
-      );
+      });
     },
   };
 }
