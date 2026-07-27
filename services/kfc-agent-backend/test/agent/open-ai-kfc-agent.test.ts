@@ -1,15 +1,12 @@
 import { describe, expect, it, vi } from 'vitest';
+import { z } from 'zod';
 import { OpenAiKfcAgent } from '../../src/agent/openAiKfcAgent.js';
 import type { OpenAiCompactionEvent } from '../../src/agent/observedOpenAiResponsesCompactionSession.js';
-import {
-  assistant,
-  user,
-  type FunctionTool,
-  type OpenAIClient,
-} from '@kfc/openai-agents-runtime';
+import { assistant, user, type OpenAIClient } from '@kfc/openai-agents-runtime';
 import {
   createKfcOpenAiAgentsTools,
   type KfcCanonicalTool,
+  type KfcOpenAiFunctionTool,
   type KfcOpenAiAgentRunContext,
 } from '../../src/agent/kfcOpenAiTools.js';
 import { MemoryStore } from '../../src/persistence/memoryStore.js';
@@ -78,7 +75,7 @@ function sequencedClient(
 function canonicalTool(input: {
   name: ToolName;
   execute: (arguments_: Record<string, unknown>) => Promise<unknown>;
-}): FunctionTool<KfcOpenAiAgentRunContext> {
+}): KfcOpenAiFunctionTool {
   const canonical: KfcCanonicalTool = {
     definition: {
       type: 'function',
@@ -91,6 +88,12 @@ function canonicalTool(input: {
         additionalProperties: false,
       },
       strict: true,
+    },
+    parseArguments(value: unknown) {
+      const parsed = z.record(z.unknown()).safeParse(value);
+      return parsed.success
+        ? { success: true, data: parsed.data }
+        : { success: false };
     },
     execute: input.execute,
   };
@@ -255,14 +258,21 @@ describe('OpenAiKfcAgent SDK Runner', () => {
             name: 'searchMenu',
             execute: async (arguments_) => {
               executed.push(arguments_);
-              return { toolName: 'searchMenu', ok: true, value: { total: 1 } };
+              return {
+                toolName: 'searchMenu',
+                ok: true,
+                value: {
+                  total: 1,
+                  items: [{ code: '20751', name: 'Combo Hợp Gu 99K' }],
+                },
+              };
             },
           }),
         ],
       }),
     );
 
-    expect(executed).toEqual([{ query: 'combo', mode: 'search' }]);
+    expect(executed).toEqual([{ query: 'combo' }]);
     expect(result).toMatchObject({
       responseText: 'Mình tìm thấy Combo Hợp Gu 99K.',
       toolCalls: [{ name: 'searchMenu', arguments: { query: 'combo' } }],
@@ -299,7 +309,10 @@ describe('OpenAiKfcAgent SDK Runner', () => {
             execute: async () => ({
               toolName: 'searchMenu',
               ok: true,
-              value: { total: 1 },
+              value: {
+                total: 1,
+                items: [{ code: '20751', name: 'Combo Hợp Gu 99K' }],
+              },
             }),
           }),
         ],
@@ -571,7 +584,7 @@ describe('OpenAiKfcAgent SDK Runner', () => {
     expect(result.assistantTurn.role).toBe('assistant');
   });
 
-  it('instructs the model to report only verified completed effects and exact mutation results', async () => {
+  it('uses positive customer-output and action-completion contracts', async () => {
     const requests: Array<Record<string, unknown>> = [];
     const agent = new OpenAiKfcAgent({
       client: sequencedClient(
@@ -584,18 +597,33 @@ describe('OpenAiKfcAgent SDK Runner', () => {
     await agent.respond(createTurn());
 
     expect(requests[0]?.instructions).toContain(
-      'only when a successful mutation result',
+      'A successful mutation result or current verified business state establishes a completed effect',
     );
     expect(requests[0]?.instructions).toContain(
       'exact quantities and totals from the latest verified result',
     );
     expect(requests[0]?.instructions).toContain(
-      'Never invent placeholder customer',
+      'Use null for customer fields that have not been supplied',
     );
     expect(requests[0]?.instructions).toContain(
-      'Do not stop at a proposal or ask for another confirmation',
+      'select from verified candidates and make one atomic updateCart call',
     );
-    expect(requests[0]?.instructions).toContain('qualitative party size');
+    expect(requests[0]?.instructions).toContain(
+      'A recommendation alone leaves that delegated request unfinished',
+    );
+    expect(requests[0]?.instructions).toContain(
+      'Treat a stated budget as the maximum resulting verified cart total',
+    );
+    expect(requests[0]?.instructions).toContain(
+      'exact answer to a choice you just asked',
+    );
+    expect(requests[0]?.instructions).toContain(
+      'Back every cart line mutation with an exact matching item',
+    );
+    expect(requests[0]?.instructions).not.toContain('qualitative party size');
+    expect(requests[0]?.instructions).not.toContain(
+      'Treat a stated budget as a maximum',
+    );
     expect(requests[0]?.instructions).toContain(
       'latest customer message as the task for this turn',
     );
@@ -605,7 +633,75 @@ describe('OpenAiKfcAgent SDK Runner', () => {
     expect(requests[0]?.instructions).toContain(
       'broad category result as a candidate set',
     );
-    expect(requests[0]?.instructions).toContain('Honor explicit output scope');
+    expect(requests[0]?.instructions).toContain(
+      'obtain the candidate’s modifier details for each remaining option requirement',
+    );
+    expect(requests[0]?.instructions).toContain(
+      'Use getModifierOptions to supply evidence for every remaining requirement',
+    );
+    expect(requests[0]?.instructions).toContain(
+      'Write only customer-useful information',
+    );
+    expect(requests[0]?.instructions).toContain(
+      'Keep capability execution, retrieval mechanics, and evidence bookkeeping implicit',
+    );
+    expect(requests[0]?.instructions).toContain(
+      'A zero-result read describes the submitted filter scope',
+    );
+    expect(requests[0]?.instructions).toContain(
+      'Build capability arguments from explicit customer constraints and current verified state',
+    );
+    expect(requests[0]?.instructions).toContain(
+      'Complete that corrected read before responding',
+    );
+    expect(requests[0]?.instructions).toContain(
+      'remove every inferred filter and search the supplied identity alone',
+    );
+    expect(requests[0]?.instructions).toContain(
+      'decompose the intersection into candidate discovery',
+    );
+    expect(requests[0]?.instructions).toContain(
+      'inspect each candidate with the relevant detail capability',
+    );
+    expect(requests[0]?.instructions).toContain(
+      'An omitted optional add-on is represented by leaving it unselected',
+    );
+    expect(requests[0]?.instructions).toContain(
+      'make one atomic updateCart call containing the complete selected change set',
+    );
+    expect(requests[0]?.instructions).toContain(
+      'calculate the proposed aggregate total from verified per-item prices and quantities',
+    );
+    expect(requests[0]?.instructions).toContain(
+      'make a corrected atomic update before replying',
+    );
+    expect(requests[0]?.instructions).toContain(
+      'A selected standalone add-on is a separate menu item change',
+    );
+    expect(requests[0]?.instructions).toContain('# Capability examples');
+    expect(requests[0]?.instructions).toContain(
+      '“Add one Named Product” → searchMenu with the supplied product name as query',
+    );
+    expect(requests[0]?.instructions).toContain(
+      '“Choose food and drinks for me under Budget” → search verified candidates',
+    );
+    expect(requests[0]?.instructions).toContain(
+      'then make one updateCart call with that complete selection',
+    );
+    expect(requests[0]?.instructions).toContain(
+      '“Choose for a group” without a numeric group size leaves partySize unset',
+    );
+    expect(requests[0]?.instructions).toContain(
+      'Lead with the requested products, outcome, or natural clarification',
+    );
+    expect(requests[0]?.instructions).toContain('Có Pepsi, 7Up và Lipton');
+    expect(requests[0]).toMatchObject({
+      temperature: 0,
+      parallel_tool_calls: false,
+    });
+    expect(requests[0]?.instructions).not.toMatch(
+      /Never expose|Do not present internal|Missing data is not proof|Do not repeat an identical failed call/iu,
+    );
   });
 
   it('sanitizes verified identifiers before persisting the customer response', async () => {
@@ -797,7 +893,10 @@ describe('OpenAiKfcAgent SDK Runner', () => {
             execute: async () => ({
               toolName: 'searchMenu',
               ok: true,
-              value: { total: 1 },
+              value: {
+                total: 1,
+                items: [{ code: '20751', name: 'Combo Hợp Gu 99K' }],
+              },
             }),
           }),
         ],

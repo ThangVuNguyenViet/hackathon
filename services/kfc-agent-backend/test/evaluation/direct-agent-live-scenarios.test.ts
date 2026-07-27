@@ -125,8 +125,18 @@ describe('direct Agents SDK live scenarios', () => {
         'modifier-preservation-through-checkout',
         'genui-selection-and-cart-actions',
         'sdk-compaction-continuity',
+        'customer-safe-presentation',
       ]),
     );
+    expect(
+      DIRECT_AGENT_MANUAL_REGRESSION_BANK.filter(
+        ({ coverage }) => coverage === 'customer-safe-presentation',
+      ).map(({ id }) => id),
+    ).toEqual([
+      'regression-presentation-drink-language',
+      'regression-presentation-modifier-language',
+      'regression-presentation-catalog-scope',
+    ]);
     expect(
       DIRECT_AGENT_MANUAL_REGRESSION_BANK.flatMap(({ turns }) => turns).some(
         ({ kind }) => kind === 'trusted_action',

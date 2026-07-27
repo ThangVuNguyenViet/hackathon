@@ -4,13 +4,29 @@ import {
   type OpenAIClient,
 } from '@kfc/openai-agents-runtime';
 import { describe, expect, it, vi } from 'vitest';
+import { z } from 'zod';
 import {
   createKfcOpenAiAgentsTools,
   type KfcCanonicalTool,
   type KfcOpenAiAgentRunContext,
+  type KfcStrictJsonObjectSchema,
 } from '../../src/agent/kfcOpenAiTools.js';
 import { OpenAiKfcAgent } from '../../src/agent/openAiKfcAgent.js';
 import { MemoryStore } from '../../src/persistence/memoryStore.js';
+
+const strictObjectParameters: KfcStrictJsonObjectSchema = {
+  type: 'object',
+  properties: {},
+  required: [],
+  additionalProperties: false,
+};
+
+function parseObjectArguments(value: unknown) {
+  const parsed = z.record(z.unknown()).safeParse(value);
+  return parsed.success
+    ? { success: true as const, data: parsed.data }
+    : { success: false as const };
+}
 
 describe('KFC OpenAI Agents SDK tools', () => {
   it('rejects invalid canonical arguments before trusted SDK execution and records safe evidence', async () => {
@@ -20,9 +36,10 @@ describe('KFC OpenAI Agents SDK tools', () => {
         type: 'function',
         name: 'updateCart',
         description: 'Update the cart.',
-        parameters: { type: 'object' },
+        parameters: strictObjectParameters,
         strict: true,
       },
+      parseArguments: () => ({ success: false }),
       execute: executed,
     };
     const context = new RunContext<KfcOpenAiAgentRunContext>({
@@ -67,9 +84,10 @@ describe('KFC OpenAI Agents SDK tools', () => {
         type: 'function',
         name: 'updateCart',
         description: 'Update the cart.',
-        parameters: { type: 'object' },
+        parameters: strictObjectParameters,
         strict: true,
       },
+      parseArguments: parseObjectArguments,
       execute: async () => {
         throw new Error(rawSecret);
       },
@@ -112,9 +130,10 @@ describe('KFC OpenAI Agents SDK tools', () => {
         type: 'function',
         name: 'updateCart',
         description: 'Update the cart.',
-        parameters: { type: 'object' },
+        parameters: strictObjectParameters,
         strict: true,
       },
+      parseArguments: parseObjectArguments,
       execute: async (_arguments, options) => {
         await new Promise((resolve) => setTimeout(resolve, 50));
         if (options?.signal.aborted) return { ok: false, cancelled: true };
@@ -167,9 +186,10 @@ describe('KFC OpenAI Agents SDK tools', () => {
         type: 'function',
         name: 'placeOrder',
         description: 'Place order.',
-        parameters: { type: 'object' },
+        parameters: strictObjectParameters,
         strict: true,
       },
+      parseArguments: parseObjectArguments,
       execute: async () => {
         await new Promise((resolve) => setTimeout(resolve, 20));
         effect();
@@ -204,9 +224,10 @@ describe('KFC OpenAI Agents SDK tools', () => {
         type: 'function',
         name: 'searchMenu',
         description: 'Read.',
-        parameters: { type: 'object' },
+        parameters: strictObjectParameters,
         strict: true,
       },
+      parseArguments: parseObjectArguments,
       execute: async () => {
         await new Promise((resolve) => setTimeout(resolve, 1));
         return { ok: false, errorCode: 'agent_tool_execution_cancelled' };
@@ -243,6 +264,7 @@ describe('KFC OpenAI Agents SDK tools', () => {
         },
         strict: true,
       },
+      parseArguments: parseObjectArguments,
       execute: async (arguments_) => {
         executed.push(arguments_);
         return {

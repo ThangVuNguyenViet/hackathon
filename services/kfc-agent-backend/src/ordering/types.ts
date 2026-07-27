@@ -37,9 +37,7 @@ export interface MenuSearchInput {
   query?: string;
   mode?: MenuSearchMode;
   category?: string;
-  minPriceVnd?: number;
   maxPriceVnd?: number;
-  maxPriceExclusiveVnd?: number;
   partySize?: number;
   modifierQueries?: string[];
 }

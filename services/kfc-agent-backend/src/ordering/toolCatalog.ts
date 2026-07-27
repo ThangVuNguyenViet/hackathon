@@ -109,7 +109,7 @@ export const toolArgumentSchemas = {
         .optional()
         .default('')
         .describe(
-          'Concise product, identifier, alias, or product-composition terms selected from the customer intent. Put components named in an item or description here, not in modifierQueries. Leave empty for category-wide browsing and put the category wording only in category. Do not pass the full customer sentence.',
+          'Concise product, identifier, alias, or product-composition terms selected from the customer intent. For a named product lookup, use the verified or customer-supplied product name as the query and add another filter only when that constraint was supplied or verified. Omit generic intent nouns that are not product facts. Put components named in an item or description here, not in modifierQueries. Leave empty for category-wide browsing and put the category wording only in category. Use concise search terms rather than the full customer sentence.',
         ),
       mode: z
         .enum(['search', 'full'])
@@ -123,15 +123,7 @@ export const toolArgumentSchemas = {
         .min(1)
         .optional()
         .describe(
-          'Optional normalized partial or complete fixture category wording selected by the model.',
-        ),
-      minPriceVnd: z
-        .number()
-        .int()
-        .nonnegative()
-        .optional()
-        .describe(
-          'Inclusive per-item price floor in VND. Use this with maxPriceVnd to narrow the candidate interval around a remaining aggregate-budget gap; the model still chooses products and quantities.',
+          'Exact verified menu category value supplied by the current catalog. All supplied fields form one intersection, so add category when it is itself part of the requested or verified scope.',
         ),
       maxPriceVnd: z
         .number()
@@ -139,15 +131,7 @@ export const toolArgumentSchemas = {
         .nonnegative()
         .optional()
         .describe(
-          'Inclusive per-item price ceiling in VND for wording such as at most or up to. Do not use this for a strict below-price request. This is not an aggregate cart limit; for a total recommendation budget, combine returned priceVnd values.',
-        ),
-      maxPriceExclusiveVnd: z
-        .number()
-        .int()
-        .positive()
-        .optional()
-        .describe(
-          'Exclusive per-item price boundary in VND. For a strict request such as below 30,000 VND, pass 30000 here so every returned item has priceVnd < 30000. Do not subtract one and do not use maxPriceVnd for that request.',
+          'Inclusive per-item price ceiling in VND. This is not an aggregate cart limit.',
         ),
       partySize: z
         .number()
@@ -162,7 +146,7 @@ export const toolArgumentSchemas = {
         .min(1)
         .optional()
         .describe(
-          'Independent terms using wording exposed by the selectable option, all intended to match the same item. Keep negation when it is part of the desired option name, such as không cay; for an omitted optional add-on, pass its target wording, such as phô mai. Use this for selectable choices, not product components named in an item or description. Only matchedModifiers is verified selectable-option evidence.',
+          'Independent terms using wording exposed by the selectable option; use this for an option that should be selected or verified as configurable. Every entry must match the same item. Keep negation when it is part of the desired option name, such as không cay. A request to leave an add-on unselected is fulfilled by omitting that modifier from a later cart change; include its target wording here only when finding items where that add-on is configurable. Use this for selectable choices, not product components named in an item or description. Only matchedModifiers is verified selectable-option evidence.',
         ),
     })
     .strict(),
