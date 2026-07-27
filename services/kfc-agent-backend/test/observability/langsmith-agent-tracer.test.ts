@@ -81,6 +81,7 @@ describe('LangSmith agent tracer boundary', () => {
     });
     const privateText =
       'Authorization: Bearer private-token; deliver to 18 Le Loi';
+    const privateSessionId = 'messenger:+84901234567:thread-customer-1';
     const turn = await tracer.startTurn({
       name: 'kfc_agent_turn',
       inputs: {
@@ -90,7 +91,7 @@ describe('LangSmith agent tracer boundary', () => {
         providerPayload: { secret: privateText },
       },
       metadata: {
-        session_id: 'kfc:session-1',
+        session_id: privateSessionId,
         run_id: 'run-1',
         turn_id: 'turn-1',
         pack_id: 'kfc-vietnam',
@@ -132,7 +133,7 @@ describe('LangSmith agent tracer boundary', () => {
       structuredAction: false,
     });
     expect(roots[0]!.config.metadata).toEqual({
-      session_id: 'kfc:session-1',
+      session_id_digest: 'a'.repeat(64),
       run_id: 'run-1',
       turn_id: 'turn-1',
       pack_id: 'kfc-vietnam',
@@ -156,6 +157,7 @@ describe('LangSmith agent tracer boundary', () => {
     });
     expect(JSON.stringify(roots)).not.toContain(privateText);
     expect(JSON.stringify(roots)).not.toContain('sk-private');
+    expect(JSON.stringify(roots)).not.toContain(privateSessionId);
   });
 
   it('sanitizes every summary with a strict whitelist', () => {
@@ -213,7 +215,12 @@ describe('LangSmith agent tracer boundary', () => {
         scoredCount: 4,
         displayedCount: 1,
         policyCount: 2,
-        reasonCodes: ['popular_here', 'already_in_cart', privateText],
+        reasonCodes: [
+          'popular_here',
+          'already_in_cart',
+          'event_append_recorded',
+          privateText,
+        ],
         decisionSource: 'ranked',
         shadowStatus: 'succeeded',
         outputMode: 'baseline',
@@ -236,13 +243,7 @@ describe('LangSmith agent tracer boundary', () => {
       scoredCount: 4,
       displayedCount: 1,
       policyCount: 2,
-      reasonCodes: ['popular_here', 'already_in_cart'],
-      recommendationStatus: 'cart_revision_conflict',
-      decisionSource: 'ranked',
-      shadowStatus: 'succeeded',
-      outputMode: 'baseline',
-      eventType: 'impression_rendered',
-      persistenceOperation: 'decision_commit',
+      reasonCodes: ['popular_here', 'already_in_cart', 'event_append_recorded'],
     });
   });
 

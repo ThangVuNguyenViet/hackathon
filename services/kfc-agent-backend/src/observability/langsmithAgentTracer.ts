@@ -48,7 +48,6 @@ function privacySafeLangSmithMetadata(
 ): Record<string, unknown> {
   const safe: Record<string, unknown> = {};
   for (const key of [
-    'session_id',
     'run_id',
     'turn_id',
     'pack_id',
@@ -81,9 +80,11 @@ function privacySafeLangSmithMetadata(
     }
   }
   for (const key of [
+    'session_id_digest',
     'request_digest',
     'action_digest',
     'decision_digest',
+    'event_digest',
     'version_binding_digest',
     'sanity_snapshot_digest',
   ] as const) {
@@ -135,70 +136,24 @@ const safeProviderErrorClasses = new Set([
 ]);
 const safeSpanStatuses = new Set(['completed', 'interrupted', 'paused']);
 const safeExecutionOutcomes = new Set(['error', 'success']);
-const safeRecommendationStatuses = new Set([
-  'committed',
-  'conflict',
-  'created',
-  'cart_revision_conflict',
-  'decided',
-  'empty',
-  'idempotency_conflict',
-  'ineligible_context',
-  'invalid_context',
-  'not_found',
-  'pending',
-  'recorded',
-  'recommended',
-  'render_binding_conflict',
-  'replay',
-  'stale',
-  'stale_recommendation',
-  'state_conflict',
-  'suppressed',
-]);
-const safeDecisionSources = new Set([
-  'fallback',
-  'merchandising_replacement',
-  'ranked',
-  'suppressed',
-]);
-const safeShadowStatuses = new Set([
-  'failed',
-  'not_applicable',
-  'not_configured',
-  'succeeded',
-]);
-const safeRecommendationOutputModes = new Set([
-  'baseline',
-  'learned_technical',
-]);
-const safeRecommendationEventTypes = new Set([
-  'candidate_eligibility_summary',
-  'cart_mutation_failed',
-  'cart_mutation_succeeded',
-  'checkout_completed',
-  'decision_completed',
-  'decision_requested',
-  'explicitly_dismissed',
-  'ignored',
-  'impression_rendered',
-  'order_abandoned',
-  'order_cancelled',
-  'selected',
-  'superseded',
-]);
-const safePersistenceOperations = new Set([
-  'decision_commit',
-  'decision_reserve',
-  'event_append',
-]);
 const safeRecommendationReasonCodes = new Set([
   'active_offer',
   'already_in_cart',
   'catalog_unavailable',
   'completes_your_item',
   'completes_your_meal',
+  'decision_commit_committed',
+  'decision_commit_replay',
+  'decision_commit_stale',
+  'decision_reserve_conflict',
+  'decision_reserve_pending',
+  'decision_reserve_replay',
+  'decision_reserve_reserved',
   'eligible',
+  'event_append_conflict',
+  'event_append_recorded',
+  'event_append_replay',
+  'event_append_stale',
   'invalid_context',
   'matches_your_history',
   'merchandising_selection',
@@ -216,6 +171,10 @@ const safeRecommendationReasonCodes = new Set([
   'previously_rejected',
   'previously_shown',
   'store_unavailable',
+  'shadow_rank_failed',
+  'shadow_rank_not_applicable',
+  'shadow_rank_not_configured',
+  'shadow_rank_succeeded',
   'verified_dietary_exclusion',
   'verified_history_required',
   'zero_history_required',
@@ -318,22 +277,6 @@ export function privacySafeLangSmithOutputs(
   copySafeEnum(safe, outputs, 'status', safeSpanStatuses);
   copySafeEnum(safe, outputs, 'executionOutcome', safeExecutionOutcomes);
   copySafeEnum(safe, outputs, 'destination', safeGraphDestinations);
-  copySafeEnum(
-    safe,
-    outputs,
-    'recommendationStatus',
-    safeRecommendationStatuses,
-  );
-  copySafeEnum(safe, outputs, 'decisionSource', safeDecisionSources);
-  copySafeEnum(safe, outputs, 'shadowStatus', safeShadowStatuses);
-  copySafeEnum(safe, outputs, 'outputMode', safeRecommendationOutputModes);
-  copySafeEnum(safe, outputs, 'eventType', safeRecommendationEventTypes);
-  copySafeEnum(
-    safe,
-    outputs,
-    'persistenceOperation',
-    safePersistenceOperations,
-  );
   if (Array.isArray(outputs.reasonCodes)) {
     safe.reasonCodes = outputs.reasonCodes.filter(
       (reason): reason is string =>

@@ -509,38 +509,12 @@ export class DefaultRecommendationDecisionEngine implements RecommendationDecisi
       merchandising,
     });
     const outputMode = this.dependencies.shadowOutputMode ?? 'baseline';
-
-    if (
-      !authoritativeContextIsValid({
-        context,
-        rankingStatistics,
-        promotionFacts,
-        merchandising,
-      })
-    ) {
-      const technical: RecommendationDecisionTechnicalEvidence = {
-        potentialCandidates: [],
-        eligibilityDecisions: [],
-        eligiblePrePolicyRanking: [],
-        merchandisingResolution: noMerchandisingResolution(),
-        emptyReason: 'invalid_context',
-        shadowComparison: inactiveShadowComparison({
-          outputMode,
-          status: 'not_applicable',
-        }),
-      };
-      return completeResult({
-        context,
-        technical,
-        versionBindings,
-        complete,
-        status: 'invalid_context',
-        decisionSource: 'fallback',
-        selected: [],
-        merchandisingEffects: [],
-      });
-    }
-
+    const contextValid = authoritativeContextIsValid({
+      context,
+      rankingStatistics,
+      promotionFacts,
+      merchandising,
+    });
     const correlation = { request_id: context.request.requestId };
     const potentialCandidates = await tracedStage(
       trace,
@@ -550,12 +524,17 @@ export class DefaultRecommendationDecisionEngine implements RecommendationDecisi
         metadata: correlation,
       },
       async () =>
-        enumeratePotentialCandidates({
-          context,
-          commerceFacts,
-          promotionFacts,
-        }),
-      (candidates) => ({ candidateCount: candidates.length }),
+        contextValid
+          ? enumeratePotentialCandidates({
+              context,
+              commerceFacts,
+              promotionFacts,
+            })
+          : [],
+      (candidates) => ({
+        candidateCount: candidates.length,
+        ...(contextValid ? {} : { reasonCodes: ['invalid_context'] }),
+      }),
     );
     const eligibilityDecisions = await tracedStage(
       trace,
@@ -568,19 +547,21 @@ export class DefaultRecommendationDecisionEngine implements RecommendationDecisi
         },
       },
       () =>
-        evaluateEligibility({
-          context,
-          candidates: potentialCandidates,
-          commerceFacts,
-        }),
+        contextValid
+          ? evaluateEligibility({
+              context,
+              candidates: potentialCandidates,
+              commerceFacts,
+            })
+          : Promise.resolve([]),
       (decisions) => ({
         candidateCount: decisions.length,
         eligibleCount: decisions.filter((decision) => decision.eligible).length,
         ineligibleCount: decisions.filter((decision) => !decision.eligible)
           .length,
-        reasonCodes: [
-          ...new Set(decisions.flatMap((decision) => decision.reasonCodes)),
-        ],
+        reasonCodes: contextValid
+          ? [...new Set(decisions.flatMap((decision) => decision.reasonCodes))]
+          : ['invalid_context'],
       }),
     );
     const eligibleActionIds = new Set(
@@ -591,32 +572,11 @@ export class DefaultRecommendationDecisionEngine implements RecommendationDecisi
     const eligibleCandidates = potentialCandidates.filter((candidate) =>
       eligibleActionIds.has(candidate.action.actionId),
     );
-    if (eligibleCandidates.length === 0) {
-      const emptyReason = emptyReasonFor(context, eligibilityDecisions);
-      const technical: RecommendationDecisionTechnicalEvidence = {
-        potentialCandidates,
-        eligibilityDecisions,
-        eligiblePrePolicyRanking: [],
-        merchandisingResolution: noMerchandisingResolution(),
-        emptyReason,
-        shadowComparison: inactiveShadowComparison({
-          outputMode,
-          status: 'not_applicable',
-          eligibleActionIds: [],
-          baselineOrderingActionIds: [],
-        }),
-      };
-      return completeResult({
-        context,
-        technical,
-        versionBindings,
-        complete,
-        status: statusForEmptyReason(emptyReason),
-        decisionSource: 'fallback',
-        selected: [],
-        merchandisingEffects: [],
-      });
-    }
+    const emptyReason =
+      contextValid && eligibleCandidates.length === 0
+        ? emptyReasonFor(context, eligibilityDecisions)
+        : null;
+    const skippedStageReason = contextValid ? emptyReason : 'invalid_context';
 
     const eligiblePrePolicyRanking = await tracedStage(
       trace,
@@ -631,13 +591,18 @@ export class DefaultRecommendationDecisionEngine implements RecommendationDecisi
         },
       },
       async () =>
-        ranker.rank({
-          context,
-          candidates: eligibleCandidates,
-          eligibilityDecisions,
-          rankingStatistics,
-        }),
-      (ranking) => ({ scoredCount: ranking.length }),
+        skippedStageReason
+          ? []
+          : ranker.rank({
+              context,
+              candidates: eligibleCandidates,
+              eligibilityDecisions,
+              rankingStatistics,
+            }),
+      (ranking) => ({
+        scoredCount: ranking.length,
+        ...(skippedStageReason ? { reasonCodes: [skippedStageReason] } : {}),
+      }),
     );
     const comparison = await tracedStage(
       trace,
@@ -654,19 +619,29 @@ export class DefaultRecommendationDecisionEngine implements RecommendationDecisi
         },
       },
       () =>
-        shadowComparison({
-          dependencies: this.dependencies,
-          context,
-          eligibleCandidates,
-          baselineRanking: eligiblePrePolicyRanking,
-          commerceFacts,
-          promotionFacts,
-          rankingStatistics,
-        }),
+        skippedStageReason
+          ? Promise.resolve(
+              inactiveShadowComparison({
+                outputMode,
+                status: 'not_applicable',
+                eligibleActionIds: [],
+                baselineOrderingActionIds: [],
+              }),
+            )
+          : shadowComparison({
+              dependencies: this.dependencies,
+              context,
+              eligibleCandidates,
+              baselineRanking: eligiblePrePolicyRanking,
+              commerceFacts,
+              promotionFacts,
+              rankingStatistics,
+            }),
       (shadow) => ({
-        shadowStatus: shadow.status,
-        outputMode: shadow.outputMode,
         candidateCount: shadow.eligibleActionIds.length,
+        reasonCodes: skippedStageReason
+          ? [skippedStageReason]
+          : [`shadow_rank_${shadow.status}`],
       }),
     );
     const merchandisingResolution = await tracedStage(
@@ -681,17 +656,65 @@ export class DefaultRecommendationDecisionEngine implements RecommendationDecisi
         },
       },
       async () =>
-        resolveMerchandisingPolicies({
-          context,
-          rankedCandidates: eligiblePrePolicyRanking,
-          policies: merchandising.snapshot.policies,
-          cartCategoryIds: cartCategoryIds(context, commerceFacts),
-        }),
+        skippedStageReason
+          ? noMerchandisingResolution()
+          : resolveMerchandisingPolicies({
+              context,
+              rankedCandidates: eligiblePrePolicyRanking,
+              policies: merchandising.snapshot.policies,
+              cartCategoryIds: cartCategoryIds(context, commerceFacts),
+            }),
       (resolution) => ({
-        policyCount: merchandising.snapshot.policies.length,
-        reasonCodes: resolution.reasonCodes,
+        policyCount: skippedStageReason
+          ? 0
+          : merchandising.snapshot.policies.length,
+        reasonCodes: skippedStageReason
+          ? [skippedStageReason]
+          : resolution.reasonCodes,
       }),
     );
+
+    if (!contextValid) {
+      const technical: RecommendationDecisionTechnicalEvidence = {
+        potentialCandidates,
+        eligibilityDecisions,
+        eligiblePrePolicyRanking,
+        merchandisingResolution,
+        emptyReason: 'invalid_context',
+        shadowComparison: comparison,
+      };
+      return completeResult({
+        context,
+        technical,
+        versionBindings,
+        complete,
+        status: 'invalid_context',
+        decisionSource: 'fallback',
+        selected: [],
+        merchandisingEffects: [],
+      });
+    }
+
+    if (emptyReason) {
+      const technical: RecommendationDecisionTechnicalEvidence = {
+        potentialCandidates,
+        eligibilityDecisions,
+        eligiblePrePolicyRanking,
+        merchandisingResolution,
+        emptyReason,
+        shadowComparison: comparison,
+      };
+      return completeResult({
+        context,
+        technical,
+        versionBindings,
+        complete,
+        status: statusForEmptyReason(emptyReason),
+        decisionSource: 'fallback',
+        selected: [],
+        merchandisingEffects: [],
+      });
+    }
 
     if (merchandisingResolution.suppressed) {
       const technical: RecommendationDecisionTechnicalEvidence = {

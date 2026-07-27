@@ -48,6 +48,7 @@ describe('recommendation tracing boundary', () => {
     });
     const privateText =
       'Zinger at 99000 for 4111111111111111, deliver to 18 Le Loi';
+    const privateSessionId = 'messenger:+84901234567:thread-customer-1';
 
     const result = await runRecommendationTrace({
       tracer,
@@ -57,7 +58,8 @@ describe('recommendation tracing boundary', () => {
         customerMessage: privateText,
       },
       metadata: {
-        session_id: 'session-observability-1',
+        session_id: privateSessionId,
+        session_id_digest: 'b'.repeat(64),
         order_flow_id: 'order-flow-observability-1',
         request_id: 'request-observability-1',
         request_digest: 'a'.repeat(64),
@@ -93,14 +95,13 @@ describe('recommendation tracing boundary', () => {
       name: 'recommendation.decide',
       inputs: { candidateCount: 3 },
       metadata: {
-        session_id: 'session-observability-1',
+        session_id_digest: 'b'.repeat(64),
         order_flow_id: 'order-flow-observability-1',
         request_id: 'request-observability-1',
         request_digest: 'a'.repeat(64),
       },
     });
     expect(roots[0]!.ended?.outputs).toMatchObject({
-      recommendationStatus: 'recommended',
       potentialCount: 3,
     });
     expect(roots[0]!.children).toHaveLength(1);
@@ -115,6 +116,7 @@ describe('recommendation tracing boundary', () => {
     expect(JSON.stringify(roots)).not.toContain(privateText);
     expect(JSON.stringify(roots)).not.toContain('Zinger');
     expect(JSON.stringify(roots)).not.toContain('ranking.example');
+    expect(JSON.stringify(roots)).not.toContain(privateSessionId);
   });
 
   it('never changes recommendation behavior when tracing throws', async () => {

@@ -720,10 +720,10 @@ describe('Recommendation application service', () => {
       'recommendation.outcome',
     ]);
     expect(tracer.roots[0]!.input.metadata).toMatchObject({
-      session_id: request.sessionId,
       order_flow_id: request.orderFlowId,
       request_id: request.requestId,
     });
+    expect(tracer.roots[0]!.input.metadata).not.toHaveProperty('session_id');
     expect(tracer.roots[0]!.children.map((child) => child.input.name)).toEqual([
       'recommendation.persistence',
       'recommendation.persistence',
@@ -734,7 +734,6 @@ describe('Recommendation application service', () => {
       trace_ref: decision.response.traceRef,
     });
     expect(tracer.roots[0]!.outputs).toMatchObject({
-      recommendationStatus: 'decided',
       potentialCount: 1,
       displayedCount: 1,
     });
@@ -742,13 +741,37 @@ describe('Recommendation application service', () => {
       recommendation_id: decision.response.recommendationId,
       event_id: impression.event.eventId,
     });
+    expect(tracer.roots[1]!.children).toHaveLength(1);
+    expect(tracer.roots[1]!.children[0]!.input).toMatchObject({
+      name: 'recommendation.persistence',
+      metadata: {
+        recommendation_id: decision.response.recommendationId,
+        request_id: request.requestId,
+        event_id: impression.event.eventId,
+      },
+    });
+    expect(tracer.roots[1]!.children[0]!.outputs).toMatchObject({
+      eventCount: 1,
+      reasonCodes: ['event_append_recorded'],
+      durationMs: expect.any(Number),
+    });
     expect(tracer.roots[2]!.input.metadata).toMatchObject({
       recommendation_id: decision.response.recommendationId,
       event_id: outcome.event.eventId,
     });
-    expect(tracer.roots[2]!.outputs).toMatchObject({
-      recommendationStatus: 'recorded',
-      eventType: 'explicitly_dismissed',
+    expect(tracer.roots[2]!.children).toHaveLength(1);
+    expect(tracer.roots[2]!.children[0]!.input).toMatchObject({
+      name: 'recommendation.persistence',
+      metadata: {
+        recommendation_id: decision.response.recommendationId,
+        request_id: request.requestId,
+        event_id: outcome.event.eventId,
+      },
+    });
+    expect(tracer.roots[2]!.children[0]!.outputs).toMatchObject({
+      eventCount: 1,
+      reasonCodes: ['event_append_recorded'],
+      durationMs: expect.any(Number),
     });
   });
 

@@ -21,7 +21,13 @@ import {
   compareCanonicalUtcInstants,
   strictlyLaterCanonicalUtcInstant,
 } from '../domain/canonical-instant.js';
-import type { RecommendationDecisionRecord } from '../persistence/repository.js';
+import type {
+  AppendRecommendationEventInput,
+  AppendRecommendationEventResult,
+  CommitRecommendationDecisionResult,
+  RecommendationDecisionRecord,
+  ReserveRecommendationDecisionResult,
+} from '../persistence/repository.js';
 import { presentationBindingForDecision } from '../persistence/types.js';
 import {
   applyCustomerRequestedRecommendationDecision,
@@ -51,7 +57,10 @@ import type {
   RecommendationShadowScorer,
 } from '../shadow/contracts.js';
 import type { MerchandisingPolicyRepository } from '../merchandising/repository.js';
-import { runRecommendationTrace } from '../observability/recommendation-tracing.js';
+import {
+  runRecommendationTrace,
+  type RecommendationTrace,
+} from '../observability/recommendation-tracing.js';
 
 const recommendationIdSchema = z.string().trim().min(1);
 const mutationOutcomeTypes = new Set<RecommendationOutcomeRequest['eventType']>(
@@ -60,6 +69,46 @@ const mutationOutcomeTypes = new Set<RecommendationOutcomeRequest['eventType']>(
 const terminalOutcomeTypes = new Set<RecommendationOutcomeRequest['eventType']>(
   ['checkout_completed', 'order_abandoned', 'order_cancelled'],
 );
+
+function reservationReasonCode(
+  result: ReserveRecommendationDecisionResult,
+): string {
+  return `decision_reserve_${result.status}`;
+}
+
+function commitReasonCode(result: CommitRecommendationDecisionResult): string {
+  return `decision_commit_${result.status}`;
+}
+
+function appendReasonCode(result: AppendRecommendationEventResult): string {
+  return `event_append_${result.status}`;
+}
+
+async function appendRecommendationEventTraced(input: {
+  trace: RecommendationTrace;
+  dependencies: RecommendationApplicationServiceDependencies;
+  append: AppendRecommendationEventInput;
+}): Promise<AppendRecommendationEventResult> {
+  const { event, eventFingerprint } = input.append;
+  return input.trace.span(
+    {
+      name: 'recommendation.persistence',
+      inputs: {},
+      metadata: {
+        recommendation_id: event.recommendationId,
+        request_id: event.requestId,
+        event_id: event.eventId,
+        event_digest: eventFingerprint,
+      },
+    },
+    () =>
+      input.dependencies.persistence.appendRecommendationEvent(input.append),
+    (result) => ({
+      eventCount: 1,
+      reasonCodes: [appendReasonCode(result)],
+    }),
+  );
+}
 async function decisionEventId(
   requestId: string,
   eventType: 'decision_requested' | 'decision_completed',
@@ -437,7 +486,6 @@ export function createRecommendationApplicationService(
         name: 'recommendation.decide',
         inputs: {},
         metadata: {
-          session_id: parsed.request.sessionId,
           order_flow_id: parsed.request.orderFlowId,
           request_id: parsed.request.requestId,
           policy_id: parsed.request.eligibilityPolicyVersion,
@@ -469,8 +517,7 @@ export function createRecommendationApplicationService(
                 createdAt: reservationCreatedAt,
               }),
             (result) => ({
-              persistenceOperation: 'decision_reserve',
-              recommendationStatus: result.status,
+              reasonCodes: [reservationReasonCode(result)],
             }),
           );
           if (reservation.status === 'replay') {
@@ -588,9 +635,8 @@ export function createRecommendationApplicationService(
                 }),
               }),
             (result) => ({
-              persistenceOperation: 'decision_commit',
-              recommendationStatus: result.status,
               eventCount: 2,
+              reasonCodes: [commitReasonCode(result)],
             }),
           );
           if (commit.status === 'stale') return { status: 'state_conflict' };
@@ -600,7 +646,6 @@ export function createRecommendationApplicationService(
           };
         },
         summarize: (result) => ({
-          recommendationStatus: result.status,
           ...(result.status === 'decided' || result.status === 'replay'
             ? {
                 potentialCount: result.response.counts.potential,
@@ -609,7 +654,6 @@ export function createRecommendationApplicationService(
                 scoredCount: result.response.counts.scored,
                 displayedCount: result.response.counts.displayed,
                 reasonCodes: result.response.reasonCodes,
-                decisionSource: result.response.decisionSource,
               }
             : {}),
         }),
@@ -700,7 +744,7 @@ export function createRecommendationApplicationService(
           event_id: request.eventId,
           action_digest: request.actionDigest,
         },
-        run: async () => {
+        run: async (trace) => {
           const record =
             await dependencies.persistence.getRecommendationDecision(
               normalizedRecommendationId,
@@ -748,11 +792,15 @@ export function createRecommendationApplicationService(
           }
           if (existing) {
             return mapAppendResult(
-              await dependencies.persistence.appendRecommendationEvent({
-                eventFingerprint,
-                event,
-                expectedPackStateDigest: loaded.expectedDigest!,
-                nextPackState: loaded.envelope!,
+              await appendRecommendationEventTraced({
+                trace,
+                dependencies,
+                append: {
+                  eventFingerprint,
+                  event,
+                  expectedPackStateDigest: loaded.expectedDigest!,
+                  nextPackState: loaded.envelope!,
+                },
               }),
             );
           }
@@ -818,21 +866,23 @@ export function createRecommendationApplicationService(
             transitionEvent,
           );
           return mapAppendResult(
-            await dependencies.persistence.appendRecommendationEvent({
-              eventFingerprint,
-              event,
-              expectedPackStateDigest: loaded.expectedDigest!,
-              nextPackState: await nextEnvelope(
-                dependencies,
-                loaded,
-                nextState,
-              ),
+            await appendRecommendationEventTraced({
+              trace,
+              dependencies,
+              append: {
+                eventFingerprint,
+                event,
+                expectedPackStateDigest: loaded.expectedDigest!,
+                nextPackState: await nextEnvelope(
+                  dependencies,
+                  loaded,
+                  nextState,
+                ),
+              },
             }),
           );
         },
         summarize: (result) => ({
-          recommendationStatus: result.status,
-          eventType: 'impression_rendered',
           eventCount:
             result.status === 'recorded' || result.status === 'replay' ? 1 : 0,
         }),
@@ -854,7 +904,7 @@ export function createRecommendationApplicationService(
           recommendation_id: normalizedRecommendationId,
           event_id: request.eventId,
         },
-        run: async () => {
+        run: async (trace) => {
           const record =
             await dependencies.persistence.getRecommendationDecision(
               normalizedRecommendationId,
@@ -890,11 +940,15 @@ export function createRecommendationApplicationService(
           });
           if (existing) {
             return mapAppendResult(
-              await dependencies.persistence.appendRecommendationEvent({
-                eventFingerprint,
-                event,
-                expectedPackStateDigest: loaded.expectedDigest!,
-                nextPackState: loaded.envelope!,
+              await appendRecommendationEventTraced({
+                trace,
+                dependencies,
+                append: {
+                  eventFingerprint,
+                  event,
+                  expectedPackStateDigest: loaded.expectedDigest!,
+                  nextPackState: loaded.envelope!,
+                },
               }),
             );
           }
@@ -943,21 +997,23 @@ export function createRecommendationApplicationService(
             throw error;
           }
           return mapAppendResult(
-            await dependencies.persistence.appendRecommendationEvent({
-              eventFingerprint,
-              event,
-              expectedPackStateDigest: loaded.expectedDigest!,
-              nextPackState: await nextEnvelope(
-                dependencies,
-                loaded,
-                nextState,
-              ),
+            await appendRecommendationEventTraced({
+              trace,
+              dependencies,
+              append: {
+                eventFingerprint,
+                event,
+                expectedPackStateDigest: loaded.expectedDigest!,
+                nextPackState: await nextEnvelope(
+                  dependencies,
+                  loaded,
+                  nextState,
+                ),
+              },
             }),
           );
         },
         summarize: (result) => ({
-          recommendationStatus: result.status,
-          eventType: request.eventType,
           eventCount:
             result.status === 'recorded' || result.status === 'replay' ? 1 : 0,
         }),

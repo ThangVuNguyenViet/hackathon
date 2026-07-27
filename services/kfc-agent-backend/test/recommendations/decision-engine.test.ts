@@ -361,11 +361,121 @@ describe('recommendation decision engine', () => {
       },
       { scoredCount: expect.any(Number), durationMs: expect.any(Number) },
       {
-        shadowStatus: 'not_applicable',
+        reasonCodes: ['shadow_rank_not_applicable'],
         durationMs: expect.any(Number),
       },
       { policyCount: expect.any(Number), durationMs: expect.any(Number) },
     ]);
+  });
+
+  it('emits every decision stage with zero counts for an invalid context', async () => {
+    const root = new RecordingTraceSpan({
+      name: 'recommendation.decide',
+      runType: 'chain',
+      inputs: {},
+    });
+    const context = makeContext();
+    context.request = parseRecommendationDecisionRequest({
+      ...context.request,
+      commerceSnapshotBindings: {
+        ...context.request.commerceSnapshotBindings,
+        catalog: {
+          ...context.request.commerceSnapshotBindings.catalog,
+          complete: false,
+        },
+      },
+    });
+
+    const result = await bundledEngine.decide(
+      context,
+      new RecommendationTrace(root),
+    );
+
+    expect(result.response.status).toBe('invalid_context');
+    expect(root.children.map((child) => child.input.name)).toEqual([
+      'recommendation.enumeration',
+      'recommendation.eligibility',
+      'recommendation.baseline_rank',
+      'recommendation.shadow_rank',
+      'recommendation.sanity_resolution',
+    ]);
+    expect(root.children.map((child) => child.outputs)).toMatchObject([
+      {
+        candidateCount: 0,
+        reasonCodes: ['invalid_context'],
+        durationMs: expect.any(Number),
+      },
+      {
+        candidateCount: 0,
+        eligibleCount: 0,
+        ineligibleCount: 0,
+        reasonCodes: ['invalid_context'],
+        durationMs: expect.any(Number),
+      },
+      {
+        scoredCount: 0,
+        reasonCodes: ['invalid_context'],
+        durationMs: expect.any(Number),
+      },
+      {
+        candidateCount: 0,
+        reasonCodes: ['invalid_context'],
+        durationMs: expect.any(Number),
+      },
+      {
+        policyCount: 0,
+        reasonCodes: ['invalid_context'],
+        durationMs: expect.any(Number),
+      },
+    ]);
+  });
+
+  it('emits skipped rank, shadow, and Sanity stages when no candidate is eligible', async () => {
+    const root = new RecordingTraceSpan({
+      name: 'recommendation.decide',
+      runType: 'chain',
+      inputs: {},
+    });
+    const context = makeContext({
+      flow: {
+        stage: 'starter_ready',
+        attemptedPlacements: ['local_favorite'],
+        previouslyShownActionIds: [],
+        rejectedActionIds: [],
+      },
+    });
+
+    const result = await bundledEngine.decide(
+      context,
+      new RecommendationTrace(root),
+    );
+
+    expect(result.response.status).toBe('ineligible_context');
+    expect(root.children.map((child) => child.input.name)).toEqual([
+      'recommendation.enumeration',
+      'recommendation.eligibility',
+      'recommendation.baseline_rank',
+      'recommendation.shadow_rank',
+      'recommendation.sanity_resolution',
+    ]);
+    expect(root.children[0]!.outputs).toMatchObject({
+      candidateCount: expect.any(Number),
+      durationMs: expect.any(Number),
+    });
+    expect(root.children[1]!.outputs).toMatchObject({
+      eligibleCount: 0,
+      reasonCodes: expect.arrayContaining(['placement_already_attempted']),
+      durationMs: expect.any(Number),
+    });
+    for (const child of root.children.slice(2)) {
+      expect(child.outputs).toMatchObject({
+        reasonCodes: ['placement_already_attempted'],
+        durationMs: expect.any(Number),
+      });
+    }
+    expect(root.children[2]!.outputs).toMatchObject({ scoredCount: 0 });
+    expect(root.children[3]!.outputs).toMatchObject({ candidateCount: 0 });
+    expect(root.children[4]!.outputs).toMatchObject({ policyCount: 0 });
   });
 
   it('recommends one real anonymous Local Favorite with complete evidence', async () => {
