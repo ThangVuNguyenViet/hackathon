@@ -462,9 +462,9 @@ async function multiFlowSessionFixture(firstFlowComplete: boolean) {
       placement: 'local_favorite',
     }),
     sessionId,
-    orderFlowId: 'order-flow-multi-a',
-    requestId: 'rec-request-multi-a',
-    idempotencyKey: 'rec-idempotency-multi-a',
+    orderFlowId: 'order-flow-multi-z',
+    requestId: 'rec-request-multi-z',
+    idempotencyKey: 'rec-idempotency-multi-z',
   });
   if (firstFlowComplete) {
     await store.putPackState(
@@ -499,9 +499,9 @@ async function multiFlowSessionFixture(firstFlowComplete: boolean) {
       placement: 'local_favorite',
     }),
     sessionId,
-    orderFlowId: 'order-flow-multi-z',
-    requestId: 'rec-request-multi-z',
-    idempotencyKey: 'rec-idempotency-multi-z',
+    orderFlowId: 'order-flow-multi-a',
+    requestId: 'rec-request-multi-a',
+    idempotencyKey: 'rec-idempotency-multi-a',
   });
   await store.putPackState(
     sessionId,
@@ -516,7 +516,7 @@ async function multiFlowSessionFixture(firstFlowComplete: boolean) {
     }),
   );
   await service.decide({ request: secondRequest });
-  return { inspection, sessionId, secondRequest };
+  return { inspection, sessionId, store, firstRequest, secondRequest };
 }
 
 describe('Recommendation application service', () => {
@@ -1007,7 +1007,48 @@ describe('Recommendation application service', () => {
     });
   });
 
-  it('selects the latest session order flow when both flows have revision one', async () => {
+  it('advances persisted decision chronology across session order flows under a fixed clock', async () => {
+    const { sessionId, store, firstRequest, secondRequest } =
+      await multiFlowSessionFixture(false);
+    const events = await store.listRecommendationEvents({ sessionId });
+    const recordedAt = [
+      events.find(
+        (event) =>
+          event.requestId === firstRequest.requestId &&
+          event.eventType === 'decision_requested',
+      )!.recordedAt,
+      events.find(
+        (event) =>
+          event.requestId === firstRequest.requestId &&
+          event.eventType === 'decision_completed',
+      )!.recordedAt,
+      events.find(
+        (event) =>
+          event.requestId === secondRequest.requestId &&
+          event.eventType === 'decision_requested',
+      )!.recordedAt,
+      events.find(
+        (event) =>
+          event.requestId === secondRequest.requestId &&
+          event.eventType === 'decision_completed',
+      )!.recordedAt,
+    ];
+
+    expect(recordedAt).toEqual([
+      '2026-07-27T09:30:00Z',
+      '2026-07-27T09:30:00.1Z',
+      '2026-07-27T09:30:00.11Z',
+      '2026-07-27T09:30:00.111Z',
+    ]);
+    expect(
+      recordedAt.slice(1).every(
+        (instant, index) =>
+          compareCanonicalUtcInstants(recordedAt[index]!, instant) === -1,
+      ),
+    ).toBe(true);
+  });
+
+  it('selects the later revision-one session flow when recommendation IDs sort opposite insertion order', async () => {
     const { inspection, sessionId, secondRequest } =
       await multiFlowSessionFixture(false);
 

@@ -2,6 +2,7 @@ import type {
   RecommendationEvent,
   RecommendationState,
 } from '../domain/contracts.js';
+import { compareCanonicalUtcInstants } from '../domain/canonical-instant.js';
 import { digestCommerceAction } from '../../ordering/commerceDigest.js';
 import type { RecommendationDecisionRecord } from '../persistence/repository.js';
 import type { RecommendationDecisionTechnicalEvidence } from './types.js';
@@ -113,13 +114,27 @@ async function decisionsForEvents(
   return records as RecommendationDecisionRecord[];
 }
 
+function compareRecordedAtDescending(
+  left: RecommendationDecisionRecord,
+  right: RecommendationDecisionRecord,
+): number {
+  const comparison = compareCanonicalUtcInstants(
+    right.recordedAt,
+    left.recordedAt,
+  );
+  if (comparison === null) {
+    throw new Error('recommendation_decision_recorded_at_invalid');
+  }
+  return comparison;
+}
+
 function latestOrderFlowDecision(
   records: readonly RecommendationDecisionRecord[],
 ): RecommendationDecisionRecord | undefined {
   return [...records].sort(
     (left, right) =>
       right.stateRevisionAfter - left.stateRevisionAfter ||
-      right.recordedAt.localeCompare(left.recordedAt) ||
+      compareRecordedAtDescending(left, right) ||
       right.response.recommendationId.localeCompare(
         left.response.recommendationId,
       ),
@@ -131,7 +146,7 @@ function latestSessionDecision(
 ): RecommendationDecisionRecord | undefined {
   return [...records].sort(
     (left, right) =>
-      right.recordedAt.localeCompare(left.recordedAt) ||
+      compareRecordedAtDescending(left, right) ||
       right.response.recommendationId.localeCompare(
         left.response.recommendationId,
       ),

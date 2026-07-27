@@ -16,7 +16,10 @@ import {
   parseRecommendationImpressionRequest,
   parseRecommendationOutcomeRequest,
 } from '../domain/schemas.js';
-import { strictlyLaterCanonicalUtcInstant } from '../domain/canonical-instant.js';
+import {
+  compareCanonicalUtcInstants,
+  strictlyLaterCanonicalUtcInstant,
+} from '../domain/canonical-instant.js';
 import type { RecommendationDecisionRecord } from '../persistence/repository.js';
 import {
   applyCustomerRequestedRecommendationDecision,
@@ -122,6 +125,36 @@ async function decisionEvents(input: {
       },
     }),
   ];
+}
+
+function maximumPersistedEventInstant(
+  events: readonly RecommendationEvent[],
+): string | undefined {
+  let maximum: string | undefined;
+  for (const event of events) {
+    for (const instant of [event.occurredAt, event.recordedAt]) {
+      if (maximum === undefined) {
+        maximum = instant;
+        continue;
+      }
+      const comparison = compareCanonicalUtcInstants(instant, maximum);
+      if (comparison === null) {
+        throw new Error('canonical_utc_instant_invalid');
+      }
+      if (comparison > 0) maximum = instant;
+    }
+  }
+  return maximum;
+}
+
+function decisionRequestInstant(
+  currentClockInstant: string,
+  persistedEvents: readonly RecommendationEvent[],
+): string {
+  const durableMaximum = maximumPersistedEventInstant(persistedEvents);
+  return durableMaximum === undefined
+    ? currentClockInstant
+    : strictlyLaterCanonicalUtcInstant(currentClockInstant, durableMaximum);
 }
 
 function applyDecision(
@@ -305,7 +338,7 @@ export function createRecommendationApplicationService(
     async decide(input: RecommendationDecisionApplicationInput) {
       const parsed = parseRecommendationDecisionApplicationInput(input);
       const requestFingerprint = await digestCommerceAction(parsed);
-      const requestedAt = dependencies.clock.now();
+      const reservationCreatedAt = dependencies.clock.now();
       const ownerDigest = await digestCommerceAction(
         `${parsed.request.requestId}:${requestFingerprint}`,
       );
@@ -317,7 +350,7 @@ export function createRecommendationApplicationService(
           requestId: parsed.request.requestId,
           requestFingerprint,
           ownerToken,
-          createdAt: requestedAt,
+          createdAt: reservationCreatedAt,
         });
       if (reservation.status === 'replay') {
         return { status: 'replay', response: reservation.record.response };
@@ -333,6 +366,12 @@ export function createRecommendationApplicationService(
         sessionId: parsed.request.sessionId,
         orderFlowId: parsed.request.orderFlowId,
       });
+      const requestedAt = decisionRequestInstant(
+        dependencies.clock.now(),
+        await dependencies.persistence.listRecommendationEvents({
+          sessionId: parsed.request.sessionId,
+        }),
+      );
       const starterDecision =
         parsed.request.placement === 'modifier_upsell'
           ? await qualifyingStarterDecision(dependencies, loaded)

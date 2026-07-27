@@ -219,6 +219,18 @@ describe('recommendation domain contracts', () => {
         '2028-02-29T00:00:00.1002Z',
       ),
     ).toBe(-1);
+    expect(
+      compareCanonicalUtcInstants(
+        '2028-02-29T00:00:00.1002Z',
+        '2028-02-29T00:00:00.10021Z',
+      ),
+    ).toBe(-1);
+    expect(
+      compareCanonicalUtcInstants(
+        '2028-02-29T00:00:00.1Z',
+        '2028-02-29T00:00:00.10Z',
+      ),
+    ).toBe(0);
   });
 
   it('advances a repeated canonical instant without losing fractional precision', () => {
