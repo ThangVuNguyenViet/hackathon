@@ -3,6 +3,7 @@ import { mkdtemp, readFile, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
+import type { LiveScenarioHttpClient } from '../../src/liveEvidence/liveScenarioHttpClient.js';
 import { startLiveScenarioSession } from '../../src/liveEvidence/liveScenarioSession.js';
 
 describe('live scenario terminal evidence', () => {
@@ -24,9 +25,10 @@ describe('live scenario terminal evidence', () => {
     expect(manifest.status).toBe('abandoned');
     expect(manifest.completedAt).toBeTypeOf('string');
     for (const fileName of [
-      'preflight.json',
+      'environment.json',
       'trace.jsonl',
       'transcript.md',
+      'evidence-packet.json',
       'codex-review-packet.md',
     ]) {
       expect(manifest.evidence.artifactSha256[fileName]).toBe(
@@ -41,7 +43,11 @@ describe('live scenario terminal evidence', () => {
       .trim()
       .split('\n')
       .map((line) => JSON.parse(line) as { type: string; reason?: string });
-    expect(trace.slice(-3)).toMatchObject([
+    expect(
+      trace.filter(({ type }) =>
+        ['protocol_error', 'session_interrupted'].includes(type),
+      ),
+    ).toMatchObject([
       { type: 'protocol_error' },
       { type: 'protocol_error' },
       { type: 'session_interrupted', reason: 'stdin_eof' },
@@ -64,6 +70,47 @@ describe('live scenario terminal evidence', () => {
         await readFile(join(session.runDirectory, 'manifest.json'), 'utf8'),
       ),
     ).toMatchObject({ status: 'completed' });
+  });
+
+  it('fails closed while preserving an incomplete protected D1 envelope', async () => {
+    const input = await fixture('incomplete');
+    input.gateway.d1Evidence = async () => ({
+      proofEnvelope: {
+        complete: false,
+        missing: ['recommendations.finalState'],
+        sessionId: 'kfc:live-incomplete',
+      },
+    });
+    const session = await startLiveScenarioSession(input);
+
+    await expect(session.finish('Reviewer requested completion.')).rejects.toThrow(
+      'live_scenario_d1_evidence_incomplete',
+    );
+    await session.interrupt('control_error');
+
+    const manifest = JSON.parse(
+      await readFile(join(session.runDirectory, 'manifest.json'), 'utf8'),
+    );
+    const packet = JSON.parse(
+      await readFile(
+        join(session.runDirectory, 'evidence-packet.json'),
+        'utf8',
+      ),
+    );
+    expect(manifest).toMatchObject({ status: 'failed' });
+    expect(packet).toMatchObject({
+      status: 'failed',
+      d1: {
+        proofEnvelope: {
+          complete: false,
+          missing: ['recommendations.finalState'],
+        },
+      },
+      finishNote: 'Reviewer requested completion.',
+    });
+    expect(
+      await readFile(join(session.runDirectory, 'transcript.md'), 'utf8'),
+    ).toContain('d1_evidence_incomplete');
   });
 });
 
@@ -91,30 +138,44 @@ async function fixture(runId: string) {
       risks: ['Abandonment must be visible.'],
     })}\n`,
   );
-  const identity = {
-    candidateId: 'deepseek-v4-flash',
-    provider: 'opencode',
-    model: 'deepseek-v4-flash',
-    profile: 'opencode:deepseek-v4-flash:chat-completions',
-    transport: 'openai_compatible_chat',
-  } as const;
+  const gateway: LiveScenarioHttpClient = {
+    environment: async () => ({
+      release: { gitSha: 'service-commit' },
+      proof: {
+        versions: {
+          agent: { candidateId: 'openai-gpt-4.1-mini' },
+        },
+      },
+    }),
+    submitUserMessage: async () => ({
+      responseText: 'unused',
+      assistantTurnId: 'assistant-unused',
+    }),
+    submitAction: async () => ({
+      responseText: 'unused',
+      assistantTurnId: 'assistant-action-unused',
+    }),
+    recordRecommendationImpression: async () => undefined,
+    d1Evidence: async () => ({
+      proofEnvelope: {
+        complete: true,
+        missing: [],
+        sessionId: `kfc:live-${runId}`,
+      },
+    }),
+  };
   return {
     artifactsRoot: join(root, 'artifacts'),
     runId,
     attempt: 1,
     correlation: {
-      externalSessionId: `live-${runId}`,
-      durableSessionId: `live-${runId}`,
+      sessionId: `kfc:live-${runId}`,
+      customerId: `live-${runId}`,
     },
     scenarioPath,
-    identity,
-    runPreflight: async () => ({
-      schemaVersion: 'agent-model-capability-preflight-v1' as const,
-      identity,
-      ordinaryInvocation: { passed: true },
-      typedToolCall: { passed: true },
-      passed: true,
-    }),
-    executeTurn: async () => ({ responseText: 'unused' }),
+    expectedCandidateId: 'openai-gpt-4.1-mini' as const,
+    backendUrl: 'https://worker.example',
+    source: { gitSha: 'bridge-commit', dirty: false },
+    gateway,
   };
 }

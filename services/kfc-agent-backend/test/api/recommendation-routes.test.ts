@@ -733,6 +733,17 @@ describe('recommendation Fastify routes', () => {
       latestDecision: {
         recommendationId: decision.response.recommendationId,
       },
+      events: [
+        {
+          eventType: 'decision_requested',
+          requestId: decision.request.requestId,
+        },
+        {
+          eventType: 'decision_completed',
+          recommendationId: decision.response.recommendationId,
+          requestId: decision.request.requestId,
+        },
+      ],
     });
   });
 });

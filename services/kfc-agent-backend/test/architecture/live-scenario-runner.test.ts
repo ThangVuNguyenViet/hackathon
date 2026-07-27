@@ -12,16 +12,17 @@ describe('live scenario runner', () => {
     );
   });
 
-  it('never waits for deferred trace work', async () => {
+  it('is a thin HTTP/D1 bridge and never constructs or invokes a model locally', async () => {
     const source = await readFile(
       new URL('../../scripts/run-live-scenario.ts', import.meta.url),
       'utf8',
     );
 
-    expect(source).not.toContain(
-      'await Promise.allSettled(deferredTraceTasks.map((task) => task()))',
-    );
-    expect(source).not.toContain('await deferredTraceTasks.settle()');
-    expect(source).toContain('deferTrace: runDetachedWork');
+    expect(source).toContain('createLiveScenarioHttpClient');
+    expect(source).not.toContain('createConfiguredAgentChatModel');
+    expect(source).not.toContain('runAgentTurn');
+    expect(source).not.toContain('createMockClients');
+    expect(source).not.toContain('MemoryStore');
+    expect(source).not.toContain('OPENAI_API_KEY');
   });
 });

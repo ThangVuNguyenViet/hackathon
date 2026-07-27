@@ -87,6 +87,7 @@ function orderFlowEnvelope(input: {
       traceRef: latest.response.traceRef,
     },
     eventCounts: eventCounts(input.events),
+    events: input.events,
   };
 }
 
@@ -238,6 +239,7 @@ export function createRecommendationInspectionService(
             traceRef: null,
           },
           eventCounts: {},
+          events: [],
         };
       }
       if (record.request.sessionId !== sessionId) {

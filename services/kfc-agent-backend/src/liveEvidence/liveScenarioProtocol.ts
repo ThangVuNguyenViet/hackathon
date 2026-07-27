@@ -9,14 +9,41 @@ const commandSchema = z.discriminatedUnion('type', [
   z.object({ type: z.literal('user'), text: z.string().min(1) }).strict(),
   z
     .object({
+      type: z.literal('action'),
+      assistantTurnId: z.string().min(1),
+      attachmentId: z.string().min(1),
+      actionId: z.string().min(1),
+    })
+    .strict(),
+  z
+    .object({
       type: z.literal('finish'),
       note: z.string().min(1).optional(),
     })
     .strict(),
 ]);
 
+export interface LiveScenarioAssistantObservation {
+  responseText: string;
+  assistantTurnId?: string | null;
+  genUi?: unknown;
+  renderedActionReferences?: Array<{
+    assistantTurnId: string;
+    attachmentId: string;
+    actionId: string;
+  }>;
+}
+
 export interface LiveScenarioProtocolSession {
-  submitUserMessage(text: string): Promise<{ responseText: string }>;
+  submitUserMessage(text: string): Promise<LiveScenarioAssistantObservation>;
+  submitAction(input: {
+    assistantTurnId: string;
+    attachmentId: string;
+    actionId: string;
+  }): Promise<LiveScenarioAssistantObservation>;
+  recordAssistantRendered(
+    observation: LiveScenarioAssistantObservation,
+  ): Promise<void>;
   finish(note?: string): Promise<void>;
   recordProtocolError(
     error: 'invalid_json' | 'invalid_command' | 'turn_error' | 'control_error',
@@ -58,8 +85,28 @@ export async function runLiveScenarioCommandStream(input: {
         return;
       }
       try {
-        const result = await input.session.submitUserMessage(parsed.data.text);
-        await emit(input, { type: 'assistant', text: result.responseText });
+        const result =
+          parsed.data.type === 'user'
+            ? await input.session.submitUserMessage(parsed.data.text)
+            : await input.session.submitAction({
+                assistantTurnId: parsed.data.assistantTurnId,
+                attachmentId: parsed.data.attachmentId,
+                actionId: parsed.data.actionId,
+              });
+        await emit(input, {
+          type: 'assistant',
+          text: result.responseText,
+          ...(result.assistantTurnId === undefined
+            ? {}
+            : { assistantTurnId: result.assistantTurnId }),
+          ...(result.genUi === undefined ? {} : { genUi: result.genUi }),
+          ...(result.renderedActionReferences === undefined
+            ? {}
+            : {
+                renderedActionReferences: result.renderedActionReferences,
+              }),
+        });
+        await input.session.recordAssistantRendered(result);
       } catch (error) {
         const errorClass = safeErrorClass(error);
         await input.session.recordProtocolError('turn_error', errorClass);

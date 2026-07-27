@@ -2,7 +2,7 @@ import { AIMessage } from '@langchain/core/messages';
 import { fakeModel } from '@langchain/core/testing';
 import { describe, expect, it } from 'vitest';
 import { runAgentTurn } from '../../src/agent/kfcAgent.js';
-import type { LocalToolEvidenceEvent } from '../../src/liveEvidence/liveScenarioSession.js';
+import type { LocalToolEvidenceEvent } from '../../src/agent/localToolEvidence.js';
 import { DashboardEventBus } from '../../src/dashboard/eventBus.js';
 import { loadGeneratedFixtures } from '../../src/fixtures/loadFixtures.js';
 import { createMockClients } from '../../src/mock/createMockClients.js';

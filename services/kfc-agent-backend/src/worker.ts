@@ -32,7 +32,9 @@ import {
   createRouteHandlers,
   type HandlerResponse,
   type RouteHandlers,
+  liveScenarioTraceEnvelopeSchema,
 } from './api/routeHandlers.js';
+import { createAgentTraceContext } from './agent/agentTraceContext.js';
 import {
   invalidRecommendationJsonResponse,
   recommendationJsonResponse,
@@ -630,6 +632,24 @@ export default {
     }
     if (request.method === 'GET' && url.pathname === '/showcase/scenarios') {
       return toResponse(await handlers.showcaseCatalog());
+    }
+    if (
+      request.method === 'POST' &&
+      (url.pathname === '/admin/live-scenarios/chat/kfc/message' ||
+        url.pathname === '/admin/live-scenarios/chat/kfc/genui-action')
+    ) {
+      const parsed = liveScenarioTraceEnvelopeSchema.safeParse(
+        await readJson(request),
+      );
+      if (!parsed.success) {
+        return json({ errorCode: 'invalid_live_scenario_trace_envelope' }, 400);
+      }
+      const traceContext = createAgentTraceContext(parsed.data.trace);
+      return respondWithAgentBackground(
+        url.pathname.endsWith('/genui-action')
+          ? await handlers.chatKfcGenUiAction(parsed.data.request, traceContext)
+          : await handlers.chatKfcMessage(parsed.data.request, traceContext),
+      );
     }
     if (request.method === 'POST' && url.pathname === '/chat/kfc/message') {
       const body = await readJson(request);

@@ -1,11 +1,13 @@
 import { type FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import { authorizeDemoAdminHeaders } from '../security/demoAdminAuth.js';
+import { createAgentTraceContext } from '../agent/agentTraceContext.js';
 import { verifyMessengerGuestCheckoutIngress } from '../security/guestCheckoutAuthority.js';
 import { verifyMetaWebhookSignature } from '../security/webhookAuthenticity.js';
 import {
   createRouteHandlers,
   type HandlerResponse,
+  liveScenarioTraceEnvelopeSchema,
   type RouteOptions,
 } from './routeHandlers.js';
 import {
@@ -197,6 +199,42 @@ export function registerRoutes(
   );
   server.get('/showcase/scenarios', async (_request, reply) =>
     send(reply, await handlers.showcaseCatalog()),
+  );
+  server.post(
+    '/admin/live-scenarios/chat/kfc/message',
+    async (request, reply) => {
+      const parsed = liveScenarioTraceEnvelopeSchema.safeParse(request.body);
+      if (!parsed.success) {
+        return reply
+          .code(400)
+          .send({ errorCode: 'invalid_live_scenario_trace_envelope' });
+      }
+      return send(
+        reply,
+        await handlers.chatKfcMessage(
+          parsed.data.request,
+          createAgentTraceContext(parsed.data.trace),
+        ),
+      );
+    },
+  );
+  server.post(
+    '/admin/live-scenarios/chat/kfc/genui-action',
+    async (request, reply) => {
+      const parsed = liveScenarioTraceEnvelopeSchema.safeParse(request.body);
+      if (!parsed.success) {
+        return reply
+          .code(400)
+          .send({ errorCode: 'invalid_live_scenario_trace_envelope' });
+      }
+      return send(
+        reply,
+        await handlers.chatKfcGenUiAction(
+          parsed.data.request,
+          createAgentTraceContext(parsed.data.trace),
+        ),
+      );
+    },
   );
   server.post('/chat/kfc/message', async (request, reply) => {
     return send(reply, await handlers.chatKfcMessage(request.body));

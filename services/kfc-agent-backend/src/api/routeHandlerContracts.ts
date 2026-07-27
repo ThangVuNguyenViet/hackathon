@@ -3,6 +3,7 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { z } from 'zod';
 import type { VerifiedMessengerGuestCheckoutIngress } from '../security/guestCheckoutAuthority.js';
+import type { AgentTraceContext } from '../agent/agentTraceContext.js';
 import type {
   ChannelMediaDeliveryResult,
   ExternalClients,
@@ -161,6 +162,20 @@ export const kfcChatPayloadSchema = z
     message: 'KFC session must match the supplied customer ID',
   });
 
+const liveScenarioTraceCorrelationSchema = z
+  .object({
+    scenarioId: z.string().regex(/^[A-Za-z0-9][A-Za-z0-9._:/-]{0,255}$/u),
+    probeRunId: z.string().regex(/^[A-Za-z0-9][A-Za-z0-9._:/-]{0,255}$/u),
+  })
+  .strict();
+
+export const liveScenarioTraceEnvelopeSchema = z
+  .object({
+    request: z.unknown(),
+    trace: liveScenarioTraceCorrelationSchema,
+  })
+  .strict();
+
 export const kfcGenUiActionPayloadSchema = z
   .object({
     sessionId: kfcSessionIdSchema,
@@ -168,6 +183,7 @@ export const kfcGenUiActionPayloadSchema = z
     clientMessageId: z.string().min(1),
     action: z
       .object({
+        assistantTurnId: z.string().min(1).max(256).optional(),
         attachmentId: z.string().min(1).max(256),
         actionId: z.string().min(1).max(256),
         value: z.string().max(1_000).optional(),
@@ -459,6 +475,7 @@ export interface KfcRecommendationProofProjection {
     traceRef: string | null;
   };
   eventCounts: Partial<Record<RecommendationEvent['eventType'], number>>;
+  events: RecommendationEvent[];
 }
 
 export interface RouteOptions {
@@ -552,8 +569,14 @@ export interface RouteHandlers {
     sessionId: string,
     body: unknown,
   ): Promise<HandlerResponse>;
-  chatKfcMessage(body: unknown): Promise<HandlerResponse>;
-  chatKfcGenUiAction(body: unknown): Promise<HandlerResponse>;
+  chatKfcMessage(
+    body: unknown,
+    traceContext?: AgentTraceContext,
+  ): Promise<HandlerResponse>;
+  chatKfcGenUiAction(
+    body: unknown,
+    traceContext?: AgentTraceContext,
+  ): Promise<HandlerResponse>;
   chatKfcStartRun(body: unknown): Promise<HandlerResponse>;
   chatKfcCancelRun(runId: string): Promise<HandlerResponse>;
   showcaseCatalog(): Promise<HandlerResponse>;

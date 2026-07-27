@@ -6,6 +6,7 @@ import {
   createEvidenceSanitizer,
   serializeEvidenceJsonLine,
 } from '../../src/liveEvidence/evidenceRedaction.js';
+import type { LiveScenarioHttpClient } from '../../src/liveEvidence/liveScenarioHttpClient.js';
 import { startLiveScenarioSession } from '../../src/liveEvidence/liveScenarioSession.js';
 
 describe('live scenario artifact redaction', () => {
@@ -62,64 +63,61 @@ describe('live scenario artifact redaction', () => {
       'credential',
       String(Date.now()),
     ].join('-');
-    const identity = {
-      candidateId: 'deepseek-v4-flash',
-      provider: 'opencode',
-      model: 'deepseek-v4-flash',
-      profile: 'opencode:deepseek-v4-flash:chat-completions',
-      transport: 'openai_compatible_chat',
-    } as const;
+    const gateway: LiveScenarioHttpClient = {
+      environment: async () => ({
+        release: { gitSha: 'service-commit' },
+        proof: {
+          versions: {
+            agent: { candidateId: 'openai-gpt-4.1-mini' },
+          },
+        },
+      }),
+      submitUserMessage: async () => ({
+        responseText: `api_key=${assignmentSecret}; ${configuredSecret}`,
+        assistantTurnId: 'assistant-redaction',
+      }),
+      submitAction: async () => ({
+        responseText: 'unused',
+        assistantTurnId: 'assistant-action-redaction',
+      }),
+      recordRecommendationImpression: async () => undefined,
+      d1Evidence: async () => ({
+        proofEnvelope: {
+          complete: true,
+          missing: [],
+          toolTrace: [
+            {
+              arguments: {
+                note: `password=${assignmentSecret}`,
+                header: `X-Api-Key: ${headerSecret}`,
+                authorization: `Authorization: Basic ${basicCredential}`,
+                cookie: `Cookie: session=${cookieCredential}; theme=dark`,
+                setCookie: `Set-Cookie: sid=${cookieCredential}; HttpOnly`,
+                genericAssignments: `secret=${genericSecret}; client_secret="${clientSecret}"`,
+              },
+              rawResult: {
+                message: `META_PAGE_ACCESS_TOKEN=${assignmentSecret}`,
+              },
+              modelFacingResult: `Authorization: Bearer ${configuredSecret}`,
+            },
+          ],
+        },
+      }),
+    };
     const session = await startLiveScenarioSession({
       artifactsRoot: join(root, 'artifacts'),
       runId: 'redaction',
       attempt: 1,
       correlation: {
-        externalSessionId: 'live-redaction',
-        durableSessionId: 'live-redaction',
+        sessionId: 'kfc:live-redaction',
+        customerId: 'live-redaction',
       },
       scenarioPath,
-      identity,
+      expectedCandidateId: 'openai-gpt-4.1-mini',
+      backendUrl: 'https://worker.example',
+      source: { gitSha: 'bridge-commit', dirty: false },
       configuredSecrets: [configuredSecret],
-      runPreflight: async () => ({
-        schemaVersion: 'agent-model-capability-preflight-v1',
-        identity,
-        ordinaryInvocation: { passed: true },
-        typedToolCall: { passed: true },
-        passed: true,
-      }),
-      executeTurn: async ({ recordToolEvent }) => {
-        await recordToolEvent({
-          phase: 'started',
-          callId: 'redaction-call',
-          toolName: 'searchMenu',
-          arguments: {
-            note: `password=${assignmentSecret}`,
-            header: `X-Api-Key: ${headerSecret}`,
-            authorization: `Authorization: Basic ${basicCredential}`,
-            cookie: `Cookie: session=${cookieCredential}; theme=dark`,
-            setCookie: `Set-Cookie: sid=${cookieCredential}; HttpOnly`,
-            genericAssignments: `secret=${genericSecret}; client_secret="${clientSecret}"`,
-          },
-          requestedAt: '2026-07-24T00:00:00.000Z',
-        });
-        await recordToolEvent({
-          phase: 'completed',
-          callId: 'redaction-call',
-          toolName: 'searchMenu',
-          arguments: { note: configuredSecret },
-          rawResult: {
-            ok: false,
-            message: `META_PAGE_ACCESS_TOKEN=${assignmentSecret}`,
-          },
-          modelFacingResult: `Authorization: Bearer ${configuredSecret}`,
-          executionStartedAt: '2026-07-24T00:00:01.000Z',
-          completedAt: '2026-07-24T00:00:01.010Z',
-          executionDurationMs: 10,
-        });
-        return {
-          responseText: `api_key=${assignmentSecret}; ${configuredSecret}`,
-        };
-      },
+      gateway,
     });
 
     await session.submitUserMessage(
@@ -130,9 +128,10 @@ describe('live scenario artifact redaction', () => {
     const artifacts: string[] = [];
     for (const fileName of [
       'manifest.json',
-      'preflight.json',
+      'environment.json',
       'trace.jsonl',
       'transcript.md',
+      'evidence-packet.json',
       'codex-review-packet.md',
     ]) {
       const artifact = await readFile(

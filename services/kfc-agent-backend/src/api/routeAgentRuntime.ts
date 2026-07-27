@@ -50,6 +50,7 @@ import {
   type KfcGenUiAttachment,
 } from '../genui/kfcGenUi.js';
 import { runAgentTurn } from '../agent/kfcAgent.js';
+import type { AgentTraceContext } from '../agent/agentTraceContext.js';
 import {
   loadVerifiedStateProjection,
   persistVerifiedStateProjection,
@@ -279,6 +280,7 @@ export function createRouteAgentRuntime(
     clientMessageId: string;
     text: string;
     metadata: ConversationTurnMetadata;
+    traceContext?: AgentTraceContext;
     agentModelBinding?: ConfiguredAgentModelBinding;
     trustedCustomerAction?: TrustedCustomerActionEnvelope;
     completeTrustedCustomerAction?: (
@@ -401,6 +403,7 @@ export function createRouteAgentRuntime(
         text: input.text,
         externalMessageId: input.clientMessageId,
         metadata: trustedMetadata,
+        traceContext: input.traceContext,
         trustedCustomerAction: input.trustedCustomerAction,
         completeTrustedCustomerAction: input.completeTrustedCustomerAction,
         clients: await createFirstPartyKfcClients(

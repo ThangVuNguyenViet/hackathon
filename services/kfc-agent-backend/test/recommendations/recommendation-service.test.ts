@@ -2241,6 +2241,7 @@ describe('Recommendation application service', () => {
         traceRef: null,
       },
       eventCounts: {},
+      events: [],
     });
   });
 

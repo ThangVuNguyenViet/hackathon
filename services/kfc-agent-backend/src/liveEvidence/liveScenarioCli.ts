@@ -10,6 +10,9 @@ export interface LiveScenarioCliArgs {
   runId: string;
   attempt: number;
   artifactsRoot: string;
+  backendUrl: string;
+  adminToken: string;
+  customerId: string;
 }
 
 export function configuredSecretValues(
@@ -32,6 +35,7 @@ export function configuredSecretValues(
 export function parseLiveScenarioCliArgs(
   argv: readonly string[],
   repoRoot: string,
+  environment: Readonly<Record<string, string | undefined>> = process.env,
 ): LiveScenarioCliArgs {
   const values = new Map<string, string>();
   for (let index = 0; index < argv.length; index += 2) {
@@ -45,6 +49,8 @@ export function parseLiveScenarioCliArgs(
         '--run-id',
         '--attempt',
         '--artifacts-root',
+        '--base-url',
+        '--customer-id',
       ].includes(flag) ||
       value === undefined ||
       value.startsWith('--') ||
@@ -66,6 +72,15 @@ export function parseLiveScenarioCliArgs(
   if (!Number.isInteger(attempt) || attempt < 1) {
     throw new Error('live_scenario_attempt_invalid');
   }
+  const backendUrl = normalizeBackendUrl(
+    values.get('--base-url') ??
+      environment.KFC_AGENT_BACKEND_URL ??
+      environment.CF_WORKER_URL ??
+      '',
+  );
+  const adminToken = environment.KFC_DEMO_ADMIN_TOKEN?.trim();
+  if (!adminToken) throw new Error('live_scenario_admin_token_required');
+  const customerId = values.get('--customer-id')?.trim() || `live-${runId}`;
   return {
     scenarioPath: resolve(repoRoot, scenario),
     candidateId: profile.candidateId,
@@ -75,5 +90,30 @@ export function parseLiveScenarioCliArgs(
       repoRoot,
       values.get('--artifacts-root') ?? '.artifacts/kfc-live-scenarios',
     ),
+    backendUrl,
+    adminToken,
+    customerId,
   };
+}
+
+function normalizeBackendUrl(value: string): string {
+  const normalized = value.trim();
+  if (!normalized) throw new Error('live_scenario_backend_url_required');
+  let url: URL;
+  try {
+    url = new URL(normalized);
+  } catch {
+    throw new Error('live_scenario_backend_url_invalid');
+  }
+  if (
+    (url.protocol !== 'http:' && url.protocol !== 'https:') ||
+    url.username ||
+    url.password ||
+    url.search ||
+    url.hash
+  ) {
+    throw new Error('live_scenario_backend_url_invalid');
+  }
+  url.pathname = url.pathname.replace(/\/+$/u, '');
+  return url.toString().replace(/\/$/u, '');
 }

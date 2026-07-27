@@ -9,6 +9,7 @@ import {
 import { MemoryStore } from '../../src/persistence/memoryStore.js';
 import { D1Store } from '../../src/persistence/d1Store.js';
 import { createPackStateEnvelope } from '../../src/runtime/businessPack.js';
+import { createAgentTraceContext } from '../../src/agent/agentTraceContext.js';
 import { recommendationCartRevision } from '../../src/recommendations/application/tool-execution.js';
 import { SqliteD1Database } from '../support/sqlite-d1.js';
 
@@ -187,11 +188,29 @@ describe('KFC GenUI guest actions', () => {
       customerId,
       clientMessageId: 'recommendation-action-client-1',
       action: {
+        assistantTurnId: sourceTurn.id,
         attachmentId: attachment.id,
         actionId: 'recommendation_select:recommendation-action-1',
       },
     };
-    const selected = await handlers.chatKfcGenUiAction(request);
+    const traceContext = createAgentTraceContext({
+      scenarioId: 'scenario-improvised',
+      probeRunId: 'run-1',
+    });
+    await expect(
+      handlers.chatKfcGenUiAction({
+        ...request,
+        clientMessageId: 'recommendation-action-wrong-turn',
+        action: {
+          ...request.action,
+          assistantTurnId: 'assistant-turn-not-observed',
+        },
+      }),
+    ).resolves.toEqual({
+      status: 404,
+      body: { errorCode: 'action_not_found' },
+    });
+    const selected = await handlers.chatKfcGenUiAction(request, traceContext);
     expect(selected).toMatchObject({
       status: 200,
       body: {
@@ -205,6 +224,7 @@ describe('KFC GenUI guest actions', () => {
     });
     expect(kfcAgentResponse).toHaveBeenCalledWith(
       expect.objectContaining({
+        traceContext,
         trustedCustomerAction: {
           source: 'kfc_genui_action',
           assistantTurnId: sourceTurn.id,

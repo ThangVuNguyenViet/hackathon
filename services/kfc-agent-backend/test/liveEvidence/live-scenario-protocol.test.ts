@@ -5,12 +5,31 @@ import {
 } from '../../src/liveEvidence/liveScenarioProtocol.js';
 
 describe('live scenario JSONL protocol', () => {
-  it('accepts improvised messages one at a time until an explicit finish', async () => {
+  it('forwards improvised messages and exact observed action references until finish', async () => {
     const session: LiveScenarioProtocolSession = {
       submitUserMessage: vi
         .fn()
-        .mockResolvedValueOnce({ responseText: 'First response' })
+        .mockResolvedValueOnce({
+          responseText: 'First response',
+          assistantTurnId: 'assistant-turn-1',
+          genUi: {
+            id: 'attachment-1',
+            actions: [{ id: 'recommendation_select:action-1' }],
+          },
+          renderedActionReferences: [
+            {
+              assistantTurnId: 'assistant-turn-1',
+              attachmentId: 'attachment-1',
+              actionId: 'recommendation_select:action-1',
+            },
+          ],
+        })
         .mockResolvedValueOnce({ responseText: 'Second response' }),
+      submitAction: vi.fn().mockResolvedValue({
+        responseText: 'Action response',
+        assistantTurnId: 'assistant-turn-2',
+      }),
+      recordAssistantRendered: vi.fn(),
       finish: vi.fn().mockResolvedValue(undefined),
       recordProtocolError: vi.fn(),
       interrupt: vi.fn(),
@@ -20,7 +39,13 @@ describe('live scenario JSONL protocol', () => {
     await runLiveScenarioCommandStream({
       session,
       lines: from([
-        JSON.stringify({ type: 'user', text: 'Improvised first turn' }),
+        JSON.stringify({ type: 'user', text: '  Improvised first turn  ' }),
+        JSON.stringify({
+          type: 'action',
+          assistantTurnId: 'assistant-turn-1',
+          attachmentId: 'attachment-1',
+          actionId: 'recommendation_select:action-1',
+        }),
         JSON.stringify({ type: 'user', text: 'Follow the flow' }),
         JSON.stringify({ type: 'finish', note: 'Goal explored' }),
       ]),
@@ -31,16 +56,55 @@ describe('live scenario JSONL protocol', () => {
 
     expect(session.submitUserMessage).toHaveBeenNthCalledWith(
       1,
-      'Improvised first turn',
+      '  Improvised first turn  ',
     );
     expect(session.submitUserMessage).toHaveBeenNthCalledWith(
       2,
       'Follow the flow',
     );
+    expect(session.submitAction).toHaveBeenCalledWith({
+      assistantTurnId: 'assistant-turn-1',
+      attachmentId: 'attachment-1',
+      actionId: 'recommendation_select:action-1',
+    });
+    expect(session.recordAssistantRendered).toHaveBeenCalledTimes(3);
+    expect(session.recordAssistantRendered).toHaveBeenNthCalledWith(
+      1,
+      expect.objectContaining({
+        assistantTurnId: 'assistant-turn-1',
+        renderedActionReferences: [
+          {
+            assistantTurnId: 'assistant-turn-1',
+            attachmentId: 'attachment-1',
+            actionId: 'recommendation_select:action-1',
+          },
+        ],
+      }),
+    );
     expect(session.finish).toHaveBeenCalledWith('Goal explored');
     expect(session.interrupt).not.toHaveBeenCalled();
     expect(output.map((line) => JSON.parse(line))).toEqual([
-      { type: 'assistant', text: 'First response' },
+      {
+        type: 'assistant',
+        text: 'First response',
+        assistantTurnId: 'assistant-turn-1',
+        genUi: {
+          id: 'attachment-1',
+          actions: [{ id: 'recommendation_select:action-1' }],
+        },
+        renderedActionReferences: [
+          {
+            assistantTurnId: 'assistant-turn-1',
+            attachmentId: 'attachment-1',
+            actionId: 'recommendation_select:action-1',
+          },
+        ],
+      },
+      {
+        type: 'assistant',
+        text: 'Action response',
+        assistantTurnId: 'assistant-turn-2',
+      },
       { type: 'assistant', text: 'Second response' },
       { type: 'finished' },
     ]);
@@ -49,6 +113,8 @@ describe('live scenario JSONL protocol', () => {
   it('reports malformed input without converting it into a customer turn', async () => {
     const session: LiveScenarioProtocolSession = {
       submitUserMessage: vi.fn(),
+      submitAction: vi.fn(),
+      recordAssistantRendered: vi.fn(),
       finish: vi.fn(),
       recordProtocolError: vi.fn(),
       interrupt: vi.fn(),
@@ -64,6 +130,7 @@ describe('live scenario JSONL protocol', () => {
     });
 
     expect(session.submitUserMessage).not.toHaveBeenCalled();
+    expect(session.submitAction).not.toHaveBeenCalled();
     expect(session.finish).not.toHaveBeenCalled();
     expect(session.recordProtocolError).toHaveBeenNthCalledWith(
       1,
@@ -85,6 +152,8 @@ describe('live scenario JSONL protocol', () => {
       submitUserMessage: vi
         .fn()
         .mockRejectedValue(new TypeError('private provider failure')),
+      submitAction: vi.fn(),
+      recordAssistantRendered: vi.fn(),
       finish: vi.fn(),
       recordProtocolError: vi.fn(),
       interrupt: vi.fn(),

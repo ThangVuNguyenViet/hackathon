@@ -62,6 +62,7 @@ import {
 } from '../genui/kfcGenUi.js';
 import { recommendationCartRevision } from '../recommendations/application/tool-execution.js';
 import { runAgentTurn } from '../agent/kfcAgent.js';
+import type { AgentTraceContext } from '../agent/agentTraceContext.js';
 import type { TrustedCustomerActionCommitReceipt } from '../agent/agentTurn.js';
 import { loadVerifiedStateProjection } from '../agent/verifiedState.js';
 import { kfcVietnamPack } from '../businessPacks/kfcVietnam/kfcVietnamPack.js';
@@ -324,7 +325,7 @@ export function createChatRouteHandlers(context: RouteHandlerContext) {
     recommendations,
   } = context;
   return {
-    async chatKfcMessage(body: unknown) {
+    async chatKfcMessage(body: unknown, traceContext?: AgentTraceContext) {
       const parsed = kfcChatPayloadSchema.safeParse(body);
       if (!parsed.success) {
         return {
@@ -355,6 +356,7 @@ export function createChatRouteHandlers(context: RouteHandlerContext) {
           rawEvent: { ...auditMetadata, source: 'kfc_chat' },
           ...(responseProfile ? { responseProfile } : {}),
         },
+        traceContext,
       });
     },
     async chatKfcStartRun(body: unknown) {
@@ -396,7 +398,7 @@ export function createChatRouteHandlers(context: RouteHandlerContext) {
         };
       }
     },
-    async chatKfcGenUiAction(body: unknown) {
+    async chatKfcGenUiAction(body: unknown, traceContext?: AgentTraceContext) {
       const parsed = kfcGenUiActionPayloadSchema.safeParse(body);
       if (!parsed.success) {
         return {
@@ -416,6 +418,8 @@ export function createChatRouteHandlers(context: RouteHandlerContext) {
           return (
             turn.role === 'assistant' &&
             turn.externalUserId === parsed.data.customerId &&
+            (parsed.data.action.assistantTurnId === undefined ||
+              turn.id === parsed.data.action.assistantTurnId) &&
             isKfcGenUiAttachment(candidate) &&
             candidate.id === parsed.data.action.attachmentId
           );
@@ -903,6 +907,7 @@ export function createChatRouteHandlers(context: RouteHandlerContext) {
               actionDigest,
             },
           },
+          traceContext,
           trustedCustomerAction,
           completeTrustedCustomerAction: async (receipt) => {
             const result = {

@@ -1,100 +1,52 @@
-import { createInterface } from 'node:readline';
+import { execFile } from 'node:child_process';
 import { resolve } from 'node:path';
-import { runAgentTurn } from '../src/agent/kfcAgent.js';
-import { createAgentTraceContext } from '../src/agent/agentTraceContext.js';
-import {
-  createConfiguredAgentChatModel,
-  resolveAgentModelProfile,
-} from '../src/config/agentModelProfile.js';
+import { createInterface } from 'node:readline';
+import { promisify } from 'node:util';
 import { resolveLiveScenarioPaths } from '../src/config/liveScenarioPaths.js';
-import { runModelCapabilityPreflight } from '../src/config/modelCapabilityPreflight.js';
 import { loadOptionalEnvFile } from '../src/config/optionalEnvFile.js';
-import { DashboardEventBus } from '../src/dashboard/eventBus.js';
-import { loadGeneratedFixtures } from '../src/fixtures/loadFixtures.js';
 import {
   configuredSecretValues,
   parseLiveScenarioCliArgs,
 } from '../src/liveEvidence/liveScenarioCli.js';
-import { runLiveScenarioCommandStream } from '../src/liveEvidence/liveScenarioProtocol.js';
-import { startLiveScenarioSession } from '../src/liveEvidence/liveScenarioSession.js';
 import {
   createEvidenceSanitizer,
   serializeEvidenceJsonLine,
 } from '../src/liveEvidence/evidenceRedaction.js';
-import { createMockClients } from '../src/mock/createMockClients.js';
-import { LangSmithAgentTracer } from '../src/observability/langsmithAgentTracer.js';
-import { MemoryStore } from '../src/persistence/memoryStore.js';
-import { legacySessionIdOutsidePackNamespace } from '../src/runtime/businessPack.js';
-import { runDetachedWork } from '../src/runtime/deferredWork.js';
-import { loadScenarioScript } from '../src/scenarios/scenarioScript.js';
+import { createLiveScenarioHttpClient } from '../src/liveEvidence/liveScenarioHttpClient.js';
+import { runLiveScenarioCommandStream } from '../src/liveEvidence/liveScenarioProtocol.js';
+import { startLiveScenarioSession } from '../src/liveEvidence/liveScenarioSession.js';
 
-const { serviceRoot, repoRoot } = resolveLiveScenarioPaths(import.meta.url);
+const execFileAsync = promisify(execFile);
+const { repoRoot } = resolveLiveScenarioPaths(import.meta.url);
 loadOptionalEnvFile(resolve(repoRoot, '.env'));
 
 const configuredSecrets = configuredSecretValues(process.env);
 const sanitizeOutput = createEvidenceSanitizer(configuredSecrets);
 
 async function main(): Promise<void> {
-  const args = parseLiveScenarioCliArgs(process.argv.slice(2), repoRoot);
-  const profile = resolveAgentModelProfile({
-    candidateId: args.candidateId,
+  const args = parseLiveScenarioCliArgs(
+    process.argv.slice(2),
+    repoRoot,
+    process.env,
+  );
+  const gateway = createLiveScenarioHttpClient({
+    baseUrl: args.backendUrl,
+    adminToken: args.adminToken,
   });
-  const binding = createConfiguredAgentChatModel({
-    profile,
-    openAiApiKey: process.env.OPENAI_API_KEY,
-    openAiBaseUrl: process.env.OPENAI_BASE_URL,
-    openCodeApiKey: process.env.OPENCODE_API_KEY,
-    googleApiKey: process.env.GOOGLE_API_KEY,
-  });
-  const narrative = await loadScenarioScript(args.scenarioPath);
-  const clients = createMockClients(await loadGeneratedFixtures(serviceRoot));
-  const store = new MemoryStore();
-  const dashboard = new DashboardEventBus();
-  const tracer = process.env.LANGSMITH_API_KEY?.trim()
-    ? new LangSmithAgentTracer({
-        projectName:
-          process.env.LANGSMITH_PROJECT?.trim() ||
-          'kfc-agent-live-qualification',
-        apiKey: process.env.LANGSMITH_API_KEY.trim(),
-        apiUrl: process.env.LANGSMITH_ENDPOINT?.trim() || undefined,
-        samplingRate: 1,
-      })
-    : undefined;
-  const traceContext = createAgentTraceContext({
-    scenarioId: narrative.id,
-    probeRunId: args.runId,
-  });
-  const externalSessionId = `live-${args.runId}`;
-
   const session = await startLiveScenarioSession({
     artifactsRoot: args.artifactsRoot,
     runId: args.runId,
     attempt: args.attempt,
     correlation: {
-      externalSessionId,
-      durableSessionId: legacySessionIdOutsidePackNamespace(externalSessionId),
+      sessionId: `kfc:${args.customerId}`,
+      customerId: args.customerId,
     },
     scenarioPath: args.scenarioPath,
-    identity: binding.identity,
+    expectedCandidateId: args.candidateId,
+    backendUrl: args.backendUrl,
+    source: await localSourceState(repoRoot),
     configuredSecrets,
-    runPreflight: () => runModelCapabilityPreflight(binding),
-    executeTurn: async ({ text, recordToolEvent }) => {
-      const output = await runAgentTurn({
-        sessionId: externalSessionId,
-        customerId: 'synthetic-live-role-player',
-        channel: narrative.channel,
-        text,
-        clients,
-        store,
-        dashboard,
-        agentModelBinding: binding,
-        traceContext,
-        tracer,
-        recordLocalToolEvidence: recordToolEvent,
-        deferTrace: runDetachedWork,
-      });
-      return { responseText: output.responseText };
-    },
+    gateway,
   });
 
   let protocolStarted = false;
@@ -102,24 +54,27 @@ async function main(): Promise<void> {
     process.stdout.write(
       `${serializeEvidenceJsonLine(
         {
-          type: session.preflightPassed ? 'session_ready' : 'preflight_failed',
+          type: 'session_ready',
           runId: args.runId,
           attempt: args.attempt,
           runDirectory: session.runDirectory,
-          model: session.identity,
+          sessionId: `kfc:${args.customerId}`,
           scenario: session.scenario,
+          environment: session.environment,
           protocol: {
             user: { type: 'user', text: '<improvised customer message>' },
+            action: {
+              type: 'action',
+              assistantTurnId: '<observed assistant turn ID>',
+              attachmentId: '<observed attachment ID>',
+              actionId: '<observed action ID>',
+            },
             finish: { type: 'finish', note: '<optional reviewer note>' },
           },
         },
         sanitizeOutput,
       )}\n`,
     );
-    if (!session.preflightPassed) {
-      process.exitCode = 2;
-      return;
-    }
 
     const lines = createInterface({
       input: process.stdin,
@@ -157,6 +112,19 @@ void main().catch((error: unknown) => {
   );
   process.exitCode = 1;
 });
+
+async function localSourceState(
+  cwd: string,
+): Promise<{ gitSha: string; dirty: boolean }> {
+  const [{ stdout: gitSha }, { stdout: status }] = await Promise.all([
+    execFileAsync('git', ['rev-parse', 'HEAD'], { cwd }),
+    execFileAsync('git', ['status', '--porcelain'], { cwd }),
+  ]);
+  return {
+    gitSha: gitSha.trim(),
+    dirty: status.trim().length > 0,
+  };
+}
 
 function safeErrorClass(error: unknown): string {
   const name = error instanceof Error ? error.name : '';

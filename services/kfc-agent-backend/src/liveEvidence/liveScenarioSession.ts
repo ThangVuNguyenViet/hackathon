@@ -1,35 +1,23 @@
-import { appendFile, mkdir, readFile, writeFile } from 'node:fs/promises';
 import { createHash } from 'node:crypto';
+import { appendFile, mkdir, readFile, writeFile } from 'node:fs/promises';
 import { basename, join, resolve } from 'node:path';
-import type { AgentModelIdentity } from '../config/agentModelProfile.js';
-import type { ModelCapabilityPreflightResult } from '../config/modelCapabilityPreflight.js';
-import type { LocalToolEvidenceEvent } from '../agent/localToolEvidence.js';
 import {
   loadScenarioScript,
   type ScenarioScript,
 } from '../scenarios/scenarioScript.js';
+import type { AgentModelCandidateId } from '../config/agentModelProfile.js';
+import type { LiveScenarioHttpClient } from './liveScenarioHttpClient.js';
 import {
   createEvidenceSanitizer,
   type EvidenceSanitizer,
 } from './evidenceRedaction.js';
+import type { LiveScenarioAssistantObservation } from './liveScenarioProtocol.js';
 
-const TRACE_SCHEMA_VERSION = 'kfc-live-scenario-trace-v1';
-const MANIFEST_SCHEMA_VERSION = 'kfc-live-scenario-manifest-v1';
+const TRACE_SCHEMA_VERSION = 'kfc-live-scenario-http-trace-v1';
+const MANIFEST_SCHEMA_VERSION = 'kfc-live-scenario-manifest-v2';
+const EVIDENCE_PACKET_SCHEMA_VERSION = 'kfc-live-scenario-evidence-packet-v1';
 
-export type { LocalToolEvidenceEvent } from '../agent/localToolEvidence.js';
-
-export type LiveScenarioTurnExecutor = (input: {
-  text: string;
-  recordToolEvent(event: LocalToolEvidenceEvent): Promise<void>;
-}) => Promise<{ responseText: string }>;
-
-type SessionStatus =
-  | 'ready'
-  | 'preflight_failed'
-  | 'running'
-  | 'completed'
-  | 'failed'
-  | 'abandoned';
+type SessionStatus = 'ready' | 'running' | 'completed' | 'failed' | 'abandoned';
 
 interface TraceEvent {
   schemaVersion: typeof TRACE_SCHEMA_VERSION;
@@ -46,9 +34,10 @@ interface Manifest {
   status: SessionStatus;
   startedAt: string;
   completedAt?: string;
+  transport: 'http_d1';
   correlation: {
-    externalSessionId: string;
-    durableSessionId: string;
+    sessionId: string;
+    customerId: string;
     scenarioId: string;
     probeRunId: string;
   };
@@ -63,20 +52,41 @@ interface Manifest {
     sourcePath: string;
     sourceSha256: string;
   };
-  model: AgentModelIdentity;
+  source: {
+    bridge: { gitSha: string; dirty: boolean };
+    service: Record<string, unknown>;
+  };
+  backend: {
+    baseUrl: string;
+    expectedCandidateId: AgentModelCandidateId;
+  };
+  bindings: {
+    versions: Record<string, unknown>;
+    observability: Record<string, unknown>;
+    langsmithCorrelation: {
+      scenarioId: string;
+      probeRunId: string;
+    };
+  };
   evidence: {
+    environment: 'environment.json';
     trace: 'trace.jsonl';
     transcript: 'transcript.md';
-    preflight: 'preflight.json';
+    packet: 'evidence-packet.json';
     reviewPacket: 'codex-review-packet.md';
     artifactSha256?: Record<string, string>;
   };
   finishNote?: string;
 }
 
+interface D1Evidence {
+  proofEnvelope: Record<string, unknown>;
+  recommendationInspection?: Record<string, unknown>;
+  orderFlowState?: Record<string, unknown>;
+}
+
 export interface LiveScenarioSession {
   readonly runDirectory: string;
-  readonly preflightPassed: boolean;
   readonly scenario: Readonly<{
     id: string;
     title: string;
@@ -85,8 +95,16 @@ export interface LiveScenarioSession {
     risks: readonly string[];
     finalState: string;
   }>;
-  readonly identity: AgentModelIdentity;
-  submitUserMessage(text: string): Promise<{ responseText: string }>;
+  readonly environment: Readonly<Record<string, unknown>>;
+  submitUserMessage(text: string): Promise<LiveScenarioAssistantObservation>;
+  submitAction(input: {
+    assistantTurnId: string;
+    attachmentId: string;
+    actionId: string;
+  }): Promise<LiveScenarioAssistantObservation>;
+  recordAssistantRendered(
+    observation: LiveScenarioAssistantObservation,
+  ): Promise<void>;
   recordProtocolError(
     error: 'invalid_json' | 'invalid_command' | 'turn_error' | 'control_error',
     errorClass?: string,
@@ -100,14 +118,15 @@ export async function startLiveScenarioSession(input: {
   runId: string;
   attempt: number;
   correlation: {
-    externalSessionId: string;
-    durableSessionId: string;
+    sessionId: string;
+    customerId: string;
   };
   scenarioPath: string;
-  identity: AgentModelIdentity;
+  expectedCandidateId: AgentModelCandidateId;
+  backendUrl: string;
+  source: { gitSha: string; dirty: boolean };
+  gateway: LiveScenarioHttpClient;
   configuredSecrets?: readonly string[];
-  runPreflight(): Promise<ModelCapabilityPreflightResult>;
-  executeTurn: LiveScenarioTurnExecutor;
   now?: () => Date;
 }): Promise<LiveScenarioSession> {
   assertRunId(input.runId);
@@ -119,21 +138,28 @@ export async function startLiveScenarioSession(input: {
   const scenarioPath = resolve(input.scenarioPath);
   const scenarioRaw = await readFile(scenarioPath);
   const scenario = await loadScenarioScript(scenarioPath);
-  const scenarioSourceSha256 = await sha256(scenarioRaw);
+  const environment = sanitize(await input.gateway.environment()) as Record<
+    string,
+    unknown
+  >;
+  assertExpectedCandidate(environment, input.expectedCandidateId);
+
   const artifactsRoot = resolve(input.artifactsRoot);
   await mkdir(artifactsRoot, { recursive: true });
   const runDirectory = join(artifactsRoot, input.runId);
   try {
     await mkdir(runDirectory);
   } catch (error) {
-    if (isAlreadyExists(error)) {
-      throw new Error('live_scenario_run_exists');
-    }
+    if (isAlreadyExists(error)) throw new Error('live_scenario_run_exists');
     throw error;
   }
 
   const events: TraceEvent[] = [];
-  let sequence = 0;
+  const observedActions = new Set<string>();
+  const recordedImpressions = new Set<string>();
+  let traceSequence = 0;
+  let commandSequence = 0;
+  let d1: D1Evidence | undefined;
   const startedAt = now().toISOString();
   const manifest: Manifest = {
     schemaVersion: MANIFEST_SCHEMA_VERSION,
@@ -141,9 +167,10 @@ export async function startLiveScenarioSession(input: {
     attempt: input.attempt,
     status: 'ready',
     startedAt,
+    transport: 'http_d1',
     correlation: {
-      externalSessionId: input.correlation.externalSessionId,
-      durableSessionId: input.correlation.durableSessionId,
+      sessionId: input.correlation.sessionId,
+      customerId: input.correlation.customerId,
       scenarioId: scenario.id,
       probeRunId: input.runId,
     },
@@ -156,41 +183,242 @@ export async function startLiveScenarioSession(input: {
       finalState: scenario.finalState,
       sourceFile: basename(scenarioPath),
       sourcePath: scenarioPath,
-      sourceSha256: scenarioSourceSha256,
+      sourceSha256: await sha256(scenarioRaw),
     },
-    model: { ...input.identity },
+    source: {
+      bridge: { ...input.source },
+      service: serviceRelease(environment),
+    },
+    backend: {
+      baseUrl: normalizedEvidenceUrl(input.backendUrl),
+      expectedCandidateId: input.expectedCandidateId,
+    },
+    bindings: {
+      versions: environmentVersions(environment),
+      observability: environmentObservability(environment),
+      langsmithCorrelation: {
+        scenarioId: scenario.id,
+        probeRunId: input.runId,
+      },
+    },
     evidence: {
+      environment: 'environment.json',
       trace: 'trace.jsonl',
       transcript: 'transcript.md',
-      preflight: 'preflight.json',
+      packet: 'evidence-packet.json',
       reviewPacket: 'codex-review-packet.md',
     },
   };
 
-  const persistManifest = () =>
-    writeJson(join(runDirectory, 'manifest.json'), manifest, sanitize);
-  const recordTerminalArtifactHashes = async (): Promise<void> => {
-    manifest.evidence.artifactSha256 = Object.fromEntries(
-      await Promise.all(
-        [
-          'preflight.json',
-          'trace.jsonl',
-          'transcript.md',
-          'codex-review-packet.md',
-        ].map(async (fileName) => [
-          fileName,
-          await sha256(await readFile(join(runDirectory, fileName))),
-        ]),
-      ),
-    );
+  await writeJson(
+    join(runDirectory, 'environment.json'),
+    environment,
+    sanitize,
+  );
+  await persistManifest();
+  await recordTrace('session_started', {
+    transport: manifest.transport,
+    source: manifest.source,
+    bindings: manifest.bindings,
+  });
+
+  return {
+    runDirectory,
+    scenario: Object.freeze({
+      id: scenario.id,
+      title: scenario.title,
+      goal: scenario.goal,
+      preconditions: Object.freeze([...scenario.preconditions]),
+      risks: Object.freeze([...scenario.risks]),
+      finalState: scenario.finalState,
+    }),
+    environment: Object.freeze(structuredClone(environment)),
+    async submitUserMessage(text) {
+      assertOpen();
+      if (text.length === 0) throw new Error('live_scenario_message_empty');
+      manifest.status = 'running';
+      await persistManifest();
+      const clientMessageId = `${input.runId}:user:${++commandSequence}`;
+      await recordTrace('user_message', { text, clientMessageId });
+      try {
+        const response = await input.gateway.submitUserMessage({
+          sessionId: input.correlation.sessionId,
+          customerId: input.correlation.customerId,
+          clientMessageId,
+          text,
+          metadata: {
+            liveScenarioRunId: input.runId,
+            liveScenarioAttempt: input.attempt,
+            liveScenarioId: scenario.id,
+          },
+          trace: {
+            scenarioId: scenario.id,
+            probeRunId: input.runId,
+          },
+        });
+        return await recordAssistantResponse('user', response);
+      } catch (error) {
+        await recordTrace('http_turn_failed', {
+          operation: 'user',
+          error: serializedError(error),
+        });
+        throw error;
+      }
+    },
+    async submitAction(action) {
+      assertOpen();
+      if (!observedActions.has(actionKey(action))) {
+        await recordTrace('action_reference_rejected', action);
+        throw new Error('live_scenario_action_not_observed');
+      }
+      manifest.status = 'running';
+      await persistManifest();
+      const clientMessageId = `${input.runId}:action:${++commandSequence}`;
+      await recordTrace('action_submitted', { ...action, clientMessageId });
+      try {
+        const response = await input.gateway.submitAction({
+          sessionId: input.correlation.sessionId,
+          customerId: input.correlation.customerId,
+          clientMessageId,
+          ...action,
+          trace: {
+            scenarioId: scenario.id,
+            probeRunId: input.runId,
+          },
+        });
+        return await recordAssistantResponse('action', response);
+      } catch (error) {
+        await recordTrace('http_turn_failed', {
+          operation: 'action',
+          references: action,
+          error: serializedError(error),
+        });
+        throw error;
+      }
+    },
+    async recordAssistantRendered(observation) {
+      assertOpen();
+      const impression = recommendationImpression({
+        observation,
+        occurredAt: now().toISOString(),
+      });
+      if (!impression || recordedImpressions.has(impression.body.eventId)) {
+        return;
+      }
+      await input.gateway.recordRecommendationImpression(impression);
+      recordedImpressions.add(impression.body.eventId);
+      await recordTrace('recommendation_impression_recorded', {
+        recommendationId: impression.recommendationId,
+        ...impression.body,
+      });
+    },
+    async recordProtocolError(error, errorClass) {
+      await recordTrace('protocol_error', {
+        error,
+        ...(errorClass ? { errorClass } : {}),
+      });
+    },
+    async interrupt(reason) {
+      if (isTerminal(manifest.status)) return;
+      try {
+        d1 = sanitize(
+          await input.gateway.d1Evidence(input.correlation.sessionId),
+        ) as D1Evidence;
+        await recordTrace('d1_evidence_collected', evidenceSummary(d1));
+      } catch (error) {
+        await recordTrace('d1_evidence_collection_failed', {
+          error: serializedError(error),
+        });
+      }
+      manifest.status = 'abandoned';
+      manifest.completedAt = now().toISOString();
+      await recordTrace('session_interrupted', { reason });
+      await writeTerminalArtifacts();
+    },
+    async finish(note) {
+      assertOpen();
+      d1 = sanitize(
+        await input.gateway.d1Evidence(input.correlation.sessionId),
+      ) as D1Evidence;
+      await recordTrace('d1_evidence_collected', evidenceSummary(d1));
+      manifest.completedAt = now().toISOString();
+      if (note?.trim()) manifest.finishNote = note.trim();
+      if (d1.proofEnvelope.complete !== true) {
+        manifest.status = 'failed';
+        await recordTrace('session_failed', {
+          reason: 'd1_evidence_incomplete',
+          missing: Array.isArray(d1.proofEnvelope.missing)
+            ? d1.proofEnvelope.missing
+            : [],
+        });
+        await writeTerminalArtifacts();
+        throw new LiveScenarioIncompleteEvidenceError();
+      }
+      manifest.status = 'completed';
+      await recordTrace('session_finished', {
+        ...(manifest.finishNote ? { note: manifest.finishNote } : {}),
+      });
+      await writeTerminalArtifacts();
+    },
   };
-  const recordTraceEvidence = async (
+
+  async function recordAssistantResponse(
+    operation: 'user' | 'action',
+    rawResponse: Record<string, unknown>,
+  ): Promise<LiveScenarioAssistantObservation> {
+    const response = sanitize(rawResponse) as Record<string, unknown>;
+    if (typeof response.responseText !== 'string') {
+      throw new Error('live_scenario_http_response_invalid');
+    }
+    const assistantTurnId =
+      typeof response.assistantTurnId === 'string'
+        ? response.assistantTurnId
+        : response.assistantTurnId === null
+          ? null
+          : undefined;
+    const genUi = response.genUi;
+    const renderedActionReferences = actionReferences({
+      assistantTurnId,
+      genUi,
+    });
+    for (const reference of renderedActionReferences) {
+      observedActions.add(actionKey(reference));
+    }
+    await recordTrace('assistant_message', {
+      operation,
+      text: response.responseText,
+      ...(assistantTurnId === undefined ? {} : { assistantTurnId }),
+      ...(genUi === undefined ? {} : { genUi }),
+      renderedActionReferences,
+      response,
+    });
+    return {
+      responseText: response.responseText,
+      ...(assistantTurnId === undefined ? {} : { assistantTurnId }),
+      ...(genUi === undefined ? {} : { genUi }),
+      ...(renderedActionReferences.length === 0
+        ? {}
+        : { renderedActionReferences }),
+    };
+  }
+
+  function assertOpen(): void {
+    if (isTerminal(manifest.status)) {
+      throw new Error('live_scenario_session_closed');
+    }
+  }
+
+  async function persistManifest(): Promise<void> {
+    await writeJson(join(runDirectory, 'manifest.json'), manifest, sanitize);
+  }
+
+  async function recordTrace(
     type: string,
     details: Record<string, unknown> = {},
-  ): Promise<void> => {
+  ): Promise<void> {
     const event = sanitize({
       schemaVersion: TRACE_SCHEMA_VERSION,
-      sequence: ++sequence,
+      sequence: ++traceSequence,
       at: now().toISOString(),
       type,
       ...details,
@@ -201,220 +429,281 @@ export async function startLiveScenarioSession(input: {
       `${JSON.stringify(event)}\n`,
       'utf8',
     );
-    await renderReadableEvidence({
-      runDirectory,
-      manifest,
-      scenario,
-      events,
+    await writeFile(
+      join(runDirectory, 'transcript.md'),
+      String(sanitize(renderTranscript({ manifest, events }))),
+      'utf8',
+    );
+  }
+
+  async function writeTerminalArtifacts(): Promise<void> {
+    const packet = sanitize({
+      schemaVersion: EVIDENCE_PACKET_SCHEMA_VERSION,
+      runId: input.runId,
+      attempt: input.attempt,
+      status: manifest.status,
+      completedAt: manifest.completedAt,
+      source: manifest.source,
+      backend: manifest.backend,
+      bindings: manifest.bindings,
+      correlation: manifest.correlation,
+      scenario: {
+        id: scenario.id,
+        title: scenario.title,
+        goal: scenario.goal,
+        preconditions: scenario.preconditions,
+        risks: scenario.risks,
+        finalState: scenario.finalState,
+        sourceSha256: manifest.scenario.sourceSha256,
+      },
+      environment,
+      timeline: events,
+      d1: d1 ?? null,
+      ...(manifest.finishNote ? { finishNote: manifest.finishNote } : {}),
+    });
+    await writeJson(
+      join(runDirectory, 'evidence-packet.json'),
+      packet,
       sanitize,
-    });
-  };
-
-  await persistManifest();
-  await recordTraceEvidence('session_started');
-
-  let preflight: ModelCapabilityPreflightResult;
-  try {
-    preflight = await input.runPreflight();
-    assertSameIdentity(input.identity, preflight.identity);
-  } catch (error) {
-    const failed = {
-      schemaVersion: 'agent-model-capability-preflight-v1',
-      identity: input.identity,
-      passed: false,
-      error: serializedError(error),
-    };
-    await writeJson(join(runDirectory, 'preflight.json'), failed, sanitize);
-    manifest.status = 'preflight_failed';
-    manifest.completedAt = now().toISOString();
-    await recordTraceEvidence('preflight_failed', {
-      error: serializedError(error),
-    });
-    await recordTerminalArtifactHashes();
-    await persistManifest();
-    return createSession();
-  }
-  await writeJson(join(runDirectory, 'preflight.json'), preflight, sanitize);
-  if (!preflight.passed) {
-    manifest.status = 'preflight_failed';
-    manifest.completedAt = now().toISOString();
-  }
-  await recordTraceEvidence('preflight_completed', {
-    passed: preflight.passed,
-    ordinaryInvocation: preflight.ordinaryInvocation,
-    typedToolCall: preflight.typedToolCall,
-  });
-  if (!preflight.passed) await recordTerminalArtifactHashes();
-  await persistManifest();
-
-  return createSession();
-
-  function createSession(): LiveScenarioSession {
-    return {
-      runDirectory,
-      preflightPassed: manifest.status !== 'preflight_failed',
-      scenario: Object.freeze(
-        sanitize({
-          id: scenario.id,
-          title: scenario.title,
-          goal: scenario.goal,
-          preconditions: Object.freeze([...scenario.preconditions]),
-          risks: Object.freeze([...scenario.risks]),
-          finalState: scenario.finalState,
-        }) as LiveScenarioSession['scenario'],
+    );
+    await writeFile(
+      join(runDirectory, 'codex-review-packet.md'),
+      String(
+        sanitize(
+          renderReviewPacket({
+            scenario,
+            packet,
+          }),
+        ),
       ),
-      identity: Object.freeze({ ...input.identity }),
-      async submitUserMessage(text) {
-        if (manifest.status === 'preflight_failed') {
-          throw new Error('live_scenario_preflight_failed');
-        }
-        if (
-          manifest.status === 'completed' ||
-          manifest.status === 'failed' ||
-          manifest.status === 'abandoned'
-        ) {
-          throw new Error('live_scenario_session_closed');
-        }
-        const normalized = text.trim();
-        if (!normalized) throw new Error('live_scenario_message_empty');
-        manifest.status = 'running';
-        await persistManifest();
-        await recordTraceEvidence('user_message', { text: normalized });
-        try {
-          const output = await input.executeTurn({
-            text: normalized,
-            recordToolEvent: async (toolEvent) => {
-              if (toolEvent.phase === 'started') {
-                await recordTraceEvidence('tool_started', {
-                  callId: toolEvent.callId,
-                  toolName: toolEvent.toolName,
-                  arguments: toolEvent.arguments,
-                  requestedAt: toolEvent.requestedAt,
-                });
-                return;
-              }
-              await recordTraceEvidence(
-                toolEvent.phase === 'completed'
-                  ? 'tool_completed'
-                  : 'tool_failed',
-                toolEvent.phase === 'completed'
-                  ? {
-                      callId: toolEvent.callId,
-                      toolName: toolEvent.toolName,
-                      arguments: toolEvent.arguments,
-                      rawResult: toolEvent.rawResult,
-                      modelFacingResult: toolEvent.modelFacingResult,
-                      executionStartedAt: toolEvent.executionStartedAt,
-                      completedAt: toolEvent.completedAt,
-                      executionDurationMs: toolEvent.executionDurationMs,
-                    }
-                  : {
-                      callId: toolEvent.callId,
-                      toolName: toolEvent.toolName,
-                      arguments: toolEvent.arguments,
-                      error: serializedError(toolEvent.error),
-                      requestedAt: toolEvent.requestedAt,
-                      executionStartedAt: toolEvent.executionStartedAt,
-                      completedAt: toolEvent.completedAt,
-                      totalDurationMs: toolEvent.totalDurationMs,
-                      executionDurationMs: toolEvent.executionDurationMs,
-                    },
-              );
-            },
-          });
-          await recordTraceEvidence('assistant_message', {
-            text: output.responseText,
-          });
-          return sanitize(output) as { responseText: string };
-        } catch (error) {
-          manifest.status = 'failed';
-          manifest.completedAt = now().toISOString();
-          await recordTraceEvidence('turn_failed', {
-            error: serializedError(error),
-          });
-          await recordTerminalArtifactHashes();
-          await persistManifest();
-          throw error;
-        }
-      },
-      async recordProtocolError(error, errorClass) {
-        await recordTraceEvidence('protocol_error', {
-          error,
-          ...(errorClass ? { errorClass } : {}),
-        });
-        if (
-          manifest.status === 'completed' ||
-          manifest.status === 'failed' ||
-          manifest.status === 'preflight_failed' ||
-          manifest.status === 'abandoned'
-        ) {
-          await recordTerminalArtifactHashes();
-          await persistManifest();
-        }
-      },
-      async interrupt(reason) {
-        if (
-          manifest.status === 'completed' ||
-          manifest.status === 'failed' ||
-          manifest.status === 'preflight_failed' ||
-          manifest.status === 'abandoned'
-        ) {
-          return;
-        }
-        manifest.status = 'abandoned';
-        manifest.completedAt = now().toISOString();
-        await recordTraceEvidence('session_interrupted', { reason });
-        await recordTerminalArtifactHashes();
-        await persistManifest();
-      },
-      async finish(note) {
-        if (
-          manifest.status === 'preflight_failed' ||
-          manifest.status === 'failed' ||
-          manifest.status === 'abandoned'
-        ) {
-          return;
-        }
-        if (manifest.status === 'completed') {
-          throw new Error('live_scenario_session_closed');
-        }
-        manifest.status = 'completed';
-        manifest.completedAt = now().toISOString();
-        if (note?.trim()) manifest.finishNote = note.trim();
-        await recordTraceEvidence('session_finished', {
-          ...(manifest.finishNote ? { note: manifest.finishNote } : {}),
-        });
-        await recordTerminalArtifactHashes();
-        await persistManifest();
-      },
-    };
+      'utf8',
+    );
+    manifest.evidence.artifactSha256 = Object.fromEntries(
+      await Promise.all(
+        [
+          'environment.json',
+          'trace.jsonl',
+          'transcript.md',
+          'evidence-packet.json',
+          'codex-review-packet.md',
+        ].map(async (fileName) => [
+          fileName,
+          await sha256(await readFile(join(runDirectory, fileName))),
+        ]),
+      ),
+    );
+    await persistManifest();
   }
 }
 
-async function renderReadableEvidence(input: {
-  runDirectory: string;
+function actionReferences(input: {
+  assistantTurnId?: string | null;
+  genUi: unknown;
+}): Array<{
+  assistantTurnId: string;
+  attachmentId: string;
+  actionId: string;
+}> {
+  if (input.genUi === undefined) return [];
+  if (
+    typeof input.assistantTurnId !== 'string' ||
+    !isRecord(input.genUi) ||
+    typeof input.genUi.id !== 'string' ||
+    !Array.isArray(input.genUi.actions)
+  ) {
+    throw new Error('live_scenario_rendered_action_reference_invalid');
+  }
+  const assistantTurnId = input.assistantTurnId;
+  const attachmentId = input.genUi.id;
+  return input.genUi.actions.map((action) => {
+    if (!isRecord(action) || typeof action.id !== 'string') {
+      throw new Error('live_scenario_rendered_action_reference_invalid');
+    }
+    return {
+      assistantTurnId,
+      attachmentId,
+      actionId: action.id,
+    };
+  });
+}
+
+function actionKey(input: {
+  assistantTurnId: string;
+  attachmentId: string;
+  actionId: string;
+}): string {
+  return JSON.stringify([
+    input.assistantTurnId,
+    input.attachmentId,
+    input.actionId,
+  ]);
+}
+
+function recommendationImpression(input: {
+  observation: LiveScenarioAssistantObservation;
+  occurredAt: string;
+}):
+  | {
+      recommendationId: string;
+      body: {
+        schemaVersion: 'kfc-recommendation-event-v1';
+        eventId: string;
+        occurredAt: string;
+        assistantTurnId: string;
+        attachmentId: string;
+        renderedActions: Array<{ actionId: string; position: number }>;
+        cartRevision: string;
+        actionDigest: string;
+      };
+    }
+  | undefined {
+  const attachment = input.observation.genUi;
+  if (
+    typeof input.observation.assistantTurnId !== 'string' ||
+    !isRecord(attachment) ||
+    attachment.widgetKind !== 'recommendationOffer' ||
+    attachment.status !== 'active' ||
+    typeof attachment.id !== 'string' ||
+    !isRecord(attachment.data)
+  ) {
+    return undefined;
+  }
+  const data = attachment.data;
+  if (
+    typeof data.recommendationId !== 'string' ||
+    typeof data.cartRevision !== 'string' ||
+    typeof data.actionDigest !== 'string' ||
+    !/^[a-f0-9]{64}$/u.test(data.actionDigest) ||
+    typeof data.decisionDigest !== 'string' ||
+    !Array.isArray(data.offers) ||
+    data.offers.length < 1 ||
+    data.offers.length > 4
+  ) {
+    throw new Error('live_scenario_recommendation_impression_invalid');
+  }
+  const renderedActions = data.offers.map((offer, index) => {
+    if (!isRecord(offer) || typeof offer.recommendationActionId !== 'string') {
+      throw new Error('live_scenario_recommendation_impression_invalid');
+    }
+    return {
+      actionId: offer.recommendationActionId,
+      position: index + 1,
+    };
+  });
+  const directEventId = `impression:${attachment.id}`;
+  const eventId = attachment.id.startsWith('recommendation-attachment:')
+    ? `recommendation-impression:${attachment.id.slice(
+        'recommendation-attachment:'.length,
+      )}`
+    : directEventId.length <= 128
+      ? directEventId
+      : `impression:${data.decisionDigest}`;
+  return {
+    recommendationId: data.recommendationId,
+    body: {
+      schemaVersion: 'kfc-recommendation-event-v1',
+      eventId,
+      occurredAt: input.occurredAt,
+      assistantTurnId: input.observation.assistantTurnId,
+      attachmentId: attachment.id,
+      renderedActions,
+      cartRevision: data.cartRevision,
+      actionDigest: data.actionDigest,
+    },
+  };
+}
+
+function renderTranscript(input: {
   manifest: Manifest;
-  scenario: ScenarioScript;
   events: TraceEvent[];
-  sanitize: EvidenceSanitizer;
-}): Promise<void> {
-  const transcript = [
-    `# Live transcript: ${input.scenario.title}`,
+}): string {
+  return [
+    `# Live transcript: ${input.manifest.scenario.title}`,
     '',
     `- Run: \`${input.manifest.runId}\` (attempt ${input.manifest.attempt})`,
-    `- Model: \`${input.manifest.model.candidateId}\` via \`${input.manifest.model.transport}\``,
+    `- Transport: \`${input.manifest.transport}\``,
+    `- Service commit: \`${String(input.manifest.source.service.gitSha ?? 'unknown')}\``,
+    `- Bridge commit: \`${input.manifest.source.bridge.gitSha}\``,
     `- Scenario source SHA-256: \`${input.manifest.scenario.sourceSha256}\``,
     '',
     ...input.events.flatMap(renderEvent),
     '',
   ].join('\n');
-  await writeFile(
-    join(input.runDirectory, 'transcript.md'),
-    String(input.sanitize(transcript)),
-    'utf8',
-  );
+}
 
-  const reviewPacket = [
+function renderEvent(event: TraceEvent): string[] {
+  if (event.type === 'user_message') {
+    return ['## User', '', String(event.text), ''];
+  }
+  if (event.type === 'action_submitted') {
+    return [
+      '## User action',
+      '',
+      '```json',
+      JSON.stringify(
+        {
+          assistantTurnId: event.assistantTurnId,
+          attachmentId: event.attachmentId,
+          actionId: event.actionId,
+        },
+        null,
+        2,
+      ),
+      '```',
+      '',
+    ];
+  }
+  if (event.type === 'assistant_message') {
+    return [
+      '## Assistant',
+      '',
+      String(event.text),
+      '',
+      ...(event.genUi === undefined
+        ? []
+        : [
+            '### Rendered GenUI and action references',
+            '',
+            '```json',
+            JSON.stringify(
+              {
+                assistantTurnId: event.assistantTurnId,
+                genUi: event.genUi,
+                renderedActionReferences: event.renderedActionReferences,
+              },
+              null,
+              2,
+            ),
+            '```',
+            '',
+          ]),
+    ];
+  }
+  if (
+    event.type === 'protocol_error' ||
+    event.type === 'action_reference_rejected' ||
+    event.type === 'http_turn_failed' ||
+    event.type === 'd1_evidence_collection_failed' ||
+    event.type === 'session_failed' ||
+    event.type === 'session_interrupted'
+  ) {
+    return [
+      `### ${event.type}`,
+      '',
+      '```json',
+      JSON.stringify(event, null, 2),
+      '```',
+      '',
+    ];
+  }
+  return [];
+}
+
+function renderReviewPacket(input: {
+  scenario: ScenarioScript;
+  packet: unknown;
+}): string {
+  return [
     `# Codex review packet: ${input.scenario.title}`,
     '',
     '## Held-out narrative',
@@ -431,102 +720,81 @@ async function renderReadableEvidence(input: {
     '',
     '## Review guidance',
     '',
-    'Evaluate the improvised transcript as a whole. Judge whether the assistant handled the narrative goal, grounded claims in tool evidence, preserved customer authority, and recovered naturally from failures. Do not require exact wording or an exact tool sequence.',
+    'Evaluate the improvised transcript and protected evidence as a whole. Judge the narrative outcome, evidence grounding, customer authority, and recovery. Do not require exact wording or an exact tool sequence. Return successful, partial, unsuccessful, or insufficient_evidence with evidence citations.',
     '',
-    '## Transcript',
+    '## Complete evidence packet',
     '',
-    ...input.events.flatMap(renderEvent),
+    '```json',
+    JSON.stringify(input.packet, null, 2),
+    '```',
     '',
   ].join('\n');
-  await writeFile(
-    join(input.runDirectory, 'codex-review-packet.md'),
-    String(input.sanitize(reviewPacket)),
-    'utf8',
+}
+
+function assertExpectedCandidate(
+  environment: Record<string, unknown>,
+  expected: AgentModelCandidateId,
+): void {
+  const agent = environmentVersions(environment).agent;
+  if (!isRecord(agent) || agent.candidateId !== expected) {
+    throw new Error('live_scenario_agent_binding_mismatch');
+  }
+}
+
+function environmentVersions(
+  environment: Record<string, unknown>,
+): Record<string, unknown> {
+  const proof = isRecord(environment.proof) ? environment.proof : {};
+  return isRecord(proof.versions) ? proof.versions : {};
+}
+
+function environmentObservability(
+  environment: Record<string, unknown>,
+): Record<string, unknown> {
+  const checks = isRecord(environment.checks) ? environment.checks : {};
+  return isRecord(checks.observability) ? checks.observability : {};
+}
+
+function serviceRelease(
+  environment: Record<string, unknown>,
+): Record<string, unknown> {
+  return isRecord(environment.release) ? environment.release : {};
+}
+
+function normalizedEvidenceUrl(value: string): string {
+  const url = new URL(value);
+  url.username = '';
+  url.password = '';
+  url.search = '';
+  url.hash = '';
+  return url.toString().replace(/\/$/u, '');
+}
+
+function evidenceSummary(evidence: D1Evidence): Record<string, unknown> {
+  return {
+    proofEnvelope: true,
+    recommendationInspection: Boolean(evidence.recommendationInspection),
+    orderFlowState: Boolean(evidence.orderFlowState),
+  };
+}
+
+function isTerminal(status: SessionStatus): boolean {
+  return (
+    status === 'completed' || status === 'failed' || status === 'abandoned'
   );
 }
 
-function renderEvent(event: TraceEvent): string[] {
-  switch (event.type) {
-    case 'user_message':
-      return [`## User`, '', String(event.text), ''];
-    case 'assistant_message':
-      return [`## Assistant`, '', String(event.text), ''];
-    case 'tool_completed':
-    case 'tool_failed':
-      return [
-        `### Tool ${event.type === 'tool_completed' ? 'result' : 'failure'}: ${String(event.toolName)}`,
-        '',
-        '```json',
-        JSON.stringify(
-          {
-            callId: event.callId,
-            arguments: event.arguments,
-            ...(event.type === 'tool_completed'
-              ? {
-                  rawResult: event.rawResult,
-                  modelFacingResult: event.modelFacingResult,
-                }
-              : { error: event.error }),
-            executionStartedAt: event.executionStartedAt,
-            completedAt: event.completedAt,
-            executionDurationMs: event.executionDurationMs,
-            requestedAt: event.requestedAt,
-            totalDurationMs: event.totalDurationMs,
-          },
-          null,
-          2,
-        ),
-        '```',
-        '',
-      ];
-    case 'tool_started':
-      return [
-        `### Tool call: ${String(event.toolName)}`,
-        '',
-        '```json',
-        JSON.stringify(
-          {
-            callId: event.callId,
-            arguments: event.arguments,
-            requestedAt: event.requestedAt,
-          },
-          null,
-          2,
-        ),
-        '```',
-        '',
-      ];
-    case 'turn_failed':
-    case 'preflight_failed':
-      return [
-        `### ${event.type}`,
-        '',
-        '```json',
-        JSON.stringify(event.error, null, 2),
-        '```',
-        '',
-      ];
-    case 'protocol_error':
-    case 'session_interrupted':
-      return [
-        `### ${event.type}`,
-        '',
-        '```json',
-        JSON.stringify(
-          {
-            ...(event.error ? { error: event.error } : {}),
-            ...(event.errorClass ? { errorClass: event.errorClass } : {}),
-            ...(event.reason ? { reason: event.reason } : {}),
-          },
-          null,
-          2,
-        ),
-        '```',
-        '',
-      ];
-    default:
-      return [];
+class LiveScenarioIncompleteEvidenceError extends Error {
+  constructor() {
+    super('live_scenario_d1_evidence_incomplete');
+    this.name = 'LiveScenarioIncompleteEvidenceError';
   }
+}
+
+function serializedError(error: unknown): { name: string; message: string } {
+  return error instanceof Error
+    ? { name: error.name, message: error.message }
+    : { name: 'UnknownError', message: String(error) };
 }
 
 async function writeJson(
@@ -541,43 +809,24 @@ async function writeJson(
   );
 }
 
-function serializedError(error: unknown): { name: string; message: string } {
-  return error instanceof Error
-    ? { name: error.name, message: error.message }
-    : { name: 'UnknownError', message: String(error) };
+async function sha256(value: Uint8Array): Promise<string> {
+  return createHash('sha256').update(value).digest('hex');
 }
 
-function assertSameIdentity(
-  expected: AgentModelIdentity,
-  actual: AgentModelIdentity,
-): void {
-  for (const key of [
-    'candidateId',
-    'provider',
-    'model',
-    'profile',
-    'transport',
-  ] as const) {
-    if (expected[key] !== actual[key]) {
-      throw new Error(`live_scenario_preflight_identity_mismatch:${key}`);
-    }
-  }
-}
-
-function assertRunId(runId: string): void {
-  if (!/^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/u.test(runId)) {
+function assertRunId(value: string): void {
+  if (!/^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/u.test(value)) {
     throw new Error('live_scenario_run_id_invalid');
   }
 }
 
 function isAlreadyExists(error: unknown): boolean {
-  return isRecord(error) && error.code === 'EEXIST';
+  return (
+    error instanceof Error &&
+    'code' in error &&
+    (error as NodeJS.ErrnoException).code === 'EEXIST'
+  );
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
-}
-
-async function sha256(value: Uint8Array): Promise<string> {
-  return createHash('sha256').update(value).digest('hex');
 }

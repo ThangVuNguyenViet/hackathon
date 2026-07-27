@@ -1,36 +1,56 @@
-# Subagent-driven live scenario harness
+# HTTP/D1 live scenario bridge
 
-This harness qualifies a fixed model against a retained narrative without
-replaying the narrative's example turns. A Codex role-player reads only the
-goal, preconditions, risks, and intended outcome emitted in the initial JSON
-record, then improvises the customer conversation one message at a time.
+This command is a thin stdin/evidence bridge over an already-running KFC chat
+service and its D1-backed protected evidence APIs. It does not construct or
+call a model locally. A Codex role-player uses its own subscription, reads only
+the emitted narrative, then improvises one customer turn or observed action at
+a time.
 
 ## Start one attempt
 
 From `services/kfc-agent-backend`:
 
 ```bash
+export KFC_AGENT_BACKEND_URL='https://<deployed-worker>'
+export KFC_DEMO_ADMIN_TOKEN='<protected-evidence-token>'
+
 npm run scenario:live -- \
   --scenario ai-talent-tracks/fnb/conversations/02-tu-van-combo-va-upsell.json \
-  --candidate qwen3.7-max \
-  --run-id qwen3.7-max-s02-a1 \
+  --candidate openai-gpt-4.1-mini \
+  --run-id openai-gpt-4.1-mini-s02-a1 \
   --attempt 1
 ```
 
-The model is constructed once and pinned to the session. Before any customer
-turn, the command runs the ordinary-invocation and typed-tool capability
-preflight. A failed preflight is recorded and exits without starting the
-scenario.
+`--candidate` is an expected deployed binding, not a local model selection. The
+bridge fails before customer work when deep readiness reports a different
+candidate. `--customer-id` may override the default fresh identity
+`live-<run-id>`. `--base-url` may be used instead of
+`KFC_AGENT_BACKEND_URL`.
 
 The command prints a `session_ready` JSON object containing the held-out
-narrative and protocol. Send improvised customer messages as newline-delimited
+narrative, deployed environment manifest, and protocol. Send newline-delimited
 JSON:
 
 ```json
 {"type":"user","text":"Bọn mình có bốn người nhưng chưa biết chọn gì, tư vấn giúp nhé."}
-{"type":"user","text":"Mình muốn xem thêm lựa chọn trong tầm ngân sách đó."}
+{"type":"action","assistantTurnId":"<observed assistant ID>","attachmentId":"<observed attachment ID>","actionId":"<observed action ID>"}
 {"type":"finish","note":"Role-player judged the narrative exploration complete."}
 ```
+
+User text is forwarded byte-for-byte as supplied in the JSON value. Assistant
+records include customer-safe text, the complete returned GenUI snapshot, and
+its action IDs. The role-player may submit one exact observed
+`assistantTurnId`/`attachmentId`/`actionId` tuple. The bridge validates that
+tuple against prior output and forwards it; it never chooses an action,
+constructs action payloads, or synthesizes a reference. The chat service
+independently verifies the assistant-turn and D1 attachment authority.
+Both forwarded turn kinds use authenticated live-scenario chat endpoints. The
+service converts the validated scenario/run correlation into its server-issued
+agent trace context, so every agent turn is queryable in LangSmith by the same
+`scenarioId` and `probeRunId` preserved in the evidence packet.
+After a recommendation offer is successfully written to stdout, the bridge
+records the exact server-authored impression binding once, matching the real
+client's impression-after-render boundary.
 
 Do not copy, enumerate, pipe, or automatically feed `scenario.turns`. They are
 historical narrative examples, not a replay script. There are no required
@@ -43,44 +63,52 @@ Every attempt owns a new, non-overwritable directory:
 ```text
 .artifacts/kfc-live-scenarios/<runId>/
 ├── manifest.json
-├── preflight.json
+├── environment.json
 ├── trace.jsonl
 ├── transcript.md
+├── evidence-packet.json
 └── codex-review-packet.md
 ```
 
-`trace.jsonl` is append-only and schema-versioned. It records every improvised
-user message, assistant response, tool call before adapter validation, complete
-raw local-fixture result, model-facing result or error, timestamps, call IDs,
-duration, preflight result, and terminal status. Invalid model tool arguments
-are retained even when the maintained adapter rejects them before the handler
-runs. The readable transcript includes the same tool evidence. Secret-shaped
-keys, bearer credentials, and API-key-shaped strings are redacted before local
-write.
+`environment.json` preserves deep readiness: deployed release/source commit,
+agent and monitor bindings, recommendation shadow/model revision, Sanity
+snapshot binding, and LangSmith project configuration. `trace.jsonl` preserves
+the exact stdin/HTTP timeline and every rendered action reference.
 
-Tool timing distinguishes the model's `requestedAt` from the queued tool's
-`executionStartedAt`; completion records execution duration and correlates the
-lifecycle by call ID.
+On `finish`, the bridge fetches the protected KFC proof envelope plus the
+correlated recommendation inspection and order-flow state. The self-contained
+`evidence-packet.json` therefore contains:
 
-The final manifest includes the session/scenario/probe correlation IDs and
-SHA-256 digests for the preflight, JSONL trace, readable transcript, and Codex
-review packet. The scenario entry independently pins the exact source-file
-SHA-256.
+- the improvised transcript and full customer-safe GenUI responses;
+- exact rendered and submitted action references;
+- the final D1 pack state and cumulative tool trace;
+- complete append-only recommendation events for the active order flow;
+- detailed redacted recommendation technical evidence;
+- LangSmith trace references;
+- model, shadow/model revision, and Sanity bindings;
+- deployed and bridge source commits; and
+- the complete environment manifest.
 
-When LangSmith credentials are configured, the same run also receives
-sanitized correlation and control-flow tracing. Raw customer text, tool
-arguments, tool results, credentials, addresses, and payment details remain
-out of LangSmith. Detailed synthetic evidence belongs only to the ignored local
-artifact directory.
+The final manifest contains SHA-256 digests for every evidence artifact and
+independently pins the scenario source SHA-256. Configured credentials,
+secret-shaped keys, bearer values, and authorization/cookie headers are
+redacted before local write. Narrative customer and assistant prose remains in
+the transcript by design. Protected technical evidence is fetched only with
+the admin credential and the credential itself is never persisted.
 
 Failed attempts are evidence. Never reuse a run ID or delete its directory.
 Start a retry with a distinct run ID and incremented `--attempt`.
 EOF or a control-stream failure records protocol evidence and terminalizes the
-attempt as `abandoned`; only the explicit finish command marks it `completed`.
+attempt as `abandoned`. An explicit finish marks it `completed` only when the
+protected proof envelope reports complete final D1 evidence. An incomplete
+HTTP 409 envelope is preserved in the packet, marks the attempt `failed`, and
+causes the bridge to exit nonzero.
 
 ## Independent review
 
 Give `codex-review-packet.md` to a fresh evaluator that did not implement the
 behavior. The evaluator should judge the transcript as a whole: narrative goal
 handling, grounding in tool evidence, customer authority, natural recovery,
-and safety. It must not impose exact wording or an exact tool sequence.
+and safety. It must not impose exact wording or an exact tool sequence. The
+verdict vocabulary is `successful`, `partial`, `unsuccessful`, or
+`insufficient_evidence`, with evidence citations.

@@ -229,6 +229,7 @@ export interface RecommendationOrderFlowInspectionEnvelope {
     traceRef: string | null;
   };
   eventCounts: Partial<Record<RecommendationEvent['eventType'], number>>;
+  events: RecommendationEvent[];
 }
 
 export type RecommendationSessionInspectionEnvelope =
@@ -246,6 +247,7 @@ export type RecommendationSessionInspectionEnvelope =
         traceRef: null;
       };
       eventCounts: {};
+      events: [];
     };
 
 export interface LoadedRecommendationPackState {
