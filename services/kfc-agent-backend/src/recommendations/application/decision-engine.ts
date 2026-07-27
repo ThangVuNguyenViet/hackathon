@@ -32,6 +32,14 @@ import type {
   PromotionFactsSnapshot,
   RankingStatisticsSnapshot,
 } from '../snapshots/types.js';
+import {
+  isRecommendationShadowPlacement,
+  type RecommendationOutputMode,
+  type RecommendationShadowComparison,
+  type RecommendationShadowScore,
+} from '../shadow/contracts.js';
+import { buildRecommendationShadowFeatureRows } from '../shadow/feature-rows.js';
+import { RecommendationShadowScorerError } from '../shadow/http-shadow-scorer.js';
 import type {
   RecommendationDecisionEmptyReason,
   RecommendationDecisionEngine,
@@ -54,6 +62,134 @@ const noMerchandisingResolution = (): MerchandisingResolution => ({
   effects: [],
   reasonCodes: [],
 });
+
+function inactiveShadowComparison(input: {
+  outputMode: RecommendationOutputMode;
+  status: 'not_applicable' | 'not_configured';
+  eligibleActionIds?: string[];
+  baselineOrderingActionIds?: string[];
+}): RecommendationShadowComparison {
+  return {
+    status: input.status,
+    outputMode: input.outputMode,
+    modelRevision: null,
+    eligibleActionIds: input.eligibleActionIds ?? [],
+    baselineOrderingActionIds: input.baselineOrderingActionIds ?? [],
+    activeTechnicalOrdering: 'baseline',
+  };
+}
+
+function sameActionIds(
+  scores: readonly RecommendationShadowScore[],
+  eligibleActionIds: readonly string[],
+): boolean {
+  const actual = scores.map((score) => score.actionId).sort();
+  const expected = [...eligibleActionIds].sort();
+  return (
+    new Set(actual).size === actual.length &&
+    actual.length === expected.length &&
+    actual.every((actionId, index) => actionId === expected[index])
+  );
+}
+
+async function shadowComparison(input: {
+  dependencies: RecommendationDecisionEngineDependencies;
+  context: RecommendationDecisionContext;
+  eligibleCandidates: readonly PotentialRecommendationCandidate[];
+  baselineRanking: readonly RankedCandidate[];
+  commerceFacts: CommerceFactsSnapshot;
+  promotionFacts: PromotionFactsSnapshot;
+  rankingStatistics: RankingStatisticsSnapshot;
+}): Promise<RecommendationShadowComparison> {
+  const outputMode = input.dependencies.shadowOutputMode ?? 'baseline';
+  const eligibleActionIds = input.eligibleCandidates.map(
+    (candidate) => candidate.action.actionId,
+  );
+  const baselineOrderingActionIds = input.baselineRanking.map(
+    (entry) => entry.candidate.action.actionId,
+  );
+  if (!isRecommendationShadowPlacement(input.context.request.placement)) {
+    return inactiveShadowComparison({
+      outputMode,
+      status: 'not_applicable',
+      eligibleActionIds,
+      baselineOrderingActionIds,
+    });
+  }
+  const scorer = input.dependencies.shadowScorer;
+  if (!scorer) {
+    return inactiveShadowComparison({
+      outputMode,
+      status: 'not_configured',
+      eligibleActionIds,
+      baselineOrderingActionIds,
+    });
+  }
+  const featureSchema =
+    input.context.request.placement === 'smart_cross_sell'
+      ? 'smart-cross-sell-feature-schema-v1'
+      : 'modifier-upsell-feature-schema-v1';
+  try {
+    const result = await scorer.score({
+      placement: input.context.request.placement,
+      featureSchema,
+      rows: buildRecommendationShadowFeatureRows({
+        context: input.context,
+        candidates: input.eligibleCandidates,
+        commerceFacts: input.commerceFacts,
+        promotionFacts: input.promotionFacts,
+        rankingStatistics: input.rankingStatistics,
+      }),
+    });
+    if (
+      result.modelRevision !== scorer.modelRevision ||
+      !sameActionIds(result.scores, eligibleActionIds) ||
+      result.scores.some((score) => score.featureSchema !== featureSchema)
+    ) {
+      throw new RecommendationShadowScorerError('shadow_response_invalid');
+    }
+    const learnedOrdering = [...result.scores].sort(
+      (left, right) =>
+        right.expectedValueScore - left.expectedValueScore ||
+        right.calibratedProbability - left.calibratedProbability ||
+        left.actionId.localeCompare(right.actionId),
+    );
+    return {
+      status: 'succeeded',
+      outputMode,
+      modelRevision: result.modelRevision,
+      eligibleActionIds,
+      baselineOrderingActionIds,
+      activeTechnicalOrdering:
+        outputMode === 'learned_technical' ? 'learned' : 'baseline',
+      learnedOrdering,
+      provenance: {
+        modelRevision: result.modelRevision,
+        modelArtifactIds: [
+          ...new Set(result.scores.map((score) => score.modelArtifactId)),
+        ].sort(),
+        calibrationIds: [
+          ...new Set(result.scores.map((score) => score.calibrationId)),
+        ].sort(),
+        featureSchema,
+      },
+    };
+  } catch (error) {
+    return {
+      status: 'failed',
+      outputMode,
+      modelRevision: scorer.modelRevision,
+      eligibleActionIds,
+      baselineOrderingActionIds,
+      activeTechnicalOrdering: 'baseline',
+      failureCode:
+        error instanceof RecommendationShadowScorerError &&
+        error.code === 'shadow_response_invalid'
+          ? 'shadow_response_invalid'
+          : 'shadow_unavailable',
+    };
+  }
+}
 
 const commerceBindings = (context: RecommendationDecisionContext) =>
   Object.values(context.request.commerceSnapshotBindings);
@@ -290,9 +426,11 @@ async function completeResult(input: {
     requestId: input.context.request.requestId,
     actions,
   });
+  const { shadowComparison: _shadowComparison, ...baselineTechnical } =
+    input.technical;
   const traceDigest = await digestCommerceAction({
     requestId: input.context.request.requestId,
-    technical: input.technical,
+    technical: baselineTechnical,
   });
   const eligible = input.technical.eligibilityDecisions.filter(
     (decision) => decision.eligible,
@@ -355,6 +493,7 @@ export class PureRecommendationDecisionEngine implements RecommendationDecisionE
       promotionFacts,
       merchandising,
     });
+    const outputMode = this.dependencies.shadowOutputMode ?? 'baseline';
 
     if (
       !authoritativeContextIsValid({
@@ -370,6 +509,10 @@ export class PureRecommendationDecisionEngine implements RecommendationDecisionE
         eligiblePrePolicyRanking: [],
         merchandisingResolution: noMerchandisingResolution(),
         emptyReason: 'invalid_context',
+        shadowComparison: inactiveShadowComparison({
+          outputMode,
+          status: 'not_applicable',
+        }),
       };
       return completeResult({
         context,
@@ -409,6 +552,12 @@ export class PureRecommendationDecisionEngine implements RecommendationDecisionE
         eligiblePrePolicyRanking: [],
         merchandisingResolution: noMerchandisingResolution(),
         emptyReason,
+        shadowComparison: inactiveShadowComparison({
+          outputMode,
+          status: 'not_applicable',
+          eligibleActionIds: [],
+          baselineOrderingActionIds: [],
+        }),
       };
       return completeResult({
         context,
@@ -428,6 +577,15 @@ export class PureRecommendationDecisionEngine implements RecommendationDecisionE
       eligibilityDecisions,
       rankingStatistics,
     });
+    const comparison = await shadowComparison({
+      dependencies: this.dependencies,
+      context,
+      eligibleCandidates,
+      baselineRanking: eligiblePrePolicyRanking,
+      commerceFacts,
+      promotionFacts,
+      rankingStatistics,
+    });
     const merchandisingResolution = resolveMerchandisingPolicies({
       context,
       rankedCandidates: eligiblePrePolicyRanking,
@@ -442,6 +600,7 @@ export class PureRecommendationDecisionEngine implements RecommendationDecisionE
         eligiblePrePolicyRanking,
         merchandisingResolution,
         emptyReason: 'merchandising_suppressed',
+        shadowComparison: comparison,
       };
       return completeResult({
         context,
@@ -467,6 +626,7 @@ export class PureRecommendationDecisionEngine implements RecommendationDecisionE
         eligiblePrePolicyRanking,
         merchandisingResolution,
         emptyReason: 'no_eligible_candidates',
+        shadowComparison: comparison,
       };
       return completeResult({
         context,
@@ -486,6 +646,7 @@ export class PureRecommendationDecisionEngine implements RecommendationDecisionE
       eligiblePrePolicyRanking,
       merchandisingResolution,
       emptyReason: null,
+      shadowComparison: comparison,
     };
     return completeResult({
       context,

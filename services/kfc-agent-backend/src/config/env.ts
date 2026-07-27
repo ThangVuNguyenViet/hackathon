@@ -1,6 +1,13 @@
 import { z } from 'zod';
 import { agentModelCandidateIds } from './agentModelProfile.js';
 
+const optionalUrlSchema = z
+  .string()
+  .refine(
+    (value) => value.trim() === '' || z.string().url().safeParse(value).success,
+    'Must be empty or a valid URL',
+  );
+
 const appEnvSchema = z.object({
   PORT: z.coerce.number().int().positive().default(18090),
   KFC_AGENT_CANDIDATE: z
@@ -41,6 +48,11 @@ const appEnvSchema = z.object({
   ZALO_APP_SECRET: z.string().optional().default(''),
   ZALO_API_BASE_URL: z.string().optional().default(''),
   KFC_DEMO_ADMIN_TOKEN: z.string().optional().default(''),
+  KFC_RECOMMENDATION_SHADOW_URL: optionalUrlSchema.optional().default(''),
+  KFC_RECOMMENDATION_SHADOW_MODEL_REVISION: z.string().optional().default(''),
+  KFC_RECOMMENDATION_OUTPUT_MODE: z
+    .enum(['baseline', 'learned_technical'])
+    .default('baseline'),
 });
 
 export type AppEnv = z.infer<typeof appEnvSchema>;

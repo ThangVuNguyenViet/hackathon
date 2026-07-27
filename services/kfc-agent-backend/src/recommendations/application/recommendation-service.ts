@@ -44,6 +44,10 @@ import type {
   RecommendationApplicationServiceDependencies,
   RecommendationDecisionApplicationInput,
 } from './service-types.js';
+import type {
+  RecommendationOutputMode,
+  RecommendationShadowScorer,
+} from '../shadow/contracts.js';
 
 const recommendationIdSchema = z.string().trim().min(1);
 const mutationOutcomeTypes = new Set<RecommendationOutcomeRequest['eventType']>(
@@ -630,11 +634,17 @@ export function createBundledRecommendationApplicationService(
   dependencies: Omit<
     RecommendationApplicationServiceDependencies,
     'decisionEngine' | 'historyRepository' | 'packState'
-  >,
+  > & {
+    shadowScorer?: RecommendationShadowScorer;
+    shadowOutputMode?: RecommendationOutputMode;
+  },
 ): RecommendationApplicationService {
   return createRecommendationApplicationService({
     ...dependencies,
-    decisionEngine: createBundledRecommendationDecisionEngine(),
+    decisionEngine: createBundledRecommendationDecisionEngine({
+      shadowScorer: dependencies.shadowScorer,
+      shadowOutputMode: dependencies.shadowOutputMode,
+    }),
     historyRepository: new StoredDemoCustomerHistoryRepository(
       dependencies.persistence,
     ),

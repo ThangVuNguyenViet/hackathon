@@ -193,6 +193,9 @@ export interface WorkerEnv {
   MESSENGER_FETCH?: typeof fetch;
   ZALO_FETCH?: typeof fetch;
   KFC_DEMO_ADMIN_TOKEN?: string;
+  KFC_RECOMMENDATION_SHADOW_URL?: string;
+  KFC_RECOMMENDATION_SHADOW_MODEL_REVISION?: string;
+  KFC_RECOMMENDATION_OUTPUT_MODE?: 'baseline' | 'learned_technical';
   RELEASE_GIT_SHA?: string;
   RELEASE_DEPLOYMENT_ID?: string;
   RELEASE_BUILT_AT?: string;

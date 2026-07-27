@@ -15,6 +15,11 @@ import type {
   PromotionFactsRepository,
   RankingStatisticsRepository,
 } from '../snapshots/repositories.js';
+import type {
+  RecommendationOutputMode,
+  RecommendationShadowComparison,
+  RecommendationShadowScorer,
+} from '../shadow/contracts.js';
 
 export type RecommendationDecisionEmptyReason =
   | null
@@ -33,6 +38,7 @@ export interface RecommendationDecisionTechnicalEvidence {
   eligiblePrePolicyRanking: RankedCandidate[];
   merchandisingResolution: MerchandisingResolution;
   emptyReason: RecommendationDecisionEmptyReason;
+  shadowComparison: RecommendationShadowComparison;
 }
 
 export interface RecommendationDecisionResult {
@@ -52,4 +58,6 @@ export interface RecommendationDecisionEngineDependencies {
   promotionFactsRepository: PromotionFactsRepository;
   rankerRepository: PlacementRankerRepository;
   merchandisingPolicyRepository: MerchandisingPolicyRepository;
+  shadowScorer?: RecommendationShadowScorer;
+  shadowOutputMode?: RecommendationOutputMode;
 }

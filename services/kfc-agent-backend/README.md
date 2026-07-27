@@ -31,6 +31,38 @@ The mock POS remains a separate proof API. There is no runtime production,
 gateway, commerce-environment, or POS-mode switch; a future production
 migration must replace the mock providers and fixtures explicitly.
 
+## Recommendation shadow scoring
+
+The qualified recommendation model is an optional, non-authoritative shadow
+dependency. Configure both non-secret Worker variables together:
+
+```text
+KFC_RECOMMENDATION_SHADOW_URL
+KFC_RECOMMENDATION_SHADOW_MODEL_REVISION
+```
+
+`KFC_RECOMMENDATION_OUTPUT_MODE` defaults to `baseline`. The only other valid
+value, `learned_technical`, changes protected comparison evidence only. It
+never changes the customer response or action set and cannot be selected by a
+customer request. `/ready` reports whether the endpoint/revision pair is
+configured, the pinned revision, and the protected output mode without
+exposing the endpoint URL.
+
+The current public Hugging Face/MLflow boundary requires no credential, so this
+feature adds no secret. Keep all actual secret values out of `.env.example`,
+`wrangler.toml`, logs, and documentation. Configure existing Worker secrets
+interactively, without placing values on the command line:
+
+```bash
+npx wrangler secret put KFC_DEMO_ADMIN_TOKEN
+npx wrangler secret put OPENAI_API_KEY
+npx wrangler secret put OPENCODE_API_KEY
+npx wrangler secret put GOOGLE_API_KEY
+npx wrangler secret put LANGSMITH_API_KEY
+npx wrangler secret put META_APP_SECRET
+npx wrangler secret put META_PAGE_ACCESS_TOKEN
+```
+
 Select one immutable candidate profile with:
 
 ```bash

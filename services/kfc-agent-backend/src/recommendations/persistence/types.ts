@@ -210,6 +210,71 @@ const merchandisingResolutionSchema = z
   })
   .strict();
 
+const shadowScoreSchema = z
+  .object({
+    actionId: nonBlankStringSchema,
+    calibratedProbability: finiteNumberSchema.min(0).max(1),
+    expectedValueScore: finiteNumberSchema,
+    modelArtifactId: nonBlankStringSchema,
+    calibrationId: nonBlankStringSchema,
+    featureSchema: nonBlankStringSchema,
+    featureContributions: z
+      .array(
+        z
+          .object({
+            feature: nonBlankStringSchema,
+            reasonCode: nonBlankStringSchema,
+            contribution: finiteNumberSchema.min(-1).max(1),
+          })
+          .strict(),
+      )
+      .max(5),
+  })
+  .strict();
+
+const shadowComparisonBase = {
+  outputMode: z.enum(['baseline', 'learned_technical']),
+  eligibleActionIds: z.array(nonBlankStringSchema),
+  baselineOrderingActionIds: z.array(nonBlankStringSchema),
+} as const;
+
+const shadowComparisonSchema = z.discriminatedUnion('status', [
+  z
+    .object({
+      ...shadowComparisonBase,
+      status: z.enum(['not_applicable', 'not_configured']),
+      modelRevision: z.null(),
+      activeTechnicalOrdering: z.literal('baseline'),
+    })
+    .strict(),
+  z
+    .object({
+      ...shadowComparisonBase,
+      status: z.literal('failed'),
+      modelRevision: nonBlankStringSchema,
+      activeTechnicalOrdering: z.literal('baseline'),
+      failureCode: z.enum(['shadow_unavailable', 'shadow_response_invalid']),
+    })
+    .strict(),
+  z
+    .object({
+      ...shadowComparisonBase,
+      status: z.literal('succeeded'),
+      modelRevision: nonBlankStringSchema,
+      activeTechnicalOrdering: z.enum(['baseline', 'learned']),
+      learnedOrdering: z.array(shadowScoreSchema),
+      provenance: z
+        .object({
+          modelRevision: nonBlankStringSchema,
+          modelArtifactIds: z.array(nonBlankStringSchema).min(1),
+          calibrationIds: z.array(nonBlankStringSchema).min(1),
+          featureSchema: nonBlankStringSchema,
+        })
+        .strict(),
+    })
+    .strict(),
+]);
+
 export const recommendationDecisionTechnicalEvidenceSchema = z
   .object({
     potentialCandidates: z.array(recommendationCandidateSchema),
@@ -228,6 +293,7 @@ export const recommendationDecisionTechnicalEvidenceSchema = z
         'invalid_context',
       ])
       .nullable(),
+    shadowComparison: shadowComparisonSchema,
   })
   .strict();
 

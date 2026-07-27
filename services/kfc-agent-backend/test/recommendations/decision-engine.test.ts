@@ -23,6 +23,10 @@ import type {
   PromotionFactsSnapshot,
   RankingStatisticsSnapshot,
 } from '../../src/recommendations/snapshots/types.js';
+import type {
+  RecommendationShadowScoreRequest,
+  RecommendationShadowScorer,
+} from '../../src/recommendations/shadow/contracts.js';
 
 const bundledEngine = createBundledRecommendationDecisionEngine();
 
@@ -522,6 +526,254 @@ describe('pure recommendation decision engine', () => {
     ).toEqual(
       expect.arrayContaining(['exclude_target', 'boost_target', 'pin_target']),
     );
+  });
+
+  it('records protected learned ordering over the exact baseline-eligible rows without changing customer output', async () => {
+    let shadowRequest: RecommendationShadowScoreRequest | undefined;
+    let baselineEligibleActionIds: string[] = [];
+    const rankers = new RankerRepository();
+    const rankerRepository = {
+      forPlacement: (
+        placement: RecommendationDecisionContext['request']['placement'],
+      ) => {
+        const baseline = rankers.forPlacement(placement);
+        return {
+          version: baseline.version,
+          rank(input: Parameters<typeof baseline.rank>[0]) {
+            baselineEligibleActionIds = input.candidates.map(
+              (candidate) => candidate.action.actionId,
+            );
+            return baseline.rank(input);
+          },
+        };
+      },
+    };
+    const shadowScorer: RecommendationShadowScorer = {
+      modelRevision: 'hf-revision-0123456789abcdef',
+      async score(request) {
+        shadowRequest = request;
+        return {
+          modelRevision: this.modelRevision,
+          scores: [...request.rows].reverse().map((row, index) => ({
+            actionId: row.action_id,
+            calibratedProbability: 0.25,
+            expectedValueScore: index + 1,
+            modelArtifactId: 'smart_cross_sell-lightgbm-873cafdc6a6a0a9f',
+            calibrationId:
+              'smart_cross_sell-isotonic-calibration-9c9c55e026c5a193',
+            featureSchema: 'smart-cross-sell-feature-schema-v1',
+            featureContributions: [],
+          })),
+        };
+      },
+    };
+    const context = smartContext();
+    const baseline = await decide(context);
+    const learnedTechnical = await decide(
+      context,
+      engineWith({
+        rankerRepository,
+        shadowScorer,
+        shadowOutputMode: 'learned_technical',
+      }),
+    );
+
+    expect(shadowRequest?.rows.map((row) => row.action_id)).toEqual(
+      baselineEligibleActionIds,
+    );
+    expect(Object.keys(shadowRequest!.rows[0]!).sort()).toEqual(
+      [
+        'action_id',
+        'candidate_id',
+        'category',
+        'eligible',
+        'feature_basket_association_score',
+        'feature_budget_vnd',
+        'feature_cart_anchor',
+        'feature_cart_subtotal_vnd',
+        'feature_customer_category_order_count',
+        'feature_customer_item_order_count',
+        'feature_customer_order_count',
+        'feature_discount_ratio',
+        'feature_discount_vnd',
+        'feature_global_item_order_count',
+        'feature_mission',
+        'feature_party_size',
+        'feature_price_delta_vnd',
+        'feature_schema',
+        'feature_store_id',
+        'feature_store_item_order_count',
+        'feature_store_local_day_of_week',
+        'feature_store_local_hour',
+        'feature_time_window',
+        'placement',
+        'product_code',
+      ].sort(),
+    );
+    expect(shadowRequest!.rows[0]).toMatchObject({
+      placement: 'smart_cross_sell',
+      feature_schema: 'smart-cross-sell-feature-schema-v1',
+      eligible: true,
+      candidate_id: baselineEligibleActionIds[0],
+      feature_cart_anchor: '20751',
+      feature_store_id: 'KFCVN0002',
+      feature_mission: '__missing__',
+      feature_time_window: '2026-07',
+      feature_party_size: 0,
+      feature_budget_vnd: 0,
+      feature_cart_subtotal_vnd: 99_000,
+      feature_store_local_hour: 16,
+      feature_store_local_day_of_week: 0,
+    });
+    expect(learnedTechnical.response).toEqual(baseline.response);
+    expect(learnedTechnical.technical.shadowComparison).toMatchObject({
+      status: 'succeeded',
+      outputMode: 'learned_technical',
+      modelRevision: 'hf-revision-0123456789abcdef',
+      eligibleActionIds: baselineEligibleActionIds,
+      baselineOrderingActionIds:
+        learnedTechnical.technical.eligiblePrePolicyRanking.map(
+          (entry) => entry.candidate.action.actionId,
+        ),
+      activeTechnicalOrdering: 'learned',
+      provenance: {
+        modelRevision: 'hf-revision-0123456789abcdef',
+        modelArtifactIds: ['smart_cross_sell-lightgbm-873cafdc6a6a0a9f'],
+        calibrationIds: [
+          'smart_cross_sell-isotonic-calibration-9c9c55e026c5a193',
+        ],
+        featureSchema: 'smart-cross-sell-feature-schema-v1',
+      },
+    });
+    expect(
+      learnedTechnical.technical.shadowComparison.status === 'succeeded'
+        ? learnedTechnical.technical.shadowComparison.learnedOrdering.map(
+            (entry) => entry.expectedValueScore,
+          )
+        : [],
+    ).toEqual(
+      [...baselineEligibleActionIds].map((_, index) => index + 1).reverse(),
+    );
+  });
+
+  it('projects the exact qualified modifier signature and keeps baseline mode active', async () => {
+    let request: RecommendationShadowScoreRequest | undefined;
+    const scorer: RecommendationShadowScorer = {
+      modelRevision: 'hf-revision-modifier-0123456789abcdef',
+      async score(input) {
+        request = input;
+        return {
+          modelRevision: this.modelRevision,
+          scores: input.rows.map((row, index) => ({
+            actionId: row.action_id,
+            calibratedProbability: 0.1,
+            expectedValueScore: index,
+            modelArtifactId: 'modifier_upsell-keras-76b1e4388f687857',
+            calibrationId:
+              'modifier_upsell-isotonic-calibration-c0b6e02e02ca5437',
+            featureSchema: 'modifier-upsell-feature-schema-v1',
+            featureContributions: [],
+          })),
+        };
+      },
+    };
+    const context = modifierContext();
+    context.remainingBudgetVnd = 20_000;
+    const baseline = await decide(context);
+    const shadowed = await decide(
+      context,
+      engineWith({
+        shadowScorer: scorer,
+        shadowOutputMode: 'baseline',
+      }),
+    );
+
+    expect(shadowed.response).toEqual(baseline.response);
+    expect(Object.keys(request!.rows[0]!).sort()).toEqual(
+      [
+        'action_id',
+        'candidate_id',
+        'eligible',
+        'feature_basket_association_score',
+        'feature_budget_vnd',
+        'feature_cart_anchor',
+        'feature_cart_subtotal_vnd',
+        'feature_customer_category_order_count',
+        'feature_customer_item_order_count',
+        'feature_customer_order_count',
+        'feature_discount_ratio',
+        'feature_discount_vnd',
+        'feature_global_item_order_count',
+        'feature_mission',
+        'feature_party_size',
+        'feature_price_delta_vnd',
+        'feature_price_to_remaining_budget_ratio',
+        'feature_remaining_budget_vnd',
+        'feature_schema',
+        'feature_store_id',
+        'feature_store_item_order_count',
+        'feature_store_local_day_of_week',
+        'feature_store_local_hour',
+        'feature_time_window',
+        'modifier_path',
+        'placement',
+        'product_code',
+      ].sort(),
+    );
+    expect(request!.rows[0]).toMatchObject({
+      placement: 'modifier_upsell',
+      feature_schema: 'modifier-upsell-feature-schema-v1',
+      eligible: true,
+      feature_cart_anchor: '20752',
+      feature_budget_vnd: 149_000,
+      feature_cart_subtotal_vnd: 129_000,
+      feature_remaining_budget_vnd: 20_000,
+      feature_time_window: '2026-07',
+    });
+    expect(shadowed.technical.shadowComparison.activeTechnicalOrdering).toBe(
+      'baseline',
+    );
+  });
+
+  it('isolates shadow failure and ignores customer-authored learned mode', async () => {
+    const context = smartContext();
+    context.request = parseRecommendationDecisionRequest({
+      ...context.request,
+      experimentProfile: {
+        ...context.request.experimentProfile,
+        outputMode: 'learned_technical',
+      },
+    });
+    const baseline = await decide(context);
+    const failingScorer: RecommendationShadowScorer = {
+      modelRevision: 'hf-revision-0123456789abcdef',
+      async score() {
+        throw new Error(
+          'Authorization: Bearer private-shadow-token service unavailable',
+        );
+      },
+    };
+
+    const failedShadow = await decide(
+      context,
+      engineWith({
+        shadowScorer: failingScorer,
+        shadowOutputMode: 'baseline',
+      }),
+    );
+
+    expect(failedShadow.response).toEqual(baseline.response);
+    expect(failedShadow.technical.shadowComparison).toEqual(
+      expect.objectContaining({
+        status: 'failed',
+        outputMode: 'baseline',
+        modelRevision: 'hf-revision-0123456789abcdef',
+        failureCode: 'shadow_unavailable',
+      }),
+    );
+    expect(
+      JSON.stringify(failedShadow.technical.shadowComparison),
+    ).not.toContain('private-shadow-token');
   });
 
   it('returns typed empty reasons for attempted, wrong-stage, and empty placement contexts', async () => {

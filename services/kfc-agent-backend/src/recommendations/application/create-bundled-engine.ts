@@ -17,12 +17,18 @@ export function createRecommendationDecisionEngine(
   return new PureRecommendationDecisionEngine(dependencies);
 }
 
-export function createBundledRecommendationDecisionEngine(): RecommendationDecisionEngine {
+export function createBundledRecommendationDecisionEngine(
+  options: Pick<
+    RecommendationDecisionEngineDependencies,
+    'shadowScorer' | 'shadowOutputMode'
+  > = {},
+): RecommendationDecisionEngine {
   return createRecommendationDecisionEngine({
     commerceFactsRepository: new BundledCommerceFactsRepository(),
     rankingStatisticsRepository: new BundledRankingStatisticsRepository(),
     promotionFactsRepository: new BundledPromotionFactsRepository(),
     rankerRepository: new RankerRepository(),
     merchandisingPolicyRepository: new LocalMerchandisingPolicyRepository(),
+    ...options,
   });
 }

@@ -2,6 +2,7 @@ import type { AgentModelIdentity } from './config/agentModelProfile.js';
 import type { MonitorModelIdentity } from './config/monitorModelProfile.js';
 import { loadBundledGeneratedFixtures } from './fixtures/bundledFixtures.js';
 import type { WorkerEnv } from './worker.js';
+import { recommendationShadowReadiness } from './config/recommendationShadow.js';
 
 export type WorkerAgentReadiness = (
   | {
@@ -51,6 +52,8 @@ export async function checkWorkerReadiness(
         endpoint: string;
         samplingRate: number;
       };
+      outputMode?: 'baseline' | 'learned_technical';
+      modelRevision?: string | null;
     }
   >;
   release: {
@@ -161,6 +164,8 @@ export async function checkWorkerReadiness(
         endpoint: string;
         samplingRate: number;
       };
+      outputMode?: 'baseline' | 'learned_technical';
+      modelRevision?: string | null;
     }
   > = {
     database,
@@ -176,6 +181,11 @@ export async function checkWorkerReadiness(
       configured: true,
       message: 'Bundled fixture commerce is enabled',
     },
+    recommendationShadow: recommendationShadowReadiness({
+      shadowUrl: env.KFC_RECOMMENDATION_SHADOW_URL ?? '',
+      modelRevision: env.KFC_RECOMMENDATION_SHADOW_MODEL_REVISION ?? '',
+      outputMode: env.KFC_RECOMMENDATION_OUTPUT_MODE ?? 'baseline',
+    }),
   };
   if (deep) {
     checks.messengerToken = await checkMessengerToken(env);
@@ -216,6 +226,7 @@ export async function checkWorkerReadiness(
               toolCatalog: 'typed-commerce-tools-v1',
               ranker: 'deterministic-safety-rerank-v1',
               ledger: 'kfc-scenario-ledger-v1',
+              recommendationShadow: checks.recommendationShadow,
             },
           },
         }

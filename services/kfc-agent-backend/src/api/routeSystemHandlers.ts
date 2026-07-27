@@ -283,6 +283,14 @@ export function createSystemRouteHandlers(context: RouteHandlerContext) {
         production: false,
         message: 'Bundled fixture-backed mock commerce is enabled',
       };
+      const recommendationShadow = options.readiness?.recommendationShadow ?? {
+        ok: true as const,
+        required: false as const,
+        configured: false,
+        outputMode: 'baseline' as const,
+        modelRevision: null,
+        message: 'Recommendation shadow scoring is not configured',
+      };
       const checks = messengerToken
         ? {
             database,
@@ -295,6 +303,7 @@ export function createSystemRouteHandlers(context: RouteHandlerContext) {
             monitor,
             observability,
             commerce,
+            recommendationShadow,
           }
         : {
             database,
@@ -306,6 +315,7 @@ export function createSystemRouteHandlers(context: RouteHandlerContext) {
             monitor,
             observability,
             commerce,
+            recommendationShadow,
           };
       const ok = Object.values(checks).every((check) => check.ok);
 
@@ -347,6 +357,7 @@ export function createSystemRouteHandlers(context: RouteHandlerContext) {
                     toolCatalog: 'typed-commerce-tools-v1',
                     ranker: 'deterministic-safety-rerank-v1',
                     ledger: 'kfc-scenario-ledger-v1',
+                    recommendationShadow,
                   },
                 },
               }

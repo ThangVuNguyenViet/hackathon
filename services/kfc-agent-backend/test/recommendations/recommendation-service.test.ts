@@ -131,6 +131,14 @@ function technical(): RecommendationDecisionResult['technical'] {
       reasonCodes: [],
     },
     emptyReason: null,
+    shadowComparison: {
+      status: 'not_applicable',
+      outputMode: 'baseline',
+      modelRevision: null,
+      eligibleActionIds: [],
+      baselineOrderingActionIds: [],
+      activeTechnicalOrdering: 'baseline',
+    },
   };
 }
 
@@ -1630,6 +1638,82 @@ describe('Recommendation application service', () => {
     ]) {
       expect(serialized).not.toContain(forbidden);
     }
+  });
+
+  it('keeps exact shadow provenance only in protected recommendation inspection', async () => {
+    const engine: RecommendationDecisionEngine = {
+      async decide(context) {
+        return {
+          response: responseFor(context),
+          technical: {
+            ...technical(),
+            shadowComparison: {
+              status: 'succeeded',
+              outputMode: 'learned_technical',
+              modelRevision: 'hf-revision-0123456789abcdef',
+              eligibleActionIds: ['product:20752'],
+              baselineOrderingActionIds: ['product:20752'],
+              activeTechnicalOrdering: 'learned',
+              learnedOrdering: [
+                {
+                  actionId: 'product:20752',
+                  calibratedProbability: 0.42,
+                  expectedValueScore: 21_000,
+                  modelArtifactId: 'smart_cross_sell-lightgbm-873cafdc6a6a0a9f',
+                  calibrationId:
+                    'smart_cross_sell-isotonic-calibration-9c9c55e026c5a193',
+                  featureSchema: 'smart-cross-sell-feature-schema-v1',
+                  featureContributions: [],
+                },
+              ],
+              provenance: {
+                modelRevision: 'hf-revision-0123456789abcdef',
+                modelArtifactIds: [
+                  'smart_cross_sell-lightgbm-873cafdc6a6a0a9f',
+                ],
+                calibrationIds: [
+                  'smart_cross_sell-isotonic-calibration-9c9c55e026c5a193',
+                ],
+                featureSchema: 'smart-cross-sell-feature-schema-v1',
+              },
+            },
+          },
+        };
+      },
+    };
+    const { service, inspection } = await application(engine);
+    const result = await service.decide({
+      request: requestFor({
+        suffix: 'protected-shadow-provenance',
+        placement: 'local_favorite',
+      }),
+    });
+    if (result.status !== 'decided') throw new Error('decision expected');
+
+    expect(JSON.stringify(result.response)).not.toMatch(
+      /hf-revision|lightgbm|calibration-9c9c/u,
+    );
+    expect(result.response.versionBindings).toMatchObject({
+      shadowModel: null,
+      calibration: null,
+    });
+    await expect(
+      inspection.recommendation(result.response.recommendationId),
+    ).resolves.toMatchObject({
+      technical: {
+        shadowComparison: {
+          status: 'succeeded',
+          modelRevision: 'hf-revision-0123456789abcdef',
+          provenance: {
+            modelArtifactIds: ['smart_cross_sell-lightgbm-873cafdc6a6a0a9f'],
+            calibrationIds: [
+              'smart_cross_sell-isotonic-calibration-9c9c55e026c5a193',
+            ],
+            featureSchema: 'smart-cross-sell-feature-schema-v1',
+          },
+        },
+      },
+    });
   });
 
   it('returns an empty protected projection for a session without decisions', async () => {

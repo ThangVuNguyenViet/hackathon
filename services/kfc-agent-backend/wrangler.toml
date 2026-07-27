@@ -5,6 +5,9 @@ compatibility_flags = ["nodejs_compat"]
 
 [vars]
 META_INBOX_URL_TEMPLATE = "https://business.facebook.com/latest/inbox/all?asset_id={pageId}&selected_item_id={externalUserId}"
+KFC_RECOMMENDATION_SHADOW_URL = ""
+KFC_RECOMMENDATION_SHADOW_MODEL_REVISION = ""
+KFC_RECOMMENDATION_OUTPUT_MODE = "baseline"
 
 [observability]
 enabled = true

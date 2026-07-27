@@ -19,11 +19,21 @@ import { kfcRecommendationPackStateDefinition } from '../recommendations/applica
 import { createRecommendationInspectionService } from '../recommendations/application/inspection-service.js';
 import { createBundledRecommendationApplicationService } from '../recommendations/application/recommendation-service.js';
 import type { RecommendationRouteServicesFactory } from './routeHandlerContracts.js';
+import { recommendationShadowReadiness } from '../config/recommendationShadow.js';
+import { HttpRecommendationShadowScorer } from '../recommendations/shadow/http-shadow-scorer.js';
+import type {
+  RecommendationOutputMode,
+  RecommendationShadowScorer,
+} from '../recommendations/shadow/contracts.js';
 
 export const KFC_RECOMMENDATION_STORE_TIMEZONE = 'Asia/Ho_Chi_Minh';
 
 export function createBundledRecommendationRouteServicesFactory(
   storeTimezone = KFC_RECOMMENDATION_STORE_TIMEZONE,
+  shadow: {
+    scorer?: RecommendationShadowScorer;
+    outputMode?: RecommendationOutputMode;
+  } = {},
 ): RecommendationRouteServicesFactory {
   return {
     create(store) {
@@ -37,6 +47,8 @@ export function createBundledRecommendationRouteServicesFactory(
           clock: {
             now: () => new Date().toISOString(),
           },
+          shadowScorer: shadow.scorer,
+          shadowOutputMode: shadow.outputMode,
         }),
         inspection: createRecommendationInspectionService({
           persistence,
@@ -138,8 +150,25 @@ export function buildServerOptionsFromEnv(env: AppEnv): BuildServerOptions {
       })
     : undefined;
   const langsmithApiKey = optionalValue(env.LANGSMITH_API_KEY);
+  const shadowReadiness = recommendationShadowReadiness({
+    shadowUrl: env.KFC_RECOMMENDATION_SHADOW_URL,
+    modelRevision: env.KFC_RECOMMENDATION_SHADOW_MODEL_REVISION,
+    outputMode: env.KFC_RECOMMENDATION_OUTPUT_MODE,
+  });
+  const shadowScorer = shadowReadiness.configured
+    ? new HttpRecommendationShadowScorer({
+        baseUrl: env.KFC_RECOMMENDATION_SHADOW_URL,
+        modelRevision: env.KFC_RECOMMENDATION_SHADOW_MODEL_REVISION,
+      })
+    : undefined;
   return {
-    recommendations: createBundledRecommendationRouteServicesFactory(),
+    recommendations: createBundledRecommendationRouteServicesFactory(
+      KFC_RECOMMENDATION_STORE_TIMEZONE,
+      {
+        scorer: shadowScorer,
+        outputMode: env.KFC_RECOMMENDATION_OUTPUT_MODE,
+      },
+    ),
     demoAdminToken: optionalValue(env.KFC_DEMO_ADMIN_TOKEN),
     messengerVerifyToken: optionalValue(env.MESSENGER_VERIFY_TOKEN),
     metaAppSecret: optionalValue(env.META_APP_SECRET),
@@ -196,6 +225,7 @@ export function buildServerOptionsFromEnv(env: AppEnv): BuildServerOptions {
       commerce: {
         mode: 'fixture',
       },
+      recommendationShadow: shadowReadiness,
     },
   };
 }
