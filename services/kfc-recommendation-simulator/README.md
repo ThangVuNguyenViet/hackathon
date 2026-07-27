@@ -84,6 +84,47 @@ uv run kfc-rec-sim benchmark \
 without copying them. Placement-specific caches, models, explanations, MLflow
 runs, and reports still live under the selected output.
 
+## Qualified shadow-model package
+
+The reviewed qualification snapshots are pinned by canonical result digest:
+
+- Smart Cross-sell:
+  `e76c7641d48a9f47f0da084ca77f30ceb8df6c31c2ebee65eef15d52c80cda80`
+- Modifier Upsell:
+  `75f1d02a4e230e901eb222b26268b255f46842483ad77f04e2192ea74d81de26`
+
+The Modifier Upsell qualification reused the Smart Cross-sell qualification's
+audited datasets. Reproduce its restartable stage graph with that same
+`--dataset-root`; changing the dataset-root identity intentionally invalidates
+its checkpoints:
+
+```bash
+uv run kfc-rec-sim benchmark \
+  --placement modifier-upsell \
+  --profile qualification \
+  --dataset-root <smart-cross-sell-qualification>/datasets \
+  --output <modifier-upsell-qualification>
+```
+
+After both benchmark results reproduce their pinned digests, create the local
+placement-aware MLflow PyFunc:
+
+```bash
+uv run kfc-rec-sim package-shadow-models \
+  --smart-cross-sell-qualification <smart-cross-sell-qualification> \
+  --modifier-upsell-qualification <modifier-upsell-qualification> \
+  --output <new-mlflow-model-directory>
+```
+
+Packaging fails closed unless each `benchmark-result.json` both declares and
+canonically recomputes to its required digest. The MLflow package copies only
+the qualified LightGBM/Keras model, calibration, feature-schema, ranker
+manifest, and qualification results; generated datasets and duplicate model
+binaries remain outside Git. Its `shadow-model-manifest.json` records input
+file hashes, immutable model/calibration/schema IDs, the MLflow signature, and
+the synthetic-evidence disclaimer. Hugging Face publication and deployment are
+separate provisioning work.
+
 Generated bundles contain:
 
 ```text

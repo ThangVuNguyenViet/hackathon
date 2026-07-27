@@ -7,6 +7,7 @@ from pathlib import Path
 from .artifacts import audit_bundle, generate_bundle
 from .benchmark import run_benchmark
 from .modifier_benchmark import run_modifier_benchmark
+from .serving import save_qualified_shadow_model
 
 
 def _package_root() -> Path:
@@ -43,6 +44,19 @@ def main() -> None:
     benchmark.add_argument("--output", type=Path)
     benchmark.add_argument("--dataset-root", type=Path)
 
+    package_shadow = subparsers.add_parser("package-shadow-models")
+    package_shadow.add_argument(
+        "--smart-cross-sell-qualification",
+        type=Path,
+        required=True,
+    )
+    package_shadow.add_argument(
+        "--modifier-upsell-qualification",
+        type=Path,
+        required=True,
+    )
+    package_shadow.add_argument("--output", type=Path, required=True)
+
     args = parser.parse_args()
     if args.command == "generate":
         config = args.config or _package_root() / "worlds" / f"{args.preset}.json"
@@ -62,7 +76,7 @@ def main() -> None:
     elif args.command == "audit":
         result = audit_bundle(args.bundle.resolve())
         print(json.dumps(result, indent=2, ensure_ascii=False))
-    else:
+    elif args.command == "benchmark":
         placement = args.placement.replace("-", "_")
         output = (
             args.output
@@ -93,6 +107,17 @@ def main() -> None:
                 output_dir=output.resolve(),
             )
         print(json.dumps(result, indent=2, ensure_ascii=False))
+    else:
+        manifest = save_qualified_shadow_model(
+            smart_cross_sell_qualification=(
+                args.smart_cross_sell_qualification.resolve()
+            ),
+            modifier_upsell_qualification=(
+                args.modifier_upsell_qualification.resolve()
+            ),
+            output_directory=args.output.resolve(),
+        )
+        print(json.dumps(manifest, indent=2, ensure_ascii=False))
 
 
 if __name__ == "__main__":
