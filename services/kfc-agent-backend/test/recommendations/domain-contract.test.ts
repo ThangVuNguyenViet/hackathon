@@ -5,6 +5,7 @@ import { describe, expect, it } from 'vitest';
 import {
   canonicalUtcInstantOccursBefore,
   compareCanonicalUtcInstants,
+  strictlyLaterCanonicalUtcInstant,
 } from '../../src/recommendations/domain/canonical-instant.js';
 import {
   instantSchema,
@@ -218,6 +219,21 @@ describe('recommendation domain contracts', () => {
         '2028-02-29T00:00:00.1002Z',
       ),
     ).toBe(-1);
+  });
+
+  it('advances a repeated canonical instant without losing fractional precision', () => {
+    expect(
+      strictlyLaterCanonicalUtcInstant(
+        '2028-02-29T00:00:00.1002Z',
+        '2028-02-29T00:00:00.1002Z',
+      ),
+    ).toBe('2028-02-29T00:00:00.10021Z');
+    expect(
+      strictlyLaterCanonicalUtcInstant(
+        '2028-02-29T00:00:00.1003Z',
+        '2028-02-29T00:00:00.1002Z',
+      ),
+    ).toBe('2028-02-29T00:00:00.1003Z');
   });
 
   it('parses the canonical decision response and event', () => {

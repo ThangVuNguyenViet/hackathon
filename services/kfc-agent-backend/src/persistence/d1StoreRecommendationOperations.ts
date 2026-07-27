@@ -20,7 +20,7 @@ import {
   assertRecommendationPackState,
   currentRecommendationPackStateRevision,
   sameRecommendationDecisionRecord,
-  sameRecommendationEvent,
+  sameRecommendationEventReplaySemantics,
 } from '../recommendations/persistence/repository.js';
 import {
   parseRecommendationDecisionRecord,
@@ -332,7 +332,7 @@ export class D1StoreRecommendationOperations extends D1StoreConversationOperatio
     const existing = await this.readEvent(event.eventId);
     if (existing) {
       return existing.eventFingerprint === eventFingerprint &&
-        sameRecommendationEvent(existing.event, event)
+        sameRecommendationEventReplaySemantics(existing.event, event)
         ? { status: 'replay', event: existing.event }
         : { status: 'conflict' };
     }
@@ -392,7 +392,7 @@ export class D1StoreRecommendationOperations extends D1StoreConversationOperatio
     if (stored) {
       if (
         stored.eventFingerprint !== eventFingerprint ||
-        !sameRecommendationEvent(stored.event, event)
+        !sameRecommendationEventReplaySemantics(stored.event, event)
       ) {
         return { status: 'conflict' };
       }

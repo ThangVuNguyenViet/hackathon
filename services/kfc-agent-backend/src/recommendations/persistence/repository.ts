@@ -112,6 +112,16 @@ export function sameRecommendationEvent(
   return canonicalJson(left) === canonicalJson(right);
 }
 
+export function sameRecommendationEventReplaySemantics(
+  stored: RecommendationEvent,
+  requested: RecommendationEvent,
+): boolean {
+  return sameRecommendationEvent(stored, {
+    ...requested,
+    recordedAt: stored.recordedAt,
+  });
+}
+
 export function assertCompletedRecommendationReservationReplay(input: {
   requested: Pick<
     ReserveRecommendationDecisionInput,

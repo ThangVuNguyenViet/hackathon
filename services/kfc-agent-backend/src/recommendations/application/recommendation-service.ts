@@ -16,8 +16,11 @@ import {
   parseRecommendationImpressionRequest,
   parseRecommendationOutcomeRequest,
 } from '../domain/schemas.js';
+import { strictlyLaterCanonicalUtcInstant } from '../domain/canonical-instant.js';
 import type { RecommendationDecisionRecord } from '../persistence/repository.js';
 import {
+  applyCustomerRequestedRecommendationDecision,
+  applyCustomerRequestedRecommendationOutcome,
   applyRecommendationDecision,
   applyRecommendationImpression,
   applyRecommendationOutcome,
@@ -29,7 +32,6 @@ import {
   kfcRecommendationPackStateDefinition,
   loadRecommendationPackState,
   parseRecommendationDecisionApplicationInput,
-  stateWithCasRevision,
 } from './context-factory.js';
 import type {
   EventApplicationResult,
@@ -43,6 +45,22 @@ const recommendationIdSchema = z.string().trim().min(1);
 const mutationOutcomeTypes = new Set<RecommendationOutcomeRequest['eventType']>(
   ['cart_mutation_succeeded', 'cart_mutation_failed'],
 );
+const terminalOutcomeTypes = new Set<RecommendationOutcomeRequest['eventType']>(
+  ['checkout_completed', 'order_abandoned', 'order_cancelled'],
+);
+const recommendationOutcomeTypes = new Set<
+  RecommendationOutcomeRequest['eventType']
+>([
+  'selected',
+  'explicitly_dismissed',
+  'ignored',
+  'superseded',
+  'cart_mutation_succeeded',
+  'cart_mutation_failed',
+  'checkout_completed',
+  'order_abandoned',
+  'order_cancelled',
+]);
 
 async function decisionEventId(
   requestId: string,
@@ -54,17 +72,16 @@ async function decisionEventId(
 
 async function decisionEvents(input: {
   record: RecommendationDecisionRecord;
-  recordedAt: string;
+  requestedAt: string;
+  completedAt: string;
 }): Promise<[RecommendationEvent, RecommendationEvent]> {
-  const { record, recordedAt } = input;
+  const { record, requestedAt, completedAt } = input;
   const shared = {
     schemaVersion: 'kfc-recommendation-event-v1' as const,
     requestId: record.request.requestId,
     orderFlowId: record.request.orderFlowId,
     sessionId: record.request.sessionId,
     placement: record.request.placement,
-    occurredAt: recordedAt,
-    recordedAt,
     actor: 'system' as const,
     actionId: null,
     cartRevision: record.request.cartRevision,
@@ -79,6 +96,8 @@ async function decisionEvents(input: {
       ),
       eventType: 'decision_requested',
       recommendationId: null,
+      occurredAt: requestedAt,
+      recordedAt: requestedAt,
       payload: {
         requestFingerprint: record.requestFingerprint,
         cartRevision: record.request.cartRevision,
@@ -92,6 +111,8 @@ async function decisionEvents(input: {
       ),
       eventType: 'decision_completed',
       recommendationId: record.response.recommendationId,
+      occurredAt: completedAt,
+      recordedAt: completedAt,
       payload: {
         status: record.response.status,
         source: record.response.decisionSource,
@@ -107,21 +128,12 @@ function applyDecision(
   state: RecommendationState,
   response: RecommendationDecisionResponse,
   decisionTime: string,
+  requestKind: 'proactive' | 'customer_requested',
 ): RecommendationState {
-  try {
-    return stateWithCasRevision(
-      state,
-      applyRecommendationDecision(state, response, decisionTime),
-    );
-  } catch (error) {
-    if (
-      error instanceof Error &&
-      error.message === 'recommendation_decision_not_eligible'
-    ) {
-      return stateWithCasRevision(state, state);
-    }
-    throw error;
+  if (requestKind === 'customer_requested' && state.stage === 'complete') {
+    return applyCustomerRequestedRecommendationDecision(state, response);
   }
+  return applyRecommendationDecision(state, response, decisionTime);
 }
 
 async function nextEnvelope(
@@ -170,7 +182,7 @@ function offeredActionIds(record: RecommendationDecisionRecord): string[] {
   );
 }
 
-function isCurrentRecommendation(
+function pendingMatchesRecommendation(
   loaded: LoadedRecommendationPackState,
   record: RecommendationDecisionRecord,
 ): boolean {
@@ -181,6 +193,41 @@ function isCurrentRecommendation(
     pending.requestId === record.request.requestId &&
     pending.placement === record.request.placement
   );
+}
+
+async function isCurrentRecommendation(
+  dependencies: RecommendationApplicationServiceDependencies,
+  loaded: LoadedRecommendationPackState,
+  record: RecommendationDecisionRecord,
+): Promise<'proactive' | 'customer_requested' | null> {
+  if (pendingMatchesRecommendation(loaded, record)) return 'proactive';
+  if (
+    loaded.state.stage !== 'complete' ||
+    loaded.state.pendingRecommendation !== null ||
+    record.stateRevisionAfter > loaded.state.revision
+  ) {
+    return null;
+  }
+  const latest =
+    await dependencies.persistence.latestRecommendationDecisionForOrderFlow(
+      record.request.orderFlowId,
+    );
+  if (
+    !latest ||
+    latest.response.recommendationId !== record.response.recommendationId
+  ) {
+    return null;
+  }
+  const events = await dependencies.persistence.listRecommendationEvents({
+    recommendationId: record.response.recommendationId,
+  });
+  return events.some((event) =>
+    recommendationOutcomeTypes.has(
+      event.eventType as RecommendationOutcomeRequest['eventType'],
+    ),
+  )
+    ? null
+    : 'customer_requested';
 }
 
 async function existingEvent(
@@ -258,7 +305,7 @@ export function createRecommendationApplicationService(
     async decide(input: RecommendationDecisionApplicationInput) {
       const parsed = parseRecommendationDecisionApplicationInput(input);
       const requestFingerprint = await digestCommerceAction(parsed);
-      const recordedAt = dependencies.clock.now();
+      const requestedAt = dependencies.clock.now();
       const ownerDigest = await digestCommerceAction(
         `${parsed.request.requestId}:${requestFingerprint}`,
       );
@@ -270,7 +317,7 @@ export function createRecommendationApplicationService(
           requestId: parsed.request.requestId,
           requestFingerprint,
           ownerToken,
-          createdAt: recordedAt,
+          createdAt: requestedAt,
         });
       if (reservation.status === 'replay') {
         return { status: 'replay', response: reservation.record.response };
@@ -300,11 +347,27 @@ export function createRecommendationApplicationService(
         contextSource: dependencies.contextSource,
       });
       const decision = await dependencies.decisionEngine.decide(context);
-      const nextState = applyDecision(
-        loaded.state,
-        decision.response,
-        parsed.request.decisionTime,
+      const completedAt = strictlyLaterCanonicalUtcInstant(
+        dependencies.clock.now(),
+        requestedAt,
       );
+      let nextState: RecommendationState;
+      try {
+        nextState = applyDecision(
+          loaded.state,
+          decision.response,
+          parsed.request.decisionTime,
+          parsed.requestKind,
+        );
+      } catch (error) {
+        if (
+          error instanceof Error &&
+          error.message === 'recommendation_decision_not_eligible'
+        ) {
+          return { status: 'state_conflict' };
+        }
+        throw error;
+      }
       const actionDigest = await digestCommerceAction(
         decision.response.primaryOffer?.actions ?? [],
       );
@@ -316,7 +379,7 @@ export function createRecommendationApplicationService(
         actionDigest,
         stateRevisionBefore: loaded.state.revision,
         stateRevisionAfter: nextState.revision,
-        recordedAt,
+        recordedAt: completedAt,
       };
       const commit =
         await dependencies.persistence.commitRecommendationDecision({
@@ -324,7 +387,7 @@ export function createRecommendationApplicationService(
           expectedPackStateDigest: loaded.expectedDigest,
           nextPackState: await nextEnvelope(dependencies, loaded, nextState),
           record,
-          events: await decisionEvents({ record, recordedAt }),
+          events: await decisionEvents({ record, requestedAt, completedAt }),
         });
       if (commit.status === 'stale') return { status: 'state_conflict' };
       return {
@@ -337,12 +400,12 @@ export function createRecommendationApplicationService(
       recommendationId: string,
       input: RecommendationImpressionRequest,
     ): Promise<EventApplicationResult> {
-      recommendationIdSchema.parse(recommendationId);
+      const normalizedRecommendationId =
+        recommendationIdSchema.parse(recommendationId);
       const request = parseRecommendationImpressionRequest(input);
-      const record =
-        await dependencies.persistence.getRecommendationDecision(
-          recommendationId,
-        );
+      const record = await dependencies.persistence.getRecommendationDecision(
+        normalizedRecommendationId,
+      );
       if (!record) return { status: 'not_found' };
       if (
         record.response.status !== 'recommended' ||
@@ -387,7 +450,7 @@ export function createRecommendationApplicationService(
           }),
         );
       }
-      if (!isCurrentRecommendation(loaded, record)) {
+      if (!(await isCurrentRecommendation(dependencies, loaded, record))) {
         return { status: 'stale_recommendation' };
       }
       if (
@@ -416,9 +479,9 @@ export function createRecommendationApplicationService(
           ),
         },
       });
-      const nextState = stateWithCasRevision(
+      const nextState = applyRecommendationImpression(
         loaded.state,
-        applyRecommendationImpression(loaded.state, transitionEvent),
+        transitionEvent,
       );
       return mapAppendResult(
         await dependencies.persistence.appendRecommendationEvent({
@@ -434,12 +497,12 @@ export function createRecommendationApplicationService(
       recommendationId: string,
       input: RecommendationOutcomeRequest,
     ): Promise<EventApplicationResult> {
-      recommendationIdSchema.parse(recommendationId);
+      const normalizedRecommendationId =
+        recommendationIdSchema.parse(recommendationId);
       const request = parseRecommendationOutcomeRequest(input);
-      const record =
-        await dependencies.persistence.getRecommendationDecision(
-          recommendationId,
-        );
+      const record = await dependencies.persistence.getRecommendationDecision(
+        normalizedRecommendationId,
+      );
       if (!record) return { status: 'not_found' };
       if (
         record.response.status !== 'recommended' ||
@@ -479,26 +542,38 @@ export function createRecommendationApplicationService(
           }),
         );
       }
-      if (!isCurrentRecommendation(loaded, record)) {
+      const currentRecommendation = await isCurrentRecommendation(
+        dependencies,
+        loaded,
+        record,
+      );
+      if (!currentRecommendation) {
         return { status: 'stale_recommendation' };
       }
       const actionIds = offeredActionIds(record);
       if (request.actionId !== null && !actionIds.includes(request.actionId)) {
         return { status: 'render_binding_conflict' };
       }
-      if (
+      if (request.cartRevision === null) {
+        if (!terminalOutcomeTypes.has(request.eventType)) {
+          return { status: 'cart_revision_conflict' };
+        }
+      } else if (
         !mutationOutcomeTypes.has(request.eventType) &&
-        request.cartRevision !== null &&
         request.cartRevision !== record.request.cartRevision
       ) {
         return { status: 'cart_revision_conflict' };
       }
       let nextState: RecommendationState;
       try {
-        nextState = stateWithCasRevision(
-          loaded.state,
-          applyRecommendationOutcome(loaded.state, event, actionIds),
-        );
+        nextState =
+          currentRecommendation === 'customer_requested'
+            ? applyCustomerRequestedRecommendationOutcome(
+                loaded.state,
+                event,
+                actionIds,
+              )
+            : applyRecommendationOutcome(loaded.state, event, actionIds);
       } catch (error) {
         if (
           error instanceof Error &&

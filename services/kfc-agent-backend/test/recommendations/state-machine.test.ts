@@ -8,6 +8,8 @@ import {
   parseRecommendationEvent,
 } from '../../src/recommendations/domain/schemas.js';
 import {
+  applyCustomerRequestedRecommendationDecision,
+  applyCustomerRequestedRecommendationOutcome,
   applyRecommendationDecision,
   applyRecommendationImpression,
   applyRecommendationOutcome,
@@ -567,11 +569,97 @@ describe('durable recommendation state machine', () => {
     });
   });
 
+  it('records a customer-requested decision after complete without reopening proactive state', () => {
+    const state = {
+      ...initialRecommendationState('order-flow-001'),
+      revision: 4,
+      stage: 'complete' as const,
+      attemptedPlacements: [
+        'local_favorite' as const,
+        'modifier_upsell' as const,
+        'smart_cross_sell' as const,
+      ],
+      shownActionIds: ['action-shown-001'],
+      rejectedActionIds: ['action-rejected-001'],
+      nextEligiblePlacement: null,
+    };
+
+    expect(
+      applyCustomerRequestedRecommendationDecision(
+        state,
+        decision({ placement: 'for_you' }),
+      ),
+    ).toEqual({
+      ...state,
+      revision: 5,
+    });
+  });
+
+  it('records a customer-requested outcome after complete without a pending proactive recommendation', () => {
+    const state = {
+      ...initialRecommendationState('order-flow-001'),
+      revision: 5,
+      stage: 'complete' as const,
+      attemptedPlacements: [
+        'local_favorite' as const,
+        'modifier_upsell' as const,
+        'smart_cross_sell' as const,
+      ],
+      pendingRecommendation: null,
+      nextEligiblePlacement: null,
+    };
+    const event = outcome({
+      eventId: 'event-customer-requested-dismissed-001',
+      placement: 'for_you',
+      eventType: 'explicitly_dismissed',
+      actionId: null,
+    });
+    const next = applyCustomerRequestedRecommendationOutcome(state, event, [
+      'action-for_you-001',
+    ]);
+
+    expect(next).toMatchObject({
+      revision: 6,
+      stage: 'complete',
+      attemptedPlacements: [
+        'local_favorite',
+        'modifier_upsell',
+        'smart_cross_sell',
+      ],
+      rejectedActionIds: ['action-for_you-001'],
+      recordedOutcomeEventIds: ['event-customer-requested-dismissed-001'],
+      pendingRecommendation: null,
+      nextEligiblePlacement: null,
+    });
+    expect(
+      applyCustomerRequestedRecommendationOutcome(next, event, [
+        'action-for_you-001',
+      ]),
+    ).toEqual(next);
+  });
+
   it('rejects decisions for a proactive placement that is not currently eligible', () => {
     expect(() =>
       applyRecommendationDecision(
         initialRecommendationState('order-flow-001'),
         decision({ placement: 'modifier_upsell' }),
+        '2026-07-27T09:00:00Z',
+      ),
+    ).toThrow('recommendation_decision_not_eligible');
+  });
+
+  it('rejects proactive decisions after the order flow is complete', () => {
+    const complete = {
+      ...initialRecommendationState('order-flow-001'),
+      revision: 4,
+      stage: 'complete' as const,
+      nextEligiblePlacement: null,
+    };
+
+    expect(() =>
+      applyRecommendationDecision(
+        complete,
+        decision({ placement: 'for_you' }),
         '2026-07-27T09:00:00Z',
       ),
     ).toThrow('recommendation_decision_not_eligible');

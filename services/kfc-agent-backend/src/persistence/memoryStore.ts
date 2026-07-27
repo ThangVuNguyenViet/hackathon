@@ -89,7 +89,7 @@ import {
   assertRecommendationPackState,
   currentRecommendationPackStateRevision,
   sameRecommendationDecisionRecord,
-  sameRecommendationEvent,
+  sameRecommendationEventReplaySemantics,
 } from '../recommendations/persistence/repository.js';
 import {
   parseRecommendationDecisionRecord,
@@ -1102,7 +1102,7 @@ export class MemoryStore
           structuredClone(existing.event),
         );
         return existing.eventFingerprint === eventFingerprint &&
-          sameRecommendationEvent(storedEvent, event)
+          sameRecommendationEventReplaySemantics(storedEvent, event)
           ? { status: 'replay', event: structuredClone(storedEvent) }
           : { status: 'conflict' };
       }

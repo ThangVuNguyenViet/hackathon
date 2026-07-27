@@ -201,7 +201,9 @@ export function applyRecommendationDecision(
   const decision = parseRecommendationDecisionResponse(response);
   assertOrderFlow(current, decision.orderFlowId);
 
-  if (current.stage === 'complete') return current;
+  if (current.stage === 'complete') {
+    throw new Error('recommendation_decision_not_eligible');
+  }
   if (
     current.attemptedPlacements.includes(decision.placement) ||
     readyStageFor(current, decision.placement) === 'complete'
@@ -255,6 +257,19 @@ export function applyRecommendationDecision(
   });
 }
 
+export function applyCustomerRequestedRecommendationDecision(
+  state: RecommendationState,
+  response: RecommendationDecisionResponse,
+): RecommendationState {
+  const current = parsedState(state);
+  const decision = parseRecommendationDecisionResponse(response);
+  assertOrderFlow(current, decision.orderFlowId);
+  if (current.stage !== 'complete') {
+    throw new Error('recommendation_customer_requested_state_invalid');
+  }
+  return transition(current, {});
+}
+
 export function applyRecommendationImpression(
   state: RecommendationState,
   event: RecommendationEvent,
@@ -271,6 +286,38 @@ export function applyRecommendationImpression(
   );
   if (shownActionIds.length === current.shownActionIds.length) return current;
   return transition(current, { shownActionIds });
+}
+
+export function applyCustomerRequestedRecommendationOutcome(
+  state: RecommendationState,
+  event: RecommendationEvent,
+  displayedActionIds: readonly string[],
+): RecommendationState {
+  const current = parsedState(state);
+  const outcome = parseRecommendationEvent(event);
+  assertOrderFlow(current, outcome.orderFlowId);
+  if (current.stage !== 'complete' || !isOutcomeEvent(outcome)) {
+    throw new Error('recommendation_customer_requested_outcome_invalid');
+  }
+  if (current.recordedOutcomeEventIds.includes(outcome.eventId)) return current;
+  if (
+    outcome.actionId !== null &&
+    !displayedActionIds.includes(outcome.actionId)
+  ) {
+    throw new Error('recommendation_customer_requested_outcome_invalid');
+  }
+  return transition(current, {
+    recordedOutcomeEventIds: appendUnique(current.recordedOutcomeEventIds, [
+      outcome.eventId,
+    ]),
+    rejectedActionIds:
+      outcome.eventType === 'explicitly_dismissed'
+        ? appendUnique(
+            current.rejectedActionIds,
+            displayedActionIds as readonly (typeof current.rejectedActionIds)[number][],
+          )
+        : [...current.rejectedActionIds],
+  });
 }
 
 export function applyRecommendationOutcome(

@@ -103,20 +103,17 @@ export function parseRecommendationDecisionApplicationInput(
     request: parseRecommendationDecisionRequest(outer.request),
     requestKind: outer.requestKind,
     trusted: {
-      ...trusted,
-      ...(trusted.verifiedCohorts
-        ? { verifiedCohorts: [...trusted.verifiedCohorts].sort() }
-        : {}),
-      ...(trusted.verifiedDietaryEvidence
+      parentCartLineId: trusted.parentCartLineId ?? null,
+      remainingBudgetVnd: trusted.remainingBudgetVnd ?? null,
+      verifiedCohorts: [...(trusted.verifiedCohorts ?? [])].sort(),
+      verifiedDietaryEvidence: trusted.verifiedDietaryEvidence
         ? {
-            verifiedDietaryEvidence: {
-              ...trusted.verifiedDietaryEvidence,
-              excludedSellableItemIds: [
-                ...trusted.verifiedDietaryEvidence.excludedSellableItemIds,
-              ].sort(),
-            },
+            ...trusted.verifiedDietaryEvidence,
+            excludedSellableItemIds: [
+              ...trusted.verifiedDietaryEvidence.excludedSellableItemIds,
+            ].sort(),
           }
-        : {}),
+        : null,
     },
   };
 }
@@ -226,9 +223,8 @@ export async function createRecommendationDecisionContext(input: {
   const serverContext: RecommendationServerContext =
     serverContextSchema.parse(rawServerContext);
   const parentCartLineId =
-    trusted.parentCartLineId !== undefined
-      ? trusted.parentCartLineId
-      : inferredParentCartLineId(request, starterDecision);
+    trusted.parentCartLineId ??
+    inferredParentCartLineId(request, starterDecision);
   return {
     request,
     storeTimezone: serverContext.storeTimezone,
@@ -242,15 +238,4 @@ export async function createRecommendationDecisionContext(input: {
         : structuredClone(trusted.verifiedDietaryEvidence),
     customerHistory: customerHistoryFor(request, history),
   };
-}
-
-export function stateWithCasRevision(
-  before: RecommendationState,
-  after: RecommendationState,
-): RecommendationState {
-  if (after.revision > before.revision) return after;
-  return parseRecommendationState({
-    ...after,
-    revision: before.revision + 1,
-  });
 }

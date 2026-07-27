@@ -59,3 +59,20 @@ export function canonicalUtcInstantOccursBefore(
 ): boolean {
   return compareCanonicalUtcInstants(earlier, later) === -1;
 }
+
+export function strictlyLaterCanonicalUtcInstant(
+  candidate: string,
+  lowerBound: string,
+): string {
+  const comparison = compareCanonicalUtcInstants(candidate, lowerBound);
+  if (comparison === null) {
+    throw new Error('canonical_utc_instant_invalid');
+  }
+  if (comparison > 0) return candidate;
+
+  const lowerBoundParts = canonicalUtcInstantPartsPattern.exec(lowerBound);
+  if (!lowerBoundParts?.groups) {
+    throw new Error('canonical_utc_instant_invalid');
+  }
+  return `${lowerBoundParts.groups.whole}.${lowerBoundParts.groups.fraction ?? ''}1Z`;
+}

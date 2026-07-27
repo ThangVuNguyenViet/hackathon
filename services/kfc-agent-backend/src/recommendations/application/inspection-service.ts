@@ -2,6 +2,7 @@ import type {
   RecommendationEvent,
   RecommendationState,
 } from '../domain/contracts.js';
+import { digestCommerceAction } from '../../ordering/commerceDigest.js';
 import type { RecommendationDecisionRecord } from '../persistence/repository.js';
 import type { RecommendationDecisionTechnicalEvidence } from './types.js';
 import { loadRecommendationPackState } from './context-factory.js';
@@ -22,18 +23,40 @@ function eventCounts(
   return result;
 }
 
-function redactedTechnical(
+const redactedBinding = (binding: string): string => {
+  if (binding.startsWith('history:verified:')) {
+    return 'redacted:verified-history';
+  }
+  if (binding.startsWith('completed-order:')) {
+    return 'redacted:completed-order';
+  }
+  if (binding.startsWith('dietary-evidence:')) {
+    return 'redacted:dietary-evidence';
+  }
+  return binding;
+};
+
+async function redactedTechnical(
   technical: RecommendationDecisionTechnicalEvidence,
-): RecommendationDecisionTechnicalEvidence {
+): Promise<RecommendationDecisionTechnicalEvidence> {
   const result = structuredClone(technical);
-  result.eligibilityDecisions = result.eligibilityDecisions.map((decision) => ({
-    ...decision,
-    evidenceBindings: decision.evidenceBindings.filter(
-      (binding) =>
-        !binding.startsWith('history:verified:') &&
-        !binding.startsWith('completed-order:'),
-    ),
-  }));
+  result.eligibilityDecisions = await Promise.all(
+    result.eligibilityDecisions.map(async (decision) => {
+      const digestInput = {
+        policyVersion: decision.policyVersion,
+        actionId: decision.actionId,
+        eligible: decision.eligible,
+        reasonCodes: decision.reasonCodes,
+        evidenceBindings: [
+          ...new Set(decision.evidenceBindings.map(redactedBinding)),
+        ].sort(),
+      };
+      return {
+        ...digestInput,
+        digest: await digestCommerceAction(digestInput),
+      };
+    }),
+  );
   return result;
 }
 
@@ -109,7 +132,6 @@ function latestSessionDecision(
   return [...records].sort(
     (left, right) =>
       right.recordedAt.localeCompare(left.recordedAt) ||
-      right.stateRevisionAfter - left.stateRevisionAfter ||
       right.response.recommendationId.localeCompare(
         left.response.recommendationId,
       ),
@@ -140,7 +162,7 @@ export function createRecommendationInspectionService(
           requestFingerprint: record.requestFingerprint,
           recordedAt: record.recordedAt,
         },
-        technical: redactedTechnical(record.technical),
+        technical: await redactedTechnical(record.technical),
         state: loaded.state,
         events: (
           await dependencies.persistence.listRecommendationEvents({

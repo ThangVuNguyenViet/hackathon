@@ -13,6 +13,7 @@ import {
 } from '../../src/recommendations/domain/schemas.js';
 import { StoredDemoCustomerHistoryRepository } from '../../src/recommendations/history/stored-demo-history-repository.js';
 import type {
+  AppendRecommendationEventInput,
   RecommendationDecisionRecord,
   RecommendationDemoCustomerHistoryRecord,
   RecommendationPersistence,
@@ -280,6 +281,69 @@ async function commit(
     record,
     events: decisionEvents(record).reverse(),
   });
+}
+
+async function concurrentEventInputs(
+  record: RecommendationDecisionRecord,
+  currentEnvelope: PackStateEnvelope,
+  kind: 'impression' | 'outcome',
+): Promise<
+  [AppendRecommendationEventInput, AppendRecommendationEventInput]
+> {
+  const actionId = record.response.primaryOffer!.actions[0]!.actionId;
+  const event = parseRecommendationEvent({
+    ...decisionEvents(record)[1],
+    eventId: `event-concurrent-${kind}-${record.request.requestId}`,
+    eventType: kind === 'impression' ? 'impression_rendered' : 'ignored',
+    occurredAt: '2026-07-27T09:00:04Z',
+    recordedAt: '2026-07-27T09:00:05Z',
+    actor: 'client',
+    actionId: null,
+    payload:
+      kind === 'impression'
+        ? {
+            assistantTurnId: 'assistant-turn-concurrent',
+            attachmentId: 'attachment-concurrent',
+            renderedActions: [{ actionId, position: 1 }],
+            actionDigest: record.actionDigest,
+          }
+        : {},
+  });
+  const currentState = Reflect.get(
+    currentEnvelope.state as object,
+    'recommendationState',
+  );
+  const nextState =
+    kind === 'impression'
+      ? applyRecommendationImpression(
+          currentState,
+          parseRecommendationEvent({
+            ...event,
+            payload: { renderedActionIds: [actionId] },
+          }),
+        )
+      : applyRecommendationOutcome(currentState, event, [actionId]);
+  const nextPackState = await createPackStateEnvelope({
+    packRef: currentEnvelope.packRef,
+    schemaVersion: currentEnvelope.schemaVersion,
+    state: { recommendationState: nextState },
+  });
+  const shared = {
+    eventFingerprint:
+      kind === 'impression' ? '1'.repeat(64) : '2'.repeat(64),
+    expectedPackStateDigest: currentEnvelope.integrity.digest,
+    nextPackState,
+  };
+  return [
+    { ...shared, event },
+    {
+      ...shared,
+      event: parseRecommendationEvent({
+        ...event,
+        recordedAt: '2026-07-27T09:00:06Z',
+      }),
+    },
+  ];
 }
 
 describe('RecommendationPersistence shared contract', () => {
@@ -853,6 +917,38 @@ describe('RecommendationPersistence shared contract', () => {
       ).resolves.toEqual([decisionEvents(record)[1], event]);
     }
   });
+
+  it.each(['impression', 'outcome'] as const)(
+    'replays concurrent identical %s requests with different server record times',
+    async (kind) => {
+      for (const { name, store } of await fixtures()) {
+        const record = recordFor(`${name.toLowerCase()}-concurrent-${kind}`);
+        await reserve(store, record);
+        await commit(store, record);
+        const currentEnvelope = await envelopeFor(record);
+        const inputs = await concurrentEventInputs(
+          record,
+          currentEnvelope,
+          kind,
+        );
+
+        const results = await Promise.all(
+          inputs.map((input) => store.appendRecommendationEvent(input)),
+        );
+
+        const recorded = results.find((result) => result.status === 'recorded');
+        const replay = results.find((result) => result.status === 'replay');
+        expect(recorded, name).toBeDefined();
+        if (!recorded || recorded.status !== 'recorded') {
+          throw new Error(`${name} did not record the concurrent event`);
+        }
+        expect(replay, name).toEqual({
+          status: 'replay',
+          event: recorded.event,
+        });
+      }
+    },
+  );
 
   it('replays a semantically identical event when payload keys are reordered', async () => {
     for (const { name, store } of await fixtures()) {
