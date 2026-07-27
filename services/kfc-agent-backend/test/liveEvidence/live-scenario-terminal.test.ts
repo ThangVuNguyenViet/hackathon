@@ -4,6 +4,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import type { LiveScenarioHttpClient } from '../../src/liveEvidence/liveScenarioHttpClient.js';
+import { runLiveScenarioCommandStream } from '../../src/liveEvidence/liveScenarioProtocol.js';
 import { startLiveScenarioSession } from '../../src/liveEvidence/liveScenarioSession.js';
 
 describe('live scenario terminal evidence', () => {
@@ -14,6 +15,7 @@ describe('live scenario terminal evidence', () => {
     await session.recordProtocolError('invalid_json');
     await session.recordProtocolError('turn_error', 'TypeError');
     await session.interrupt('stdin_eof');
+    await session.finalizeTerminal();
 
     const manifest = JSON.parse(
       await readFile(join(session.runDirectory, 'manifest.json'), 'utf8'),
@@ -60,37 +62,97 @@ describe('live scenario terminal evidence', () => {
     expect(transcript).toContain('session_interrupted');
   });
 
-  it('does not relabel an explicitly completed attempt as abandoned', async () => {
+  it('finalizes immutable completed evidence before the protocol exits', async () => {
     const session = await startLiveScenarioSession(await fixture('completed'));
-    await session.finish('Explicit role-player finish.');
-    await session.interrupt('stdin_eof');
+    const output: string[] = [];
 
-    expect(
-      JSON.parse(
-        await readFile(join(session.runDirectory, 'manifest.json'), 'utf8'),
-      ),
-    ).toMatchObject({ status: 'completed' });
-  });
-
-  it('fails closed while preserving an incomplete protected D1 envelope', async () => {
-    const input = await fixture('incomplete');
-    input.gateway.d1Evidence = async () => ({
-      proofEnvelope: {
-        complete: false,
-        missing: ['recommendations.finalState'],
-        sessionId: 'kfc:live-incomplete',
+    await runLiveScenarioCommandStream({
+      session,
+      lines: lines([
+        JSON.stringify({
+          type: 'user',
+          text: 'Complete the terminal attempt.',
+        }),
+        JSON.stringify({
+          type: 'finish',
+          note: 'Explicit role-player finish.',
+        }),
+      ]),
+      writeLine(line) {
+        output.push(line);
       },
     });
-    const session = await startLiveScenarioSession(input);
-
-    await expect(session.finish('Reviewer requested completion.')).rejects.toThrow(
-      'live_scenario_d1_evidence_incomplete',
-    );
-    await session.interrupt('control_error');
+    await session.interrupt('stdin_eof');
 
     const manifest = JSON.parse(
       await readFile(join(session.runDirectory, 'manifest.json'), 'utf8'),
-    );
+    ) as {
+      status: string;
+      evidence: { artifactSha256: Record<string, string> };
+    };
+    expect(manifest).toMatchObject({ status: 'completed' });
+    expect(output.map((line) => JSON.parse(line))).toEqual([
+      expect.objectContaining({ type: 'assistant', text: 'unused' }),
+      { type: 'finished' },
+    ]);
+    for (const fileName of [
+      'environment.json',
+      'trace.jsonl',
+      'transcript.md',
+      'evidence-packet.json',
+      'codex-review-packet.md',
+    ]) {
+      expect(manifest.evidence.artifactSha256[fileName]).toBe(
+        createHash('sha256')
+          .update(await readFile(join(session.runDirectory, fileName)))
+          .digest('hex'),
+      );
+    }
+  });
+
+  it('finalizes immutable failed evidence after an incomplete finish control error', async () => {
+    const input = await fixture('incomplete');
+    input.gateway.d1Evidence = async () => ({
+      proofEnvelope: {
+        schemaVersion: 1,
+        artifactKind: 'kfc-simple-agent-proof',
+        runtime: 'simple-model-tool-loop',
+        complete: false,
+        missing: ['recommendations.finalState'],
+        sessionId: 'kfc:live-incomplete',
+        turns: proofTurns(),
+        packState: proofPackState(),
+        recommendations: noRecommendationProjection(),
+      },
+    });
+    const session = await startLiveScenarioSession(input);
+    const output: string[] = [];
+
+    await expect(
+      runLiveScenarioCommandStream({
+        session,
+        lines: lines([
+          JSON.stringify({
+            type: 'user',
+            text: 'Improvised incomplete attempt.',
+          }),
+          JSON.stringify({
+            type: 'finish',
+            note: 'Reviewer requested completion.',
+          }),
+        ]),
+        writeLine(line) {
+          output.push(line);
+        },
+      }),
+    ).rejects.toThrow('live_scenario_evidence_incomplete');
+
+    const manifest = JSON.parse(
+      await readFile(join(session.runDirectory, 'manifest.json'), 'utf8'),
+    ) as {
+      status: string;
+      evidence: { artifactSha256: Record<string, string> };
+    };
     const packet = JSON.parse(
       await readFile(
         join(session.runDirectory, 'evidence-packet.json'),
@@ -108,9 +170,41 @@ describe('live scenario terminal evidence', () => {
       },
       finishNote: 'Reviewer requested completion.',
     });
+    expect(packet.timeline).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          type: 'session_failed',
+          reason: 'evidence_incomplete',
+        }),
+        expect.objectContaining({
+          type: 'protocol_error',
+          error: 'control_error',
+          errorClass: 'LiveScenarioEvidenceIncompleteError',
+        }),
+      ]),
+    );
     expect(
       await readFile(join(session.runDirectory, 'transcript.md'), 'utf8'),
-    ).toContain('d1_evidence_incomplete');
+    ).toContain('evidence_incomplete');
+    expect(output.map((line) => JSON.parse(line))).toEqual([
+      expect.objectContaining({
+        type: 'assistant',
+        text: 'unused',
+      }),
+    ]);
+    for (const fileName of [
+      'environment.json',
+      'trace.jsonl',
+      'transcript.md',
+      'evidence-packet.json',
+      'codex-review-packet.md',
+    ]) {
+      expect(manifest.evidence.artifactSha256[fileName]).toBe(
+        createHash('sha256')
+          .update(await readFile(join(session.runDirectory, fileName)))
+          .digest('hex'),
+      );
+    }
   });
 });
 
@@ -140,16 +234,57 @@ async function fixture(runId: string) {
   );
   const gateway: LiveScenarioHttpClient = {
     environment: async () => ({
-      release: { gitSha: 'service-commit' },
+      ok: true,
+      service: 'kfc-agent-backend',
+      release: {
+        gitSha: '1'.repeat(40),
+        deploymentId: 'deployment-1',
+        builtAt: '2026-07-28T00:00:00.000Z',
+        dirty: false,
+      },
+      checks: {
+        observability: {
+          ok: true,
+          langsmith: {
+            configured: true,
+            project: 'kfc-live',
+            endpoint: 'https://api.smith.langchain.com',
+            samplingRate: 1,
+          },
+        },
+      },
       proof: {
         versions: {
-          agent: { candidateId: 'openai-gpt-4.1-mini' },
+          agent: {
+            candidateId: 'openai-gpt-4.1-mini',
+            provider: 'openai',
+            model: 'gpt-4.1-mini',
+            profile: 'openai:gpt-4.1-mini:responses',
+            transport: 'openai_responses',
+          },
+          recommendationShadow: {
+            ok: true,
+            required: false,
+            configured: true,
+            outputMode: 'learned_technical',
+          },
+          recommendationSanity: {
+            authority: 'sanity',
+            configured: true,
+            reachable: true,
+            snapshotDigest: '2'.repeat(64),
+          },
         },
       },
     }),
     submitUserMessage: async () => ({
       responseText: 'unused',
       assistantTurnId: 'assistant-unused',
+      liveScenarioTrace: {
+        authority: 'server_issued_agent_trace_context',
+        scenarioId: 'terminal-evidence',
+        probeRunId: runId,
+      },
     }),
     submitAction: async () => ({
       responseText: 'unused',
@@ -158,9 +293,15 @@ async function fixture(runId: string) {
     recordRecommendationImpression: async () => undefined,
     d1Evidence: async () => ({
       proofEnvelope: {
+        schemaVersion: 1,
+        artifactKind: 'kfc-simple-agent-proof',
+        runtime: 'simple-model-tool-loop',
         complete: true,
         missing: [],
         sessionId: `kfc:live-${runId}`,
+        turns: proofTurns(),
+        packState: proofPackState(),
+        recommendations: noRecommendationProjection(),
       },
     }),
   };
@@ -175,7 +316,53 @@ async function fixture(runId: string) {
     scenarioPath,
     expectedCandidateId: 'openai-gpt-4.1-mini' as const,
     backendUrl: 'https://worker.example',
-    source: { gitSha: 'bridge-commit', dirty: false },
+    source: { gitSha: '3'.repeat(40), dirty: false },
     gateway,
   };
+}
+
+function proofTurns() {
+  return [
+    {
+      id: 'user-1',
+      role: 'user',
+      content: { characterCount: 10, sha256: '4'.repeat(64) },
+    },
+    {
+      id: 'assistant-unused',
+      role: 'assistant',
+      content: { characterCount: 6, sha256: '5'.repeat(64) },
+    },
+  ];
+}
+
+function proofPackState() {
+  return {
+    envelopeVersion: 1,
+    packRef: { packId: 'kfc-vietnam', version: '1' },
+    schemaVersion: '1',
+    state: { toolTrace: [] },
+    integrity: { algorithm: 'sha256', digest: '6'.repeat(64) },
+  };
+}
+
+function noRecommendationProjection() {
+  return {
+    schemaVersion: 'kfc-recommendation-order-flow-inspection-v1',
+    state: null,
+    latestDecision: null,
+    pendingAction: null,
+    correlations: {
+      orderFlowId: null,
+      recommendationId: null,
+      requestId: null,
+      traceRef: null,
+    },
+    eventCounts: {},
+    events: [],
+  };
+}
+
+async function* lines(values: string[]): AsyncIterable<string> {
+  yield* values;
 }

@@ -48,6 +48,9 @@ Both forwarded turn kinds use authenticated live-scenario chat endpoints. The
 service converts the validated scenario/run correlation into its server-issued
 agent trace context, so every agent turn is queryable in LangSmith by the same
 `scenarioId` and `probeRunId` preserved in the evidence packet.
+Each assistant response also carries that server-issued correlation. Completion
+checks the response correlation against the requested attempt, rather than
+trusting locally copied request metadata.
 After a recommendation offer is successfully written to stdout, the bridge
 records the exact server-authored impression binding once, matching the real
 client's impression-after-render boundary.
@@ -96,13 +99,27 @@ redacted before local write. Narrative customer and assistant prose remains in
 the transcript by design. Protected technical evidence is fetched only with
 the admin credential and the credential itself is never persisted.
 
+Explicit finish is fail-closed. Completion requires all of the following:
+
+- a deployed and bridge source commit plus the scenario source digest;
+- configured LangSmith query metadata and server-issued turn correlation;
+- complete agent, recommendation-shadow, and reachable Sanity bindings;
+- improvised user and assistant transcript records, rendered action references,
+  and submitted actions bound to a prior render;
+- a complete, session-bound proof envelope with durable transcript turns and a
+  valid pack-state/tool-trace envelope; and
+- either correlated recommendation inspection, append-only recommendation
+  events, and order-flow state, or an explicit bounded no-recommendation
+  projection with no stray recommendation evidence.
+
 Failed attempts are evidence. Never reuse a run ID or delete its directory.
 Start a retry with a distinct run ID and incremented `--attempt`.
 EOF or a control-stream failure records protocol evidence and terminalizes the
-attempt as `abandoned`. An explicit finish marks it `completed` only when the
-protected proof envelope reports complete final D1 evidence. An incomplete
-HTTP 409 envelope is preserved in the packet, marks the attempt `failed`, and
-causes the bridge to exit nonzero.
+attempt as `abandoned`. Missing or malformed required evidence, including an
+incomplete HTTP 409 envelope, is preserved in the packet, marks the attempt
+`failed`, and causes the bridge to exit nonzero. Terminal artifacts are written
+once after late control errors have been recorded; their manifest SHA-256
+digests therefore cover the final completed, failed, or abandoned bytes.
 
 ## Independent review
 

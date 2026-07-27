@@ -94,9 +94,11 @@ async function main(): Promise<void> {
       await session.recordProtocolError('control_error', safeErrorClass(error));
     }
     await session.interrupt('control_error');
+    await session.finalizeTerminal();
     throw error;
   } finally {
     await session.interrupt('stdin_eof');
+    await session.finalizeTerminal();
   }
 }
 

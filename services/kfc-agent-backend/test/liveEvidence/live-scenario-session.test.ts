@@ -5,6 +5,16 @@ import { join } from 'node:path';
 import { describe, expect, it, vi } from 'vitest';
 import type { LiveScenarioHttpClient } from '../../src/liveEvidence/liveScenarioHttpClient.js';
 import { startLiveScenarioSession } from '../../src/liveEvidence/liveScenarioSession.js';
+import {
+  bridgeGitSha,
+  completeLiveEnvironment,
+  completeNoRecommendationProof,
+  completeRecommendationD1,
+  completeToolTraceEntry,
+  deployedGitSha,
+  sanitySnapshotDigest,
+  serverTrace,
+} from './live-scenario-test-evidence.js';
 
 const scenario = {
   id: 'scenario-improvised',
@@ -25,39 +35,7 @@ const scenario = {
   risks: ['Recommendations need evidence.'],
 } as const;
 
-const environment = {
-  release: {
-    gitSha: 'deployed-service-commit',
-    deploymentId: 'worker-deployment-1',
-  },
-  checks: {
-    observability: {
-      langsmith: {
-        configured: true,
-        project: 'kfc-live',
-        endpoint: 'https://api.smith.langchain.com',
-        samplingRate: 1,
-      },
-    },
-  },
-  proof: {
-    versions: {
-      agent: {
-        candidateId: 'openai-gpt-4.1-mini',
-        provider: 'openai',
-        model: 'gpt-4.1-mini',
-      },
-      recommendationShadow: {
-        modelRevision: 'hf-revision-1',
-        outputMode: 'baseline',
-      },
-      recommendationSanity: {
-        configured: true,
-        snapshotDigest: 'sanity-snapshot-1',
-      },
-    },
-  },
-};
+const environment = completeLiveEnvironment();
 
 async function fixture() {
   const root = await mkdtemp(join(tmpdir(), 'live-scenario-http-'));
@@ -74,6 +52,7 @@ describe('live scenario HTTP/D1 evidence session', () => {
       submitUserMessage: vi.fn(async () => ({
         responseText: 'Mình có một gợi ý.',
         assistantTurnId: 'assistant-turn-1',
+        liveScenarioTrace: serverTrace(scenario.id, 'run-1'),
         genUi: {
           id: 'attachment-1',
           widgetKind: 'recommendationOffer',
@@ -96,47 +75,29 @@ describe('live scenario HTTP/D1 evidence session', () => {
       submitAction: vi.fn(async () => ({
         responseText: 'Đã thêm món.',
         assistantTurnId: 'assistant-turn-2',
+        liveScenarioTrace: serverTrace(scenario.id, 'run-1'),
       })),
       recordRecommendationImpression: vi.fn(async () => undefined),
-      d1Evidence: vi.fn(async () => ({
-        proofEnvelope: {
-          complete: true,
-          missing: [],
-          packState: {
-            state: {
-              toolTrace: [
-                {
-                  toolName: 'getRecommendations',
-                  result: { recommendationId: 'recommendation-1' },
-                },
-              ],
-            },
-          },
-          recommendations: {
-            correlations: {
-              recommendationId: 'recommendation-1',
-              orderFlowId: 'order-flow-1',
-              traceRef: 'langsmith-trace-1',
-            },
-          },
-        },
-        recommendationInspection: {
-          technical: {
-            model: { revision: 'hf-revision-1' },
-            sanity: { snapshotDigest: 'sanity-snapshot-1' },
-          },
-        },
-        orderFlowState: {
-          state: { stage: 'modifier_eligible' },
-          events: [
+      d1Evidence: vi.fn(async () => {
+        const evidence = completeRecommendationD1({
+          sessionId: 'kfc:live-run-1',
+          recommendationId: 'recommendation-1',
+          orderFlowId: 'order-flow-1',
+          traceRef: 'langsmith-trace-1',
+          toolTrace: [
             {
-              eventType: 'decision_completed',
-              payload: { traceRef: 'langsmith-trace-1' },
+              ...completeToolTraceEntry(),
+              result: { recommendationId: 'recommendation-1' },
             },
-            { eventType: 'selected' },
           ],
-        },
-      })),
+        });
+        evidence.orderFlowState.events.push({
+          eventType: 'selected',
+          recommendationId: 'recommendation-1',
+          requestId: 'request-1',
+        });
+        return evidence;
+      }),
     };
     const session = await startLiveScenarioSession({
       artifactsRoot: join(root, 'artifacts'),
@@ -149,7 +110,7 @@ describe('live scenario HTTP/D1 evidence session', () => {
       scenarioPath,
       expectedCandidateId: 'openai-gpt-4.1-mini',
       backendUrl: 'https://worker.example',
-      source: { gitSha: 'bridge-source-commit', dirty: false },
+      source: { gitSha: bridgeGitSha, dirty: false },
       gateway,
       now: sequenceClock(),
     });
@@ -173,6 +134,7 @@ describe('live scenario HTTP/D1 evidence session', () => {
       actionId: 'recommendation_select:action-1',
     });
     await session.finish('Role-player completed the improvised flow.');
+    await session.finalizeTerminal();
 
     expect(gateway.submitUserMessage).toHaveBeenCalledWith({
       sessionId: 'kfc:live-run-1',
@@ -224,9 +186,9 @@ describe('live scenario HTTP/D1 evidence session', () => {
     expect(packet).toMatchObject({
       schemaVersion: 'kfc-live-scenario-evidence-packet-v1',
       source: {
-        bridge: { gitSha: 'bridge-source-commit', dirty: false },
+        bridge: { gitSha: bridgeGitSha, dirty: false },
         service: {
-          gitSha: 'deployed-service-commit',
+          gitSha: deployedGitSha,
           deploymentId: 'worker-deployment-1',
         },
       },
@@ -235,7 +197,7 @@ describe('live scenario HTTP/D1 evidence session', () => {
         proofEnvelope: {
           packState: {
             state: {
-              toolTrace: [{ toolName: 'getRecommendations' }],
+              toolTrace: [{ toolName: 'recommendStarter' }],
             },
           },
         },
@@ -251,7 +213,7 @@ describe('live scenario HTTP/D1 evidence session', () => {
       'recommendation_select:action-1',
     );
     expect(JSON.stringify(packet)).toContain('langsmith-trace-1');
-    expect(JSON.stringify(packet)).toContain('sanity-snapshot-1');
+    expect(JSON.stringify(packet)).toContain(sanitySnapshotDigest);
     expect(JSON.stringify(packet)).toContain(
       '  Tôi muốn xem món phù hợp.  ',
     );
@@ -293,13 +255,13 @@ describe('live scenario HTTP/D1 evidence session', () => {
       submitUserMessage: vi.fn(async () => ({
         responseText: 'Safe response',
         assistantTurnId: 'assistant-turn-1',
+        liveScenarioTrace: serverTrace(scenario.id, 'redacted'),
       })),
       submitAction: vi.fn(),
       recordRecommendationImpression: vi.fn(),
       d1Evidence: vi.fn(async () => ({
         proofEnvelope: {
-          complete: true,
-          missing: [],
+          ...completeNoRecommendationProof('kfc:live-redacted'),
           diagnostic: `Authorization: Bearer ${credential}`,
           apiKey: credential,
         },
@@ -316,7 +278,7 @@ describe('live scenario HTTP/D1 evidence session', () => {
       scenarioPath,
       expectedCandidateId: 'openai-gpt-4.1-mini',
       backendUrl: 'https://worker.example',
-      source: { gitSha: 'bridge-source-commit', dirty: true },
+      source: { gitSha: bridgeGitSha, dirty: true },
       configuredSecrets: [credential],
       gateway,
       now: sequenceClock(),
@@ -324,6 +286,7 @@ describe('live scenario HTTP/D1 evidence session', () => {
 
     await session.submitUserMessage('Narrative prose remains.');
     await session.finish();
+    await session.finalizeTerminal();
 
     const directory = join(root, 'artifacts', 'redacted');
     for (const fileName of [
@@ -340,6 +303,49 @@ describe('live scenario HTTP/D1 evidence session', () => {
     expect(
       await readFile(join(directory, 'transcript.md'), 'utf8'),
     ).toContain('Narrative prose remains.');
+  });
+
+  it('fails completion when the deployed source commit is missing', async () => {
+    const { root, scenarioPath } = await fixture();
+    const environmentWithoutSource = structuredClone(environment);
+    delete (environmentWithoutSource.release as { gitSha?: string }).gitSha;
+    const gateway: LiveScenarioHttpClient = {
+      environment: vi.fn(async () => environmentWithoutSource),
+      submitUserMessage: vi.fn(async () => ({
+        responseText: 'Safe response',
+        assistantTurnId: 'assistant-turn-1',
+        liveScenarioTrace: serverTrace(
+          scenario.id,
+          'missing-service-source',
+        ),
+      })),
+      submitAction: vi.fn(),
+      recordRecommendationImpression: vi.fn(),
+      d1Evidence: vi.fn(async () => ({
+        proofEnvelope: completeNoRecommendationProof(
+          'kfc:live-missing-service-source',
+        ),
+      })),
+    };
+    const session = await startLiveScenarioSession({
+      artifactsRoot: join(root, 'artifacts'),
+      runId: 'missing-service-source',
+      attempt: 1,
+      correlation: {
+        sessionId: 'kfc:live-missing-service-source',
+        customerId: 'live-missing-service-source',
+      },
+      scenarioPath,
+      expectedCandidateId: 'openai-gpt-4.1-mini',
+      backendUrl: 'https://worker.example',
+      source: { gitSha: 'a'.repeat(40), dirty: false },
+      gateway,
+    });
+    await session.submitUserMessage('Complete this attempt.');
+
+    await expect(session.finish()).rejects.toThrow(
+      'live_scenario_evidence_incomplete',
+    );
   });
 });
 

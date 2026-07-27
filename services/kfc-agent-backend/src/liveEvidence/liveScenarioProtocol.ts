@@ -45,6 +45,7 @@ export interface LiveScenarioProtocolSession {
     observation: LiveScenarioAssistantObservation,
   ): Promise<void>;
   finish(note?: string): Promise<void>;
+  finalizeTerminal(): Promise<void>;
   recordProtocolError(
     error: 'invalid_json' | 'invalid_command' | 'turn_error' | 'control_error',
     errorClass?: string,
@@ -81,6 +82,7 @@ export async function runLiveScenarioCommandStream(input: {
       if (parsed.data.type === 'finish') {
         await input.session.finish(parsed.data.note);
         await emit(input, { type: 'finished' });
+        await input.session.finalizeTerminal();
         finished = true;
         return;
       }
@@ -123,10 +125,12 @@ export async function runLiveScenarioCommandStream(input: {
       safeErrorClass(error),
     );
     await input.session.interrupt('control_error');
+    await input.session.finalizeTerminal();
     throw error;
   } finally {
     if (!finished && !interrupted) {
       await input.session.interrupt('stdin_eof');
+      await input.session.finalizeTerminal();
     }
   }
 }

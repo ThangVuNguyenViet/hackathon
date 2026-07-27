@@ -12,6 +12,7 @@ import {
   type EvidenceSanitizer,
 } from './evidenceRedaction.js';
 import type { LiveScenarioAssistantObservation } from './liveScenarioProtocol.js';
+import { liveScenarioEvidenceMissing } from './liveScenarioEvidenceCompleteness.js';
 
 const TRACE_SCHEMA_VERSION = 'kfc-live-scenario-http-trace-v1';
 const MANIFEST_SCHEMA_VERSION = 'kfc-live-scenario-manifest-v2';
@@ -111,6 +112,7 @@ export interface LiveScenarioSession {
   ): Promise<void>;
   interrupt(reason: 'stdin_eof' | 'control_error'): Promise<void>;
   finish(note?: string): Promise<void>;
+  finalizeTerminal(): Promise<void>;
 }
 
 export async function startLiveScenarioSession(input: {
@@ -160,6 +162,7 @@ export async function startLiveScenarioSession(input: {
   let traceSequence = 0;
   let commandSequence = 0;
   let d1: D1Evidence | undefined;
+  let terminalArtifactsWritten = false;
   const startedAt = now().toISOString();
   const manifest: Manifest = {
     schemaVersion: MANIFEST_SCHEMA_VERSION,
@@ -313,13 +316,14 @@ export async function startLiveScenarioSession(input: {
       });
     },
     async recordProtocolError(error, errorClass) {
+      if (terminalArtifactsWritten) return;
       await recordTrace('protocol_error', {
         error,
         ...(errorClass ? { errorClass } : {}),
       });
     },
     async interrupt(reason) {
-      if (isTerminal(manifest.status)) return;
+      if (terminalArtifactsWritten || isTerminal(manifest.status)) return;
       try {
         d1 = sanitize(
           await input.gateway.d1Evidence(input.correlation.sessionId),
@@ -333,7 +337,6 @@ export async function startLiveScenarioSession(input: {
       manifest.status = 'abandoned';
       manifest.completedAt = now().toISOString();
       await recordTrace('session_interrupted', { reason });
-      await writeTerminalArtifacts();
     },
     async finish(note) {
       assertOpen();
@@ -343,22 +346,34 @@ export async function startLiveScenarioSession(input: {
       await recordTrace('d1_evidence_collected', evidenceSummary(d1));
       manifest.completedAt = now().toISOString();
       if (note?.trim()) manifest.finishNote = note.trim();
-      if (d1.proofEnvelope.complete !== true) {
+      const missingEvidence = liveScenarioEvidenceMissing({
+        environment,
+        bridgeSource: input.source,
+        scenarioSourceSha256: manifest.scenario.sourceSha256,
+        correlation: manifest.correlation,
+        timeline: events,
+        d1,
+      });
+      if (missingEvidence.length > 0) {
         manifest.status = 'failed';
         await recordTrace('session_failed', {
-          reason: 'd1_evidence_incomplete',
-          missing: Array.isArray(d1.proofEnvelope.missing)
-            ? d1.proofEnvelope.missing
-            : [],
+          reason: 'evidence_incomplete',
+          missing: missingEvidence,
         });
-        await writeTerminalArtifacts();
-        throw new LiveScenarioIncompleteEvidenceError();
+        throw new LiveScenarioEvidenceIncompleteError();
       }
       manifest.status = 'completed';
       await recordTrace('session_finished', {
         ...(manifest.finishNote ? { note: manifest.finishNote } : {}),
       });
+    },
+    async finalizeTerminal() {
+      if (terminalArtifactsWritten) return;
+      if (!isTerminal(manifest.status)) {
+        throw new Error('live_scenario_session_not_terminal');
+      }
       await writeTerminalArtifacts();
+      terminalArtifactsWritten = true;
     },
   };
 
@@ -784,10 +799,10 @@ function isTerminal(status: SessionStatus): boolean {
   );
 }
 
-class LiveScenarioIncompleteEvidenceError extends Error {
+class LiveScenarioEvidenceIncompleteError extends Error {
   constructor() {
-    super('live_scenario_d1_evidence_incomplete');
-    this.name = 'LiveScenarioIncompleteEvidenceError';
+    super('live_scenario_evidence_incomplete');
+    this.name = 'LiveScenarioEvidenceIncompleteError';
   }
 }
 

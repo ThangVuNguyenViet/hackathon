@@ -4,6 +4,14 @@ import { join } from 'node:path';
 import { describe, expect, it, vi } from 'vitest';
 import { createLiveScenarioHttpClient } from '../../src/liveEvidence/liveScenarioHttpClient.js';
 import { startLiveScenarioSession } from '../../src/liveEvidence/liveScenarioSession.js';
+import {
+  bridgeGitSha,
+  completeLiveEnvironment,
+  completeRecommendationD1,
+  completeToolTraceEntry,
+  sanitySnapshotDigest,
+  serverTrace,
+} from './live-scenario-test-evidence.js';
 
 describe('live scenario evidence packet over HTTP', () => {
   it('assembles the final packet exclusively from chat and protected D1 HTTP responses', async () => {
@@ -30,21 +38,20 @@ describe('live scenario evidence packet over HTTP', () => {
         risks: ['Remote evidence may be incomplete.'],
       })}\n`,
     );
+    const remoteEvidence = completeRecommendationD1({
+      sessionId: 'kfc:live-http-evidence',
+      recommendationId: 'recommendation-http-1',
+      orderFlowId: 'order-flow-http-1',
+      traceRef: 'trace-http-1',
+      toolTrace: [completeToolTraceEntry()],
+    });
+    remoteEvidence.recommendationInspection.technical.shadowComparison.modelRevision =
+      'hf-http-revision';
     const fetchImpl = vi.fn(
       async (input: string | URL | Request, init?: RequestInit) => {
         const path = new URL(String(input)).pathname;
         if (path === '/ready') {
-          return Response.json({
-            release: { gitSha: 'service-commit' },
-            proof: {
-              versions: {
-                agent: { candidateId: 'openai-gpt-4.1-mini' },
-                recommendationSanity: {
-                  snapshotDigest: 'sanity-http-digest',
-                },
-              },
-            },
-          });
+          return Response.json(completeLiveEnvironment());
         }
         if (path === '/admin/live-scenarios/chat/kfc/message') {
           expect(JSON.parse(String(init?.body))).toMatchObject({
@@ -57,34 +64,20 @@ describe('live scenario evidence packet over HTTP', () => {
           return Response.json({
             responseText: 'Remote assistant response.',
             assistantTurnId: 'assistant-http-1',
+            liveScenarioTrace: serverTrace(
+              'http-evidence',
+              'http-evidence',
+            ),
           });
         }
         if (path.endsWith('/envelope')) {
-          return Response.json({
-            complete: true,
-            missing: [],
-            packState: {
-              state: { toolTrace: [{ toolName: 'getRecommendations' }] },
-            },
-            recommendations: {
-              correlations: {
-                recommendationId: 'recommendation-http-1',
-                orderFlowId: 'order-flow-http-1',
-                traceRef: 'trace-http-1',
-              },
-            },
-          });
+          return Response.json(remoteEvidence.proofEnvelope);
         }
         if (path.endsWith('/inspection')) {
-          return Response.json({
-            technical: { modelRevision: 'hf-http-revision' },
-          });
+          return Response.json(remoteEvidence.recommendationInspection);
         }
         if (path.endsWith('/state')) {
-          return Response.json({
-            state: { stage: 'starter_answered' },
-            events: [{ eventType: 'decision_completed' }],
-          });
+          return Response.json(remoteEvidence.orderFlowState);
         }
         return Response.json({ errorCode: 'not_found' }, { status: 404 });
       },
@@ -100,7 +93,7 @@ describe('live scenario evidence packet over HTTP', () => {
       scenarioPath,
       expectedCandidateId: 'openai-gpt-4.1-mini',
       backendUrl: 'https://worker.example',
-      source: { gitSha: 'bridge-commit', dirty: false },
+      source: { gitSha: bridgeGitSha, dirty: false },
       gateway: createLiveScenarioHttpClient({
         baseUrl: 'https://worker.example',
         adminToken: 'admin-secret-value',
@@ -110,6 +103,7 @@ describe('live scenario evidence packet over HTTP', () => {
 
     await session.submitUserMessage('Improvised remote turn.');
     await session.finish();
+    await session.finalizeTerminal();
 
     const packet = JSON.parse(
       await readFile(
@@ -128,7 +122,7 @@ describe('live scenario evidence packet over HTTP', () => {
         proof: {
           versions: {
             recommendationSanity: {
-              snapshotDigest: 'sanity-http-digest',
+              snapshotDigest: sanitySnapshotDigest,
             },
           },
         },
@@ -136,11 +130,13 @@ describe('live scenario evidence packet over HTTP', () => {
       d1: {
         proofEnvelope: {
           packState: {
-            state: { toolTrace: [{ toolName: 'getRecommendations' }] },
+            state: { toolTrace: [{ toolName: 'recommendStarter' }] },
           },
         },
         recommendationInspection: {
-          technical: { modelRevision: 'hf-http-revision' },
+          technical: {
+            shadowComparison: { modelRevision: 'hf-http-revision' },
+          },
         },
         orderFlowState: {
           events: [{ eventType: 'decision_completed' }],

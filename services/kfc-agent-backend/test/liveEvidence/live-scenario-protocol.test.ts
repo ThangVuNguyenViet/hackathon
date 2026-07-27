@@ -31,6 +31,7 @@ describe('live scenario JSONL protocol', () => {
       }),
       recordAssistantRendered: vi.fn(),
       finish: vi.fn().mockResolvedValue(undefined),
+      finalizeTerminal: vi.fn().mockResolvedValue(undefined),
       recordProtocolError: vi.fn(),
       interrupt: vi.fn(),
     };
@@ -82,6 +83,7 @@ describe('live scenario JSONL protocol', () => {
       }),
     );
     expect(session.finish).toHaveBeenCalledWith('Goal explored');
+    expect(session.finalizeTerminal).toHaveBeenCalledTimes(1);
     expect(session.interrupt).not.toHaveBeenCalled();
     expect(output.map((line) => JSON.parse(line))).toEqual([
       {
@@ -116,6 +118,7 @@ describe('live scenario JSONL protocol', () => {
       submitAction: vi.fn(),
       recordAssistantRendered: vi.fn(),
       finish: vi.fn(),
+      finalizeTerminal: vi.fn(),
       recordProtocolError: vi.fn(),
       interrupt: vi.fn(),
     };
@@ -141,6 +144,7 @@ describe('live scenario JSONL protocol', () => {
       'invalid_command',
     );
     expect(session.interrupt).toHaveBeenCalledWith('stdin_eof');
+    expect(session.finalizeTerminal).toHaveBeenCalledTimes(1);
     expect(output.map((line) => JSON.parse(line))).toEqual([
       { type: 'protocol_error', error: 'invalid_json' },
       { type: 'protocol_error', error: 'invalid_command' },
@@ -155,6 +159,7 @@ describe('live scenario JSONL protocol', () => {
       submitAction: vi.fn(),
       recordAssistantRendered: vi.fn(),
       finish: vi.fn(),
+      finalizeTerminal: vi.fn(),
       recordProtocolError: vi.fn(),
       interrupt: vi.fn(),
     };
@@ -180,6 +185,7 @@ describe('live scenario JSONL protocol', () => {
       'Error',
     );
     expect(session.interrupt).toHaveBeenCalledWith('control_error');
+    expect(session.finalizeTerminal).toHaveBeenCalledTimes(1);
   });
 });
 

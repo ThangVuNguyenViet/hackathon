@@ -3,7 +3,11 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { z } from 'zod';
 import type { VerifiedMessengerGuestCheckoutIngress } from '../security/guestCheckoutAuthority.js';
-import type { AgentTraceContext } from '../agent/agentTraceContext.js';
+import {
+  agentTraceProbeRunId,
+  agentTraceScenarioId,
+  type AgentTraceContext,
+} from '../agent/agentTraceContext.js';
 import type {
   ChannelMediaDeliveryResult,
   ExternalClients,
@@ -532,6 +536,29 @@ export interface HandlerResponse<T = unknown> {
   body: T;
   contentType?: string;
   headers?: Record<string, string>;
+}
+
+export function withLiveScenarioTraceEvidence(
+  response: HandlerResponse,
+  traceContext: AgentTraceContext,
+): HandlerResponse {
+  if (!isRecord(response.body)) return response;
+  const scenarioId = agentTraceScenarioId(traceContext);
+  const probeRunId = agentTraceProbeRunId(traceContext);
+  if (!scenarioId || !probeRunId) {
+    throw new Error('live_scenario_trace_context_invalid');
+  }
+  return {
+    ...response,
+    body: {
+      ...response.body,
+      liveScenarioTrace: {
+        authority: 'server_issued_agent_trace_context',
+        scenarioId,
+        probeRunId,
+      },
+    },
+  };
 }
 
 export interface MessengerWebhookEventProcessingResult {

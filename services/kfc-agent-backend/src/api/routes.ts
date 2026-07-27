@@ -9,6 +9,7 @@ import {
   type HandlerResponse,
   liveScenarioTraceEnvelopeSchema,
   type RouteOptions,
+  withLiveScenarioTraceEvidence,
 } from './routeHandlers.js';
 import {
   invalidRecommendationJsonResponse,
@@ -209,11 +210,12 @@ export function registerRoutes(
           .code(400)
           .send({ errorCode: 'invalid_live_scenario_trace_envelope' });
       }
+      const traceContext = createAgentTraceContext(parsed.data.trace);
       return send(
         reply,
-        await handlers.chatKfcMessage(
-          parsed.data.request,
-          createAgentTraceContext(parsed.data.trace),
+        withLiveScenarioTraceEvidence(
+          await handlers.chatKfcMessage(parsed.data.request, traceContext),
+          traceContext,
         ),
       );
     },
@@ -227,11 +229,12 @@ export function registerRoutes(
           .code(400)
           .send({ errorCode: 'invalid_live_scenario_trace_envelope' });
       }
+      const traceContext = createAgentTraceContext(parsed.data.trace);
       return send(
         reply,
-        await handlers.chatKfcGenUiAction(
-          parsed.data.request,
-          createAgentTraceContext(parsed.data.trace),
+        withLiveScenarioTraceEvidence(
+          await handlers.chatKfcGenUiAction(parsed.data.request, traceContext),
+          traceContext,
         ),
       );
     },

@@ -33,6 +33,7 @@ import {
   type HandlerResponse,
   type RouteHandlers,
   liveScenarioTraceEnvelopeSchema,
+  withLiveScenarioTraceEvidence,
 } from './api/routeHandlers.js';
 import { createAgentTraceContext } from './agent/agentTraceContext.js';
 import {
@@ -646,9 +647,15 @@ export default {
       }
       const traceContext = createAgentTraceContext(parsed.data.trace);
       return respondWithAgentBackground(
-        url.pathname.endsWith('/genui-action')
-          ? await handlers.chatKfcGenUiAction(parsed.data.request, traceContext)
-          : await handlers.chatKfcMessage(parsed.data.request, traceContext),
+        withLiveScenarioTraceEvidence(
+          url.pathname.endsWith('/genui-action')
+            ? await handlers.chatKfcGenUiAction(
+                parsed.data.request,
+                traceContext,
+              )
+            : await handlers.chatKfcMessage(parsed.data.request, traceContext),
+          traceContext,
+        ),
       );
     }
     if (request.method === 'POST' && url.pathname === '/chat/kfc/message') {

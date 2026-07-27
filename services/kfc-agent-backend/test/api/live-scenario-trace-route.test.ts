@@ -70,6 +70,13 @@ describe('live scenario trace HTTP boundary', () => {
     });
 
     expect(response.statusCode).toBe(200);
+    expect(response.json()).toMatchObject({
+      liveScenarioTrace: {
+        authority: 'server_issued_agent_trace_context',
+        scenarioId: 'scenario-improvised',
+        probeRunId: 'run-1',
+      },
+    });
     expect(starts).toHaveLength(1);
     expect(starts[0]?.metadata).toMatchObject({
       scenarioId: 'scenario-improvised',

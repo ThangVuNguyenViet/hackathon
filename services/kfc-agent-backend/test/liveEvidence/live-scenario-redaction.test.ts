@@ -8,6 +8,12 @@ import {
 } from '../../src/liveEvidence/evidenceRedaction.js';
 import type { LiveScenarioHttpClient } from '../../src/liveEvidence/liveScenarioHttpClient.js';
 import { startLiveScenarioSession } from '../../src/liveEvidence/liveScenarioSession.js';
+import {
+  bridgeGitSha,
+  completeLiveEnvironment,
+  completeNoRecommendationProof,
+  serverTrace,
+} from './live-scenario-test-evidence.js';
 
 describe('live scenario artifact redaction', () => {
   it('redacts configured values and common assignment/header forms from every artifact', async () => {
@@ -64,17 +70,11 @@ describe('live scenario artifact redaction', () => {
       String(Date.now()),
     ].join('-');
     const gateway: LiveScenarioHttpClient = {
-      environment: async () => ({
-        release: { gitSha: 'service-commit' },
-        proof: {
-          versions: {
-            agent: { candidateId: 'openai-gpt-4.1-mini' },
-          },
-        },
-      }),
+      environment: async () => completeLiveEnvironment(),
       submitUserMessage: async () => ({
         responseText: `api_key=${assignmentSecret}; ${configuredSecret}`,
         assistantTurnId: 'assistant-redaction',
+        liveScenarioTrace: serverTrace('redaction-evidence', 'redaction'),
       }),
       submitAction: async () => ({
         responseText: 'unused',
@@ -83,10 +83,9 @@ describe('live scenario artifact redaction', () => {
       recordRecommendationImpression: async () => undefined,
       d1Evidence: async () => ({
         proofEnvelope: {
-          complete: true,
-          missing: [],
-          toolTrace: [
+          ...completeNoRecommendationProof('kfc:live-redaction', [
             {
+              toolName: 'searchMenu',
               arguments: {
                 note: `password=${assignmentSecret}`,
                 header: `X-Api-Key: ${headerSecret}`,
@@ -98,9 +97,12 @@ describe('live scenario artifact redaction', () => {
               rawResult: {
                 message: `META_PAGE_ACCESS_TOKEN=${assignmentSecret}`,
               },
+              ok: true,
+              resultSummary: `Authorization: Bearer ${configuredSecret}`,
+              provenance: [],
               modelFacingResult: `Authorization: Bearer ${configuredSecret}`,
             },
-          ],
+          ]),
         },
       }),
     };
@@ -115,7 +117,7 @@ describe('live scenario artifact redaction', () => {
       scenarioPath,
       expectedCandidateId: 'openai-gpt-4.1-mini',
       backendUrl: 'https://worker.example',
-      source: { gitSha: 'bridge-commit', dirty: false },
+      source: { gitSha: bridgeGitSha, dirty: false },
       configuredSecrets: [configuredSecret],
       gateway,
     });
@@ -124,6 +126,7 @@ describe('live scenario artifact redaction', () => {
       `access_token=${assignmentSecret}; X-Meta-Token: ${headerSecret}`,
     );
     await session.finish(`password: ${configuredSecret}`);
+    await session.finalizeTerminal();
 
     const artifacts: string[] = [];
     for (const fileName of [
