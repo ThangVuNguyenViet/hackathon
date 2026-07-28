@@ -203,7 +203,7 @@ describe('merchandising policy snapshots', () => {
       fetch: async () =>
         [...local.snapshot.policies].reverse().map((entry, index) => ({
           ...entry,
-          _id: `recommendationPolicy.${entry.policyId}`,
+          _id: `recommendationPolicy-${entry.policyId}`,
           _rev: `rev-${index + 1}`,
           _updatedAt: `2026-07-26T00:00:0${index}Z`,
         })),
@@ -240,6 +240,22 @@ describe('merchandising policy snapshots', () => {
         invalidClient as never,
       ).loadPublishedSnapshot(),
     ).rejects.toThrow();
+
+    const privateDocumentClient = {
+      fetch: async () => [
+        {
+          ...policy(),
+          _id: `recommendationPolicy.${policy().policyId}`,
+          _rev: 'rev-private',
+          _updatedAt: '2026-07-26T00:00:00Z',
+        },
+      ],
+    };
+    await expect(
+      new SanityMerchandisingPolicyRepository(
+        privateDocumentClient as never,
+      ).loadPublishedSnapshot(),
+    ).rejects.toThrow('Sanity policy document ID must match policyId');
   });
 
   it('applies replacement and suppression from the injected published Sanity snapshot', async () => {
@@ -260,7 +276,7 @@ describe('merchandising policy snapshots', () => {
       }),
     ].map((entry, index) => ({
       ...entry,
-      _id: `recommendationPolicy.${entry.policyId}`,
+      _id: `recommendationPolicy-${entry.policyId}`,
       _rev: `sanity-revision-${index + 1}`,
       _updatedAt: `2026-07-26T00:00:0${index}Z`,
     }));

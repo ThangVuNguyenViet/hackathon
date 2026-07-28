@@ -16,7 +16,7 @@ afterEach(async () => {
 function publishedDocuments() {
   return policySnapshot.policies.map((policy, index) => ({
     ...policy,
-    _id: `recommendationPolicy.${policy.policyId}`,
+    _id: `recommendationPolicy-${policy.policyId}`,
     _rev: `published-revision-${index + 1}`,
     _updatedAt: `2026-07-27T09:00:0${index}Z`,
   }));

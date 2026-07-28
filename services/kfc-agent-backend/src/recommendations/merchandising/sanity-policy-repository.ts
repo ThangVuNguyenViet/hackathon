@@ -48,7 +48,7 @@ export class SanityMerchandisingPolicyRepository implements MerchandisingPolicyR
           'Sanity policy document must include _id, _rev, and _updatedAt',
         );
       }
-      if (_id !== `recommendationPolicy.${String(policy.policyId ?? '')}`) {
+      if (_id !== `recommendationPolicy-${String(policy.policyId ?? '')}`) {
         throw new Error('Sanity policy document ID must match policyId');
       }
       return {

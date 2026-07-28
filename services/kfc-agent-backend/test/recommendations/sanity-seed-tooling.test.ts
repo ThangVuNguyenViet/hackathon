@@ -29,16 +29,25 @@ describe('Sanity recommendation policy seed tooling', () => {
       fetch: async <T>() =>
         [
           'recommendationPolicy.obsolete',
-          recommendationPolicyDocumentId(policySnapshot.policies[0]!.policyId),
+          `recommendationPolicy.${policySnapshot.policies[0]!.policyId}`,
+          'recommendationPolicy-for-you-replace-20751',
         ] as T,
       transaction: () => transaction,
     });
 
-    expect(result).toEqual({ replaced: 5, deleted: 1 });
-    expect(operations[0]).toEqual({
-      kind: 'delete',
-      documentId: 'recommendationPolicy.obsolete',
-    });
+    expect(result).toEqual({ replaced: 5, deleted: 2 });
+    expect(
+      operations.filter((operation) => operation.kind === 'delete'),
+    ).toEqual([
+      {
+        kind: 'delete',
+        documentId: 'recommendationPolicy.local-favorite-boost-20732',
+      },
+      {
+        kind: 'delete',
+        documentId: 'recommendationPolicy.obsolete',
+      },
+    ]);
     expect(
       operations.filter((operation) => operation.kind === 'replace'),
     ).toHaveLength(5);
@@ -54,10 +63,15 @@ describe('Sanity recommendation policy seed tooling', () => {
           } => operation.kind === 'replace',
         )
         .map((operation) => operation.document._id),
-    ).toEqual(
-      policySnapshot.policies.map((policy) =>
-        recommendationPolicyDocumentId(policy.policyId),
-      ),
-    );
+    ).toEqual([
+      'recommendationPolicy-local-favorite-boost-20732',
+      'recommendationPolicy-for-you-replace-20751',
+      'recommendationPolicy-smart-cross-sell-exclude-20712',
+      'recommendationPolicy-smart-cross-sell-suppress-kfcvn0036',
+      'recommendationPolicy-modifier-pin-41091',
+    ]);
+    expect(
+      recommendationPolicyDocumentId('local-favorite-boost-20732'),
+    ).not.toContain('.');
   });
 });

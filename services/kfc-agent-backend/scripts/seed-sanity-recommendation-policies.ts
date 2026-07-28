@@ -16,7 +16,7 @@ interface SanitySeedClient {
 }
 
 export function recommendationPolicyDocumentId(policyId: string): string {
-  return `recommendationPolicy.${policyId}`;
+  return `recommendationPolicy-${policyId}`;
 }
 
 export async function seedSanityRecommendationPolicies(
