@@ -13,6 +13,7 @@ import {
 } from './evidenceRedaction.js';
 import type { LiveScenarioAssistantObservation } from './liveScenarioProtocol.js';
 import { liveScenarioEvidenceMissing } from './liveScenarioEvidenceCompleteness.js';
+import { liveScenarioActionPayloadMatchesRenderedAttachment } from './liveScenarioActionPayload.js';
 
 const TRACE_SCHEMA_VERSION = 'kfc-live-scenario-http-trace-v1';
 const MANIFEST_SCHEMA_VERSION = 'kfc-live-scenario-manifest-v2';
@@ -102,6 +103,7 @@ export interface LiveScenarioSession {
     assistantTurnId: string;
     attachmentId: string;
     actionId: string;
+    payload?: Record<string, unknown>;
   }): Promise<LiveScenarioAssistantObservation>;
   recordAssistantRendered(
     observation: LiveScenarioAssistantObservation,
@@ -158,7 +160,7 @@ export async function startLiveScenarioSession(input: {
   }
 
   const events: TraceEvent[] = [];
-  const observedActions = new Set<string>();
+  const observedActions = new Map<string, unknown>();
   const recordedImpressions = new Set<string>();
   let traceSequence = 0;
   let commandSequence = 0;
@@ -272,9 +274,24 @@ export async function startLiveScenarioSession(input: {
     },
     async submitAction(action) {
       assertOpen();
-      if (!observedActions.has(actionKey(action))) {
+      const renderedAttachment = observedActions.get(actionKey(action));
+      if (renderedAttachment === undefined) {
         await recordTrace('action_reference_rejected', action);
         throw new Error('live_scenario_action_not_observed');
+      }
+      if (
+        !liveScenarioActionPayloadMatchesRenderedAttachment({
+          attachment: renderedAttachment,
+          actionId: action.actionId,
+          ...(action.payload === undefined ? {} : { payload: action.payload }),
+        })
+      ) {
+        await recordTrace('action_payload_rejected', {
+          assistantTurnId: action.assistantTurnId,
+          attachmentId: action.attachmentId,
+          actionId: action.actionId,
+        });
+        throw new Error('live_scenario_action_payload_invalid');
       }
       manifest.status = 'running';
       await persistManifest();
@@ -420,7 +437,7 @@ export async function startLiveScenarioSession(input: {
       genUi,
     });
     for (const reference of renderedActionReferences) {
-      observedActions.add(actionKey(reference));
+      observedActions.set(actionKey(reference), genUi);
     }
     await recordTrace('assistant_message', {
       operation,
@@ -683,6 +700,7 @@ function renderEvent(event: TraceEvent): string[] {
           assistantTurnId: event.assistantTurnId,
           attachmentId: event.attachmentId,
           actionId: event.actionId,
+          ...(event.payload === undefined ? {} : { payload: event.payload }),
         },
         null,
         2,

@@ -15,6 +15,7 @@ export interface LiveScenarioHttpClient {
     assistantTurnId: string;
     attachmentId: string;
     actionId: string;
+    payload?: Record<string, unknown>;
     trace: LiveScenarioTraceCorrelation;
   }): Promise<Record<string, unknown>>;
   recordRecommendationImpression(input: {
@@ -103,6 +104,9 @@ export function createLiveScenarioHttpClient(input: {
               assistantTurnId: action.assistantTurnId,
               attachmentId: action.attachmentId,
               actionId: action.actionId,
+              ...(action.payload === undefined
+                ? {}
+                : { payload: action.payload }),
             },
           },
           trace: action.trace,

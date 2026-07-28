@@ -421,7 +421,7 @@ export const agentToolDescriptions: Record<ToolName, string> = {
     'Apply the current verified GenUI cart action. The server derives the authorized item identifiers, quantities, and modifiers from that typed action and ignores wider model-authored changes. Plain-text messages, including explicit requests, can prepare a proposal but do not authorize this tool. Item quantity means menu portions, not pieces described inside the item. Treat the returned cart as authoritative; this permission never extends to irreversible actions.',
   previewCart: 'Return the current verified cart and server-calculated totals.',
   recommendStarter:
-    'Request the one eligible starter recommendation for this order flow. The server chooses Local Favorite or For You from verified identity and completed-order history. Use proactive after genuine food, menu, or order intent, or customer_requested when the customer explicitly asks for a recommendation.',
+    'Request the one eligible starter recommendation for this order flow. The server chooses Local Favorite or For You from verified identity and completed-order history. Use proactive after genuine food, menu, or order intent, or customer_requested when the customer explicitly asks for a recommendation. Call this before getFavoriteItems, generic searchMenu exploration, or asking for preferences whenever it is available for that genuine intent.',
   recommendModifierUpsell:
     'Request the one eligible modifier upsell for the exact current cart line. Use only a parentCartLineId returned by verified current cart state. Use proactive after that line is added, or customer_requested when the customer explicitly asks.',
   recommendSmartCrossSell:
@@ -454,7 +454,7 @@ export const agentToolDescriptions: Record<ToolName, string> = {
   getRecentOrder:
     'Return the authenticated customer most recent order, or null when none exists, as read-only evidence for this tool loop.',
   getFavoriteItems:
-    'Return the authenticated customer favorite menu items as read-only evidence for this tool loop.',
+    'Return the authenticated customer favorite menu items as read-only evidence for this tool loop. Do not use this as a substitute for an available recommendStarter call after genuine food, menu, or order intent.',
   acquireVoucher: 'Acquire one previously verified membership reward.',
   redeemReward: 'Redeem one previously verified wallet voucher.',
   searchContentPolicy:

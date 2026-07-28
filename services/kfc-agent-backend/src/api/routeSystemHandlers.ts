@@ -71,7 +71,10 @@ import {
 } from '../mock/mockedUpstreamProfile.js';
 import { paymentOrderIdentifierMatches } from '../ordering/paymentOrderAuthority.js';
 import { kfcVietnamPack } from '../businessPacks/kfcVietnam/kfcVietnamPack.js';
-import { createPackStateEnvelope } from '../runtime/businessPack.js';
+import {
+  createPackStateEnvelope,
+  validatePackStateEnvelope,
+} from '../runtime/businessPack.js';
 import type { ToolName } from '../ordering/types.js';
 import {
   CustomerRunCoordinator,
@@ -145,6 +148,12 @@ import {
 import type { RouteHandlerContext } from './routeHandlerContext.js';
 
 const proofProviderTimeoutMs = 3_000;
+const lifecycleBackedToolNames = new Set<ToolName>([
+  'placeOrder',
+  'getOrderStatus',
+  'createPaymentLink',
+  'checkPaymentStatus',
+]);
 
 async function projectKfcProofTurn(turn: ConversationTurn) {
   return {
@@ -165,6 +174,28 @@ async function projectKfcProofTurn(turn: ConversationTurn) {
     metadataDigest:
       turn.metadata === null ? null : await sha256Fingerprint(turn.metadata),
   };
+}
+
+async function kfcLifecycleProofRequired(packState: unknown) {
+  if (packState === null || packState === undefined) return false;
+  try {
+    const state = await validatePackStateEnvelope(packState, {
+      packRef: kfcVietnamPack.ref,
+      schemaVersion: kfcVietnamPack.stateSchemaVersion,
+      parseState: (value) => kfcVietnamPack.parseState(value),
+    });
+    return (
+      state.order !== undefined ||
+      state.paymentAttempt !== undefined ||
+      (state.toolTrace?.some(
+        ({ ok, toolName }) => ok && lifecycleBackedToolNames.has(toolName),
+      ) ??
+        false)
+    );
+  } catch {
+    // Invalid durable state must not make missing lifecycle evidence disappear.
+    return true;
+  }
 }
 
 export function createSystemRouteHandlers(context: RouteHandlerContext) {
@@ -575,7 +606,9 @@ export function createSystemRouteHandlers(context: RouteHandlerContext) {
           recommendations?.inspection.session(sessionId) ??
             Promise.resolve(null),
         ]);
-      const lifecycle = projectKfcLifecycleProofEvidence(lifecycleSource);
+      const lifecycle = projectKfcLifecycleProofEvidence(lifecycleSource, {
+        required: await kfcLifecycleProofRequired(packState),
+      });
       const proofTurns = await Promise.all(turns.map(projectKfcProofTurn));
       const missing = [
         ...(turns.length > 0 ? [] : ['conversation_turns']),

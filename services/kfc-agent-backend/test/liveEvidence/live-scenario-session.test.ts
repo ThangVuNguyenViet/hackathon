@@ -45,6 +45,137 @@ async function fixture() {
 }
 
 describe('live scenario HTTP/D1 evidence session', () => {
+  it('forwards an exact rendered menu payload without choosing or inferring selections', async () => {
+    const { root, scenarioPath } = await fixture();
+    const offeredPayload = {
+      items: [{ itemCode: '41173', quantity: 2 }],
+    };
+    const gateway: LiveScenarioHttpClient = {
+      environment: vi.fn(async () => environment),
+      submitUserMessage: vi.fn(async () => ({
+        responseText: 'Bạn chọn món nhé.',
+        assistantTurnId: 'assistant-menu-1',
+        liveScenarioTrace: serverTrace(scenario.id, 'menu-payload'),
+        genUi: {
+          id: 'attachment-menu-1',
+          widgetKind: 'smartMenuPicker',
+          status: 'active',
+          data: {
+            items: [
+              { code: '41173', name: 'Xô Zui Zẻ 139K', available: true },
+              { code: '41174', name: 'Xô Zòn Zã 179K', available: true },
+            ],
+          },
+          actions: [{ id: 'add_items', label: 'Xác nhận món' }],
+        },
+      })),
+      submitAction: vi.fn(async () => ({
+        responseText: 'Đã thêm món.',
+        assistantTurnId: 'assistant-menu-2',
+        liveScenarioTrace: serverTrace(scenario.id, 'menu-payload'),
+      })),
+      recordRecommendationImpression: vi.fn(async () => undefined),
+      d1Evidence: vi.fn(async () => ({
+        proofEnvelope: completeNoRecommendationProof(
+          'kfc:menu-payload-customer',
+          [],
+        ),
+      })),
+    };
+    const session = await startLiveScenarioSession({
+      artifactsRoot: join(root, 'artifacts'),
+      runId: 'menu-payload',
+      attempt: 1,
+      correlation: {
+        sessionId: 'kfc:menu-payload-customer',
+        customerId: 'menu-payload-customer',
+      },
+      scenarioPath,
+      expectedCandidateId: 'openai-gpt-4.1-mini',
+      backendUrl: 'https://worker.example',
+      source: { gitSha: bridgeGitSha, dirty: false },
+      gateway,
+      now: sequenceClock(),
+    });
+
+    await session.submitUserMessage('Cho mình xem món.');
+    await session.submitAction({
+      assistantTurnId: 'assistant-menu-1',
+      attachmentId: 'attachment-menu-1',
+      actionId: 'add_items',
+      payload: offeredPayload,
+    });
+
+    expect(gateway.submitAction).toHaveBeenCalledWith(
+      expect.objectContaining({ payload: offeredPayload }),
+    );
+  });
+
+  it('rejects a missing or mismatched generic-widget payload before HTTP forwarding', async () => {
+    const { root, scenarioPath } = await fixture();
+    const gateway: LiveScenarioHttpClient = {
+      environment: vi.fn(async () => environment),
+      submitUserMessage: vi.fn(async () => ({
+        responseText: 'Bạn chọn món nhé.',
+        assistantTurnId: 'assistant-menu-1',
+        liveScenarioTrace: serverTrace(scenario.id, 'menu-rejection'),
+        genUi: {
+          id: 'attachment-menu-1',
+          widgetKind: 'smartMenuPicker',
+          status: 'active',
+          data: {
+            items: [{ code: '41173', name: 'Xô Zui Zẻ 139K', available: true }],
+          },
+          actions: [{ id: 'add_items', label: 'Xác nhận món' }],
+        },
+      })),
+      submitAction: vi.fn(),
+      recordRecommendationImpression: vi.fn(async () => undefined),
+      d1Evidence: vi.fn(async () => ({
+        proofEnvelope: completeNoRecommendationProof(
+          'kfc:menu-rejection-customer',
+          [],
+        ),
+      })),
+    };
+    const session = await startLiveScenarioSession({
+      artifactsRoot: join(root, 'artifacts'),
+      runId: 'menu-rejection',
+      attempt: 1,
+      correlation: {
+        sessionId: 'kfc:menu-rejection-customer',
+        customerId: 'menu-rejection-customer',
+      },
+      scenarioPath,
+      expectedCandidateId: 'openai-gpt-4.1-mini',
+      backendUrl: 'https://worker.example',
+      source: { gitSha: bridgeGitSha, dirty: false },
+      gateway,
+      now: sequenceClock(),
+    });
+
+    await session.submitUserMessage('Cho mình xem món.');
+    await expect(
+      session.submitAction({
+        assistantTurnId: 'assistant-menu-1',
+        attachmentId: 'attachment-menu-1',
+        actionId: 'add_items',
+      }),
+    ).rejects.toThrow('live_scenario_action_payload_invalid');
+    await expect(
+      session.submitAction({
+        assistantTurnId: 'assistant-menu-1',
+        attachmentId: 'attachment-menu-1',
+        actionId: 'add_items',
+        payload: {
+          items: [{ itemCode: 'not-rendered', quantity: 1 }],
+        },
+      }),
+    ).rejects.toThrow('live_scenario_action_payload_invalid');
+
+    expect(gateway.submitAction).not.toHaveBeenCalled();
+  });
+
   it('validates observed action references and writes a self-contained evidence packet', async () => {
     const { root, scenarioPath } = await fixture();
     const gateway: LiveScenarioHttpClient = {

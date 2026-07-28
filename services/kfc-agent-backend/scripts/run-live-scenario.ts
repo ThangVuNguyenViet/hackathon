@@ -70,6 +70,8 @@ async function main(): Promise<void> {
               assistantTurnId: '<observed assistant turn ID>',
               attachmentId: '<observed attachment ID>',
               actionId: '<observed action ID>',
+              payload:
+                '<optional exact client-generated payload for this action>',
             },
             finish: { type: 'finish', note: '<optional reviewer note>' },
           },

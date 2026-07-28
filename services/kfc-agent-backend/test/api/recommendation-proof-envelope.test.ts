@@ -10,6 +10,8 @@ import {
 } from '../../src/recommendations/domain/schemas.js';
 import { renderBindingForDecisionDigests } from '../../src/recommendations/persistence/types.js';
 import type { KfcGenUiAttachment } from '../../src/genui/kfcGenUi.js';
+import { createPackStateEnvelope } from '../../src/runtime/businessPack.js';
+import { kfcVietnamPack } from '../../src/businessPacks/kfcVietnam/kfcVietnamPack.js';
 
 const adminToken = 'recommendation-proof-admin-token';
 const servers: FastifyInstance[] = [];
@@ -51,7 +53,7 @@ function lifecycleProof(): { instance: LifecycleInstance; audit: unknown[] } {
   };
 }
 
-async function configuredServer() {
+async function configuredServer(input: { lifecycle?: boolean } = {}) {
   const store = new MemoryStore();
   const sessionId = 'kfc:customer-proof';
   await store.appendTurn({
@@ -76,30 +78,34 @@ async function configuredServer() {
   if (!recommendations) {
     throw new Error('Expected configured recommendation services');
   }
+  const lifecycle =
+    input.lifecycle === false
+      ? undefined
+      : {
+          environment: 'sandbox' as const,
+          controls: {
+            create: async () => {
+              throw new Error('not used by proof-envelope test');
+            },
+            get: async () => {
+              throw new Error('not used by proof-envelope test');
+            },
+            transition: async () => {
+              throw new Error('not used by proof-envelope test');
+            },
+          },
+          createInput: async () => {
+            throw new Error('not used by proof-envelope test');
+          },
+          binding: async () => {
+            throw new Error('not used by proof-envelope test');
+          },
+          proofForSession: async () => lifecycleProof(),
+        };
   const server = buildServer({
     ...options,
     store,
-    lifecycle: {
-      environment: 'sandbox',
-      controls: {
-        create: async () => {
-          throw new Error('not used by proof-envelope test');
-        },
-        get: async () => {
-          throw new Error('not used by proof-envelope test');
-        },
-        transition: async () => {
-          throw new Error('not used by proof-envelope test');
-        },
-      },
-      createInput: async () => {
-        throw new Error('not used by proof-envelope test');
-      },
-      binding: async () => {
-        throw new Error('not used by proof-envelope test');
-      },
-      proofForSession: async () => lifecycleProof(),
-    },
+    ...(lifecycle ? { lifecycle } : {}),
   });
   servers.push(server);
   return { server, sessionId, store, recommendations };
@@ -164,6 +170,90 @@ async function proofEnvelope(server: FastifyInstance, sessionId: string) {
 }
 
 describe('KFC recommendation proof envelope', () => {
+  it('marks an absent commerce lifecycle not applicable for a recommendation-only conversation', async () => {
+    const { server, sessionId, store } = await configuredServer({
+      lifecycle: false,
+    });
+    await store.putPackState(
+      sessionId,
+      await createPackStateEnvelope({
+        packRef: kfcVietnamPack.ref,
+        schemaVersion: kfcVietnamPack.stateSchemaVersion,
+        state: {
+          toolTrace: [
+            {
+              toolName: 'recommendStarter',
+              arguments: { requestKind: 'proactive' },
+              ok: true,
+              resultSummary: 'recommended',
+              provenance: [],
+            },
+          ],
+        },
+      }),
+    );
+
+    const response = await server.inject({
+      method: 'GET',
+      url: `/admin/proof/kfc/sessions/${encodeURIComponent(sessionId)}/envelope`,
+      headers: { 'x-kfc-demo-admin-token': adminToken },
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toMatchObject({
+      complete: true,
+      missing: [],
+      lifecycle: {
+        status: 'not_applicable',
+        complete: true,
+        missing: [],
+        instance: null,
+        audit: [],
+      },
+    });
+  });
+
+  it('does not hide an absent lifecycle after a successful order-lifecycle tool', async () => {
+    const { server, sessionId, store } = await configuredServer({
+      lifecycle: false,
+    });
+    await store.putPackState(
+      sessionId,
+      await createPackStateEnvelope({
+        packRef: kfcVietnamPack.ref,
+        schemaVersion: kfcVietnamPack.stateSchemaVersion,
+        state: {
+          toolTrace: [
+            {
+              toolName: 'placeOrder',
+              arguments: {},
+              ok: true,
+              resultSummary: 'order placed',
+              provenance: [],
+            },
+          ],
+        },
+      }),
+    );
+
+    const response = await server.inject({
+      method: 'GET',
+      url: `/admin/proof/kfc/sessions/${encodeURIComponent(sessionId)}/envelope`,
+      headers: { 'x-kfc-demo-admin-token': adminToken },
+    });
+
+    expect(response.statusCode).toBe(409);
+    expect(response.json()).toMatchObject({
+      complete: false,
+      missing: ['lifecycle_instance', 'lifecycle_audit'],
+      lifecycle: {
+        status: 'missing',
+        complete: false,
+        missing: ['lifecycle_instance', 'lifecycle_audit'],
+      },
+    });
+  });
+
   it('projects proof turns as privacy-safe metadata and digests without literal prose or private fields', async () => {
     const { server, sessionId } = await configuredServer();
 

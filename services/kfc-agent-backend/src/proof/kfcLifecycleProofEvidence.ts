@@ -88,6 +88,7 @@ export type KfcLifecycleProofMissingReason =
   'lifecycle_audit' | 'lifecycle_evidence' | 'lifecycle_instance';
 
 export interface KfcLifecycleProofEvidenceProjection {
+  status: 'complete' | 'missing' | 'not_applicable';
   complete: boolean;
   missing: KfcLifecycleProofMissingReason[];
   instance: {
@@ -114,10 +115,12 @@ export interface KfcLifecycleProofEvidenceProjection {
 
 export function projectKfcLifecycleProofEvidence(
   source: unknown,
+  options: { required?: boolean } = {},
 ): KfcLifecycleProofEvidenceProjection {
   const parsed = lifecycleProofSourceSchema.safeParse(source);
   if (!parsed.success) {
     return {
+      status: 'missing',
       complete: false,
       missing: ['lifecycle_evidence'],
       instance: null,
@@ -125,11 +128,21 @@ export function projectKfcLifecycleProofEvidence(
     };
   }
   const { instance, audit } = parsed.data;
+  if (!options.required && instance === null && audit.length === 0) {
+    return {
+      status: 'not_applicable',
+      complete: true,
+      missing: [],
+      instance: null,
+      audit: [],
+    };
+  }
   const missing: KfcLifecycleProofMissingReason[] = [
     ...(instance ? [] : ['lifecycle_instance' as const]),
     ...(audit.length > 0 ? [] : ['lifecycle_audit' as const]),
   ];
   return {
+    status: missing.length === 0 ? 'complete' : 'missing',
     complete: missing.length === 0,
     missing,
     instance: instance

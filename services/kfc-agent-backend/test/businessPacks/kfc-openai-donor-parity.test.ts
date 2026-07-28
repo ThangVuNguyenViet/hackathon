@@ -125,12 +125,24 @@ describe('portable Direct SDK behavior retained by the KFC LangChain pack', () =
     expect(KFC_AGENT_INSTRUCTIONS).toContain(
       'Never repeat a proactive recommendation placement',
     );
+    expect(KFC_AGENT_INSTRUCTIONS).toContain(
+      'When recommendStarter is available after genuine food, menu, or ordering intent, call it before getFavoriteItems, generic searchMenu exploration, or asking the customer for preferences',
+    );
+    expect(KFC_AGENT_INSTRUCTIONS).toContain(
+      'The server chooses For You for a linked returning customer with completed-order history and Local Favorite otherwise',
+    );
 
     expect(agentToolDescriptions.getModifierOptions).toContain(
       'Do not transfer evidence between options, branches, or items',
     );
     expect(agentToolDescriptions.recommendStarter).toContain(
       'verified identity and completed-order history',
+    );
+    expect(agentToolDescriptions.recommendStarter).toContain(
+      'Call this before getFavoriteItems, generic searchMenu exploration, or asking for preferences',
+    );
+    expect(agentToolDescriptions.getFavoriteItems).toContain(
+      'Do not use this as a substitute for an available recommendStarter call',
     );
     expect(agentToolDescriptions.recommendModifierUpsell).toContain(
       'exact current cart line',

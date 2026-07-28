@@ -114,6 +114,46 @@ describe('live scenario JSONL protocol', () => {
     ]);
   });
 
+  it('forwards an optional client-generated generic-widget payload unchanged', async () => {
+    const payload = {
+      items: [{ itemCode: '41173', quantity: 2 }],
+    };
+    const session: LiveScenarioProtocolSession = {
+      submitUserMessage: vi.fn(),
+      submitAction: vi.fn(async () => ({
+        responseText: 'Đã thêm món.',
+        assistantTurnId: 'assistant-turn-2',
+      })),
+      recordAssistantRendered: vi.fn(),
+      finish: vi.fn(),
+      commitFinish: vi.fn(),
+      finalizeTerminal: vi.fn(),
+      recordProtocolError: vi.fn(),
+      interrupt: vi.fn(),
+    };
+
+    await runLiveScenarioCommandStream({
+      session,
+      lines: from([
+        JSON.stringify({
+          type: 'action',
+          assistantTurnId: 'assistant-turn-1',
+          attachmentId: 'attachment-1',
+          actionId: 'add_items',
+          payload,
+        }),
+      ]),
+      writeLine: vi.fn(),
+    });
+
+    expect(session.submitAction).toHaveBeenCalledWith({
+      assistantTurnId: 'assistant-turn-1',
+      attachmentId: 'attachment-1',
+      actionId: 'add_items',
+      payload,
+    });
+  });
+
   it('reports malformed input without converting it into a customer turn', async () => {
     const session: LiveScenarioProtocolSession = {
       submitUserMessage: vi.fn(),

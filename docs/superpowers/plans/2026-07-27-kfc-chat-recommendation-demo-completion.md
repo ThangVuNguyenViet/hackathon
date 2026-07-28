@@ -154,16 +154,34 @@ and the evidence and qualification loop.
 
 - Make `scenario:live` consume:
   - `{"type":"user","text":"..."}`
-  - `{"type":"action","assistantTurnId":"...","attachmentId":"...","actionId":"..."}`
+  - `{"type":"action","assistantTurnId":"...","attachmentId":"...","actionId":"...","payload":{...}}`
   - `{"type":"finish","note":"..."}`
-- Forward user turns and verified action references to the running chat HTTP
-  service and D1. The bridge validates references but never chooses an
-  action.
+- Forward user turns, verified action references, and optional exact
+  client-generated payloads to the running chat HTTP service and D1. The
+  bridge validates references and payloads against the active rendered
+  attachment but never chooses an action, selection, modifier, address, or
+  quantity.
+- Keep `recommendation_select:<action-id>` and `recommendation_dismiss`
+  reference-only because their complete mutation is already bound to the
+  server-issued action. Require payloads for generic menu, modifier, address,
+  and cart actions because those selections are created by the client.
 - Preserve complete transcript, tool calls, rendered/action references,
   recommendation events, final D1 state, LangSmith correlation,
   model/Sanity bindings, source commit, and environment manifest.
 - Keep narrative JSON assertion-free.
 - Add HTTP/D1 forwarding and evidence-packet tests.
+
+Attempt-1 qualification evidence exposed three additional runtime contracts
+that are part of Task 8/9 completion:
+
+- prioritize the dynamically available `recommendStarter` tool after genuine
+  ordering intent, before generic favorites/search exploration, without
+  keyword routing;
+- represent legitimately absent commerce lifecycle evidence as
+  `status: not_applicable`, while retaining `status: missing` for durable
+  order/payment state that should have lifecycle evidence; and
+- seed scenario 06 store KFCVN0036 through the durable pack-state authority
+  consumed by the recommendation tools, not through narrative prose.
 
 ## Task 9: Provision, Publish, and Run Live Qualification
 

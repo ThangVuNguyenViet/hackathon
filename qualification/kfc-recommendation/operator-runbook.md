@@ -265,6 +265,49 @@ The application never role-plays, evaluates, chooses GenUI actions, or replays
 the narrative turns deterministically. A different fresh evaluator receives
 only the run's `codex-review-packet.md`.
 
+### Attempt-2 action input contract
+
+Copy `assistantTurnId`, `attachmentId`, and `actionId` from the latest active
+rendered attachment. The bridge rejects stale/forged references, malformed
+payloads, selections outside the rendered attachment, and omitted payloads for
+client-generated actions. It forwards an accepted payload unchanged; it never
+fills in an item, modifier, address, or quantity.
+
+Recommendation actions are reference-only because the server-issued action
+already binds the full mutation:
+
+```json
+{"type":"action","assistantTurnId":"...","attachmentId":"...","actionId":"recommendation_select:<server-action-id>"}
+{"type":"action","assistantTurnId":"...","attachmentId":"...","actionId":"recommendation_dismiss"}
+```
+
+Generic rendered actions carry the exact client-generated payload:
+
+```json
+{"type":"action","assistantTurnId":"...","attachmentId":"...","actionId":"add_items","payload":{"items":[{"itemCode":"<rendered-code>","quantity":1}]}}
+{"type":"action","assistantTurnId":"...","attachmentId":"...","actionId":"apply_modifiers","payload":{"itemCode":"<rendered-code>","selections":[{"groupId":"<rendered-group>","modifierId":"<rendered-option>"}]}}
+{"type":"action","assistantTurnId":"...","attachmentId":"...","actionId":"update_cart","payload":{"items":[{"itemCode":"<every-rendered-cart-code>","quantity":1}]}}
+{"type":"action","assistantTurnId":"...","attachmentId":"...","actionId":"submit_address","payload":{"recipientName":null,"phone":null,"addressLine":null,"provinceCode":null,"provinceName":null,"communeCode":null,"communeName":null,"deliveryInstructions":null,"rawAddress":"<customer-entered-address>","legacyDistrictText":null}}
+```
+
+`continue_to_fulfillment` uses the same complete cart payload as
+`update_cart`. `add_item` uses
+`{"itemCode":"<rendered-code>","quantity":1}`. Cart payloads contain each
+currently rendered cart line exactly once; quantity zero is the explicit
+remove operation.
+
+The proof envelope reports commerce lifecycle as one of `complete`, `missing`,
+or `not_applicable`. Recommendation/menu-only sessions without lifecycle-backed
+order or payment state are `not_applicable` and can be complete. If durable
+order/payment state or a successful lifecycle-backed tool exists, absent
+lifecycle evidence remains `missing` and the proof remains incomplete.
+
+Migration `0027_recommendation_qualification_store_authority.sql` seeds
+scenario 06's verified pickup store as KFCVN0036 in
+`pack_state_projections`. Run attempt 2 against a fresh qualification data
+plane so attempt-1 turns and order-flow state cannot contaminate the fresh
+sessions; retain the complete attempt-1 artifact root unchanged.
+
 ## 9. Lifecycle and shutdown
 
 During the demo, verify:

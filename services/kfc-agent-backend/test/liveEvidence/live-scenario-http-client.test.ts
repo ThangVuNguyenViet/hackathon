@@ -48,7 +48,10 @@ describe('live scenario HTTP/D1 client', () => {
       clientMessageId: 'run-1:action:2',
       assistantTurnId: 'assistant-turn-1',
       attachmentId: 'attachment-1',
-      actionId: 'recommendation_select:action-1',
+      actionId: 'add_items',
+      payload: {
+        items: [{ itemCode: '41173', quantity: 2 }],
+      },
       trace: {
         scenarioId: 'scenario-improvised',
         probeRunId: 'run-1',
@@ -94,7 +97,10 @@ describe('live scenario HTTP/D1 client', () => {
         action: {
           assistantTurnId: 'assistant-turn-1',
           attachmentId: 'attachment-1',
-          actionId: 'recommendation_select:action-1',
+          actionId: 'add_items',
+          payload: {
+            items: [{ itemCode: '41173', quantity: 2 }],
+          },
         },
       },
       trace: {

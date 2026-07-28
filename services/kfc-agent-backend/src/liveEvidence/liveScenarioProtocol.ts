@@ -13,6 +13,7 @@ const commandSchema = z.discriminatedUnion('type', [
       assistantTurnId: z.string().min(1),
       attachmentId: z.string().min(1),
       actionId: z.string().min(1),
+      payload: z.record(z.unknown()).optional(),
     })
     .strict(),
   z
@@ -31,6 +32,7 @@ export interface LiveScenarioAssistantObservation {
     assistantTurnId: string;
     attachmentId: string;
     actionId: string;
+    payload?: Record<string, unknown>;
   }>;
 }
 
@@ -96,6 +98,9 @@ export async function runLiveScenarioCommandStream(input: {
                 assistantTurnId: parsed.data.assistantTurnId,
                 attachmentId: parsed.data.attachmentId,
                 actionId: parsed.data.actionId,
+                ...(parsed.data.payload === undefined
+                  ? {}
+                  : { payload: parsed.data.payload }),
               });
         await emit(input, {
           type: 'assistant',
