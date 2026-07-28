@@ -31,7 +31,9 @@ def resolve_model_path(
     revision = binding.get("modelRevision")
     model_path = binding.get("modelPath")
     if (
-        not isinstance(repository_id, str)
+        binding.get("schemaVersion") != "kfc-shadow-runtime-model-binding-v1"
+        or binding.get("runtimeProfile") != "local_docker_cloudflare_tunnel"
+        or not isinstance(repository_id, str)
         or "/" not in repository_id
         or repository_id.rsplit("/", maxsplit=1)[1] != _MODEL_NAME
         or not isinstance(revision, str)

@@ -40,8 +40,9 @@ function workerEnvFile(lines: readonly string[]) {
       'LANGSMITH_PROJECT=test-project',
       'LANGSMITH_ENDPOINT=https://example.test',
       'META_APP_SECRET=test-meta',
-      'KFC_RECOMMENDATION_SHADOW_URL=https://space.example.test',
+      'KFC_RECOMMENDATION_SHADOW_URL=https://tunnel.example.test',
       `KFC_RECOMMENDATION_SHADOW_MODEL_REVISION=${'a'.repeat(40)}`,
+      'KFC_RECOMMENDATION_SHADOW_RUNTIME_PROFILE=local_docker_cloudflare_tunnel',
       'KFC_RECOMMENDATION_OUTPUT_MODE=baseline',
       'SANITY_PROJECT_ID=abc123xy',
       'SANITY_DATASET=production',
@@ -138,7 +139,7 @@ describe('deployment model candidate configuration', () => {
     const secret = 'test-sanity-read-secret-do-not-log';
     const worker = runWorkerPreflight([
       'OPENAI_API_KEY=test-openai',
-      'KFC_RECOMMENDATION_SHADOW_URL=https://space.example.test',
+      'KFC_RECOMMENDATION_SHADOW_URL=https://tunnel.example.test',
       `KFC_RECOMMENDATION_SHADOW_MODEL_REVISION=${'a'.repeat(40)}`,
       'KFC_RECOMMENDATION_OUTPUT_MODE=baseline',
       'SANITY_PROJECT_ID=abc123xy',
@@ -149,6 +150,18 @@ describe('deployment model candidate configuration', () => {
 
     expect(worker.status, worker.stderr).toBe(0);
     expect(`${worker.stdout}${worker.stderr}`).not.toContain(secret);
+  });
+
+  it('rejects a recommendation runtime profile outside the approved free path', () => {
+    const worker = runWorkerPreflight([
+      'OPENAI_API_KEY=test-openai',
+      'KFC_RECOMMENDATION_SHADOW_RUNTIME_PROFILE=hugging_face_space',
+    ]);
+
+    expect(worker.status).toBe(64);
+    expect(worker.stderr).toContain(
+      'KFC_RECOMMENDATION_SHADOW_RUNTIME_PROFILE',
+    );
   });
 
   it('rejects unknown candidates before deployment', () => {

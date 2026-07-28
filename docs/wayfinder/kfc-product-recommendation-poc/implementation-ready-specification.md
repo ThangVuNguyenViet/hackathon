@@ -51,7 +51,8 @@ and shadow-model boundaries and produce the acceptance evidence in section 15.
 - Durable once-per-order-flow stage policy.
 - Customer-chat recommendation cards and verified actions.
 - Deterministic serving rankers and optional learned technical output.
-- Public Hugging Face model artifact and Docker Space for shadow inference.
+- Public Hugging Face model artifact plus an operator-managed local Docker
+  runtime exposed through Cloudflare Tunnel for shadow inference.
 - Synthetic-world and behavioral qualification evidence.
 
 ### Out of scope
@@ -102,11 +103,12 @@ flowchart LR
     Eligibility --> Rankers["Placement ranker repository"]
     Rankers --> Baseline["Promoted deterministic rankers"]
     Rankers -. "shadow only" .-> Adapter["Model scoring adapter"]
-    Adapter --> Space["HF Docker Space / MLflow PyFunc"]
+    Adapter --> Runtime["Local Docker / MLflow PyFunc"]
+    Tunnel["Cloudflare Tunnel"] --> Runtime
     Service --> Sanity["Sanity policy repository"]
     Service --> D1["D1 state and recommendation events"]
     Service --> Trace["Sanitized LangSmith spans"]
-    Space --> MLflow["MLflow runs, model manifest, SHAP"]
+    Runtime --> MLflow["MLflow runs, model manifest, SHAP"]
     Service --> GenUI["Verified recommendation_offer attachment"]
     GenUI --> Chat
 ```
@@ -552,7 +554,7 @@ adapter depends on this table. Seed at least:
 The existing `pack_state_projections` table remains the current-state store.
 `recommendation_events` is the independent append-only audit/analytics history.
 
-## 10. Model package and Hugging Face
+## 10. Model package and approved free shadow runtime
 
 Add one placement-aware MLflow PyFunc package under:
 
@@ -590,22 +592,30 @@ stores:
 Do not commit generated training datasets or duplicate model binaries to the
 application repository.
 
-Deploy the pinned bundle in one public Hugging Face Docker Space using MLflow’s
-standard inference server. The backend adapter calls `/invocations`. This uses
-[MLflow Model Serving](https://mlflow.org/docs/latest/ml/deployment),
-[Docker Spaces](https://huggingface.co/docs/hub/main/spaces-sdks-docker), and
-the free CPU Basic tier documented in the
-[Spaces overview](https://huggingface.co/docs/hub/main/spaces-overview).
-Free-space sleep is acceptable for the non-authoritative shadow path; it is not
-used as evidence of production availability.
+Run the pinned bundle with MLflow’s standard inference server inside the
+verified local Docker image. Expose the local port through Cloudflare Tunnel
+using runtime profile `local_docker_cloudflare_tunnel`. The backend adapter
+calls `/invocations`; `/health` is the liveness gate.
+
+The Hugging Face model repository and immutable revision remain artifact
+authority. The Cloudflare URL is only an operator-managed transport to the
+local container. The Mac, Docker container, and tunnel process must remain
+running for the demo. A quick-tunnel URL changes after restart and therefore
+requires a Worker binding update. This profile is not evidence of production
+availability, uptime, or durability.
 
 Configuration:
 
 ```text
 KFC_RECOMMENDATION_SHADOW_URL
 KFC_RECOMMENDATION_SHADOW_MODEL_REVISION
+KFC_RECOMMENDATION_SHADOW_RUNTIME_PROFILE=local_docker_cloudflare_tunnel
 KFC_RECOMMENDATION_OUTPUT_MODE=baseline|learned_technical
 ```
+
+The Hugging Face git revision pins the artifact download. The shadow model
+revision pins the distinct `trustedArtifactManifestDigest` attested by every
+served prediction.
 
 Default is `baseline`. `learned_technical` is protected configuration, never a
 customer-controlled or model-controlled parameter. Shadow unavailability does
@@ -849,7 +859,9 @@ Preserve:
 - Modifier Upsell digest
   `75f1d02a4e230e901eb222b26268b255f46842483ad77f04e2192ea74d81de26`;
 - Hugging Face model repository and pinned revision;
-- Docker Space URL and health/inference capture;
+- runtime profile `local_docker_cloudflare_tunnel`;
+- local container image digest, Cloudflare Tunnel URL, process evidence, and
+  public health/inference capture;
 - MLflow run IDs and serving signature;
 - baseline and learned outputs for the same held-out requests; and
 - the synthetic-evidence disclaimer.
@@ -893,7 +905,7 @@ Each behavioral run produces:
 1. Branch from `4246c6b2`.
 2. Freeze the current KFC fixture digests and benchmark result digests.
 3. Add contract-generation tooling and test commands.
-4. Provision the Sanity Free project/dataset and Hugging Face repositories;
+4. Provision the Sanity Free project/dataset and Hugging Face model repository;
    record only public identifiers and secret names in Git.
 
 Exit: reproducible environment manifest and no uncommitted generated artifact.
@@ -931,7 +943,7 @@ Exit: API, D1, replay, once-only, and concurrency tests pass.
 1. Convert qualified artifacts into one signed MLflow PyFunc bundle.
 2. Verify predictions against benchmark artifacts.
 3. Publish the pinned Hugging Face model revision.
-4. Deploy the Docker Space.
+4. Run the verified local Docker image and expose it through Cloudflare Tunnel.
 5. Add the backend shadow adapter and protected output mode.
 
 Exit: baseline and shadow score the same eligible rows with exact artifact
@@ -967,7 +979,7 @@ The phases may run in parallel only after their declared prerequisites:
 | Contracts | Phase 0 | Cross-language schemas and domain types |
 | Sanity and eligibility | Contract identities | Policy schema/repository/resolver and candidate evidence |
 | D1 and API | Transport and state schemas | Migrations, repositories, routes, idempotency |
-| Model packaging | Frozen qualification artifacts | MLflow bundle, Hugging Face model and Space |
+| Model packaging | Frozen qualification artifacts | MLflow bundle, Hugging Face model authority, local Docker runtime, and tunnel evidence |
 | Agent integration | Tool and state contracts | Tools, availability, prompt, traces |
 | Flutter GenUI | Attachment/action schema | Existing chat renderer and interaction proof |
 | Qualification | All runtime paths | Narratives, HTTP harness, Codex evidence packet |
@@ -982,8 +994,9 @@ The implementation executor must obtain or create:
 - Sanity project ID, public dataset name, read token if required, and Studio
   project;
 - public Hugging Face model repository;
-- public Hugging Face Docker Space;
 - Hugging Face write token used only during publication;
+- local Docker and `cloudflared`; the operator must keep the Mac, container,
+  and tunnel process running during the demo;
 - LangSmith project and API key;
 - OpenAI model credentials already supported by the KISS runtime; and
 - Cloudflare D1 database and Worker secrets.

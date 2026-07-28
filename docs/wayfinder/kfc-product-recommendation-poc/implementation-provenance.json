@@ -24,5 +24,21 @@
       "selectedRanker": "incremental_value",
       "promotionDecision": "retain_baseline"
     }
+  },
+  "runtime": {
+    "profile": "local_docker_cloudflare_tunnel",
+    "availability": "operator_managed_demo",
+    "requiresLocalProcesses": true,
+    "servedModelRevision": "10da1b47f6d744e0b1f118950a77de9811c90ab44a2b876f6a62e7cce56e537a",
+    "artifactAuthority": {
+      "repositoryId": "thangvu132/kfc-vietnam-recommendation-shadow-20260727",
+      "revision": "129754a17b513b93efb3071ca4af9f42bb2a2f9c",
+      "publicationDigest": "605d6ac494154e9d316985aa72c56de51f10679826f5878ba5115fe1fbd5dfc6"
+    },
+    "sanity": {
+      "projectId": "09hoxft9",
+      "dataset": "production",
+      "snapshotDigest": "87c4f52022e3090119d7261eff13c5afd3cd763a7366428bb74eb4479514fcb2"
+    }
   }
 }

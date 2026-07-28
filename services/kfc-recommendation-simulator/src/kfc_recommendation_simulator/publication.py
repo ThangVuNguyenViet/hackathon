@@ -7,16 +7,20 @@ import shutil
 from collections.abc import Mapping
 from pathlib import Path
 from typing import Any
+from urllib.parse import urlparse
 
 MODEL_REPOSITORY_NAME = "kfc-vietnam-recommendation-shadow-20260727"
-SPACE_REPOSITORY_NAME = "kfc-vietnam-recommendation-shadow-space-20260727"
 SANITY_PROJECT_NAME = "kfc-vietnam-recommendation-poc"
 SANITY_DATASET = "production"
-SPACE_PUBLICATION_FILES = (
+SHADOW_RUNTIME_PROFILE = "local_docker_cloudflare_tunnel"
+SHADOW_RUNTIME_FILES = (
     "Dockerfile",
     "README.md",
     "requirements.txt",
     "serve.py",
+)
+_RUNTIME_TUNNEL_KINDS = frozenset(
+    {"trycloudflare_quick_tunnel", "cloudflare_named_tunnel"}
 )
 
 _COMMIT_PATTERN = re.compile(r"^[a-f0-9]{40,64}$")
@@ -149,7 +153,7 @@ def verify_file_manifest(manifest_path: Path) -> dict[str, Any]:
     return actual
 
 
-def build_space_binding(
+def build_model_binding(
     model_repository_id: str,
     model_revision: str,
 ) -> dict[str, str]:
@@ -160,7 +164,8 @@ def build_space_binding(
     )
     _assert_commit(model_revision, "model revision")
     return {
-        "schemaVersion": "kfc-hugging-face-model-binding-v1",
+        "schemaVersion": "kfc-shadow-runtime-model-binding-v1",
+        "runtimeProfile": SHADOW_RUNTIME_PROFILE,
         "modelRepositoryId": model_repository_id,
         "modelRevision": model_revision,
         "modelPath": "model",
@@ -296,7 +301,7 @@ def prepare_model_publication(
     )
 
 
-def prepare_space_publication(
+def prepare_local_runtime_publication(
     *,
     source_directory: Path,
     output_directory: Path,
@@ -305,27 +310,29 @@ def prepare_space_publication(
     model_revision: str,
 ) -> dict[str, Any]:
     _assert_commit(source_commit, "source commit")
-    binding = build_space_binding(model_repository_id, model_revision)
+    binding = build_model_binding(model_repository_id, model_revision)
     source = source_directory.resolve()
-    for filename in SPACE_PUBLICATION_FILES:
+    for filename in SHADOW_RUNTIME_FILES:
         path = source / filename
         if path.is_symlink() or not path.is_file():
-            raise ValueError(f"Space source is missing a regular {filename}")
+            raise ValueError(f"runtime source is missing a regular {filename}")
     output_directory.parent.mkdir(parents=True, exist_ok=True)
     output_directory.mkdir()
-    for filename in SPACE_PUBLICATION_FILES:
+    for filename in SHADOW_RUNTIME_FILES:
         shutil.copy2(source / filename, output_directory / filename)
     _write_json(output_directory / "model-binding.json", binding)
     return write_file_manifest(
         output_directory,
-        filename="space-publication-manifest.json",
-        schema_version="kfc-hugging-face-space-publication-v1",
+        filename="runtime-publication-manifest.json",
+        schema_version="kfc-local-shadow-runtime-publication-v1",
         metadata={
             "sourceCommit": source_commit,
-            "expectedRepositoryName": SPACE_REPOSITORY_NAME,
+            "runtimeProfile": SHADOW_RUNTIME_PROFILE,
             "modelBinding": binding,
             "healthPath": "/health",
             "inferencePath": "/invocations",
+            "availability": "operator_managed_demo",
+            "requiresLocalProcesses": True,
         },
     )
 
@@ -336,9 +343,12 @@ def build_public_provenance(
     model_repository_id: str,
     model_revision: str,
     model_publication_digest: str,
-    space_repository_id: str,
-    space_revision: str,
-    space_publication_digest: str,
+    runtime_profile: str,
+    runtime_public_url: str,
+    runtime_publication_digest: str,
+    runtime_container_image_digest: str,
+    runtime_served_model_revision: str,
+    runtime_tunnel_kind: str,
     sanity_project_id: str,
     sanity_dataset: str,
     sanity_snapshot_digest: str,
@@ -351,13 +361,16 @@ def build_public_provenance(
     )
     _assert_commit(model_revision, "model revision")
     _assert_digest(model_publication_digest, "model publication digest")
-    _assert_repository_name(
-        space_repository_id,
-        SPACE_REPOSITORY_NAME,
-        "Space",
-    )
-    _assert_commit(space_revision, "Space revision")
-    _assert_digest(space_publication_digest, "Space publication digest")
+    if runtime_profile != SHADOW_RUNTIME_PROFILE:
+        raise ValueError(
+            f"runtime profile must be {SHADOW_RUNTIME_PROFILE}"
+        )
+    _assert_credential_free_https_url(runtime_public_url, "runtime public URL")
+    _assert_digest(runtime_publication_digest, "runtime publication digest")
+    _assert_digest(runtime_container_image_digest, "runtime image digest")
+    _assert_digest(runtime_served_model_revision, "runtime served model revision")
+    if runtime_tunnel_kind not in _RUNTIME_TUNNEL_KINDS:
+        raise ValueError("runtime tunnel kind is invalid")
     if not _SANITY_PROJECT_ID_PATTERN.fullmatch(sanity_project_id):
         raise ValueError("Sanity project ID is invalid")
     if sanity_dataset != SANITY_DATASET:
@@ -373,11 +386,17 @@ def build_public_provenance(
                 "publicationDigest": model_publication_digest,
                 "visibility": "public",
             },
-            "huggingFaceSpace": {
-                "repositoryId": space_repository_id,
-                "revision": space_revision,
-                "publicationDigest": space_publication_digest,
-                "visibility": "public",
+            "shadowRuntime": {
+                "profile": runtime_profile,
+                "publicUrl": runtime_public_url,
+                "publicationDigest": runtime_publication_digest,
+                "containerImageDigest": runtime_container_image_digest,
+                "servedModelRevision": runtime_served_model_revision,
+                "tunnelKind": runtime_tunnel_kind,
+                "healthPath": "/health",
+                "inferencePath": "/invocations",
+                "availability": "operator_managed_demo",
+                "requiresLocalProcesses": True,
             },
             "sanity": {
                 "projectId": sanity_project_id,
@@ -433,3 +452,17 @@ def _assert_commit(value: str, name: str) -> None:
 def _assert_digest(value: str, name: str) -> None:
     if not _DIGEST_PATTERN.fullmatch(value):
         raise ValueError(f"{name} must be a SHA-256 digest")
+
+
+def _assert_credential_free_https_url(value: str, name: str) -> None:
+    parsed = urlparse(value)
+    if (
+        parsed.scheme != "https"
+        or not parsed.hostname
+        or parsed.username is not None
+        or parsed.password is not None
+        or parsed.query
+        or parsed.fragment
+        or parsed.path not in ("", "/")
+    ):
+        raise ValueError(f"{name} must be a credential-free HTTPS origin")

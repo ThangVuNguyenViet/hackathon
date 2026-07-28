@@ -118,6 +118,7 @@ describe('external recommendation qualification probes', () => {
             ok: true,
             required: false,
             configured: true,
+            runtimeProfile: 'local_docker_cloudflare_tunnel',
             outputMode: 'baseline',
           },
           recommendationSanity: {
@@ -150,6 +151,7 @@ describe('external recommendation qualification probes', () => {
       sourceCommit: 'b'.repeat(40),
       deploymentId: 'deployment-1',
       agentCandidate: 'openai-gpt-4.1-mini',
+      shadowRuntimeProfile: 'local_docker_cloudflare_tunnel',
       sanitySnapshotDigest: 'c'.repeat(64),
       langsmithProject: 'kfc-qualification',
     });

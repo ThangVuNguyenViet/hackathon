@@ -170,16 +170,21 @@ and the evidence and qualification loop.
 - After interactive account authorization, create:
   - public Hugging Face model repo
     `<authenticated-namespace>/kfc-vietnam-recommendation-shadow-20260727`
-  - public Docker Space
-    `<authenticated-namespace>/kfc-vietnam-recommendation-shadow-space-20260727`
   - Sanity project `kfc-vietnam-recommendation-poc` with public dataset
     `production`
 - Publish immutable model artifacts/manifests at a pinned Hugging Face
-  revision and deploy the Space with MLflow `/invocations`.
+  revision.
+- Use the approved free runtime profile
+  `local_docker_cloudflare_tunnel`: run the verified MLflow Docker image on the
+  operator's Mac and expose `/health` and `/invocations` through Cloudflare
+  Tunnel.
+- Record that the Mac, Docker container, and tunnel process must remain
+  running for the demo URL to work. This is operator-managed demo
+  availability, not production availability.
 - Commit only public IDs, revisions, signatures, qualification digests, and
   file hashes.
 - Seed and verify the Sanity published snapshot.
-- Recheck Hugging Face health/inference and LangSmith no-model
+- Recheck the public Cloudflare Tunnel health/inference and LangSmith no-model
   ingestion/queryability.
 - Run eight fresh held-out narratives:
   1. Returning customer: For You → add → Modifier dismiss → Smart Cross-sell
@@ -204,7 +209,8 @@ and the evidence and qualification loop.
 - Simulator: Ruff, compileall, and unittest suite.
 - Flutter: analyze, unit/widget tests, and integration proof.
 - Sanity published-snapshot read.
-- Hugging Face health and inference probe.
+- Public tunnel health and inference probe against the pinned Hugging Face
+  model revision.
 - LangSmith no-model ingestion/queryability probe.
 - Eight Codex role-play/evaluator runs.
 

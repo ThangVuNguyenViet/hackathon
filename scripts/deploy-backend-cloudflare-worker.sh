@@ -98,6 +98,7 @@ fi
 for name in \
   KFC_RECOMMENDATION_SHADOW_URL \
   KFC_RECOMMENDATION_SHADOW_MODEL_REVISION \
+  KFC_RECOMMENDATION_SHADOW_RUNTIME_PROFILE \
   SANITY_PROJECT_ID \
   SANITY_DATASET \
   SANITY_API_VERSION; do
@@ -113,6 +114,10 @@ if [[ ! "$KFC_RECOMMENDATION_SHADOW_URL" =~ ^https://[^[:space:]]+$ ]]; then
 fi
 if [[ ! "$KFC_RECOMMENDATION_SHADOW_MODEL_REVISION" =~ ^[a-f0-9]{40,64}$ ]]; then
   echo "ERROR: KFC_RECOMMENDATION_SHADOW_MODEL_REVISION must be an immutable hexadecimal revision." >&2
+  exit 64
+fi
+if [[ "$KFC_RECOMMENDATION_SHADOW_RUNTIME_PROFILE" != "local_docker_cloudflare_tunnel" ]]; then
+  echo "ERROR: KFC_RECOMMENDATION_SHADOW_RUNTIME_PROFILE must be local_docker_cloudflare_tunnel." >&2
   exit 64
 fi
 if [[ "$KFC_RECOMMENDATION_OUTPUT_MODE" != "baseline" ]]; then
@@ -198,6 +203,7 @@ mkdir -p "$(dirname "$DEPLOYMENT_OUTPUT_FILE")"
     --var "KFC_SHOWCASE_DATASET:$KFC_SHOWCASE_DATASET" \
     --var "KFC_RECOMMENDATION_SHADOW_URL:$KFC_RECOMMENDATION_SHADOW_URL" \
     --var "KFC_RECOMMENDATION_SHADOW_MODEL_REVISION:$KFC_RECOMMENDATION_SHADOW_MODEL_REVISION" \
+    --var "KFC_RECOMMENDATION_SHADOW_RUNTIME_PROFILE:$KFC_RECOMMENDATION_SHADOW_RUNTIME_PROFILE" \
     --var "KFC_RECOMMENDATION_OUTPUT_MODE:$KFC_RECOMMENDATION_OUTPUT_MODE" \
     --var "SANITY_PROJECT_ID:$SANITY_PROJECT_ID" \
     --var "SANITY_DATASET:$SANITY_DATASET" \
@@ -214,8 +220,8 @@ if [[ -z "$WORKER_URL" ]]; then
 fi
 
 deployed_at="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
-printf '{"gitSha":"%s","deploymentId":"%s","releaseBuiltAt":"%s","dirty":false,"deployedAt":"%s","workerName":"%s","workerUrl":"%s","agentCandidate":"%s","monitorCandidate":"%s","recommendationShadowUrl":"%s","recommendationShadowModelRevision":"%s","recommendationOutputMode":"%s","sanityProjectId":"%s","sanityDataset":"%s","sanityApiVersion":"%s"}\n' \
-  "$GIT_SHA" "$RELEASE_DEPLOYMENT_ID" "$RELEASE_BUILT_AT" "$deployed_at" "$WORKER_NAME" "$WORKER_URL" "$KFC_AGENT_CANDIDATE" "$KFC_MONITOR_CANDIDATE" "$KFC_RECOMMENDATION_SHADOW_URL" "$KFC_RECOMMENDATION_SHADOW_MODEL_REVISION" "$KFC_RECOMMENDATION_OUTPUT_MODE" "$SANITY_PROJECT_ID" "$SANITY_DATASET" "$SANITY_API_VERSION" > "$DEPLOYMENT_OUTPUT_FILE"
+printf '{"gitSha":"%s","deploymentId":"%s","releaseBuiltAt":"%s","dirty":false,"deployedAt":"%s","workerName":"%s","workerUrl":"%s","agentCandidate":"%s","monitorCandidate":"%s","recommendationShadowUrl":"%s","recommendationShadowModelRevision":"%s","recommendationShadowRuntimeProfile":"%s","recommendationOutputMode":"%s","sanityProjectId":"%s","sanityDataset":"%s","sanityApiVersion":"%s"}\n' \
+  "$GIT_SHA" "$RELEASE_DEPLOYMENT_ID" "$RELEASE_BUILT_AT" "$deployed_at" "$WORKER_NAME" "$WORKER_URL" "$KFC_AGENT_CANDIDATE" "$KFC_MONITOR_CANDIDATE" "$KFC_RECOMMENDATION_SHADOW_URL" "$KFC_RECOMMENDATION_SHADOW_MODEL_REVISION" "$KFC_RECOMMENDATION_SHADOW_RUNTIME_PROFILE" "$KFC_RECOMMENDATION_OUTPUT_MODE" "$SANITY_PROJECT_ID" "$SANITY_DATASET" "$SANITY_API_VERSION" > "$DEPLOYMENT_OUTPUT_FILE"
 
 echo
 echo "Cloudflare Worker URL:"

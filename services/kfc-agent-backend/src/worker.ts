@@ -199,6 +199,7 @@ export interface WorkerEnv {
   KFC_DEMO_ADMIN_TOKEN?: string;
   KFC_RECOMMENDATION_SHADOW_URL?: string;
   KFC_RECOMMENDATION_SHADOW_MODEL_REVISION?: string;
+  KFC_RECOMMENDATION_SHADOW_RUNTIME_PROFILE?: 'local_docker_cloudflare_tunnel';
   KFC_RECOMMENDATION_OUTPUT_MODE?: 'baseline' | 'learned_technical';
   SANITY_PROJECT_ID?: string;
   SANITY_DATASET?: string;

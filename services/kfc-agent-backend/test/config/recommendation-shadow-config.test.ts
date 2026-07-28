@@ -14,6 +14,8 @@ describe('recommendation shadow configuration', () => {
     expect(env).toMatchObject({
       KFC_RECOMMENDATION_SHADOW_URL: '',
       KFC_RECOMMENDATION_SHADOW_MODEL_REVISION: '',
+      KFC_RECOMMENDATION_SHADOW_RUNTIME_PROFILE:
+        'local_docker_cloudflare_tunnel',
       KFC_RECOMMENDATION_OUTPUT_MODE: 'baseline',
     });
     expect(
@@ -22,6 +24,7 @@ describe('recommendation shadow configuration', () => {
       ok: true,
       required: false,
       configured: false,
+      runtimeProfile: 'local_docker_cloudflare_tunnel',
       outputMode: 'baseline',
       message: 'Recommendation shadow scoring is not configured',
     });
@@ -31,6 +34,8 @@ describe('recommendation shadow configuration', () => {
     const env = loadEnv({
       KFC_RECOMMENDATION_SHADOW_URL: 'https://shadow.example',
       KFC_RECOMMENDATION_SHADOW_MODEL_REVISION: 'hf-revision-0123456789abcdef',
+      KFC_RECOMMENDATION_SHADOW_RUNTIME_PROFILE:
+        'local_docker_cloudflare_tunnel',
       KFC_RECOMMENDATION_OUTPUT_MODE: 'learned_technical',
     });
     const readiness =
@@ -40,6 +45,7 @@ describe('recommendation shadow configuration', () => {
       ok: true,
       required: false,
       configured: true,
+      runtimeProfile: 'local_docker_cloudflare_tunnel',
       outputMode: 'learned_technical',
     });
     expect(readiness).not.toHaveProperty('url');
@@ -66,12 +72,14 @@ describe('recommendation shadow configuration', () => {
       recommendationShadowReadiness({
         shadowUrl: 'https://shadow.example',
         modelRevision: '',
+        runtimeProfile: 'local_docker_cloudflare_tunnel',
         outputMode: 'baseline',
       }),
     ).toEqual({
       ok: true,
       required: false,
       configured: false,
+      runtimeProfile: 'local_docker_cloudflare_tunnel',
       outputMode: 'baseline',
       message:
         'KFC_RECOMMENDATION_SHADOW_URL and KFC_RECOMMENDATION_SHADOW_MODEL_REVISION must be configured together',
@@ -86,9 +94,15 @@ describe('recommendation shadow configuration', () => {
 
     expect(example).toContain('KFC_RECOMMENDATION_SHADOW_URL=');
     expect(example).toContain('KFC_RECOMMENDATION_SHADOW_MODEL_REVISION=');
+    expect(example).toContain(
+      'KFC_RECOMMENDATION_SHADOW_RUNTIME_PROFILE=local_docker_cloudflare_tunnel',
+    );
     expect(example).toContain('KFC_RECOMMENDATION_OUTPUT_MODE=baseline');
     expect(wrangler).toContain('KFC_RECOMMENDATION_SHADOW_URL = ""');
     expect(wrangler).toContain('KFC_RECOMMENDATION_SHADOW_MODEL_REVISION = ""');
+    expect(wrangler).toContain(
+      'KFC_RECOMMENDATION_SHADOW_RUNTIME_PROFILE = "local_docker_cloudflare_tunnel"',
+    );
     expect(wrangler).toContain('KFC_RECOMMENDATION_OUTPUT_MODE = "baseline"');
   });
 
@@ -101,6 +115,8 @@ describe('recommendation shadow configuration', () => {
         KFC_RECOMMENDATION_SHADOW_URL: 'https://shadow.example',
         KFC_RECOMMENDATION_SHADOW_MODEL_REVISION:
           'hf-revision-0123456789abcdef',
+        KFC_RECOMMENDATION_SHADOW_RUNTIME_PROFILE:
+          'local_docker_cloudflare_tunnel',
         KFC_RECOMMENDATION_OUTPUT_MODE: 'learned_technical',
       } as never,
       false,
@@ -111,6 +127,7 @@ describe('recommendation shadow configuration', () => {
       ok: true,
       required: false,
       configured: true,
+      runtimeProfile: 'local_docker_cloudflare_tunnel',
       outputMode: 'learned_technical',
     });
     expect(readiness.checks.recommendationShadow).not.toHaveProperty('url');

@@ -7,13 +7,13 @@ from pathlib import Path
 
 from kfc_recommendation_simulator.publication import (
     MODEL_REPOSITORY_NAME,
-    SPACE_REPOSITORY_NAME,
+    SHADOW_RUNTIME_PROFILE,
     build_file_manifest,
+    build_model_binding,
     build_probe_request,
     build_public_provenance,
-    build_space_binding,
+    prepare_local_runtime_publication,
     prepare_model_publication,
-    prepare_space_publication,
     verify_file_manifest,
 )
 
@@ -84,8 +84,10 @@ class PublicationManifestTest(unittest.TestCase):
                     },
                 )
 
-    def test_space_binding_requires_the_exact_public_model_name_and_revision(self) -> None:
-        binding = build_space_binding(
+    def test_runtime_binding_requires_the_exact_public_model_name_and_revision(
+        self,
+    ) -> None:
+        binding = build_model_binding(
             "verified-owner/kfc-vietnam-recommendation-shadow-20260727",
             "1234567890abcdef1234567890abcdef12345678",
         )
@@ -93,7 +95,8 @@ class PublicationManifestTest(unittest.TestCase):
         self.assertEqual(
             binding,
             {
-                "schemaVersion": "kfc-hugging-face-model-binding-v1",
+                "schemaVersion": "kfc-shadow-runtime-model-binding-v1",
+                "runtimeProfile": "local_docker_cloudflare_tunnel",
                 "modelRepositoryId": (
                     "verified-owner/kfc-vietnam-recommendation-shadow-20260727"
                 ),
@@ -102,12 +105,12 @@ class PublicationManifestTest(unittest.TestCase):
             },
         )
         with self.assertRaisesRegex(ValueError, "exact model repository name"):
-            build_space_binding(
+            build_model_binding(
                 "verified-owner/not-the-qualified-model",
                 "1234567890abcdef1234567890abcdef12345678",
             )
         with self.assertRaisesRegex(ValueError, "immutable hexadecimal"):
-            build_space_binding(
+            build_model_binding(
                 "verified-owner/kfc-vietnam-recommendation-shadow-20260727",
                 "main",
             )
@@ -118,9 +121,12 @@ class PublicationManifestTest(unittest.TestCase):
             model_repository_id=f"verified-owner/{MODEL_REPOSITORY_NAME}",
             model_revision="1" * 40,
             model_publication_digest="2" * 64,
-            space_repository_id=f"verified-owner/{SPACE_REPOSITORY_NAME}",
-            space_revision="3" * 40,
-            space_publication_digest="4" * 64,
+            runtime_profile=SHADOW_RUNTIME_PROFILE,
+            runtime_public_url="https://verified-shadow.trycloudflare.com",
+            runtime_publication_digest="3" * 64,
+            runtime_container_image_digest="4" * 64,
+            runtime_served_model_revision="6" * 64,
+            runtime_tunnel_kind="trycloudflare_quick_tunnel",
             sanity_project_id="abc123xy",
             sanity_dataset="production",
             sanity_snapshot_digest="5" * 64,
@@ -133,6 +139,21 @@ class PublicationManifestTest(unittest.TestCase):
                 "dataset": "production",
                 "snapshotDigest": "5" * 64,
                 "visibility": "public",
+            },
+        )
+        self.assertEqual(
+            provenance["resources"]["shadowRuntime"],
+            {
+                "profile": "local_docker_cloudflare_tunnel",
+                "publicUrl": "https://verified-shadow.trycloudflare.com",
+                "publicationDigest": "3" * 64,
+                "containerImageDigest": "4" * 64,
+                "servedModelRevision": "6" * 64,
+                "tunnelKind": "trycloudflare_quick_tunnel",
+                "healthPath": "/health",
+                "inferencePath": "/invocations",
+                "availability": "operator_managed_demo",
+                "requiresLocalProcesses": True,
             },
         )
         self.assertRegex(provenance["contentDigest"], r"^[a-f0-9]{64}$")
@@ -272,10 +293,10 @@ class PublicationProbeTest(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "does not match"):
                 verify_file_manifest(output / "publication-manifest.json")
 
-    def test_space_publication_is_pinned_to_one_model_revision(self) -> None:
+    def test_local_runtime_publication_is_pinned_to_one_model_revision(self) -> None:
         with tempfile.TemporaryDirectory() as temporary_directory:
             root = Path(temporary_directory)
-            source = root / "space-source"
+            source = root / "runtime-source"
             source.mkdir()
             (source / "Dockerfile").write_text("FROM scratch\n", encoding="utf-8")
             (source / "serve.py").write_text("print('serve')\n", encoding="utf-8")
@@ -288,9 +309,9 @@ class PublicationProbeTest(unittest.TestCase):
                 "must not be published\n",
                 encoding="utf-8",
             )
-            output = root / "space-publication"
+            output = root / "runtime-publication"
 
-            manifest = prepare_space_publication(
+            manifest = prepare_local_runtime_publication(
                 source_directory=source,
                 output_directory=output,
                 source_commit="a" * 40,
@@ -302,8 +323,16 @@ class PublicationProbeTest(unittest.TestCase):
             self.assertEqual(binding["modelRevision"], "b" * 40)
             self.assertEqual(binding["modelPath"], "model")
             self.assertEqual(
+                binding["runtimeProfile"],
+                "local_docker_cloudflare_tunnel",
+            )
+            self.assertEqual(
                 manifest["metadata"]["modelBinding"],
                 binding,
+            )
+            self.assertEqual(
+                manifest["metadata"]["runtimeProfile"],
+                "local_docker_cloudflare_tunnel",
             )
             self.assertIn(
                 "Dockerfile",

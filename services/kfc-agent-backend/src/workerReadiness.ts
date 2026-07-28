@@ -195,6 +195,9 @@ export async function checkWorkerReadiness(
     recommendationShadow: recommendationShadowReadiness({
       shadowUrl: env.KFC_RECOMMENDATION_SHADOW_URL ?? '',
       modelRevision: env.KFC_RECOMMENDATION_SHADOW_MODEL_REVISION ?? '',
+      runtimeProfile:
+        env.KFC_RECOMMENDATION_SHADOW_RUNTIME_PROFILE ??
+        'local_docker_cloudflare_tunnel',
       outputMode: env.KFC_RECOMMENDATION_OUTPUT_MODE ?? 'baseline',
     }),
     recommendationSanity,

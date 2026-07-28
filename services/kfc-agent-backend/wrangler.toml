@@ -7,6 +7,7 @@ compatibility_flags = ["nodejs_compat"]
 META_INBOX_URL_TEMPLATE = "https://business.facebook.com/latest/inbox/all?asset_id={pageId}&selected_item_id={externalUserId}"
 KFC_RECOMMENDATION_SHADOW_URL = ""
 KFC_RECOMMENDATION_SHADOW_MODEL_REVISION = ""
+KFC_RECOMMENDATION_SHADOW_RUNTIME_PROFILE = "local_docker_cloudflare_tunnel"
 KFC_RECOMMENDATION_OUTPUT_MODE = "baseline"
 SANITY_PROJECT_ID = ""
 SANITY_DATASET = ""

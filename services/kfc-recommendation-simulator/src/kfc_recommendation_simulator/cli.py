@@ -9,8 +9,8 @@ from .benchmark import run_benchmark
 from .modifier_benchmark import run_modifier_benchmark
 from .publication import (
     build_public_provenance,
+    prepare_local_runtime_publication,
     prepare_model_publication,
-    prepare_space_publication,
 )
 from .serving import save_qualified_shadow_model
 
@@ -77,21 +77,24 @@ def main() -> None:
     prepare_model.add_argument("--source-commit", required=True)
     prepare_model.add_argument("--output", type=Path, required=True)
 
-    prepare_space = subparsers.add_parser("prepare-space-publication")
-    prepare_space.add_argument("--source", type=Path, required=True)
-    prepare_space.add_argument("--source-commit", required=True)
-    prepare_space.add_argument("--model-repository-id", required=True)
-    prepare_space.add_argument("--model-revision", required=True)
-    prepare_space.add_argument("--output", type=Path, required=True)
+    prepare_runtime = subparsers.add_parser("prepare-local-runtime-publication")
+    prepare_runtime.add_argument("--source", type=Path, required=True)
+    prepare_runtime.add_argument("--source-commit", required=True)
+    prepare_runtime.add_argument("--model-repository-id", required=True)
+    prepare_runtime.add_argument("--model-revision", required=True)
+    prepare_runtime.add_argument("--output", type=Path, required=True)
 
     provenance = subparsers.add_parser("write-public-provenance")
     provenance.add_argument("--source-commit", required=True)
     provenance.add_argument("--model-repository-id", required=True)
     provenance.add_argument("--model-revision", required=True)
     provenance.add_argument("--model-publication-digest", required=True)
-    provenance.add_argument("--space-repository-id", required=True)
-    provenance.add_argument("--space-revision", required=True)
-    provenance.add_argument("--space-publication-digest", required=True)
+    provenance.add_argument("--runtime-profile", required=True)
+    provenance.add_argument("--runtime-public-url", required=True)
+    provenance.add_argument("--runtime-publication-digest", required=True)
+    provenance.add_argument("--runtime-container-image-digest", required=True)
+    provenance.add_argument("--runtime-served-model-revision", required=True)
+    provenance.add_argument("--runtime-tunnel-kind", required=True)
     provenance.add_argument("--sanity-project-id", required=True)
     provenance.add_argument("--sanity-dataset", required=True)
     provenance.add_argument("--sanity-snapshot-digest", required=True)
@@ -171,8 +174,8 @@ def main() -> None:
             ),
         )
         print(json.dumps(manifest, indent=2, ensure_ascii=False))
-    elif args.command == "prepare-space-publication":
-        manifest = prepare_space_publication(
+    elif args.command == "prepare-local-runtime-publication":
+        manifest = prepare_local_runtime_publication(
             source_directory=args.source.resolve(),
             output_directory=args.output.resolve(),
             source_commit=args.source_commit,
@@ -186,9 +189,12 @@ def main() -> None:
             model_repository_id=args.model_repository_id,
             model_revision=args.model_revision,
             model_publication_digest=args.model_publication_digest,
-            space_repository_id=args.space_repository_id,
-            space_revision=args.space_revision,
-            space_publication_digest=args.space_publication_digest,
+            runtime_profile=args.runtime_profile,
+            runtime_public_url=args.runtime_public_url,
+            runtime_publication_digest=args.runtime_publication_digest,
+            runtime_container_image_digest=args.runtime_container_image_digest,
+            runtime_served_model_revision=args.runtime_served_model_revision,
+            runtime_tunnel_kind=args.runtime_tunnel_kind,
             sanity_project_id=args.sanity_project_id,
             sanity_dataset=args.sanity_dataset,
             sanity_snapshot_digest=args.sanity_snapshot_digest,

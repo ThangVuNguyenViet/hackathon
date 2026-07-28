@@ -92,6 +92,7 @@ export function validateBackendQualificationEnvironment(
   sourceCommit: string;
   deploymentId: string;
   agentCandidate: 'openai-gpt-4.1-mini';
+  shadowRuntimeProfile: 'local_docker_cloudflare_tunnel';
   sanitySnapshotDigest: string;
   langsmithProject: string;
 } {
@@ -116,6 +117,7 @@ export function validateBackendQualificationEnvironment(
   if (
     shadow?.ok !== true ||
     shadow.configured !== true ||
+    shadow.runtimeProfile !== 'local_docker_cloudflare_tunnel' ||
     shadow.outputMode !== 'baseline'
   ) {
     throw new Error(
@@ -164,6 +166,7 @@ export function validateBackendQualificationEnvironment(
     sourceCommit: input.expectedSourceCommit,
     deploymentId: release.deploymentId,
     agentCandidate: 'openai-gpt-4.1-mini',
+    shadowRuntimeProfile: 'local_docker_cloudflare_tunnel',
     sanitySnapshotDigest: sanity.snapshotDigest,
     langsmithProject: langsmith.project,
   };

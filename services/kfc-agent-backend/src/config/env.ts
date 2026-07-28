@@ -50,6 +50,9 @@ const appEnvSchema = z.object({
   KFC_DEMO_ADMIN_TOKEN: z.string().optional().default(''),
   KFC_RECOMMENDATION_SHADOW_URL: optionalUrlSchema.optional().default(''),
   KFC_RECOMMENDATION_SHADOW_MODEL_REVISION: z.string().optional().default(''),
+  KFC_RECOMMENDATION_SHADOW_RUNTIME_PROFILE: z
+    .literal('local_docker_cloudflare_tunnel')
+    .default('local_docker_cloudflare_tunnel'),
   KFC_RECOMMENDATION_OUTPUT_MODE: z
     .enum(['baseline', 'learned_technical'])
     .default('baseline'),

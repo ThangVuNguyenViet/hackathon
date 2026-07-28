@@ -16,9 +16,9 @@ RUN python -m pip install --no-cache-dir -r /app/requirements.txt
 
 COPY . /app/
 
-RUN useradd --create-home --uid 1000 space \
-    && chown -R space:space /app
-USER space
+RUN useradd --create-home --uid 1000 runtime \
+    && chown -R runtime:runtime /app
+USER runtime
 
 EXPOSE 7860
 HEALTHCHECK --interval=30s --timeout=10s --start-period=120s --retries=3 \

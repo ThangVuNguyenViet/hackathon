@@ -1,44 +1,55 @@
 # KFC recommendation Task 9 operator runbook
 
-Run this only from a clean committed Task 9 source revision. Every generated
-path below must be new; never overwrite or delete a failed attempt.
+Runtime profile: `local_docker_cloudflare_tunnel`.
 
-## 1. Interactive authorization blockers
+Run only from a clean committed Task 9 revision. Every evidence directory must
+be new. Never overwrite a failed attempt, print a credential, or modify an
+unrelated Cloudflare DNS route, Sanity project, or Hugging Face repository.
 
-Hugging Face currently requires interactive authorization:
+The Hugging Face model repository is artifact authority. The public runtime is
+an operator-managed Cloudflare transport to a local MLflow container. The Mac,
+Docker container, and `cloudflared` process must remain running for the demo
+URL to work. This is not production availability.
+
+## 1. Verify authoritative public resources
+
+The approved resources are:
+
+- model repository:
+  `thangvu132/kfc-vietnam-recommendation-shadow-20260727`;
+- model revision:
+  `129754a17b513b93efb3071ca4af9f42bb2a2f9c`;
+- model publication digest:
+  `605d6ac494154e9d316985aa72c56de51f10679826f5878ba5115fe1fbd5dfc6`;
+- served model revision (`trustedArtifactManifestDigest`):
+  `10da1b47f6d744e0b1f118950a77de9811c90ab44a2b876f6a62e7cce56e537a`;
+- Sanity project: `09hoxft9`;
+- public Sanity dataset: `production`;
+- Sanity snapshot digest:
+  `87c4f52022e3090119d7261eff13c5afd3cd763a7366428bb74eb4479514fcb2`.
+
+Verify without printing credentials:
 
 ```bash
 cd services/kfc-recommendation-simulator
-uv run hf auth login
 uv run hf auth whoami
-```
 
-`hf auth login` asks for a token created at
-`https://huggingface.co/settings/tokens`. It does not issue a one-time device
-code. Do not paste the token into Codex output or save it in this repository.
+cd ../kfc-recommendation-sanity
+export SANITY_PROJECT_ID=09hoxft9
+export SANITY_DATASET=production
+export SANITY_API_VERSION=2026-07-27
+npx sanity datasets visibility get production
+npm run policies:check
 
-Sanity currently requires interactive authorization:
-
-```bash
-cd services/kfc-recommendation-sanity
-npx sanity login --provider google --no-open
-npx sanity projects list
-```
-
-The login command prints a fresh, per-attempt browser URL. Open that exact URL
-and complete Google login. There is no stable URL or current code to record in
-source control.
-
-Cloudflare authorization is checked separately:
-
-```bash
-cd services/kfc-agent-backend
+cd ../kfc-agent-backend
 npx wrangler whoami
+docker version
+cloudflared --version
 ```
 
-## 2. Package the immutable local model publication
+## 2. Prepare the pinned local runtime publication
 
-Set new artifact paths and the committed source revision:
+From the repository root:
 
 ```bash
 export TASK9_SOURCE_COMMIT="$(git rev-parse HEAD)"
@@ -46,160 +57,202 @@ export TASK9_ARTIFACT_ROOT="$PWD/.artifacts/kfc-recommendation-task-9/$TASK9_SOU
 mkdir -p "$TASK9_ARTIFACT_ROOT"
 
 cd services/kfc-recommendation-simulator
-uv run kfc-rec-sim package-shadow-models \
-  --smart-cross-sell-qualification /Users/vietthangvunguyen/Workspace/hackathon/.worktrees/kfc-smart-cross-sell-ranker/.artifacts/kfc-recommendation-simulator/smart-cross-sell-qualification-v1 \
-  --modifier-upsell-qualification /Users/vietthangvunguyen/Workspace/hackathon/.worktrees/kfc-modifier-upsell-ranker/.artifacts/kfc-recommendation-simulator/modifier-upsell-qualification-v1 \
-  --output "$TASK9_ARTIFACT_ROOT/qualified-model"
-
-uv run kfc-rec-sim prepare-model-publication \
-  --mlflow-model "$TASK9_ARTIFACT_ROOT/qualified-model" \
-  --smart-cross-sell-feature-schema /Users/vietthangvunguyen/Workspace/hackathon/.worktrees/kfc-smart-cross-sell-ranker/.artifacts/kfc-recommendation-simulator/smart-cross-sell-qualification-v1/models/lightgbm/feature-schema.json \
-  --modifier-upsell-feature-schema /Users/vietthangvunguyen/Workspace/hackathon/.worktrees/kfc-modifier-upsell-ranker/.artifacts/kfc-recommendation-simulator/modifier-upsell-qualification-v1/models/keras/feature-schema.json \
+uv run kfc-rec-sim prepare-local-runtime-publication \
+  --source ../kfc-recommendation-shadow-runtime \
   --source-commit "$TASK9_SOURCE_COMMIT" \
-  --output "$TASK9_ARTIFACT_ROOT/model-publication"
+  --model-repository-id thangvu132/kfc-vietnam-recommendation-shadow-20260727 \
+  --model-revision 129754a17b513b93efb3071ca4af9f42bb2a2f9c \
+  --output "$TASK9_ARTIFACT_ROOT/runtime-publication"
+
+uv run hf download \
+  thangvu132/kfc-vietnam-recommendation-shadow-20260727 \
+  probe-request.json \
+  --revision 129754a17b513b93efb3071ca4af9f42bb2a2f9c \
+  --local-dir "$TASK9_ARTIFACT_ROOT/model-probe"
 ```
 
-`publication-manifest.json` recursively pins every staged byte, the two
-qualification-result digests, MLflow signature, bundle digest, and source
-commit. `probe-request.json` contains one already-eligible row for each
-placement.
+`runtime-publication-manifest.json` hashes the Docker runtime, pins the exact
+model revision, declares operator-managed availability, and contains no
+credential.
 
-## 3. Verify the Docker Space locally
+## 3. Build and start the local MLflow container
+
+Use a commit-specific name. Do not replace another running container:
 
 ```bash
-docker build \
-  --tag kfc-recommendation-shadow-task9:"${TASK9_SOURCE_COMMIT:0:12}" \
-  services/kfc-recommendation-shadow-space
+export KFC_SHADOW_IMAGE="kfc-recommendation-shadow-task9:${TASK9_SOURCE_COMMIT:0:12}"
+export KFC_SHADOW_CONTAINER="kfc-recommendation-shadow-${TASK9_SOURCE_COMMIT:0:12}"
 
-docker run --rm \
-  --publish 7860:7860 \
-  --env KFC_MODEL_LOCAL_PATH=/model \
-  --volume "$TASK9_ARTIFACT_ROOT/qualified-model:/model:ro" \
-  kfc-recommendation-shadow-task9:"${TASK9_SOURCE_COMMIT:0:12}"
+docker build \
+  --tag "$KFC_SHADOW_IMAGE" \
+  "$TASK9_ARTIFACT_ROOT/runtime-publication"
+
+docker run --detach \
+  --name "$KFC_SHADOW_CONTAINER" \
+  --publish 127.0.0.1:7860:7860 \
+  "$KFC_SHADOW_IMAGE"
+
+docker inspect "$KFC_SHADOW_CONTAINER" \
+  > "$TASK9_ARTIFACT_ROOT/shadow-container-inspect.json"
+docker inspect --format '{{.LogPath}}' "$KFC_SHADOW_CONTAINER" \
+  > "$TASK9_ARTIFACT_ROOT/shadow-container-log-path.txt"
 ```
 
-From a second terminal:
+Verify both local routes:
 
 ```bash
 curl --fail --silent --show-error http://127.0.0.1:7860/health
 curl --fail --silent --show-error \
   --header 'content-type: application/json' \
-  --data-binary "@$TASK9_ARTIFACT_ROOT/model-publication/probe-request.json" \
+  --data-binary "@$TASK9_ARTIFACT_ROOT/model-probe/probe-request.json" \
   http://127.0.0.1:7860/invocations
 ```
 
-## 4. Create and publish the exact Hugging Face resources
+## 4. Start the free Cloudflare Tunnel
 
-The publisher derives the namespace from the authenticated CLI identity. It
-creates exactly these public repositories and records the upload callback OIDs:
-
-- `kfc-vietnam-recommendation-shadow-20260727`
-- `kfc-vietnam-recommendation-shadow-space-20260727`
+First inspect existing named tunnels and local configuration. Reuse a named
+tunnel only when it is already owned by the user and already routes this exact
+shadow service without any DNS or ingress change:
 
 ```bash
-cd services/kfc-recommendation-simulator
-uv run python scripts/publish-hugging-face.py \
-  --model-publication "$TASK9_ARTIFACT_ROOT/model-publication" \
-  --space-source ../kfc-recommendation-shadow-space \
-  --space-publication "$TASK9_ARTIFACT_ROOT/space-publication" \
-  --source-commit "$TASK9_SOURCE_COMMIT" \
-  --output "$TASK9_ARTIFACT_ROOT/hugging-face-publication.json"
+cloudflared tunnel list
 ```
 
-Do not copy a branch name such as `main` into a model binding. The generated
-Space pins the model upload callback's immutable hexadecimal revision.
-
-## 5. Create, deploy, seed, and publicly verify Sanity
+Otherwise use a TryCloudflare quick tunnel:
 
 ```bash
-cd services/kfc-recommendation-sanity
-npx sanity projects create "kfc-vietnam-recommendation-poc" \
-  --dataset production \
-  --dataset-visibility public \
-  --yes \
-  --json > "$TASK9_ARTIFACT_ROOT/sanity-project.json"
+export KFC_TUNNEL_LOG="$TASK9_ARTIFACT_ROOT/cloudflared-quick-tunnel.log"
+cloudflared tunnel --no-autoupdate --url http://127.0.0.1:7860 \
+  > "$KFC_TUNNEL_LOG" 2>&1 &
+export KFC_TUNNEL_PID=$!
+printf '%s\n' "$KFC_TUNNEL_PID" \
+  > "$TASK9_ARTIFACT_ROOT/cloudflared-quick-tunnel.pid"
+```
 
-export SANITY_PROJECT_ID="$(
-  node -e "const fs=require('fs');const value=JSON.parse(fs.readFileSync(process.argv[1],'utf8'));if(!value.projectId)process.exit(1);process.stdout.write(value.projectId)" \
-    "$TASK9_ARTIFACT_ROOT/sanity-project.json"
+Read the generated `https://*.trycloudflare.com` URL from the log and set:
+
+```bash
+export KFC_RECOMMENDATION_SHADOW_URL='<actual generated HTTPS origin>'
+export KFC_RECOMMENDATION_SHADOW_RUNTIME_PROFILE=local_docker_cloudflare_tunnel
+export KFC_RECOMMENDATION_SHADOW_MODEL_REVISION=10da1b47f6d744e0b1f118950a77de9811c90ab44a2b876f6a62e7cce56e537a
+export KFC_RECOMMENDATION_OUTPUT_MODE=baseline
+```
+
+A quick-tunnel URL is ephemeral. If `cloudflared` restarts, obtain the new URL,
+rerun public probes, and redeploy the Worker binding.
+
+Verify the public transport:
+
+```bash
+curl --fail --silent --show-error \
+  "$KFC_RECOMMENDATION_SHADOW_URL/health"
+curl --fail --silent --show-error \
+  --header 'content-type: application/json' \
+  --data-binary "@$TASK9_ARTIFACT_ROOT/model-probe/probe-request.json" \
+  "$KFC_RECOMMENDATION_SHADOW_URL/invocations"
+```
+
+## 5. Write safe public provenance
+
+Capture the image digest without its `sha256:` prefix and write only public
+runtime, model, and Sanity identifiers:
+
+```bash
+export KFC_SHADOW_IMAGE_DIGEST="$(
+  docker image inspect --format '{{.Id}}' "$KFC_SHADOW_IMAGE" |
+    sed 's/^sha256://'
 )"
-export SANITY_DATASET=production
-export SANITY_API_VERSION=2026-07-27
+export KFC_RUNTIME_PUBLICATION_DIGEST="$(
+  node -e "const fs=require('fs');const p=JSON.parse(fs.readFileSync(process.argv[1],'utf8'));process.stdout.write(p.contentDigest)" \
+    "$TASK9_ARTIFACT_ROOT/runtime-publication/runtime-publication-manifest.json"
+)"
 
-npm run schema:validate
-npm run schema:deploy
-npm run policies:seed
-npm run policies:check
+cd services/kfc-recommendation-simulator
+uv run kfc-rec-sim write-public-provenance \
+  --source-commit "$TASK9_SOURCE_COMMIT" \
+  --model-repository-id thangvu132/kfc-vietnam-recommendation-shadow-20260727 \
+  --model-revision 129754a17b513b93efb3071ca4af9f42bb2a2f9c \
+  --model-publication-digest 605d6ac494154e9d316985aa72c56de51f10679826f5878ba5115fe1fbd5dfc6 \
+  --runtime-profile local_docker_cloudflare_tunnel \
+  --runtime-public-url "$KFC_RECOMMENDATION_SHADOW_URL" \
+  --runtime-publication-digest "$KFC_RUNTIME_PUBLICATION_DIGEST" \
+  --runtime-container-image-digest "$KFC_SHADOW_IMAGE_DIGEST" \
+  --runtime-served-model-revision 10da1b47f6d744e0b1f118950a77de9811c90ab44a2b876f6a62e7cce56e537a \
+  --runtime-tunnel-kind trycloudflare_quick_tunnel \
+  --sanity-project-id 09hoxft9 \
+  --sanity-dataset production \
+  --sanity-snapshot-digest 87c4f52022e3090119d7261eff13c5afd3cd763a7366428bb74eb4479514fcb2 \
+  --output "$TASK9_ARTIFACT_ROOT/public-provenance.json"
 ```
 
-The seed command uses the logged-in CLI user's token in memory. The check
-command omits the user token and verifies the five published documents through
-the public dataset.
+## 6. Deploy the callback-attested Worker
 
-## 6. Deploy the callback-attested backend revision
-
-Load the public Hugging Face output without printing secrets, then place these
-public values in the untracked root `.env`:
-
-- `KFC_RECOMMENDATION_SHADOW_URL`: the actual `space.appUrl`.
-- `KFC_RECOMMENDATION_SHADOW_MODEL_REVISION`: the actual `model.revision`.
-- `KFC_RECOMMENDATION_OUTPUT_MODE=baseline`.
-- `SANITY_PROJECT_ID`: the actual created project ID.
-- `SANITY_DATASET=production`.
-- `SANITY_API_VERSION=2026-07-27`.
-
-Keep existing `OPENAI_API_KEY`, `LANGSMITH_API_KEY`,
-`KFC_DEMO_ADMIN_TOKEN`, and other credentials only in `.env`/Wrangler secret
-storage. Then:
+Load credentials from the untracked parent `.env` only into the process. Never
+print or copy their values into evidence:
 
 ```bash
+cd services/kfc-agent-backend
+set -a
+source /Users/vietthangvunguyen/Workspace/hackathon/.env
+set +a
+
 export RELEASE_GIT_SHA="$TASK9_SOURCE_COMMIT"
 export ALLOW_NON_MAIN_DEPLOY=true
 export CF_WORKER_NAME=kfc-agent-backend-recommendation-qualification
 export DEPLOYMENT_OUTPUT_FILE="$TASK9_ARTIFACT_ROOT/worker-deployment.json"
-./scripts/deploy-backend-cloudflare-worker.sh
+export KFC_RECOMMENDATION_SHADOW_URL
+export KFC_RECOMMENDATION_SHADOW_RUNTIME_PROFILE=local_docker_cloudflare_tunnel
+export KFC_RECOMMENDATION_SHADOW_MODEL_REVISION=10da1b47f6d744e0b1f118950a77de9811c90ab44a2b876f6a62e7cce56e537a
+export KFC_RECOMMENDATION_OUTPUT_MODE=baseline
+export SANITY_PROJECT_ID=09hoxft9
+export SANITY_DATASET=production
+export SANITY_API_VERSION=2026-07-27
+
+../../scripts/deploy-backend-cloudflare-worker.sh
 ```
 
-The deploy script applies D1 migrations, including one unique deterministic
-synthetic customer authority per narrative. It passes the public
-Space/revision and Sanity bindings and rejects non-baseline qualification.
-`/ready?deep=1` must callback-attest the exact clean source commit.
+`KFC_DEMO_ADMIN_TOKEN` is the protected bridge credential mechanism. It is
+loaded from the untracked `.env` and written to Wrangler secret storage by the
+deployment script. Only its variable name and presence may be reported.
 
-## 7. Run direct external and LangSmith no-model probes
+## 7. Run public and backend probes
 
-Set the deployed URL from the actual deployment output, then:
+Load the Worker URL from `worker-deployment.json`, then:
 
 ```bash
-cd services/kfc-agent-backend
-export KFC_AGENT_BACKEND_URL='<actual worker URL from worker-deployment.json>'
-export KFC_SHADOW_PROBE_REQUEST="$TASK9_ARTIFACT_ROOT/model-publication/probe-request.json"
+export KFC_AGENT_BACKEND_URL='<actual workers.dev URL>'
+export KFC_SHADOW_PROBE_REQUEST="$TASK9_ARTIFACT_ROOT/model-probe/probe-request.json"
 export KFC_QUALIFICATION_PROBE_OUTPUT="$TASK9_ARTIFACT_ROOT/external-probe.json"
-npm run sanity:policies:check
-npm run qualification:externals:probe
+export KFC_RECOMMENDATION_SHADOW_URL
+export KFC_RECOMMENDATION_SHADOW_RUNTIME_PROFILE=local_docker_cloudflare_tunnel
+export KFC_RECOMMENDATION_SHADOW_MODEL_REVISION=10da1b47f6d744e0b1f118950a77de9811c90ab44a2b876f6a62e7cce56e537a
+export RELEASE_GIT_SHA="$TASK9_SOURCE_COMMIT"
+export SANITY_PROJECT_ID=09hoxft9
+export SANITY_DATASET=production
+export SANITY_API_VERSION=2026-07-27
 
-export KFC_LANGSMITH_PROBE_OUTPUT="$TASK9_ARTIFACT_ROOT/langsmith-no-model-probe.json"
-npm run qualification:langsmith:probe
+npm run qualification:externals:probe
 ```
 
-A LangSmith quota error is preserved as an external evidence blocker. It is not
-an implementation failure and must not be hidden by retrying with a model call.
+The LangSmith no-model probe remains independent. Preserve HTTP 429 quota
+evidence and continue without claiming LangSmith queryability.
 
-After the direct probe has produced the actual Sanity snapshot digest, create
-the public provenance file with `kfc-rec-sim write-public-provenance`, passing
-only the actual IDs/revisions/digests from
-`hugging-face-publication.json`, `external-probe.json`, and
-`TASK9_SOURCE_COMMIT`.
+## 8. Controller role-player and evaluator handoff
 
-## 8. Run eight controller-owned Codex role-players and evaluators
+Do not start the eight runs until all of these exist:
 
-The application must not role-play, evaluate, call an evaluator model, replay
-the historical turns, or decide which GenUI action to submit.
+- actual `KFC_AGENT_BACKEND_URL`;
+- `KFC_DEMO_ADMIN_TOKEN` present in the controller process, never printed;
+- live `cloudflared` PID and log path;
+- live Docker container ID and Docker log path;
+- `public-provenance.json`;
+- `external-probe.json`; and
+- a new evidence root under
+  `$TASK9_ARTIFACT_ROOT/controller-qualification/`.
 
-For each narrative, the controller starts a fresh Codex subagent and a fresh
-bridge process:
+The controller starts one fresh bridge and role-player per narrative:
 
 ```bash
-cd services/kfc-agent-backend
 npm run scenario:live -- \
   --scenario qualification/kfc-recommendation/narratives/<file>.json \
   --candidate openai-gpt-4.1-mini \
@@ -208,32 +261,26 @@ npm run scenario:live -- \
   --customer-id <customer-authority-named-in-the-narrative>
 ```
 
-The role-player sees the emitted narrative and customer-safe assistant output,
-then sends exactly one improvised JSONL command at a time. An action command may
-contain only an exact previously observed
-`assistantTurnId`/`attachmentId`/`actionId` tuple. Finish explicitly; never pipe
-`scenario.turns` into stdin.
+The application never role-plays, evaluates, chooses GenUI actions, or replays
+the narrative turns deterministically. A different fresh evaluator receives
+only the run's `codex-review-packet.md`.
 
-After each terminal evidence directory exists, launch a different fresh Codex
-subagent. Give that evaluator only `codex-review-packet.md` plus the verdict
-vocabulary `successful`, `partial`, `unsuccessful`, or
-`insufficient_evidence`. Save its result in the shape of
-`evaluation-template.json`, including:
+## 9. Lifecycle and shutdown
 
-- the actual evaluator task ID;
-- SHA-256 of the exact `evidence-packet.json`;
-- specific artifact/pointer citations; and
-- concerns without inspecting sibling runs or implementation code.
-
-Finally prepare a private finalize-input JSON containing the eight narrative,
-evidence-directory, and evaluation paths plus the three external artifact
-paths. Then:
+During the demo, verify:
 
 ```bash
-export KFC_QUALIFICATION_FINALIZE_INPUT='<actual finalize-input JSON path>'
-export KFC_QUALIFICATION_MANIFEST_OUTPUT="$TASK9_ARTIFACT_ROOT/qualification-manifest.json"
-npm run qualification:finalize
+kill -0 "$KFC_TUNNEL_PID"
+docker inspect --format '{{.State.Running}}' "$KFC_SHADOW_CONTAINER"
 ```
 
-The finalizer rejects a missing Task 8 artifact, wrong scenario inventory,
-unsupported verdict, missing citation, or evaluator/evidence digest mismatch.
+After the controller confirms that qualification and the demo are finished:
+
+```bash
+kill "$KFC_TUNNEL_PID"
+docker stop "$KFC_SHADOW_CONTAINER"
+```
+
+Stopping either process makes the public shadow URL unavailable. Baseline
+customer decisions remain authoritative and shadow failure remains isolated,
+but live qualification evidence must record the outage rather than hiding it.

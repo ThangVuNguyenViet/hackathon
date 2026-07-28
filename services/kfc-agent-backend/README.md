@@ -39,6 +39,7 @@ dependency. Configure both non-secret Worker variables together:
 ```text
 KFC_RECOMMENDATION_SHADOW_URL
 KFC_RECOMMENDATION_SHADOW_MODEL_REVISION
+KFC_RECOMMENDATION_SHADOW_RUNTIME_PROFILE=local_docker_cloudflare_tunnel
 ```
 
 `KFC_RECOMMENDATION_OUTPUT_MODE` defaults to `baseline`. The only other valid
@@ -53,10 +54,15 @@ decision. `/ready` reports only whether the endpoint/revision pair is
 configured and the output mode; it exposes neither the endpoint URL nor exact
 revision provenance.
 
-The current public Hugging Face/MLflow boundary requires no credential, so this
-feature adds no secret. Keep all actual secret values out of `.env.example`,
-`wrangler.toml`, logs, and documentation. Configure existing Worker secrets
-interactively, without placing values on the command line:
+The Hugging Face git revision pins the downloadable model artifact. It is
+distinct from `KFC_RECOMMENDATION_SHADOW_MODEL_REVISION`, which pins the
+`trustedArtifactManifestDigest` returned by the serving container. The current
+local Docker/Cloudflare Tunnel runtime requires no model-endpoint credential,
+so this feature adds no secret. The operator-managed container and tunnel must
+remain running, and this profile is not production availability. Keep all
+actual secret values out of `.env.example`, `wrangler.toml`, logs, and
+documentation. Configure existing Worker secrets interactively, without
+placing values on the command line:
 
 ```bash
 npx wrangler secret put KFC_DEMO_ADMIN_TOKEN

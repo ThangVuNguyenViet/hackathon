@@ -179,6 +179,7 @@ export function buildServerOptionsFromEnv(
   const shadowReadiness = recommendationShadowReadiness({
     shadowUrl: env.KFC_RECOMMENDATION_SHADOW_URL,
     modelRevision: env.KFC_RECOMMENDATION_SHADOW_MODEL_REVISION,
+    runtimeProfile: env.KFC_RECOMMENDATION_SHADOW_RUNTIME_PROFILE,
     outputMode: env.KFC_RECOMMENDATION_OUTPUT_MODE,
   });
   const shadowScorer = shadowReadiness.configured
