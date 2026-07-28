@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta
+      name="description"
+      content="Throwaway KFC recommendation engine workbench prototype"
+    />
+    <title>KFC Recommendation Engine Workbench</title>
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <!--
+      THROWAWAY PROTOTYPE.
+      Three variants of a recommendation-engine workbench, switchable via
+      ?variant=A|B|C. Scratch local D1 only. Never deploy.
+    -->
+    <header class="app-header">
+      <div class="brand">
+        <div class="brand-mark">KFC</div>
+        <div>
+          <h1>Recommendation Engine Workbench</h1>
+          <p>Mutate durable commerce state · invoke one engine request · explain the result</p>
+        </div>
+      </div>
+      <div class="header-actions">
+        <div class="identity-toggle" id="identity-toggle"></div>
+        <button class="button secondary" id="reset-profile" type="button">
+          Reset profile
+        </button>
+        <span class="d1-badge"><i></i> Local D1 durable state</span>
+      </div>
+    </header>
+
+    <main id="prototype-root" aria-live="polite"></main>
+
+    <nav class="variant-switcher" aria-label="Prototype variants">
+      <button type="button" id="previous-variant" aria-label="Previous variant">←</button>
+      <div id="variant-options"></div>
+      <button type="button" id="next-variant" aria-label="Next variant">→</button>
+    </nav>
+
+    <div class="toast" id="toast" role="status"></div>
+    <script src="/workbench.js"></script>
+  </body>
+</html>

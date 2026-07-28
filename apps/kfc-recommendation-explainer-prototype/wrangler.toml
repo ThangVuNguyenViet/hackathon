@@ -1,0 +1,13 @@
+name = "kfc-recommendation-explainer-prototype"
+main = "worker.js"
+compatibility_date = "2026-07-08"
+
+[assets]
+directory = "./public"
+binding = "ASSETS"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "kfc-recommendation-workbench-prototype"
+# Local-only prototype binding. Never deploy this Worker.
+database_id = "fb36af59-58d0-42e1-932b-144dbd17e477"

@@ -1,0 +1,11 @@
+{
+  "name": "kfc-recommendation-explainer-prototype",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "wrangler dev --local --port 8512"
+  },
+  "devDependencies": {
+    "wrangler": "4.108.0"
+  }
+}

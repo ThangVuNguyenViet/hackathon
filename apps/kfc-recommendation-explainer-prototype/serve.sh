@@ -2,5 +2,15 @@
 set -euo pipefail
 
 cd "$(dirname "$0")"
-exec python3 -m http.server "${KFC_RECOMMENDATION_EXPLAINER_PORT:-8512}" \
-  --bind 127.0.0.1
+if [[ ! -x node_modules/.bin/wrangler ]]; then
+  npm install
+fi
+
+./node_modules/.bin/wrangler d1 execute \
+  kfc-recommendation-workbench-prototype \
+  --local \
+  --file schema.sql
+
+exec ./node_modules/.bin/wrangler dev \
+  --local \
+  --port "${KFC_RECOMMENDATION_EXPLAINER_PORT:-8512}"
