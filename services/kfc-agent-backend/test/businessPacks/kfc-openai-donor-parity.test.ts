@@ -32,6 +32,9 @@ function toolOutputText(value: unknown): string {
 
 describe('portable Direct SDK behavior retained by the KFC LangChain pack', () => {
   it('keeps the enhanced searchMenu contract and portable evidence boundaries', () => {
+    expect(KFC_AGENT_INSTRUCTIONS).toMatch(
+      /^HIGHEST PRIORITY FOR THE FIRST ORDERING TURN: If recommendStarter is dynamically present/u,
+    );
     expect(agentToolDescriptions.searchMenu).toContain(
       'complete available menu',
     );
