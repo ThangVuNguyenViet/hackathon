@@ -520,6 +520,13 @@ describe('portable Direct SDK behavior retained by the KFC LangChain pack', () =
     );
     if (!presentation) throw new Error('recommendation presentation expected');
     const assistantTurn = (await store.listTurns(sessionId)).at(-1);
+    expect(assistantTurn?.metadata?.modelToolPublication).toEqual({
+      schemaVersion: 'kfc-model-tool-publication-v1',
+      calls: boundToolNames.map((providerBoundToolNames, index) => ({
+        sequence: index + 1,
+        providerBoundToolNames,
+      })),
+    });
     expect(assistantTurn?.id).toBe(
       presentation.binding.assistantTurnId,
     );

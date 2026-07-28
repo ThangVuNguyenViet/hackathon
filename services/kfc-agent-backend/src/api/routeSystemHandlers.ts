@@ -75,7 +75,7 @@ import {
   createPackStateEnvelope,
   validatePackStateEnvelope,
 } from '../runtime/businessPack.js';
-import type { ToolName } from '../ordering/types.js';
+import { TOOL_NAMES, type ToolName } from '../ordering/types.js';
 import {
   CustomerRunCoordinator,
   type CustomerRunObservation,
@@ -155,7 +155,27 @@ const lifecycleBackedToolNames = new Set<ToolName>([
   'checkPaymentStatus',
 ]);
 
+const modelToolPublicationProofSchema = z
+  .object({
+    schemaVersion: z.literal('kfc-model-tool-publication-v1'),
+    calls: z.array(
+      z
+        .object({
+          sequence: z.number().int().positive(),
+          providerBoundToolNames: z.array(z.enum(TOOL_NAMES)),
+        })
+        .strict(),
+    ),
+  })
+  .strict();
+
 async function projectKfcProofTurn(turn: ConversationTurn) {
+  const modelToolPublication =
+    turn.role === 'assistant'
+      ? modelToolPublicationProofSchema.safeParse(
+          turn.metadata?.modelToolPublication,
+        )
+      : null;
   return {
     id: turn.id,
     ordinal: turn.ordinal,
@@ -173,6 +193,9 @@ async function projectKfcProofTurn(turn: ConversationTurn) {
         : await sha256Fingerprint(turn.externalMessageId),
     metadataDigest:
       turn.metadata === null ? null : await sha256Fingerprint(turn.metadata),
+    ...(modelToolPublication?.success
+      ? { modelToolPublication: modelToolPublication.data }
+      : {}),
   };
 }
 

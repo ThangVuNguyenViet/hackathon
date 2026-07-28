@@ -10,6 +10,7 @@ import { kfcGenUiAttachmentForPersistence } from '../genui/kfcGenUi.js';
 import { selectKfcGenUiAttachment } from '../genui/kfcGenUiSelector.js';
 import type { AgentTraceSpan } from '../observability/agentTracing.js';
 import type { ToolTraceEntry } from '../ordering/types.js';
+import type { ToolName } from '../ordering/types.js';
 import {
   buildChannelPresentation,
   buildSocialPresentation,
@@ -39,6 +40,10 @@ export async function persistCompletedTurn(input: {
   responseText: string;
   packRef: PackRef;
   packStateSchemaVersion: string;
+  modelToolPublicationCalls: Array<{
+    sequence: number;
+    providerBoundToolNames: ToolName[];
+  }>;
 }): Promise<AgentTurnOutput> {
   const responseProfile = resolveResponseProfile(input.turnInput);
   const successfulToolNames = input.currentTurnToolTrace
@@ -91,6 +96,17 @@ export async function persistCompletedTurn(input: {
       : {}),
     ...(input.turnInput.agentModelIdentity
       ? { agentModel: input.turnInput.agentModelIdentity }
+      : {}),
+    ...(input.modelToolPublicationCalls.length > 0
+      ? {
+          modelToolPublication: {
+            schemaVersion: 'kfc-model-tool-publication-v1' as const,
+            calls: input.modelToolPublicationCalls.map((call) => ({
+              sequence: call.sequence,
+              providerBoundToolNames: [...call.providerBoundToolNames],
+            })),
+          },
+        }
       : {}),
     ...(genUi ? { genUi: kfcGenUiAttachmentForPersistence(genUi) } : {}),
   };

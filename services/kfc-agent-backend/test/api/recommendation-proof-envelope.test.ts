@@ -255,7 +255,34 @@ describe('KFC recommendation proof envelope', () => {
   });
 
   it('projects proof turns as privacy-safe metadata and digests without literal prose or private fields', async () => {
-    const { server, sessionId } = await configuredServer();
+    const { server, sessionId, store } = await configuredServer();
+    await store.appendTurn({
+      sessionId,
+      channel: 'kfc',
+      role: 'assistant',
+      text: 'A private assistant response.',
+      externalMessageId: null,
+      externalUserId: 'private-external-user-8472',
+      deliveryStatus: 'sent',
+      metadata: {
+        rawEvent: {
+          hiddenPrompt: 'Do not expose this private prompt.',
+        },
+        modelToolPublication: {
+          schemaVersion: 'kfc-model-tool-publication-v1',
+          calls: [
+            {
+              sequence: 1,
+              providerBoundToolNames: [
+                'searchMenu',
+                'recommendStarter',
+                'previewCart',
+              ],
+            },
+          ],
+        },
+      },
+    });
 
     const response = await proofEnvelope(server, sessionId);
     const body = response.json<{
@@ -263,7 +290,7 @@ describe('KFC recommendation proof envelope', () => {
       turns: Array<Record<string, unknown>>;
     }>();
     expect(body.complete).toBe(true);
-    expect(body.turns).toHaveLength(1);
+    expect(body.turns).toHaveLength(2);
     expect(body.turns[0]).toMatchObject({
       ordinal: 1,
       channel: 'kfc',
@@ -275,6 +302,23 @@ describe('KFC recommendation proof envelope', () => {
       },
       externalMessageIdDigest: null,
       metadataDigest: expect.stringMatching(/^[a-f0-9]{64}$/u),
+    });
+    expect(body.turns[1]).toMatchObject({
+      ordinal: 2,
+      role: 'assistant',
+      modelToolPublication: {
+        schemaVersion: 'kfc-model-tool-publication-v1',
+        calls: [
+          {
+            sequence: 1,
+            providerBoundToolNames: [
+              'searchMenu',
+              'recommendStarter',
+              'previewCart',
+            ],
+          },
+        ],
+      },
     });
     for (const privateField of [
       'text',
@@ -289,6 +333,8 @@ describe('KFC recommendation proof envelope', () => {
       'private-external-user-8472',
       'private-8472@example.test',
       'Ring the private side door.',
+      'A private assistant response.',
+      'Do not expose this private prompt.',
     ]) {
       expect(response.body).not.toContain(privateValue);
     }

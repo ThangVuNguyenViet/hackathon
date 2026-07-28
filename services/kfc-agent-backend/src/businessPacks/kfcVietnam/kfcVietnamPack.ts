@@ -1355,6 +1355,23 @@ function recommendationToolAvailabilityMiddleware(input: {
   });
 }
 
+function modelToolPublicationEvidenceMiddleware(input: {
+  record: (providerBoundToolNames: ToolName[]) => void;
+}) {
+  return createMiddleware({
+    name: 'KfcModelToolPublicationEvidenceMiddleware',
+    wrapModelCall: async (request, handler) => {
+      input.record(
+        request.tools.flatMap((candidate) => {
+          const name = requestToolName(candidate);
+          return name ? [name] : [];
+        }),
+      );
+      return handler(request);
+    },
+  });
+}
+
 function parseKfcVerifiedState(value: unknown): Partial<VerifiedStateSnapshot> {
   const parsed = kfcVerifiedStateSnapshotSchema.safeParse(value);
   if (!parsed.success) throw new Error('kfc_pack_state_invalid');
@@ -1658,6 +1675,10 @@ export const kfcVietnamPack: BusinessPack<
         await turnTrace.langchainCallbacks?.(),
       );
       const runWithContext = turnTrace.withActiveTrace?.bind(turnTrace);
+      const modelToolPublicationCalls: Array<{
+        sequence: number;
+        providerBoundToolNames: ToolName[];
+      }> = [];
       const responseText = await invokeModel({
         model: agent.model,
         messages: conversationMessages(input, state, currentUserTurn, context),
@@ -1679,6 +1700,14 @@ export const kfcVietnamPack: BusinessPack<
                 }),
               ]
             : []),
+          modelToolPublicationEvidenceMiddleware({
+            record: (providerBoundToolNames) => {
+              modelToolPublicationCalls.push({
+                sequence: modelToolPublicationCalls.length + 1,
+                providerBoundToolNames,
+              });
+            },
+          }),
         ],
         systemPrompt: systemPrompt(state),
         signal: externalCallContext.signal,
@@ -1705,6 +1734,7 @@ export const kfcVietnamPack: BusinessPack<
           currentTurnToolTrace,
           state,
         ),
+        modelToolPublicationCalls,
         packRef: KFC_VIETNAM_PACK_REF,
         packStateSchemaVersion: '1',
       });

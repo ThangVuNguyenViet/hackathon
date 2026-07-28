@@ -202,6 +202,18 @@ export interface ConversationTurnMetadata {
     builtAt: string;
     dirty: boolean;
   };
+  /**
+   * Sanitized model-call evidence captured immediately before the request is
+   * handed to the provider. It contains names only: never prompts, arguments,
+   * tool results, customer data, or provider credentials.
+   */
+  modelToolPublication?: {
+    schemaVersion: 'kfc-model-tool-publication-v1';
+    calls: Array<{
+      sequence: number;
+      providerBoundToolNames: string[];
+    }>;
+  };
 }
 
 export interface ConversationProfile {
