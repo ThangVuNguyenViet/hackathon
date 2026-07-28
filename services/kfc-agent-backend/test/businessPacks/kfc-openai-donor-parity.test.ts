@@ -129,6 +129,12 @@ describe('portable Direct SDK behavior retained by the KFC LangChain pack', () =
       'When recommendStarter is available after genuine food, menu, or ordering intent, call it before getFavoriteItems, generic searchMenu exploration, or asking the customer for preferences',
     );
     expect(KFC_AGENT_INSTRUCTIONS).toContain(
+      'If recommendStarter is dynamically present after that semantic intent, you MUST call it as the first tool before composing a reply',
+    );
+    expect(KFC_AGENT_INSTRUCTIONS).toContain(
+      'Do not ask for preferences or claim that a suggestion is unavailable before that call returns',
+    );
+    expect(KFC_AGENT_INSTRUCTIONS).toContain(
       'The server chooses For You for a linked returning customer with completed-order history and Local Favorite otherwise',
     );
 
@@ -140,6 +146,9 @@ describe('portable Direct SDK behavior retained by the KFC LangChain pack', () =
     );
     expect(agentToolDescriptions.recommendStarter).toContain(
       'Call this before getFavoriteItems, generic searchMenu exploration, or asking for preferences',
+    );
+    expect(agentToolDescriptions.recommendStarter).toContain(
+      'When dynamically available after genuine ordering intent, this MUST be the first tool call',
     );
     expect(agentToolDescriptions.getFavoriteItems).toContain(
       'Do not use this as a substitute for an available recommendStarter call',
