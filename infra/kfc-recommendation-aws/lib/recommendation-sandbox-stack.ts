@@ -1,11 +1,12 @@
-import { Stack, type StackProps, Tags, Validations } from "aws-cdk-lib";
+import { CfnCondition, Fn, Stack, type StackProps, Tags, Token, Validations } from "aws-cdk-lib";
+import { CfnService } from "aws-cdk-lib/aws-ecs";
 import { Construct } from "constructs";
 
 import { createAuth } from "./auth.js";
 import { createCompute } from "./compute.js";
 import { createDataPlane } from "./data-plane.js";
-import { createDeploymentIdentity } from "./deployment-identity.js";
 import { createHttpApi } from "./http-api.js";
+import { importServiceRepositories } from "./image-repositories.js";
 import { createNetwork } from "./network.js";
 import { createObservability } from "./observability.js";
 import { createReleaseParameters } from "./release-parameters.js";
@@ -24,12 +25,27 @@ export class RecommendationSandboxStack extends Stack {
     const release = createReleaseParameters(this);
     const network = createNetwork(this);
     const data = createDataPlane(this);
+    const repositories = importServiceRepositories(this);
     const auth = createAuth(this);
-    const compute = createCompute(this, network, data, release);
-    createHttpApi(this, network, compute, auth);
-    createScaling(this, compute, release);
-    createObservability(this, compute, release);
-    createDeploymentIdentity(this, release, githubRepository);
+    const compute = createCompute(this, network, data, repositories, release);
+    const activateService = new CfnCondition(this, "ActivateServiceCondition", {
+      expression: Fn.conditionEquals(release.activateService.valueAsString, "true"),
+    });
+    const cfnService = compute.service.node.defaultChild as CfnService;
+    cfnService.desiredCount = Token.asNumber(Fn.conditionIf(activateService.logicalId, 1, 0));
+    createHttpApi(this, network, compute, auth, release);
+    createScaling(this, compute, release, activateService);
+    const releaseSafety = createObservability(this, compute, release);
+    cfnService.addPropertyOverride("DeploymentConfiguration.Strategy", "CANARY");
+    cfnService.addPropertyOverride("DeploymentConfiguration.CanaryConfiguration", {
+      CanaryPercent: 10,
+      CanaryBakeTimeInMinutes: 5,
+    });
+    cfnService.addPropertyOverride("DeploymentConfiguration.Alarms", {
+      AlarmNames: [releaseSafety.alarmName],
+      Enable: true,
+      Rollback: true,
+    });
 
     const acknowledgements: ReadonlyArray<[string, string]> = [
       ["AwsSolutions-EC23", "The unresolved VPC CIDR is used only for DNS egress; no ingress is CIDR-open and no internet route exists."],

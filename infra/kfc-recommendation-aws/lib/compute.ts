@@ -22,6 +22,7 @@ import { Construct } from "constructs";
 import type { DataPlaneResources } from "./data-plane.js";
 import type { NetworkResources } from "./network.js";
 import type { ReleaseParameters } from "./release-parameters.js";
+import type { ImageRepositories } from "./image-repositories.js";
 
 export interface ComputeResources {
   readonly cluster: Cluster;
@@ -39,6 +40,7 @@ export const createCompute = (
   scope: Construct,
   network: NetworkResources,
   data: DataPlaneResources,
+  repositories: ImageRepositories,
   release: ReleaseParameters,
 ): ComputeResources => {
   const cluster = new Cluster(scope, "Cluster", {
@@ -79,13 +81,16 @@ export const createCompute = (
     ENVIRONMENT: "synthetic-sandbox",
     RELEASE_DIGEST: release.releaseDigest.valueAsString,
     QUALIFIED_BUNDLE_DIGEST: release.qualifiedBundleDigest.valueAsString,
+    AUTOMATIC_CONTRACT_DIGEST: release.automaticContractDigest.valueAsString,
+    AUTOMATIC_FEATURE_DIGEST: release.automaticFeatureDigest.valueAsString,
+    AUTOMATIC_COMPOSER_DIGEST: release.automaticComposerDigest.valueAsString,
     LOG_FORMAT: "json",
     OTEL_EXPORTER_OTLP_ENDPOINT: "http://127.0.0.1:4318",
     OTEL_RESOURCE_ATTRIBUTES: "service.namespace=kfc-recommendations,deployment.environment=synthetic-sandbox",
   };
   const scorer = task.addContainer("Scorer", {
     containerName: "scorer",
-    image: digestImage(data.scorerRepository.repositoryUri, release.scorerImageDigest.valueAsString),
+    image: digestImage(repositories.scorerRepository.repositoryUri, release.scorerImageDigest.valueAsString),
     essential: true,
     cpu: 384,
     memoryLimitMiB: 1024,
@@ -94,6 +99,7 @@ export const createCompute = (
       HOST: "127.0.0.1",
       PORT: "8081",
       MODEL_THREADS: "1",
+      QUALIFIED_BUNDLE_PATH: "/opt/kfc/bundle",
     },
     logging: LogDrivers.awsLogs({ logGroup, streamPrefix: "scorer", mode: "non-blocking" as never }),
     healthCheck: {
@@ -108,22 +114,30 @@ export const createCompute = (
 
   const adot = task.addContainer("Adot", {
     containerName: "adot",
-    image: digestImage(data.adotRepository.repositoryUri, release.adotImageDigest.valueAsString),
+    image: digestImage(repositories.adotRepository.repositoryUri, release.adotImageDigest.valueAsString),
     essential: true,
     cpu: 128,
     memoryLimitMiB: 256,
     command: ["--config=/etc/ecs/ecs-default-config.yaml"],
     environment: { AWS_REGION: Stack.of(scope).region },
     logging: LogDrivers.awsLogs({ logGroup, streamPrefix: "adot", mode: "non-blocking" as never }),
+    healthCheck: {
+      command: ["CMD-SHELL", "curl --fail --silent http://127.0.0.1:13133/ >/dev/null || exit 1"],
+      interval: Duration.seconds(15),
+      timeout: Duration.seconds(5),
+      retries: 3,
+      startPeriod: Duration.seconds(30),
+    },
   });
   adot.addPortMappings(
     { containerPort: 4317, protocol: Protocol.TCP },
     { containerPort: 4318, protocol: Protocol.TCP },
+    { containerPort: 13133, protocol: Protocol.TCP },
   );
 
   const main = task.addContainer("Main", {
     containerName: "main",
-    image: digestImage(data.mainRepository.repositoryUri, release.mainImageDigest.valueAsString),
+    image: digestImage(repositories.mainRepository.repositoryUri, release.mainImageDigest.valueAsString),
     essential: true,
     cpu: 512,
     memoryLimitMiB: 1536,
@@ -139,7 +153,7 @@ export const createCompute = (
     secrets: { RUNTIME_TOKEN: EcsSecret.fromSecretsManager(data.runtimeSecret, "token") },
     logging: LogDrivers.awsLogs({ logGroup, streamPrefix: "main", mode: "non-blocking" as never }),
     healthCheck: {
-      command: ["CMD-SHELL", "node -e \"fetch('http://127.0.0.1:8080/recommendations/ready').then(r=>process.exit(r.status===200?0:1)).catch(()=>process.exit(1))\""],
+      command: ["CMD-SHELL", "node -e \"fetch('http://127.0.0.1:8080/ready').then(r=>process.exit(r.status===200?0:1)).catch(()=>process.exit(1))\""],
       interval: Duration.seconds(15),
       timeout: Duration.seconds(5),
       retries: 3,
@@ -149,9 +163,9 @@ export const createCompute = (
   main.addPortMappings({ containerPort: 8080, protocol: Protocol.TCP });
   main.addContainerDependencies(
     { container: scorer, condition: ContainerDependencyCondition.HEALTHY },
-    { container: adot, condition: ContainerDependencyCondition.START },
+    { container: adot, condition: ContainerDependencyCondition.HEALTHY },
   );
-  for (const repo of [data.mainRepository, data.scorerRepository, data.adotRepository]) {
+  for (const repo of [repositories.mainRepository, repositories.scorerRepository, repositories.adotRepository]) {
     repo.grantPull(task.obtainExecutionRole());
   }
 
@@ -190,10 +204,10 @@ export const createCompute = (
   const targetGroup = listener.addTargets("MainTargets", {
     port: 8080,
     protocol: ApplicationProtocol.HTTP,
-    targets: [service],
+    targets: [service.loadBalancerTarget({ containerName: "main", containerPort: 8080 })],
     deregistrationDelay: Duration.seconds(60),
     healthCheck: {
-      path: "/recommendations/ready",
+      path: "/ready",
       healthyHttpCodes: "200",
       healthyThresholdCount: 2,
       unhealthyThresholdCount: 2,

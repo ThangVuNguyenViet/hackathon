@@ -1,6 +1,5 @@
 import { Duration, RemovalPolicy } from "aws-cdk-lib";
 import { AttributeType, BillingMode, Table, TableEncryption } from "aws-cdk-lib/aws-dynamodb";
-import { Repository, RepositoryEncryption, TagMutability } from "aws-cdk-lib/aws-ecr";
 import { AnyPrincipal, Effect, PolicyStatement } from "aws-cdk-lib/aws-iam";
 import { Key } from "aws-cdk-lib/aws-kms";
 import { BlockPublicAccess, Bucket, BucketEncryption } from "aws-cdk-lib/aws-s3";
@@ -13,20 +12,7 @@ export interface DataPlaneResources {
   readonly accessLogBucket: Bucket;
   readonly stateTable: Table;
   readonly runtimeSecret: Secret;
-  readonly mainRepository: Repository;
-  readonly scorerRepository: Repository;
-  readonly adotRepository: Repository;
 }
-
-const repository = (scope: Construct, id: string, name: string): Repository =>
-  new Repository(scope, id, {
-    repositoryName: name,
-    imageScanOnPush: true,
-    imageTagMutability: TagMutability.IMMUTABLE,
-    encryption: RepositoryEncryption.AES_256,
-    removalPolicy: RemovalPolicy.RETAIN,
-    emptyOnDelete: false,
-  });
 
 export const createDataPlane = (scope: Construct): DataPlaneResources => {
   const key = new Key(scope, "DataKey", {
@@ -88,8 +74,5 @@ export const createDataPlane = (scope: Construct): DataPlaneResources => {
     accessLogBucket,
     stateTable,
     runtimeSecret,
-    mainRepository: repository(scope, "MainRepository", "kfc-recommendation-main"),
-    scorerRepository: repository(scope, "ScorerRepository", "kfc-recommendation-scorer"),
-    adotRepository: repository(scope, "AdotRepository", "kfc-recommendation-adot"),
   };
 };

@@ -6,15 +6,16 @@ import {
 } from "../lib/release-contract.js";
 
 const sha256 = (character: string): string => `sha256:${character.repeat(64)}`;
+const contentDigest = (character: string): string => character.repeat(64);
 
 const validRelease = (): ReleaseInputs => ({
   region: "ap-southeast-1",
   mainImageDigest: sha256("a"),
   scorerImageDigest: sha256("b"),
   adotImageDigest: sha256("c"),
-  qualifiedBundleDigest: sha256("d"),
-  releaseDigest: sha256("e"),
-  previousReleaseDigest: sha256("f"),
+  qualifiedBundleDigest: contentDigest("d"),
+  releaseDigest: contentDigest("e"),
+  previousReleaseDigest: contentDigest("f"),
 });
 
 describe("release deployment contract", () => {
@@ -28,7 +29,7 @@ describe("release deployment contract", () => {
     ["scorer image", { scorerImageDigest: "scorer:v1" }],
     ["ADOT image", { adotImageDigest: "sha256:short" }],
     ["bundle", { qualifiedBundleDigest: "" }],
-    ["release", { releaseDigest: sha256("A") }],
+    ["release", { releaseDigest: contentDigest("A") }],
   ])("rejects a non-deployable %s binding", (_label, override) => {
     expect(() => assertDeployableRelease({ ...validRelease(), ...override })).toThrow();
   });

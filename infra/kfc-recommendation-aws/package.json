@@ -11,7 +11,7 @@
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "vitest run",
     "synth": "npm run build && cdk synth --quiet",
-    "deploy:preflight": "npm run build && node dist/bin/deployment-preflight.js",
+    "deploy:preflight": "npm run synth && node dist/bin/deployment-preflight.js",
     "check": "npm run typecheck && npm test && npm run synth"
   },
   "dependencies": {

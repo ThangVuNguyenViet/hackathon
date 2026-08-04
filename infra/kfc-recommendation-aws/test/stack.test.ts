@@ -63,12 +63,41 @@ describe("RecommendationSandboxStack", () => {
       IntegrationMethod: "ANY",
       IntegrationType: "HTTP_PROXY",
       PayloadFormatVersion: "1.0",
+      TlsConfig: { ServerNameToVerify: { Ref: "InternalAlbServerName" } },
     });
-    template.hasResourceProperties("AWS::ApiGatewayV2::Route", {
-      RouteKey: "$default",
-      AuthorizationType: "JWT",
-      AuthorizationScopes: ["recommendations/decide", "recommendations/events"],
-    });
+    const routes = template.findResources("AWS::ApiGatewayV2::Route");
+    expect(Object.keys(routes)).toHaveLength(7);
+    const routeContracts = Object.values(routes).map((resource) => resource.Properties);
+    for (const routeKey of [
+      "POST /v1/recommendations/local-favorites",
+      "POST /v1/recommendations/for-you",
+      "POST /v1/recommendations/modifier-upsells",
+      "POST /v1/recommendations/smart-cross-sells",
+    ]) {
+      expect(routeContracts).toContainEqual(
+        expect.objectContaining({
+          RouteKey: routeKey,
+          AuthorizationScopes: ["recommendations/decision.write"],
+        }),
+      );
+    }
+    for (const routeKey of [
+      "POST /v1/recommendations/{recommendationId}/impressions",
+      "POST /v1/recommendations/{recommendationId}/outcomes",
+    ]) {
+      expect(routeContracts).toContainEqual(
+        expect.objectContaining({
+          RouteKey: routeKey,
+          AuthorizationScopes: ["recommendations/event.write"],
+        }),
+      );
+    }
+    expect(routeContracts).toContainEqual(
+      expect.objectContaining({
+        RouteKey: "GET /v1/admin/recommendations/{recommendationId}/inspection",
+        AuthorizationScopes: ["recommendations/inspection.read"],
+      }),
+    );
     template.hasResourceProperties("AWS::ApiGatewayV2::Stage", {
       StageName: "$default",
       AutoDeploy: true,
@@ -88,17 +117,51 @@ describe("RecommendationSandboxStack", () => {
       NetworkMode: "awsvpc",
       RequiresCompatibilities: ["FARGATE"],
     });
+    const taskDefinitions = template.findResources("AWS::ECS::TaskDefinition");
+    const task = Object.values(taskDefinitions)[0].Properties;
+    const containers = task.ContainerDefinitions as Array<Record<string, unknown>>;
+    const main = containers.find((container) => container.Name === "main")!;
+    const scorer = containers.find((container) => container.Name === "scorer")!;
+    const adot = containers.find((container) => container.Name === "adot")!;
+    expect(main.HealthCheck).toEqual(
+      expect.objectContaining({ Command: expect.arrayContaining([expect.stringContaining("/ready")]) }),
+    );
+    expect(main.DependsOn).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ ContainerName: "scorer", Condition: "HEALTHY" }),
+        expect.objectContaining({ ContainerName: "adot", Condition: "HEALTHY" }),
+      ]),
+    );
+    expect(adot.HealthCheck).toEqual(expect.objectContaining({ Command: expect.any(Array) }));
+    const scorerEnvironment = Object.fromEntries(
+      (scorer.Environment as Array<{ Name: string; Value: unknown }>).map(({ Name, Value }) => [Name, Value]),
+    );
+    expect(scorerEnvironment).toEqual(
+      expect.objectContaining({
+        QUALIFIED_BUNDLE_PATH: "/opt/kfc/bundle",
+        QUALIFIED_BUNDLE_DIGEST: { Ref: "QualifiedBundleDigest" },
+        AUTOMATIC_CONTRACT_DIGEST: { Ref: "AutomaticContractDigest" },
+        AUTOMATIC_FEATURE_DIGEST: { Ref: "AutomaticFeatureDigest" },
+        AUTOMATIC_COMPOSER_DIGEST: { Ref: "AutomaticComposerDigest" },
+      }),
+    );
     template.hasResourceProperties("AWS::ElasticLoadBalancingV2::TargetGroup", {
-      HealthCheckPath: "/recommendations/ready",
+      HealthCheckPath: "/ready",
       Matcher: { HttpCode: "200" },
       TargetType: "ip",
     });
     template.hasResourceProperties("AWS::ECS::Service", {
       DeploymentConfiguration: Match.objectLike({
         DeploymentCircuitBreaker: { Enable: true, Rollback: true },
+        Strategy: "CANARY",
+        CanaryConfiguration: { CanaryPercent: 10, CanaryBakeTimeInMinutes: 5 },
+        Alarms: Match.objectLike({ Enable: true, Rollback: true }),
       }),
-      DesiredCount: 1,
+      DesiredCount: { "Fn::If": ["ActivateServiceCondition", 1, 0] },
       HealthCheckGracePeriodSeconds: 90,
+      LoadBalancers: Match.arrayWith([
+        Match.objectLike({ ContainerName: "main", ContainerPort: 8080 }),
+      ]),
     });
   });
 
@@ -119,10 +182,6 @@ describe("RecommendationSandboxStack", () => {
       BillingMode: "PAY_PER_REQUEST",
       PointInTimeRecoverySpecification: { PointInTimeRecoveryEnabled: true },
       SSESpecification: { SSEEnabled: true, SSEType: "KMS" },
-    });
-    template.hasResourceProperties("AWS::ECR::Repository", {
-      ImageTagMutability: "IMMUTABLE",
-      ImageScanningConfiguration: { ScanOnPush: true },
     });
   });
 
@@ -157,13 +216,26 @@ describe("RecommendationSandboxStack", () => {
     expect(metrics).not.toContain("StoreId");
   });
 
-  it("creates scoped Cognito M2M and GitHub OIDC deployment identities", () => {
+  it("has no internet route and attaches policies to every private endpoint", () => {
+    const template = synthesize();
+    template.resourceCountIs("AWS::EC2::InternetGateway", 0);
+    template.resourceCountIs("AWS::EC2::NatGateway", 0);
+    for (const endpoint of Object.values(template.findResources("AWS::EC2::VPCEndpoint"))) {
+      expect(endpoint.Properties.PolicyDocument).toEqual(expect.any(Object));
+    }
+    const egressRules = Object.values(template.findResources("AWS::EC2::SecurityGroupEgress"));
+    expect(egressRules.every((rule) => rule.Properties.FromPort !== 80)).toBe(true);
+    expect(egressRules.every((rule) => rule.Properties.IpProtocol !== "-1")).toBe(true);
+  });
+
+  it("creates scoped Cognito M2M identities", () => {
     const template = synthesize();
     template.hasResourceProperties("AWS::Cognito::UserPoolResourceServer", {
       Identifier: "recommendations",
       Scopes: Match.arrayWith([
-        { ScopeName: "decide", ScopeDescription: Match.anyValue() },
-        { ScopeName: "events", ScopeDescription: Match.anyValue() },
+        { ScopeName: "decision.write", ScopeDescription: Match.anyValue() },
+        { ScopeName: "event.write", ScopeDescription: Match.anyValue() },
+        { ScopeName: "inspection.read", ScopeDescription: Match.anyValue() },
       ]),
     });
     template.hasResourceProperties("AWS::Cognito::UserPoolClient", {
@@ -171,15 +243,5 @@ describe("RecommendationSandboxStack", () => {
       GenerateSecret: true,
     });
     template.hasResourceProperties("AWS::Cognito::UserPoolDomain", Match.objectLike({}));
-    template.hasResourceProperties("AWS::IAM::OIDCProvider", {
-      Url: "https://token.actions.githubusercontent.com",
-    });
-    template.hasResourceProperties("AWS::IAM::Role", {
-      AssumeRolePolicyDocument: Match.objectLike({
-        Statement: Match.arrayWith([
-          Match.objectLike({ Action: "sts:AssumeRoleWithWebIdentity" }),
-        ]),
-      }),
-    });
   });
 });

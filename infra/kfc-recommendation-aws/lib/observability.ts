@@ -20,11 +20,7 @@ export const createObservability = (
   scope: Construct,
   compute: ComputeResources,
   release: ReleaseParameters,
-): void => {
-  const dimensions = {
-    Environment: "synthetic-sandbox",
-    Release: release.releaseDigest.valueAsString,
-  };
+): CompositeAlarm => {
   const latency = new Metric({
     namespace: "AWS/ApplicationELB",
     metricName: "TargetResponseTime",
@@ -32,17 +28,13 @@ export const createObservability = (
     statistic: "p99",
     period: Duration.minutes(1),
   });
-  const saturation = new Metric({
-    namespace: "KFC/Recommendations",
-    metricName: "SaturationResponses",
-    dimensionsMap: { ...dimensions, OutcomeClass: "retryable_saturation" },
-    statistic: "Sum",
-    period: Duration.minutes(1),
-  });
-  const falseDurability = new Metric({
-    namespace: "KFC/Recommendations",
-    metricName: "EvidenceReconciliationFailures",
-    dimensionsMap: { ...dimensions, OutcomeClass: "false_durability" },
+  const target5xx = new Metric({
+    namespace: "AWS/ApplicationELB",
+    metricName: "HTTPCode_Target_5XX_Count",
+    dimensionsMap: {
+      LoadBalancer: compute.loadBalancer.loadBalancerFullName,
+      TargetGroup: compute.targetGroupFullName,
+    },
     statistic: "Sum",
     period: Duration.minutes(1),
   });
@@ -55,19 +47,12 @@ export const createObservability = (
     evaluateLowSampleCountPercentile: "ignore",
     treatMissingData: TreatMissingData.NOT_BREACHING,
   });
-  const saturationAlarm = new Alarm(scope, "SaturationAlarm", {
-    metric: saturation,
+  const target5xxAlarm = new Alarm(scope, "Target5xxAlarm", {
+    metric: target5xx,
     threshold: 1,
     comparisonOperator: ComparisonOperator.GREATER_THAN_OR_EQUAL_TO_THRESHOLD,
     evaluationPeriods: 2,
     treatMissingData: TreatMissingData.NOT_BREACHING,
-  });
-  const durabilityAlarm = new Alarm(scope, "DurabilityAlarm", {
-    metric: falseDurability,
-    threshold: 1,
-    comparisonOperator: ComparisonOperator.GREATER_THAN_OR_EQUAL_TO_THRESHOLD,
-    evaluationPeriods: 1,
-    treatMissingData: TreatMissingData.BREACHING,
   });
   const unhealthy = new Alarm(scope, "UnhealthyTargetsAlarm", {
     metric: new Metric({
@@ -85,10 +70,10 @@ export const createObservability = (
     evaluationPeriods: 2,
     treatMissingData: TreatMissingData.BREACHING,
   });
-  new CompositeAlarm(scope, "ReleaseSafetyComposite", {
+  const releaseSafety = new CompositeAlarm(scope, "ReleaseSafetyComposite", {
     compositeAlarmName: "kfc-recommendation-sandbox-release-safety",
-    alarmRule: AlarmRule.anyOf(p99Alarm, saturationAlarm, durabilityAlarm, unhealthy),
-    alarmDescription: "Pause/rollback signal for sustained latency, saturation, durability, or readiness failure",
+    alarmRule: AlarmRule.anyOf(p99Alarm, target5xxAlarm, unhealthy),
+    alarmDescription: "Pause/rollback signal for sustained latency, target failures, or readiness failure",
   });
 
   const dashboard = new Dashboard(scope, "Dashboard", {
@@ -106,8 +91,8 @@ export const createObservability = (
       leftAnnotations: [{ value: 65, label: "CPU scale" }, { value: 70, label: "memory scale" }],
     }),
     new GraphWidget({
-      title: "Bounded failures",
-      left: [saturation, falseDurability],
+      title: "Target failures",
+      left: [target5xx],
     }),
   );
 
@@ -137,4 +122,5 @@ export const createObservability = (
     },
     targets: [{ arn: deploymentEvents.logGroupArn, id: "DeploymentEvents" }],
   });
+  return releaseSafety;
 };

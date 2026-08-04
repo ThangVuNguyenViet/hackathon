@@ -1,7 +1,6 @@
-import { Duration } from "aws-cdk-lib";
-import { CfnScalableTarget } from "aws-cdk-lib/aws-applicationautoscaling";
-import { AdjustmentType } from "aws-cdk-lib/aws-applicationautoscaling";
-import { ComparisonOperator, Metric, TreatMissingData } from "aws-cdk-lib/aws-cloudwatch";
+import { CfnCondition, Duration } from "aws-cdk-lib";
+import { CfnScalableTarget, CfnScalingPolicy } from "aws-cdk-lib/aws-applicationautoscaling";
+import { CfnAlarm, ComparisonOperator, Metric, TreatMissingData } from "aws-cdk-lib/aws-cloudwatch";
 import { Construct } from "constructs";
 
 import type { ComputeResources } from "./compute.js";
@@ -11,6 +10,7 @@ export const createScaling = (
   scope: Construct,
   compute: ComputeResources,
   release: ReleaseParameters,
+  activation: CfnCondition,
 ): void => {
   const target = compute.service.autoScaleTaskCount({
     minCapacity: 1,
@@ -26,25 +26,6 @@ export const createScaling = (
     scaleOutCooldown: Duration.seconds(30),
     scaleInCooldown: Duration.minutes(15),
   });
-  target.scaleOnMetric("InflightPressure", {
-    metric: new Metric({
-      namespace: "KFC/Recommendations",
-      metricName: "InflightUtilization",
-      dimensionsMap: {
-        Environment: "synthetic-sandbox",
-        Release: release.releaseDigest.valueAsString,
-      },
-      statistic: "Maximum",
-      period: Duration.minutes(1),
-    }),
-    scalingSteps: [
-      { lower: 70, change: +1 },
-      { lower: 90, change: +2 },
-    ],
-    adjustmentType: AdjustmentType.CHANGE_IN_CAPACITY,
-    cooldown: Duration.seconds(30),
-  });
-
   const resource = target.node.findAll().find((child) => child instanceof CfnScalableTarget);
   if (!(resource instanceof CfnScalableTarget)) {
     throw new Error("ECS scalable target synthesis did not produce a CloudFormation scalable target");
@@ -55,8 +36,12 @@ export const createScaling = (
     scheduled("DinnerPrewarm", "cron(30 16 * * ? *)", 2, release.maximumTasks.valueAsNumber),
     scheduled("DinnerDrain", "cron(0 22 * * ? *)", 1, release.maximumTasks.valueAsNumber),
   ];
+  resource.cfnOptions.condition = activation;
+  for (const child of target.node.findAll()) {
+    if (child instanceof CfnScalingPolicy) child.cfnOptions.condition = activation;
+  }
 
-  new Metric({
+  const capacityDiscovery = new Metric({
     namespace: "AWS/ApplicationELB",
     metricName: "RequestCountPerTarget",
     dimensionsMap: { TargetGroup: compute.targetGroupFullName },
@@ -69,6 +54,7 @@ export const createScaling = (
     treatMissingData: TreatMissingData.BREACHING,
     alarmDescription: "Fail-closed reminder: replace temporary max tasks with measured 70% safe-RPS target in Task 9",
   });
+  (capacityDiscovery.node.defaultChild as CfnAlarm).cfnOptions.condition = activation;
 };
 
 const scheduled = (

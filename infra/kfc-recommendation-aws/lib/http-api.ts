@@ -6,12 +6,15 @@ import { Construct } from "constructs";
 import type { AuthResources } from "./auth.js";
 import type { ComputeResources } from "./compute.js";
 import type { NetworkResources } from "./network.js";
+import type { ReleaseParameters } from "./release-parameters.js";
+import { cognitoScopeFor, type CanonicalRecommendationScope } from "./scope-aliases.js";
 
 export const createHttpApi = (
   scope: Construct,
   network: NetworkResources,
   compute: ComputeResources,
   auth: AuthResources,
+  release: ReleaseParameters,
 ): CfnApi => {
   const api = new CfnApi(scope, "HttpApi", {
     name: "kfc-recommendation-synthetic-sandbox",
@@ -32,6 +35,7 @@ export const createHttpApi = (
     integrationUri: compute.listenerArn,
     payloadFormatVersion: "1.0",
     timeoutInMillis: 30_000,
+    tlsConfig: { serverNameToVerify: release.internalAlbServerName.valueAsString },
   });
   const authorizer = new CfnAuthorizer(scope, "JwtAuthorizer", {
     apiId: api.ref,
@@ -43,14 +47,30 @@ export const createHttpApi = (
       issuer: auth.issuer,
     },
   });
-  const route = new CfnRoute(scope, "DefaultRoute", {
-    apiId: api.ref,
-    routeKey: "$default",
-    target: `integrations/${integration.ref}`,
-    authorizationType: "JWT",
-    authorizerId: authorizer.ref,
-    authorizationScopes: [...auth.scopes],
-  });
+  const routeDefinitions: ReadonlyArray<{
+    id: string;
+    routeKey: string;
+    canonicalScope: CanonicalRecommendationScope;
+  }> = [
+    { id: "LocalFavoritesRoute", routeKey: "POST /v1/recommendations/local-favorites", canonicalScope: "recommendations.decision:write" },
+    { id: "ForYouRoute", routeKey: "POST /v1/recommendations/for-you", canonicalScope: "recommendations.decision:write" },
+    { id: "ModifierUpsellsRoute", routeKey: "POST /v1/recommendations/modifier-upsells", canonicalScope: "recommendations.decision:write" },
+    { id: "SmartCrossSellsRoute", routeKey: "POST /v1/recommendations/smart-cross-sells", canonicalScope: "recommendations.decision:write" },
+    { id: "ImpressionsRoute", routeKey: "POST /v1/recommendations/{recommendationId}/impressions", canonicalScope: "recommendations.event:write" },
+    { id: "OutcomesRoute", routeKey: "POST /v1/recommendations/{recommendationId}/outcomes", canonicalScope: "recommendations.event:write" },
+    { id: "InspectionRoute", routeKey: "GET /v1/admin/recommendations/{recommendationId}/inspection", canonicalScope: "recommendations.inspection:read" },
+  ];
+  const routes = routeDefinitions.map(
+    ({ id, routeKey, canonicalScope }) =>
+      new CfnRoute(scope, id, {
+        apiId: api.ref,
+        routeKey,
+        target: `integrations/${integration.ref}`,
+        authorizationType: "JWT",
+        authorizerId: authorizer.ref,
+        authorizationScopes: [cognitoScopeFor(canonicalScope)],
+      }),
+  );
   const accessLogs = new LogGroup(scope, "ApiAccessLogs", {
     logGroupName: "/kfc/recommendations/sandbox/api-access",
     retention: RetentionDays.ONE_MONTH,
@@ -75,7 +95,7 @@ export const createHttpApi = (
       throttlingRateLimit: 100,
     },
   });
-  stage.addResourceDependency(route);
+  for (const route of routes) stage.addResourceDependency(route);
   new CfnOutput(scope, "RecommendationApiEndpoint", {
     value: api.attrApiEndpoint,
     description: "JWT-protected synthetic sandbox endpoint",

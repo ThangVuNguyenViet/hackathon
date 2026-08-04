@@ -2,11 +2,9 @@ import { Duration } from "aws-cdk-lib";
 import { CfnOIDCProvider, FederatedPrincipal, PolicyStatement, Role } from "aws-cdk-lib/aws-iam";
 import { Construct } from "constructs";
 
-import type { ReleaseParameters } from "./release-parameters.js";
-
 export const createDeploymentIdentity = (
   scope: Construct,
-  release: ReleaseParameters,
+  cdkDeploymentRoleArn: string,
   githubRepository: string,
 ): Role => {
   const provider = new CfnOIDCProvider(scope, "GitHubOidc", {
@@ -32,7 +30,7 @@ export const createDeploymentIdentity = (
   role.addToPolicy(
     new PolicyStatement({
       actions: ["sts:AssumeRole"],
-      resources: [release.cdkDeploymentRoleArn.valueAsString],
+      resources: [cdkDeploymentRoleArn],
     }),
   );
   return role;

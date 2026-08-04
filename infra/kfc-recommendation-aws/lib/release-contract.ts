@@ -1,4 +1,5 @@
 const IMMUTABLE_DIGEST = /^sha256:[a-f0-9]{64}$/;
+const CONTENT_DIGEST = /^[a-f0-9]{64}$/;
 
 export interface ReleaseInputs {
   readonly region: string;
@@ -17,6 +18,12 @@ const requireDigest = (name: string, value: string | undefined): void => {
   }
 };
 
+const requireContentDigest = (name: string, value: string | undefined): void => {
+  if (value === undefined || !CONTENT_DIGEST.test(value)) {
+    throw new Error(`${name} must be an immutable lowercase sha256 content digest`);
+  }
+};
+
 export const assertDeployableRelease = <T extends ReleaseInputs>(release: T): T => {
   if (release.region !== "ap-southeast-1") {
     throw new Error("recommendation sandbox releases are restricted to ap-southeast-1");
@@ -24,8 +31,8 @@ export const assertDeployableRelease = <T extends ReleaseInputs>(release: T): T 
   requireDigest("Main image", release.mainImageDigest);
   requireDigest("scorer image", release.scorerImageDigest);
   requireDigest("ADOT image", release.adotImageDigest);
-  requireDigest("Qualified Model Bundle", release.qualifiedBundleDigest);
-  requireDigest("release", release.releaseDigest);
+  requireContentDigest("Qualified Model Bundle", release.qualifiedBundleDigest);
+  requireContentDigest("release", release.releaseDigest);
   if (release.previousReleaseDigest === undefined) {
     if (!release.allowRollbackToPaused) {
       throw new Error(
@@ -33,9 +40,10 @@ export const assertDeployableRelease = <T extends ReleaseInputs>(release: T): T 
       );
     }
   } else {
-    requireDigest("previous compatible release", release.previousReleaseDigest);
+    requireContentDigest("previous compatible release", release.previousReleaseDigest);
   }
   return release;
 };
 
 export const immutableDigestPattern = "^sha256:[a-f0-9]{64}$";
+export const contentDigestPattern = "^[a-f0-9]{64}$";

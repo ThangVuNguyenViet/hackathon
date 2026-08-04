@@ -8,6 +8,8 @@ import {
 } from "aws-cdk-lib/aws-cognito";
 import { Construct } from "constructs";
 
+import { cognitoScopeFor } from "./scope-aliases.js";
+
 export interface AuthResources {
   readonly userPool: UserPool;
   readonly client: UserPoolClient;
@@ -26,17 +28,21 @@ export const createAuth = (scope: Construct): AuthResources => {
     cognitoDomain: { domainPrefix: `kfc-recommendation-${userPool.stack.account}` },
   });
   const decide = new ResourceServerScope({
-    scopeName: "decide",
+    scopeName: "decision.write",
     scopeDescription: "Call one of the four exact recommendation decision APIs",
   });
   const events = new ResourceServerScope({
-    scopeName: "events",
+    scopeName: "event.write",
     scopeDescription: "Record trusted recommendation outcomes",
+  });
+  const inspection = new ResourceServerScope({
+    scopeName: "inspection.read",
+    scopeDescription: "Read protected technical recommendation evidence",
   });
   const resourceServer = new UserPoolResourceServer(scope, "ResourceServer", {
     userPool,
     identifier: "recommendations",
-    scopes: [decide, events],
+    scopes: [decide, events, inspection],
   });
   const client = userPool.addClient("MachineClient", {
     userPoolClientName: "trusted-recommendation-backends",
@@ -45,7 +51,11 @@ export const createAuth = (scope: Construct): AuthResources => {
     supportedIdentityProviders: [UserPoolClientIdentityProvider.COGNITO],
     oAuth: {
       flows: { clientCredentials: true },
-      scopes: [OAuthScope.resourceServer(resourceServer, decide), OAuthScope.resourceServer(resourceServer, events)],
+      scopes: [
+        OAuthScope.resourceServer(resourceServer, decide),
+        OAuthScope.resourceServer(resourceServer, events),
+        OAuthScope.resourceServer(resourceServer, inspection),
+      ],
     },
     enableTokenRevocation: true,
     preventUserExistenceErrors: true,
@@ -55,6 +65,10 @@ export const createAuth = (scope: Construct): AuthResources => {
     userPool,
     client,
     issuer: `https://cognito-idp.${userPool.stack.region}.amazonaws.com/${userPool.userPoolId}`,
-    scopes: ["recommendations/decide", "recommendations/events"],
+    scopes: [
+      cognitoScopeFor("recommendations.decision:write"),
+      cognitoScopeFor("recommendations.event:write"),
+      cognitoScopeFor("recommendations.inspection:read"),
+    ],
   };
 };
