@@ -4,6 +4,7 @@ import type {
   AutomaticRecommendationScorerPort,
   AutomaticScorerRequest,
 } from '../automatic-core/index.js';
+import { reconcileAutomaticScorerResponse } from '../contracts/automatic-scorer.js';
 
 export type AutomaticScorerFailureCode =
   | 'scorer_saturated'
@@ -25,6 +26,7 @@ export class AutomaticScorerUnavailableError extends Error {
 
 export interface PersistentAutomaticScorerClient extends AutomaticRecommendationScorerPort {
   readiness(): Promise<boolean>;
+  warmup(request: AutomaticScorerRequest): Promise<boolean>;
   close(): void;
 }
 
@@ -157,6 +159,18 @@ export function createPersistentAutomaticScorerClient({
           'ready' in result &&
           result.ready === true
         );
+      } catch {
+        return false;
+      }
+    },
+    async warmup(request: AutomaticScorerRequest) {
+      try {
+        if (!(await this.readiness())) return false;
+        reconcileAutomaticScorerResponse(
+          request,
+          await call('/v1/score', request),
+        );
+        return true;
       } catch {
         return false;
       }

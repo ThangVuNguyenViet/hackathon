@@ -5,12 +5,15 @@ import {
 } from '@aws-sdk/client-s3';
 import {
   GetCommand,
+  DeleteCommand,
+  PutCommand,
   QueryCommand,
   TransactWriteCommand,
 } from '@aws-sdk/lib-dynamodb';
 import { createHash } from 'node:crypto';
 import {
   AutomaticEvidencePersistenceError,
+  AutomaticRecommendationIdentityConflictError,
   type AutomaticDecisionEvidence,
   type AutomaticEventEvidence,
   type AutomaticEvidenceObjectStore,
@@ -19,6 +22,10 @@ import {
   type ImmutableEvidenceObject,
   type StoredEvidenceObject,
 } from './evidence-saga.js';
+import {
+  parseAutomaticDecisionEvidence,
+  parseAutomaticEventEvidence,
+} from './evidence-contracts.js';
 
 interface AwsCommandClient {
   send(command: object): Promise<unknown>;
@@ -211,6 +218,109 @@ export class DynamoDbAutomaticRecommendationLedger implements AutomaticRecommend
     private readonly options: { tableName: string; client: AwsCommandClient },
   ) {}
 
+  private async claim(
+    kind: 'decision' | 'event',
+    input: {
+      idempotencyKey: string;
+      payloadDigest: string;
+      cartDigest?: string;
+      contextDigest?: string;
+    },
+  ): Promise<'acquired' | 'pending' | 'replayed'> {
+    const key = {
+      pk: `IDEMPOTENCY#${kind}#${input.idempotencyKey}`,
+      sk: 'BINDING',
+    };
+    try {
+      await this.options.client.send(
+        new PutCommand({
+          TableName: this.options.tableName,
+          Item: {
+            ...key,
+            kind,
+            state: 'pending',
+            payloadDigest: input.payloadDigest,
+            ...(input.cartDigest ? { cartDigest: input.cartDigest } : {}),
+            ...(input.contextDigest
+              ? { contextDigest: input.contextDigest }
+              : {}),
+          },
+          ConditionExpression: 'attribute_not_exists(pk)',
+        }),
+      );
+      return 'acquired';
+    } catch (error) {
+      if (awsErrorName(error) !== 'ConditionalCheckFailedException')
+        throw error;
+      const existing = await this.readBinding(kind, input.idempotencyKey);
+      if (
+        existing === null ||
+        existing.payloadDigest !== input.payloadDigest ||
+        (input.cartDigest !== undefined &&
+          existing.cartDigest !== input.cartDigest) ||
+        (input.contextDigest !== undefined &&
+          existing.contextDigest !== input.contextDigest)
+      ) {
+        throw new AutomaticRecommendationIdentityConflictError();
+      }
+      return existing.state === 'committed' ? 'replayed' : 'pending';
+    }
+  }
+
+  claimDecision(input: {
+    idempotencyKey: string;
+    requestDigest: string;
+    cartDigest: string;
+    contextDigest: string;
+  }) {
+    return this.claim('decision', {
+      idempotencyKey: input.idempotencyKey,
+      payloadDigest: input.requestDigest,
+      cartDigest: input.cartDigest,
+      contextDigest: input.contextDigest,
+    });
+  }
+
+  claimEvent(input: { idempotencyKey: string; payloadDigest: string }) {
+    return this.claim('event', input);
+  }
+
+  private async releaseClaim(
+    kind: 'decision' | 'event',
+    idempotencyKey: string,
+    payloadDigest: string,
+  ) {
+    try {
+      await this.options.client.send(
+        new DeleteCommand({
+          TableName: this.options.tableName,
+          Key: {
+            pk: `IDEMPOTENCY#${kind}#${idempotencyKey}`,
+            sk: 'BINDING',
+          },
+          ConditionExpression:
+            '#state = :pending AND payloadDigest = :payloadDigest',
+          ExpressionAttributeNames: { '#state': 'state' },
+          ExpressionAttributeValues: {
+            ':pending': 'pending',
+            ':payloadDigest': payloadDigest,
+          },
+        }),
+      );
+    } catch (error) {
+      if (awsErrorName(error) !== 'ConditionalCheckFailedException')
+        throw error;
+    }
+  }
+
+  releaseDecisionClaim(idempotencyKey: string, requestDigest: string) {
+    return this.releaseClaim('decision', idempotencyKey, requestDigest);
+  }
+
+  releaseEventClaim(idempotencyKey: string, payloadDigest: string) {
+    return this.releaseClaim('event', idempotencyKey, payloadDigest);
+  }
+
   private async commit<
     T extends AutomaticDecisionEvidence | AutomaticEventEvidence,
   >(
@@ -224,19 +334,10 @@ export class DynamoDbAutomaticRecommendationLedger implements AutomaticRecommend
       evidenceDigest: input.evidenceDigest,
       evidenceSizeBytes: input.evidenceSizeBytes,
     };
-    const binding = {
-      pk: bindingKey,
-      sk: 'BINDING',
-      kind,
-      ...pointer,
-      payloadDigest:
-        'requestDigest' in input.evidence
-          ? input.evidence.requestDigest
-          : input.evidence.payloadDigest,
-      ...('recommendationType' in input.evidence
-        ? { recommendationType: input.evidence.recommendationType }
-        : {}),
-    };
+    const payloadDigest =
+      'requestDigest' in input.evidence
+        ? input.evidence.requestDigest
+        : input.evidence.payloadDigest;
     const durable = {
       pk: `RECOMMENDATION#${input.evidence.recommendationId}`,
       sk: kind === 'decision' ? 'DECISION' : `EVENT#${input.idempotencyKey}`,
@@ -247,13 +348,36 @@ export class DynamoDbAutomaticRecommendationLedger implements AutomaticRecommend
     try {
       await this.options.client.send(
         new TransactWriteCommand({
-          TransactItems: [binding, durable].map((Item) => ({
-            Put: {
-              TableName: this.options.tableName,
-              Item,
-              ConditionExpression: 'attribute_not_exists(pk)',
+          TransactItems: [
+            {
+              Update: {
+                TableName: this.options.tableName,
+                Key: { pk: bindingKey, sk: 'BINDING' },
+                ConditionExpression:
+                  '#state = :pending AND payloadDigest = :payloadDigest',
+                UpdateExpression:
+                  'SET #state = :committed, evidenceKey = :evidenceKey, evidenceVersionId = :evidenceVersionId, evidenceDigest = :evidenceDigest, evidenceSizeBytes = :evidenceSizeBytes, recommendationId = :recommendationId',
+                ExpressionAttributeNames: { '#state': 'state' },
+                ExpressionAttributeValues: {
+                  ':pending': 'pending',
+                  ':committed': 'committed',
+                  ':payloadDigest': payloadDigest,
+                  ':evidenceKey': pointer.evidenceKey,
+                  ':evidenceVersionId': pointer.evidenceVersionId,
+                  ':evidenceDigest': pointer.evidenceDigest,
+                  ':evidenceSizeBytes': pointer.evidenceSizeBytes,
+                  ':recommendationId': input.evidence.recommendationId,
+                },
+              },
             },
-          })),
+            {
+              Put: {
+                TableName: this.options.tableName,
+                Item: durable,
+                ConditionExpression: 'attribute_not_exists(pk)',
+              },
+            },
+          ],
         }),
       );
       return 'committed';
@@ -274,7 +398,7 @@ export class DynamoDbAutomaticRecommendationLedger implements AutomaticRecommend
         existing.evidenceVersionId === pointer.evidenceVersionId &&
         existing.evidenceDigest === pointer.evidenceDigest &&
         existing.evidenceSizeBytes === pointer.evidenceSizeBytes &&
-        existing.payloadDigest === binding.payloadDigest
+        existing.payloadDigest === payloadDigest
       ) {
         return 'replayed';
       }
@@ -294,6 +418,69 @@ export class DynamoDbAutomaticRecommendationLedger implements AutomaticRecommend
     input: LedgerInput<AutomaticEventEvidence>,
   ): Promise<'committed' | 'replayed'> {
     return this.commit('event', input);
+  }
+
+  private async readBinding(
+    kind: 'decision' | 'event',
+    idempotencyKey: string,
+  ) {
+    const response = record(
+      await this.options.client.send(
+        new GetCommand({
+          TableName: this.options.tableName,
+          Key: {
+            pk: `IDEMPOTENCY#${kind}#${idempotencyKey}`,
+            sk: 'BINDING',
+          },
+          ConsistentRead: true,
+        }),
+      ),
+    );
+    return response.Item === undefined ? null : record(response.Item);
+  }
+
+  async readDecision(idempotencyKey: string) {
+    const binding = await this.readBinding('decision', idempotencyKey);
+    if (binding === null || typeof binding.recommendationId !== 'string') {
+      return null;
+    }
+    const response = record(
+      await this.options.client.send(
+        new GetCommand({
+          TableName: this.options.tableName,
+          Key: {
+            pk: `RECOMMENDATION#${binding.recommendationId}`,
+            sk: 'DECISION',
+          },
+          ConsistentRead: true,
+        }),
+      ),
+    );
+    return response.Item === undefined
+      ? null
+      : parseAutomaticDecisionEvidence(response.Item);
+  }
+
+  async readEvent(idempotencyKey: string) {
+    const binding = await this.readBinding('event', idempotencyKey);
+    if (binding === null || typeof binding.recommendationId !== 'string') {
+      return null;
+    }
+    const response = record(
+      await this.options.client.send(
+        new GetCommand({
+          TableName: this.options.tableName,
+          Key: {
+            pk: `RECOMMENDATION#${binding.recommendationId}`,
+            sk: `EVENT#${idempotencyKey}`,
+          },
+          ConsistentRead: true,
+        }),
+      ),
+    );
+    return response.Item === undefined
+      ? null
+      : parseAutomaticEventEvidence(response.Item);
   }
 
   async hasEvidence(digest: string): Promise<boolean> {

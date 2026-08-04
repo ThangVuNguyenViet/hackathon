@@ -1,7 +1,10 @@
 import { DynamoDBClient, DescribeTableCommand } from '@aws-sdk/client-dynamodb';
 import { HeadBucketCommand, S3Client } from '@aws-sdk/client-s3';
 import { DynamoDBDocumentClient } from '@aws-sdk/lib-dynamodb';
-import type { AutomaticRecommendationScorerPort } from '../automatic-core/index.js';
+import type {
+  AutomaticRecommendationScorerPort,
+  AutomaticScorerRequest,
+} from '../automatic-core/index.js';
 import type { AutomaticRecommendationType } from '../contracts/automatic-recommendation.js';
 import { AUTOMATIC_RECOMMENDATION_CONTRACT_DIGEST } from '../contracts/automatic-recommendation.js';
 import {
@@ -26,6 +29,7 @@ export function createAwsAutomaticRecommendationRuntime({
   scorerBaseUrl,
   scorerMaxConcurrency,
   scorerTimeoutMs,
+  readinessWarmup,
   createDecisionEngine,
   technicalEvidence,
   s3Client = new S3Client({ region }),
@@ -38,6 +42,7 @@ export function createAwsAutomaticRecommendationRuntime({
   scorerBaseUrl: string;
   scorerMaxConcurrency: number;
   scorerTimeoutMs: number;
+  readinessWarmup: AutomaticScorerRequest;
   createDecisionEngine(scorer: AutomaticRecommendationScorerPort): {
     decide(
       type: AutomaticRecommendationType,
@@ -84,7 +89,7 @@ export function createAwsAutomaticRecommendationRuntime({
     evidence: saga,
     async readiness() {
       const [scorerReady, storageReady, ledgerReady] = await Promise.all([
-        scorer.readiness(),
+        scorer.warmup(readinessWarmup),
         s3Client.send(new HeadBucketCommand({ Bucket: evidenceBucket })).then(
           () => true,
           () => false,

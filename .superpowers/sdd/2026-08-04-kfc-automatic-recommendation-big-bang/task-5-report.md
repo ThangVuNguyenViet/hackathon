@@ -43,6 +43,17 @@ qualification. The scientific limitation is preserved instead of bypassed.
 - The AWS runtime factory requires a real decision-engine factory and complete
   technical-evidence projector, and owns one persistent scorer client, S3 client,
   DynamoDB clients, readiness probes, and coordinated close.
+- Readiness performs a canonical scorer request through the real Node HTTP client
+  into Python and reconciles candidate coverage plus exact model provenance. The
+  cross-runtime test uses the explicitly test-only four-model bundle; a tampered
+  warmup model binding remains unready. Production without a QMB remains `503`.
+- Decision and event idempotency is claimed in DynamoDB before scoring, object
+  writes, or other effects. Conditional pending bindings contain canonical
+  request/cart/context or event-payload digests; matching concurrent instances
+  wait for and read the committed winner, while rebounds return canonical `409`.
+  Identical retries return the original stored response and timestamps without a
+  second scorer call or S3 orphan. Failed owners release only their exact pending
+  claim so immutable-orphan recovery can safely take over.
 - Decision and event evidence use an immutable content-addressed object write
   before a transactional ledger commit. Same-payload retries remain stable across
   wall-clock changes. A changed binding conflicts without rewriting evidence.
@@ -56,8 +67,9 @@ qualification. The scientific limitation is preserved instead of bypassed.
   repairing missing transactions.
 - Canonical decision evidence binds request/cart digests and revisions plus full
   candidate, eligibility, feature, scoring/calibration, composition, release, and
-  trace sections. Recommended responses cannot commit without a complete technical
-  evidence projector. Events expose typed/queryable journey, channel, action,
+  trace sections. Every response, including empty and paused, requires complete
+  engine execution evidence; the former fabricated public-response fallback was
+  removed. Events expose typed/queryable journey, channel, action,
   position, revision, digest, and time fields.
   In-memory production-shaped adapters support deterministic failure injection and
   local durability tests without an AWS deployment.
@@ -83,7 +95,7 @@ The implementation followed explicit RED/GREEN cycles for:
 
 ## Fresh verification
 
-- Focused Node serving/core/authority suites: **21 passed**, 0 failed.
+- Complete automatic-recommendation Node suites: **88 passed**, 0 failed.
 - Complete Python scorer suite: **14 passed**, 0 failed.
 - TypeScript typecheck: passed.
 - Maintained-file format gate: passed.

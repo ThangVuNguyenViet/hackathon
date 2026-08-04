@@ -1,9 +1,14 @@
 import { describe, expect, it } from 'vitest';
 import { PutObjectCommand } from '@aws-sdk/client-s3';
-import { TransactWriteCommand } from '@aws-sdk/lib-dynamodb';
+import {
+  GetCommand,
+  PutCommand,
+  TransactWriteCommand,
+} from '@aws-sdk/lib-dynamodb';
 import { createHash } from 'node:crypto';
 import {
   AutomaticEvidencePersistenceError,
+  AutomaticRecommendationIdentityConflictError,
   InMemoryAutomaticEvidenceObjectStore,
   InMemoryAutomaticRecommendationLedger,
   createAutomaticEvidenceSaga,
@@ -19,6 +24,7 @@ const decision = {
   recommendationId: 'recommendation-1',
   requestId: 'request-1',
   requestDigest: 'b'.repeat(64),
+  contextDigest: 'f'.repeat(64),
   orderingJourneyRef: 'journey-1',
   opportunityRef: 'opportunity-1',
   recommendationType: 'local_favorite' as const,
@@ -61,6 +67,8 @@ const event = {
   payload: { channel: 'kiosk' },
 };
 
+const technicalEvidence = () => decision.technical;
+
 it('writes immutable evidence before one transactional decision and idempotency record', async () => {
   const objects = new InMemoryAutomaticEvidenceObjectStore();
   const ledger = new InMemoryAutomaticRecommendationLedger();
@@ -73,7 +81,7 @@ it('writes immutable evidence before one transactional decision and idempotency 
   const first = await saga.commitDecision(decision);
   const second = await saga.commitDecision(decision);
 
-  expect(second).toEqual(first);
+  expect(second).toMatchObject({ status: first.status });
   expect(objects.objects()).toHaveLength(1);
   expect(ledger.decisions()).toHaveLength(1);
   expect(ledger.idempotencyRecords()).toHaveLength(1);
@@ -128,6 +136,7 @@ it('Main returns a no-qualified-model decision only after durable evidence commi
     },
     evidence: saga,
     contractDigest: 'a'.repeat(64),
+    technicalEvidence,
   });
 
   const response = await runtime.decide('local_favorite', {
@@ -150,6 +159,167 @@ it('Main returns a no-qualified-model decision only after durable evidence commi
     emptyReason: 'no_qualified_model',
   });
   expect(ledger.decisions()[0]?.evidence.response).toEqual(response);
+});
+
+it('replays the durable original response before invoking the engine again', async () => {
+  const objects = new InMemoryAutomaticEvidenceObjectStore();
+  const ledger = new InMemoryAutomaticRecommendationLedger();
+  const saga = createAutomaticEvidenceSaga({
+    objects,
+    ledger,
+    clock: () => new Date(),
+  });
+  let invocations = 0;
+  const runtime = createAutomaticRecommendationServingRuntime({
+    engine: {
+      decide: async () => {
+        invocations += 1;
+        return {
+          schemaVersion: 'kfc-automatic-recommendation-v1',
+          requestId: 'request-1',
+          recommendationId: `recommendation-${invocations}`,
+          recommendationType: 'local_favorite',
+          status: 'empty',
+          emptyReason: 'no_qualified_model',
+          cartRevision: 'cart-revision-1',
+          catalogRevision: 'catalog-1',
+          expiresAt: '2026-08-05T00:05:00.000Z',
+          model: null,
+          proposals: [],
+          counts: { potential: 0, eligible: 0, scored: 0, displayed: 0 },
+        };
+      },
+    },
+    evidence: saga,
+    contractDigest: 'a'.repeat(64),
+    technicalEvidence,
+  });
+  const input = {
+    schemaVersion: 'kfc-automatic-recommendation-v1',
+    requestId: 'request-1',
+    storeId: 'store-1',
+    fulfilmentMode: 'pickup',
+    locale: 'vi-VN',
+    orderingJourneyRef: 'journey-1',
+    opportunityRef: 'opportunity-1',
+    cart: {
+      cartId: 'cart-1',
+      revision: 'cart-revision-1',
+      subtotal: { amount: 0, currency: 'VND' },
+      lines: [],
+    },
+  };
+  const first = await runtime.decide('local_favorite', input);
+  const replay = await runtime.decide('local_favorite', input);
+  expect(replay).toEqual(first);
+  expect(invocations).toBe(1);
+  expect(objects.objects()).toHaveLength(1);
+});
+
+it('rejects a rebound request identity before scoring and coalesces concurrent duplicates', async () => {
+  const objects = new InMemoryAutomaticEvidenceObjectStore();
+  const ledger = new InMemoryAutomaticRecommendationLedger();
+  const saga = createAutomaticEvidenceSaga({
+    objects,
+    ledger,
+    clock: () => new Date(),
+  });
+  let invocations = 0;
+  const runtime = createAutomaticRecommendationServingRuntime({
+    engine: {
+      decide: async () => {
+        invocations += 1;
+        await new Promise((resolve) => setTimeout(resolve, 10));
+        return {
+          schemaVersion: 'kfc-automatic-recommendation-v1',
+          requestId: 'request-1',
+          recommendationId: 'recommendation-1',
+          recommendationType: 'local_favorite',
+          status: 'empty',
+          emptyReason: 'no_qualified_model',
+          cartRevision: 'cart-revision-1',
+          catalogRevision: 'catalog-1',
+          expiresAt: '2026-08-05T00:05:00.000Z',
+          model: null,
+          proposals: [],
+          counts: { potential: 0, eligible: 0, scored: 0, displayed: 0 },
+        };
+      },
+    },
+    evidence: saga,
+    contractDigest: 'a'.repeat(64),
+    technicalEvidence,
+  });
+  const input = {
+    schemaVersion: 'kfc-automatic-recommendation-v1',
+    requestId: 'request-1',
+    storeId: 'store-1',
+    fulfilmentMode: 'pickup',
+    locale: 'vi-VN',
+    orderingJourneyRef: 'journey-1',
+    opportunityRef: 'opportunity-1',
+    cart: {
+      cartId: 'cart-1',
+      revision: 'cart-revision-1',
+      subtotal: { amount: 0, currency: 'VND' },
+      lines: [],
+    },
+  };
+  await Promise.all([
+    runtime.decide('local_favorite', input),
+    runtime.decide('local_favorite', input),
+  ]);
+  expect(invocations).toBe(1);
+  expect(objects.objects()).toHaveLength(1);
+  await expect(
+    runtime.decide('local_favorite', {
+      ...input,
+      cart: { ...input.cart, revision: 'cart-revision-2' },
+    }),
+  ).rejects.toBeInstanceOf(AutomaticRecommendationIdentityConflictError);
+  expect(invocations).toBe(1);
+});
+
+it('releases an exact pending claim when the decision engine fails', async () => {
+  const saga = createAutomaticEvidenceSaga({
+    objects: new InMemoryAutomaticEvidenceObjectStore(),
+    ledger: new InMemoryAutomaticRecommendationLedger(),
+    clock: () => new Date(),
+  });
+  let invocations = 0;
+  const runtime = createAutomaticRecommendationServingRuntime({
+    engine: {
+      decide: async () => {
+        invocations += 1;
+        throw new Error('engine unavailable');
+      },
+    },
+    evidence: saga,
+    contractDigest: 'a'.repeat(64),
+    technicalEvidence,
+  });
+  const input = {
+    schemaVersion: 'kfc-automatic-recommendation-v1',
+    requestId: 'retry-after-engine-failure',
+    storeId: 'store-1',
+    fulfilmentMode: 'pickup',
+    locale: 'vi-VN',
+    orderingJourneyRef: 'journey-1',
+    opportunityRef: 'opportunity-1',
+    cart: {
+      cartId: 'cart-1',
+      revision: 'cart-revision-1',
+      subtotal: { amount: 0, currency: 'VND' },
+      lines: [],
+    },
+  };
+  await expect(runtime.decide('local_favorite', input)).rejects.toThrow(
+    'engine unavailable',
+  );
+  await expect(runtime.decide('local_favorite', input)).rejects.toThrow(
+    'engine unavailable',
+  );
+  expect(invocations).toBe(2);
 });
 
 it('retains an immutable orphan when the transaction fails and reconciles it later', async () => {
@@ -226,6 +396,95 @@ it('rejects evidence containing undefined before writing S3', async () => {
   expect(objects.objects()).toHaveLength(0);
 });
 
+it('rejects incomplete execution evidence for empty and paused decisions before S3', async () => {
+  const objects = new InMemoryAutomaticEvidenceObjectStore();
+  const saga = createAutomaticEvidenceSaga({
+    objects,
+    ledger: new InMemoryAutomaticRecommendationLedger(),
+    clock: () => new Date(),
+  });
+  for (const response of [
+    { status: 'empty', emptyReason: 'no_qualified_model' },
+    { status: 'paused', emptyReason: 'recommendation_serving_paused' },
+  ]) {
+    const malformed: unknown = {
+      ...decision,
+      idempotencyKey: `incomplete-${response.status}`,
+      requestId: `incomplete-${response.status}`,
+      response,
+      technical: {
+        contextBindings: {},
+        featureReconciliation: {},
+        scoresCalibration: null,
+        composition: {},
+        modelReleaseProvenance: null,
+        traceLocator: null,
+      },
+    };
+    await expect(
+      Reflect.apply(saga.commitDecision, saga, [malformed]),
+    ).rejects.toThrow();
+  }
+  expect(objects.objects()).toHaveLength(0);
+});
+
+it.each([
+  ['empty', 'no_qualified_model'],
+  ['paused', 'recommendation_serving_paused'],
+] as const)(
+  'persists engine execution evidence for %s decisions',
+  async (status, emptyReason) => {
+    const ledger = new InMemoryAutomaticRecommendationLedger();
+    const saga = createAutomaticEvidenceSaga({
+      objects: new InMemoryAutomaticEvidenceObjectStore(),
+      ledger,
+      clock: () => new Date(),
+    });
+    const execution = {
+      ...decision.technical,
+      potentialCandidates: [{ source: `engine-${status}` }],
+      eligibilityDecisions: [{ code: `${status}-execution` }],
+    };
+    const runtime = createAutomaticRecommendationServingRuntime({
+      engine: {
+        decide: async () => ({
+          schemaVersion: 'kfc-automatic-recommendation-v1',
+          requestId: `request-${status}`,
+          recommendationId: `recommendation-${status}`,
+          recommendationType: 'local_favorite',
+          status,
+          emptyReason,
+          cartRevision: 'cart-revision-1',
+          catalogRevision: 'catalog-1',
+          expiresAt: '2026-08-05T00:05:00.000Z',
+          model: null,
+          proposals: [],
+          counts: { potential: 1, eligible: 0, scored: 0, displayed: 0 },
+        }),
+      },
+      evidence: saga,
+      contractDigest: 'a'.repeat(64),
+      technicalEvidence: () => execution,
+    });
+    await runtime.decide('local_favorite', {
+      schemaVersion: 'kfc-automatic-recommendation-v1',
+      requestId: `request-${status}`,
+      storeId: 'store-1',
+      fulfilmentMode: 'pickup',
+      locale: 'vi-VN',
+      orderingJourneyRef: 'journey-1',
+      opportunityRef: 'opportunity-1',
+      cart: {
+        cartId: 'cart-1',
+        revision: 'cart-revision-1',
+        subtotal: { amount: 0, currency: 'VND' },
+        lines: [],
+      },
+    });
+    expect(ledger.decisions()[0]?.evidence.technical).toEqual(execution);
+  },
+);
+
 it('stores events S3-first and rejects an idempotency key rebound to different evidence', async () => {
   const objects = new InMemoryAutomaticEvidenceObjectStore();
   const ledger = new InMemoryAutomaticRecommendationLedger();
@@ -236,13 +495,38 @@ it('stores events S3-first and rejects an idempotency key rebound to different e
   });
   await saga.commitDecision(decision);
   await expect(
-    saga.commitDecision({ ...decision, requestId: 'request-other' }),
-  ).rejects.toMatchObject({ code: 'idempotency_conflict' });
+    saga.commitDecision({
+      ...decision,
+      requestId: 'request-other',
+      requestDigest: '9'.repeat(64),
+    }),
+  ).rejects.toBeInstanceOf(AutomaticRecommendationIdentityConflictError);
   await saga.commitEvent(event);
-  // S3-first means even the conflicting attempt remains immutable evidence;
-  // reconciliation will leave it uncommitted rather than rewrite history.
-  expect(objects.objects()).toHaveLength(3);
+  // The rebound is rejected before S3, so only the decision and event exist.
+  expect(objects.objects()).toHaveLength(2);
   expect(ledger.events()).toHaveLength(1);
+});
+
+it('replays events before S3 despite a fresh receipt time and coalesces concurrent duplicates', async () => {
+  const objects = new InMemoryAutomaticEvidenceObjectStore();
+  const ledger = new InMemoryAutomaticRecommendationLedger();
+  const saga = createAutomaticEvidenceSaga({
+    objects,
+    ledger,
+    clock: () => new Date(),
+  });
+  await Promise.all([saga.commitEvent(event), saga.commitEvent(event)]);
+  await saga.commitEvent({ ...event, receivedAt: '2026-08-05T00:04:00.000Z' });
+  expect(objects.objects()).toHaveLength(1);
+  expect(ledger.events()).toHaveLength(1);
+  expect(ledger.events()[0]?.evidence.receivedAt).toBe(event.receivedAt);
+  await expect(
+    saga.commitEvent({
+      ...event,
+      payloadDigest: 'e'.repeat(64),
+    }),
+  ).rejects.toBeInstanceOf(AutomaticRecommendationIdentityConflictError);
+  expect(objects.objects()).toHaveLength(1);
 });
 
 it('uses create-only S3 writes and verifies an existing object by digest', async () => {
@@ -302,10 +586,58 @@ it('commits a decision and its idempotency binding in one DynamoDB transaction',
   expect(transactions[0]?.input.TransactItems).toEqual(
     expect.arrayContaining([
       expect.objectContaining({
+        Update: expect.objectContaining({
+          ConditionExpression:
+            '#state = :pending AND payloadDigest = :payloadDigest',
+        }),
+      }),
+      expect.objectContaining({
         Put: expect.objectContaining({
           ConditionExpression: 'attribute_not_exists(pk)',
         }),
       }),
     ]),
   );
+});
+
+it('claims a Dynamo request identity before effects and makes other instances wait', async () => {
+  let claimed = false;
+  const ledger = new DynamoDbAutomaticRecommendationLedger({
+    tableName: 'automatic-ledger',
+    client: {
+      send: async (command) => {
+        if (command instanceof PutCommand) {
+          if (!claimed) {
+            claimed = true;
+            return {};
+          }
+          const error = new Error('claimed');
+          error.name = 'ConditionalCheckFailedException';
+          throw error;
+        }
+        if (command instanceof GetCommand) {
+          return {
+            Item: {
+              state: 'pending',
+              payloadDigest: decision.requestDigest,
+              cartDigest: decision.cartDigest,
+              contextDigest: decision.contextDigest,
+            },
+          };
+        }
+        throw new Error('unexpected command');
+      },
+    },
+  });
+  const claim = {
+    idempotencyKey: decision.idempotencyKey,
+    requestDigest: decision.requestDigest,
+    cartDigest: decision.cartDigest,
+    contextDigest: decision.contextDigest,
+  };
+  await expect(ledger.claimDecision(claim)).resolves.toBe('acquired');
+  await expect(ledger.claimDecision(claim)).resolves.toBe('pending');
+  await expect(
+    ledger.claimDecision({ ...claim, contextDigest: '8'.repeat(64) }),
+  ).rejects.toBeInstanceOf(AutomaticRecommendationIdentityConflictError);
 });

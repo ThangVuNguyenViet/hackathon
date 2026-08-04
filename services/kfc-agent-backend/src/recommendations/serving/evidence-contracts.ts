@@ -28,6 +28,7 @@ export const automaticDecisionEvidenceSchema = z
     idempotencyKey: id,
     requestId: id,
     requestDigest: digest,
+    contextDigest: digest,
     recommendationId: id,
     recommendationType,
     orderingJourneyRef: id,

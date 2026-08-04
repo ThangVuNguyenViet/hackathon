@@ -1,5 +1,6 @@
 import { type FastifyInstance } from 'fastify';
 import { z } from 'zod';
+import { AutomaticRecommendationIdentityConflictError } from '../recommendations/serving/evidence-saga.js';
 import { authorizeDemoAdminHeaders } from '../security/demoAdminAuth.js';
 import {
   verifyMessengerGuestCheckoutIngress,
@@ -45,6 +46,9 @@ export function registerRoutes(server: FastifyInstance, options: RouteOptions = 
       try {
         return reply.code(200).send(await options.automaticRecommendations.decide(type, request.body));
       } catch (error) {
+        if (error instanceof AutomaticRecommendationIdentityConflictError) {
+          return recommendationIdentityConflict(reply);
+        }
         if (error instanceof z.ZodError) {
           return reply.code(400).send({
             type: 'https://kfc.example/problems/invalid-request',
@@ -65,6 +69,7 @@ export function registerRoutes(server: FastifyInstance, options: RouteOptions = 
       await options.automaticRecommendations.recordImpression(params.recommendationId, request.body);
       return reply.code(204).send();
     } catch (error) {
+      if (error instanceof AutomaticRecommendationIdentityConflictError) return recommendationIdentityConflict(reply);
       if (error instanceof z.ZodError) return reply.code(400).send({ errorCode: 'invalid_request' });
       return recommendationUnavailable(reply);
     }
@@ -76,6 +81,7 @@ export function registerRoutes(server: FastifyInstance, options: RouteOptions = 
       await options.automaticRecommendations.recordOutcome(params.recommendationId, request.body);
       return reply.code(204).send();
     } catch (error) {
+      if (error instanceof AutomaticRecommendationIdentityConflictError) return recommendationIdentityConflict(reply);
       if (error instanceof z.ZodError) return reply.code(400).send({ errorCode: 'invalid_request' });
       return recommendationUnavailable(reply);
     }
@@ -264,6 +270,16 @@ function recommendationUnavailable(reply: { code(statusCode: number): { send(pay
     status: 503,
     code: 'recommendation_infrastructure_unavailable',
     retryable: true,
+  });
+}
+
+function recommendationIdentityConflict(reply: { code(statusCode: number): { send(payload: unknown): unknown } }) {
+  return reply.code(409).send({
+    type: 'https://kfc.example/problems/identity-conflict',
+    title: 'Recommendation identity conflict',
+    status: 409,
+    code: 'identity_conflict',
+    retryable: false,
   });
 }
 

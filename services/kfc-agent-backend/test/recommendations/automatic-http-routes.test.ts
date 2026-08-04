@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { buildServer } from '../../src/api/server.js';
 import type { AutomaticRecommendationHttpRuntime } from '../../src/recommendations/serving/http-runtime.js';
 import { createUnavailableAutomaticRecommendationHttpRuntime } from '../../src/recommendations/serving/http-runtime.js';
+import { AutomaticRecommendationIdentityConflictError } from '../../src/recommendations/serving/evidence-saga.js';
 
 const request = {
   schemaVersion: 'kfc-automatic-recommendation-v1',
@@ -136,6 +137,26 @@ describe('automatic recommendation HTTP routes', () => {
       ).statusCode,
     ).toBe(503);
     await failing.close();
+  });
+
+  it('maps a rebound durable identity to the canonical non-retryable 409', async () => {
+    const automaticRecommendations = runtime();
+    vi.mocked(automaticRecommendations.decide).mockRejectedValueOnce(
+      new AutomaticRecommendationIdentityConflictError(),
+    );
+    const server = buildServer({ automaticRecommendations });
+    const response = await server.inject({
+      method: 'POST',
+      url: '/v1/recommendations/local-favorites',
+      payload: request,
+    });
+    expect(response.statusCode).toBe(409);
+    expect(response.json()).toMatchObject({
+      status: 409,
+      code: 'identity_conflict',
+      retryable: false,
+    });
+    await server.close();
   });
 
   it('exposes the process-owned unavailable provider in readiness without accepting traffic', async () => {
