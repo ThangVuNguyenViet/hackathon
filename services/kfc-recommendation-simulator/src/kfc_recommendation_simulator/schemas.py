@@ -163,6 +163,7 @@ EXPOSURE_SCHEMA = _schema(
     ("categoryId", pa.string(), False),
     ("renderedPosition", pa.int8(), False),
     ("priceImpactVnd", pa.int64(), False),
+    ("composerScore", pa.float64(), False),
     ("slatePropensity", pa.float64(), False),
     ("selectionPropensity", pa.float64(), False),
     ("behaviorSelectionProbability", pa.float64(), False),

@@ -46,9 +46,14 @@ The generator emits stateful starter -> modifier -> Smart journeys. Starter
 eligibility is exact: zero completed orders receives Local Favorite; positive
 history receives For You. A modifier opportunity is attached only to the cart
 line created by an accepted starter action, and Smart occurs after modifier
-resolution against the resulting cart. Ordered slates, positions, joint slate
-propensities, member selection propensities, typed empty cases, and terminal
-outcomes are explicit.
+resolution against the resulting cart. Local Favorite, For You, and Modifier
+Upsell render one action. Ordered Smart slates render three products by default
+and a fourth only when requested and its positive score, new category, and
+price keep the composed slate within the remaining budget. A one- or two-member
+composition becomes a typed empty result with no slate. Automatic, random,
+popularity, and active ablation conditions all rank first and then use this
+same deterministic composer. Positions, exact joint slate/member propensities,
+typed empty cases, and terminal outcomes are explicit.
 
 Paired oracle rows cover automatic, no-recommendation, uniform random eligible,
 popularity-descending, and each one-type ablation. Each condition owns its

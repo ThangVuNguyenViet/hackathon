@@ -71,7 +71,7 @@ class SyntheticWorldTest(unittest.TestCase):
 
     def test_manifest_binds_exact_profile_schemas_and_artifact_digests(self) -> None:
         self.assertEqual(
-            self.manifest["schemaVersion"], "kfc-synthetic-world-manifest-v2"
+            self.manifest["schemaVersion"], "kfc-synthetic-world-manifest-v3"
         )
         self.assertEqual(self.manifest["artifactEncoding"], "parquet")
         self.assertEqual(self.manifest["profile"]["journeysPerSeed"], 2_000)
@@ -119,6 +119,30 @@ class SyntheticWorldTest(unittest.TestCase):
                 "compressionLevel": 3,
                 "dictionaryEncoding": True,
                 "writeStatistics": True,
+            },
+        )
+        self.assertEqual(
+            self.manifest.get("placementComposer"),
+            {
+                "order": (
+                    "condition-specific ranking then shared deterministic composer"
+                ),
+                "singleActionTypes": [
+                    "local_favorite",
+                    "for_you",
+                    "modifier_upsell",
+                ],
+                "smartCrossSell": {
+                    "budgetCeilingVnd": 250_000,
+                    "defaultRenderedCount": 3,
+                    "maximumRenderedCount": 4,
+                    "minimumReadyCount": 3,
+                    "insufficientResult": "typed empty with no slate",
+                    "fourthMemberRule": (
+                        "requested size is 4; score is positive; category is new; "
+                        "composed total remains within remaining budget"
+                    ),
+                },
             },
         )
 
@@ -383,10 +407,20 @@ class SyntheticWorldTest(unittest.TestCase):
             if row["recommendationType"] == "smart_cross_sell"
         ]
         self.assertEqual(len(smart), 2_000)
-        self.assertTrue(any(row["slateSize"] < 3 for row in smart))
+        self.assertTrue(
+            any(
+                row["status"] == "empty"
+                and row["emptyReason"] == "insufficient_composable_candidates"
+                and row["slateSize"] == 0
+                and row["slateId"] is None
+                for row in smart
+            )
+        )
         self.assertTrue(any(row["slateSize"] == 3 for row in smart))
         self.assertTrue(any(row["slateSize"] == 4 for row in smart))
         for opportunity in smart:
+            if opportunity["status"] == "ready":
+                self.assertIn(opportunity["slateSize"], {3, 4})
             self.assertLessEqual(opportunity["slateSize"], 4)
             self.assertLessEqual(
                 opportunity["slateSize"], opportunity["candidateCount"]
@@ -402,6 +436,99 @@ class SyntheticWorldTest(unittest.TestCase):
             if opportunity["treatmentPolicy"] == "automatic_proxy_scorer_composer_v1":
                 categories = [member["categoryId"] for member in members]
                 self.assertEqual(len(categories), len(set(categories)))
+
+    def test_ready_starter_and_modifier_placements_render_one_valid_action(
+        self,
+    ) -> None:
+        opportunities = pq.read_table(
+            self.world / "evaluation" / "opportunities.parquet"
+        ).to_pylist()
+        exposures = pq.read_table(
+            self.world / "evaluation" / "exposures.parquet"
+        ).to_pylist()
+        by_opportunity: dict[str, list[dict[str, object]]] = {}
+        for exposure in exposures:
+            by_opportunity.setdefault(exposure["opportunityId"], []).append(exposure)
+        by_journey: dict[str, list[dict[str, object]]] = {}
+        for opportunity in opportunities:
+            by_journey.setdefault(opportunity["journeyId"], []).append(opportunity)
+
+        ready_types: set[str] = set()
+        for journey in by_journey.values():
+            journey.sort(key=lambda row: row["sequence"])
+            starter, modifier, _smart = journey
+            for opportunity in (starter, modifier):
+                if opportunity["status"] != "ready":
+                    continue
+                ready_types.add(opportunity["recommendationType"])
+                members = by_opportunity[opportunity["opportunityId"]]
+                self.assertEqual(opportunity["slateSize"], 1)
+                self.assertEqual(len(members), 1)
+                self.assertEqual(members[0]["renderedPosition"], 1)
+            if modifier["status"] == "ready":
+                self.assertEqual(
+                    modifier["parentCartLineId"], starter["createdCartLineId"]
+                )
+                self.assertGreater(
+                    by_opportunity[modifier["opportunityId"]][0]["priceImpactVnd"],
+                    0,
+                )
+        self.assertEqual(ready_types, {"local_favorite", "for_you", "modifier_upsell"})
+
+    def test_every_policy_uses_the_same_smart_composer_constraints(self) -> None:
+        source = {
+            row["journeyId"]: row
+            for row in pq.read_table(
+                self.world / "source" / "journeys.parquet"
+            ).to_pylist()
+        }
+        opportunities = pq.read_table(
+            self.world / "evaluation" / "opportunities.parquet"
+        ).to_pylist()
+        exposures = pq.read_table(
+            self.world / "evaluation" / "exposures.parquet"
+        ).to_pylist()
+        by_opportunity: dict[str, list[dict[str, object]]] = {}
+        for exposure in exposures:
+            by_opportunity.setdefault(exposure["opportunityId"], []).append(exposure)
+
+        active_conditions: set[str] = set()
+        for opportunity in opportunities:
+            if (
+                opportunity["recommendationType"] != "smart_cross_sell"
+                or opportunity["status"] != "ready"
+            ):
+                continue
+            active_conditions.add(opportunity["assignedCondition"])
+            members = by_opportunity[opportunity["opportunityId"]]
+            categories = [member["categoryId"] for member in members]
+            self.assertEqual(len(categories), len(set(categories)))
+            remaining_budget_vnd = 250_000 - opportunity["cartSubtotalBeforeVnd"]
+            self.assertLessEqual(
+                sum(member["priceImpactVnd"] for member in members),
+                remaining_budget_vnd,
+            )
+            self.assertTrue(
+                all(
+                    member.get("composerScore") is not None
+                    and member["composerScore"] > 0
+                    for member in members
+                )
+            )
+            if opportunity["slateSize"] == 4:
+                self.assertEqual(
+                    source[opportunity["journeyId"]]["desiredSmartSlateSize"], 4
+                )
+        self.assertTrue(
+            {
+                "automatic",
+                "random_eligible",
+                "popularity",
+                "ablate_local_favorite",
+                "ablate_for_you",
+                "ablate_modifier_upsell",
+            }.issubset(active_conditions)
+        )
 
     def test_untouched_drift_changes_actual_candidate_features(self) -> None:
         rows = pq.read_table(

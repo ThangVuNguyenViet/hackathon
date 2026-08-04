@@ -19,8 +19,8 @@ from .profiles import GenerationProfile
 from .schemas import ARTIFACT_SCHEMAS, FEATURE_FIELDS, schema_digest
 from .validation import count_invalid_rows
 
-WORLD_MANIFEST_VERSION = "kfc-synthetic-world-manifest-v2"
-GENERATOR_REVISION = "kfc-stateful-synthetic-causal-generator-v2"
+WORLD_MANIFEST_VERSION = "kfc-synthetic-world-manifest-v3"
+GENERATOR_REVISION = "kfc-stateful-synthetic-causal-generator-v3"
 RANDOM_STREAM_NAMES = (
     "catalog",
     "population",
@@ -743,7 +743,7 @@ def generate_world(
                 "initialCartItemId": initial_item["sellableItemId"]
                 if initial_item
                 else None,
-                "desiredSmartSlateSize": 3 + (index % 2),
+                "desiredSmartSlateSize": 4 if index % 4 in {1, 2} else 3,
                 "heldOutStore": untouched,
                 "coldCustomer": untouched,
                 "coldCandidate": untouched,
@@ -884,6 +884,7 @@ def generate_world(
                                     "categoryId",
                                     "renderedPosition",
                                     "priceImpactVnd",
+                                    "composerScore",
                                     "slatePropensity",
                                     "selectionPropensity",
                                     "behaviorSelectionProbability",
@@ -1061,6 +1062,25 @@ def generate_world(
             "popularity": "popularity_descending_v1",
             "ablations": "automatic proxy with exactly one named type suppressed",
             "no_recommendation": "no action or slate",
+        },
+        "placementComposer": {
+            "order": ("condition-specific ranking then shared deterministic composer"),
+            "singleActionTypes": [
+                "local_favorite",
+                "for_you",
+                "modifier_upsell",
+            ],
+            "smartCrossSell": {
+                "budgetCeilingVnd": 250_000,
+                "defaultRenderedCount": 3,
+                "maximumRenderedCount": 4,
+                "minimumReadyCount": 3,
+                "insufficientResult": "typed empty with no slate",
+                "fourthMemberRule": (
+                    "requested size is 4; score is positive; category is new; "
+                    "composed total remains within remaining budget"
+                ),
+            },
         },
         "driftMechanism": {
             "window": "untouched_test",

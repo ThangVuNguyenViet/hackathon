@@ -2,8 +2,8 @@ from __future__ import annotations
 
 import hashlib
 import json
-import math
 from collections.abc import Mapping
+from itertools import permutations
 from typing import Any
 
 CONDITIONS = (
@@ -70,49 +70,97 @@ def _random_order(
     )
 
 
+def _compose_ranked_candidates(
+    *,
+    ranked_candidates: list[dict[str, Any]],
+    recommendation_type: str,
+    desired_smart_size: int,
+    remaining_budget_vnd: int,
+) -> list[dict[str, Any]]:
+    if recommendation_type != "smart_cross_sell":
+        return ranked_candidates[:1]
+    diverse: list[dict[str, Any]] = []
+    seen_categories: set[str] = set()
+    composed_price_vnd = 0
+    for candidate in ranked_candidates:
+        category = str(candidate["categoryId"])
+        price_vnd = int(candidate["priceImpactVnd"])
+        if (
+            float(candidate["automaticScore"]) <= 0
+            or category in seen_categories
+            or composed_price_vnd + price_vnd > remaining_budget_vnd
+        ):
+            continue
+        seen_categories.add(category)
+        diverse.append(candidate)
+        composed_price_vnd += price_vnd
+        if len(diverse) == desired_smart_size:
+            break
+    return diverse if len(diverse) >= 3 else []
+
+
 def _slate(
     *,
     candidates: list[dict[str, Any]],
     recommendation_type: str,
     condition: str,
     desired_smart_size: int,
+    remaining_budget_vnd: int,
     random_priorities: Mapping[str, float],
-) -> tuple[list[dict[str, Any]], float, float]:
+) -> tuple[
+    list[dict[str, Any]],
+    float,
+    dict[str, float],
+    list[dict[str, Any]],
+]:
     if condition == "random_eligible":
         ordered = _random_order(candidates, random_priorities)
     elif condition == "popularity":
         ordered = _popularity_order(candidates)
     else:
         ordered = _automatic_order(candidates)
-    target = {
-        "local_favorite": 3,
-        "for_you": 3,
-        "modifier_upsell": 3,
-        "smart_cross_sell": desired_smart_size,
-    }[recommendation_type]
-    if recommendation_type == "smart_cross_sell" and condition not in {
-        "random_eligible",
-        "popularity",
-    }:
-        diverse: list[dict[str, Any]] = []
-        seen_categories: set[str] = set()
-        for candidate in ordered:
-            category = str(candidate["categoryId"])
-            if category in seen_categories:
-                continue
-            seen_categories.add(category)
-            diverse.append(candidate)
-            if len(diverse) == target:
-                break
-        slate = diverse
-    else:
-        slate = ordered[:target]
+    slate = _compose_ranked_candidates(
+        ranked_candidates=ordered,
+        recommendation_type=recommendation_type,
+        desired_smart_size=desired_smart_size,
+        remaining_budget_vnd=remaining_budget_vnd,
+    )
     if condition != "random_eligible" or not slate:
-        return slate, 1.0, 1.0
-    population = len(candidates)
-    slate_size = len(slate)
-    permutations = math.prod(range(population - slate_size + 1, population + 1))
-    return slate, 1.0 / permutations, slate_size / population
+        return (
+            slate,
+            1.0,
+            {str(candidate["candidateId"]): 1.0 for candidate in slate},
+            ordered,
+        )
+    output_ids = [str(candidate["candidateId"]) for candidate in slate]
+    matching_outputs = 0
+    inclusion_counts = {candidate_id: 0 for candidate_id in output_ids}
+    total_orders = 0
+    for possible_order in permutations(candidates):
+        total_orders += 1
+        possible_slate = _compose_ranked_candidates(
+            ranked_candidates=list(possible_order),
+            recommendation_type=recommendation_type,
+            desired_smart_size=desired_smart_size,
+            remaining_budget_vnd=remaining_budget_vnd,
+        )
+        possible_ids = {str(candidate["candidateId"]) for candidate in possible_slate}
+        if [
+            str(candidate["candidateId"]) for candidate in possible_slate
+        ] == output_ids:
+            matching_outputs += 1
+        for candidate_id in inclusion_counts:
+            if candidate_id in possible_ids:
+                inclusion_counts[candidate_id] += 1
+    return (
+        slate,
+        matching_outputs / total_orders,
+        {
+            candidate_id: count / total_orders
+            for candidate_id, count in inclusion_counts.items()
+        },
+        ordered,
+    )
 
 
 def _slate_id(
@@ -143,6 +191,8 @@ def _suppressed_placement(
         "parentCartLineId": parent_line_id,
         "createdCartLineId": None,
         "eligibleCandidateIds": [],
+        "eligibleCandidates": [],
+        "rankedCandidateIds": [],
         "popularityOrderCandidateIds": [],
         "slateId": None,
         "slatePropensity": None,
@@ -204,25 +254,58 @@ def _ready_placement(
     cart_line_count: int,
     parent_line_id: str | None,
 ) -> dict[str, Any]:
-    slate, slate_propensity, member_propensity = _slate(
+    slate, slate_propensity, member_propensities, ranked = _slate(
         candidates=candidates,
         recommendation_type=recommendation_type,
         condition=condition,
         desired_smart_size=desired_smart_size,
+        remaining_budget_vnd=max(0, 250_000 - cart_subtotal),
         random_priorities=random_priorities,
     )
+    eligible_candidate_facts = [
+        {
+            "candidateId": candidate["candidateId"],
+            "categoryId": candidate["categoryId"],
+            "priceImpactVnd": candidate["priceImpactVnd"],
+            "composerScore": candidate["automaticScore"],
+        }
+        for candidate in candidates
+    ]
+    ranked_candidate_ids = [str(candidate["candidateId"]) for candidate in ranked]
     if not slate:
-        return _empty_placement(
+        placement = _empty_placement(
             journey_id=journey_id,
             recommendation_type=recommendation_type,
             sequence=sequence,
             condition=condition,
-            empty_reason="no_eligible_candidates",
-            prerequisite_state="eligible_candidates_exhausted",
+            empty_reason=(
+                "insufficient_composable_candidates"
+                if recommendation_type == "smart_cross_sell" and candidates
+                else "no_eligible_candidates"
+            ),
+            prerequisite_state=(
+                "composer_cardinality_not_met"
+                if recommendation_type == "smart_cross_sell" and candidates
+                else "eligible_candidates_exhausted"
+            ),
             cart_subtotal=cart_subtotal,
             cart_line_count=cart_line_count,
             parent_line_id=parent_line_id,
         )
+        placement.update(
+            {
+                "eligibleCandidateIds": [
+                    str(candidate["candidateId"]) for candidate in candidates
+                ],
+                "eligibleCandidates": eligible_candidate_facts,
+                "rankedCandidateIds": ranked_candidate_ids,
+                "popularityOrderCandidateIds": [
+                    str(candidate["candidateId"])
+                    for candidate in _popularity_order(candidates)
+                ],
+            }
+        )
+        return placement
     selection_probability = min(0.88, 0.18 + 0.52 * affinity)
     selected_position: int | None = None
     if selection_draw < selection_probability:
@@ -255,9 +338,12 @@ def _ready_placement(
                 "candidateId": candidate["candidateId"],
                 "categoryId": candidate["categoryId"],
                 "priceImpactVnd": price,
+                "composerScore": float(candidate["automaticScore"]),
                 "renderedPosition": position,
                 "slatePropensity": slate_propensity,
-                "selectionPropensity": member_propensity,
+                "selectionPropensity": member_propensities[
+                    str(candidate["candidateId"])
+                ],
                 "behaviorSelectionProbability": selection_probability / len(slate),
                 "selected": selected,
                 "removalDraw": removal_draw if selected else None,
@@ -276,6 +362,8 @@ def _ready_placement(
         "eligibleCandidateIds": [
             str(candidate["candidateId"]) for candidate in candidates
         ],
+        "eligibleCandidates": eligible_candidate_facts,
+        "rankedCandidateIds": ranked_candidate_ids,
         "popularityOrderCandidateIds": [
             str(candidate["candidateId"]) for candidate in _popularity_order(candidates)
         ],
