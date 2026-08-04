@@ -48,3 +48,16 @@ def verify_frozen_configuration(
         raise FrozenConfigurationError("configuration path changed after freeze")
     if _sha256(configuration) != frozen.configuration_sha256:
         raise FrozenConfigurationError("configuration digest changed after freeze")
+    if not frozen.evidence_path.is_file():
+        raise FrozenConfigurationError("freeze evidence token is missing")
+    try:
+        evidence = json.loads(frozen.evidence_path.read_text(encoding="utf-8"))
+    except (json.JSONDecodeError, OSError) as error:
+        raise FrozenConfigurationError("freeze evidence token is invalid") from error
+    expected = {
+        "schemaVersion": "kfc-model-qualification-freeze-v1",
+        "configurationPath": configuration.name,
+        "configurationSha256": frozen.configuration_sha256,
+    }
+    if evidence != expected:
+        raise FrozenConfigurationError("freeze evidence token does not match")

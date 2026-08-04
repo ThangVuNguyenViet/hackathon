@@ -38,6 +38,7 @@ EXPECTED_ARTIFACTS = {
     "evaluation/opportunities.parquet",
     "evaluation/exposures.parquet",
     "evaluation/journeys.parquet",
+    "evaluation/candidate-relevance.parquet",
     "oracle/potential-outcomes.parquet",
     "traffic/arrivals-per-minute.parquet",
     "traffic/scorer-candidate-shapes.parquet",
@@ -71,7 +72,7 @@ class SyntheticWorldTest(unittest.TestCase):
 
     def test_manifest_binds_exact_profile_schemas_and_artifact_digests(self) -> None:
         self.assertEqual(
-            self.manifest["schemaVersion"], "kfc-synthetic-world-manifest-v3"
+            self.manifest["schemaVersion"], "kfc-synthetic-world-manifest-v4"
         )
         self.assertEqual(self.manifest["artifactEncoding"], "parquet")
         self.assertEqual(self.manifest["profile"]["journeysPerSeed"], 2_000)
@@ -83,6 +84,13 @@ class SyntheticWorldTest(unittest.TestCase):
             self.assertEqual(hashlib.sha256(payload).hexdigest(), evidence["sha256"])
             self.assertGreater(evidence["rowCount"], 0)
             self.assertRegex(evidence["schemaDigest"], r"^[a-f0-9]{64}$")
+        relevance = self.manifest["candidateRelevanceDefinition"]
+        self.assertEqual(relevance["version"], "candidate-singleton-value-v1")
+        self.assertRegex(relevance["sha256"], r"^[a-f0-9]{64}$")
+        self.assertEqual(
+            relevance["sharedExogenous"],
+            "sha256 candidate-keyed draws independent of ranking policy",
+        )
 
     def test_world_digest_binds_manifest_configuration_and_artifacts(self) -> None:
         bound_manifest = dict(self.manifest)

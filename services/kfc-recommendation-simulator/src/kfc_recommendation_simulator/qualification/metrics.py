@@ -68,7 +68,7 @@ def normal_mean_interval(values: NDArray[np.float64]) -> dict[str, float]:
     }
 
 
-def ndcg(relevance: list[int], *, k: int) -> float:
+def ndcg(relevance: list[float], *, k: int) -> float:
     if not relevance:
         return 0.0
     observed = relevance[:k]

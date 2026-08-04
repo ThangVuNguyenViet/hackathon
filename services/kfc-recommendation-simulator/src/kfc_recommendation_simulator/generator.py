@@ -19,8 +19,18 @@ from .profiles import GenerationProfile
 from .schemas import ARTIFACT_SCHEMAS, FEATURE_FIELDS, schema_digest
 from .validation import count_invalid_rows
 
-WORLD_MANIFEST_VERSION = "kfc-synthetic-world-manifest-v3"
-GENERATOR_REVISION = "kfc-stateful-synthetic-causal-generator-v3"
+WORLD_MANIFEST_VERSION = "kfc-synthetic-world-manifest-v4"
+GENERATOR_REVISION = "kfc-stateful-synthetic-causal-generator-v4"
+CANDIDATE_RELEVANCE_DEFINITION_VERSION = "candidate-singleton-value-v1"
+CANDIDATE_RELEVANCE_DEFINITION = {
+    "intervention": "render_only_this_eligible_candidate",
+    "selection": "min(0.88, 0.18 + 0.52 * journey affinity)",
+    "checkout": "0.64 after one selected candidate",
+    "removal": "0.10 after selection and checkout",
+    "realizedValue": "price when selected, checked out, and not removed; else zero",
+    "gradedRelevance": "expected retained incremental value in VND",
+    "sharedExogenous": "sha256 candidate-keyed draws independent of ranking policy",
+}
 RANDOM_STREAM_NAMES = (
     "catalog",
     "population",
@@ -60,6 +70,11 @@ def _canonical_json(value: Any, *, pretty: bool = False) -> bytes:
         separators=(",", ":"),
         allow_nan=False,
     ).encode()
+
+
+CANDIDATE_RELEVANCE_DEFINITION_DIGEST = hashlib.sha256(
+    _canonical_json(CANDIDATE_RELEVANCE_DEFINITION)
+).hexdigest()
 
 
 def _derived_stream_seed(
@@ -202,6 +217,69 @@ def _daypart(hour: int) -> str:
 def _stable_fraction(*values: object) -> float:
     digest = hashlib.sha256("\0".join(map(str, values)).encode()).digest()
     return int.from_bytes(digest[:8], "big") / 2**64
+
+
+def _candidate_relevance_row(
+    *,
+    seed: int,
+    split: str,
+    journey_id: str,
+    opportunity_id: str,
+    recommendation_type: str,
+    candidate: Mapping[str, Any],
+    affinity: float,
+) -> dict[str, Any]:
+    candidate_id = str(candidate["candidateId"])
+    price_vnd = int(candidate["priceImpactVnd"])
+    selection_probability = min(0.88, 0.18 + 0.52 * affinity)
+    checkout_probability = 0.64
+    removal_probability = 0.10
+    draw_key = (
+        CANDIDATE_RELEVANCE_DEFINITION_VERSION,
+        journey_id,
+        opportunity_id,
+        candidate_id,
+    )
+    selected = _stable_fraction(*draw_key, "selection") < selection_probability
+    checkout = _stable_fraction(*draw_key, "checkout") < checkout_probability
+    removed = (
+        selected
+        and checkout
+        and _stable_fraction(*draw_key, "removal") < removal_probability
+    )
+    retained = selected and checkout and not removed
+    expected_value = (
+        price_vnd
+        * selection_probability
+        * checkout_probability
+        * (1.0 - removal_probability)
+    )
+    outcome_ref_digest = hashlib.sha256(
+        "\0".join(map(str, draw_key)).encode()
+    ).hexdigest()[:24]
+    return {
+        "evaluationDefinitionVersion": CANDIDATE_RELEVANCE_DEFINITION_VERSION,
+        "evaluationDefinitionDigest": CANDIDATE_RELEVANCE_DEFINITION_DIGEST,
+        "intervention": CANDIDATE_RELEVANCE_DEFINITION["intervention"],
+        "seed": seed,
+        "split": split,
+        "journeyId": journey_id,
+        "opportunityId": opportunity_id,
+        "recommendationType": recommendation_type,
+        "candidateId": candidate_id,
+        "potentialOutcomeRef": f"candidate-potential:{outcome_ref_digest}",
+        "priceImpactVnd": price_vnd,
+        "selectionProbability": selection_probability,
+        "checkoutProbability": checkout_probability,
+        "removalProbability": removal_probability,
+        "potentialSelected": selected,
+        "potentialCheckout": checkout,
+        "potentialRemoved": removed,
+        "potentialRetained": retained,
+        "potentialIncrementalValueVnd": price_vnd if retained else 0,
+        "expectedRetainedValueVnd": expected_value,
+        "gradedRelevance": expected_value,
+    }
 
 
 def _actual_candidate(
@@ -357,15 +435,16 @@ def _journey_candidates(
         smart_category_cases[index % len(smart_category_cases)],
         start=index,
     )
-    smart = [
-        _candidate(
+    smart_by_id: dict[str, dict[str, Any]] = {}
+    for item in smart_raw:
+        candidate = _candidate(
             item,
             recommendation_type="smart_cross_sell",
             affinity=affinity,
             journey_index=index,
         )
-        for item in smart_raw
-    ]
+        smart_by_id.setdefault(str(candidate["candidateId"]), candidate)
+    smart = list(smart_by_id.values())
     return starter, modifier_by_parent, smart
 
 
@@ -899,6 +978,17 @@ def generate_world(
                     candidate = candidate_lookup[candidate_id]
                     member = member_by_candidate.get(candidate_id)
                     shown = member is not None
+                    rows["evaluation/candidate-relevance.parquet"].append(
+                        _candidate_relevance_row(
+                            seed=seed,
+                            split=split,
+                            journey_id=journey_id,
+                            opportunity_id=placement["opportunityId"],
+                            recommendation_type=placement["recommendationType"],
+                            candidate=candidate,
+                            affinity=affinity,
+                        )
+                    )
                     features = _candidate_features(
                         candidate=candidate,
                         recommendation_type=placement["recommendationType"],
@@ -1044,8 +1134,16 @@ def generate_world(
         "physicalSurfaces": {
             "source": "pre-opportunity synthetic commerce facts",
             "model-visible": "pre-decision features and factual shown labels only",
-            "evaluation": "factual lifecycle, exposure, and terminal evidence",
+            "evaluation": (
+                "factual lifecycle plus candidate-level potential value, physically "
+                "separate from model-visible training data"
+            ),
             "oracle": "paired treatment paths, latent facts, and potential outcomes",
+        },
+        "candidateRelevanceDefinition": {
+            "version": CANDIDATE_RELEVANCE_DEFINITION_VERSION,
+            "sha256": CANDIDATE_RELEVANCE_DEFINITION_DIGEST,
+            **CANDIDATE_RELEVANCE_DEFINITION,
         },
         "randomStreams": stream_evidence,
         "streamSeedOverrides": overrides,

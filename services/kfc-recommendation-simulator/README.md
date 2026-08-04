@@ -15,7 +15,7 @@ Each world has four physically separate data surfaces:
 <world-revision>/
   source/{catalog,population,journeys}.parquet
   model-visible/training-examples.parquet
-  evaluation/{opportunities,exposures,journeys}.parquet
+  evaluation/{opportunities,exposures,journeys,candidate-relevance}.parquet
   oracle/potential-outcomes.parquet
   traffic/{arrivals-per-minute,scorer-candidate-shapes}.parquet
   manifests/synthetic-world.json
@@ -51,15 +51,21 @@ selected champions, calibrators, feature encoders, thresholds, composer, and
 configuration before evaluator-only untouched-test access. Exit code `0`
 means every per-type and combined gate passed and one atomic four-model bundle
 was emitted. Exit code `2` means explicit failed qualification; no serving
-bundle or baseline substitute is emitted. Model ranking evidence uses the full
-eligible candidate set and fails as insufficient when evaluation-only
-candidate relevance cannot identify ideal DCG. Oracle data is never used for
-training or model-visible ranking.
+bundle or baseline substitute is emitted. Candidate-level singleton potential
+value is physically isolated in `evaluation/candidate-relevance.parquet`. Its
+versioned, manifest-bound expected retained VND defines graded relevance for
+honest full-set ideal DCG and paired model/random/popularity NDCG intervals.
+The dedicated untouched relevance loader verifies the frozen configuration
+token before reading this artifact. Oracle and candidate-relevance data are
+never used for training, calibration, threshold selection, champion selection,
+or model-visible ranking.
 
 Training consumers call `load_training_table(world_root)`. That loader owns its
 path and exact schema; it cannot be redirected to `evaluation/` or `oracle/`.
 It verifies the manifest, artifact digest, exact model-visible schema, forbidden
 fields, and permitted chronological splits before returning a table.
+Unshown factual candidates keep null labels; evaluation values are not copied
+onto the model-visible surface.
 
 The generator emits stateful starter -> modifier -> Smart journeys. Starter
 eligibility is exact: zero completed orders receives Local Favorite; positive

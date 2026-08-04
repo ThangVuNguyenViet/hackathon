@@ -28,6 +28,20 @@ FORBIDDEN_TRAINING_FIELDS = frozenset(
         "removedActionIdsJson",
         "treatmentRevenueVnd",
         "treatmentPathJson",
+        "evaluationDefinitionVersion",
+        "evaluationDefinitionDigest",
+        "intervention",
+        "potentialOutcomeRef",
+        "selectionProbability",
+        "checkoutProbability",
+        "removalProbability",
+        "potentialSelected",
+        "potentialCheckout",
+        "potentialRemoved",
+        "potentialRetained",
+        "potentialIncrementalValueVnd",
+        "expectedRetainedValueVnd",
+        "gradedRelevance",
     }
 )
 TRAINING_SPLITS = ("training", "calibration", "validation")

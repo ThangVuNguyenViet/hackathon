@@ -189,6 +189,30 @@ EVALUATION_JOURNEY_SCHEMA = _schema(
     ("finalMerchandiseSubtotalVnd", pa.int64(), False),
 )
 
+CANDIDATE_RELEVANCE_SCHEMA = _schema(
+    ("evaluationDefinitionVersion", pa.string(), False),
+    ("evaluationDefinitionDigest", pa.string(), False),
+    ("intervention", pa.string(), False),
+    ("seed", pa.int32(), False),
+    ("split", pa.string(), False),
+    ("journeyId", pa.string(), False),
+    ("opportunityId", pa.string(), False),
+    ("recommendationType", pa.string(), False),
+    ("candidateId", pa.string(), False),
+    ("potentialOutcomeRef", pa.string(), False),
+    ("priceImpactVnd", pa.int64(), False),
+    ("selectionProbability", pa.float64(), False),
+    ("checkoutProbability", pa.float64(), False),
+    ("removalProbability", pa.float64(), False),
+    ("potentialSelected", pa.bool_(), False),
+    ("potentialCheckout", pa.bool_(), False),
+    ("potentialRemoved", pa.bool_(), False),
+    ("potentialRetained", pa.bool_(), False),
+    ("potentialIncrementalValueVnd", pa.int64(), False),
+    ("expectedRetainedValueVnd", pa.float64(), False),
+    ("gradedRelevance", pa.float64(), False),
+)
+
 ORACLE_SCHEMA = _schema(
     ("seed", pa.int32(), False),
     ("journeyId", pa.string(), False),
@@ -238,6 +262,7 @@ ARTIFACT_SCHEMAS = {
     "evaluation/opportunities.parquet": OPPORTUNITY_SCHEMA,
     "evaluation/exposures.parquet": EXPOSURE_SCHEMA,
     "evaluation/journeys.parquet": EVALUATION_JOURNEY_SCHEMA,
+    "evaluation/candidate-relevance.parquet": CANDIDATE_RELEVANCE_SCHEMA,
     "oracle/potential-outcomes.parquet": ORACLE_SCHEMA,
     "traffic/arrivals-per-minute.parquet": ARRIVAL_SCHEMA,
     "traffic/scorer-candidate-shapes.parquet": SCORER_SHAPE_SCHEMA,
