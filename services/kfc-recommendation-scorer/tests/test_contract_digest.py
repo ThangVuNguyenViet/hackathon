@@ -24,6 +24,7 @@ from kfc_recommendation_scorer.contract import (  # noqa: E402
     parse_automatic_scorer_request,
     parse_automatic_scorer_response,
     reconcile_automatic_scorer_response,
+    validate_automatic_recommendation_binding,
     automatic_recommendation_identity_digest,
 )
 
@@ -91,6 +92,7 @@ class ContractDigestTest(unittest.TestCase):
             ("examples/adversarial/modifier-with-product-action.json", parse_automatic_recommendation_response),
             ("examples/adversarial/impression-empty.json", parse_automatic_recommendation_impression),
             ("examples/adversarial/recommended-nonmonotonic-counts.json", parse_automatic_recommendation_response),
+            ("examples/adversarial/modifier-four-proposals.json", parse_automatic_recommendation_response),
         )
         for relative_path, parser in negative_examples:
             value = json.loads((contract_root / relative_path).read_text())
@@ -103,6 +105,13 @@ class ContractDigestTest(unittest.TestCase):
         request = json.loads((root / "scorer-request.json").read_text())
         response = json.loads((root / "scorer-response.json").read_text())
         self.assertEqual(reconcile_automatic_scorer_response(request, response).to_wire(), response)
+        reordered_response = json.loads(
+            (root / "scorer-reordered-model-response.json").read_text()
+        )
+        self.assertEqual(
+            reconcile_automatic_scorer_response(request, reordered_response).to_wire(),
+            reordered_response,
+        )
         for invalid_response in (
             {**response, "requestId": "mismatch"},
             {**response, "scores": []},
@@ -129,6 +138,29 @@ class ContractDigestTest(unittest.TestCase):
             automatic_recommendation_identity_digest(
                 "/v1/recommendations/local-favorites", "smart_cross_sell", request
             ),
+        )
+
+    def test_python_modifier_binding_requires_the_requested_parent(self) -> None:
+        repository_root = SCORER_ROOT.parents[1]
+        root = repository_root / "contracts" / "automatic-recommendations" / "v1" / "examples"
+        request = json.loads((root / "modifier-upsell-request.json").read_text())
+        mismatch = json.loads(
+            (root / "adversarial" / "modifier-parent-mismatch-response.json").read_text()
+        )
+        with self.assertRaises(ContractValidationError):
+            validate_automatic_recommendation_binding("modifier_upsell", request, mismatch)
+
+    def test_python_identity_digest_matches_the_published_vector(self) -> None:
+        repository_root = SCORER_ROOT.parents[1]
+        manifest = json.loads(
+            (repository_root / "contracts" / "automatic-recommendations" / "v1" / "contract-manifest.json").read_text()
+        )
+        vector = manifest["identityDigestVector"]
+        self.assertEqual(
+            automatic_recommendation_identity_digest(
+                vector["operationPath"], vector["identityType"], vector["payload"]
+            ),
+            vector["sha256"],
         )
 
 

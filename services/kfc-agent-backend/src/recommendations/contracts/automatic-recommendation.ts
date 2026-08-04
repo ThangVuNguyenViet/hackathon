@@ -1,8 +1,15 @@
 import { z } from 'zod';
 import { createHash } from 'node:crypto';
+import {
+  parseAutomaticRecommendationImpression,
+  parseAutomaticRecommendationInspection,
+  parseAutomaticRecommendationOutcome,
+  parseAutomaticRecommendationProblem,
+  parseAutomaticRecommendationResponse,
+} from './automatic-recommendation-response.js';
 
 export const AUTOMATIC_RECOMMENDATION_CONTRACT_DIGEST =
-  '57117c33245e6060b4cdf5dc58a0ceabff22e516d4b4eb38aecafa2ca2d9025e';
+  '5998c1d2b50c09e14d144fbc327a885e71245c7fcbb3cb1f7b23d0ea8a547dbc';
 
 export const automaticRecommendationOperations = {
   local_favorite: '/v1/recommendations/local-favorites',
@@ -167,6 +174,35 @@ export function parseAutomaticRecommendationRequest(
   value: unknown,
 ): AutomaticRecommendationRequest {
   return automaticRecommendationRequestSchemas[type].parse(value);
+}
+
+export function validateAutomaticRecommendationBinding(
+  type: AutomaticRecommendationType,
+  requestValue: unknown,
+  responseValue: unknown,
+) {
+  const request = parseAutomaticRecommendationRequest(type, requestValue);
+  const response = parseAutomaticRecommendationResponse(responseValue);
+  if (request.requestId !== response.requestId) {
+    throw new Error('Recommendation response request identity does not match');
+  }
+  if (response.recommendationType !== type) {
+    throw new Error('Recommendation response type does not match the request');
+  }
+  if (type === 'modifier_upsell') {
+    const parentCartLineId =
+      modifierUpsellRequestSchema.parse(requestValue).parentCartLineId;
+    if (
+      response.proposals.some(
+        ({ action }) =>
+          action.type !== 'apply_modifier' ||
+          action.parentCartLineId !== parentCartLineId,
+      )
+    ) {
+      throw new Error('Modifier actions must target the requested parent line');
+    }
+  }
+  return response;
 }
 
 export {

@@ -51,6 +51,14 @@ const contractManifestSchema = z
   .object({
     schemaVersion: z.literal('kfc-automatic-contract-manifest-v1'),
     canonicalDigest: z.string().regex(/^[a-f0-9]{64}$/u),
+    identityDigestVector: z
+      .object({
+        operationPath: z.string().min(1),
+        identityType: z.string().min(1),
+        payload: z.unknown(),
+        sha256: z.string().regex(/^[a-f0-9]{64}$/u),
+      })
+      .strict(),
     authorityFiles: z.array(z.string()).min(1),
     idempotency: z
       .object({
@@ -141,6 +149,10 @@ const negativeExamples = [
     file: 'examples/adversarial/recommended-nonmonotonic-counts.json',
     kind: 'recommendation_response',
   },
+  {
+    file: 'examples/adversarial/modifier-four-proposals.json',
+    kind: 'recommendation_response',
+  },
 ] as const;
 
 describe('automatic recommendation wire authority', () => {
@@ -191,7 +203,7 @@ describe('automatic recommendation wire authority', () => {
     const manifest = contractManifestSchema.parse(
       await readJson('contract-manifest.json'),
     );
-    expect(manifest.examples).toHaveLength(16);
+    expect(manifest.examples).toHaveLength(17);
 
     for (const example of manifest.examples) {
       const value = await readJson(example.file);
@@ -319,6 +331,7 @@ describe('automatic recommendation wire authority', () => {
         'examples/adversarial/recommended-invented-reason.json',
         'examples/adversarial/recommended-without-model.json',
         'examples/adversarial/problem-503-not-retryable.json',
+        'examples/adversarial/modifier-four-proposals.json',
       ].includes(example.file),
     )) {
       const schema =

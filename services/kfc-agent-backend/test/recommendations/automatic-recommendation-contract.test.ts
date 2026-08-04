@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { readFile } from 'node:fs/promises';
 
 const contractModulePath =
   '../../src/recommendations/contracts/automatic-recommendation.js';
@@ -57,6 +58,19 @@ describe('automatic recommendation wire contract', () => {
         operationPath: '/v1/recommendations/local-favorites/events',
       }),
     );
+  });
+
+  it('matches the published cross-runtime identity digest vector', async () => {
+    const { automaticRecommendationIdentityDigest } = await import(
+      contractModulePath
+    );
+    const manifest = await import(
+      '../../../../contracts/automatic-recommendations/v1/contract-manifest.json',
+      { with: { type: 'json' } }
+    );
+    const vector = manifest.default.identityDigestVector;
+
+    expect(automaticRecommendationIdentityDigest(vector)).toBe(vector.sha256);
   });
 
   it('enforces each trusted type-specific request prerequisite', async () => {
@@ -276,6 +290,30 @@ describe('automatic recommendation wire contract', () => {
     ).toMatchObject({
       scores: [{ candidateId: 'product:20732' }],
     });
+    const scorerVectorRequest = JSON.parse(
+      await readFile(
+        new URL(
+          '../../../../contracts/automatic-recommendations/v1/examples/scorer-request.json',
+          import.meta.url,
+        ),
+        'utf8',
+      ),
+    );
+    const reorderedModelResponse = JSON.parse(
+      await readFile(
+        new URL(
+          '../../../../contracts/automatic-recommendations/v1/examples/scorer-reordered-model-response.json',
+          import.meta.url,
+        ),
+        'utf8',
+      ),
+    );
+    expect(
+      reconcileAutomaticScorerResponse(
+        scorerVectorRequest,
+        reorderedModelResponse,
+      ),
+    ).toMatchObject({ scores: [{ candidateId: 'product:20732' }] });
     for (const invalidResponse of [
       { ...scorerResponse, requestId: 'different-request' },
       {
@@ -311,6 +349,33 @@ describe('automatic recommendation wire contract', () => {
           },
         ],
       }),
+    ).toThrow();
+  });
+
+  it('binds modifier actions to the requested parent cart line', async () => {
+    const { validateAutomaticRecommendationBinding } = await import(
+      contractModulePath
+    );
+    const root = new URL(
+      '../../../../contracts/automatic-recommendations/v1/examples/',
+      import.meta.url,
+    );
+    const request = JSON.parse(
+      await readFile(new URL('modifier-upsell-request.json', root), 'utf8'),
+    );
+    const mismatchedResponse = JSON.parse(
+      await readFile(
+        new URL('adversarial/modifier-parent-mismatch-response.json', root),
+        'utf8',
+      ),
+    );
+
+    expect(() =>
+      validateAutomaticRecommendationBinding(
+        'modifier_upsell',
+        request,
+        mismatchedResponse,
+      ),
     ).toThrow();
   });
 

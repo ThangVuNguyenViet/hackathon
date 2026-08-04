@@ -136,6 +136,8 @@ void main() {
               AutomaticRecommendationImpressionPayload.parse,
           'examples/adversarial/recommended-nonmonotonic-counts.json':
               AutomaticRecommendationResponsePayload.parse,
+          'examples/adversarial/modifier-four-proposals.json':
+              AutomaticRecommendationResponsePayload.parse,
         };
 
     for (final entry in negativeExamples.entries) {
@@ -170,6 +172,20 @@ void main() {
     expect(
       reconcileAutomaticScorerResponse(request, response).toJson(),
       response,
+    );
+    final reorderedModelResponse =
+        jsonDecode(
+              File.fromUri(
+                root.resolve('scorer-reordered-model-response.json'),
+              ).readAsStringSync(),
+            )
+            as Map<String, dynamic>;
+    expect(
+      reconcileAutomaticScorerResponse(
+        request,
+        reorderedModelResponse,
+      ).toJson(),
+      reorderedModelResponse,
     );
     for (final invalid in [
       {...response, 'requestId': 'mismatch'},
@@ -222,6 +238,60 @@ void main() {
           payload: request,
         ),
       ),
+    );
+  });
+
+  test('Dart identity digest matches the published cross-runtime vector', () {
+    final contractRoot = Directory.current.parent.parent.uri.resolve(
+      'contracts/automatic-recommendations/v1/',
+    );
+    final manifest =
+        jsonDecode(
+              File.fromUri(
+                contractRoot.resolve('contract-manifest.json'),
+              ).readAsStringSync(),
+            )
+            as Map<String, dynamic>;
+    final vector = manifest['identityDigestVector'] as Map<String, dynamic>;
+
+    expect(
+      automaticRecommendationIdentityDigest(
+        operationPath: vector['operationPath'] as String,
+        identityType: vector['identityType'] as String,
+        payload: vector['payload'],
+      ),
+      vector['sha256'],
+    );
+  });
+
+  test('Dart modifier binding requires the requested parent cart line', () {
+    final root = Directory.current.parent.parent.uri.resolve(
+      'contracts/automatic-recommendations/v1/examples/',
+    );
+    final request =
+        jsonDecode(
+              File.fromUri(
+                root.resolve('modifier-upsell-request.json'),
+              ).readAsStringSync(),
+            )
+            as Map<String, dynamic>;
+    final mismatch =
+        jsonDecode(
+              File.fromUri(
+                root.resolve(
+                  'adversarial/modifier-parent-mismatch-response.json',
+                ),
+              ).readAsStringSync(),
+            )
+            as Map<String, dynamic>;
+
+    expect(
+      () => validateAutomaticRecommendationBinding(
+        AutomaticRecommendationType.modifierUpsell,
+        request,
+        mismatch,
+      ),
+      throwsA(isA<AutomaticRecommendationContractException>()),
     );
   });
 }

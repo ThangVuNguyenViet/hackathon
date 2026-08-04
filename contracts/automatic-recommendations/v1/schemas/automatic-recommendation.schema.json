@@ -379,7 +379,7 @@
         },
         {
           "if": { "type": "object", "properties": { "recommendationType": { "const": "modifier_upsell" } } },
-          "then": { "type": "object", "properties": { "proposals": { "type": "array", "items": { "type": "object", "properties": { "action": { "$ref": "#/$defs/ModifierAction" } } } } } },
+          "then": { "type": "object", "properties": { "proposals": { "type": "array", "maxItems": 3, "items": { "type": "object", "properties": { "action": { "$ref": "#/$defs/ModifierAction" } } } } } },
           "else": { "type": "object", "properties": { "proposals": { "type": "array", "items": { "type": "object", "properties": { "action": { "$ref": "#/$defs/ProductAction" } } } } } }
         }
       ]

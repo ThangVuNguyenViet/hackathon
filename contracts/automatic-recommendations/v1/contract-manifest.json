@@ -1,6 +1,15 @@
 {
   "schemaVersion": "kfc-automatic-contract-manifest-v1",
-  "canonicalDigest": "57117c33245e6060b4cdf5dc58a0ceabff22e516d4b4eb38aecafa2ca2d9025e",
+  "canonicalDigest": "5998c1d2b50c09e14d144fbc327a885e71245c7fcbb3cb1f7b23d0ea8a547dbc",
+  "identityDigestVector": {
+    "operationPath": "/v1/recommendations/local-favorites",
+    "identityType": "local_favorite",
+    "payload": {
+      "cart": { "revision": "cart-1" },
+      "storeId": "KFCVN0002"
+    },
+    "sha256": "f641fbc337aa6d16eed2aa1efc7ab5c90a9b11b834da5ca3605166d12a172361"
+  },
   "representations": {
     "node": "services/kfc-agent-backend/src/recommendations/contracts/automatic-recommendation.ts",
     "python": "services/kfc-recommendation-scorer/src/kfc_recommendation_scorer/contract.py",
@@ -35,6 +44,7 @@
     { "file": "examples/problem-503.json", "kind": "problem_details" },
     { "file": "examples/inspection-response.json", "kind": "inspection_response" },
     { "file": "examples/scorer-request.json", "kind": "scorer_request" },
-    { "file": "examples/scorer-response.json", "kind": "scorer_response" }
+    { "file": "examples/scorer-response.json", "kind": "scorer_response" },
+    { "file": "examples/scorer-reordered-model-response.json", "kind": "scorer_response" }
   ]
 }

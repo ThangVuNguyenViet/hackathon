@@ -2,6 +2,8 @@ import 'dart:convert';
 
 import 'package:crypto/crypto.dart';
 
+part 'automatic_recommendation_binding.dart';
+
 enum AutomaticRecommendationType {
   localFavorite,
   forYou,
@@ -11,7 +13,7 @@ enum AutomaticRecommendationType {
 
 const automaticRecommendationSchemaVersion = 'kfc-automatic-recommendation-v1';
 const automaticRecommendationContractDigest =
-    '57117c33245e6060b4cdf5dc58a0ceabff22e516d4b4eb38aecafa2ca2d9025e';
+    '5998c1d2b50c09e14d144fbc327a885e71245c7fcbb3cb1f7b23d0ea8a547dbc';
 
 const automaticRecommendationOperationPaths = {
   AutomaticRecommendationType.localFavorite:
@@ -149,7 +151,9 @@ AutomaticScorerResponsePayload reconcileAutomaticScorerResponse(
   if (request['requestId'] != responseWire['requestId']) {
     _Validator.fail('scorer response request identity does not match');
   }
-  if (jsonEncode(request['model']) != jsonEncode(responseWire['model'])) {
+  final sameModel =
+      _canonicalJson(request['model']) == _canonicalJson(responseWire['model']);
+  if (!sameModel) {
     _Validator.fail('scorer response model binding does not match');
   }
   final candidateIds = (request['candidates'] as List)

@@ -336,6 +336,26 @@ def parse_automatic_recommendation_response(value: Any) -> AutomaticRecommendati
     return AutomaticRecommendationResponsePayload(payload)
 
 
+def validate_automatic_recommendation_binding(
+    recommendation_type: str, request_value: Any, response_value: Any
+) -> AutomaticRecommendationResponsePayload:
+    request = parse_automatic_recommendation_request(recommendation_type, request_value).to_wire()
+    response = parse_automatic_recommendation_response(response_value)
+    response_wire = response.to_wire()
+    if request["requestId"] != response_wire["requestId"]:
+        _fail("recommendation response request identity does not match")
+    if response_wire["recommendationType"] != recommendation_type:
+        _fail("recommendation response type does not match the request")
+    if recommendation_type == "modifier_upsell":
+        parent_cart_line_id = request["parentCartLineId"]
+        if any(
+            proposal["action"]["parentCartLineId"] != parent_cart_line_id
+            for proposal in response_wire["proposals"]
+        ):
+            _fail("modifier actions must target the requested parent line")
+    return response
+
+
 def _event_base(value: Any, keys: Iterable[str], path: str) -> Mapping[str, Any]:
     payload = _exact_object(value, keys, path)
     if payload["schemaVersion"] != "kfc-automatic-recommendation-event-v1":
