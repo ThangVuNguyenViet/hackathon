@@ -1,9 +1,9 @@
 {
-  "schemaVersion": "kfc-synthetic-world-qualification-proof-v1",
-  "sourceSha": "ba4f981b3b892548ac78a6a21d2c41d47b7a07ae",
+  "schemaVersion": "kfc-synthetic-world-qualification-proof-v2",
+  "sourceSha": "6b25a0e0f7f0172bcc8a6545c2d95807a1f7f24d",
   "qualification": {
     "workingDirectory": "services/kfc-recommendation-simulator",
-    "command": "/usr/bin/time -l uv run --locked --no-dev kfc-recommendation-simulator generate --profile qualification --output /tmp/kfc-round2-qualification.uRNt4m --world-revision synthetic-causal-world-v3 > /tmp/kfc-round2-qualification.uRNt4m/qualification-command.stdout 2> /tmp/kfc-round2-qualification.uRNt4m/qualification-time.log",
+    "command": "/usr/bin/time -l uv run --locked --no-dev kfc-recommendation-simulator generate --profile qualification --output /tmp/kfc-round3-qualification.egnXw8 --world-revision synthetic-causal-world-v4",
     "exitCode": 0,
     "profile": {
       "journeysPerSeed": 50000,
@@ -12,16 +12,24 @@
     }
   },
   "manifest": {
-    "path": "synthetic-causal-world-v3/manifests/synthetic-world.json",
-    "sha256": "606e52727906900cdb94017e7a5517fd00893f7c64a2c88be4fa83e97c3f08dd",
-    "worldDigest": "08a6a2d99753b860287f3b9a423a96e344ce758af81302f3663539c8b14cdcc5"
+    "path": "synthetic-causal-world-v4/manifests/synthetic-world.json",
+    "schemaVersion": "kfc-synthetic-world-manifest-v4",
+    "sha256": "3e3a9804bb70662fb9a9e410a8ff85ee792ffd35e788922068633ea07e67e24c",
+    "worldDigest": "c60c0976824bf72c4675d88c22a23f00d5cb234295618e265e65049a7546f957"
+  },
+  "candidateRelevanceDefinition": {
+    "version": "candidate-singleton-value-v1",
+    "sha256": "08e52f202a135b2e2c8300fd5b0ff2c5c7b9d36196cc5fcf4c3fe85d98a09bfe",
+    "intervention": "render_only_this_eligible_candidate",
+    "gradedRelevance": "expected retained incremental value in VND",
+    "sharedExogenous": "sha256 candidate-keyed draws independent of ranking policy"
   },
   "environment": {
     "pythonImplementation": "CPython",
     "pythonVersion": "3.11.14",
     "pythonExecutableVersion": "3.11.14",
     "pyarrowVersion": "23.0.1",
-    "uvLockSha256": "7a454f77fcc11ef22046670a44f3c2d8de942ee896c35c94649d1f9005cfc65d",
+    "uvLockSha256": "d312f42cd5e5fd74e99812eb46eaa89e47e04d2ea3cf131cde492d6d03bf2192",
     "parquetWriter": {
       "formatVersion": "2.6",
       "dataPageVersion": "2.0",
@@ -35,14 +43,17 @@
     "source/catalog.parquet": 2880,
     "source/population.parquet": 1600,
     "source/journeys.parquet": 500000,
-    "model-visible/training-examples.parquet": 3182171,
+    "model-visible/training-examples.parquet": 3143827,
     "evaluation/opportunities.parquet": 1500000,
-    "evaluation/exposures.parquet": 800018,
+    "evaluation/exposures.parquet": 801654,
     "evaluation/journeys.parquet": 500000,
+    "evaluation/candidate-relevance.parquet": 3143827,
     "oracle/potential-outcomes.parquet": 4000000,
     "traffic/arrivals-per-minute.parquet": 25077,
     "traffic/scorer-candidate-shapes.parquet": 13,
-    "trainingLoaderVisibleRows": 2705961
+    "trainingLoaderVisibleRows": 2704346,
+    "untouchedCandidateRelevanceLoaderRows": 439481,
+    "unshownModelVisibleCandidateRows": 2342173
   },
   "invalidCounters": {
     "invalidFulfilmentMode": 0,
@@ -51,16 +62,56 @@
     "invalidShownLabel": 0,
     "missingTerminalJourney": 0
   },
+  "candidateRelevanceAudit": {
+    "opportunityCandidateCountSum": 3143827,
+    "candidateKeyMismatches": 0,
+    "duplicateCandidateKeyViolations": 0,
+    "artifactDigestViolations": 0,
+    "causalValueIdentityViolations": 0,
+    "expectedValueViolations": 0,
+    "probabilityBoundViolations": 0,
+    "removalStateViolations": 0,
+    "unshownNonNullLabelViolations": 0,
+    "trainingForbiddenFieldsPresent": [],
+    "distinctGradedRelevanceValues": 28160
+  },
+  "untouchedPairedRankingEvidence": {
+    "note": "Diagnostic modelProxy is the pre-existing automatic feature formula without the opportunity-constant latent affinity term; these intervals prove evaluability, not model qualification.",
+    "local_favorite": {
+      "opportunityCount": 13168,
+      "modelProxyNdcgAtK95": [0.7199125312917083, 0.7228750399761666, 0.725837548660625],
+      "randomNdcgAtK95": [0.8124869751847628, 0.8152697594316222, 0.8180525436784816],
+      "popularityNdcgAtK95": [0.6863841853324951, 0.6893726971160287, 0.6923612088995622]
+    },
+    "for_you": {
+      "opportunityCount": 39926,
+      "modelProxyNdcgAtK95": [0.7585990437722194, 0.7592009208040671, 0.7598027978359148],
+      "randomNdcgAtK95": [0.8153159078040677, 0.8168978718118122, 0.8184798358195566],
+      "popularityNdcgAtK95": [0.5890138442392587, 0.5897791215319685, 0.5905443988246784]
+    },
+    "modifier_upsell": {
+      "opportunityCount": 20249,
+      "modelProxyNdcgAtK95": [0.3846153846153846, 0.3846153846153846, 0.3846153846153846],
+      "randomNdcgAtK95": [0.6922240197683338, 0.6952252153002807, 0.6982264108322276],
+      "popularityNdcgAtK95": [0.3846153846153846, 0.3846153846153846, 0.3846153846153846]
+    },
+    "smart_cross_sell": {
+      "opportunityCount": 49234,
+      "modelProxyNdcgAtK95": [0.9634209814169211, 0.9637253340804401, 0.9640296867439592],
+      "randomNdcgAtK95": [0.959287182793642, 0.959679213987115, 0.960071245180588],
+      "popularityNdcgAtK95": [0.9189813316758934, 0.9194451450682029, 0.9199089584605123]
+    }
+  },
   "cardinalityAndComposerAudit": {
-    "readySingleActionCount": 488431,
+    "readySingleActionCount": 487011,
     "singleActionCardinalityViolations": 0,
     "readyModifierParentBindingViolations": 0,
     "renderedModifierNonPositivePriceViolations": 0,
-    "emptySmartCount": 274728,
+    "emptySmartCount": 274239,
     "emptySmartWithSlateViolations": 0,
-    "readySmartCount": 99964,
-    "readySmartThreeCount": 88269,
-    "readySmartFourCount": 11695,
+    "readySmartCount": 100945,
+    "readySmartThreeCount": 89137,
+    "readySmartFourCount": 11808,
     "readySmartInvalidCardinality": 0,
     "smartComposerConstraintViolations": 0,
     "smartFourWithoutDeclaredRequestViolations": 0,
@@ -78,12 +129,12 @@
     "oracle/potential-outcomes.parquet": 0
   },
   "resources": {
-    "wallSeconds": 456.65,
-    "userCpuSeconds": 358.46,
-    "systemCpuSeconds": 47.94,
-    "maximumResidentSetBytes": 4791779328,
+    "wallSeconds": 362.55,
+    "userCpuSeconds": 327.07,
+    "systemCpuSeconds": 25.07,
+    "maximumResidentSetBytes": 4678909952,
     "swaps": 0,
-    "diskUsageBytes": 474030080,
-    "totalArtifactBytes": 471694943
+    "diskUsageBytes": 539688960,
+    "totalArtifactBytes": 535467225
   }
 }

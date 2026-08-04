@@ -1,122 +1,153 @@
-# Task 3 repair report — synthetic causal world, round 2
+# Task 3 repair report — evaluation candidate relevance, round 3
 
 ## Result
 
-Repair round 2 is complete in implementation checkpoint
-`ba4f981b3b892548ac78a6a21d2c41d47b7a07ae`
-(`fix(recommendations): enforce placement composer cardinality`). It follows
-round-1 implementation checkpoint
-`f9540b8efc6e0042358217bf245980b80f14a63b`.
+Repair round 3 is complete at exact implementation checkpoint
+`6b25a0e0f7f0172bcc8a6545c2d95807a1f7f24d`
+(`fix(recommendations): add evaluation candidate relevance`). It adds the
+evaluation-only candidate outcome contract required by the Task 4 sequential
+blocker without moving hidden labels into training or changing any Task 4
+model, calibrator, threshold, gate, or bundle behavior.
 
-The two remaining critical cardinality defects are repaired without regressing
-the treatment-specific counterfactuals, stateful journey lifecycle, exact
-policy mechanisms, information boundaries, drift, traffic, or locked
-reproduction fixes from round 1.
+The prior round-1 and round-2 causal-world, exact-policy, physical-boundary,
+drift, reproducibility, single-action, and Smart composer repairs remain
+intact. The fresh 500,000-journey v4 world passed all old audits and the new
+candidate-relevance audits.
 
-## C4 — Single-action placements
+This remains synthetic-only qualification evidence. It does not claim
+compatibility with real KFC data or authorize real-customer exposure.
 
-- Local Favorite, For You, and Modifier Upsell now compose exactly one rendered
-  action after condition-specific ranking.
-- A ready Modifier Upsell is attached to the exact cart line created by the
-  accepted starter and has a positive price impact.
-- Generated-world tests inspect real opportunity and exposure artifacts for
-  all three types, position 1, exact parent identity, and positive modifier
-  price.
-- The final 500,000-journey audit found 488,431 ready single-action placements,
-  zero cardinality violations, zero ready-modifier parent-binding violations,
-  and zero non-positive rendered modifier prices.
+## Evaluation-only candidate relevance
 
-## C5 — Shared valid Smart composer
+- Added `evaluation/candidate-relevance.parquet`, physically separate from
+  `model-visible/training-examples.parquet` and `oracle/`.
+- Emits exactly one row for every unique eligible candidate at every factual
+  opportunity, including candidates not shown by the factual logging policy.
+- Binds seed, split, journey, opportunity, recommendation type, candidate,
+  price, outcome reference, probabilities, realized potential events,
+  realized incremental VND, expected retained VND, and graded relevance.
+- Uses manifest-bound `candidate-singleton-value-v1`: render only the named
+  eligible candidate; use the existing singleton selection, one-selection
+  checkout, and post-checkout removal equations; value is price only when the
+  candidate is selected, checkout completes, and the candidate is not removed.
+- Candidate-keyed SHA-256 exogenous draws do not depend on model, random, or
+  popularity ranking policy, so policy comparisons share the same candidate
+  potential outcomes.
+- `gradedRelevance` is expected retained incremental VND. It supplies a
+  complete, non-binary ideal-DCG target without exposing latent affinity or
+  policy condition fields.
+- Smart eligibility now removes duplicate candidate identities before any
+  policy ranking/composition. This makes the eligible set a true set and keeps
+  training, opportunity counts, and relevance keys exactly aligned.
 
-- Every automatic, uniform-random, popularity, and active-ablation path first
-  ranks its eligible candidates, then uses the same deterministic composer.
-- Smart composition accepts only positive-score candidates, distinct
-  categories, and a total price within the remaining `250,000 VND` budget.
-- Three members is the default valid offer. A fourth is allowed only when size
-  four was requested and the fourth member remains positive-score,
-  category-diverse, and within remaining budget.
-- A one- or two-member composition becomes typed
-  `insufficient_composable_candidates` empty evidence with no slate or
-  exposures. The two-candidate scorer request remains an input-shape fixture,
-  never a rendered offer.
-- Oracle paths persist eligible candidate facts and condition-ranked IDs.
-  Tests independently recompose every policy path. Uniform-random output-slate
-  and member propensities are enumerated across the complete small candidate
-  permutation set, so category/budget skips do not retain the invalid
-  `1 / P(n,k)` shortcut.
-- The manifest declares ranking-before-composition, single-action types,
-  minimum/default/maximum Smart cardinality, budget ceiling, insufficient
-  result, and the exact fourth-member rule.
+## Freeze and information boundaries
+
+- Added `load_untouched_candidate_relevance_table`, which first verifies the
+  selected-configuration path, digest, and physical freeze evidence token,
+  then verifies world manifest, artifact SHA-256, and exact immutable Arrow
+  schema before returning only `untouched_test` rows.
+- Strengthened freeze verification so a fabricated dataclass with a correct
+  configuration digest but missing or mismatched evidence token cannot open
+  untouched evaluation.
+- Added every candidate-relevance/potential-value field to the training
+  forbidden-field set. A fresh Python process injecting `gradedRelevance` into
+  the training Parquet fails with `forbidden training field`.
+- Model-visible unshown rows remain deliberately unlabelled. The final audit
+  found 2,342,173 unshown rows and zero non-null
+  `selectedThroughCheckout` violations.
+- No training, feature encoding, model fitting, calibration, threshold,
+  champion selection, or Task 4 gate path imports or loads the new surface.
+
+## Full-set ranking support
+
+- `evaluate_opportunity_ndcg` now accepts an explicit, separate
+  `relevance_by_candidate` map while retaining the old fail-closed behavior for
+  incomplete factual labels.
+- It rejects duplicate eligible identities and missing candidate relevance,
+  then computes ideal DCG over the complete eligible set with real-valued
+  relevance.
+- `evaluate_paired_policy_ndcg` computes policy NDCG intervals and paired
+  reference-policy differences from the same opportunity/candidate outcomes.
+- Dedicated tests prove nontrivial model/random/popularity ordering and paired
+  differences. The final full-scale diagnostic evaluated 122,577 untouched
+  opportunities across all four types and emitted separate model-proxy,
+  random, popularity, and paired 95% intervals. These demonstrate that the
+  surface is evaluable; they are not Task 4 model-qualification results.
 
 ## Strict TDD evidence
 
-1. The generated single-action test failed because ready starters/modifiers
-   rendered three members. Target size one made it green.
-2. The generated Smart test failed because undersized ready offers existed and
-   no typed insufficient state existed. Shared composition and fail-closed
-   minimum cardinality made it green.
-3. The cross-policy composer test failed because exposure evidence did not
-   persist composer score. Persisted score plus shared constraints made it
-   green.
-4. The oracle rank/composer test failed because ranked candidate facts were not
-   persisted. Adding those facts exposed the old random propensity shortcut;
-   exact enumerated slate/member propensity computation made it green.
-5. The manifest contract test failed on schema v2 and missing composer rules.
-   Manifest v3 and explicit composer policy made it green.
+1. The candidate-surface tests first failed because
+   `evaluation/candidate-relevance.parquet` did not exist. Schema, generator,
+   causal identity, and manifest binding made them green.
+2. Full-key uniqueness then failed with 28 duplicate Smart candidate rows in a
+   512-journey fixture. Deduplicating eligible Smart identities before ranking
+   made candidate keys, training keys, and opportunity candidate totals equal.
+3. Evaluator-boundary tests first failed because the dedicated relevance loader
+   did not exist. Freeze-token, digest, and immutable-schema verification made
+   missing-token, digest-tamper, and schema-tamper cases green.
+4. The fresh-process leakage test first received only a generic schema error.
+   Explicit candidate-relevance forbidden fields made it fail at the intended
+   information boundary.
+5. Ranking tests first failed because separate graded relevance and paired
+   policy evaluation were unsupported. Complete-map NDCG and paired interval
+   evaluation made all legacy and new ranking tests green.
+6. The manifest test failed on v3 and the absent artifact/definition. Manifest
+   v4 now binds the physical surface, schema, artifact digest, causal definition
+   digest, and policy-independent exogenous rule.
 
-## Final qualification and retained proof
+## Final 500,000-journey proof
 
-The exact final-code qualification proof is retained at
+The retained machine proof is
 `.superpowers/sdd/2026-08-04-kfc-automatic-recommendation-big-bang/task-3-qualification-proof.json`.
-Its SHA-256 digest is
-`24de11034a1209d5a6ffd946b9d8cdd3828985de80bfdad252e6891aa007679e`.
+Its SHA-256 is
+`e8d089426da2e3fbeb3597a3c6ded43ef5cc9213985f98c59ea8f34e8a748de9`.
 
-The machine-readable artifact binds the exact command, implementation SHA,
-manifest path and digest, world digest, interpreter/PyArrow/lock/writer
-settings, artifact and training-loader row counts, invalid counters,
-cardinality/composer audits, zero-value-checkout audits, and resource metrics.
-No generated Parquet world is committed.
+The run used the exact implementation SHA above and generated ten seeds of
+50,000 journeys each:
 
-Final proof summary:
-
-- 500,000 source/evaluation journeys;
-- 1,500,000 ordered factual opportunities;
-- 800,018 rendered exposure members;
-- 3,182,171 model-visible rows and 2,705,961 loader-visible rows;
-- 4,000,000 paired oracle rows;
-- 274,728 typed-empty Smart results;
-- 88,269 ready three-member and 11,695 ready four-member Smart offers;
-- zero invalid, cardinality, parent, price, composer, undeclared-fourth,
-  empty-with-slate, and zero-value-checkout violations;
+- 500,000 journeys, 1,500,000 opportunities, 801,654 exposures, and 4,000,000
+  paired oracle rows;
+- 3,143,827 model-visible rows, exactly 3,143,827 candidate-relevance rows,
+  and exactly 3,143,827 summed opportunity candidates;
+- 2,704,346 training-loader rows and 439,481 freeze-gated untouched relevance
+  rows;
+- zero candidate-key mismatches, duplicate candidate keys, artifact-digest
+  violations, causal-value violations, expected-value violations,
+  probability-bound violations, invalid removal states, training forbidden
+  fields, or unshown-label violations;
+- 28,160 distinct graded-relevance values under exactly one version/digest/
+  intervention tuple;
+- zero old invalid-data, cardinality, parent, price, Smart composer,
+  undeclared-fourth, empty-with-slate, and zero-value-checkout violations;
 - manifest SHA-256
-  `606e52727906900cdb94017e7a5517fd00893f7c64a2c88be4fa83e97c3f08dd`;
+  `3e3a9804bb70662fb9a9e410a8ff85ee792ffd35e788922068633ea07e67e24c`;
 - world digest
-  `08a6a2d99753b860287f3b9a423a96e344ce758af81302f3663539c8b14cdcc5`;
-- 456.65 seconds wall time;
-- 4,791,779,328-byte maximum RSS, zero swaps;
-- 474,030,080-byte generated-world disk usage.
+  `c60c0976824bf72c4675d88c22a23f00d5cb234295618e265e65049a7546f957`;
+- candidate-relevance artifact SHA-256
+  `67ccbc5311c2925d0f576560fc8785ede435fdd16374debbf0e79b37543d325b`;
+- 362.55 seconds wall time, 4,678,909,952-byte maximum RSS, zero swaps,
+  539,688,960-byte generated-world disk usage, and 535,467,225 artifact bytes.
 
 ## GREEN gates
 
 - `uv run ruff check .` — PASS.
 - `uv run python -m compileall -q src tests` — PASS.
-- `uv run python -m unittest discover -s tests -v` — PASS: 23 simulator
+- `uv run python -m unittest discover -s tests -v` — PASS: 46 simulator
   tests.
 - `PYTHONPATH=src python3 -m compileall -q src tests` in the scorer — PASS.
 - `PYTHONPATH=src python3 -m unittest discover -s tests -v` in the scorer —
   PASS: 9 tests.
-- `npm run check:automatic-recommendation-authority` — PASS: 5 tests.
+- `npm run check:automatic-recommendation-authority` in the backend — PASS: 5
+  tests.
 - `git diff --check` — PASS.
-- Machine proof versus final manifest and independent zero-audit contracts —
-  PASS.
+- Machine proof versus manifest, full candidate-key reconciliation, frozen
+  loader, causal identity, leakage, cardinality/composer, and zero-value
+  contracts — PASS.
 
-## Boundaries and cleanup
+## Cleanup and handoff
 
-- Model-visible artifacts still exclude condition, terminal, treatment-path,
-  treatment-revenue, latent, and oracle fields.
-- Random/popularity remain offline evidence conditions and add no runtime
-  recommendation authority.
-- Large qualification and smoke worlds plus generated Python/Ruff caches were
-  removed after proof extraction.
-- The two unrelated untracked audit reports were preserved and excluded from
-  both round-2 checkpoints.
+- No generated Parquet world is committed.
+- The two unrelated untracked audit reports remain preserved and excluded.
+- Task 4 can now consume the dedicated freeze-gated relevance surface and
+  re-run its unchanged smoke, development, and qualification gates. This Task 3
+  repair does not claim that Task 4 has passed.
