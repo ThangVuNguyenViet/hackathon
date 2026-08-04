@@ -8,10 +8,10 @@ exists. This task did not create, copy, relabel, or substitute a model bundle or
 baseline. The scorer remains unready and returns a typed retryable `503` while the
 bundle is missing or invalid. No runtime recommendation fallback exists.
 
-The local serving and persistence contracts pass their focused gates. Positive
-native-model inference and a ready scorer cannot be qualified until a future Task
-4 run atomically emits a real all-four bundle; that scientific limitation is
-preserved instead of bypassed.
+The local serving and persistence contracts pass their focused gates. A fixture
+marked explicitly test-only proves the future all-four positive load, golden
+warmup, readiness, and scoring path without being usable as production
+qualification. The scientific limitation is preserved instead of bypassed.
 
 ## Implemented boundary
 
@@ -22,22 +22,43 @@ preserved instead of bypassed.
   request identity, candidate coverage, response model provenance, and reordered
   candidate reconciliation. The canonical wire manifest was not changed.
 - The Python 3.11 scorer has a minimal standard-library HTTP service and non-root
-  container. Its loader verifies the exact expected bundle digest, atomic four-type
-  champion inventory, every payload digest, and immutable qualified evidence
-  before a bundle can be considered structurally available.
+  container. Its loader recomputes the exact Task 4 canonical binding digest and
+  verifies the contract, feature, composer, qualification evidence, all payload
+  digests, and atomic four-type champion inventory before availability.
+- All four champion runtimes load their native estimator, feature encoder,
+  selection/joint heads, calibrators, threshold, and golden vectors. Any tampered
+  binding, payload, or golden prediction keeps readiness false and scoring at a
+  typed retryable `503`; no fallback scorer exists.
 - Readiness never turns true for a manifest alone: native predictors and their
   golden vectors must load. Because Task 4 emitted no bundle/runtime, the current
   image stays typed-unready rather than installing a substitute.
 - Main is pinned to Node 24 in its engine contract, Node type definitions, and
   container base. The verification host runs Node 26.5.0, so the Node 24 image
   itself was not executed locally.
+- Main registers all four decision endpoints plus impression and outcome event
+  endpoints. A process-owned provider participates in readiness and shutdown.
+  Because trusted order/catalog/history/exposure ports are not configured in the
+  current composition root, its production default is explicitly typed-unavailable;
+  request bodies are never promoted into trusted state.
+- The AWS runtime factory requires a real decision-engine factory and complete
+  technical-evidence projector, and owns one persistent scorer client, S3 client,
+  DynamoDB clients, readiness probes, and coordinated close.
 - Decision and event evidence use an immutable content-addressed object write
   before a transactional ledger commit. Same-payload retries remain stable across
   wall-clock changes. A changed binding conflicts without rewriting evidence.
-- S3 contracts use create-only `If-None-Match: *` writes and digest metadata.
+- S3 contracts use create-only `If-None-Match: *` writes, mandatory version IDs,
+  exact byte digest/size metadata, version-aware pagination, and exact-version
+  reads.
   DynamoDB contracts commit the idempotency binding and decision/event record in
   one conditional transaction with strongly consistent replay checks.
-- Orphan reconciliation scans immutable evidence and repairs missing transactions.
+- Orphan reconciliation scans immutable versions, re-hashes exact bytes, and
+  verifies key, version, digest, size, envelope, and canonical typed payload before
+  repairing missing transactions.
+- Canonical decision evidence binds request/cart digests and revisions plus full
+  candidate, eligibility, feature, scoring/calibration, composition, release, and
+  trace sections. Recommended responses cannot commit without a complete technical
+  evidence projector. Events expose typed/queryable journey, channel, action,
+  position, revision, digest, and time fields.
   In-memory production-shaped adapters support deterministic failure injection and
   local durability tests without an AWS deployment.
 - Every new source module remains below the 900-line ceiling.
@@ -62,15 +83,15 @@ The implementation followed explicit RED/GREEN cycles for:
 
 ## Fresh verification
 
-- Focused Node serving/core/authority suites: **32 passed**, 0 failed.
-- Complete Python scorer suite: **12 passed**, 0 failed.
+- Focused Node serving/core/authority suites: **21 passed**, 0 failed.
+- Complete Python scorer suite: **14 passed**, 0 failed.
 - TypeScript typecheck: passed.
 - Maintained-file format gate: passed.
 - Strict ESLint warning budget: preserved at 542 warnings across 161 legacy files;
   Task 5 added no warning budget.
 - Scoped Ruff format and lint for all Task 5 Python files: passed.
 - Python bytecode compilation: passed.
-- Architecture check: **468 files**, 900-line ceiling, no baseline growth.
+- Architecture check: **471 files**, 900-line ceiling, no baseline growth.
 - `git diff --check`: passed.
 
 The repository-wide backend test command also completed: **2,527 passed, 12
@@ -85,9 +106,10 @@ Docker build validation could not run because the local Docker daemon is stopped
 
 ## Remaining scientific gate
 
-There is deliberately no ready scorer and no positive native-inference result:
-Task 4 emitted no qualified bundle. A later model iteration must pass the fixed
-scientific gates, emit one atomic four-type bundle, load all native predictors and
-golden vectors, and then rerun serving readiness/contract/latency qualification.
-Until then, the only valid production-shaped behavior is typed unavailability with
-durable empty/no-qualified-model evidence and no fallback.
+There is deliberately no production-ready scorer: Task 4 emitted no qualified
+bundle. The explicitly non-production fixture proves that a future valid bundle
+can load all native predictors and golden vectors and score canonically, while
+tamper tests prove the same path fails closed. A later model iteration must pass
+the fixed scientific gates and emit the real atomic bundle before production
+readiness/contract/latency qualification. Until then, the only valid
+production-shaped behavior is typed unavailability and no fallback.

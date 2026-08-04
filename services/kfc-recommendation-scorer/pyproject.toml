@@ -7,7 +7,11 @@ name = "kfc-recommendation-scorer"
 version = "0.1.0"
 description = "Fail-closed localhost scorer for qualified KFC recommendation bundles"
 requires-python = "==3.11.14"
-dependencies = []
+dependencies = [
+  "lightgbm==4.6.0",
+  "numpy==2.3.2",
+  "xgboost==3.0.2",
+]
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/kfc_recommendation_scorer"]

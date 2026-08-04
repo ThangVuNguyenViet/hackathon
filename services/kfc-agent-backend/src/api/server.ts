@@ -19,6 +19,7 @@ export function buildServer(options: BuildServerOptions = {}): FastifyInstance {
   });
 
   server.addHook('onClose', async () => {
+    await options.automaticRecommendations?.close();
     await options.agentTracer?.flush();
   });
 

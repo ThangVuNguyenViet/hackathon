@@ -33,6 +33,53 @@ export function registerRoutes(server: FastifyInstance, options: RouteOptions = 
     const query = z.object({ deep: z.enum(['0', '1']).optional() }).parse(request.query);
     return send(reply, await handlers.ready(query.deep === '1'));
   });
+  const recommendationRoutes = {
+    '/v1/recommendations/local-favorites': 'local_favorite',
+    '/v1/recommendations/for-you': 'for_you',
+    '/v1/recommendations/modifier-upsells': 'modifier_upsell',
+    '/v1/recommendations/smart-cross-sells': 'smart_cross_sell',
+  } as const;
+  for (const [path, type] of Object.entries(recommendationRoutes)) {
+    server.post(path, async (request, reply) => {
+      if (!options.automaticRecommendations) return recommendationUnavailable(reply);
+      try {
+        return reply.code(200).send(await options.automaticRecommendations.decide(type, request.body));
+      } catch (error) {
+        if (error instanceof z.ZodError) {
+          return reply.code(400).send({
+            type: 'https://kfc.example/problems/invalid-request',
+            title: 'Invalid recommendation request',
+            status: 400,
+            code: 'invalid_request',
+            retryable: false,
+          });
+        }
+        return recommendationUnavailable(reply);
+      }
+    });
+  }
+  server.post('/v1/recommendations/:recommendationId/impressions', async (request, reply) => {
+    if (!options.automaticRecommendations) return recommendationUnavailable(reply);
+    const params = z.object({ recommendationId: z.string().min(1) }).parse(request.params);
+    try {
+      await options.automaticRecommendations.recordImpression(params.recommendationId, request.body);
+      return reply.code(204).send();
+    } catch (error) {
+      if (error instanceof z.ZodError) return reply.code(400).send({ errorCode: 'invalid_request' });
+      return recommendationUnavailable(reply);
+    }
+  });
+  server.post('/v1/recommendations/:recommendationId/outcomes', async (request, reply) => {
+    if (!options.automaticRecommendations) return recommendationUnavailable(reply);
+    const params = z.object({ recommendationId: z.string().min(1) }).parse(request.params);
+    try {
+      await options.automaticRecommendations.recordOutcome(params.recommendationId, request.body);
+      return reply.code(204).send();
+    } catch (error) {
+      if (error instanceof z.ZodError) return reply.code(400).send({ errorCode: 'invalid_request' });
+      return recommendationUnavailable(reply);
+    }
+  });
   if (options.lifecycle?.environment === 'sandbox') {
     server.post('/admin/lifecycle/sessions/:sessionId/instances', async (request, reply) => {
       const params = z.object({ sessionId: z.string().min(1) }).parse(request.params);
@@ -207,6 +254,16 @@ export function registerRoutes(server: FastifyInstance, options: RouteOptions = 
   server.post('/dashboard/sessions/:sessionId/resume-ai', async (request, reply) => {
     const params = z.object({ sessionId: z.string() }).parse(request.params);
     return send(reply, await handlers.dashboardResumeAi(params.sessionId, request.body));
+  });
+}
+
+function recommendationUnavailable(reply: { code(statusCode: number): { send(payload: unknown): unknown } }) {
+  return reply.code(503).send({
+    type: 'https://kfc.example/problems/recommendation-infrastructure-unavailable',
+    title: 'Recommendation infrastructure unavailable',
+    status: 503,
+    code: 'recommendation_infrastructure_unavailable',
+    retryable: true,
   });
 }
 

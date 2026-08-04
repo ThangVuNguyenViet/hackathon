@@ -52,6 +52,9 @@
     "worker:d1:migrate:remote": "wrangler d1 migrations apply ${KFC_D1_DATABASE_NAME:-kfc-agent-demo} --remote"
   },
   "dependencies": {
+    "@aws-sdk/client-dynamodb": "3.1103.0",
+    "@aws-sdk/client-s3": "3.1103.0",
+    "@aws-sdk/lib-dynamodb": "3.1103.0",
     "@kfc/openai-agents-runtime": "file:packages/openai-agents-runtime",
     "@langchain/core": "1.2.3",
     "@langchain/google": "0.2.1",

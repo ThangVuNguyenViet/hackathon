@@ -1,24 +1,21 @@
 import { createHash } from 'node:crypto';
+import {
+  parseAutomaticDecisionEvidence,
+  parseAutomaticEventEvidence,
+  parseJsonValue,
+  type AutomaticDecisionEvidence,
+  type AutomaticEventEvidence,
+} from './evidence-contracts.js';
+import {
+  automaticRecommendationIdentityDigest,
+  parseAutomaticRecommendationRequest,
+} from '../contracts/automatic-recommendation.js';
+import { parseAutomaticRecommendationResponse } from '../contracts/automatic-recommendation-response.js';
 
-export interface AutomaticDecisionEvidence {
-  idempotencyKey: string;
-  recommendationId: string;
-  requestId: string;
-  orderingJourneyRef: string;
-  opportunityRef: string;
-  recommendationType:
-    'local_favorite' | 'for_you' | 'modifier_upsell' | 'smart_cross_sell';
-  contractDigest: string;
-  bundleDigest: string | null;
-  outcome: unknown;
-}
-
-export interface AutomaticEventEvidence {
-  idempotencyKey: string;
-  recommendationId: string;
-  eventType: 'impression' | 'selected' | 'checkout' | 'removed';
-  payload: unknown;
-}
+export type {
+  AutomaticDecisionEvidence,
+  AutomaticEventEvidence,
+} from './evidence-contracts.js';
 
 type EvidenceEnvelope =
   | {
@@ -35,25 +32,43 @@ type EvidenceEnvelope =
 export interface ImmutableEvidenceObject {
   key: string;
   digest: string;
+  sizeBytes: number;
+  body: string;
+}
+
+export interface DurableEvidencePointer {
+  key: string;
+  versionId: string;
+  digest: string;
+  sizeBytes: number;
+}
+
+export interface StoredEvidenceObject extends DurableEvidencePointer {
   body: string;
 }
 
 export interface AutomaticEvidenceObjectStore {
-  putImmutable(object: ImmutableEvidenceObject): Promise<void>;
-  list(prefix: string): Promise<readonly ImmutableEvidenceObject[]>;
+  putImmutable(
+    object: ImmutableEvidenceObject,
+  ): Promise<DurableEvidencePointer>;
+  list(prefix: string): Promise<readonly StoredEvidenceObject[]>;
 }
 
 export interface AutomaticRecommendationLedger {
   commitDecision(input: {
     idempotencyKey: string;
     evidenceKey: string;
+    evidenceVersionId: string;
     evidenceDigest: string;
+    evidenceSizeBytes: number;
     evidence: AutomaticDecisionEvidence;
   }): Promise<'committed' | 'replayed'>;
   commitEvent(input: {
     idempotencyKey: string;
     evidenceKey: string;
+    evidenceVersionId: string;
     evidenceDigest: string;
+    evidenceSizeBytes: number;
     evidence: AutomaticEventEvidence;
   }): Promise<'committed' | 'replayed'>;
   hasEvidence(digest: string): Promise<boolean>;
@@ -75,40 +90,31 @@ export class AutomaticEvidencePersistenceError extends Error {
 }
 
 function canonicalJson(value: unknown): string {
+  if (
+    value === null ||
+    typeof value === 'string' ||
+    typeof value === 'boolean'
+  ) {
+    return JSON.stringify(value);
+  }
+  if (typeof value === 'number') {
+    if (!Number.isFinite(value)) {
+      throw new TypeError('Canonical JSON rejects non-finite numbers');
+    }
+    return JSON.stringify(value);
+  }
   if (Array.isArray(value)) return `[${value.map(canonicalJson).join(',')}]`;
-  if (value !== null && typeof value === 'object') {
+  if (isRecord(value)) {
     return `{${Object.entries(value)
       .sort(([left], [right]) => left.localeCompare(right))
       .map(([key, entry]) => `${JSON.stringify(key)}:${canonicalJson(entry)}`)
       .join(',')}}`;
   }
-  return JSON.stringify(value);
+  throw new TypeError('Canonical JSON supports JSON values only');
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === 'object' && !Array.isArray(value);
-}
-
-function isRecommendationType(
-  value: unknown,
-): value is AutomaticDecisionEvidence['recommendationType'] {
-  return (
-    value === 'local_favorite' ||
-    value === 'for_you' ||
-    value === 'modifier_upsell' ||
-    value === 'smart_cross_sell'
-  );
-}
-
-function isEventType(
-  value: unknown,
-): value is AutomaticEventEvidence['eventType'] {
-  return (
-    value === 'impression' ||
-    value === 'selected' ||
-    value === 'checkout' ||
-    value === 'removed'
-  );
 }
 
 function parseEvidenceEnvelope(body: string): EvidenceEnvelope {
@@ -116,58 +122,24 @@ function parseEvidenceEnvelope(body: string): EvidenceEnvelope {
   if (
     !isRecord(value) ||
     value.schemaVersion !== 'kfc-automatic-evidence-v1' ||
-    !isRecord(value.payload) ||
-    typeof value.payload.idempotencyKey !== 'string' ||
-    typeof value.payload.recommendationId !== 'string'
+    !('payload' in value)
   ) {
     throw new Error('invalid automatic evidence envelope');
   }
   if (value.kind === 'decision') {
-    const payload = value.payload;
-    const idempotencyKey = payload.idempotencyKey;
-    const recommendationId = payload.recommendationId;
-    const recommendationType = payload.recommendationType;
-    if (
-      typeof idempotencyKey !== 'string' ||
-      typeof recommendationId !== 'string' ||
-      typeof payload.requestId !== 'string' ||
-      typeof payload.orderingJourneyRef !== 'string' ||
-      typeof payload.opportunityRef !== 'string' ||
-      !isRecommendationType(recommendationType) ||
-      typeof payload.contractDigest !== 'string' ||
-      (payload.bundleDigest !== null &&
-        typeof payload.bundleDigest !== 'string')
-    ) {
-      throw new Error('invalid automatic decision evidence');
-    }
     return {
       schemaVersion: 'kfc-automatic-evidence-v1',
       kind: 'decision',
-      payload: {
-        idempotencyKey,
-        recommendationId,
-        requestId: payload.requestId,
-        orderingJourneyRef: payload.orderingJourneyRef,
-        opportunityRef: payload.opportunityRef,
-        recommendationType,
-        contractDigest: payload.contractDigest,
-        bundleDigest: payload.bundleDigest,
-        outcome: payload.outcome,
-      },
+      payload: parseAutomaticDecisionEvidence(value.payload),
     };
   }
-  if (value.kind !== 'event' || !isEventType(value.payload.eventType)) {
+  if (value.kind !== 'event') {
     throw new Error('invalid automatic event evidence');
   }
   return {
     schemaVersion: 'kfc-automatic-evidence-v1',
     kind: 'event',
-    payload: {
-      idempotencyKey: value.payload.idempotencyKey,
-      recommendationId: value.payload.recommendationId,
-      eventType: value.payload.eventType,
-      payload: value.payload.payload,
-    },
+    payload: parseAutomaticEventEvidence(value.payload),
   };
 }
 
@@ -177,6 +149,7 @@ function objectFor(envelope: EvidenceEnvelope): ImmutableEvidenceObject {
   return {
     key: `automatic-recommendations/${envelope.kind}/${digest}.json`,
     digest,
+    sizeBytes: Buffer.byteLength(body),
     body,
   };
 }
@@ -191,8 +164,19 @@ export function createAutomaticEvidenceSaga({
 }) {
   async function persist(envelope: EvidenceEnvelope) {
     const object = objectFor(envelope);
+    let pointer: DurableEvidencePointer;
     try {
-      await objects.putImmutable(object);
+      pointer = await objects.putImmutable(object);
+      if (
+        pointer.key !== object.key ||
+        pointer.digest !== object.digest ||
+        pointer.sizeBytes !== object.sizeBytes ||
+        pointer.versionId.length === 0
+      ) {
+        throw new Error(
+          'immutable evidence pointer does not match written bytes',
+        );
+      }
     } catch (error) {
       throw new AutomaticEvidencePersistenceError('immutable_evidence_failed', {
         cause: error,
@@ -204,19 +188,25 @@ export function createAutomaticEvidenceSaga({
           ? await ledger.commitDecision({
               idempotencyKey: envelope.payload.idempotencyKey,
               evidenceKey: object.key,
+              evidenceVersionId: pointer.versionId,
               evidenceDigest: object.digest,
+              evidenceSizeBytes: object.sizeBytes,
               evidence: envelope.payload,
             })
           : await ledger.commitEvent({
               idempotencyKey: envelope.payload.idempotencyKey,
               evidenceKey: object.key,
+              evidenceVersionId: pointer.versionId,
               evidenceDigest: object.digest,
+              evidenceSizeBytes: object.sizeBytes,
               evidence: envelope.payload,
             });
       return {
         status: status === 'replayed' ? 'committed' : status,
         evidenceKey: object.key,
+        evidenceVersionId: pointer.versionId,
         evidenceDigest: object.digest,
+        evidenceSizeBytes: object.sizeBytes,
       };
     } catch (error) {
       if (error instanceof AutomaticEvidencePersistenceError) throw error;
@@ -227,18 +217,20 @@ export function createAutomaticEvidenceSaga({
   }
 
   return {
-    commitDecision: (value: AutomaticDecisionEvidence) =>
-      persist({
+    async commitDecision(value: AutomaticDecisionEvidence) {
+      return persist({
         schemaVersion: 'kfc-automatic-evidence-v1',
         kind: 'decision',
-        payload: value,
-      }),
-    commitEvent: (value: AutomaticEventEvidence) =>
-      persist({
+        payload: parseAutomaticDecisionEvidence(value),
+      });
+    },
+    async commitEvent(value: AutomaticEventEvidence) {
+      return persist({
         schemaVersion: 'kfc-automatic-evidence-v1',
         kind: 'event',
-        payload: value,
-      }),
+        payload: parseAutomaticEventEvidence(value),
+      });
+    },
     async reconcileOrphans() {
       const stored = await objects.list('automatic-recommendations/');
       let repaired = 0;
@@ -246,19 +238,35 @@ export function createAutomaticEvidenceSaga({
       for (const object of stored) {
         if (await ledger.hasEvidence(object.digest)) continue;
         try {
+          const actualDigest = createHash('sha256')
+            .update(object.body)
+            .digest('hex');
+          const expectedKey = `automatic-recommendations/${object.key.includes('/decision/') ? 'decision' : 'event'}/${object.digest}.json`;
+          if (
+            object.versionId.length === 0 ||
+            object.sizeBytes !== Buffer.byteLength(object.body) ||
+            actualDigest !== object.digest ||
+            object.key !== expectedKey
+          ) {
+            throw new Error('orphan evidence pointer verification failed');
+          }
           const envelope = parseEvidenceEnvelope(object.body);
           if (envelope.kind === 'decision') {
             await ledger.commitDecision({
               idempotencyKey: envelope.payload.idempotencyKey,
               evidenceKey: object.key,
+              evidenceVersionId: object.versionId,
               evidenceDigest: object.digest,
+              evidenceSizeBytes: object.sizeBytes,
               evidence: envelope.payload,
             });
           } else {
             await ledger.commitEvent({
               idempotencyKey: envelope.payload.idempotencyKey,
               evidenceKey: object.key,
+              evidenceVersionId: object.versionId,
               evidenceDigest: object.digest,
+              evidenceSizeBytes: object.sizeBytes,
               evidence: envelope.payload,
             });
           }
@@ -275,16 +283,29 @@ export function createAutomaticEvidenceSaga({
 export class InMemoryAutomaticEvidenceObjectStore implements AutomaticEvidenceObjectStore {
   private readonly state = new Map<string, ImmutableEvidenceObject>();
 
-  async putImmutable(object: ImmutableEvidenceObject): Promise<void> {
+  async putImmutable(
+    object: ImmutableEvidenceObject,
+  ): Promise<DurableEvidencePointer> {
     const existing = this.state.get(object.key);
     if (existing !== undefined && existing.body !== object.body) {
       throw new Error('immutable object conflict');
     }
     this.state.set(object.key, object);
+    return {
+      key: object.key,
+      versionId: `memory:${object.digest}`,
+      digest: object.digest,
+      sizeBytes: object.sizeBytes,
+    };
   }
 
-  async list(prefix: string): Promise<readonly ImmutableEvidenceObject[]> {
-    return [...this.state.values()].filter(({ key }) => key.startsWith(prefix));
+  async list(prefix: string): Promise<readonly StoredEvidenceObject[]> {
+    return [...this.state.values()]
+      .filter(({ key }) => key.startsWith(prefix))
+      .map((object) => ({
+        ...object,
+        versionId: `memory:${object.digest}`,
+      }));
   }
 
   objects(): readonly ImmutableEvidenceObject[] {
@@ -295,6 +316,8 @@ export class InMemoryAutomaticEvidenceObjectStore implements AutomaticEvidenceOb
 interface LedgerRecord<T> {
   evidenceDigest: string;
   evidenceKey: string;
+  evidenceVersionId: string;
+  evidenceSizeBytes: number;
   evidence: T;
 }
 
@@ -325,7 +348,9 @@ export class InMemoryAutomaticRecommendationLedger implements AutomaticRecommend
     input: {
       idempotencyKey: string;
       evidenceKey: string;
+      evidenceVersionId: string;
       evidenceDigest: string;
+      evidenceSizeBytes: number;
       evidence: T;
     },
   ): 'committed' | 'replayed' {
@@ -344,7 +369,9 @@ export class InMemoryAutomaticRecommendationLedger implements AutomaticRecommend
   async commitDecision(input: {
     idempotencyKey: string;
     evidenceKey: string;
+    evidenceVersionId: string;
     evidenceDigest: string;
+    evidenceSizeBytes: number;
     evidence: AutomaticDecisionEvidence;
   }): Promise<'committed' | 'replayed'> {
     return this.commit(this.decisionState, input);
@@ -353,7 +380,9 @@ export class InMemoryAutomaticRecommendationLedger implements AutomaticRecommend
   async commitEvent(input: {
     idempotencyKey: string;
     evidenceKey: string;
+    evidenceVersionId: string;
     evidenceDigest: string;
+    evidenceSizeBytes: number;
     evidence: AutomaticEventEvidence;
   }): Promise<'committed' | 'replayed'> {
     return this.commit(this.eventState, input);
@@ -382,6 +411,8 @@ export function createAutomaticRecommendationServingRuntime({
   engine,
   evidence,
   contractDigest,
+  clock = () => new Date(),
+  technicalEvidence,
 }: {
   engine: {
     decide(
@@ -393,64 +424,94 @@ export function createAutomaticRecommendationServingRuntime({
     commitDecision(value: AutomaticDecisionEvidence): Promise<unknown>;
   };
   contractDigest: string;
+  clock?: () => Date;
+  technicalEvidence?: (input: {
+    request: ReturnType<typeof parseAutomaticRecommendationRequest>;
+    response: ReturnType<typeof parseAutomaticRecommendationResponse>;
+  }) => AutomaticDecisionEvidence['technical'];
 }) {
   return {
     async decide(
       recommendationType: AutomaticDecisionEvidence['recommendationType'],
       request: unknown,
     ) {
-      if (!isRecord(request)) {
-        throw new Error('automatic recommendation request must be an object');
-      }
-      const binding = request;
-      const requestId = binding.requestId;
-      const orderingJourneyRef = binding.orderingJourneyRef;
-      const opportunityRef = binding.opportunityRef;
-      if (typeof requestId !== 'string' || requestId.length === 0) {
-        throw new Error('automatic recommendation requestId is required');
-      }
-      if (
-        typeof orderingJourneyRef !== 'string' ||
-        orderingJourneyRef.length === 0
-      ) {
-        throw new Error(
-          'automatic recommendation orderingJourneyRef is required',
-        );
-      }
-      if (typeof opportunityRef !== 'string' || opportunityRef.length === 0) {
-        throw new Error('automatic recommendation opportunityRef is required');
-      }
-      const response = await engine.decide(recommendationType, request);
-      if (!isRecord(response)) {
-        throw new Error('automatic recommendation response must be an object');
-      }
-      const responseValue = response;
-      if (
-        typeof responseValue.recommendationId !== 'string' ||
-        responseValue.recommendationId.length === 0
-      ) {
-        throw new Error(
-          'automatic recommendation response identity is missing',
-        );
-      }
-      const model = responseValue.model;
-      const bundleDigest =
-        model !== null &&
-        isRecord(model) &&
-        'bundleDigest' in model &&
-        typeof model.bundleDigest === 'string'
-          ? model.bundleDigest
-          : null;
-      await evidence.commitDecision({
-        idempotencyKey: `${orderingJourneyRef}:${opportunityRef}:${recommendationType}`,
-        recommendationId: responseValue.recommendationId,
-        requestId,
-        orderingJourneyRef,
-        opportunityRef,
+      const binding = parseAutomaticRecommendationRequest(
         recommendationType,
+        request,
+      );
+      const response = parseAutomaticRecommendationResponse(
+        await engine.decide(recommendationType, binding),
+      );
+      const operationPath = {
+        local_favorite: '/v1/recommendations/local-favorites',
+        for_you: '/v1/recommendations/for-you',
+        modifier_upsell: '/v1/recommendations/modifier-upsells',
+        smart_cross_sell: '/v1/recommendations/smart-cross-sells',
+      }[recommendationType];
+      const requestDigest = automaticRecommendationIdentityDigest({
+        operationPath,
+        identityType: recommendationType,
+        payload: binding,
+      });
+      const cartDigest = automaticRecommendationIdentityDigest({
+        operationPath: `${operationPath}/cart`,
+        identityType: 'cart',
+        payload: binding.cart,
+      });
+      const fallbackTechnical: AutomaticDecisionEvidence['technical'] = {
+        contextBindings: {
+          orderingJourneyRef: binding.orderingJourneyRef,
+          opportunityRef: binding.opportunityRef,
+          storeId: binding.storeId,
+          fulfilmentMode: binding.fulfilmentMode,
+          locale: binding.locale,
+          cartRevision: binding.cart.revision,
+        },
+        potentialCandidates: [],
+        eligibilityDecisions: [],
+        featureReconciliation: {
+          eligible: response.counts.eligible,
+          scored: response.counts.scored,
+        },
+        scoresCalibration: parseJsonValue(response.model),
+        composition: {
+          displayed: response.counts.displayed,
+          status: response.status,
+          emptyReason: response.emptyReason,
+        },
+        modelReleaseProvenance: parseJsonValue(response.model),
+        traceLocator: null,
+      };
+      if (
+        response.status === 'recommended' &&
+        technicalEvidence === undefined
+      ) {
+        throw new TypeError(
+          'recommended decisions require complete technical evidence',
+        );
+      }
+      await evidence.commitDecision({
+        idempotencyKey: binding.requestId,
+        recommendationId: response.recommendationId,
+        requestId: binding.requestId,
+        requestDigest,
+        orderingJourneyRef: binding.orderingJourneyRef,
+        opportunityRef: binding.opportunityRef,
+        recommendationType,
+        storeId: binding.storeId,
+        fulfilmentMode: binding.fulfilmentMode,
+        locale: binding.locale,
+        cartId: binding.cart.cartId,
+        cartRevision: binding.cart.revision,
+        cartDigest,
+        catalogRevision: response.catalogRevision,
+        decisionTime: clock().toISOString(),
+        expiresAt: response.expiresAt,
         contractDigest,
-        bundleDigest,
-        outcome: response,
+        response: parseJsonValue(response),
+        technical:
+          technicalEvidence?.({ request: binding, response }) ??
+          fallbackTechnical,
       });
       return response;
     },

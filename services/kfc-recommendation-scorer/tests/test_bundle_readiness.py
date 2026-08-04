@@ -33,7 +33,13 @@ class BundleReadinessTest(unittest.TestCase):
                 json.dumps({"bundleDigest": "b" * 64})
             )
             with self.assertRaises(BundleUnavailable):
-                load_qualified_bundle(root, expected_bundle_digest="a" * 64)
+                load_qualified_bundle(
+                    root,
+                    expected_bundle_digest="a" * 64,
+                    expected_contract_digest="c" * 64,
+                    expected_feature_digest="d" * 64,
+                    expected_composer_digest="e" * 64,
+                )
 
 
 if __name__ == "__main__":

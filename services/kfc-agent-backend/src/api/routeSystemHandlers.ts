@@ -271,6 +271,9 @@ export function createSystemRouteHandlers(context: RouteHandlerContext) {
                   configured: true,
                   simulated: posConfig.simulated ?? false,
                 };
+      const automaticRecommendations = options.automaticRecommendations
+        ? await runReadinessCheck(options.automaticRecommendations.readiness)
+        : undefined;
       const checks = messengerToken
         ? {
             database,
@@ -285,8 +288,22 @@ export function createSystemRouteHandlers(context: RouteHandlerContext) {
             catalog,
             commerce,
             pos,
+            ...(automaticRecommendations ? { automaticRecommendations } : {}),
           }
-        : { database, fixtures, messenger, zalo, openai, agent, monitor, observability, catalog, commerce, pos };
+        : {
+            database,
+            fixtures,
+            messenger,
+            zalo,
+            openai,
+            agent,
+            monitor,
+            observability,
+            catalog,
+            commerce,
+            pos,
+            ...(automaticRecommendations ? { automaticRecommendations } : {}),
+          };
       const ok = Object.values(checks).every((check) => check.ok);
 
       return {

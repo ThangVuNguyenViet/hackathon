@@ -106,3 +106,23 @@ it('fails saturated requests immediately without invoking a substitute scorer', 
   ).rejects.toMatchObject({ code: 'scorer_saturated', retryable: true });
   await expect(first).resolves.toBeInstanceOf(AutomaticScorerUnavailableError);
 });
+
+it('rejects zero, fractional, and non-finite timeout or response limits', () => {
+  for (const timeoutMs of [0, 1.5, Number.POSITIVE_INFINITY]) {
+    expect(() =>
+      createPersistentAutomaticScorerClient({
+        baseUrl: 'http://127.0.0.1:8081',
+        maxConcurrency: 1,
+        timeoutMs,
+      }),
+    ).toThrow('timeoutMs');
+  }
+  expect(() =>
+    createPersistentAutomaticScorerClient({
+      baseUrl: 'http://127.0.0.1:8081',
+      maxConcurrency: 1,
+      timeoutMs: 50,
+      maxResponseBytes: 0,
+    }),
+  ).toThrow('maxResponseBytes');
+});

@@ -32,10 +32,12 @@ export function createPersistentAutomaticScorerClient({
   baseUrl,
   maxConcurrency,
   timeoutMs,
+  maxResponseBytes = 1_048_576,
 }: {
   baseUrl: string;
   maxConcurrency: number;
   timeoutMs: number;
+  maxResponseBytes?: number;
 }): PersistentAutomaticScorerClient {
   const origin = new URL(baseUrl);
   if (
@@ -46,6 +48,12 @@ export function createPersistentAutomaticScorerClient({
   }
   if (!Number.isInteger(maxConcurrency) || maxConcurrency < 1) {
     throw new Error('maxConcurrency must be a positive integer');
+  }
+  if (!Number.isInteger(timeoutMs) || timeoutMs < 1) {
+    throw new Error('timeoutMs must be a positive finite integer');
+  }
+  if (!Number.isInteger(maxResponseBytes) || maxResponseBytes < 1) {
+    throw new Error('maxResponseBytes must be a positive finite integer');
   }
   const agent = new http.Agent({
     keepAlive: true,
@@ -80,8 +88,24 @@ export function createPersistentAutomaticScorerClient({
           },
           (response) => {
             const chunks: Buffer[] = [];
-            response.on('data', (chunk: Buffer) => chunks.push(chunk));
+            let responseBytes = 0;
+            let rejected = false;
+            response.on('data', (chunk: Buffer) => {
+              responseBytes += chunk.byteLength;
+              if (responseBytes > maxResponseBytes) {
+                rejected = true;
+                response.destroy();
+                reject(
+                  new AutomaticScorerUnavailableError(
+                    'scorer_invalid_response',
+                  ),
+                );
+                return;
+              }
+              chunks.push(chunk);
+            });
             response.on('end', () => {
+              if (rejected) return;
               if (response.statusCode !== 200) {
                 reject(
                   new AutomaticScorerUnavailableError('scorer_unavailable'),

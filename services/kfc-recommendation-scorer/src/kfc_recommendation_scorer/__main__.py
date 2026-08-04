@@ -11,6 +11,9 @@ def main() -> None:
     application = ScorerApplication(
         bundle_path=Path(os.environ.get("QUALIFIED_BUNDLE_PATH", "/opt/kfc/bundle")),
         expected_bundle_digest=os.environ.get("QUALIFIED_BUNDLE_DIGEST", ""),
+        expected_contract_digest=os.environ.get("AUTOMATIC_CONTRACT_DIGEST", ""),
+        expected_feature_digest=os.environ.get("AUTOMATIC_FEATURE_DIGEST", ""),
+        expected_composer_digest=os.environ.get("AUTOMATIC_COMPOSER_DIGEST", ""),
     )
     server = create_http_server(
         application,

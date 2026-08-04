@@ -8,6 +8,7 @@ import {
 } from "./channels/messengerHistory.js";
 import { loadEnv } from "./config/env.js";
 import { createPostgresPersistence } from "./persistence/postgresStore.js";
+import { createUnavailableAutomaticRecommendationHttpRuntime } from "./recommendations/serving/index.js";
 
 const env = loadEnv();
 const baseOptions = buildServerOptionsFromEnv(env);
@@ -33,12 +34,21 @@ const messengerHistorySync =
         }),
       )
     : undefined;
+// The automatic engine requires trusted order, catalog, history, exposure, and
+// Qualified Model Bundle ports. Main owns an explicit fail-closed provider
+// until those production authorities are configured; request bodies are never
+// promoted into trusted context.
+const automaticRecommendations =
+  createUnavailableAutomaticRecommendationHttpRuntime(
+    "trusted automatic recommendation context ports are not configured",
+  );
 const server = buildServer({
   ...baseOptions,
   store: persistence.store,
   checkpointer: persistence.checkpointer,
   dashboard,
   messengerHistorySync,
+  automaticRecommendations,
   readiness: {
     ...baseOptions.readiness,
     database: async () => {
