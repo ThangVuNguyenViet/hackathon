@@ -3,6 +3,7 @@ import { readFile } from 'node:fs/promises';
 import { describe, expect, it } from 'vitest';
 import { z } from 'zod';
 import { Ajv2020, type AnySchema } from 'ajv/dist/2020.js';
+import $RefParser from '@apidevtools/json-schema-ref-parser';
 import {
   AUTOMATIC_RECOMMENDATION_CONTRACT_DIGEST,
   parseAutomaticRecommendationImpression,
@@ -51,6 +52,18 @@ const contractManifestSchema = z
     schemaVersion: z.literal('kfc-automatic-contract-manifest-v1'),
     canonicalDigest: z.string().regex(/^[a-f0-9]{64}$/u),
     authorityFiles: z.array(z.string()).min(1),
+    idempotency: z
+      .object({
+        canonicalization: z.literal(
+          'UTF-8 JSON with recursively lexicographically sorted object keys and preserved array order',
+        ),
+        binding: z.literal(
+          'sha256(UTF-8(operationPath + NUL + identityType + NUL + canonicalJson))',
+        ),
+        requestRule: z.string().min(1),
+        eventRule: z.string().min(1),
+      })
+      .strict(),
     examples: z.array(
       z
         .object({
@@ -76,6 +89,8 @@ const contractManifestSchema = z
         node: z.string(),
         python: z.string(),
         dart: z.string(),
+        workbench: z.string().startsWith('deferred:'),
+        chat: z.string().startsWith('deferred:'),
       })
       .strict(),
   })
@@ -97,6 +112,34 @@ const negativeExamples = [
   {
     file: 'examples/negative/problem-status-code-mismatch.json',
     kind: 'problem_details',
+  },
+  {
+    file: 'examples/adversarial/scorer-nested-feature.json',
+    kind: 'scorer_request',
+  },
+  {
+    file: 'examples/adversarial/recommended-invented-reason.json',
+    kind: 'recommendation_response',
+  },
+  {
+    file: 'examples/adversarial/recommended-without-model.json',
+    kind: 'recommendation_response',
+  },
+  {
+    file: 'examples/adversarial/problem-503-not-retryable.json',
+    kind: 'problem_details',
+  },
+  {
+    file: 'examples/adversarial/modifier-with-product-action.json',
+    kind: 'recommendation_response',
+  },
+  {
+    file: 'examples/adversarial/impression-empty.json',
+    kind: 'impression_request',
+  },
+  {
+    file: 'examples/adversarial/recommended-nonmonotonic-counts.json',
+    kind: 'recommendation_response',
   },
 ] as const;
 
@@ -204,6 +247,12 @@ describe('automatic recommendation wire authority', () => {
           case 'scorer_request':
             parseAutomaticScorerRequest(value);
             break;
+          case 'recommendation_response':
+            parseAutomaticRecommendationResponse(value);
+            break;
+          case 'impression_request':
+            parseAutomaticRecommendationImpression(value);
+            break;
           case 'problem_details':
             parseAutomaticRecommendationProblem(value);
             break;
@@ -263,6 +312,53 @@ describe('automatic recommendation wire authority', () => {
       expect(validator).toBeDefined();
       expect(validator!(await readJson(example.file))).toBe(true);
     }
+
+    for (const example of negativeExamples.filter((example) =>
+      [
+        'examples/adversarial/scorer-nested-feature.json',
+        'examples/adversarial/recommended-invented-reason.json',
+        'examples/adversarial/recommended-without-model.json',
+        'examples/adversarial/problem-503-not-retryable.json',
+      ].includes(example.file),
+    )) {
+      const schema =
+        example.kind === 'scorer_request' ? scorerSchema : recommendationSchema;
+      const validator = ajv.getSchema(
+        `${schema.$id}#/$defs/${definitionForKind[example.kind]}`,
+      );
+      expect(validator).toBeDefined();
+      expect(validator!(await readJson(example.file))).toBe(false);
+    }
+  });
+
+  it('bundles OpenAPI external refs and fails a broken reference', async () => {
+    await expect(
+      $RefParser.bundle(new URL('openapi.json', contractRoot).pathname),
+    ).resolves.toMatchObject({ openapi: '3.1.0' });
+    await expect(
+      $RefParser.dereference({
+        openapi: '3.1.0',
+        info: { title: 'broken', version: '1' },
+        paths: {
+          '/broken': {
+            get: {
+              responses: {
+                '200': {
+                  description: 'broken reference',
+                  content: {
+                    'application/json': {
+                      schema: {
+                        $ref: './schemas/missing.schema.json#/$defs/Missing',
+                      },
+                    },
+                  },
+                },
+              },
+            },
+          },
+        },
+      }),
+    ).rejects.toThrow();
   });
 
   it('binds the Node representation to the canonical contract digest', async () => {
@@ -275,6 +371,9 @@ describe('automatic recommendation wire authority', () => {
     );
     expect(manifest.representations.node).toBe(
       'services/kfc-agent-backend/src/recommendations/contracts/automatic-recommendation.ts',
+    );
+    expect(manifest.representations.python).toBe(
+      'services/kfc-recommendation-scorer/src/kfc_recommendation_scorer/contract.py',
     );
   });
 });

@@ -1,5 +1,7 @@
 import 'dart:convert';
 
+import 'package:crypto/crypto.dart';
+
 enum AutomaticRecommendationType {
   localFavorite,
   forYou,
@@ -9,7 +11,7 @@ enum AutomaticRecommendationType {
 
 const automaticRecommendationSchemaVersion = 'kfc-automatic-recommendation-v1';
 const automaticRecommendationContractDigest =
-    '34c389f3ff5954a790be171778214028e1097c52b9b43f044416279b77b91034';
+    '57117c33245e6060b4cdf5dc58a0ceabff22e516d4b4eb38aecafa2ca2d9025e';
 
 const automaticRecommendationOperationPaths = {
   AutomaticRecommendationType.localFavorite:
@@ -137,6 +139,69 @@ class AutomaticScorerResponsePayload extends AutomaticRecommendationPayload {
   }
 }
 
+AutomaticScorerResponsePayload reconcileAutomaticScorerResponse(
+  Object? requestValue,
+  Object? responseValue,
+) {
+  final request = AutomaticScorerRequestPayload.parse(requestValue).toJson();
+  final response = AutomaticScorerResponsePayload.parse(responseValue);
+  final responseWire = response.toJson();
+  if (request['requestId'] != responseWire['requestId']) {
+    _Validator.fail('scorer response request identity does not match');
+  }
+  if (jsonEncode(request['model']) != jsonEncode(responseWire['model'])) {
+    _Validator.fail('scorer response model binding does not match');
+  }
+  final candidateIds = (request['candidates'] as List)
+      .map((candidate) => (candidate as Map)['candidateId'])
+      .toList();
+  final scoreIds = (responseWire['scores'] as List)
+      .map((score) => (score as Map)['candidateId'])
+      .toList();
+  if (candidateIds.toSet().length != candidateIds.length ||
+      scoreIds.toSet().length != scoreIds.length ||
+      candidateIds.toSet().length != scoreIds.toSet().length ||
+      !candidateIds.toSet().containsAll(scoreIds)) {
+    _Validator.fail(
+      'scorer response must contain one score for every candidate',
+    );
+  }
+  return response;
+}
+
+String automaticRecommendationIdentityDigest({
+  required String operationPath,
+  required String identityType,
+  required Object? payload,
+}) {
+  final binding =
+      '$operationPath\u0000$identityType\u0000${_canonicalJson(payload)}';
+  return sha256.convert(utf8.encode(binding)).toString();
+}
+
+String _canonicalJson(Object? value) {
+  if (value == null || value is String || value is bool || value is num) {
+    if (value is num && !value.isFinite) {
+      throw ArgumentError.value(
+        value,
+        'value',
+        'Canonical JSON rejects non-finite numbers',
+      );
+    }
+    return jsonEncode(value);
+  }
+  if (value is List) return '[${value.map(_canonicalJson).join(',')}]';
+  if (value is Map) {
+    final keys = value.keys.map((key) => key.toString()).toList()..sort();
+    return '{${keys.map((key) => '${jsonEncode(key)}:${_canonicalJson(value[key])}').join(',')}}';
+  }
+  throw ArgumentError.value(
+    value,
+    'value',
+    'Canonical JSON supports JSON values only',
+  );
+}
+
 class _Validator {
   static final _opaqueId = RegExp(r'^[A-Za-z0-9][A-Za-z0-9._:/-]*$');
   static final _sha256 = RegExp(r'^[a-f0-9]{64}$');
@@ -155,6 +220,14 @@ class _Validator {
     'empty_cart',
     'no_candidate_above_threshold',
     'recommendation_serving_paused',
+  };
+  static const _reasonCodes = {
+    'popular_here',
+    'ordered_before',
+    'matches_your_history',
+    'completes_your_item',
+    'completes_your_meal',
+    'active_offer',
   };
 
   static Map<String, dynamic> object(Object? value, String path) {
@@ -212,7 +285,10 @@ class _Validator {
     double minimum,
     double maximum,
   ) {
-    if (value is! num || value < minimum || value > maximum) {
+    if (value is! num ||
+        !value.isFinite ||
+        value < minimum ||
+        value > maximum) {
       fail('$path must be between $minimum and $maximum');
     }
     return value.toDouble();
@@ -437,6 +513,9 @@ class _Validator {
             (modifier['groupPath'] as List).isEmpty) {
           fail('$proposalPath.action.groupPath is invalid');
         }
+        for (final identifier in modifier['groupPath'] as List) {
+          opaqueId(identifier, '$proposalPath.action.groupPath');
+        }
         integer(modifier['quantity'], '$proposalPath.action.quantity', 1);
         money(modifier['priceImpact'], '$proposalPath.action.priceImpact');
       } else {
@@ -461,6 +540,11 @@ class _Validator {
           (proposal['reasonCodes'] as List).isEmpty) {
         fail('$proposalPath.reasonCodes is invalid');
       }
+      if ((proposal['reasonCodes'] as List).any(
+        (reason) => !_reasonCodes.contains(reason),
+      )) {
+        fail('$proposalPath.reasonCodes contain an unknown reason');
+      }
     }
     final counts = exact(map['counts'], [
       'potential',
@@ -473,6 +557,26 @@ class _Validator {
     }
     if (counts['displayed'] != proposals.length) {
       fail('response displayed count must equal proposal count');
+    }
+    if (!(counts['potential'] >= counts['eligible'] &&
+        counts['eligible'] >= counts['scored'] &&
+        counts['scored'] >= counts['displayed'])) {
+      fail('response counts must be monotonic');
+    }
+    if (proposals
+            .map((proposal) => (proposal as Map)['actionId'])
+            .toSet()
+            .length !=
+        proposals.length) {
+      fail('response action identifiers must be unique');
+    }
+    final expectedAction = map['recommendationType'] == 'modifier_upsell'
+        ? 'apply_modifier'
+        : 'add_product';
+    if (proposals.any(
+      (proposal) => (proposal as Map)['action']['type'] != expectedAction,
+    )) {
+      fail('response action is incompatible with recommendation type');
     }
     final status = map['status'];
     if (status == 'recommended') {
@@ -533,9 +637,11 @@ class _Validator {
       'renderedActions',
     ], 'impression');
     final actions = map['renderedActions'];
-    if (actions is! List || actions.length > 4) {
+    if (actions is! List || actions.isEmpty || actions.length > 4) {
       fail('impression.renderedActions is invalid');
     }
+    final actionIds = <Object?>{};
+    final positions = <Object?>{};
     for (var index = 0; index < actions.length; index++) {
       final action = exact(actions[index], [
         'actionId',
@@ -550,6 +656,12 @@ class _Validator {
         'impression.renderedActions[$index].renderedPosition',
         1,
       );
+      actionIds.add(action['actionId']);
+      positions.add(action['renderedPosition']);
+    }
+    if (actionIds.length != actions.length ||
+        positions.length != actions.length) {
+      fail('impression actions and positions must be unique');
     }
   }
 
@@ -613,6 +725,8 @@ class _Validator {
     string(map['title'], 'problem.title');
     const codes = {
       400: {'invalid_request'},
+      401: {'unauthorized'},
+      403: {'forbidden'},
       404: {'recommendation_not_found'},
       409: {'identity_conflict', 'stale_or_invalid_action'},
       503: {'recommendation_infrastructure_unavailable'},
@@ -691,6 +805,18 @@ class _Validator {
       if (candidate['features'] is! Map) {
         fail('scorer candidate features are invalid');
       }
+      (candidate['features'] as Map).forEach((key, feature) {
+        string(key, 'scorer feature key');
+        if (feature != null &&
+            feature is! String &&
+            feature is! bool &&
+            feature is! num) {
+          fail('scorer feature values must be scalar or null');
+        }
+        if (feature is num && !feature.isFinite) {
+          fail('scorer feature values must be finite');
+        }
+      });
     }
   }
 

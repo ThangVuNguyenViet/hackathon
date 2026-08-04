@@ -1,16 +1,24 @@
 {
   "schemaVersion": "kfc-automatic-contract-manifest-v1",
-  "canonicalDigest": "34c389f3ff5954a790be171778214028e1097c52b9b43f044416279b77b91034",
+  "canonicalDigest": "57117c33245e6060b4cdf5dc58a0ceabff22e516d4b4eb38aecafa2ca2d9025e",
   "representations": {
     "node": "services/kfc-agent-backend/src/recommendations/contracts/automatic-recommendation.ts",
-    "python": "services/kfc-recommendation-scorer/src/kfc_recommendation_scorer/contract_digest.py",
-    "dart": "apps/kfc_live_monitor_flutter/lib/features/automatic_recommendations/domain/automatic_recommendation_contract.dart"
+    "python": "services/kfc-recommendation-scorer/src/kfc_recommendation_scorer/contract.py",
+    "dart": "apps/kfc_live_monitor_flutter/lib/features/automatic_recommendations/domain/automatic_recommendation_contract.dart",
+    "workbench": "deferred: Slice 7 generated client has no entrypoint in Slice 1",
+    "chat": "deferred: Slice 8 shared client has no entrypoint in Slice 1"
   },
   "authorityFiles": [
     "openapi.json",
     "schemas/automatic-recommendation.schema.json",
     "schemas/automatic-scorer.schema.json"
   ],
+  "idempotency": {
+    "canonicalization": "UTF-8 JSON with recursively lexicographically sorted object keys and preserved array order",
+    "binding": "sha256(UTF-8(operationPath + NUL + identityType + NUL + canonicalJson))",
+    "requestRule": "Same requestId, operation path, type, and digest replays; any changed binding conflicts.",
+    "eventRule": "Same eventId, operation path, event type, and digest replays; any changed binding conflicts."
+  },
   "examples": [
     { "file": "examples/local-favorite-request.json", "kind": "local_favorite_request" },
     { "file": "examples/for-you-request.json", "kind": "for_you_request" },

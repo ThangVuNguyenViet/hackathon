@@ -146,6 +146,40 @@ const responseSchema = z
         message: 'Displayed count must equal proposal count',
       });
     }
+    if (
+      response.counts.potential < response.counts.eligible ||
+      response.counts.eligible < response.counts.scored ||
+      response.counts.scored < response.counts.displayed
+    ) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['counts'],
+        message: 'Recommendation counts must be monotonic',
+      });
+    }
+    const actionIds = new Set(
+      response.proposals.map((proposal) => proposal.actionId),
+    );
+    if (actionIds.size !== response.proposals.length) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['proposals'],
+        message: 'Proposal action identifiers must be unique',
+      });
+    }
+    if (
+      response.proposals.some(({ action }) =>
+        response.recommendationType === 'modifier_upsell'
+          ? action.type !== 'apply_modifier'
+          : action.type !== 'add_product',
+      )
+    ) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['proposals'],
+        message: 'Proposal action is incompatible with recommendation type',
+      });
+    }
   });
 
 export function parseAutomaticRecommendationResponse(value: unknown) {
@@ -172,9 +206,33 @@ const eventBase = {
 const impressionSchema = z
   .object({
     ...eventBase,
-    renderedActions: z.array(renderedActionSchema).max(4),
+    renderedActions: z.array(renderedActionSchema).min(1).max(4),
   })
-  .strict();
+  .strict()
+  .superRefine((impression, context) => {
+    const positions = new Set(
+      impression.renderedActions.map(
+        ({ renderedPosition }) => renderedPosition,
+      ),
+    );
+    const actionIds = new Set(
+      impression.renderedActions.map(({ actionId }) => actionId),
+    );
+    if (positions.size !== impression.renderedActions.length) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['renderedActions'],
+        message: 'Rendered positions must be unique',
+      });
+    }
+    if (actionIds.size !== impression.renderedActions.length) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['renderedActions'],
+        message: 'Rendered action identifiers must be unique',
+      });
+    }
+  });
 
 const actionOutcomeSchema = z
   .object({
@@ -233,12 +291,16 @@ const problemSchema = z
     title: z.string().trim().min(1),
     status: z.union([
       z.literal(400),
+      z.literal(401),
+      z.literal(403),
       z.literal(404),
       z.literal(409),
       z.literal(503),
     ]),
     code: z.enum([
       'invalid_request',
+      'unauthorized',
+      'forbidden',
       'recommendation_not_found',
       'identity_conflict',
       'stale_or_invalid_action',
@@ -251,6 +313,8 @@ const problemSchema = z
   .superRefine((problem, context) => {
     const validCodesByStatus: Record<number, readonly string[]> = {
       400: ['invalid_request'],
+      401: ['unauthorized'],
+      403: ['forbidden'],
       404: ['recommendation_not_found'],
       409: ['identity_conflict', 'stale_or_invalid_action'],
       503: ['recommendation_infrastructure_unavailable'],

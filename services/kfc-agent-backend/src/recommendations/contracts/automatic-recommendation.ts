@@ -1,7 +1,8 @@
 import { z } from 'zod';
+import { createHash } from 'node:crypto';
 
 export const AUTOMATIC_RECOMMENDATION_CONTRACT_DIGEST =
-  '34c389f3ff5954a790be171778214028e1097c52b9b43f044416279b77b91034';
+  '57117c33245e6060b4cdf5dc58a0ceabff22e516d4b4eb38aecafa2ca2d9025e';
 
 export const automaticRecommendationOperations = {
   local_favorite: '/v1/recommendations/local-favorites',
@@ -113,6 +114,54 @@ export type AutomaticRecommendationRequest =
   | z.infer<typeof modifierUpsellRequestSchema>
   | z.infer<typeof smartCrossSellRequestSchema>;
 
+function isJsonRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function canonicalJson(value: unknown): string {
+  if (
+    value === null ||
+    typeof value === 'string' ||
+    typeof value === 'boolean'
+  ) {
+    return JSON.stringify(value);
+  }
+  if (typeof value === 'number') {
+    if (!Number.isFinite(value)) {
+      throw new TypeError('Canonical JSON rejects non-finite numbers');
+    }
+    return JSON.stringify(value);
+  }
+  if (Array.isArray(value)) {
+    return `[${value.map(canonicalJson).join(',')}]`;
+  }
+  if (isJsonRecord(value)) {
+    return `{${Object.entries(value)
+      .sort(([left], [right]) => left.localeCompare(right))
+      .map(([key, nested]) => `${JSON.stringify(key)}:${canonicalJson(nested)}`)
+      .join(',')}}`;
+  }
+  throw new TypeError('Canonical JSON supports JSON values only');
+}
+
+export function automaticRecommendationIdentityDigest({
+  operationPath,
+  identityType,
+  payload,
+}: {
+  operationPath: string;
+  identityType: string;
+  payload: unknown;
+}): string {
+  return createHash('sha256')
+    .update(operationPath)
+    .update('\0')
+    .update(identityType)
+    .update('\0')
+    .update(canonicalJson(payload))
+    .digest('hex');
+}
+
 export function parseAutomaticRecommendationRequest(
   type: AutomaticRecommendationType,
   value: unknown,
@@ -130,4 +179,5 @@ export {
 export {
   parseAutomaticScorerRequest,
   parseAutomaticScorerResponse,
+  reconcileAutomaticScorerResponse,
 } from './automatic-scorer.js';

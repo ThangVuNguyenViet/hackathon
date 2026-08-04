@@ -8,10 +8,14 @@ response payloads.
 from __future__ import annotations
 
 import copy
+import hashlib
+import json
+import math
 import re
 from dataclasses import dataclass
 from datetime import datetime
 from typing import Any, Dict, Iterable, Mapping, Type, TypeVar
+from urllib.parse import urlparse
 
 
 _OPAQUE_ID = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:/-]*$")
@@ -31,6 +35,10 @@ _EMPTY_REASONS = {
     "empty_cart",
     "no_candidate_above_threshold",
     "recommendation_serving_paused",
+}
+_REASON_CODES = {
+    "popular_here", "ordered_before", "matches_your_history",
+    "completes_your_item", "completes_your_meal", "active_offer",
 }
 
 
@@ -130,7 +138,7 @@ def _number(value: Any, path: str, minimum: float, maximum: float) -> float:
     if isinstance(value, bool) or not isinstance(value, (int, float)):
         _fail(f"{path} must be a number")
     number = float(value)
-    if number < minimum or number > maximum:
+    if not math.isfinite(number) or number < minimum or number > maximum:
         _fail(f"{path} must be between {minimum} and {maximum}")
     return number
 
@@ -282,6 +290,8 @@ def parse_automatic_recommendation_response(value: Any) -> AutomaticRecommendati
                 _opaque_id(modifier[name], f"{proposal_path}.action.{name}")
             if not isinstance(modifier["groupPath"], list) or not modifier["groupPath"]:
                 _fail(f"{proposal_path}.action.groupPath must be non-empty")
+            for path_index, identifier in enumerate(modifier["groupPath"]):
+                _opaque_id(identifier, f"{proposal_path}.action.groupPath[{path_index}]")
             _integer(modifier["quantity"], f"{proposal_path}.action.quantity", 1)
             _money(modifier["priceImpact"], f"{proposal_path}.action.priceImpact")
         else:
@@ -289,15 +299,26 @@ def parse_automatic_recommendation_response(value: Any) -> AutomaticRecommendati
         display = _exact_object(item["display"], ("name", "imageUrl", "priceImpact"), f"{proposal_path}.display")
         _string(display["name"], f"{proposal_path}.display.name")
         if display["imageUrl"] is not None:
-            _string(display["imageUrl"], f"{proposal_path}.display.imageUrl")
+            image_url = _string(display["imageUrl"], f"{proposal_path}.display.imageUrl")
+            if not urlparse(image_url).scheme:
+                _fail(f"{proposal_path}.display.imageUrl must be a URI")
         _money(display["priceImpact"], f"{proposal_path}.display.priceImpact")
         if not isinstance(item["reasonCodes"], list) or not item["reasonCodes"]:
             _fail(f"{proposal_path}.reasonCodes must be non-empty")
+        if any(reason not in _REASON_CODES for reason in item["reasonCodes"]):
+            _fail(f"{proposal_path}.reasonCodes contain an unknown reason")
     counts = _exact_object(payload["counts"], ("potential", "eligible", "scored", "displayed"), "response.counts")
     for name in counts:
         _integer(counts[name], f"response.counts.{name}")
     if counts["displayed"] != len(proposals):
         _fail("response.counts.displayed must equal proposal count")
+    if not counts["potential"] >= counts["eligible"] >= counts["scored"] >= counts["displayed"]:
+        _fail("response counts must be monotonic")
+    if len({proposal["actionId"] for proposal in proposals}) != len(proposals):
+        _fail("response proposal action identifiers must be unique")
+    expected_action = "apply_modifier" if payload["recommendationType"] == "modifier_upsell" else "add_product"
+    if any(proposal["action"]["type"] != expected_action for proposal in proposals):
+        _fail("response proposal action is incompatible with recommendation type")
     status = payload["status"]
     empty_reason = payload["emptyReason"]
     if status == "recommended":
@@ -330,12 +351,18 @@ def _event_base(value: Any, keys: Iterable[str], path: str) -> Mapping[str, Any]
 def parse_automatic_recommendation_impression(value: Any) -> AutomaticRecommendationImpressionPayload:
     payload = _event_base(value, ("schemaVersion", "eventId", "channel", "occurredAt", "orderingJourneyRef", "opportunityRef", "cartRevision", "renderedActions"), "impression")
     actions = payload["renderedActions"]
-    if not isinstance(actions, list) or len(actions) > 4:
+    if not isinstance(actions, list) or not actions or len(actions) > 4:
         _fail("impression.renderedActions is invalid")
+    action_ids = set()
+    positions = set()
     for index, action in enumerate(actions):
         item = _exact_object(action, ("actionId", "renderedPosition"), f"impression.renderedActions[{index}]")
         _opaque_id(item["actionId"], f"impression.renderedActions[{index}].actionId")
         _integer(item["renderedPosition"], f"impression.renderedActions[{index}].renderedPosition", 1)
+        action_ids.add(item["actionId"])
+        positions.add(item["renderedPosition"])
+    if len(action_ids) != len(actions) or len(positions) != len(actions):
+        _fail("impression actions and positions must be unique")
     return AutomaticRecommendationImpressionPayload(payload)
 
 
@@ -367,7 +394,7 @@ def parse_automatic_recommendation_problem(value: Any) -> AutomaticRecommendatio
         _fail("problem has invalid fields")
     _string(payload.get("type"), "problem.type")
     _string(payload.get("title"), "problem.title")
-    status_codes = {400: {"invalid_request"}, 404: {"recommendation_not_found"}, 409: {"identity_conflict", "stale_or_invalid_action"}, 503: {"recommendation_infrastructure_unavailable"}}
+    status_codes = {400: {"invalid_request"}, 401: {"unauthorized"}, 403: {"forbidden"}, 404: {"recommendation_not_found"}, 409: {"identity_conflict", "stale_or_invalid_action"}, 503: {"recommendation_infrastructure_unavailable"}}
     if payload.get("status") not in status_codes or payload.get("code") not in status_codes[payload["status"]]:
         _fail("problem status and code must agree")
     if payload.get("retryable") != (payload["status"] == 503):
@@ -408,6 +435,12 @@ def parse_automatic_scorer_request(value: Any) -> AutomaticScorerRequestPayload:
         _integer(item["priceImpactVnd"], f"scorer request.candidates[{index}].priceImpactVnd")
         if not isinstance(item["features"], dict):
             _fail("scorer request candidate features must be an object")
+        for name, feature in item["features"].items():
+            _string(name, "scorer request feature key")
+            if feature is not None and not isinstance(feature, (str, bool, int, float)):
+                _fail("scorer request feature values must be scalar or null")
+            if isinstance(feature, float) and not math.isfinite(feature):
+                _fail("scorer request feature values must be finite")
     return AutomaticScorerRequestPayload(payload)
 
 
@@ -432,3 +465,39 @@ def parse_automatic_scorer_response(value: Any) -> AutomaticScorerResponsePayloa
             _string(name, "scorer response explanation key")
             _number(explanation, "scorer response explanation value", -1, 1)
     return AutomaticScorerResponsePayload(payload)
+
+
+def reconcile_automatic_scorer_response(
+    request_value: Any, response_value: Any
+) -> AutomaticScorerResponsePayload:
+    request = parse_automatic_scorer_request(request_value).to_wire()
+    response = parse_automatic_scorer_response(response_value)
+    response_wire = response.to_wire()
+    if request["requestId"] != response_wire["requestId"]:
+        _fail("scorer response request identity does not match")
+    if request["model"] != response_wire["model"]:
+        _fail("scorer response model binding does not match")
+    candidate_ids = [candidate["candidateId"] for candidate in request["candidates"]]
+    score_ids = [score["candidateId"] for score in response_wire["scores"]]
+    if (
+        len(set(candidate_ids)) != len(candidate_ids)
+        or len(set(score_ids)) != len(score_ids)
+        or set(candidate_ids) != set(score_ids)
+    ):
+        _fail("scorer response must contain one score for every candidate")
+    return response
+
+
+def automatic_recommendation_identity_digest(
+    operation_path: str, identity_type: str, payload: Any
+) -> str:
+    canonical_json = json.dumps(
+        payload, ensure_ascii=False, sort_keys=True, separators=(",", ":"), allow_nan=False
+    )
+    return hashlib.sha256(
+        operation_path.encode("utf-8")
+        + b"\0"
+        + identity_type.encode("utf-8")
+        + b"\0"
+        + canonical_json.encode("utf-8")
+    ).hexdigest()

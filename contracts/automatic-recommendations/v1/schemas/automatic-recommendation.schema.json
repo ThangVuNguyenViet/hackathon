@@ -347,7 +347,42 @@
             "displayed": { "type": "integer", "minimum": 0 }
           }
         }
-      }
+      },
+      "allOf": [
+        {
+          "oneOf": [
+            {
+              "properties": {
+                "status": { "const": "recommended" },
+                "emptyReason": { "type": "null" },
+                "model": { "$ref": "#/$defs/ModelBinding" },
+                "proposals": { "type": "array", "minItems": 1 }
+              }
+            },
+            {
+              "properties": {
+                "status": { "const": "empty" },
+                "emptyReason": { "enum": ["no_qualified_model", "no_eligible_candidates", "insufficient_history", "parent_cart_line_not_found", "empty_cart", "no_candidate_above_threshold"] },
+                "model": { "type": "null" },
+                "proposals": { "type": "array", "maxItems": 0 }
+              }
+            },
+            {
+              "properties": {
+                "status": { "const": "paused" },
+                "emptyReason": { "const": "recommendation_serving_paused" },
+                "model": { "type": "null" },
+                "proposals": { "type": "array", "maxItems": 0 }
+              }
+            }
+          ]
+        },
+        {
+          "if": { "type": "object", "properties": { "recommendationType": { "const": "modifier_upsell" } } },
+          "then": { "type": "object", "properties": { "proposals": { "type": "array", "items": { "type": "object", "properties": { "action": { "$ref": "#/$defs/ModifierAction" } } } } } },
+          "else": { "type": "object", "properties": { "proposals": { "type": "array", "items": { "type": "object", "properties": { "action": { "$ref": "#/$defs/ProductAction" } } } } } }
+        }
+      ]
     },
     "RenderedAction": {
       "type": "object",
@@ -381,6 +416,7 @@
         "cartRevision": { "$ref": "#/$defs/OpaqueId" },
         "renderedActions": {
           "type": "array",
+          "minItems": 1,
           "maxItems": 4,
           "items": { "$ref": "#/$defs/RenderedAction" }
         }
@@ -486,10 +522,12 @@
       "properties": {
         "type": { "type": "string", "format": "uri" },
         "title": { "type": "string", "minLength": 1 },
-        "status": { "enum": [400, 404, 409, 503] },
+        "status": { "enum": [400, 401, 403, 404, 409, 503] },
         "code": {
           "enum": [
             "invalid_request",
+            "unauthorized",
+            "forbidden",
             "recommendation_not_found",
             "identity_conflict",
             "stale_or_invalid_action",
@@ -504,10 +542,12 @@
       "allOf": [
         {
           "oneOf": [
-            { "properties": { "status": { "const": 400 }, "code": { "const": "invalid_request" } } },
-            { "properties": { "status": { "const": 404 }, "code": { "const": "recommendation_not_found" } } },
-            { "properties": { "status": { "const": 409 }, "code": { "enum": ["identity_conflict", "stale_or_invalid_action"] } } },
-            { "properties": { "status": { "const": 503 }, "code": { "const": "recommendation_infrastructure_unavailable" } } }
+            { "properties": { "status": { "const": 400 }, "code": { "const": "invalid_request" }, "retryable": { "const": false } } },
+            { "properties": { "status": { "const": 401 }, "code": { "const": "unauthorized" }, "retryable": { "const": false } } },
+            { "properties": { "status": { "const": 403 }, "code": { "const": "forbidden" }, "retryable": { "const": false } } },
+            { "properties": { "status": { "const": 404 }, "code": { "const": "recommendation_not_found" }, "retryable": { "const": false } } },
+            { "properties": { "status": { "const": 409 }, "code": { "enum": ["identity_conflict", "stale_or_invalid_action"] }, "retryable": { "const": false } } },
+            { "properties": { "status": { "const": 503 }, "code": { "const": "recommendation_infrastructure_unavailable" }, "retryable": { "const": true } } }
           ]
         }
       ]

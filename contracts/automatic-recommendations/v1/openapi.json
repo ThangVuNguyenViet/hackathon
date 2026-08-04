@@ -24,6 +24,8 @@
         "responses": {
           "200": { "$ref": "#/components/responses/Decision" },
           "400": { "$ref": "#/components/responses/BadRequest" },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "403": { "$ref": "#/components/responses/Forbidden" },
           "409": { "$ref": "#/components/responses/Conflict" },
           "503": { "$ref": "#/components/responses/Unavailable" }
         }
@@ -46,6 +48,8 @@
         "responses": {
           "200": { "$ref": "#/components/responses/Decision" },
           "400": { "$ref": "#/components/responses/BadRequest" },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "403": { "$ref": "#/components/responses/Forbidden" },
           "409": { "$ref": "#/components/responses/Conflict" },
           "503": { "$ref": "#/components/responses/Unavailable" }
         }
@@ -68,6 +72,8 @@
         "responses": {
           "200": { "$ref": "#/components/responses/Decision" },
           "400": { "$ref": "#/components/responses/BadRequest" },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "403": { "$ref": "#/components/responses/Forbidden" },
           "409": { "$ref": "#/components/responses/Conflict" },
           "503": { "$ref": "#/components/responses/Unavailable" }
         }
@@ -90,6 +96,8 @@
         "responses": {
           "200": { "$ref": "#/components/responses/Decision" },
           "400": { "$ref": "#/components/responses/BadRequest" },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "403": { "$ref": "#/components/responses/Forbidden" },
           "409": { "$ref": "#/components/responses/Conflict" },
           "503": { "$ref": "#/components/responses/Unavailable" }
         }
@@ -113,6 +121,8 @@
         "responses": {
           "204": { "$ref": "#/components/responses/EventAccepted" },
           "400": { "$ref": "#/components/responses/BadRequest" },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "403": { "$ref": "#/components/responses/Forbidden" },
           "404": { "$ref": "#/components/responses/NotFound" },
           "409": { "$ref": "#/components/responses/Conflict" },
           "503": { "$ref": "#/components/responses/Unavailable" }
@@ -137,6 +147,8 @@
         "responses": {
           "204": { "$ref": "#/components/responses/EventAccepted" },
           "400": { "$ref": "#/components/responses/BadRequest" },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "403": { "$ref": "#/components/responses/Forbidden" },
           "404": { "$ref": "#/components/responses/NotFound" },
           "409": { "$ref": "#/components/responses/Conflict" },
           "503": { "$ref": "#/components/responses/Unavailable" }
@@ -248,8 +260,14 @@
           }
         }
       },
-      "Unauthorized": { "description": "Missing or invalid admin identity" },
-      "Forbidden": { "description": "Identity lacks inspection authority" }
+      "Unauthorized": {
+        "description": "Missing or invalid service identity",
+        "content": { "application/problem+json": { "schema": { "$ref": "./schemas/automatic-recommendation.schema.json#/$defs/ProblemDetails" } } }
+      },
+      "Forbidden": {
+        "description": "Service identity lacks the required scope",
+        "content": { "application/problem+json": { "schema": { "$ref": "./schemas/automatic-recommendation.schema.json#/$defs/ProblemDetails" } } }
+      }
     }
   }
 }

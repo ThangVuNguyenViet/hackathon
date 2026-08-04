@@ -51,11 +51,11 @@
     "worker:d1:migrate:remote": "wrangler d1 migrations apply ${KFC_D1_DATABASE_NAME:-kfc-agent-demo} --remote"
   },
   "dependencies": {
+    "@kfc/openai-agents-runtime": "file:packages/openai-agents-runtime",
     "@langchain/core": "1.2.3",
     "@langchain/google": "0.2.1",
     "@langchain/langgraph": "1.4.8",
     "@langchain/openai": "1.5.5",
-    "@kfc/openai-agents-runtime": "file:packages/openai-agents-runtime",
     "fastify": "^5.4.0",
     "gray-matter": "^4.0.3",
     "langchain": "1.5.3",
@@ -67,6 +67,7 @@
     "zod-to-json-schema": "^3.25.2"
   },
   "devDependencies": {
+    "@apidevtools/json-schema-ref-parser": "^15.5.1",
     "@types/node": "^22.10.0",
     "@types/pg": "^8.15.4",
     "eslint": "^10.7.0",

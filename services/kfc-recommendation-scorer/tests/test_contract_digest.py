@@ -23,6 +23,8 @@ from kfc_recommendation_scorer.contract import (  # noqa: E402
     parse_automatic_recommendation_response,
     parse_automatic_scorer_request,
     parse_automatic_scorer_response,
+    reconcile_automatic_scorer_response,
+    automatic_recommendation_identity_digest,
 )
 
 
@@ -82,11 +84,52 @@ class ContractDigestTest(unittest.TestCase):
             ("examples/negative/outcome-generic-payload.json", parse_automatic_recommendation_outcome),
             ("examples/negative/scorer-missing-provenance.json", parse_automatic_scorer_request),
             ("examples/negative/problem-status-code-mismatch.json", parse_automatic_recommendation_problem),
+            ("examples/adversarial/scorer-nested-feature.json", parse_automatic_scorer_request),
+            ("examples/adversarial/recommended-invented-reason.json", parse_automatic_recommendation_response),
+            ("examples/adversarial/recommended-without-model.json", parse_automatic_recommendation_response),
+            ("examples/adversarial/problem-503-not-retryable.json", parse_automatic_recommendation_problem),
+            ("examples/adversarial/modifier-with-product-action.json", parse_automatic_recommendation_response),
+            ("examples/adversarial/impression-empty.json", parse_automatic_recommendation_impression),
+            ("examples/adversarial/recommended-nonmonotonic-counts.json", parse_automatic_recommendation_response),
         )
         for relative_path, parser in negative_examples:
             value = json.loads((contract_root / relative_path).read_text())
             with self.assertRaises(ContractValidationError):
                 parser(value)
+
+    def test_python_scorer_reconciliation_requires_exact_pairing(self) -> None:
+        repository_root = SCORER_ROOT.parents[1]
+        root = repository_root / "contracts" / "automatic-recommendations" / "v1" / "examples"
+        request = json.loads((root / "scorer-request.json").read_text())
+        response = json.loads((root / "scorer-response.json").read_text())
+        self.assertEqual(reconcile_automatic_scorer_response(request, response).to_wire(), response)
+        for invalid_response in (
+            {**response, "requestId": "mismatch"},
+            {**response, "scores": []},
+            {**response, "scores": [response["scores"][0], response["scores"][0]]},
+            {**response, "scores": [{**response["scores"][0], "candidateId": "extra"}]},
+        ):
+            with self.assertRaises(ContractValidationError):
+                reconcile_automatic_scorer_response(request, invalid_response)
+
+    def test_python_identity_digest_binds_type_and_path(self) -> None:
+        request = {"cart": {"revision": "cart-1"}, "storeId": "KFCVN0002"}
+        reordered = {"storeId": "KFCVN0002", "cart": {"revision": "cart-1"}}
+        digest = automatic_recommendation_identity_digest(
+            "/v1/recommendations/local-favorites", "local_favorite", request
+        )
+        self.assertEqual(
+            digest,
+            automatic_recommendation_identity_digest(
+                "/v1/recommendations/local-favorites", "local_favorite", reordered
+            ),
+        )
+        self.assertNotEqual(
+            digest,
+            automatic_recommendation_identity_digest(
+                "/v1/recommendations/local-favorites", "smart_cross_sell", request
+            ),
+        )
 
 
 if __name__ == "__main__":

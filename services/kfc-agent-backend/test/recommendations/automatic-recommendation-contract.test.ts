@@ -31,6 +31,34 @@ describe('automatic recommendation wire contract', () => {
     });
   });
 
+  it('binds canonical request and event identity digests to type and operation path', async () => {
+    const { automaticRecommendationIdentityDigest } = await import(
+      contractModulePath
+    );
+    const request = { cart: { revision: 'cart-1' }, storeId: 'KFCVN0002' };
+    const reordered = { storeId: 'KFCVN0002', cart: { revision: 'cart-1' } };
+    const input = {
+      operationPath: '/v1/recommendations/local-favorites',
+      identityType: 'local_favorite',
+      payload: request,
+    };
+    expect(automaticRecommendationIdentityDigest(input)).toBe(
+      automaticRecommendationIdentityDigest({ ...input, payload: reordered }),
+    );
+    expect(automaticRecommendationIdentityDigest(input)).not.toBe(
+      automaticRecommendationIdentityDigest({
+        ...input,
+        identityType: 'smart_cross_sell',
+      }),
+    );
+    expect(automaticRecommendationIdentityDigest(input)).not.toBe(
+      automaticRecommendationIdentityDigest({
+        ...input,
+        operationPath: '/v1/recommendations/local-favorites/events',
+      }),
+    );
+  });
+
   it('enforces each trusted type-specific request prerequisite', async () => {
     const { parseAutomaticRecommendationRequest } = await import(
       contractModulePath
@@ -188,8 +216,11 @@ describe('automatic recommendation wire contract', () => {
   });
 
   it('accepts only eligible rows and reconciled bounded scorer output', async () => {
-    const { parseAutomaticScorerRequest, parseAutomaticScorerResponse } =
-      await import(contractModulePath);
+    const {
+      parseAutomaticScorerRequest,
+      parseAutomaticScorerResponse,
+      reconcileAutomaticScorerResponse,
+    } = await import(contractModulePath);
     const model = {
       bundleId: 'qualified-bundle-contract-001',
       bundleDigest:
@@ -206,38 +237,65 @@ describe('automatic recommendation wire contract', () => {
         'dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd',
     };
 
-    expect(
-      parseAutomaticScorerRequest({
-        schemaVersion: 'kfc-automatic-scorer-v1',
-        requestId: commonRequest.requestId,
-        recommendationType: 'local_favorite',
-        model,
-        candidates: [
-          {
-            candidateId: 'product:20732',
-            eligibility: 'eligible',
-            priceImpactVnd: 89000,
-            features: { priceImpactVnd: 89000, daypart: 'lunch' },
-          },
-        ],
-      }),
-    ).toMatchObject({ candidates: [{ eligibility: 'eligible' }] });
+    const scorerRequest = {
+      schemaVersion: 'kfc-automatic-scorer-v1',
+      requestId: commonRequest.requestId,
+      recommendationType: 'local_favorite',
+      model,
+      candidates: [
+        {
+          candidateId: 'product:20732',
+          eligibility: 'eligible',
+          priceImpactVnd: 89000,
+          features: { priceImpactVnd: 89000, daypart: 'lunch' },
+        },
+      ],
+    };
+    expect(parseAutomaticScorerRequest(scorerRequest)).toMatchObject({
+      candidates: [{ eligibility: 'eligible' }],
+    });
 
+    const scorerResponse = {
+      schemaVersion: 'kfc-automatic-scorer-v1',
+      requestId: commonRequest.requestId,
+      model,
+      scores: [
+        {
+          candidateId: 'product:20732',
+          selectionProbability: 0.4,
+          jointProbability: 0.3,
+          explanationValues: { localDemand: 0.25, priceImpact: -0.1 },
+        },
+      ],
+    };
+    expect(parseAutomaticScorerResponse(scorerResponse)).toMatchObject({
+      scores: [{ jointProbability: 0.3 }],
+    });
     expect(
-      parseAutomaticScorerResponse({
-        schemaVersion: 'kfc-automatic-scorer-v1',
-        requestId: commonRequest.requestId,
-        model,
-        scores: [
-          {
-            candidateId: 'product:20732',
-            selectionProbability: 0.4,
-            jointProbability: 0.3,
-            explanationValues: { localDemand: 0.25, priceImpact: -0.1 },
-          },
-        ],
-      }),
-    ).toMatchObject({ scores: [{ jointProbability: 0.3 }] });
+      reconcileAutomaticScorerResponse(scorerRequest, scorerResponse),
+    ).toMatchObject({
+      scores: [{ candidateId: 'product:20732' }],
+    });
+    for (const invalidResponse of [
+      { ...scorerResponse, requestId: 'different-request' },
+      {
+        ...scorerResponse,
+        model: { ...model, modelRevision: 'different-model' },
+      },
+      { ...scorerResponse, scores: [] },
+      {
+        ...scorerResponse,
+        scores: [...scorerResponse.scores, scorerResponse.scores[0]],
+      },
+      {
+        ...scorerResponse,
+        scores: [{ ...scorerResponse.scores[0], candidateId: 'extra-product' }],
+      },
+    ]) {
+      expect(() =>
+        reconcileAutomaticScorerResponse(scorerRequest, invalidResponse),
+      ).toThrow();
+    }
 
     expect(() =>
       parseAutomaticScorerResponse({

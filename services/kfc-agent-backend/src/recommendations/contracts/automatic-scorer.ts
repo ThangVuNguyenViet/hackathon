@@ -91,3 +91,30 @@ export function parseAutomaticScorerRequest(value: unknown) {
 export function parseAutomaticScorerResponse(value: unknown) {
   return scorerResponseSchema.parse(value);
 }
+
+export function reconcileAutomaticScorerResponse(
+  requestValue: unknown,
+  responseValue: unknown,
+) {
+  const request = parseAutomaticScorerRequest(requestValue);
+  const response = parseAutomaticScorerResponse(responseValue);
+  if (request.requestId !== response.requestId) {
+    throw new Error('Scorer response request identity does not match');
+  }
+  if (JSON.stringify(request.model) !== JSON.stringify(response.model)) {
+    throw new Error('Scorer response model binding does not match');
+  }
+  const candidateIds = request.candidates.map(({ candidateId }) => candidateId);
+  const scoreIds = response.scores.map(({ candidateId }) => candidateId);
+  if (
+    new Set(candidateIds).size !== candidateIds.length ||
+    new Set(scoreIds).size !== scoreIds.length ||
+    candidateIds.length !== scoreIds.length ||
+    candidateIds.some((candidateId) => !new Set(scoreIds).has(candidateId))
+  ) {
+    throw new Error(
+      'Scorer response must contain one score for every candidate',
+    );
+  }
+  return response;
+}

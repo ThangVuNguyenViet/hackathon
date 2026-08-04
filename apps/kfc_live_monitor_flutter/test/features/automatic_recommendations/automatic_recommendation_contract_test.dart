@@ -122,6 +122,20 @@ void main() {
               AutomaticScorerRequestPayload.parse,
           'examples/negative/problem-status-code-mismatch.json':
               AutomaticRecommendationProblemPayload.parse,
+          'examples/adversarial/scorer-nested-feature.json':
+              AutomaticScorerRequestPayload.parse,
+          'examples/adversarial/recommended-invented-reason.json':
+              AutomaticRecommendationResponsePayload.parse,
+          'examples/adversarial/recommended-without-model.json':
+              AutomaticRecommendationResponsePayload.parse,
+          'examples/adversarial/problem-503-not-retryable.json':
+              AutomaticRecommendationProblemPayload.parse,
+          'examples/adversarial/modifier-with-product-action.json':
+              AutomaticRecommendationResponsePayload.parse,
+          'examples/adversarial/impression-empty.json':
+              AutomaticRecommendationImpressionPayload.parse,
+          'examples/adversarial/recommended-nonmonotonic-counts.json':
+              AutomaticRecommendationResponsePayload.parse,
         };
 
     for (final entry in negativeExamples.entries) {
@@ -133,5 +147,81 @@ void main() {
         throwsA(isA<AutomaticRecommendationContractException>()),
       );
     }
+  });
+
+  test('Dart scorer reconciliation requires exact pairing', () {
+    final root = Directory.current.parent.parent.uri.resolve(
+      'contracts/automatic-recommendations/v1/examples/',
+    );
+    final request =
+        jsonDecode(
+              File.fromUri(
+                root.resolve('scorer-request.json'),
+              ).readAsStringSync(),
+            )
+            as Map<String, dynamic>;
+    final response =
+        jsonDecode(
+              File.fromUri(
+                root.resolve('scorer-response.json'),
+              ).readAsStringSync(),
+            )
+            as Map<String, dynamic>;
+    expect(
+      reconcileAutomaticScorerResponse(request, response).toJson(),
+      response,
+    );
+    for (final invalid in [
+      {...response, 'requestId': 'mismatch'},
+      {...response, 'scores': []},
+      {
+        ...response,
+        'scores': [response['scores']![0], response['scores']![0]],
+      },
+      {
+        ...response,
+        'scores': [
+          {...response['scores']![0], 'candidateId': 'extra'},
+        ],
+      },
+    ]) {
+      expect(
+        () => reconcileAutomaticScorerResponse(request, invalid),
+        throwsA(isA<AutomaticRecommendationContractException>()),
+      );
+    }
+  });
+
+  test('Dart identity digest binds type and path', () {
+    final request = {
+      'cart': {'revision': 'cart-1'},
+      'storeId': 'KFCVN0002',
+    };
+    final digest = automaticRecommendationIdentityDigest(
+      operationPath: '/v1/recommendations/local-favorites',
+      identityType: 'local_favorite',
+      payload: request,
+    );
+    expect(
+      digest,
+      automaticRecommendationIdentityDigest(
+        operationPath: '/v1/recommendations/local-favorites',
+        identityType: 'local_favorite',
+        payload: {
+          'storeId': 'KFCVN0002',
+          'cart': {'revision': 'cart-1'},
+        },
+      ),
+    );
+    expect(
+      digest,
+      isNot(
+        automaticRecommendationIdentityDigest(
+          operationPath: '/v1/recommendations/local-favorites',
+          identityType: 'smart_cross_sell',
+          payload: request,
+        ),
+      ),
+    );
   });
 }
