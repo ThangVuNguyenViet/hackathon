@@ -12,9 +12,12 @@
     "bundleId": "qualified-bundle-001",
     "bundleDigest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
     "modelRevision": "local-favorite-model-001",
-    "calibrationRevision": "local-favorite-calibration-001",
-    "featureSchema": "local-favorite-features-v1",
-    "datasetDigest": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+    "calibratorRevision": "local-favorite-calibrator-001",
+    "featureSchemaDigest": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+    "thresholdRevision": "local-favorite-threshold-001",
+    "composerContractDigest": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+    "qualificationRunId": "qualification-run-001",
+    "qualificationEvidenceDigest": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"
   },
   "proposals": [
     {

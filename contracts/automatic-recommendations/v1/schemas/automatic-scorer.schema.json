@@ -25,22 +25,33 @@
         "bundleId",
         "bundleDigest",
         "modelRevision",
-        "featureSchema"
+        "calibratorRevision",
+        "featureSchemaDigest",
+        "thresholdRevision",
+        "composerContractDigest",
+        "qualificationRunId",
+        "qualificationEvidenceDigest"
       ],
       "properties": {
         "bundleId": { "$ref": "#/$defs/OpaqueId" },
         "bundleDigest": { "$ref": "#/$defs/Sha256" },
         "modelRevision": { "$ref": "#/$defs/OpaqueId" },
-        "featureSchema": { "$ref": "#/$defs/OpaqueId" }
+        "calibratorRevision": { "$ref": "#/$defs/OpaqueId" },
+        "featureSchemaDigest": { "$ref": "#/$defs/Sha256" },
+        "thresholdRevision": { "$ref": "#/$defs/OpaqueId" },
+        "composerContractDigest": { "$ref": "#/$defs/Sha256" },
+        "qualificationRunId": { "$ref": "#/$defs/OpaqueId" },
+        "qualificationEvidenceDigest": { "$ref": "#/$defs/Sha256" }
       }
     },
     "Candidate": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["candidateId", "eligibility", "features"],
+      "required": ["candidateId", "eligibility", "priceImpactVnd", "features"],
       "properties": {
         "candidateId": { "$ref": "#/$defs/OpaqueId" },
         "eligibility": { "const": "eligible" },
+        "priceImpactVnd": { "type": "integer", "minimum": 0 },
         "features": {
           "type": "object",
           "additionalProperties": {
@@ -56,14 +67,12 @@
         "candidateId",
         "selectionProbability",
         "jointProbability",
-        "expectedRetainedValueVnd",
         "explanationValues"
       ],
       "properties": {
         "candidateId": { "$ref": "#/$defs/OpaqueId" },
         "selectionProbability": { "type": "number", "minimum": 0, "maximum": 1 },
         "jointProbability": { "type": "number", "minimum": 0, "maximum": 1 },
-        "expectedRetainedValueVnd": { "type": "number", "minimum": 0 },
         "explanationValues": {
           "type": "object",
           "additionalProperties": {

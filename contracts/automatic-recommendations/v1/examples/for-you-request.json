@@ -4,6 +4,8 @@
   "storeId": "KFCVN0002",
   "fulfilmentMode": "delivery",
   "locale": "vi-VN",
+  "orderingJourneyRef": "journey-for-you-001",
+  "opportunityRef": "opportunity-for-you-001",
   "cart": {
     "cartId": "cart-for-you-001",
     "revision": "cart-revision-for-you-001",

@@ -87,14 +87,18 @@
         "storeId",
         "fulfilmentMode",
         "locale",
+        "orderingJourneyRef",
+        "opportunityRef",
         "cart"
       ],
       "properties": {
         "schemaVersion": { "const": "kfc-automatic-recommendation-v1" },
-        "requestId": { "$ref": "#/$defs/OpaqueId" },
+        "requestId": { "$ref": "#/$defs/OpaqueId", "description": "Globally unique. Identical canonical content replays the stored decision; changed content or a different type conflicts." },
         "storeId": { "$ref": "#/$defs/OpaqueId" },
         "fulfilmentMode": { "enum": ["pickup", "delivery"] },
         "locale": { "type": "string", "minLength": 2, "maxLength": 35 },
+        "orderingJourneyRef": { "$ref": "#/$defs/OpaqueId" },
+        "opportunityRef": { "$ref": "#/$defs/OpaqueId" },
         "cart": { "$ref": "#/$defs/Cart" }
       }
     },
@@ -107,15 +111,19 @@
         "storeId",
         "fulfilmentMode",
         "locale",
+        "orderingJourneyRef",
+        "opportunityRef",
         "cart",
         "verifiedCustomerRef"
       ],
       "properties": {
         "schemaVersion": { "const": "kfc-automatic-recommendation-v1" },
-        "requestId": { "$ref": "#/$defs/OpaqueId" },
+        "requestId": { "$ref": "#/$defs/OpaqueId", "description": "Globally unique. Identical canonical content replays the stored decision; changed content or a different type conflicts." },
         "storeId": { "$ref": "#/$defs/OpaqueId" },
         "fulfilmentMode": { "enum": ["pickup", "delivery"] },
         "locale": { "type": "string", "minLength": 2, "maxLength": 35 },
+        "orderingJourneyRef": { "$ref": "#/$defs/OpaqueId" },
+        "opportunityRef": { "$ref": "#/$defs/OpaqueId" },
         "cart": { "$ref": "#/$defs/Cart" },
         "verifiedCustomerRef": { "$ref": "#/$defs/OpaqueId" }
       }
@@ -129,15 +137,19 @@
         "storeId",
         "fulfilmentMode",
         "locale",
+        "orderingJourneyRef",
+        "opportunityRef",
         "cart",
         "parentCartLineId"
       ],
       "properties": {
         "schemaVersion": { "const": "kfc-automatic-recommendation-v1" },
-        "requestId": { "$ref": "#/$defs/OpaqueId" },
+        "requestId": { "$ref": "#/$defs/OpaqueId", "description": "Globally unique. Identical canonical content replays the stored decision; changed content or a different type conflicts." },
         "storeId": { "$ref": "#/$defs/OpaqueId" },
         "fulfilmentMode": { "enum": ["pickup", "delivery"] },
         "locale": { "type": "string", "minLength": 2, "maxLength": 35 },
+        "orderingJourneyRef": { "$ref": "#/$defs/OpaqueId" },
+        "opportunityRef": { "$ref": "#/$defs/OpaqueId" },
         "cart": { "$ref": "#/$defs/Cart" },
         "parentCartLineId": { "$ref": "#/$defs/OpaqueId" }
       }
@@ -151,14 +163,18 @@
         "storeId",
         "fulfilmentMode",
         "locale",
+        "orderingJourneyRef",
+        "opportunityRef",
         "cart"
       ],
       "properties": {
         "schemaVersion": { "const": "kfc-automatic-recommendation-v1" },
-        "requestId": { "$ref": "#/$defs/OpaqueId" },
+        "requestId": { "$ref": "#/$defs/OpaqueId", "description": "Globally unique. Identical canonical content replays the stored decision; changed content or a different type conflicts." },
         "storeId": { "$ref": "#/$defs/OpaqueId" },
         "fulfilmentMode": { "enum": ["pickup", "delivery"] },
         "locale": { "type": "string", "minLength": 2, "maxLength": 35 },
+        "orderingJourneyRef": { "$ref": "#/$defs/OpaqueId" },
+        "opportunityRef": { "$ref": "#/$defs/OpaqueId" },
         "cart": { "$ref": "#/$defs/NonEmptyCart" }
       }
     },
@@ -169,17 +185,23 @@
         "bundleId",
         "bundleDigest",
         "modelRevision",
-        "calibrationRevision",
-        "featureSchema",
-        "datasetDigest"
+        "calibratorRevision",
+        "featureSchemaDigest",
+        "thresholdRevision",
+        "composerContractDigest",
+        "qualificationRunId",
+        "qualificationEvidenceDigest"
       ],
       "properties": {
         "bundleId": { "$ref": "#/$defs/OpaqueId" },
         "bundleDigest": { "$ref": "#/$defs/Sha256" },
         "modelRevision": { "$ref": "#/$defs/OpaqueId" },
-        "calibrationRevision": { "$ref": "#/$defs/OpaqueId" },
-        "featureSchema": { "$ref": "#/$defs/OpaqueId" },
-        "datasetDigest": { "$ref": "#/$defs/Sha256" }
+        "calibratorRevision": { "$ref": "#/$defs/OpaqueId" },
+        "featureSchemaDigest": { "$ref": "#/$defs/Sha256" },
+        "thresholdRevision": { "$ref": "#/$defs/OpaqueId" },
+        "composerContractDigest": { "$ref": "#/$defs/Sha256" },
+        "qualificationRunId": { "$ref": "#/$defs/OpaqueId" },
+        "qualificationEvidenceDigest": { "$ref": "#/$defs/Sha256" }
       }
     },
     "ProductAction": {
@@ -344,14 +366,18 @@
         "eventId",
         "channel",
         "occurredAt",
+        "orderingJourneyRef",
+        "opportunityRef",
         "cartRevision",
         "renderedActions"
       ],
       "properties": {
         "schemaVersion": { "const": "kfc-automatic-recommendation-event-v1" },
-        "eventId": { "$ref": "#/$defs/OpaqueId" },
+        "eventId": { "$ref": "#/$defs/OpaqueId", "description": "Globally unique. Identical event facts replay; changed event facts conflict." },
         "channel": { "enum": ["kiosk", "chat", "workbench", "other"] },
         "occurredAt": { "type": "string", "format": "date-time" },
+        "orderingJourneyRef": { "$ref": "#/$defs/OpaqueId" },
+        "opportunityRef": { "$ref": "#/$defs/OpaqueId" },
         "cartRevision": { "$ref": "#/$defs/OpaqueId" },
         "renderedActions": {
           "type": "array",
@@ -360,45 +386,98 @@
         }
       }
     },
-    "OutcomeRequest": {
+    "OutcomeBase": {
       "type": "object",
-      "additionalProperties": false,
-      "required": [
-        "schemaVersion",
-        "eventId",
-        "channel",
-        "eventType",
-        "occurredAt",
-        "actionId",
-        "renderedPosition",
-        "cartRevision",
-        "payload"
-      ],
+      "required": ["schemaVersion", "eventId", "channel", "occurredAt", "orderingJourneyRef", "opportunityRef", "cartRevision"],
       "properties": {
         "schemaVersion": { "const": "kfc-automatic-recommendation-event-v1" },
-        "eventId": { "$ref": "#/$defs/OpaqueId" },
+        "eventId": { "$ref": "#/$defs/OpaqueId", "description": "Globally unique. Identical event facts replay; changed event facts conflict." },
         "channel": { "enum": ["kiosk", "chat", "workbench", "other"] },
-        "eventType": {
-          "enum": [
-            "selected",
-            "explicitly_dismissed",
-            "cart_mutation_succeeded",
-            "cart_mutation_failed",
-            "checkout_completed",
-            "order_abandoned"
-          ]
-        },
         "occurredAt": { "type": "string", "format": "date-time" },
-        "actionId": {
-          "oneOf": [{ "$ref": "#/$defs/OpaqueId" }, { "type": "null" }]
-        },
-        "renderedPosition": {
-          "type": ["integer", "null"],
-          "minimum": 1
-        },
-        "cartRevision": { "$ref": "#/$defs/OpaqueId" },
-        "payload": { "type": "object" }
+        "orderingJourneyRef": { "$ref": "#/$defs/OpaqueId" },
+        "opportunityRef": { "$ref": "#/$defs/OpaqueId" },
+        "cartRevision": { "$ref": "#/$defs/OpaqueId" }
       }
+    },
+    "ActionOutcome": {
+      "type": "object",
+      "unevaluatedProperties": false,
+      "allOf": [
+        { "$ref": "#/$defs/OutcomeBase" },
+        {
+          "type": "object",
+          "required": ["eventType", "actionId", "renderedPosition"],
+          "properties": {
+            "eventType": { "enum": ["selected", "action_dismissed"] },
+            "actionId": { "$ref": "#/$defs/OpaqueId" },
+            "renderedPosition": { "type": "integer", "minimum": 1 }
+          }
+        }
+      ]
+    },
+    "MutationOutcome": {
+      "type": "object",
+      "unevaluatedProperties": false,
+      "allOf": [
+        { "$ref": "#/$defs/OutcomeBase" },
+        {
+          "type": "object",
+          "required": ["eventType", "actionId", "cartMutationRef"],
+          "properties": {
+            "eventType": { "enum": ["cart_mutation_succeeded", "cart_mutation_failed"] },
+            "actionId": { "$ref": "#/$defs/OpaqueId" },
+            "cartMutationRef": { "$ref": "#/$defs/OpaqueId" }
+          }
+        }
+      ]
+    },
+    "SlateDismissedOutcome": {
+      "type": "object",
+      "unevaluatedProperties": false,
+      "allOf": [
+        { "$ref": "#/$defs/OutcomeBase" },
+        {
+          "type": "object",
+          "required": ["eventType"],
+          "properties": { "eventType": { "const": "slate_dismissed" } }
+        }
+      ]
+    },
+    "CheckoutCompletedOutcome": {
+      "type": "object",
+      "unevaluatedProperties": false,
+      "allOf": [
+        { "$ref": "#/$defs/OutcomeBase" },
+        {
+          "type": "object",
+          "required": ["eventType", "orderRef"],
+          "properties": {
+            "eventType": { "const": "checkout_completed" },
+            "orderRef": { "$ref": "#/$defs/OpaqueId" }
+          }
+        }
+      ]
+    },
+    "OrderAbandonedOutcome": {
+      "type": "object",
+      "unevaluatedProperties": false,
+      "allOf": [
+        { "$ref": "#/$defs/OutcomeBase" },
+        {
+          "type": "object",
+          "required": ["eventType"],
+          "properties": { "eventType": { "const": "order_abandoned" } }
+        }
+      ]
+    },
+    "OutcomeRequest": {
+      "oneOf": [
+        { "$ref": "#/$defs/ActionOutcome" },
+        { "$ref": "#/$defs/MutationOutcome" },
+        { "$ref": "#/$defs/SlateDismissedOutcome" },
+        { "$ref": "#/$defs/CheckoutCompletedOutcome" },
+        { "$ref": "#/$defs/OrderAbandonedOutcome" }
+      ]
     },
     "ProblemDetails": {
       "type": "object",
@@ -421,7 +500,17 @@
         "requestId": {
           "oneOf": [{ "$ref": "#/$defs/OpaqueId" }, { "type": "null" }]
         }
-      }
+      },
+      "allOf": [
+        {
+          "oneOf": [
+            { "properties": { "status": { "const": 400 }, "code": { "const": "invalid_request" } } },
+            { "properties": { "status": { "const": 404 }, "code": { "const": "recommendation_not_found" } } },
+            { "properties": { "status": { "const": 409 }, "code": { "enum": ["identity_conflict", "stale_or_invalid_action"] } } },
+            { "properties": { "status": { "const": 503 }, "code": { "const": "recommendation_infrastructure_unavailable" } } }
+          ]
+        }
+      ]
     },
     "InspectionResponse": {
       "type": "object",

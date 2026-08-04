@@ -5,14 +5,18 @@
     "bundleId": "qualified-bundle-001",
     "bundleDigest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
     "modelRevision": "local-favorite-model-001",
-    "featureSchema": "local-favorite-features-v1"
+    "calibratorRevision": "local-favorite-calibrator-001",
+    "featureSchemaDigest": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+    "thresholdRevision": "local-favorite-threshold-001",
+    "composerContractDigest": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+    "qualificationRunId": "qualification-run-001",
+    "qualificationEvidenceDigest": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"
   },
   "scores": [
     {
       "candidateId": "product:20732",
       "selectionProbability": 0.4,
       "jointProbability": 0.3,
-      "expectedRetainedValueVnd": 26700,
       "explanationValues": { "localDemand": 0.25, "priceImpact": -0.1 }
     }
   ]

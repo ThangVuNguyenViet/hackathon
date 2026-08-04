@@ -10,6 +10,7 @@
     "/v1/recommendations/local-favorites": {
       "post": {
         "operationId": "createLocalFavoriteRecommendation",
+        "security": [{ "serviceJwt": ["recommendations.decision:write"] }],
         "requestBody": {
           "required": true,
           "content": {
@@ -31,6 +32,7 @@
     "/v1/recommendations/for-you": {
       "post": {
         "operationId": "createForYouRecommendation",
+        "security": [{ "serviceJwt": ["recommendations.decision:write"] }],
         "requestBody": {
           "required": true,
           "content": {
@@ -52,6 +54,7 @@
     "/v1/recommendations/modifier-upsells": {
       "post": {
         "operationId": "createModifierUpsellRecommendation",
+        "security": [{ "serviceJwt": ["recommendations.decision:write"] }],
         "requestBody": {
           "required": true,
           "content": {
@@ -73,6 +76,7 @@
     "/v1/recommendations/smart-cross-sells": {
       "post": {
         "operationId": "createSmartCrossSellRecommendation",
+        "security": [{ "serviceJwt": ["recommendations.decision:write"] }],
         "requestBody": {
           "required": true,
           "content": {
@@ -94,6 +98,7 @@
     "/v1/recommendations/{recommendationId}/impressions": {
       "post": {
         "operationId": "recordAutomaticRecommendationImpression",
+        "security": [{ "serviceJwt": ["recommendations.event:write"] }],
         "parameters": [{ "$ref": "#/components/parameters/RecommendationId" }],
         "requestBody": {
           "required": true,
@@ -117,6 +122,7 @@
     "/v1/recommendations/{recommendationId}/outcomes": {
       "post": {
         "operationId": "recordAutomaticRecommendationOutcome",
+        "security": [{ "serviceJwt": ["recommendations.event:write"] }],
         "parameters": [{ "$ref": "#/components/parameters/RecommendationId" }],
         "requestBody": {
           "required": true,
@@ -140,7 +146,7 @@
     "/v1/admin/recommendations/{recommendationId}/inspection": {
       "get": {
         "operationId": "inspectAutomaticRecommendation",
-        "security": [{ "sandboxAdminBearer": [] }],
+        "security": [{ "serviceJwt": ["recommendations.inspection:read"] }],
         "parameters": [{ "$ref": "#/components/parameters/RecommendationId" }],
         "responses": {
           "200": {
@@ -162,7 +168,20 @@
   },
   "components": {
     "securitySchemes": {
-      "sandboxAdminBearer": { "type": "http", "scheme": "bearer" }
+      "serviceJwt": {
+        "type": "oauth2",
+        "description": "Replaceable trusted service-to-service JWT authority. Browser clients never hold this credential.",
+        "flows": {
+          "clientCredentials": {
+            "tokenUrl": "https://identity.invalid/oauth/token",
+            "scopes": {
+              "recommendations.decision:write": "Create automatic recommendation decisions",
+              "recommendations.event:write": "Record automatic recommendation evidence",
+              "recommendations.inspection:read": "Read protected technical inspection evidence"
+            }
+          }
+        }
+      }
     },
     "parameters": {
       "RecommendationId": {

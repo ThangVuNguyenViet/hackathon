@@ -9,6 +9,8 @@ const commonRequest = {
   storeId: 'KFCVN0002',
   fulfilmentMode: 'pickup',
   locale: 'vi-VN',
+  orderingJourneyRef: 'journey-contract-001',
+  opportunityRef: 'opportunity-contract-001',
   cart: {
     cartId: 'cart-contract-001',
     revision: 'cart-revision-contract-001',
@@ -36,7 +38,10 @@ describe('automatic recommendation wire contract', () => {
 
     expect(
       parseAutomaticRecommendationRequest('local_favorite', commonRequest),
-    ).toEqual(commonRequest);
+    ).toMatchObject({
+      orderingJourneyRef: 'journey-contract-001',
+      opportunityRef: 'opportunity-contract-001',
+    });
     expect(() =>
       parseAutomaticRecommendationRequest('for_you', commonRequest),
     ).toThrow();
@@ -142,16 +147,19 @@ describe('automatic recommendation wire contract', () => {
       parseAutomaticRecommendationOutcome,
     } = await import(contractModulePath);
 
-    expect(
-      parseAutomaticRecommendationImpression({
-        schemaVersion: 'kfc-automatic-recommendation-event-v1',
-        eventId: 'event-impression-contract-001',
-        channel: 'kiosk',
-        occurredAt: '2026-08-04T13:00:00Z',
-        cartRevision: commonRequest.cart.revision,
-        renderedActions: [{ actionId: 'product:20732', renderedPosition: 1 }],
-      }),
-    ).toMatchObject({ renderedActions: [{ renderedPosition: 1 }] });
+    const impression = {
+      schemaVersion: 'kfc-automatic-recommendation-event-v1',
+      eventId: 'event-impression-contract-001',
+      channel: 'kiosk',
+      occurredAt: '2026-08-04T13:00:00Z',
+      orderingJourneyRef: 'journey-contract-001',
+      opportunityRef: 'opportunity-contract-001',
+      cartRevision: commonRequest.cart.revision,
+      renderedActions: [{ actionId: 'product:20732', renderedPosition: 1 }],
+    };
+    expect(parseAutomaticRecommendationImpression(impression)).toMatchObject({
+      renderedActions: [{ renderedPosition: 1 }],
+    });
 
     expect(() =>
       parseAutomaticRecommendationOutcome({
@@ -160,10 +168,21 @@ describe('automatic recommendation wire contract', () => {
         channel: 'kiosk',
         eventType: 'selected',
         occurredAt: '2026-08-04T13:01:00Z',
+        orderingJourneyRef: 'journey-contract-001',
+        opportunityRef: 'opportunity-contract-001',
         actionId: null,
         renderedPosition: 1,
         cartRevision: commonRequest.cart.revision,
-        payload: {},
+      }),
+    ).toThrow();
+
+    expect(() =>
+      parseAutomaticRecommendationOutcome({
+        ...impression,
+        eventId: 'event-outcome-contract-002',
+        eventType: 'slate_dismissed',
+        actionId: 'product:20732',
+        renderedPosition: 1,
       }),
     ).toThrow();
   });
@@ -176,7 +195,15 @@ describe('automatic recommendation wire contract', () => {
       bundleDigest:
         'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
       modelRevision: 'local-favorite-model-contract-001',
-      featureSchema: 'local-favorite-features-v1',
+      calibratorRevision: 'local-favorite-calibrator-contract-001',
+      featureSchemaDigest:
+        'bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb',
+      thresholdRevision: 'local-favorite-threshold-contract-001',
+      composerContractDigest:
+        'cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc',
+      qualificationRunId: 'qualification-run-contract-001',
+      qualificationEvidenceDigest:
+        'dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd',
     };
 
     expect(
@@ -189,6 +216,7 @@ describe('automatic recommendation wire contract', () => {
           {
             candidateId: 'product:20732',
             eligibility: 'eligible',
+            priceImpactVnd: 89000,
             features: { priceImpactVnd: 89000, daypart: 'lunch' },
           },
         ],
@@ -205,7 +233,6 @@ describe('automatic recommendation wire contract', () => {
             candidateId: 'product:20732',
             selectionProbability: 0.4,
             jointProbability: 0.3,
-            expectedRetainedValueVnd: 26700,
             explanationValues: { localDemand: 0.25, priceImpact: -0.1 },
           },
         ],
@@ -222,10 +249,22 @@ describe('automatic recommendation wire contract', () => {
             candidateId: 'product:20732',
             selectionProbability: 0.2,
             jointProbability: 0.3,
-            expectedRetainedValueVnd: 26700,
             explanationValues: {},
           },
         ],
+      }),
+    ).toThrow();
+  });
+
+  it('requires trusted journey and opportunity references without client ranking authority', async () => {
+    const { parseAutomaticRecommendationRequest } = await import(
+      contractModulePath
+    );
+
+    expect(() =>
+      parseAutomaticRecommendationRequest('local_favorite', {
+        ...commonRequest,
+        orderingJourneyRef: undefined,
       }),
     ).toThrow();
   });

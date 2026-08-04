@@ -19,9 +19,12 @@ const modelBindingSchema = z
     bundleId: opaqueIdSchema,
     bundleDigest: sha256Schema,
     modelRevision: opaqueIdSchema,
-    calibrationRevision: opaqueIdSchema,
-    featureSchema: opaqueIdSchema,
-    datasetDigest: sha256Schema,
+    calibratorRevision: opaqueIdSchema,
+    featureSchemaDigest: sha256Schema,
+    thresholdRevision: opaqueIdSchema,
+    composerContractDigest: sha256Schema,
+    qualificationRunId: opaqueIdSchema,
+    qualificationEvidenceDigest: sha256Schema,
   })
   .strict();
 
@@ -161,6 +164,8 @@ const eventBase = {
   eventId: opaqueIdSchema,
   channel: channelSchema,
   occurredAt: z.string().datetime({ offset: true }),
+  orderingJourneyRef: opaqueIdSchema,
+  opportunityRef: opaqueIdSchema,
   cartRevision: opaqueIdSchema,
 } as const;
 
@@ -171,36 +176,48 @@ const impressionSchema = z
   })
   .strict();
 
-const outcomeSchema = z
+const actionOutcomeSchema = z
   .object({
     ...eventBase,
-    eventType: z.enum([
-      'selected',
-      'explicitly_dismissed',
-      'cart_mutation_succeeded',
-      'cart_mutation_failed',
-      'checkout_completed',
-      'order_abandoned',
-    ]),
-    actionId: opaqueIdSchema.nullable(),
-    renderedPosition: z.number().int().positive().nullable(),
-    payload: z.record(z.string(), z.unknown()),
+    eventType: z.enum(['selected', 'action_dismissed']),
+    actionId: opaqueIdSchema,
+    renderedPosition: z.number().int().positive(),
   })
-  .strict()
-  .superRefine((outcome, context) => {
-    const actionRequired = [
-      'selected',
-      'cart_mutation_succeeded',
-      'cart_mutation_failed',
-    ].includes(outcome.eventType);
-    if (actionRequired && outcome.actionId === null) {
-      context.addIssue({
-        code: z.ZodIssueCode.custom,
-        path: ['actionId'],
-        message: 'This outcome requires an action identity',
-      });
-    }
-  });
+  .strict();
+const mutationOutcomeSchema = z
+  .object({
+    ...eventBase,
+    eventType: z.enum(['cart_mutation_succeeded', 'cart_mutation_failed']),
+    actionId: opaqueIdSchema,
+    cartMutationRef: opaqueIdSchema,
+  })
+  .strict();
+const slateDismissedOutcomeSchema = z
+  .object({
+    ...eventBase,
+    eventType: z.literal('slate_dismissed'),
+  })
+  .strict();
+const checkoutCompletedOutcomeSchema = z
+  .object({
+    ...eventBase,
+    eventType: z.literal('checkout_completed'),
+    orderRef: opaqueIdSchema,
+  })
+  .strict();
+const orderAbandonedOutcomeSchema = z
+  .object({
+    ...eventBase,
+    eventType: z.literal('order_abandoned'),
+  })
+  .strict();
+const outcomeSchema = z.discriminatedUnion('eventType', [
+  actionOutcomeSchema,
+  mutationOutcomeSchema,
+  slateDismissedOutcomeSchema,
+  checkoutCompletedOutcomeSchema,
+  orderAbandonedOutcomeSchema,
+]);
 
 export function parseAutomaticRecommendationImpression(value: unknown) {
   return impressionSchema.parse(value);
@@ -232,6 +249,19 @@ const problemSchema = z
   })
   .strict()
   .superRefine((problem, context) => {
+    const validCodesByStatus: Record<number, readonly string[]> = {
+      400: ['invalid_request'],
+      404: ['recommendation_not_found'],
+      409: ['identity_conflict', 'stale_or_invalid_action'],
+      503: ['recommendation_infrastructure_unavailable'],
+    };
+    if (!validCodesByStatus[problem.status].includes(problem.code)) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['code'],
+        message: 'Problem code must agree with its HTTP status',
+      });
+    }
     if (problem.retryable !== (problem.status === 503)) {
       context.addIssue({
         code: z.ZodIssueCode.custom,

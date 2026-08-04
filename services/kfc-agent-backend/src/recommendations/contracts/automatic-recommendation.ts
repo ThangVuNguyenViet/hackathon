@@ -1,7 +1,7 @@
 import { z } from 'zod';
 
 export const AUTOMATIC_RECOMMENDATION_CONTRACT_DIGEST =
-  '18bc66980c853f79b11a4d59f746da37533edbdf158beb087eeb184ee969f474';
+  '34c389f3ff5954a790be171778214028e1097c52b9b43f044416279b77b91034';
 
 export const automaticRecommendationOperations = {
   local_favorite: '/v1/recommendations/local-favorites',
@@ -66,6 +66,8 @@ const commonRequestShape = {
   storeId: opaqueIdSchema,
   fulfilmentMode: z.enum(['pickup', 'delivery']),
   locale: z.string().trim().min(2).max(35),
+  orderingJourneyRef: opaqueIdSchema,
+  opportunityRef: opaqueIdSchema,
 } as const;
 
 const localFavoriteRequestSchema = z

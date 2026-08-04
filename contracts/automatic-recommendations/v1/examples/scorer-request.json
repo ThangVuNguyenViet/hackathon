@@ -6,12 +6,18 @@
     "bundleId": "qualified-bundle-001",
     "bundleDigest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
     "modelRevision": "local-favorite-model-001",
-    "featureSchema": "local-favorite-features-v1"
+    "calibratorRevision": "local-favorite-calibrator-001",
+    "featureSchemaDigest": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+    "thresholdRevision": "local-favorite-threshold-001",
+    "composerContractDigest": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+    "qualificationRunId": "qualification-run-001",
+    "qualificationEvidenceDigest": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"
   },
   "candidates": [
     {
       "candidateId": "product:20732",
       "eligibility": "eligible",
+      "priceImpactVnd": 89000,
       "features": { "priceImpactVnd": 89000, "daypart": "lunch" }
     }
   ]

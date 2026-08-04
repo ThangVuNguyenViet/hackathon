@@ -18,7 +18,12 @@ const modelBindingSchema = z
     bundleId: opaqueIdSchema,
     bundleDigest: sha256Schema,
     modelRevision: opaqueIdSchema,
-    featureSchema: opaqueIdSchema,
+    calibratorRevision: opaqueIdSchema,
+    featureSchemaDigest: sha256Schema,
+    thresholdRevision: opaqueIdSchema,
+    composerContractDigest: sha256Schema,
+    qualificationRunId: opaqueIdSchema,
+    qualificationEvidenceDigest: sha256Schema,
   })
   .strict();
 const featureValueSchema = z.union([
@@ -40,6 +45,7 @@ const scorerRequestSchema = z
           .object({
             candidateId: opaqueIdSchema,
             eligibility: z.literal('eligible'),
+            priceImpactVnd: z.number().int().nonnegative(),
             features: z.record(z.string(), featureValueSchema),
           })
           .strict(),
@@ -59,7 +65,6 @@ const scorerResponseSchema = z
           candidateId: opaqueIdSchema,
           selectionProbability: z.number().min(0).max(1),
           jointProbability: z.number().min(0).max(1),
-          expectedRetainedValueVnd: z.number().nonnegative(),
           explanationValues: z.record(
             z.string(),
             z.number().finite().min(-1).max(1),

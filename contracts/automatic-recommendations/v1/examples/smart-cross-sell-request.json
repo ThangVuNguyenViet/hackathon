@@ -4,6 +4,8 @@
   "storeId": "KFCVN0002",
   "fulfilmentMode": "pickup",
   "locale": "vi-VN",
+  "orderingJourneyRef": "journey-cross-sell-001",
+  "opportunityRef": "opportunity-cross-sell-001",
   "cart": {
     "cartId": "cart-cross-sell-001",
     "revision": "cart-revision-cross-sell-001",
