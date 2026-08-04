@@ -1,5 +1,1 @@
-{
-  "configurationPath": "selected-configuration.json",
-  "configurationSha256": "573206c1aebd7550edb6ce2b659b4138fcf12ce1bdc1492763ecd7d209aa2929",
-  "schemaVersion": "kfc-model-qualification-freeze-v1"
-}
+{"configurationPath":"/private/tmp/kfc-task4-v5-00f9eda6/development-qualification/selected-configuration.json","configurationSha256":"1b8d83d3ebab143ef0fbedb7d4715dd4722736ec74d9e51a561a45bbc417fcb7","precommitSha256":"4a2feac46d192eadda3e8ed5277e2e65fba6c30a32b7c181b88c228faf495787","schemaVersion":"kfc-model-qualification-freeze-v2","sourceContractSha256":"762b1c0fca370b226177e6ab15a9b364f8034b4891f0583173d6f3e501d8359c","stage":"configuration_frozen_before_evaluation","worldDigest":"c8252efef9107f692eb377e72dc1ff3802c277de3ebb53f33470c0677976e181"}

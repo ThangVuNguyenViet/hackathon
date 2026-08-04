@@ -1,167 +1,215 @@
-# Task 4 blocker report — full-eligible-set ranking evidence
+# Task 4 report — four-family model qualification
 
 ## Result
 
-Task 4 is **not qualified**. The maintained Slice 4 implementation checkpoint is
-`af60617c36fb5b4a14f48ee7273507f804946de7`
-(`feat(recommendations): guard model qualification evidence`). A clean-source
-development run on that exact commit returned `failed_qualification` with all
-four per-type gates false. It emitted no `qualified-model-bundle` directory and
-performed no partial promotion or runtime baseline substitution.
+Task 4 is **not qualified**. The clean-source implementation checkpoint is
+`00f9eda65f1f443ca82f01f048f3c8da071b6ea4`
+(`feat(recommendations): qualify four model families`). The fixed 60,000-
+journey, three-seed development run returned `failed_qualification`. It emitted
+no `qualified-model-bundle`, made no partial promotion, and substituted no
+runtime baseline.
 
-The 500,000-journey qualification profile was intentionally not run. The
-development world proves that Task 3 lacks the evaluation-only candidate-level
-relevance needed to identify the canonical NDCG gate. Spending the ten 50,000-
-journey seeds would only reproduce an invalid metric. Task 4 must resume after a
-sequential Task 3 data-contract repair.
+The 500,000-journey ten-seed qualification run was intentionally not launched.
+The task contract permits that expensive untouched qualification only if the
+fixed development run passes. It did not. No threshold, calibration gate,
+coverage gate, ranking gate, model family, or composer rule was weakened or
+retuned after observing smoke or development evidence.
 
 This is synthetic-only evidence. It does not claim compatibility with real KFC
 data and does not authorize real-customer exposure.
 
 ## Implemented checkpoint
 
-- Added maintained NumPy/scikit-learn/LightGBM/XGBoost packaging with exact
-  locked versions.
-- Benchmarks real regularized logistic regression, LightGBM, and XGBoost on the
-  same chronological model-visible splits for every recommendation type and
-  both factual selection/joint-retention heads.
-- Adds clipped inverse-propensity weights and effective-sample-size evidence,
-  sigmoid/isotonic calibration selection, joint-probability bounds, frozen
-  per-type abstention thresholds, and the accepted deterministic one-action /
-  three-or-four Smart composer.
-- Serializes logistic models as data-only coefficient JSON, LightGBM as native
-  text, and XGBoost as native JSON, with exact library versions and golden
-  predictions. No pickle artifact is permitted.
-- Freezes champions, hyperparameters, seeds, feature encoders, calibrators,
-  thresholds, split rules, and composer before evaluator-only untouched-test
-  access. A deliberate tamper probe must be rejected and the exact
-  configuration digest must still match after evaluation.
-- Computes per-seed/slice calibration, coverage, invalid counters, outcome
-  intervals, evaluator-only random/popularity/no-recommendation evidence, and
-  paired business intervals. Oracle outcomes are used only for paired business
-  evaluation, never for training or model-visible ranker evaluation.
-- Emits an atomic four-model bundle only if every per-type and combined gate
-  passes. Any failure returns exit code 2, writes explicit failed evidence, and
-  emits no bundle.
+- Benchmarks four real maintained families for each of the four recommendation
+  types and both factual heads: regularized logistic regression, LightGBM,
+  XGBoost, and a compact scikit-learn MLP.
+- Uses the same chronological training/calibration/validation surfaces, clipped
+  inverse-propensity weights, effective-sample-size evidence, calibration,
+  joint-probability bounds, champion rules, thresholds, feature encoder, and
+  exact shared deterministic composer for every challenger.
+- Serializes logistic coefficients and compact MLP weights/intercepts as
+  data-only JSON, LightGBM as native text, and XGBoost as native JSON. Every
+  champion head carries native-artifact digests and golden predictions; pickle
+  is not used.
+- Consumes the world-owned immutable qualification precommit before a selected
+  configuration exists. Training, calibration, threshold selection, and
+  champion selection receive only the model-visible table. The v5 candidate
+  relevance loader is called only after the exact selected configuration is
+  written and frozen.
+- Verifies exact candidate-set parity between model-visible untouched rows and
+  `evaluation/candidate-relevance.parquet`, one immutable relevance definition,
+  and post-freeze artifact/schema digests before computing evaluation metrics.
+- Computes paired full-set NDCG@K and Recall@K for model, deterministic random,
+  and popularity orderings. The ranker score remains calibrated joint
+  probability times valid price impact with Unicode identity tie-break.
+- Preserves the fixed gates: zero invalid/cardinality/padding violations, at
+  least 95% of the better baseline coverage, both Brier scores no worse than
+  null, ECE at most 0.05, paired NDCG lower 95% above both baselines, per-type
+  business non-harm, and positive combined business lower bounds.
+- Emits a serving bundle only when all four per-type gates and the combined
+  business gate pass atomically.
 
-## RED/GREEN evidence
+## TDD evidence
 
-1. Qualification-contract tests first failed because the qualification package
-   did not exist. Frozen configuration/tamper rejection, clipped IPW/ESS,
-   calibrator rules, joint bounds, composer cardinality, and atomic no-partial-
-   promotion implementations made 8 tests green.
-2. Native-artifact tests first failed because the feature encoder and model
-   package did not exist. Explicit unknown categories and real native model
-   round trips with golden predictions made 3 tests green.
-3. Evaluator-boundary tests first failed because untouched evaluation had no
-   freeze-gated loader. Digest-verified evaluator-only access made it green.
-4. The smoke CLI test first failed because `qualify-models` did not exist. The
-   end-to-end command now benchmarks all four types and three challenger
-   families, freezes before test, proves tamper rejection, and fails atomically.
-5. The first development evaluator incorrectly collapsed ranking groups to
-   shown rows. The new guard test failed because no full-eligible-set ranking
-   module existed; it now proves that one rendered action does not mean one
-   eligible candidate and rejects missing candidate relevance rather than
-   manufacturing NDCG.
-6. The end-to-end smoke test then failed until its evidence reported
-   `insufficient_evidence`, full/shown/unlabelled candidate counts, the Task 3
-   repair contract, and no ranking intervals derived from incomplete labels.
+1. The native artifact test first failed with `unsupported model family: mlp`.
+   A real `MLPClassifier`, data-only native JSON representation, independent
+   NumPy inference loader, and golden-prediction round trip made it green.
+2. The end-to-end smoke test then failed because qualification exposed only the
+   three earlier challenger families. It also required evaluated post-freeze
+   relevance evidence instead of the earlier `insufficient_evidence` blocker.
+3. Adding the fourth challenger to the fixed configuration and opening the v5
+   relevance surface only after freeze made the end-to-end test green. Exact
+   candidate parity, paired NDCG intervals, Recall@K, and atomic failure
+   behavior are asserted.
+4. The simulator deterministic suite passed 57 tests and Ruff passed on the
+   clean implementation checkpoint.
 
-## Development failed qualification
+## Fixed smoke run
 
 Commands:
 
 ```text
-uv run --locked --no-dev kfc-recommendation-simulator generate \
-  --profile development \
-  --output /tmp/kfc-task4-development.phWQLb/worlds \
-  --world-revision synthetic-causal-world-v3
+uv run --locked --no-dev --project services/kfc-recommendation-simulator \
+  kfc-recommendation-simulator generate --profile smoke \
+  --output /tmp/kfc-task4-v5-00f9eda6/smoke-worlds \
+  --world-revision synthetic-causal-world-v5-task4-smoke
 
-uv run --locked --no-dev kfc-recommendation-simulator qualify-models \
-  --world /tmp/kfc-task4-development.phWQLb/worlds/synthetic-causal-world-v3 \
-  --output /tmp/kfc-task4-development.phWQLb/model-qualification-af60617c
+uv run --locked --no-dev --project services/kfc-recommendation-simulator \
+  kfc-recommendation-simulator qualify-models \
+  --world /tmp/kfc-task4-v5-00f9eda6/smoke-worlds/synthetic-causal-world-v5-task4-smoke \
+  --output /tmp/kfc-task4-v5-00f9eda6/smoke-qualification
+```
+
+- Profile: 2,000 journeys, seed `101`.
+- Generation: 1.67 seconds wall time, 347,308,032-byte maximum RSS, zero
+  swaps.
+- Qualification: 1.47 seconds wall time, 232,374,272-byte maximum RSS, zero
+  swaps.
+- Source binding: clean tracked tree at `00f9eda65f1f443ca82f01f048f3c8da071b6ea4`.
+- World validity and combined business passed. All four ranking gates passed.
+- All four calibration gates failed at smoke support; Smart Cross-sell also
+  failed slice coverage. Status was `failed_qualification`; bundle emitted was
+  false.
+
+## Fixed development run
+
+Commands:
+
+```text
+uv run --locked --no-dev --project services/kfc-recommendation-simulator \
+  kfc-recommendation-simulator generate --profile development \
+  --output /tmp/kfc-task4-v5-00f9eda6/development-worlds \
+  --world-revision synthetic-causal-world-v5-task4-development
+
+uv run --locked --no-dev --project services/kfc-recommendation-simulator \
+  kfc-recommendation-simulator qualify-models \
+  --world /tmp/kfc-task4-v5-00f9eda6/development-worlds/synthetic-causal-world-v5-task4-development \
+  --output /tmp/kfc-task4-v5-00f9eda6/development-qualification
 ```
 
 - Profile: 20,000 journeys per seed, seeds `101`, `211`, `307`, 60,000 total.
-- Generation: 44.87 seconds wall time; 2,173,075,456-byte maximum RSS; zero
+- Generation: 43.54 seconds wall time, 2,685,796,352-byte maximum RSS, zero
   swaps.
-- Clean-source qualification: 7.19 seconds wall time; 778,665,984-byte maximum
-  RSS; zero swaps; exit code 2.
-- Source binding: `af60617c36fb5b4a14f48ee7273507f804946de7`, tracked
-  tree clean at run start.
-- Champions selected without untouched-test access: Local Favorite LightGBM,
-  For You logistic regression, Modifier Upsell XGBoost, Smart Cross-sell
-  LightGBM.
-- World validity passed and the combined paired business gate passed. Every
-  per-type gate failed because canonical ranking evidence is insufficient;
-  calibration failures remain reported separately in the retained artifact.
+- Qualification: 8.99 seconds wall time, 1,159,938,048-byte maximum RSS, zero
+  swaps.
+- Source binding: clean tracked tree at `00f9eda65f1f443ca82f01f048f3c8da071b6ea4`.
+- World validity passed, all invalid counters were exactly zero, every per-type
+  business non-harm gate passed, and the combined business gate passed.
+- Configuration precommit, pre-test freeze verification, deliberate tamper
+  rejection, post-test freeze verification, and post-freeze-only relevance
+  opening all passed.
 - Atomic bundle emitted: false.
 
-Full eligible versus shown/unlabelled untouched-test candidate rows:
+### Champions and fixed gate results
 
-| Recommendation type | Eligible | Shown | Unlabelled eligible |
+| Type | Champion | Calibration | Ranking | Slice coverage/validity | Business | Type gate |
+|---|---|---:|---:|---:|---:|---:|
+| Local Favorite | LightGBM | fail | pass | pass | pass | fail |
+| For You | LightGBM | fail | pass | pass | pass | fail |
+| Modifier Upsell | compact MLP | fail | pass | pass | pass | fail |
+| Smart Cross-sell | XGBoost | fail | pass | fail | pass | fail |
+
+Candidate relevance covered every eligible row exactly:
+
+| Type | Eligible rows | Shown factual rows | Relevance rows |
 |---|---:|---:|---:|
-| Local Favorite | 6,122 | 1,539 | 4,583 |
-| For You | 19,340 | 4,862 | 14,478 |
-| Modifier Upsell | 12,290 | 2,458 | 9,832 |
-| Smart Cross-sell | 19,364 | 7,383 | 11,981 |
+| Local Favorite | 8,212 | 1,544 | 8,212 |
+| For You | 25,714 | 4,794 | 25,714 |
+| Modifier Upsell | 24,580 | 2,536 | 24,580 |
+| Smart Cross-sell | 20,774 | 6,822 | 20,774 |
 
-The retained machine evidence contains every challenger/head metric,
-calibrator, hyperparameter, ESS, threshold candidate, per-seed/slice metric,
-invalid counter, baseline, business interval, environment version, artifact
-digest, and explicit failure reason.
+The evaluation definition was `candidate-singleton-value-v2`, digest
+`61e5aed6ab9654984ecde0beea0ee1747a2af80fd08a102b3370f464e59b3e92`,
+with intervention `render_only_this_eligible_candidate`. It was not used for
+model, calibrator, threshold, or champion selection.
 
-## Required Task 3 repair
+Paired NDCG lower 95% bounds were all strictly positive:
 
-Add a physically separate **evaluation-only** surface containing per-candidate
-relevance or potential-outcome evidence for every eligible candidate at each
-opportunity, sufficient to compute ideal DCG for the full candidate set and
-paired NDCG@K confidence intervals against random and popularity. It must:
+| Type | Model vs random | Model vs popularity |
+|---|---:|---:|
+| Local Favorite | 0.141254 | 0.228942 |
+| For You | 0.151272 | 0.228001 |
+| Modifier Upsell | 0.282989 | 0.273141 |
+| Smart Cross-sell | 0.039283 | 0.046557 |
 
-- never appear in `model-visible/training-examples.parquet`;
-- remain inaccessible through `load_training_table` and all model,
-  calibrator, threshold, feature, and champion selection paths;
-- bind journey, opportunity, recommendation type, candidate identity, and the
-  evaluation outcome definition without latent/semantic leakage; and
-- preserve null labels for unshown candidates on the factual model-visible
-  surface.
+### Honest failure diagnosis
 
-Task 4 must re-run smoke, development, and then all ten qualification seeds only
-after that repaired evaluation contract passes leakage and full-set NDCG tests.
-No gate may be weakened and oracle fields may not be moved into training or the
-model-visible evaluator.
+The development failure is a model-calibration and composer-coverage result,
+not missing ranking evidence:
 
-## Retained proof and digests
+| Type/head | Brier | Null Brier | ECE | Failed condition |
+|---|---:|---:|---:|---|
+| Local Favorite selection | 0.253734 | 0.248971 | 0.070231 | Brier and ECE |
+| Local Favorite joint | 0.226042 | 0.222849 | 0.056326 | Brier and ECE |
+| For You selection | 0.253369 | 0.249989 | 0.056102 | Brier and ECE |
+| For You joint | 0.214208 | 0.213394 | 0.028886 | Brier |
+| Modifier Upsell selection | 0.251251 | 0.249993 | 0.035206 | Brier |
+| Modifier Upsell joint | 0.217249 | 0.216312 | 0.029799 | Brier |
+| Smart Cross-sell selection | 0.131218 | 0.131150 | 0.008213 | Brier |
+| Smart Cross-sell joint | 0.082299 | 0.082302 | 0.003334 | pass |
 
-- `task-4-development-failed-qualification.json`:
-  `c58a5c1deafb77b15b4cf45d730214a10adc50f3c34a8f8065906056c57ff885`
-- `task-4-development-qualification-status.json`:
-  `459260500dbbc38b9905b1d7f592efbed8cfa357b556ec6cb2d7e59565750f44`
-- `task-4-development-selected-configuration.json`:
-  `573206c1aebd7550edb6ce2b659b4138fcf12ce1bdc1492763ecd7d209aa2929`
-- `task-4-development-frozen-configuration.json`:
-  `5f4b335048b5c30efdca83a8306d48c37f67ccec6a5f55bf59885d83e995ac6e`
-- World digest:
-  `3ea86f44d59a5a02a509990b594ba0611aac6c124a0d0304bc3a34c5e456a23b`
-- Model-visible dataset artifact:
-  `b68ae923d2c33e569344c9f614601eea2e09ace37cbc0443d08652f63d8bca17`
-- Canonical wire digest:
-  `30fb774b804b4868abd78e30e489aa9fe835d3b959b38ae389c127949ac8e678`
-- Feature contract digest:
-  `35b710d0b73e7419038e83bc9c39f93feb38564d793726cd47021fa2dbc8421b`
-- Composer contract digest:
-  `16adfe83b611495758df995693781264b61f12d54c698da9ab52c895b64d7e49`
+Smart Cross-sell additionally missed the fixed 95%-of-better-baseline coverage
+gate in 11 evaluated slices for seed `211` and 11 for seed `307`. For example,
+seed `211` all-slice model coverage was 0.354731 versus required 0.369425;
+seed `307` was 0.353926 versus required 0.360979. Its zero threshold does not
+force invalid or padded slates: the exact composer still abstains when the
+three-or-four-item diversity/budget contract cannot be met.
 
-## GREEN gates on the implementation checkpoint
+The combined automatic-vs-no-recommendation evidence remained positive:
+AOV lower 95% `26,177.75 VND`, revenue per started journey lower 95%
+`20,520.97 VND`, checkout conversion lower 95% `+0.09791`, and abandonment
+upper 95% `-0.09791`. Those business results cannot override failed per-type
+model gates.
 
-- `uv run ruff check .` — PASS.
-- `uv run python -m compileall -q src tests` — PASS.
-- `uv run python -m unittest discover -s tests -v` — PASS: 38 simulator
-  tests.
-- `PYTHONPATH=src python3 -m compileall -q src tests` in the scorer — PASS.
-- `PYTHONPATH=src python3 -m unittest discover -s tests -v` in the scorer —
-  PASS: 9 tests.
-- `npm run check:automatic-recommendation-authority` — PASS: 5 tests.
-- `git diff --check` — PASS.
+A scientifically valid next attempt requires a new predeclared experiment on a
+new development world, with a training-only reason for changing calibration or
+composer behavior. It must not tune gates or configuration against this
+observed development result, and it still must pass development before the
+ten-seed qualification is authorized.
+
+## Retained evidence and digests
+
+- Development failed qualification:
+  `d5dc231201b87799aec0de1ca6158c4b0fb3ec795b12a7dd64edcb344f8492a3`
+- Development status:
+  `633f44079679883fa62fc86ff56c1bc84c8f024b7b2aa4ae73ac57f7ef435675`
+- Development selected configuration:
+  `1b8d83d3ebab143ef0fbedb7d4715dd4722736ec74d9e51a561a45bbc417fcb7`
+- Development frozen configuration:
+  `7b9372fac3077363ae2cd8b2473f614099f5fccf87944b429e1ddebe0f7b56a2`
+- Smoke failed qualification:
+  `41adeafa3c17baed58a8a3c5dc9491a9010d0e0a29c26e0feb3623c077f5f2a7`
+- Smoke status:
+  `e7d803b7f5d4a1742f0ee5f248872601b4e76705c83bc611f282e39b9f2e5929`
+- Smoke selected configuration:
+  `de29f3a0b6379f5917e6227149964f2914b774a1cf728fa30d6019a92a63e330`
+- Smoke frozen configuration:
+  `34d6c68352c6e92f93cc0c9bcc1f646655393da79d0c0f10266fa1068ab35371`
+- Development world digest:
+  `c8252efef9107f692eb377e72dc1ff3802c277de3ebb53f33470c0677976e181`
+- Development model-visible artifact:
+  `eca35e4154b418a4bcde88415b8235489d2a5164d5916a21ddbf243dcc185385`
+- Development candidate-relevance artifact:
+  `8976f15bf70ee4cb0f444b299aaf9478da3490d36b78bdca0a2021943677fd2c`
 
 The ledger and the two unrelated untracked reports were not edited.
