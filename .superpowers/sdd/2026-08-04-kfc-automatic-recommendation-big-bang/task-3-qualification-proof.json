@@ -1,0 +1,89 @@
+{
+  "schemaVersion": "kfc-synthetic-world-qualification-proof-v1",
+  "sourceSha": "ba4f981b3b892548ac78a6a21d2c41d47b7a07ae",
+  "qualification": {
+    "workingDirectory": "services/kfc-recommendation-simulator",
+    "command": "/usr/bin/time -l uv run --locked --no-dev kfc-recommendation-simulator generate --profile qualification --output /tmp/kfc-round2-qualification.uRNt4m --world-revision synthetic-causal-world-v3 > /tmp/kfc-round2-qualification.uRNt4m/qualification-command.stdout 2> /tmp/kfc-round2-qualification.uRNt4m/qualification-time.log",
+    "exitCode": 0,
+    "profile": {
+      "journeysPerSeed": 50000,
+      "seedCount": 10,
+      "totalJourneys": 500000
+    }
+  },
+  "manifest": {
+    "path": "synthetic-causal-world-v3/manifests/synthetic-world.json",
+    "sha256": "606e52727906900cdb94017e7a5517fd00893f7c64a2c88be4fa83e97c3f08dd",
+    "worldDigest": "08a6a2d99753b860287f3b9a423a96e344ce758af81302f3663539c8b14cdcc5"
+  },
+  "environment": {
+    "pythonImplementation": "CPython",
+    "pythonVersion": "3.11.14",
+    "pythonExecutableVersion": "3.11.14",
+    "pyarrowVersion": "23.0.1",
+    "uvLockSha256": "7a454f77fcc11ef22046670a44f3c2d8de942ee896c35c94649d1f9005cfc65d",
+    "parquetWriter": {
+      "formatVersion": "2.6",
+      "dataPageVersion": "2.0",
+      "compression": "zstd",
+      "compressionLevel": 3,
+      "dictionaryEncoding": true,
+      "writeStatistics": true
+    }
+  },
+  "rowCounts": {
+    "source/catalog.parquet": 2880,
+    "source/population.parquet": 1600,
+    "source/journeys.parquet": 500000,
+    "model-visible/training-examples.parquet": 3182171,
+    "evaluation/opportunities.parquet": 1500000,
+    "evaluation/exposures.parquet": 800018,
+    "evaluation/journeys.parquet": 500000,
+    "oracle/potential-outcomes.parquet": 4000000,
+    "traffic/arrivals-per-minute.parquet": 25077,
+    "traffic/scorer-candidate-shapes.parquet": 13,
+    "trainingLoaderVisibleRows": 2705961
+  },
+  "invalidCounters": {
+    "invalidFulfilmentMode": 0,
+    "invalidPropensity": 0,
+    "invalidScorerCandidateShape": 0,
+    "invalidShownLabel": 0,
+    "missingTerminalJourney": 0
+  },
+  "cardinalityAndComposerAudit": {
+    "readySingleActionCount": 488431,
+    "singleActionCardinalityViolations": 0,
+    "readyModifierParentBindingViolations": 0,
+    "renderedModifierNonPositivePriceViolations": 0,
+    "emptySmartCount": 274728,
+    "emptySmartWithSlateViolations": 0,
+    "readySmartCount": 99964,
+    "readySmartThreeCount": 88269,
+    "readySmartFourCount": 11695,
+    "readySmartInvalidCardinality": 0,
+    "smartComposerConstraintViolations": 0,
+    "smartFourWithoutDeclaredRequestViolations": 0,
+    "smartActiveConditions": [
+      "ablate_for_you",
+      "ablate_local_favorite",
+      "ablate_modifier_upsell",
+      "automatic",
+      "popularity",
+      "random_eligible"
+    ]
+  },
+  "zeroValueCheckoutAudit": {
+    "evaluation/journeys.parquet": 0,
+    "oracle/potential-outcomes.parquet": 0
+  },
+  "resources": {
+    "wallSeconds": 456.65,
+    "userCpuSeconds": 358.46,
+    "systemCpuSeconds": 47.94,
+    "maximumResidentSetBytes": 4791779328,
+    "swaps": 0,
+    "diskUsageBytes": 474030080,
+    "totalArtifactBytes": 471694943
+  }
+}
