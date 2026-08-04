@@ -1,0 +1,661 @@
+{
+  "calibration": {
+    "isotonicMinimumBrierImprovement": 0.002,
+    "isotonicMinimumNegative": 100,
+    "isotonicMinimumPositive": 100,
+    "isotonicMinimumRows": 1000,
+    "methods": [
+      "sigmoid",
+      "isotonic"
+    ]
+  },
+  "challengers": {
+    "lightgbm": {
+      "learning_rate": 0.05,
+      "max_depth": 5,
+      "min_child_samples": 40,
+      "n_estimators": 60,
+      "num_leaves": 15,
+      "reg_alpha": 0.1,
+      "reg_lambda": 1.0
+    },
+    "logistic": {
+      "C": 1.0,
+      "max_iter": 1000,
+      "solver": "lbfgs"
+    },
+    "xgboost": {
+      "colsample_bytree": 1.0,
+      "learning_rate": 0.05,
+      "max_depth": 5,
+      "min_child_weight": 10,
+      "n_estimators": 60,
+      "reg_alpha": 0.1,
+      "reg_lambda": 1.0,
+      "subsample": 1.0,
+      "tree_method": "hist"
+    }
+  },
+  "composerContract": {
+    "order": "calibrated joint probability times valid price impact descending; Unicode candidate identity tie-break",
+    "schemaVersion": "kfc-qualified-composer-v1",
+    "singleActionCardinality": 1,
+    "singleActionTypes": [
+      "local_favorite",
+      "for_you",
+      "modifier_upsell"
+    ],
+    "smartCrossSell": {
+      "defaultRenderedCount": 3,
+      "distinctCategory": true,
+      "maximumRenderedCount": 4,
+      "minimumReadyCount": 3,
+      "noPadding": true,
+      "positiveProbability": true,
+      "remainingBudgetRequired": true
+    }
+  },
+  "composerContractDigest": "16adfe83b611495758df995693781264b61f12d54c698da9ab52c895b64d7e49",
+  "featureContract": {
+    "categoricalFields": [
+      "storeId",
+      "fulfilmentMode",
+      "locale",
+      "daypart",
+      "catalogRevision",
+      "candidateSellableItemId",
+      "candidateModifierOptionId",
+      "candidateCategoryId",
+      "modifierParentSellableItemId",
+      "modifierGroupPath",
+      "modifierSelectionMode"
+    ],
+    "fields": [
+      {
+        "arrowType": "string",
+        "name": "featureSchemaVersion",
+        "nullable": false
+      },
+      {
+        "arrowType": "string",
+        "name": "recommendationType",
+        "nullable": false
+      },
+      {
+        "arrowType": "string",
+        "name": "storeId",
+        "nullable": false
+      },
+      {
+        "arrowType": "string",
+        "name": "fulfilmentMode",
+        "nullable": false
+      },
+      {
+        "arrowType": "string",
+        "name": "locale",
+        "nullable": false
+      },
+      {
+        "arrowType": "int8",
+        "name": "localHour",
+        "nullable": false
+      },
+      {
+        "arrowType": "string",
+        "name": "daypart",
+        "nullable": false
+      },
+      {
+        "arrowType": "string",
+        "name": "catalogRevision",
+        "nullable": false
+      },
+      {
+        "arrowType": "int64",
+        "name": "cartSubtotalVnd",
+        "nullable": false
+      },
+      {
+        "arrowType": "int16",
+        "name": "cartLineCount",
+        "nullable": false
+      },
+      {
+        "arrowType": "int16",
+        "name": "cartDistinctCategoryCount",
+        "nullable": false
+      },
+      {
+        "arrowType": "string",
+        "name": "candidateSellableItemId",
+        "nullable": false
+      },
+      {
+        "arrowType": "string",
+        "name": "candidateModifierOptionId",
+        "nullable": true
+      },
+      {
+        "arrowType": "string",
+        "name": "candidateCategoryId",
+        "nullable": false
+      },
+      {
+        "arrowType": "int64",
+        "name": "candidatePriceImpactVnd",
+        "nullable": false
+      },
+      {
+        "arrowType": "int64",
+        "name": "candidateUnitPriceVnd",
+        "nullable": false
+      },
+      {
+        "arrowType": "int64",
+        "name": "candidateDiscountAmountVnd",
+        "nullable": false
+      },
+      {
+        "arrowType": "bool",
+        "name": "candidateDiscountActive",
+        "nullable": false
+      },
+      {
+        "arrowType": "bool",
+        "name": "promotionActive",
+        "nullable": false
+      },
+      {
+        "arrowType": "int32",
+        "name": "completedOrderCount",
+        "nullable": false
+      },
+      {
+        "arrowType": "int32",
+        "name": "priorItemOrderCount",
+        "nullable": false
+      },
+      {
+        "arrowType": "int32",
+        "name": "priorCategoryOrderCount",
+        "nullable": false
+      },
+      {
+        "arrowType": "double",
+        "name": "historyRecencyDays",
+        "nullable": true
+      },
+      {
+        "arrowType": "int32",
+        "name": "localDemandCount",
+        "nullable": true
+      },
+      {
+        "arrowType": "string",
+        "name": "modifierParentCartLineId",
+        "nullable": true
+      },
+      {
+        "arrowType": "string",
+        "name": "modifierParentSellableItemId",
+        "nullable": true
+      },
+      {
+        "arrowType": "string",
+        "name": "modifierGroupPath",
+        "nullable": true
+      },
+      {
+        "arrowType": "string",
+        "name": "modifierSelectionMode",
+        "nullable": true
+      },
+      {
+        "arrowType": "bool",
+        "name": "modifierOptionAvailable",
+        "nullable": true
+      },
+      {
+        "arrowType": "bool",
+        "name": "modifierOptionSafe",
+        "nullable": true
+      },
+      {
+        "arrowType": "double",
+        "name": "modifierPriceRatio",
+        "nullable": true
+      },
+      {
+        "arrowType": "int64",
+        "name": "remainingBudgetVnd",
+        "nullable": true
+      },
+      {
+        "arrowType": "int32",
+        "name": "basketAssociationCount",
+        "nullable": true
+      },
+      {
+        "arrowType": "double",
+        "name": "basketComplementarityScore",
+        "nullable": true
+      },
+      {
+        "arrowType": "int32",
+        "name": "basketRedundancyCount",
+        "nullable": true
+      },
+      {
+        "arrowType": "int32",
+        "name": "basketCategoryDiversityCount",
+        "nullable": true
+      }
+    ],
+    "nullCategory": "__NULL__",
+    "numericFields": [
+      "localHour",
+      "cartSubtotalVnd",
+      "cartLineCount",
+      "cartDistinctCategoryCount",
+      "candidatePriceImpactVnd",
+      "candidateUnitPriceVnd",
+      "candidateDiscountAmountVnd",
+      "candidateDiscountActive",
+      "promotionActive",
+      "completedOrderCount",
+      "priorItemOrderCount",
+      "priorCategoryOrderCount",
+      "historyRecencyDays",
+      "localDemandCount",
+      "modifierOptionAvailable",
+      "modifierOptionSafe",
+      "modifierPriceRatio",
+      "remainingBudgetVnd",
+      "basketAssociationCount",
+      "basketComplementarityScore",
+      "basketRedundancyCount",
+      "basketCategoryDiversityCount"
+    ],
+    "numericScales": {
+      "basketAssociationCount": 255.0,
+      "basketCategoryDiversityCount": 10.0,
+      "basketRedundancyCount": 10.0,
+      "candidateDiscountAmountVnd": 250000.0,
+      "candidatePriceImpactVnd": 250000.0,
+      "candidateUnitPriceVnd": 250000.0,
+      "cartDistinctCategoryCount": 10.0,
+      "cartLineCount": 10.0,
+      "cartSubtotalVnd": 250000.0,
+      "completedOrderCount": 30.0,
+      "historyRecencyDays": 365.0,
+      "localDemandCount": 640.0,
+      "localHour": 23.0,
+      "priorCategoryOrderCount": 30.0,
+      "priorItemOrderCount": 30.0,
+      "remainingBudgetVnd": 250000.0
+    },
+    "schemaVersion": "automatic-feature-v1",
+    "unknownCategory": "__UNKNOWN__"
+  },
+  "featureContractDigest": "35b710d0b73e7419038e83bc9c39f93feb38564d793726cd47021fa2dbc8421b",
+  "heads": {
+    "joint": "selectedThroughCheckout",
+    "selection": "selected"
+  },
+  "inversePropensityMaximumWeight": 10.0,
+  "libraries": {
+    "lightgbm": "4.6.0",
+    "numpy": "2.3.2",
+    "pyarrow": "23.0.1",
+    "python": "3.11.14",
+    "scikit-learn": "1.7.1",
+    "xgboost": "3.0.2"
+  },
+  "modelSeed": 20260805,
+  "permittedSelectionSplits": [
+    "training",
+    "calibration",
+    "validation"
+  ],
+  "promotionGates": {
+    "abandonmentNonInferiorityMargin": 0.005,
+    "combinedBusinessPairedLower95MustExceed": 0.0,
+    "conversionNonInferiorityMargin": 0.005,
+    "coverageFractionOfBetterBaseline": 0.95,
+    "maximumEce": 0.05,
+    "rankingPairedLower95MustExceed": 0.0
+  },
+  "recommendationTypes": [
+    "local_favorite",
+    "for_you",
+    "modifier_upsell",
+    "smart_cross_sell"
+  ],
+  "schemaVersion": "kfc-model-qualification-configuration-v1",
+  "selectedTypes": {
+    "for_you": {
+      "abstentionThreshold": 0.0,
+      "artifacts": {
+        "joint": {
+          "goldenPredictionsSha256": "d08ebfcc4a8f545fed452b5a449557a440928b93f72d0d0e587467167541d9cc",
+          "modelSha256": "ce9facbe7a24ff12692d4e8a2d3794831c29169fd1ab889ea027c86c840bfd22"
+        },
+        "selection": {
+          "goldenPredictionsSha256": "0c238716cbaaf0e64f1534196ee8bf4707c7b6b6c0f5f57e8378186fa91eac66",
+          "modelSha256": "f7c7e3591663db47854153e5bfdca3b8f678413cfdc577ba884b3c6ac01d8b4c"
+        }
+      },
+      "calibrators": {
+        "joint": {
+          "method": "sigmoid",
+          "parameters": {
+            "intercept": -0.6737632250054817,
+            "slope": 0.24885547386695894
+          },
+          "schemaVersion": "kfc-probability-calibrator-v1"
+        },
+        "selection": {
+          "method": "sigmoid",
+          "parameters": {
+            "intercept": -0.010313828410893237,
+            "slope": 0.86505183956705
+          },
+          "schemaVersion": "kfc-probability-calibrator-v1"
+        }
+      },
+      "champion": "logistic",
+      "featureEncoderSha256": "0bde1bf6c28bdb4fbffe643bb863e5e94d6ae0dea0f9450d985ab6cc79c64db3"
+    },
+    "local_favorite": {
+      "abstentionThreshold": 0.0,
+      "artifacts": {
+        "joint": {
+          "goldenPredictionsSha256": "262ea022263daa367156e1ab6e8cf6db2f828021eccea4bb51970f96ff9605d7",
+          "modelSha256": "3117415b5b345fa7471b80c323eb2ded5dec9f2b857841fa43c0183a4e0534bd"
+        },
+        "selection": {
+          "goldenPredictionsSha256": "605e2f572794c9401f51698a042960b33c7639cd1e5476e6cc2e091dcc80415a",
+          "modelSha256": "fa52cb52ad2db66bf14e4bc46a7ab8f118fad9aa3cf64cfb3bf03fd6425e3fcb"
+        }
+      },
+      "calibrators": {
+        "joint": {
+          "method": "isotonic",
+          "parameters": {
+            "x": [
+              0.1649329339395575,
+              0.18022123719760735,
+              0.18538106728521547,
+              0.20173665224071605,
+              0.20333968597429292,
+              0.20671343906597225,
+              0.20706399931279948,
+              0.2715851536487065,
+              0.2716152050270295,
+              0.2780012115050531,
+              0.2780301032404382,
+              0.27835036413055414,
+              0.27836520942048154,
+              0.28251559641363627,
+              0.2826017378470955,
+              0.28308187407835644,
+              0.2830983361060513,
+              0.5771694794886231
+            ],
+            "y": [
+              0.0,
+              0.0,
+              0.11764705882352941,
+              0.11764705882352941,
+              0.2,
+              0.2,
+              0.2777777777777778,
+              0.2777777777777778,
+              0.2825112107623319,
+              0.2825112107623319,
+              0.2857142857142857,
+              0.2857142857142857,
+              0.2932330827067669,
+              0.2932330827067669,
+              0.3125,
+              0.3125,
+              0.3333333333333333,
+              0.3333333333333333
+            ]
+          },
+          "schemaVersion": "kfc-probability-calibrator-v1"
+        },
+        "selection": {
+          "method": "isotonic",
+          "parameters": {
+            "x": [
+              0.30604726221382567,
+              0.3402613776599904,
+              0.3423053504338724,
+              0.3461434767474215,
+              0.3473356216960562,
+              0.4522904079309438,
+              0.45230670338947776,
+              0.455337297400941,
+              0.4554069078409254,
+              0.4554401962648358,
+              0.4555373110586204,
+              0.45775838337761077,
+              0.4578857911353723,
+              0.4811329796508068,
+              0.481137948224684,
+              0.4919182842864714,
+              0.49209592201978125,
+              0.5242591587824478,
+              0.5242818205866163,
+              0.5328769099771669,
+              0.5329391093471333,
+              0.539721087654717,
+              0.5399631131546633,
+              0.5520921818862533,
+              0.5523553857854449,
+              0.6249969294970922,
+              0.6251673965041633,
+              0.6497262922286781,
+              0.7110085394510691
+            ],
+            "y": [
+              0.30434782608695654,
+              0.30434782608695654,
+              0.3333333333333333,
+              0.3333333333333333,
+              0.43086816720257226,
+              0.43086816720257226,
+              0.4393939393939394,
+              0.4393939393939394,
+              0.45454545454545453,
+              0.45454545454545453,
+              0.45714285714285713,
+              0.45714285714285713,
+              0.4620000000000001,
+              0.4620000000000001,
+              0.46441947565543074,
+              0.46441947565543074,
+              0.5301418439716312,
+              0.5301418439716312,
+              0.5396825396825397,
+              0.5396825396825397,
+              0.5526315789473685,
+              0.5526315789473685,
+              0.563380281690141,
+              0.563380281690141,
+              0.5950413223140496,
+              0.5950413223140496,
+              0.6666666666666666,
+              0.6666666666666666,
+              1.0
+            ]
+          },
+          "schemaVersion": "kfc-probability-calibrator-v1"
+        }
+      },
+      "champion": "lightgbm",
+      "featureEncoderSha256": "0bde1bf6c28bdb4fbffe643bb863e5e94d6ae0dea0f9450d985ab6cc79c64db3"
+    },
+    "modifier_upsell": {
+      "abstentionThreshold": 0.0,
+      "artifacts": {
+        "joint": {
+          "goldenPredictionsSha256": "0c7376bf4b69a616665ca82f51bf510648f66a37a6bae7139abba488f56c42b3",
+          "modelSha256": "ba2e50ad14acaab3b236abfdf000e96d0ee38ec792d467e6c753c80e1ad423b2"
+        },
+        "selection": {
+          "goldenPredictionsSha256": "e1c1503c84ead9f2e25048e69bd8edbe467034646b1dcdfd9894b2d89c2a717b",
+          "modelSha256": "b468d11be9036848535be4c2da956cedacb1de8524d3852d76fc46b8e8dad3f7"
+        }
+      },
+      "calibrators": {
+        "joint": {
+          "method": "sigmoid",
+          "parameters": {
+            "intercept": -1.0120135416872584,
+            "slope": -0.2805493745055414
+          },
+          "schemaVersion": "kfc-probability-calibrator-v1"
+        },
+        "selection": {
+          "method": "isotonic",
+          "parameters": {
+            "x": [
+              0.22972190380096436,
+              0.3276885151863098,
+              0.3381359577178955,
+              0.4543137848377228,
+              0.4545743763446808,
+              0.454850435256958,
+              0.4548856019973755,
+              0.499557763338089,
+              0.4997667074203491,
+              0.503909707069397,
+              0.5039494037628174,
+              0.5290091633796692,
+              0.5290096998214722,
+              0.5342328548431396,
+              0.5345378518104553,
+              0.6643065214157104,
+              0.665015697479248,
+              0.6784790754318237,
+              0.6808258295059204,
+              0.7108548879623413
+            ],
+            "y": [
+              0.375,
+              0.375,
+              0.4267631103074141,
+              0.4267631103074141,
+              0.46153846153846156,
+              0.46153846153846156,
+              0.5007759958613556,
+              0.5007759958613556,
+              0.5117647058823529,
+              0.5117647058823529,
+              0.5129533678756478,
+              0.5129533678756478,
+              0.5284552845528455,
+              0.5284552845528455,
+              0.5505780346820811,
+              0.5505780346820811,
+              0.75,
+              0.75,
+              1.0,
+              1.0
+            ]
+          },
+          "schemaVersion": "kfc-probability-calibrator-v1"
+        }
+      },
+      "champion": "xgboost",
+      "featureEncoderSha256": "d4b4f7127bd9dbf242a85c99362cd86a3eba51517c9b7289776c9b65add1535d"
+    },
+    "smart_cross_sell": {
+      "abstentionThreshold": 0.0,
+      "artifacts": {
+        "joint": {
+          "goldenPredictionsSha256": "67edf05a9a89c10d9bc9f9a916a3d47844cf6252258140dc8f108458f4bf03b4",
+          "modelSha256": "f7293fb430c5c6c70ddc6ba761d57a3bc037c8bea7c3b08bc947e31d760ce248"
+        },
+        "selection": {
+          "goldenPredictionsSha256": "f9d98792bf2afa90b3da404defe09c7d795a4489b75d8823ac5d3c8398b3b146",
+          "modelSha256": "bd0101cbf4bd343131d330b429a85e39f9af352dbac7ca2f6bbdea7c59a7f14b"
+        }
+      },
+      "calibrators": {
+        "joint": {
+          "method": "sigmoid",
+          "parameters": {
+            "intercept": -1.4804195598971293,
+            "slope": 0.3430145421087873
+          },
+          "schemaVersion": "kfc-probability-calibrator-v1"
+        },
+        "selection": {
+          "method": "sigmoid",
+          "parameters": {
+            "intercept": -0.8903024400107814,
+            "slope": 0.4789453692063966
+          },
+          "schemaVersion": "kfc-probability-calibrator-v1"
+        }
+      },
+      "champion": "lightgbm",
+      "featureEncoderSha256": "77aaa280c1d5f864c93a01e3a30cba7a6efde39a497e56aff24dbf314c2f3a8e"
+    }
+  },
+  "source": {
+    "gitSha": "af60617c36fb5b4a14f48ee7273507f804946de7",
+    "trackedTreeClean": true
+  },
+  "splitStrategy": {
+    "fractions": [
+      0.6,
+      0.15,
+      0.1,
+      0.15
+    ],
+    "order": [
+      "training",
+      "calibration",
+      "validation",
+      "untouched_test"
+    ],
+    "unit": "whole_journey"
+  },
+  "syntheticOnlyDisclaimer": "Synthetic qualification evidence only; this does not claim compatibility with real KFC data or authorize real-customer exposure.",
+  "thresholdSelection": {
+    "candidates": [
+      0.0,
+      0.01,
+      0.02,
+      0.03,
+      0.05,
+      0.075,
+      0.1,
+      0.15,
+      0.2
+    ],
+    "objectiveOrder": [
+      "retained_value_lower_95",
+      "retained_value_mean",
+      "coverage",
+      "smaller_threshold"
+    ]
+  },
+  "untouchedEvaluationSplit": "untouched_test",
+  "worldDigest": "3ea86f44d59a5a02a509990b594ba0611aac6c124a0d0304bc3a34c5e456a23b",
+  "worldProfile": {
+    "journeysPerSeed": 20000,
+    "name": "development",
+    "seeds": [
+      101,
+      211,
+      307
+    ],
+    "totalJourneys": 60000
+  }
+}
