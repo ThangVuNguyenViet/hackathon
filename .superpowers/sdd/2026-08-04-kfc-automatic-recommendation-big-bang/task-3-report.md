@@ -1,139 +1,142 @@
-# Task 3 report — Build the synthetic causal world
+# Task 3 repair report — Build the synthetic causal world
 
 ## Result
 
-Completed Slice 3 in implementation checkpoint
-`201857a21b8462b42e1e1e2192dc683e43787084`
-(`feat(recommendations): build synthetic causal world`).
+Repair round 1 is complete in implementation checkpoint
+`f9540b8efc6e0042358217bf245980b80f14a63b`
+(`fix(recommendations): repair synthetic causal world`). It supersedes the
+original Task 3 implementation checkpoint
+`201857a21b8462b42e1e1e2192dc683e43787084`.
 
-The isolated `services/kfc-recommendation-simulator` Python package generates a
-removable, synthetic-only causal world as real Apache Parquet 2.6 artifacts.
-Its locked `uv` environment uses maintained PyArrow packaging; no fake Parquet
-encoding or follow-up workaround was required.
+All Critical and Important findings from the independent review are repaired.
+The package remains synthetic-only: no model was trained, no serving runtime
+was added, and no real-KFC compatibility claim is made.
 
-No model was trained, no serving runtime was added, and no claim of real KFC
-data compatibility is made.
+## C1 — Treatment-complete potential outcomes
 
-## World and authority boundaries
+- Every journey now simulates all eight conditions independently from shared
+  exogenous draws: automatic, no recommendation, uniform random eligible,
+  popularity descending, and four one-placement ablations.
+- Each condition persists its ordered treatment path, selected action IDs,
+  retained/removed action IDs, action prices, checkout state, treatment
+  revenue, and final merchandise subtotal.
+- Completed value is exactly base cart subtotal plus retained treatment
+  revenue. No-treatment owns no action or revenue. A completed checkout must
+  have positive final value.
+- A 500,000-journey final proof found zero `checkout=true` rows with zero final
+  value in both factual evaluation and all 4,000,000 oracle rows.
 
-- Physical `source/`, `model-visible/`, `evaluation/`, and `oracle/` surfaces
-  use exact immutable Arrow schemas. `traffic/` separately exports
-  arrivals-per-minute and strict scorer candidate-shape fixtures.
-- The digest-rich manifest binds generator revision, exact profile, named
-  stream seeds, stream overrides, physical-surface declarations, chronological
-  split policy, condition and fulfilment vocabularies, exposure policy,
-  quality counters, every artifact digest/schema/row count, and the complete
-  manifest configuration through one world digest.
-- Independent deterministic streams cover catalog, population, traffic,
-  behavior, logging policy, outcomes, and splits. Changing only the outcome
-  stream preserves source and traffic bytes while changing oracle outcomes.
-- The training loader owns the exact model-visible path. It validates the
-  world digest, exact schema, forbidden-field set, artifact digest, and allowed
-  training/calibration/validation splits. It accepts neither an arbitrary
-  artifact path nor evaluation/oracle fields.
-- A fresh-process deliberate-leakage test injects an oracle field into the
-  physical model-visible Parquet artifact and proves the loader fails closed.
+## C2 — Stateful placement lifecycle
 
-## Causal world
+- Each whole journey has exactly three ordered opportunity records: one
+  mutually exclusive starter, Modifier Upsell, then Smart Cross-sell.
+- Starter eligibility is exact: `completedOrderCount == 0` receives Local
+  Favorite; positive completed-order history receives For You.
+- An accepted starter creates a cart line. Only that new line can become the
+  Modifier Upsell parent. Otherwise the modifier emits the typed
+  `parent_cart_line_not_found` empty state.
+- Modifier outcomes explicitly cover accepted, dismissed, ignored, empty, and
+  treatment-suppressed paths. Smart occurs once after modifier resolution and
+  consumes the resulting cart state.
 
-- Whole journeys split chronologically into training, calibration, validation,
-  and untouched test windows. Untouched rows contain held-out stores, cold
-  customers, cold candidates, drift, lunch, dinner, and rush slices.
-- The world covers Local Favorite, For You, Modifier Upsell, and Smart
-  Cross-sell. Starter placement produces at most one Local Favorite or For You
-  opportunity per journey. Exact API empty reasons represent missing
-  prerequisites or no eligible candidates.
-- Stochastic-popularity, basket-association, promotion-biased, and randomized
-  exploration logging policies retain 20% exploration. Every shown candidate
-  records a known positive propensity and rendered position; eligible unshown
-  candidates have null labels rather than negative labels.
-- Evaluation records impression/selection/dismissal, cart mutation, accepted
-  item removal, checkout/abandonment, and final merchandise subtotal. Every
-  journey has a declared terminal state.
-- Oracle rows contain latent affinity and paired potential outcomes for
-  automatic, no-recommendation, random-eligible, popularity, and all four
-  one-type ablations. Empty opportunities cannot have impossible potential
-  selections.
-- Generated candidate-shape fixtures parse through the accepted strict Python
-  `kfc-automatic-scorer-v1` contract for all four recommendation types. The
-  only fulfilment values are the API vocabulary `pickup` and `delivery`.
+## C3 and I1 — Exact policies, propensities, and slates
 
-## Profiles and operational proof
+- No-recommendation emits no action or slate.
+- Random eligible uses a uniform ordered sample without replacement and
+  persists exact joint slate probability `1 / P(n, k)` and member inclusion
+  probability `k / n`.
+- Popularity uses descending local demand with a deterministic candidate-ID
+  tie break. Automatic uses a deterministic scorer/composer proxy. Each
+  ablation suppresses only its named placement; prerequisite effects remain
+  explicit rather than being hidden.
+- Exposure evidence is a separate artifact with slate identity, member action,
+  rendered position, category, price, slate/selection propensities, behavior
+  selection probability, and selected/retained/removed outcomes.
+- Smart targets three products by default and up to four, preserves ordered
+  members, enforces category diversity for automatic composition, may emit an
+  insufficient or empty slate, and never pads.
+- Strict scorer fixtures cover Local Favorite and For You at 120/240
+  candidates, Modifier Upsell at 5/17/25, and Smart insufficient/default/max/
+  no-padding/120/240 shapes. All parse through the accepted scorer contract.
 
-Profiles are exact per seed:
+## I2 — Drift and qualification traffic
 
-| Profile | Journeys per seed | Seeds | Total journeys |
-|---|---:|---:|---:|
-| Smoke | 2,000 | 1 | 2,000 |
-| Development | 20,000 | 3 | 60,000 |
-| Qualification | 50,000 | 10 | 500,000 |
+- The untouched window now changes actual candidate demand,
+  complementarity/preferences, promotion flags, availability, and catalog
+  revision. The drift is documented and bound in the manifest.
+- Traffic artifacts contain both observed synthetic arrivals and the explicit
+  AWS qualification profile: 5-minute 5-RPS warmup, 10-minute ramp to 50 RPS,
+  30 minutes at 50 RPS, 2 minutes at 100 RPS, 15 minutes at 25 RPS, and a
+  15-minute 5-RPS drain. Every row asserts
+  `arrivals == targetRps * durationSeconds`.
+
+## I3 — Locked byte reproduction
+
+- `pyproject.toml` and `uv.lock` pin CPython 3.11.14, PyArrow 23.0.1, and Ruff
+  0.16.1 exactly.
+- The manifest binds implementation/interpreter versions, the `uv.lock`
+  SHA-256 digest, and Parquet 2.6 / data-page-v2 / Zstandard-level-3 /
+  dictionary / statistics writer settings.
+- Two separate fresh `UV_PROJECT_ENVIRONMENT` directories ran
+  `uv run --locked --no-dev` and generated byte-identical smoke worlds,
+  including every Parquet artifact and manifest.
+
+## Final qualification proof
 
 The final-code qualification generation completed successfully:
 
-- 500,000 physical source journeys;
-- 1,568,059 model-visible candidate rows;
-- 1,367,459 rows returned by the training loader after untouched-test removal;
+- 500,000 source and factual evaluation journeys;
+- 1,500,000 ordered factual opportunities;
+- 2,322,400 rendered exposure-member rows;
+- 3,186,967 model-visible candidate rows;
+- 2,713,102 rows returned by the training loader after untouched-test removal;
 - 4,000,000 paired oracle rows;
-- every invalid counter equal to zero;
+- all five manifest quality counters equal to zero;
+- zero factual or oracle completed checkouts with zero final value;
 - world digest
-  `01c7e408b9eab7e6d1ad39cb9aec65304cd8e2fb1a1cb63d64e1013eb2001c6d`;
-- 39.59 seconds wall time and 1,525,153,792-byte maximum resident set on the
-  local proof machine.
+  `22e1ed192a234e25a303c1ece505a869d895bfe62805375dcea3391b73499d78`;
+- 351.63 seconds wall time;
+- 4,792,385,536-byte maximum resident set and zero swaps;
+- 528 MB complete generated world on the local proof machine.
 
-The generator writes one deterministic row group per seed, bounding memory
-instead of retaining all ten qualification seeds at once.
+The generator writes one deterministic row group per seed rather than holding
+all ten qualification seeds in one aggregate artifact buffer.
 
 ## RED evidence
 
-1. The profile test failed because `kfc_recommendation_simulator` did not
-   exist. The minimal immutable profile definitions made it green.
-2. The world suite failed because the generator, loader, and validation modules
-   did not exist. The first real Parquet implementation made ten boundary and
-   causal tests green.
-3. The exposure-evidence test failed with missing `renderedPosition`; the
-   evaluation schema now records position and shown-action propensity and the
-   manifest binds the positive-support exposure policy.
-4. The empty-opportunity oracle test found 570 impossible potential selections;
-   potential selection now requires an eligible candidate.
-5. The manifest-binding test showed the world digest covered artifacts but not
-   generation configuration; it now binds the complete manifest except its own
-   digest field.
-6. The manifest-tamper test showed the training loader accepted a changed
-   profile name; it now recomputes and rejects a mismatched world digest before
-   loading training data.
+1. The new causal action test failed with missing
+   `selectedActionIdsJson`; per-condition actions and amount reconciliation made
+   it green.
+2. The exact environment test failed because Python was `>=3.11` instead of
+   `==3.11.14`; exact project/lock pins and manifest environment binding made
+   it green.
+3. The smoke-scale terminal test failed because empty baskets could complete
+   checkout at zero value; positive-final-basket checkout eligibility made it
+   green.
+4. Legacy single-candidate exposure and aggregate-traffic assertions failed
+   against the stateful schema; direct lifecycle, slate-member, drift, and
+   explicit traffic-profile assertions now cover the repaired contracts.
 
 ## GREEN evidence
 
-- `uv run ruff check .`
-  - PASS.
-- `uv run python -m compileall -q src tests`
-  - PASS.
-- `uv run python -m unittest discover -s tests -v`
-  - PASS: 15 simulator tests.
-- `PYTHONPATH=src python3 -m compileall -q src tests`
-  - PASS in `services/kfc-recommendation-scorer`.
-- `PYTHONPATH=src python3 -m unittest discover -s tests -v`
-  - PASS: 9 accepted Python scorer/contract tests.
-- `npm run check:automatic-recommendation-authority`
-  - PASS: 1 file, 5 deterministic authority tests.
-- `git diff --check`
-  - PASS.
+- `uv run ruff check .` — PASS.
+- `uv run python -m compileall -q src tests` — PASS.
+- `uv run python -m unittest discover -s tests -v` — PASS: 20 simulator tests.
+- Clean `uv run --locked --no-dev` generation in two independent environments
+  — PASS, byte-identical smoke worlds.
+- `PYTHONPATH=src python3 -m compileall -q src tests` in the scorer — PASS.
+- `PYTHONPATH=src python3 -m unittest discover -s tests -v` in the scorer —
+  PASS: 9 tests.
+- `npm run check:automatic-recommendation-authority` — PASS: 5 tests.
+- `git diff --check` — PASS.
 
-## Files
+## Self-review and cleanup
 
-- `services/kfc-recommendation-simulator/{pyproject.toml,uv.lock,README.md}`
-- `services/kfc-recommendation-simulator/src/kfc_recommendation_simulator/`
-- `services/kfc-recommendation-simulator/tests/`
-
-## Self-review
-
-- Public artifacts and manifests regenerate byte-identically from identical
-  inputs under the locked environment.
-- Model-visible rows contain only fixed scorer features, exposure evidence, and
-  permitted factual labels. Condition assignments, terminal outcomes, latent
-  preferences, and potential outcomes remain physically separate.
-- Random/popularity outputs are offline causal baselines only and expose no
-  runtime recommendation authority.
+- Model-visible rows physically exclude condition assignment, terminal facts,
+  treatment paths/actions/revenue, latent affinity, and oracle outcomes.
+- Random/popularity remain offline evidence conditions and add no runtime
+  recommendation authority.
+- Generated proof worlds and source/test caches were removed after evidence
+  extraction.
 - The two unrelated untracked audit reports were preserved and excluded from
-  both checkpoints. Generated Python caches and temporary proof worlds were
-  removed before commit.
+  both repair checkpoints.
