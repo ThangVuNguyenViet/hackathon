@@ -1,9 +1,9 @@
 {
-  "schemaVersion": "kfc-synthetic-world-qualification-proof-v2",
-  "sourceSha": "6b25a0e0f7f0172bcc8a6545c2d95807a1f7f24d",
+  "schemaVersion": "kfc-synthetic-world-qualification-proof-v3",
+  "sourceSha": "a37bbab7cd92e2e8d3d2bbc04e1574094f86c317",
   "qualification": {
     "workingDirectory": "services/kfc-recommendation-simulator",
-    "command": "/usr/bin/time -l uv run --locked --no-dev kfc-recommendation-simulator generate --profile qualification --output /tmp/kfc-round3-qualification.egnXw8 --world-revision synthetic-causal-world-v4",
+    "command": "/usr/bin/time -l uv run --locked --no-dev kfc-recommendation-simulator generate --profile qualification --output /tmp/kfc-round3-r4-qualification.NZUw3z --world-revision synthetic-causal-world-v5",
     "exitCode": 0,
     "profile": {
       "journeysPerSeed": 50000,
@@ -12,16 +12,31 @@
     }
   },
   "manifest": {
-    "path": "synthetic-causal-world-v4/manifests/synthetic-world.json",
-    "schemaVersion": "kfc-synthetic-world-manifest-v4",
-    "sha256": "3e3a9804bb70662fb9a9e410a8ff85ee792ffd35e788922068633ea07e67e24c",
-    "worldDigest": "c60c0976824bf72c4675d88c22a23f00d5cb234295618e265e65049a7546f957"
+    "path": "synthetic-causal-world-v5/manifests/synthetic-world.json",
+    "schemaVersion": "kfc-synthetic-world-manifest-v5",
+    "generatorRevision": "kfc-stateful-synthetic-causal-generator-v5",
+    "sha256": "2f772a9b4009dfbc45745aa27704b4600174a592234ebc42fe7c879e4d95178e",
+    "worldDigest": "7bd3748589ac3222553b52a6f1fa2035a20bec450222eb3122042297ec0ec83a"
+  },
+  "qualificationPrecommit": {
+    "path": "synthetic-causal-world-v5/manifests/qualification-precommit.json",
+    "sha256": "55135158c35eb45151146643248aa4be4ab3bd945a905446e08b1de8c4c05c9b",
+    "sourceContractSha256": "762b1c0fca370b226177e6ab15a9b364f8034b4891f0583173d6f3e501d8359c",
+    "mode": "-r--r--r--",
+    "precommitBeforeConfiguration": true,
+    "precommitDigestViolations": 0,
+    "precommitSourceBindingViolations": 0,
+    "precommitWriteBitViolations": 0
   },
   "candidateRelevanceDefinition": {
-    "version": "candidate-singleton-value-v1",
-    "sha256": "08e52f202a135b2e2c8300fd5b0ff2c5c7b9d36196cc5fcf4c3fe85d98a09bfe",
+    "version": "candidate-singleton-value-v2",
+    "sha256": "61e5aed6ab9654984ecde0beea0ee1747a2af80fd08a102b3370f464e59b3e92",
+    "eligibility": "automatic reference-path candidates plus deduplicated factual-state extensions required to retain observed support",
     "intervention": "render_only_this_eligible_candidate",
     "gradedRelevance": "expected retained incremental value in VND",
+    "selection": "bounded response to journey affinity, candidate desirability, promotion, basket fit, and contextual price burden",
+    "checkout": "bounded response to affinity, candidate desirability, fulfilment mode, and post-action price burden",
+    "removal": "bounded response to contextual price burden, candidate desirability, and promotion",
     "sharedExogenous": "sha256 candidate-keyed draws independent of ranking policy"
   },
   "environment": {
@@ -43,17 +58,17 @@
     "source/catalog.parquet": 2880,
     "source/population.parquet": 1600,
     "source/journeys.parquet": 500000,
-    "model-visible/training-examples.parquet": 3143827,
+    "model-visible/training-examples.parquet": 4592398,
     "evaluation/opportunities.parquet": 1500000,
-    "evaluation/exposures.parquet": 801654,
+    "evaluation/exposures.parquet": 804837,
     "evaluation/journeys.parquet": 500000,
-    "evaluation/candidate-relevance.parquet": 3143827,
+    "evaluation/candidate-relevance.parquet": 4592398,
     "oracle/potential-outcomes.parquet": 4000000,
     "traffic/arrivals-per-minute.parquet": 25077,
     "traffic/scorer-candidate-shapes.parquet": 13,
-    "trainingLoaderVisibleRows": 2704346,
-    "untouchedCandidateRelevanceLoaderRows": 439481,
-    "unshownModelVisibleCandidateRows": 2342173
+    "trainingLoaderVisibleRows": 3942202,
+    "untouchedCandidateRelevanceLoaderRows": 650196,
+    "unshownModelVisibleCandidateRows": 3787561
   },
   "invalidCounters": {
     "invalidFulfilmentMode": 0,
@@ -63,7 +78,7 @@
     "missingTerminalJourney": 0
   },
   "candidateRelevanceAudit": {
-    "opportunityCandidateCountSum": 3143827,
+    "opportunityCandidateCountSum": 4592398,
     "candidateKeyMismatches": 0,
     "duplicateCandidateKeyViolations": 0,
     "artifactDigestViolations": 0,
@@ -72,46 +87,56 @@
     "probabilityBoundViolations": 0,
     "removalStateViolations": 0,
     "unshownNonNullLabelViolations": 0,
+    "shownWithoutFactualExposure": 0,
+    "missingFactualExposureLabels": 0,
+    "automaticCandidateMissing": 0,
+    "automaticCandidateOrderViolations": 0,
+    "suppressedNonemptyAutomaticOpportunities": 283160,
+    "suppressedMissingCandidates": 0,
+    "factualExtensionCandidates": 183092,
+    "candidateProbabilityVaryingOpportunities": 1121959,
+    "cheaperButMoreRelevantOpportunities": 583161,
     "trainingForbiddenFieldsPresent": [],
-    "distinctGradedRelevanceValues": 28160
+    "distinctGradedRelevanceSample": 100000,
+    "definitionTupleCount": 1
   },
   "untouchedPairedRankingEvidence": {
-    "note": "Diagnostic modelProxy is the pre-existing automatic feature formula without the opportunity-constant latent affinity term; these intervals prove evaluability, not model qualification.",
+    "note": "Diagnostic modelProxy is not a Task 4 qualification model; these held-out intervals prove that the candidate-responsive relevance surface supports full-set comparisons.",
     "local_favorite": {
-      "opportunityCount": 13168,
-      "modelProxyNdcgAtK95": [0.7199125312917083, 0.7228750399761666, 0.725837548660625],
-      "randomNdcgAtK95": [0.8124869751847628, 0.8152697594316222, 0.8180525436784816],
-      "popularityNdcgAtK95": [0.6863841853324951, 0.6893726971160287, 0.6923612088995622]
+      "opportunityCount": 17815,
+      "modelProxyNdcgAtK95": [0.828248626058471, 0.8306780458884643, 0.8331074657184575],
+      "randomNdcgAtK95": [0.788079919621981, 0.7907576452390006, 0.7934353708560202],
+      "popularityNdcgAtK95": [0.7518749867773414, 0.7546715418226297, 0.757468096867918]
     },
     "for_you": {
-      "opportunityCount": 39926,
-      "modelProxyNdcgAtK95": [0.7585990437722194, 0.7592009208040671, 0.7598027978359148],
-      "randomNdcgAtK95": [0.8153159078040677, 0.8168978718118122, 0.8184798358195566],
-      "popularityNdcgAtK95": [0.5890138442392587, 0.5897791215319685, 0.5905443988246784]
+      "opportunityCount": 53234,
+      "modelProxyNdcgAtK95": [0.7910332277845792, 0.7922600823022519, 0.7934869368199245],
+      "randomNdcgAtK95": [0.7924285767840646, 0.7939641617555764, 0.7954997467270881],
+      "popularityNdcgAtK95": [0.5920171121319471, 0.5931692893299275, 0.594321466527908]
     },
     "modifier_upsell": {
-      "opportunityCount": 20249,
-      "modelProxyNdcgAtK95": [0.3846153846153846, 0.3846153846153846, 0.3846153846153846],
-      "randomNdcgAtK95": [0.6922240197683338, 0.6952252153002807, 0.6982264108322276],
-      "popularityNdcgAtK95": [0.3846153846153846, 0.3846153846153846, 0.3846153846153846]
+      "opportunityCount": 33842,
+      "modelProxyNdcgAtK95": [0.40586700638068146, 0.4062727085234194, 0.40667841066615734],
+      "randomNdcgAtK95": [0.709237103314979, 0.7115299991548916, 0.7138228949948041],
+      "popularityNdcgAtK95": [0.40586700638068146, 0.4062727085234194, 0.40667841066615734]
     },
     "smart_cross_sell": {
-      "opportunityCount": 49234,
-      "modelProxyNdcgAtK95": [0.9634209814169211, 0.9637253340804401, 0.9640296867439592],
-      "randomNdcgAtK95": [0.959287182793642, 0.959679213987115, 0.960071245180588],
-      "popularityNdcgAtK95": [0.9189813316758934, 0.9194451450682029, 0.9199089584605123]
+      "opportunityCount": 66986,
+      "modelProxyNdcgAtK95": [0.9773136575064565, 0.977582168972386, 0.9778506804383156],
+      "randomNdcgAtK95": [0.9523138711857839, 0.9527156119826136, 0.9531173527794432],
+      "popularityNdcgAtK95": [0.9160808404751147, 0.9165620779613898, 0.9170433154476648]
     }
   },
   "cardinalityAndComposerAudit": {
-    "readySingleActionCount": 487011,
+    "readySingleActionCount": 488916,
     "singleActionCardinalityViolations": 0,
     "readyModifierParentBindingViolations": 0,
     "renderedModifierNonPositivePriceViolations": 0,
-    "emptySmartCount": 274239,
+    "emptySmartCount": 273713,
     "emptySmartWithSlateViolations": 0,
-    "readySmartCount": 100945,
-    "readySmartThreeCount": 89137,
-    "readySmartFourCount": 11808,
+    "readySmartCount": 101421,
+    "readySmartThreeCount": 89763,
+    "readySmartFourCount": 11658,
     "readySmartInvalidCardinality": 0,
     "smartComposerConstraintViolations": 0,
     "smartFourWithoutDeclaredRequestViolations": 0,
@@ -128,13 +153,17 @@
     "evaluation/journeys.parquet": 0,
     "oracle/potential-outcomes.parquet": 0
   },
+  "artifactDigests": {
+    "model-visible/training-examples.parquet": "c4a30da57ccf8f8ad996f49453b8f9044dc4fb5562bc73170a8e329d8b18a3a7",
+    "evaluation/candidate-relevance.parquet": "60d81a37126cfd5d4856b96d0a3016299b5336d9448d8177a5692cd85cc659d4"
+  },
   "resources": {
-    "wallSeconds": 362.55,
-    "userCpuSeconds": 327.07,
-    "systemCpuSeconds": 25.07,
-    "maximumResidentSetBytes": 4678909952,
+    "wallSeconds": 386.33,
+    "userCpuSeconds": 346.91,
+    "systemCpuSeconds": 30.55,
+    "maximumResidentSetBytes": 5173231616,
     "swaps": 0,
-    "diskUsageBytes": 539688960,
-    "totalArtifactBytes": 535467225
+    "diskUsageBytes": 754192384,
+    "totalArtifactBytes": 737553695
   }
 }
