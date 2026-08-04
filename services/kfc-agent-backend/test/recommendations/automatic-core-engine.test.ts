@@ -2,12 +2,15 @@ import { describe, expect, it } from 'vitest';
 import {
   AUTOMATIC_FEATURE_SCHEMA_DIGEST,
   AutomaticRecommendationInfrastructureError,
+  composeAutomaticRecommendationSlate,
   createAutomaticRecommendationEngine,
   resolveQualifiedAutomaticRecommendationBundle,
   type AutomaticCatalogSnapshot,
   type AutomaticQualifiedBundlePort,
   type AutomaticRecommendationContextPorts,
   type AutomaticRecommendationScorerPort,
+  type AutomaticTrustedOrderContextSnapshot,
+  type AutomaticScoredCandidate,
 } from '../../src/recommendations/automatic-core/index.js';
 
 const digest = (character: string) => character.repeat(64);
@@ -23,6 +26,10 @@ const catalog: AutomaticCatalogSnapshot = {
       imageUrl: null,
       categoryId: 'side',
       unitPriceVnd: 10000,
+      discountAmountVnd: 0,
+      localDemandCount: 50,
+      basketAssociationCount: 5,
+      basketComplementarityScore: 0.2,
       sellable: true,
       safe: true,
       availableFulfilmentModes: ['pickup'],
@@ -35,6 +42,10 @@ const catalog: AutomaticCatalogSnapshot = {
       imageUrl: null,
       categoryId: 'side',
       unitPriceVnd: 30000,
+      discountAmountVnd: 5000,
+      localDemandCount: 90,
+      basketAssociationCount: 12,
+      basketComplementarityScore: 0.8,
       sellable: true,
       safe: true,
       availableFulfilmentModes: ['pickup'],
@@ -47,6 +58,10 @@ const catalog: AutomaticCatalogSnapshot = {
       imageUrl: null,
       categoryId: 'drink',
       unitPriceVnd: 20000,
+      discountAmountVnd: 0,
+      localDemandCount: 80,
+      basketAssociationCount: 8,
+      basketComplementarityScore: 0.7,
       sellable: true,
       safe: true,
       availableFulfilmentModes: ['pickup'],
@@ -59,6 +74,10 @@ const catalog: AutomaticCatalogSnapshot = {
       imageUrl: null,
       categoryId: 'dessert',
       unitPriceVnd: 15000,
+      discountAmountVnd: 0,
+      localDemandCount: 70,
+      basketAssociationCount: 6,
+      basketComplementarityScore: 0.6,
       sellable: true,
       safe: true,
       availableFulfilmentModes: ['pickup'],
@@ -71,6 +90,10 @@ const catalog: AutomaticCatalogSnapshot = {
       imageUrl: null,
       categoryId: 'meal',
       unitPriceVnd: 80000,
+      discountAmountVnd: 0,
+      localDemandCount: 100,
+      basketAssociationCount: 10,
+      basketComplementarityScore: 0.9,
       sellable: true,
       safe: true,
       availableFulfilmentModes: ['pickup'],
@@ -78,6 +101,7 @@ const catalog: AutomaticCatalogSnapshot = {
       modifierGroups: [
         {
           groupPath: ['meal', 'side'],
+          selectionMode: 'single',
           options: [
             {
               optionId: 'large-fries',
@@ -145,12 +169,29 @@ function contextPorts({
   paused = false,
   history = true,
   snapshot = catalog,
+  trustedCart = baseRequest.cart,
+  trustedParentCartLineId = null,
 }: {
   paused?: boolean;
   history?: boolean;
   snapshot?: AutomaticCatalogSnapshot;
+  trustedCart?: AutomaticTrustedOrderContextSnapshot['cart'];
+  trustedParentCartLineId?: string | null;
 } = {}): AutomaticRecommendationContextPorts {
   return {
+    orderContext: {
+      readSnapshot: async ({ orderingJourneyRef, opportunityRef }) => ({
+        orderingJourneyRef,
+        opportunityRef,
+        storeId: baseRequest.storeId,
+        fulfilmentMode: baseRequest.fulfilmentMode,
+        locale: baseRequest.locale,
+        cart: trustedCart,
+        parentCartLineId: trustedParentCartLineId,
+        verifiedCustomerRef: 'customer-engine-001',
+        remainingBudgetVnd: 100000,
+      }),
+    },
     catalog: { readSnapshot: async () => snapshot },
     history: {
       readCompletedHistory: async (verifiedCustomerRef) =>
@@ -161,6 +202,7 @@ function contextPorts({
               completedOrderCount: 2,
               itemOrderCounts: {},
               categoryOrderCounts: { side: 1 },
+              lastCompletedOrderAt: '2026-08-01T05:15:00.000Z',
             }
           : null,
     },
@@ -257,6 +299,48 @@ describe('qualified automatic model bundle resolution', () => {
       ),
     ).resolves.toBeNull();
   });
+});
+
+describe('automatic recommendation composition tie-breaking', () => {
+  it.each([
+    'local_favorite',
+    'for_you',
+    'modifier_upsell',
+    'smart_cross_sell',
+  ] as const)(
+    'uses locale-independent code-point order for %s ties',
+    (type) => {
+      const tied: AutomaticScoredCandidate[] = ['é', 'a', 'Z'].map(
+        (identity, index) => ({
+          candidate: {
+            candidateId: `product:${identity}`,
+            categoryId: `category-${index}`,
+            name: identity,
+            imageUrl: null,
+            sellable: true,
+            safe: true,
+            available: true,
+            promotionActive: false,
+            action: {
+              type: 'add_product',
+              sellableItemId: identity,
+              quantity: 1,
+              priceImpactVnd: 10000,
+            },
+          },
+          selectionProbability: 0.5,
+          jointProbability: 0.5,
+          expectedRetainedValueVnd: 5000,
+        }),
+      );
+
+      expect(
+        composeAutomaticRecommendationSlate(type, tied).map(
+          ({ candidateId }) => candidateId,
+        ),
+      ).toEqual(['product:Z', 'product:a', 'product:é']);
+    },
+  );
 });
 
 describe('automatic recommendation deterministic engine', () => {
@@ -371,7 +455,12 @@ describe('automatic recommendation deterministic engine', () => {
       },
       parentCartLineId: 'line-parent-1',
     };
-    const modifier = await engine().decide('modifier_upsell', modifierRequest);
+    const modifier = await engine({
+      ports: contextPorts({
+        trustedCart: modifierRequest.cart,
+        trustedParentCartLineId: 'line-parent-1',
+      }),
+    }).decide('modifier_upsell', modifierRequest);
     expect(modifier).toMatchObject({
       status: 'recommended',
       counts: { potential: 2, eligible: 2, scored: 2, displayed: 2 },
@@ -385,7 +474,7 @@ describe('automatic recommendation deterministic engine', () => {
       ),
     ).toBe(true);
 
-    const smart = await engine().decide('smart_cross_sell', {
+    const smartRequest = {
       ...baseRequest,
       cart: {
         ...baseRequest.cart,
@@ -400,7 +489,10 @@ describe('automatic recommendation deterministic engine', () => {
           },
         ],
       },
-    });
+    };
+    const smart = await engine({
+      ports: contextPorts({ trustedCart: smartRequest.cart }),
+    }).decide('smart_cross_sell', smartRequest);
     expect(
       smart.proposals.map(({ action }) =>
         action.type === 'add_product' ? action.sellableItemId : 'modifier',
@@ -483,6 +575,144 @@ describe('automatic recommendation deterministic engine', () => {
       status: 503,
       code: 'recommendation_infrastructure_unavailable',
       retryable: true,
+      stage: 'context',
     });
+  });
+
+  it.each([
+    {
+      label: 'invalid catalog time zone',
+      snapshot: { ...catalog, timeZone: 'Mars/Olympus_Mons' },
+    },
+    {
+      label: 'invalid catalog item price',
+      snapshot: {
+        ...catalog,
+        items: [
+          { ...catalog.items[0]!, unitPriceVnd: -1 },
+          ...catalog.items.slice(1),
+        ],
+      },
+    },
+  ])('fails closed before scoring for $label', async ({ snapshot }) => {
+    let scorerCalled = false;
+    await expect(
+      engine({
+        ports: contextPorts({ snapshot }),
+        scorerPort: {
+          score: async () => {
+            scorerCalled = true;
+            throw new Error('scorer_must_not_be_called');
+          },
+        },
+      }).decide('local_favorite', baseRequest),
+    ).rejects.toMatchObject({
+      status: 503,
+      retryable: true,
+      stage: 'context',
+    });
+    expect(scorerCalled).toBe(false);
+  });
+
+  it('fails closed in the feature stage when trusted inputs cannot form the fixed schema', async () => {
+    const zeroPriceCart: AutomaticTrustedOrderContextSnapshot['cart'] = {
+      ...baseRequest.cart,
+      lines: [
+        {
+          lineId: 'line-parent-1',
+          sellableItemId: 'parent-1',
+          quantity: 1,
+          unitPrice: { amount: 0, currency: 'VND' },
+          modifiers: [],
+        },
+      ],
+    };
+    const request = {
+      ...baseRequest,
+      cart: zeroPriceCart,
+      parentCartLineId: 'line-parent-1',
+    };
+    let scorerCalled = false;
+    await expect(
+      engine({
+        ports: contextPorts({
+          trustedCart: zeroPriceCart,
+          trustedParentCartLineId: 'line-parent-1',
+        }),
+        scorerPort: {
+          score: async () => {
+            scorerCalled = true;
+            throw new Error('scorer_must_not_be_called');
+          },
+        },
+      }).decide('modifier_upsell', request),
+    ).rejects.toMatchObject({
+      status: 503,
+      retryable: true,
+      stage: 'features',
+    });
+    expect(scorerCalled).toBe(false);
+  });
+
+  it('rejects a malformed trusted order snapshot before catalog or scorer access', async () => {
+    const invalidPorts = contextPorts();
+    const readOrder = invalidPorts.orderContext.readSnapshot;
+    let catalogCalled = false;
+    let scorerCalled = false;
+    invalidPorts.orderContext.readSnapshot = async (input) => ({
+      ...(await readOrder(input))!,
+      remainingBudgetVnd: -1,
+    });
+    invalidPorts.catalog.readSnapshot = async () => {
+      catalogCalled = true;
+      return catalog;
+    };
+    await expect(
+      engine({
+        ports: invalidPorts,
+        scorerPort: {
+          score: async () => {
+            scorerCalled = true;
+            throw new Error('scorer_must_not_be_called');
+          },
+        },
+      }).decide('local_favorite', baseRequest),
+    ).rejects.toMatchObject({
+      status: 503,
+      retryable: true,
+      stage: 'context',
+    });
+    expect(catalogCalled).toBe(false);
+    expect(scorerCalled).toBe(false);
+  });
+
+  it('preserves a typed binding conflict and stops before catalog, candidates, or scoring', async () => {
+    const boundPorts = contextPorts();
+    let catalogCalled = false;
+    let scorerCalled = false;
+    boundPorts.catalog.readSnapshot = async () => {
+      catalogCalled = true;
+      return catalog;
+    };
+    await expect(
+      engine({
+        ports: boundPorts,
+        scorerPort: {
+          score: async () => {
+            scorerCalled = true;
+            throw new Error('scorer_must_not_be_called');
+          },
+        },
+      }).decide('local_favorite', {
+        ...baseRequest,
+        storeId: 'SPOOFED-STORE',
+      }),
+    ).rejects.toMatchObject({
+      status: 409,
+      code: 'identity_conflict',
+      retryable: false,
+    });
+    expect(catalogCalled).toBe(false);
+    expect(scorerCalled).toBe(false);
   });
 });

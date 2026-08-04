@@ -20,7 +20,12 @@ const inventorySchema = z
     schemaVersion: z.literal('kfc-automatic-donor-disposition-v1'),
     donorCommit: z.string().regex(/^[a-f0-9]{40}$/u),
     capture: z
-      .object({ description: z.string().min(1), pathCount: z.number().int() })
+      .object({
+        description: z.string().min(1),
+        pathCount: z.number().int(),
+        roots: z.array(z.string().min(1)),
+        explicitPaths: z.array(z.string().min(1)),
+      })
       .strict(),
     allowedDispositions: z.array(dispositionSchema),
     entries: z.array(
@@ -45,6 +50,28 @@ async function sourceFiles(directory: string): Promise<string[]> {
     }),
   );
   return nested.flat();
+}
+
+async function relativeImportGraph(entrypoints: readonly string[]) {
+  const visited = new Set<string>();
+  const pending = [...entrypoints];
+  while (pending.length > 0) {
+    const file = pending.pop()!;
+    if (visited.has(file)) continue;
+    visited.add(file);
+    const source = await readFile(file, 'utf8');
+    const imports = [...source.matchAll(/from\s+['"]([^'"]+)['"]/gu)]
+      .map((match) => match[1]!)
+      .filter((specifier) => specifier.startsWith('.'));
+    for (const specifier of imports) {
+      const imported = path.resolve(
+        path.dirname(file),
+        specifier.replace(/\.js$/u, '.ts'),
+      );
+      if (!visited.has(imported)) pending.push(imported);
+    }
+  }
+  return visited;
 }
 
 describe('automatic recommendation donor disposition coverage', () => {
@@ -101,22 +128,26 @@ describe('automatic recommendation donor disposition coverage', () => {
 
     expect(paths).toEqual(expect.arrayContaining(requiredExamples));
 
-    const donorAvailable =
+    expect(
       spawnSync('git', ['cat-file', '-e', `${inventory.donorCommit}^{tree}`], {
         cwd: repositoryRoot,
-      }).status === 0;
-    if (donorAvailable) {
-      const donorPaths = new Set(
-        execFileSync(
-          'git',
-          ['ls-tree', '-r', '--name-only', inventory.donorCommit],
-          { cwd: repositoryRoot, encoding: 'utf8' },
-        )
-          .trim()
-          .split('\n'),
-      );
-      expect(paths.every((donorPath) => donorPaths.has(donorPath))).toBe(true);
-    }
+      }).status,
+    ).toBe(0);
+    const donorPaths = execFileSync(
+      'git',
+      ['ls-tree', '-r', '--name-only', inventory.donorCommit],
+      { cwd: repositoryRoot, encoding: 'utf8' },
+    )
+      .trim()
+      .split('\n');
+    const derivedPaths = donorPaths
+      .filter((donorPath) =>
+        inventory.capture.roots.some((root) => donorPath.startsWith(root)),
+      )
+      .concat(inventory.capture.explicitPaths)
+      .sort();
+    expect(new Set(derivedPaths).size).toBe(derivedPaths.length);
+    expect(paths).toEqual(derivedPaths);
   });
 });
 
@@ -148,6 +179,46 @@ describe('automatic recommendation single-authority source and config audit', ()
     }
   });
 
+  it('traverses the target import graph and isolates explicitly preserved chat ranking', async () => {
+    const targetEntrypoints = [path.join(coreRoot, 'index.ts')];
+    const targetGraph = await relativeImportGraph(targetEntrypoints);
+    const unrelatedChatAuthorityAllowlist = [
+      path.join(backendRoot, 'src/ordering/recommendationRanking.ts'),
+      path.join(backendRoot, 'src/clients/catalogObservationClients.ts'),
+    ];
+    const forbiddenAuthority =
+      /(merchandis|manual|shadow|fallback|popularity|random|personalize|sanity|keras|transformer|embedding|stategraph|openai|d1|@aws)/iu;
+
+    expect(targetGraph.size).toBeGreaterThan(1);
+    for (const file of targetGraph) {
+      expect(unrelatedChatAuthorityAllowlist).not.toContain(file);
+      expect(
+        await readFile(file, 'utf8'),
+        path.relative(repositoryRoot, file),
+      ).not.toMatch(forbiddenAuthority);
+    }
+
+    const rankingImporters = [];
+    for (const file of await sourceFiles(path.join(backendRoot, 'src'))) {
+      if (
+        (await readFile(file, 'utf8')).includes(
+          'ordering/recommendationRanking.js',
+        )
+      ) {
+        rankingImporters.push(file);
+      }
+    }
+    expect(rankingImporters).toEqual([
+      path.join(backendRoot, 'src/clients/catalogObservationClients.ts'),
+    ]);
+    expect(unrelatedChatAuthorityAllowlist).toEqual(
+      expect.arrayContaining([
+        ...rankingImporters,
+        path.join(backendRoot, 'src/ordering/recommendationRanking.ts'),
+      ]),
+    );
+  });
+
   it('has no parallel recommendation authority or forbidden target config', async () => {
     const recommendationDirectories = await readdir(
       path.join(backendRoot, 'src/recommendations'),
@@ -157,10 +228,17 @@ describe('automatic recommendation single-authority source and config audit', ()
       'contracts',
     ]);
 
-    const configText = await Promise.all(
-      ['.env.example', 'wrangler.toml'].map((file) =>
-        readFile(path.join(backendRoot, file), 'utf8'),
+    const workflowRoot = path.join(repositoryRoot, '.github/workflows');
+    const deploymentSurfaces = [
+      path.join(backendRoot, '.env.example'),
+      path.join(backendRoot, 'wrangler.toml'),
+      path.join(backendRoot, 'package.json'),
+      ...(await readdir(workflowRoot)).map((file) =>
+        path.join(workflowRoot, file),
       ),
+    ];
+    const configText = await Promise.all(
+      deploymentSurfaces.map((file) => readFile(file, 'utf8')),
     );
     expect(configText.join('\n')).not.toMatch(
       /(SANITY_|KFC_RECOMMENDATION_|PERSONALIZE|HUGGING_FACE|SHADOW_SCORER|MERCHANDISING)/u,

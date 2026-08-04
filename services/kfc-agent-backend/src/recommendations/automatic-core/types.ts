@@ -14,6 +14,7 @@ export interface AutomaticModifierOptionSnapshot {
 
 export interface AutomaticModifierGroupSnapshot {
   groupPath: readonly string[];
+  selectionMode: 'single' | 'multiple';
   options: readonly AutomaticModifierOptionSnapshot[];
 }
 
@@ -27,6 +28,10 @@ export interface AutomaticCatalogItemSnapshot {
   safe: boolean;
   availableFulfilmentModes: readonly ('pickup' | 'delivery')[];
   promotionActive: boolean;
+  discountAmountVnd: number;
+  localDemandCount: number | null;
+  basketAssociationCount: number | null;
+  basketComplementarityScore: number | null;
   modifierGroups: readonly AutomaticModifierGroupSnapshot[];
 }
 
@@ -41,11 +46,32 @@ export interface AutomaticCompletedHistorySnapshot {
   verifiedCustomerRef: string;
   historyRevision: string;
   completedOrderCount: number;
+  lastCompletedOrderAt: string | null;
   itemOrderCounts: Readonly<Record<string, number>>;
   categoryOrderCounts: Readonly<Record<string, number>>;
 }
 
+type AutomaticCart = AutomaticRecommendationRequest['cart'];
+
+export interface AutomaticTrustedOrderContextSnapshot {
+  orderingJourneyRef: string;
+  opportunityRef: string;
+  storeId: string;
+  fulfilmentMode: 'pickup' | 'delivery';
+  locale: string;
+  cart: AutomaticCart;
+  remainingBudgetVnd: number | null;
+  parentCartLineId: string | null;
+  verifiedCustomerRef: string | null;
+}
+
 export interface AutomaticRecommendationContextPorts {
+  orderContext: {
+    readSnapshot(input: {
+      orderingJourneyRef: string;
+      opportunityRef: string;
+    }): Promise<AutomaticTrustedOrderContextSnapshot | null>;
+  };
   catalog: {
     readSnapshot(input: {
       storeId: string;
@@ -68,11 +94,12 @@ export interface AutomaticRecommendationContextPorts {
   };
 }
 
-type CartLine = AutomaticRecommendationRequest['cart']['lines'][number];
+type CartLine = AutomaticCart['lines'][number];
 
 export interface AutomaticRecommendationContext {
   recommendationType: AutomaticRecommendationType;
   request: AutomaticRecommendationRequest;
+  order: AutomaticTrustedOrderContextSnapshot;
   decisionTime: string;
   catalog: AutomaticCatalogSnapshot;
   history: AutomaticCompletedHistorySnapshot | null;
@@ -87,12 +114,14 @@ export type AutomaticRecommendationContextResolution =
   | {
       kind: 'empty';
       reason: AutomaticContextEmptyReason;
+      decisionTime: string;
       cartRevision: string;
       catalogRevision: string;
     }
   | {
       kind: 'paused';
       reason: 'recommendation_serving_paused';
+      decisionTime: string;
       cartRevision: string;
       catalogRevision: string;
     };
@@ -134,7 +163,9 @@ export type AutomaticEligibilityEvidenceCode =
   | 'unavailable_for_fulfilment'
   | 'already_in_cart'
   | 'modifier_parent_mismatch'
-  | 'modifier_path_mismatch';
+  | 'modifier_path_mismatch'
+  | 'modifier_already_applied'
+  | 'modifier_group_satisfied';
 
 export interface AutomaticEligibilityDecision {
   candidate: AutomaticRecommendationCandidate;

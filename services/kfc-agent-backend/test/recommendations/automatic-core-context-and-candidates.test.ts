@@ -17,6 +17,10 @@ const catalog: AutomaticCatalogSnapshot = {
       imageUrl: 'https://example.test/chicken-1.png',
       categoryId: 'chicken',
       unitPriceVnd: 45000,
+      discountAmountVnd: 0,
+      localDemandCount: 100,
+      basketAssociationCount: 8,
+      basketComplementarityScore: 0.5,
       sellable: true,
       safe: true,
       availableFulfilmentModes: ['pickup', 'delivery'],
@@ -24,6 +28,7 @@ const catalog: AutomaticCatalogSnapshot = {
       modifierGroups: [
         {
           groupPath: ['meal', 'drink'],
+          selectionMode: 'single',
           options: [
             {
               optionId: 'pepsi-medium',
@@ -51,6 +56,10 @@ const catalog: AutomaticCatalogSnapshot = {
       imageUrl: 'https://example.test/fries-1.png',
       categoryId: 'side',
       unitPriceVnd: 25000,
+      discountAmountVnd: 5000,
+      localDemandCount: 90,
+      basketAssociationCount: 12,
+      basketComplementarityScore: 0.9,
       sellable: true,
       safe: true,
       availableFulfilmentModes: ['pickup', 'delivery'],
@@ -63,6 +72,10 @@ const catalog: AutomaticCatalogSnapshot = {
       imageUrl: null,
       categoryId: 'drink',
       unitPriceVnd: 20000,
+      discountAmountVnd: 0,
+      localDemandCount: 70,
+      basketAssociationCount: 5,
+      basketComplementarityScore: 0.7,
       sellable: true,
       safe: true,
       availableFulfilmentModes: ['delivery'],
@@ -75,6 +88,10 @@ const catalog: AutomaticCatalogSnapshot = {
       imageUrl: null,
       categoryId: 'retired',
       unitPriceVnd: 1000,
+      discountAmountVnd: 0,
+      localDemandCount: null,
+      basketAssociationCount: null,
+      basketComplementarityScore: null,
       sellable: false,
       safe: true,
       availableFulfilmentModes: [],
@@ -111,11 +128,30 @@ const commonRequest = {
 function ports({
   paused = false,
   completedOrderCount = 2,
+  trustedParentCartLineId = 'line-chicken-1',
+  trustedCustomerRef = 'customer-001',
+  trustedCart = commonRequest.cart,
 }: {
   paused?: boolean;
   completedOrderCount?: number;
+  trustedParentCartLineId?: string | null;
+  trustedCustomerRef?: string | null;
+  trustedCart?: typeof commonRequest.cart;
 } = {}): AutomaticRecommendationContextPorts {
   return {
+    orderContext: {
+      readSnapshot: async () => ({
+        orderingJourneyRef: commonRequest.orderingJourneyRef,
+        opportunityRef: commonRequest.opportunityRef,
+        storeId: commonRequest.storeId,
+        fulfilmentMode: commonRequest.fulfilmentMode,
+        locale: commonRequest.locale,
+        cart: trustedCart,
+        parentCartLineId: trustedParentCartLineId,
+        verifiedCustomerRef: trustedCustomerRef,
+        remainingBudgetVnd: 100000,
+      }),
+    },
     catalog: {
       readSnapshot: async () => catalog,
     },
@@ -129,6 +165,7 @@ function ports({
               completedOrderCount,
               itemOrderCounts: { 'chicken-1': 2 },
               categoryOrderCounts: { chicken: 2 },
+              lastCompletedOrderAt: '2026-08-01T05:15:00.000Z',
             },
     },
     exposure: {
@@ -175,7 +212,7 @@ describe('automatic recommendation trusted context', () => {
     {
       recommendationType: 'modifier_upsell' as const,
       request: { ...commonRequest, parentCartLineId: 'missing-line' },
-      contextPorts: ports(),
+      contextPorts: ports({ trustedParentCartLineId: 'missing-line' }),
       expectedKind: 'empty',
       expectedReason: 'parent_cart_line_not_found',
     },
@@ -189,7 +226,13 @@ describe('automatic recommendation trusted context', () => {
           lines: [],
         },
       },
-      contextPorts: ports(),
+      contextPorts: ports({
+        trustedCart: {
+          ...commonRequest.cart,
+          subtotal: { amount: 0, currency: 'VND' as const },
+          lines: [],
+        },
+      }),
       expectedKind: 'empty',
       expectedReason: 'empty_cart',
     },
@@ -218,6 +261,73 @@ describe('automatic recommendation trusted context', () => {
       expect(resolved).toMatchObject({
         kind: expectedKind,
         reason: expectedReason,
+      });
+    },
+  );
+
+  it.each([
+    {
+      label: 'store',
+      recommendationType: 'local_favorite' as const,
+      request: { ...commonRequest, storeId: 'SPOOFED-STORE' },
+      contextPorts: ports(),
+    },
+    {
+      label: 'fulfilment',
+      recommendationType: 'local_favorite' as const,
+      request: { ...commonRequest, fulfilmentMode: 'delivery' as const },
+      contextPorts: ports(),
+    },
+    {
+      label: 'cart contents',
+      recommendationType: 'local_favorite' as const,
+      request: {
+        ...commonRequest,
+        cart: {
+          ...commonRequest.cart,
+          subtotal: { amount: 0, currency: 'VND' as const },
+          lines: [],
+        },
+      },
+      contextPorts: ports(),
+    },
+    {
+      label: 'subtotal',
+      recommendationType: 'local_favorite' as const,
+      request: {
+        ...commonRequest,
+        cart: {
+          ...commonRequest.cart,
+          subtotal: { amount: 1, currency: 'VND' as const },
+        },
+      },
+      contextPorts: ports(),
+    },
+    {
+      label: 'modifier parent',
+      recommendationType: 'modifier_upsell' as const,
+      request: { ...commonRequest, parentCartLineId: 'spoofed-line' },
+      contextPorts: ports(),
+    },
+    {
+      label: 'history authority',
+      recommendationType: 'for_you' as const,
+      request: { ...commonRequest, verifiedCustomerRef: 'spoofed-customer' },
+      contextPorts: ports(),
+    },
+  ])(
+    'rejects spoofed $label binding before trusted context can affect candidates',
+    async ({ recommendationType, request, contextPorts }) => {
+      await expect(
+        resolveAutomaticRecommendationContext({
+          recommendationType,
+          request,
+          ports: contextPorts,
+        }),
+      ).rejects.toMatchObject({
+        status: 409,
+        code: 'identity_conflict',
+        retryable: false,
       });
     },
   );

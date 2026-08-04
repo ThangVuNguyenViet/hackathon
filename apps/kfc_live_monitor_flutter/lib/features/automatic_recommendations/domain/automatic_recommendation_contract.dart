@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:crypto/crypto.dart';
 
 part 'automatic_recommendation_binding.dart';
+part 'automatic_recommendation_scorer_features.dart';
 
 enum AutomaticRecommendationType {
   localFavorite,
@@ -13,7 +14,7 @@ enum AutomaticRecommendationType {
 
 const automaticRecommendationSchemaVersion = 'kfc-automatic-recommendation-v1';
 const automaticRecommendationContractDigest =
-    '5998c1d2b50c09e14d144fbc327a885e71245c7fcbb3cb1f7b23d0ea8a547dbc';
+    '30fb774b804b4868abd78e30e489aa9fe835d3b959b38ae389c127949ac8e678';
 
 const automaticRecommendationOperationPaths = {
   AutomaticRecommendationType.localFavorite:
@@ -806,21 +807,12 @@ class _Validator {
         candidate['priceImpactVnd'],
         'scorer request.candidates[$index].priceImpactVnd',
       );
-      if (candidate['features'] is! Map) {
-        fail('scorer candidate features are invalid');
-      }
-      (candidate['features'] as Map).forEach((key, feature) {
-        string(key, 'scorer feature key');
-        if (feature != null &&
-            feature is! String &&
-            feature is! bool &&
-            feature is! num) {
-          fail('scorer feature values must be scalar or null');
-        }
-        if (feature is num && !feature.isFinite) {
-          fail('scorer feature values must be finite');
-        }
-      });
+      _validateAutomaticScorerFeatures(
+        candidate['features'],
+        map['recommendationType'] as String,
+        candidate['priceImpactVnd'] as int,
+        'scorer request.candidates[$index].features',
+      );
     }
   }
 

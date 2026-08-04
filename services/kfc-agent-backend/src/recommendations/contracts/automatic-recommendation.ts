@@ -9,7 +9,7 @@ import {
 } from './automatic-recommendation-response.js';
 
 export const AUTOMATIC_RECOMMENDATION_CONTRACT_DIGEST =
-  '5998c1d2b50c09e14d144fbc327a885e71245c7fcbb3cb1f7b23d0ea8a547dbc';
+  '30fb774b804b4868abd78e30e489aa9fe835d3b959b38ae389c127949ac8e678';
 
 export const automaticRecommendationOperations = {
   local_favorite: '/v1/recommendations/local-favorites',
@@ -144,7 +144,7 @@ function canonicalJson(value: unknown): string {
   }
   if (isJsonRecord(value)) {
     return `{${Object.entries(value)
-      .sort(([left], [right]) => left.localeCompare(right))
+      .sort(([left], [right]) => (left < right ? -1 : left > right ? 1 : 0))
       .map(([key, nested]) => `${JSON.stringify(key)}:${canonicalJson(nested)}`)
       .join(',')}}`;
   }

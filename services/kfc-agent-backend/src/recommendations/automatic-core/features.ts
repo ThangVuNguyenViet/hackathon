@@ -1,35 +1,22 @@
-import { createHash } from 'node:crypto';
+import {
+  AUTOMATIC_FEATURE_SCHEMA_VERSION,
+  parseAutomaticRecommendationFeatureVector,
+} from '../contracts/automatic-features.js';
 import type {
+  AutomaticCatalogItemSnapshot,
   AutomaticEligibilityDecision,
-  AutomaticFeatureValue,
   AutomaticRecommendationCandidate,
   AutomaticRecommendationContext,
   AutomaticRecommendationFeatureRow,
 } from './types.js';
 
-export const AUTOMATIC_FEATURE_SCHEMA_VERSION = 'automatic-feature-v1';
-
-const FEATURE_SCHEMA_DESCRIPTOR = [
-  'featureSchemaVersion:string',
-  'recommendationType:string',
-  'fulfilmentMode:string',
-  'localHour:number',
-  'cartSubtotalVnd:number',
-  'cartLineCount:number',
-  'candidateCategoryId:string',
-  'priceImpactVnd:number',
-  'promotionActive:boolean',
-  'completedOrderCount:number',
-  'priorItemOrderCount:number',
-  'priorCategoryOrderCount:number',
-  'modifierParentSellableItemId:string?',
-  'modifierGroupPath:string?',
-  'modifierPriceRatio:number?',
-].join('\n');
-
-export const AUTOMATIC_FEATURE_SCHEMA_DIGEST = createHash('sha256')
-  .update(FEATURE_SCHEMA_DESCRIPTOR)
-  .digest('hex');
+export {
+  AUTOMATIC_FEATURE_KEYS,
+  AUTOMATIC_FEATURE_SCHEMA_DIGEST,
+  AUTOMATIC_FEATURE_SCHEMA_VERSION,
+  automaticFeatureVectorSchema,
+  parseAutomaticRecommendationFeatureVector,
+} from '../contracts/automatic-features.js';
 
 function localHour(instant: string, timeZone: string): number {
   const hour = new Intl.DateTimeFormat('en-US', {
@@ -45,43 +32,133 @@ function localHour(instant: string, timeZone: string): number {
   return Number.parseInt(hour, 10);
 }
 
-function priceImpactVnd(candidate: AutomaticRecommendationCandidate): number {
-  return candidate.action.priceImpactVnd;
+function daypart(hour: number) {
+  if (hour >= 5 && hour < 10) return 'breakfast' as const;
+  if (hour >= 10 && hour < 14) return 'lunch' as const;
+  if (hour >= 14 && hour < 17) return 'afternoon' as const;
+  if (hour >= 17 && hour < 22) return 'dinner' as const;
+  return 'late_night' as const;
 }
 
-function historyFeatures(
+function candidateItem(
   context: AutomaticRecommendationContext,
   candidate: AutomaticRecommendationCandidate,
-): Record<string, AutomaticFeatureValue> {
-  const history = context.history;
+): AutomaticCatalogItemSnapshot {
   const sellableItemId =
     candidate.action.type === 'add_product'
       ? candidate.action.sellableItemId
       : candidate.action.parentSellableItemId;
+  const item = context.catalog.items.find(
+    (catalogItem) => catalogItem.sellableItemId === sellableItemId,
+  );
+  if (item === undefined) {
+    throw new Error('Eligible candidate is absent from trusted catalog');
+  }
+  return item;
+}
+
+function historyRecencyDays(context: AutomaticRecommendationContext) {
+  const lastCompletedOrderAt = context.history?.lastCompletedOrderAt;
+  if (lastCompletedOrderAt === null || lastCompletedOrderAt === undefined) {
+    return null;
+  }
+  const elapsed =
+    new Date(context.decisionTime).getTime() -
+    new Date(lastCompletedOrderAt).getTime();
+  return Math.max(0, Math.floor(elapsed / 86_400_000));
+}
+
+function cartCategoryFacts(context: AutomaticRecommendationContext) {
+  const categories = context.order.cart.lines.map(
+    ({ sellableItemId }) =>
+      context.catalog.items.find(
+        (item) => item.sellableItemId === sellableItemId,
+      )?.categoryId ?? '__unknown__',
+  );
   return {
-    completedOrderCount: history?.completedOrderCount ?? 0,
-    priorItemOrderCount: history?.itemOrderCounts[sellableItemId] ?? 0,
-    priorCategoryOrderCount:
-      history?.categoryOrderCounts[candidate.categoryId] ?? 0,
+    categories,
+    distinctCount: new Set(categories).size,
   };
 }
 
-function modifierFeatures(
+function buildFeatureVector(
   context: AutomaticRecommendationContext,
   candidate: AutomaticRecommendationCandidate,
-): Record<string, AutomaticFeatureValue> {
-  if (candidate.action.type !== 'apply_modifier') {
-    return {};
-  }
-  const parentUnitPrice = context.parentCartLine?.unitPrice.amount;
-  if (parentUnitPrice === undefined || parentUnitPrice === 0) {
-    throw new Error('Modifier features require a priced exact parent line');
-  }
-  return {
-    modifierParentSellableItemId: candidate.action.parentSellableItemId,
-    modifierGroupPath: candidate.action.groupPath.join('/'),
-    modifierPriceRatio: candidate.action.priceImpactVnd / parentUnitPrice,
-  };
+) {
+  const item = candidateItem(context, candidate);
+  const action = candidate.action;
+  const hour = localHour(context.decisionTime, context.catalog.timeZone);
+  const cartCategories = cartCategoryFacts(context);
+  const modifierGroup =
+    action.type === 'apply_modifier'
+      ? item.modifierGroups.find(
+          ({ groupPath }) => groupPath.join('/') === action.groupPath.join('/'),
+        )
+      : undefined;
+  const priorItemOrderCount =
+    context.history?.itemOrderCounts[item.sellableItemId] ?? 0;
+  const isSmart = context.recommendationType === 'smart_cross_sell';
+  const isModifier = context.recommendationType === 'modifier_upsell';
+  return parseAutomaticRecommendationFeatureVector({
+    featureSchemaVersion: AUTOMATIC_FEATURE_SCHEMA_VERSION,
+    recommendationType: context.recommendationType,
+    storeId: context.order.storeId,
+    fulfilmentMode: context.order.fulfilmentMode,
+    locale: context.order.locale,
+    localHour: hour,
+    daypart: daypart(hour),
+    catalogRevision: context.catalog.catalogRevision,
+    cartSubtotalVnd: context.order.cart.subtotal.amount,
+    cartLineCount: context.order.cart.lines.length,
+    cartDistinctCategoryCount: cartCategories.distinctCount,
+    candidateSellableItemId: item.sellableItemId,
+    candidateModifierOptionId:
+      action.type === 'apply_modifier' ? action.optionId : null,
+    candidateCategoryId: candidate.categoryId,
+    candidatePriceImpactVnd: action.priceImpactVnd,
+    candidateUnitPriceVnd: item.unitPriceVnd,
+    candidateDiscountAmountVnd: item.discountAmountVnd,
+    candidateDiscountActive: item.discountAmountVnd > 0,
+    promotionActive: item.promotionActive,
+    completedOrderCount: context.history?.completedOrderCount ?? 0,
+    priorItemOrderCount,
+    priorCategoryOrderCount:
+      context.history?.categoryOrderCounts[candidate.categoryId] ?? 0,
+    historyRecencyDays:
+      context.recommendationType === 'for_you'
+        ? historyRecencyDays(context)
+        : null,
+    localDemandCount:
+      context.recommendationType === 'local_favorite'
+        ? item.localDemandCount
+        : null,
+    modifierParentCartLineId:
+      action.type === 'apply_modifier' ? action.parentCartLineId : null,
+    modifierParentSellableItemId:
+      action.type === 'apply_modifier' ? action.parentSellableItemId : null,
+    modifierGroupPath:
+      action.type === 'apply_modifier' ? action.groupPath.join('/') : null,
+    modifierSelectionMode: isModifier
+      ? (modifierGroup?.selectionMode ?? null)
+      : null,
+    modifierOptionAvailable: isModifier ? candidate.available : null,
+    modifierOptionSafe: isModifier ? candidate.safe : null,
+    modifierPriceRatio: isModifier
+      ? action.priceImpactVnd / (context.parentCartLine?.unitPrice.amount ?? 0)
+      : null,
+    remainingBudgetVnd:
+      isModifier || isSmart ? context.order.remainingBudgetVnd : null,
+    basketAssociationCount: isSmart ? item.basketAssociationCount : null,
+    basketComplementarityScore: isSmart
+      ? item.basketComplementarityScore
+      : null,
+    basketRedundancyCount: isSmart
+      ? cartCategories.categories.filter(
+          (categoryId) => categoryId === candidate.categoryId,
+        ).length
+      : null,
+    basketCategoryDiversityCount: isSmart ? cartCategories.distinctCount : null,
+  });
 }
 
 export function buildAutomaticRecommendationFeatureRows(
@@ -93,19 +170,7 @@ export function buildAutomaticRecommendationFeatureRows(
     .map(({ candidate }) => ({
       candidateId: candidate.candidateId,
       eligibility: 'eligible' as const,
-      priceImpactVnd: priceImpactVnd(candidate),
-      features: {
-        featureSchemaVersion: AUTOMATIC_FEATURE_SCHEMA_VERSION,
-        recommendationType: context.recommendationType,
-        fulfilmentMode: context.request.fulfilmentMode,
-        localHour: localHour(context.decisionTime, context.catalog.timeZone),
-        cartSubtotalVnd: context.request.cart.subtotal.amount,
-        cartLineCount: context.request.cart.lines.length,
-        candidateCategoryId: candidate.categoryId,
-        priceImpactVnd: priceImpactVnd(candidate),
-        promotionActive: candidate.promotionActive,
-        ...historyFeatures(context, candidate),
-        ...modifierFeatures(context, candidate),
-      },
+      priceImpactVnd: candidate.action.priceImpactVnd,
+      features: buildFeatureVector(context, candidate),
     }));
 }

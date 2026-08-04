@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { automaticFeatureVectorSchema } from './automatic-features.js';
 
 const opaqueIdSchema = z
   .string()
@@ -26,13 +27,6 @@ const modelBindingSchema = z
     qualificationEvidenceDigest: sha256Schema,
   })
   .strict();
-const featureValueSchema = z.union([
-  z.number().finite(),
-  z.string(),
-  z.boolean(),
-  z.null(),
-]);
-
 const scorerRequestSchema = z
   .object({
     schemaVersion: z.literal('kfc-automatic-scorer-v1'),
@@ -46,13 +40,38 @@ const scorerRequestSchema = z
             candidateId: opaqueIdSchema,
             eligibility: z.literal('eligible'),
             priceImpactVnd: z.number().int().nonnegative(),
-            features: z.record(z.string(), featureValueSchema),
+            features: automaticFeatureVectorSchema,
           })
-          .strict(),
+          .strict()
+          .superRefine((candidate, context) => {
+            if (
+              candidate.priceImpactVnd !==
+              candidate.features.candidatePriceImpactVnd
+            ) {
+              context.addIssue({
+                code: z.ZodIssueCode.custom,
+                path: ['features', 'candidatePriceImpactVnd'],
+                message: 'Candidate price impact must match its feature vector',
+              });
+            }
+          }),
       )
       .min(1),
   })
-  .strict();
+  .strict()
+  .superRefine((request, context) => {
+    request.candidates.forEach((candidate, index) => {
+      if (
+        candidate.features.recommendationType !== request.recommendationType
+      ) {
+        context.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ['candidates', index, 'features', 'recommendationType'],
+          message: 'Candidate feature type must match the scorer request',
+        });
+      }
+    });
+  });
 
 const scorerResponseSchema = z
   .object({

@@ -40,6 +40,20 @@ _REASON_CODES = {
     "popular_here", "ordered_before", "matches_your_history",
     "completes_your_item", "completes_your_meal", "active_offer",
 }
+_FEATURE_KEYS = (
+    "featureSchemaVersion", "recommendationType", "storeId", "fulfilmentMode",
+    "locale", "localHour", "daypart", "catalogRevision", "cartSubtotalVnd",
+    "cartLineCount", "cartDistinctCategoryCount", "candidateSellableItemId",
+    "candidateModifierOptionId", "candidateCategoryId",
+    "candidatePriceImpactVnd", "candidateUnitPriceVnd",
+    "candidateDiscountAmountVnd", "candidateDiscountActive", "promotionActive",
+    "completedOrderCount", "priorItemOrderCount", "priorCategoryOrderCount",
+    "historyRecencyDays", "localDemandCount", "modifierParentCartLineId",
+    "modifierParentSellableItemId", "modifierGroupPath", "modifierSelectionMode",
+    "modifierOptionAvailable", "modifierOptionSafe", "modifierPriceRatio",
+    "remainingBudgetVnd", "basketAssociationCount", "basketComplementarityScore",
+    "basketRedundancyCount", "basketCategoryDiversityCount",
+)
 
 
 class ContractValidationError(ValueError):
@@ -141,6 +155,83 @@ def _number(value: Any, path: str, minimum: float, maximum: float) -> float:
     if not math.isfinite(number) or number < minimum or number > maximum:
         _fail(f"{path} must be between {minimum} and {maximum}")
     return number
+
+
+def _nullable_integer(value: Any, path: str) -> None:
+    if value is not None:
+        _integer(value, path)
+
+
+def _nullable_number(value: Any, path: str, minimum: float, maximum: float) -> None:
+    if value is not None:
+        _number(value, path, minimum, maximum)
+
+
+def _nullable_string(value: Any, path: str) -> None:
+    if value is not None:
+        _string(value, path)
+
+
+def _feature_vector(value: Any, expected_type: str, expected_price: int, path: str) -> None:
+    feature = _exact_object(value, _FEATURE_KEYS, path)
+    if feature["featureSchemaVersion"] != "automatic-feature-v1":
+        _fail(f"{path}.featureSchemaVersion is invalid")
+    if feature["recommendationType"] != expected_type:
+        _fail(f"{path}.recommendationType must match the scorer request")
+    for name in ("storeId", "locale", "catalogRevision", "candidateSellableItemId", "candidateCategoryId"):
+        _string(feature[name], f"{path}.{name}")
+    if feature["fulfilmentMode"] not in {"pickup", "delivery"}:
+        _fail(f"{path}.fulfilmentMode is invalid")
+    if feature["daypart"] not in {"breakfast", "lunch", "afternoon", "dinner", "late_night"}:
+        _fail(f"{path}.daypart is invalid")
+    hour = _integer(feature["localHour"], f"{path}.localHour")
+    if hour > 23:
+        _fail(f"{path}.localHour must be at most 23")
+    for name in (
+        "cartSubtotalVnd", "cartLineCount", "cartDistinctCategoryCount",
+        "candidatePriceImpactVnd", "candidateUnitPriceVnd", "candidateDiscountAmountVnd",
+        "completedOrderCount", "priorItemOrderCount", "priorCategoryOrderCount",
+    ):
+        _integer(feature[name], f"{path}.{name}")
+    if feature["candidatePriceImpactVnd"] != expected_price:
+        _fail(f"{path}.candidatePriceImpactVnd must match the candidate")
+    for name in ("candidateDiscountActive", "promotionActive"):
+        if not isinstance(feature[name], bool):
+            _fail(f"{path}.{name} must be a boolean")
+    _nullable_number(feature["historyRecencyDays"], f"{path}.historyRecencyDays", 0, math.inf)
+    for name in ("localDemandCount", "remainingBudgetVnd", "basketAssociationCount", "basketRedundancyCount", "basketCategoryDiversityCount"):
+        _nullable_integer(feature[name], f"{path}.{name}")
+    _nullable_number(feature["basketComplementarityScore"], f"{path}.basketComplementarityScore", -1, 1)
+    _nullable_number(feature["modifierPriceRatio"], f"{path}.modifierPriceRatio", 0, math.inf)
+    for name in ("candidateModifierOptionId", "modifierParentCartLineId", "modifierParentSellableItemId", "modifierGroupPath"):
+        _nullable_string(feature[name], f"{path}.{name}")
+    if feature["modifierSelectionMode"] not in {None, "single", "multiple"}:
+        _fail(f"{path}.modifierSelectionMode is invalid")
+    for name in ("modifierOptionAvailable", "modifierOptionSafe"):
+        if feature[name] is not None and not isinstance(feature[name], bool):
+            _fail(f"{path}.{name} must be a boolean or null")
+    modifier_fields = (
+        "candidateModifierOptionId", "modifierParentCartLineId",
+        "modifierParentSellableItemId", "modifierGroupPath", "modifierSelectionMode",
+        "modifierOptionAvailable", "modifierOptionSafe", "modifierPriceRatio",
+    )
+    if expected_type == "modifier_upsell":
+        if any(feature[name] is None for name in modifier_fields):
+            _fail(f"{path} is missing modifier features")
+    elif any(feature[name] is not None for name in modifier_fields):
+        _fail(f"{path} contains inapplicable modifier features")
+    basket_fields = (
+        "basketAssociationCount", "basketComplementarityScore",
+        "basketRedundancyCount", "basketCategoryDiversityCount",
+    )
+    if expected_type != "smart_cross_sell" and any(feature[name] is not None for name in basket_fields):
+        _fail(f"{path} contains inapplicable basket features")
+    if expected_type not in {"modifier_upsell", "smart_cross_sell"} and feature["remainingBudgetVnd"] is not None:
+        _fail(f"{path}.remainingBudgetVnd is inapplicable")
+    if expected_type != "local_favorite" and feature["localDemandCount"] is not None:
+        _fail(f"{path}.localDemandCount is inapplicable")
+    if expected_type != "for_you" and feature["historyRecencyDays"] is not None:
+        _fail(f"{path}.historyRecencyDays is inapplicable")
 
 
 def _datetime(value: Any, path: str) -> str:
@@ -453,14 +544,10 @@ def parse_automatic_scorer_request(value: Any) -> AutomaticScorerRequestPayload:
         if item["eligibility"] != "eligible":
             _fail("scorer request accepts eligible candidates only")
         _integer(item["priceImpactVnd"], f"scorer request.candidates[{index}].priceImpactVnd")
-        if not isinstance(item["features"], dict):
-            _fail("scorer request candidate features must be an object")
-        for name, feature in item["features"].items():
-            _string(name, "scorer request feature key")
-            if feature is not None and not isinstance(feature, (str, bool, int, float)):
-                _fail("scorer request feature values must be scalar or null")
-            if isinstance(feature, float) and not math.isfinite(feature):
-                _fail("scorer request feature values must be finite")
+        _feature_vector(
+            item["features"], payload["recommendationType"], item["priceImpactVnd"],
+            f"scorer request.candidates[{index}].features",
+        )
     return AutomaticScorerRequestPayload(payload)
 
 

@@ -65,7 +65,11 @@ function exclusionCode(
     const option = group?.options.find(
       ({ optionId }) => optionId === action.optionId,
     );
-    if (parentItem === undefined || option === undefined) {
+    if (
+      parentItem === undefined ||
+      group === undefined ||
+      option === undefined
+    ) {
       return 'modifier_path_mismatch';
     }
     if (!parentItem.sellable) {
@@ -76,11 +80,23 @@ function exclusionCode(
     }
     if (
       !parentItem.availableFulfilmentModes.includes(
-        context.request.fulfilmentMode,
+        context.order.fulfilmentMode,
       ) ||
       !option.available
     ) {
       return 'unavailable_for_fulfilment';
+    }
+    const appliedInGroup = context.parentCartLine?.modifiers.filter(
+      (modifier) => samePath(modifier.groupPath, action.groupPath),
+    );
+    if (
+      appliedInGroup?.some(({ optionId }) => optionId === action.optionId) ===
+      true
+    ) {
+      return 'modifier_already_applied';
+    }
+    if (group.selectionMode === 'single' && (appliedInGroup?.length ?? 0) > 0) {
+      return 'modifier_group_satisfied';
     }
     return 'eligible';
   }
@@ -103,11 +119,11 @@ function exclusionCode(
   if (!item.safe) {
     return 'unsafe_candidate';
   }
-  if (!item.availableFulfilmentModes.includes(context.request.fulfilmentMode)) {
+  if (!item.availableFulfilmentModes.includes(context.order.fulfilmentMode)) {
     return 'unavailable_for_fulfilment';
   }
   if (
-    context.request.cart.lines.some(
+    context.order.cart.lines.some(
       (line) => line.sellableItemId === sellableItemId,
     )
   ) {

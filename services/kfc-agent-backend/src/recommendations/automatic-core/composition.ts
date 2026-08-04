@@ -4,13 +4,30 @@ import type {
   AutomaticScoredCandidate,
 } from './types.js';
 
+function compareUnicodeCodePoints(left: string, right: string): number {
+  const leftPoints = [...left];
+  const rightPoints = [...right];
+  const sharedLength = Math.min(leftPoints.length, rightPoints.length);
+  for (let index = 0; index < sharedLength; index += 1) {
+    const difference =
+      leftPoints[index]!.codePointAt(0)! - rightPoints[index]!.codePointAt(0)!;
+    if (difference !== 0) {
+      return difference;
+    }
+  }
+  return leftPoints.length - rightPoints.length;
+}
+
 function byRetainedValueThenIdentity(
   left: AutomaticScoredCandidate,
   right: AutomaticScoredCandidate,
 ): number {
   return (
     right.expectedRetainedValueVnd - left.expectedRetainedValueVnd ||
-    left.candidate.candidateId.localeCompare(right.candidate.candidateId)
+    compareUnicodeCodePoints(
+      left.candidate.candidateId,
+      right.candidate.candidateId,
+    )
   );
 }
 

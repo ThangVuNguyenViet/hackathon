@@ -6,12 +6,17 @@ export {
 export { composeAutomaticRecommendationSlate } from './composition.js';
 export { resolveAutomaticRecommendationContext } from './context.js';
 export { createAutomaticRecommendationEngine } from './engine.js';
-export { AutomaticRecommendationInfrastructureError } from './errors.js';
+export {
+  AutomaticRecommendationBindingError,
+  AutomaticRecommendationInfrastructureError,
+} from './errors.js';
 export { evaluateAutomaticRecommendationEligibility } from './eligibility.js';
 export {
+  AUTOMATIC_FEATURE_KEYS,
   AUTOMATIC_FEATURE_SCHEMA_DIGEST,
   AUTOMATIC_FEATURE_SCHEMA_VERSION,
   buildAutomaticRecommendationFeatureRows,
+  parseAutomaticRecommendationFeatureVector,
 } from './features.js';
 export type {
   AutomaticCatalogItemSnapshot,
@@ -23,6 +28,7 @@ export type {
   AutomaticRecommendationContext,
   AutomaticRecommendationContextPorts,
   AutomaticRecommendationContextResolution,
+  AutomaticTrustedOrderContextSnapshot,
   AutomaticEligibilityDecision,
   AutomaticEligibilityEvidenceCode,
   AutomaticFeatureValue,

@@ -44,6 +44,148 @@
         "qualificationEvidenceDigest": { "$ref": "#/$defs/Sha256" }
       }
     },
+    "FeatureVector": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "featureSchemaVersion",
+        "recommendationType",
+        "storeId",
+        "fulfilmentMode",
+        "locale",
+        "localHour",
+        "daypart",
+        "catalogRevision",
+        "cartSubtotalVnd",
+        "cartLineCount",
+        "cartDistinctCategoryCount",
+        "candidateSellableItemId",
+        "candidateModifierOptionId",
+        "candidateCategoryId",
+        "candidatePriceImpactVnd",
+        "candidateUnitPriceVnd",
+        "candidateDiscountAmountVnd",
+        "candidateDiscountActive",
+        "promotionActive",
+        "completedOrderCount",
+        "priorItemOrderCount",
+        "priorCategoryOrderCount",
+        "historyRecencyDays",
+        "localDemandCount",
+        "modifierParentCartLineId",
+        "modifierParentSellableItemId",
+        "modifierGroupPath",
+        "modifierSelectionMode",
+        "modifierOptionAvailable",
+        "modifierOptionSafe",
+        "modifierPriceRatio",
+        "remainingBudgetVnd",
+        "basketAssociationCount",
+        "basketComplementarityScore",
+        "basketRedundancyCount",
+        "basketCategoryDiversityCount"
+      ],
+      "properties": {
+        "featureSchemaVersion": { "const": "automatic-feature-v1" },
+        "recommendationType": { "$ref": "#/$defs/RecommendationType" },
+        "storeId": { "type": "string", "minLength": 1 },
+        "fulfilmentMode": { "enum": ["pickup", "delivery"] },
+        "locale": { "type": "string", "minLength": 2 },
+        "localHour": { "type": "integer", "minimum": 0, "maximum": 23 },
+        "daypart": {
+          "enum": ["breakfast", "lunch", "afternoon", "dinner", "late_night"]
+        },
+        "catalogRevision": { "type": "string", "minLength": 1 },
+        "cartSubtotalVnd": { "type": "integer", "minimum": 0 },
+        "cartLineCount": { "type": "integer", "minimum": 0 },
+        "cartDistinctCategoryCount": { "type": "integer", "minimum": 0 },
+        "candidateSellableItemId": { "type": "string", "minLength": 1 },
+        "candidateModifierOptionId": { "type": ["string", "null"], "minLength": 1 },
+        "candidateCategoryId": { "type": "string", "minLength": 1 },
+        "candidatePriceImpactVnd": { "type": "integer", "minimum": 0 },
+        "candidateUnitPriceVnd": { "type": "integer", "minimum": 0 },
+        "candidateDiscountAmountVnd": { "type": "integer", "minimum": 0 },
+        "candidateDiscountActive": { "type": "boolean" },
+        "promotionActive": { "type": "boolean" },
+        "completedOrderCount": { "type": "integer", "minimum": 0 },
+        "priorItemOrderCount": { "type": "integer", "minimum": 0 },
+        "priorCategoryOrderCount": { "type": "integer", "minimum": 0 },
+        "historyRecencyDays": { "type": ["number", "null"], "minimum": 0 },
+        "localDemandCount": { "type": ["integer", "null"], "minimum": 0 },
+        "modifierParentCartLineId": { "type": ["string", "null"], "minLength": 1 },
+        "modifierParentSellableItemId": { "type": ["string", "null"], "minLength": 1 },
+        "modifierGroupPath": { "type": ["string", "null"], "minLength": 1 },
+        "modifierSelectionMode": { "enum": ["single", "multiple", null] },
+        "modifierOptionAvailable": { "type": ["boolean", "null"] },
+        "modifierOptionSafe": { "type": ["boolean", "null"] },
+        "modifierPriceRatio": { "type": ["number", "null"], "minimum": 0 },
+        "remainingBudgetVnd": { "type": ["integer", "null"], "minimum": 0 },
+        "basketAssociationCount": { "type": ["integer", "null"], "minimum": 0 },
+        "basketComplementarityScore": {
+          "type": ["number", "null"],
+          "minimum": -1,
+          "maximum": 1
+        },
+        "basketRedundancyCount": { "type": ["integer", "null"], "minimum": 0 },
+        "basketCategoryDiversityCount": { "type": ["integer", "null"], "minimum": 0 }
+      },
+      "allOf": [
+        {
+          "if": { "properties": { "recommendationType": { "const": "modifier_upsell" } } },
+          "then": {
+            "properties": {
+              "candidateModifierOptionId": { "type": "string" },
+              "modifierParentCartLineId": { "type": "string" },
+              "modifierParentSellableItemId": { "type": "string" },
+              "modifierGroupPath": { "type": "string" },
+              "modifierSelectionMode": { "enum": ["single", "multiple"] },
+              "modifierOptionAvailable": { "type": "boolean" },
+              "modifierOptionSafe": { "type": "boolean" },
+              "modifierPriceRatio": { "type": "number" }
+            }
+          },
+          "else": {
+            "properties": {
+              "candidateModifierOptionId": { "type": "null" },
+              "modifierParentCartLineId": { "type": "null" },
+              "modifierParentSellableItemId": { "type": "null" },
+              "modifierGroupPath": { "type": "null" },
+              "modifierSelectionMode": { "type": "null" },
+              "modifierOptionAvailable": { "type": "null" },
+              "modifierOptionSafe": { "type": "null" },
+              "modifierPriceRatio": { "type": "null" }
+            }
+          }
+        },
+        {
+          "if": { "properties": { "recommendationType": { "const": "smart_cross_sell" } } },
+          "else": {
+            "properties": {
+              "basketAssociationCount": { "type": "null" },
+              "basketComplementarityScore": { "type": "null" },
+              "basketRedundancyCount": { "type": "null" },
+              "basketCategoryDiversityCount": { "type": "null" }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "recommendationType": { "enum": ["modifier_upsell", "smart_cross_sell"] }
+            }
+          },
+          "else": { "properties": { "remainingBudgetVnd": { "type": "null" } } }
+        },
+        {
+          "if": { "properties": { "recommendationType": { "const": "local_favorite" } } },
+          "else": { "properties": { "localDemandCount": { "type": "null" } } }
+        },
+        {
+          "if": { "properties": { "recommendationType": { "const": "for_you" } } },
+          "else": { "properties": { "historyRecencyDays": { "type": "null" } } }
+        }
+      ]
+    },
     "Candidate": {
       "type": "object",
       "additionalProperties": false,
@@ -52,12 +194,7 @@
         "candidateId": { "$ref": "#/$defs/OpaqueId" },
         "eligibility": { "const": "eligible" },
         "priceImpactVnd": { "type": "integer", "minimum": 0 },
-        "features": {
-          "type": "object",
-          "additionalProperties": {
-            "type": ["number", "string", "boolean", "null"]
-          }
-        }
+        "features": { "$ref": "#/$defs/FeatureVector" }
       }
     },
     "Score": {

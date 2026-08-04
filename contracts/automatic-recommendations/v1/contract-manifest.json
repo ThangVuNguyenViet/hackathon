@@ -1,6 +1,6 @@
 {
   "schemaVersion": "kfc-automatic-contract-manifest-v1",
-  "canonicalDigest": "5998c1d2b50c09e14d144fbc327a885e71245c7fcbb3cb1f7b23d0ea8a547dbc",
+  "canonicalDigest": "30fb774b804b4868abd78e30e489aa9fe835d3b959b38ae389c127949ac8e678",
   "identityDigestVector": {
     "operationPath": "/v1/recommendations/local-favorites",
     "identityType": "local_favorite",

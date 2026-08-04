@@ -121,6 +121,28 @@ class ContractDigestTest(unittest.TestCase):
             with self.assertRaises(ContractValidationError):
                 reconcile_automatic_scorer_response(request, invalid_response)
 
+    def test_python_scorer_feature_vector_is_fixed_and_type_applicable(self) -> None:
+        repository_root = SCORER_ROOT.parents[1]
+        request = json.loads(
+            (
+                repository_root
+                / "contracts"
+                / "automatic-recommendations"
+                / "v1"
+                / "examples"
+                / "scorer-request.json"
+            ).read_text()
+        )
+        for mutate in (
+            lambda features: features.pop("storeId"),
+            lambda features: features.__setitem__("selectedAfterDisplay", True),
+            lambda features: features.__setitem__("modifierGroupPath", "meal/side"),
+        ):
+            invalid = json.loads(json.dumps(request))
+            mutate(invalid["candidates"][0]["features"])
+            with self.assertRaises(ContractValidationError):
+                parse_automatic_scorer_request(invalid)
+
     def test_python_identity_digest_binds_type_and_path(self) -> None:
         request = {"cart": {"revision": "cart-1"}, "storeId": "KFCVN0002"}
         reordered = {"storeId": "KFCVN0002", "cart": {"revision": "cart-1"}}

@@ -208,6 +208,33 @@ void main() {
     }
   });
 
+  test('Dart scorer feature vector is fixed and type-applicable', () {
+    final root = Directory.current.parent.parent.uri.resolve(
+      'contracts/automatic-recommendations/v1/examples/',
+    );
+    final request =
+        jsonDecode(
+              File.fromUri(
+                root.resolve('scorer-request.json'),
+              ).readAsStringSync(),
+            )
+            as Map<String, dynamic>;
+    for (final mutate in <void Function(Map<String, dynamic>)>[
+      (features) => features.remove('storeId'),
+      (features) => features['selectedAfterDisplay'] = true,
+      (features) => features['modifierGroupPath'] = 'meal/side',
+    ]) {
+      final invalid = jsonDecode(jsonEncode(request)) as Map<String, dynamic>;
+      final candidates = invalid['candidates'] as List<dynamic>;
+      final candidate = candidates.single as Map<String, dynamic>;
+      mutate(candidate['features'] as Map<String, dynamic>);
+      expect(
+        () => AutomaticScorerRequestPayload.parse(invalid),
+        throwsA(isA<AutomaticRecommendationContractException>()),
+      );
+    }
+  });
+
   test('Dart identity digest binds type and path', () {
     final request = {
       'cart': {'revision': 'cart-1'},

@@ -1,10 +1,12 @@
 import { describe, expect, it } from 'vitest';
 import {
+  AUTOMATIC_FEATURE_KEYS,
   AUTOMATIC_FEATURE_SCHEMA_DIGEST,
   AUTOMATIC_FEATURE_SCHEMA_VERSION,
   buildAutomaticRecommendationFeatureRows,
   discoverAutomaticRecommendationCandidates,
   evaluateAutomaticRecommendationEligibility,
+  parseAutomaticRecommendationFeatureVector,
   resolveAutomaticRecommendationContext,
   type AutomaticCatalogSnapshot,
   type AutomaticRecommendationContext,
@@ -26,9 +28,14 @@ const catalog: AutomaticCatalogSnapshot = {
       safe: true,
       availableFulfilmentModes: ['pickup'],
       promotionActive: false,
+      discountAmountVnd: 0,
+      localDemandCount: 25,
+      basketAssociationCount: 2,
+      basketComplementarityScore: 0.5,
       modifierGroups: [
         {
           groupPath: ['meal', 'side'],
+          selectionMode: 'single',
           options: [
             {
               optionId: 'fries-large',
@@ -60,6 +67,10 @@ const catalog: AutomaticCatalogSnapshot = {
       safe: true,
       availableFulfilmentModes: ['pickup'],
       promotionActive: true,
+      discountAmountVnd: 5000,
+      localDemandCount: 42,
+      basketAssociationCount: 8,
+      basketComplementarityScore: 0.8,
       modifierGroups: [],
     },
     {
@@ -72,6 +83,10 @@ const catalog: AutomaticCatalogSnapshot = {
       safe: true,
       availableFulfilmentModes: ['delivery'],
       promotionActive: false,
+      discountAmountVnd: 0,
+      localDemandCount: 30,
+      basketAssociationCount: 5,
+      basketComplementarityScore: 0.7,
       modifierGroups: [],
     },
     {
@@ -84,6 +99,10 @@ const catalog: AutomaticCatalogSnapshot = {
       safe: false,
       availableFulfilmentModes: ['pickup'],
       promotionActive: false,
+      discountAmountVnd: 0,
+      localDemandCount: null,
+      basketAssociationCount: null,
+      basketComplementarityScore: null,
       modifierGroups: [],
     },
     {
@@ -96,6 +115,10 @@ const catalog: AutomaticCatalogSnapshot = {
       safe: true,
       availableFulfilmentModes: ['pickup'],
       promotionActive: false,
+      discountAmountVnd: 0,
+      localDemandCount: null,
+      basketAssociationCount: null,
+      basketComplementarityScore: null,
       modifierGroups: [],
     },
   ],
@@ -126,12 +149,26 @@ const commonRequest = {
 };
 
 const ports: AutomaticRecommendationContextPorts = {
+  orderContext: {
+    readSnapshot: async ({ orderingJourneyRef, opportunityRef }) => ({
+      orderingJourneyRef,
+      opportunityRef,
+      storeId: commonRequest.storeId,
+      fulfilmentMode: commonRequest.fulfilmentMode,
+      locale: commonRequest.locale,
+      cart: commonRequest.cart,
+      remainingBudgetVnd: 120000,
+      parentCartLineId: 'line-parent-1',
+      verifiedCustomerRef: 'customer-001',
+    }),
+  },
   catalog: { readSnapshot: async () => catalog },
   history: {
     readCompletedHistory: async (verifiedCustomerRef) => ({
       verifiedCustomerRef,
       historyRevision: 'history-revision-001',
       completedOrderCount: 3,
+      lastCompletedOrderAt: '2026-08-01T05:15:00.000Z',
       itemOrderCounts: { 'eligible-1': 2 },
       categoryOrderCounts: { side: 2 },
     }),
@@ -276,6 +313,123 @@ describe('automatic recommendation Eligibility Policy', () => {
       ]).map(({ evidence }) => evidence.code),
     ).toEqual(['unavailable_for_fulfilment', 'candidate_not_in_catalog']);
   });
+
+  it('uses exact nested group semantics to exclude applied modifiers and single-select alternatives', async () => {
+    const context = await readyContext('modifier_upsell');
+    const parentLine = context.parentCartLine;
+    if (parentLine === null) {
+      throw new Error('Expected trusted modifier parent');
+    }
+    const nestedCatalog = {
+      ...context.catalog,
+      items: context.catalog.items.map((item) =>
+        item.sellableItemId !== 'parent-1'
+          ? item
+          : {
+              ...item,
+              modifierGroups: [
+                {
+                  groupPath: ['meal', 'nested', 'side'],
+                  selectionMode: 'single' as const,
+                  options: [
+                    {
+                      optionId: 'fries-large',
+                      name: 'Large Fries',
+                      imageUrl: null,
+                      priceImpactVnd: 15000,
+                      available: true,
+                      safe: true,
+                    },
+                    {
+                      optionId: 'salad',
+                      name: 'Salad',
+                      imageUrl: null,
+                      priceImpactVnd: 12000,
+                      available: true,
+                      safe: true,
+                    },
+                  ],
+                },
+                {
+                  groupPath: ['meal', 'nested', 'extras'],
+                  selectionMode: 'multiple' as const,
+                  options: [
+                    {
+                      optionId: 'cheese',
+                      name: 'Cheese',
+                      imageUrl: null,
+                      priceImpactVnd: 5000,
+                      available: true,
+                      safe: true,
+                    },
+                    {
+                      optionId: 'bacon',
+                      name: 'Bacon',
+                      imageUrl: null,
+                      priceImpactVnd: 7000,
+                      available: true,
+                      safe: true,
+                    },
+                  ],
+                },
+              ],
+            },
+      ),
+    };
+    const trustedParentLine = {
+      ...parentLine,
+      modifiers: [
+        {
+          groupPath: ['meal', 'nested', 'side'],
+          optionId: 'fries-large',
+          quantity: 1,
+          priceImpact: { amount: 15000, currency: 'VND' as const },
+        },
+        {
+          groupPath: ['meal', 'nested', 'extras'],
+          optionId: 'cheese',
+          quantity: 1,
+          priceImpact: { amount: 5000, currency: 'VND' as const },
+        },
+      ],
+    };
+    const trustedContext = {
+      ...context,
+      catalog: nestedCatalog,
+      parentCartLine: trustedParentLine,
+      order: {
+        ...context.order,
+        cart: { ...context.order.cart, lines: [trustedParentLine] },
+      },
+    };
+
+    expect(
+      evaluateAutomaticRecommendationEligibility(
+        trustedContext,
+        discoverAutomaticRecommendationCandidates(trustedContext),
+      ).map(({ candidate, evidence }) => ({
+        candidateId: candidate.candidateId,
+        code: evidence.code,
+      })),
+    ).toEqual([
+      {
+        candidateId: 'modifier:line-parent-1:meal/nested/side:fries-large',
+        code: 'modifier_already_applied',
+      },
+      {
+        candidateId: 'modifier:line-parent-1:meal/nested/side:salad',
+        code: 'modifier_group_satisfied',
+      },
+      {
+        candidateId: 'modifier:line-parent-1:meal/nested/extras:cheese',
+        code: 'modifier_already_applied',
+      },
+      {
+        candidateId: 'modifier:line-parent-1:meal/nested/extras:bacon',
+        code: 'eligible',
+      },
+    ]);
+  });
 });
 
 describe('automatic recommendation versioned feature construction', () => {
@@ -288,28 +442,53 @@ describe('automatic recommendation versioned feature construction', () => {
 
     expect(AUTOMATIC_FEATURE_SCHEMA_VERSION).toBe('automatic-feature-v1');
     expect(AUTOMATIC_FEATURE_SCHEMA_DIGEST).toMatch(/^[a-f0-9]{64}$/u);
-    expect(buildAutomaticRecommendationFeatureRows(context, decisions)).toEqual(
-      [
-        {
-          candidateId: 'product:eligible-1',
-          eligibility: 'eligible',
-          priceImpactVnd: 30000,
-          features: {
-            featureSchemaVersion: 'automatic-feature-v1',
-            recommendationType: 'for_you',
-            fulfilmentMode: 'pickup',
-            localHour: 12,
-            cartSubtotalVnd: 80000,
-            cartLineCount: 1,
-            candidateCategoryId: 'side',
-            priceImpactVnd: 30000,
-            promotionActive: true,
-            completedOrderCount: 3,
-            priorItemOrderCount: 2,
-            priorCategoryOrderCount: 2,
-          },
-        },
-      ],
+    const rows = buildAutomaticRecommendationFeatureRows(context, decisions);
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toMatchObject({
+      candidateId: 'product:eligible-1',
+      eligibility: 'eligible',
+      priceImpactVnd: 30000,
+      features: {
+        featureSchemaVersion: 'automatic-feature-v1',
+        recommendationType: 'for_you',
+        storeId: 'KFCVN0002',
+        fulfilmentMode: 'pickup',
+        locale: 'vi-VN',
+        localHour: 12,
+        daypart: 'lunch',
+        catalogRevision: 'catalog-revision-eligibility-001',
+        cartSubtotalVnd: 80000,
+        cartLineCount: 1,
+        cartDistinctCategoryCount: 1,
+        candidateSellableItemId: 'eligible-1',
+        candidateModifierOptionId: null,
+        candidateCategoryId: 'side',
+        candidatePriceImpactVnd: 30000,
+        candidateUnitPriceVnd: 30000,
+        candidateDiscountAmountVnd: 5000,
+        candidateDiscountActive: true,
+        promotionActive: true,
+        completedOrderCount: 3,
+        priorItemOrderCount: 2,
+        priorCategoryOrderCount: 2,
+        historyRecencyDays: 3,
+        localDemandCount: null,
+        modifierParentCartLineId: null,
+        modifierParentSellableItemId: null,
+        modifierGroupPath: null,
+        modifierSelectionMode: null,
+        modifierOptionAvailable: null,
+        modifierOptionSafe: null,
+        modifierPriceRatio: null,
+        remainingBudgetVnd: null,
+        basketAssociationCount: null,
+        basketComplementarityScore: null,
+        basketRedundancyCount: null,
+        basketCategoryDiversityCount: null,
+      },
+    });
+    expect(Object.keys(rows[0]?.features ?? {})).toEqual(
+      AUTOMATIC_FEATURE_KEYS,
     );
   });
 
@@ -335,5 +514,47 @@ describe('automatic recommendation versioned feature construction', () => {
           ['string', 'number', 'boolean'].includes(typeof value),
       ),
     ).toBe(true);
+  });
+
+  it('rejects missing, extra, post-decision, nested, and type-inapplicable feature fields', async () => {
+    const context = await readyContext('for_you');
+    const rows = buildAutomaticRecommendationFeatureRows(
+      context,
+      evaluateAutomaticRecommendationEligibility(
+        context,
+        discoverAutomaticRecommendationCandidates(context),
+      ),
+    );
+    const valid = rows[0]?.features;
+    if (valid === undefined) {
+      throw new Error('Expected feature vector');
+    }
+    const { storeId: _missingStore, ...missing } = valid;
+
+    expect(() =>
+      parseAutomaticRecommendationFeatureVector(valid),
+    ).not.toThrow();
+    expect(() => parseAutomaticRecommendationFeatureVector(missing)).toThrow();
+    expect(() =>
+      parseAutomaticRecommendationFeatureVector({ ...valid, extra: 1 }),
+    ).toThrow();
+    expect(() =>
+      parseAutomaticRecommendationFeatureVector({
+        ...valid,
+        selectedAfterDisplay: true,
+      }),
+    ).toThrow();
+    expect(() =>
+      parseAutomaticRecommendationFeatureVector({
+        ...valid,
+        storeId: { nested: 'forbidden' },
+      }),
+    ).toThrow();
+    expect(() =>
+      parseAutomaticRecommendationFeatureVector({
+        ...valid,
+        modifierGroupPath: 'meal/side',
+      }),
+    ).toThrow();
   });
 });

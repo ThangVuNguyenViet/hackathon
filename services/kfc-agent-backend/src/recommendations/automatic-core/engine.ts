@@ -11,7 +11,10 @@ import {
 import { discoverAutomaticRecommendationCandidates } from './candidates.js';
 import { composeAutomaticRecommendationSlate } from './composition.js';
 import { resolveAutomaticRecommendationContext } from './context.js';
-import { AutomaticRecommendationInfrastructureError } from './errors.js';
+import {
+  AutomaticRecommendationBindingError,
+  AutomaticRecommendationInfrastructureError,
+} from './errors.js';
 import { evaluateAutomaticRecommendationEligibility } from './eligibility.js';
 import { buildAutomaticRecommendationFeatureRows } from './features.js';
 import type {
@@ -210,7 +213,10 @@ export function createAutomaticRecommendationEngine({
           ports: contextPorts,
         });
       } catch (error) {
-        if (error instanceof ZodError) {
+        if (
+          error instanceof ZodError ||
+          error instanceof AutomaticRecommendationBindingError
+        ) {
           throw error;
         }
         throw new AutomaticRecommendationInfrastructureError('context', error);
@@ -227,7 +233,7 @@ export function createAutomaticRecommendationEngine({
       const responseExpiry = expiresAt(
         resolution.kind === 'ready'
           ? resolution.context.decisionTime
-          : contextPorts.clock.now().toISOString(),
+          : resolution.decisionTime,
         recommendationTtlMs,
       );
 
@@ -261,7 +267,7 @@ export function createAutomaticRecommendationEngine({
           recommendationType,
           status: 'empty',
           emptyReason: 'no_eligible_candidates',
-          cartRevision: context.request.cart.revision,
+          cartRevision: context.order.cart.revision,
           catalogRevision: context.catalog.catalogRevision,
           expires: responseExpiry,
           counts: {
@@ -289,7 +295,7 @@ export function createAutomaticRecommendationEngine({
           recommendationType,
           status: 'empty',
           emptyReason: 'no_qualified_model',
-          cartRevision: context.request.cart.revision,
+          cartRevision: context.order.cart.revision,
           catalogRevision: context.catalog.catalogRevision,
           expires: responseExpiry,
           counts: {
@@ -302,17 +308,23 @@ export function createAutomaticRecommendationEngine({
       }
 
       const model = automaticModelBinding(bundle, recommendationType);
-      const featureRows = buildAutomaticRecommendationFeatureRows(
-        context,
-        eligibility,
-      );
-      const scorerRequest = parseAutomaticScorerRequest({
-        schemaVersion: 'kfc-automatic-scorer-v1',
-        requestId,
-        recommendationType,
-        model,
-        candidates: featureRows,
-      });
+      let featureRows;
+      let scorerRequest;
+      try {
+        featureRows = buildAutomaticRecommendationFeatureRows(
+          context,
+          eligibility,
+        );
+        scorerRequest = parseAutomaticScorerRequest({
+          schemaVersion: 'kfc-automatic-scorer-v1',
+          requestId,
+          recommendationType,
+          model,
+          candidates: featureRows,
+        });
+      } catch (error) {
+        throw new AutomaticRecommendationInfrastructureError('features', error);
+      }
       let scorerResponse;
       try {
         scorerResponse = reconcileAutomaticScorerResponse(
@@ -359,7 +371,7 @@ export function createAutomaticRecommendationEngine({
           recommendationType,
           status: 'empty',
           emptyReason: 'no_candidate_above_threshold',
-          cartRevision: context.request.cart.revision,
+          cartRevision: context.order.cart.revision,
           catalogRevision: context.catalog.catalogRevision,
           expires: responseExpiry,
           counts: {
@@ -379,7 +391,7 @@ export function createAutomaticRecommendationEngine({
         requestId,
         recommendationId,
         recommendationType,
-        cartRevision: context.request.cart.revision,
+        cartRevision: context.order.cart.revision,
         catalogRevision: context.catalog.catalogRevision,
         expires: responseExpiry,
         model,

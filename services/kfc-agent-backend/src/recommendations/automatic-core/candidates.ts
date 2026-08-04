@@ -14,7 +14,7 @@ function discoverProducts(
     sellable: item.sellable,
     safe: item.safe,
     available: item.availableFulfilmentModes.includes(
-      context.request.fulfilmentMode,
+      context.order.fulfilmentMode,
     ),
     promotionActive: item.promotionActive,
     action: {
@@ -49,7 +49,7 @@ function discoverModifiers(
       safe: parentItem.safe && option.safe,
       available:
         parentItem.availableFulfilmentModes.includes(
-          context.request.fulfilmentMode,
+          context.order.fulfilmentMode,
         ) && option.available,
       promotionActive: parentItem.promotionActive,
       action: {

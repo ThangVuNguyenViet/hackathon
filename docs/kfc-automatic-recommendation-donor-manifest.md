@@ -12,13 +12,16 @@ may be reimplemented after contract review; it does not make the donor runtime
 authoritative.
 
 The machine-checkable path-level authority is
-`docs/kfc-automatic-recommendation-donor-dispositions.json`. It captures 297
+`docs/kfc-automatic-recommendation-donor-dispositions.json`. It captures 299
 exact donor paths at `fc5fcafbaf7e0f00afbdd668ab90f6be0439b947` and assigns
 each path exactly one of `Adopt`, `Redesign`, `Delete`, `Preserve unrelated`, or
 `Historical superseded`. The capture includes runtime modules, scripts,
 configuration, CI, documentation, evidence, tests, assets, migrations, and
-cross-cutting imports. The maintained backend authority audit verifies the
-capture and the absence of alternate serving authority in the clean boundary.
+cross-cutting imports. Its declared donor roots and explicit exception paths
+derive the exact inventory from `git ls-tree`; the maintained backend authority
+audit requires equality and traverses the target runtime import graph plus
+deployment/config/CI surfaces. Preserved chat ranking is explicitly allowlisted
+and proven unreachable from the automatic core entrypoint.
 
 ## Adopt after contract review
 

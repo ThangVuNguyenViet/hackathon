@@ -261,13 +261,74 @@ describe('automatic recommendation wire contract', () => {
           candidateId: 'product:20732',
           eligibility: 'eligible',
           priceImpactVnd: 89000,
-          features: { priceImpactVnd: 89000, daypart: 'lunch' },
+          features: {
+            featureSchemaVersion: 'automatic-feature-v1',
+            recommendationType: 'local_favorite',
+            storeId: 'KFCVN0002',
+            fulfilmentMode: 'pickup',
+            locale: 'vi-VN',
+            localHour: 12,
+            daypart: 'lunch',
+            catalogRevision: 'catalog-revision-contract-001',
+            cartSubtotalVnd: 0,
+            cartLineCount: 0,
+            cartDistinctCategoryCount: 0,
+            candidateSellableItemId: '20732',
+            candidateModifierOptionId: null,
+            candidateCategoryId: 'meal',
+            candidatePriceImpactVnd: 89000,
+            candidateUnitPriceVnd: 89000,
+            candidateDiscountAmountVnd: 0,
+            candidateDiscountActive: false,
+            promotionActive: false,
+            completedOrderCount: 0,
+            priorItemOrderCount: 0,
+            priorCategoryOrderCount: 0,
+            historyRecencyDays: null,
+            localDemandCount: 42,
+            modifierParentCartLineId: null,
+            modifierParentSellableItemId: null,
+            modifierGroupPath: null,
+            modifierSelectionMode: null,
+            modifierOptionAvailable: null,
+            modifierOptionSafe: null,
+            modifierPriceRatio: null,
+            remainingBudgetVnd: null,
+            basketAssociationCount: null,
+            basketComplementarityScore: null,
+            basketRedundancyCount: null,
+            basketCategoryDiversityCount: null,
+          },
         },
       ],
     };
     expect(parseAutomaticScorerRequest(scorerRequest)).toMatchObject({
       candidates: [{ eligibility: 'eligible' }],
     });
+    const { storeId: _missingStore, ...missingFeature } =
+      scorerRequest.candidates[0].features;
+    expect(() =>
+      parseAutomaticScorerRequest({
+        ...scorerRequest,
+        candidates: [
+          { ...scorerRequest.candidates[0], features: missingFeature },
+        ],
+      }),
+    ).toThrow();
+    expect(() =>
+      parseAutomaticScorerRequest({
+        ...scorerRequest,
+        candidates: [
+          {
+            ...scorerRequest.candidates[0],
+            features: {
+              ...scorerRequest.candidates[0].features,
+              selectedAfterDisplay: true,
+            },
+          },
+        ],
+      }),
+    ).toThrow();
 
     const scorerResponse = {
       schemaVersion: 'kfc-automatic-scorer-v1',
