@@ -19,6 +19,9 @@ def _parser() -> argparse.ArgumentParser:
     generate.add_argument("--world-revision", default="synthetic-causal-world-v1")
     summary = subcommands.add_parser("training-summary")
     summary.add_argument("--world", type=Path, required=True)
+    qualify = subcommands.add_parser("qualify-models")
+    qualify.add_argument("--world", type=Path, required=True)
+    qualify.add_argument("--output", type=Path, required=True)
     return parser
 
 
@@ -32,6 +35,21 @@ def main(argv: Sequence[str] | None = None) -> int:
         )
         print(json.dumps({"world": str(world)}, sort_keys=True))
         return 0
+    if arguments.command == "qualify-models":
+        from .qualification.pipeline import run_model_qualification
+
+        result = run_model_qualification(arguments.world, arguments.output)
+        print(
+            json.dumps(
+                {
+                    "status": result.status,
+                    "evidence": str(result.evidence_path),
+                    "bundle": str(result.bundle_path) if result.bundle_path else None,
+                },
+                sort_keys=True,
+            )
+        )
+        return 0 if result.status == "qualified" else 2
     table = load_training_table(arguments.world)
     print(
         json.dumps(

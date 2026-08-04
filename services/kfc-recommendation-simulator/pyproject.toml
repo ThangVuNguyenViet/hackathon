@@ -8,7 +8,13 @@ version = "0.1.0"
 description = "Reproducible synthetic-only causal world for automatic recommendations"
 readme = "README.md"
 requires-python = "==3.11.14"
-dependencies = ["pyarrow==23.0.1"]
+dependencies = [
+  "lightgbm==4.6.0",
+  "numpy==2.3.2",
+  "pyarrow==23.0.1",
+  "scikit-learn==1.7.1",
+  "xgboost==3.0.2",
+]
 
 [project.scripts]
 kfc-recommendation-simulator = "kfc_recommendation_simulator.cli:main"

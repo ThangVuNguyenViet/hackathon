@@ -101,7 +101,16 @@ class SyntheticWorldTest(unittest.TestCase):
             (SIMULATOR_ROOT / "pyproject.toml").read_text(encoding="utf-8")
         )
         self.assertEqual(project["project"]["requires-python"], "==3.11.14")
-        self.assertEqual(project["project"]["dependencies"], ["pyarrow==23.0.1"])
+        self.assertEqual(
+            project["project"]["dependencies"],
+            [
+                "lightgbm==4.6.0",
+                "numpy==2.3.2",
+                "pyarrow==23.0.1",
+                "scikit-learn==1.7.1",
+                "xgboost==3.0.2",
+            ],
+        )
         self.assertEqual(project["dependency-groups"]["dev"], ["ruff==0.16.1"])
         environment = self.manifest["environment"]
         self.assertEqual(environment["pythonVersion"], "3.11.14")
