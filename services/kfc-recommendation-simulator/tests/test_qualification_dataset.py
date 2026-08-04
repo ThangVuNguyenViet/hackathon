@@ -215,6 +215,64 @@ class UntouchedDatasetBoundaryTest(unittest.TestCase):
             self.assertEqual(result.returncode, 0, result.stderr)
             self.assertGreater(int(result.stdout.strip()), 0)
 
+    def test_fresh_process_loader_rechecks_every_precommit_write_bit(self) -> None:
+        """Catches restoring write access after the precommit was consumed."""
+
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            world = generate_world(
+                root / "worlds",
+                profile=GenerationProfile("mode-tamper", 64, (41,)),
+                world_revision="mode-tamper-v1",
+            )
+            configuration = root / "selected-configuration.json"
+            script = (
+                "import json,sys; from pathlib import Path; "
+                "from kfc_recommendation_simulator.qualification.freeze import "
+                "FrozenConfigurationError,precommit_qualification,"
+                "freeze_configuration; "
+                "from kfc_recommendation_simulator.qualification.datasets import "
+                "load_untouched_candidate_relevance_table; "
+                "world=Path(sys.argv[1]); config=Path(sys.argv[2]); "
+                "pre=precommit_qualification(world,config); "
+                "config.write_text(json.dumps({'champion':'precommitted'})); "
+                "frozen=freeze_configuration(config,Path(sys.argv[3]),precommit=pre); "
+                "token=world/'manifests'/'qualification-precommit.json'; "
+                "write_bits=(0o200,0o020,0o002); "
+                "exec(\"for bit in write_bits:\\n"
+                " token.chmod(0o444 | bit)\\n"
+                " try:\\n"
+                "  load_untouched_candidate_relevance_table(world,config,frozen)\\n"
+                " except FrozenConfigurationError as error:\\n"
+                "  assert 'immutable' in str(error)\\n"
+                " else:\\n"
+                "  raise AssertionError(f'write bit {bit:o} was accepted')\\n"
+                " finally:\\n"
+                "  token.chmod(0o444)\"); "
+                "print('all write bits rejected')"
+            )
+            result = subprocess.run(
+                [
+                    sys.executable,
+                    "-c",
+                    script,
+                    str(world),
+                    str(configuration),
+                    str(root / "frozen.json"),
+                ],
+                cwd=Path(__file__).resolve().parents[1],
+                env={
+                    **os.environ,
+                    "PYTHONPATH": str(Path(__file__).resolve().parents[1] / "src"),
+                },
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertEqual(result.stdout.strip(), "all write bits rejected")
+
     def test_freeze_for_one_world_cannot_open_another_world(self) -> None:
         """Catches omitting the precommitted world binding at loader access."""
 

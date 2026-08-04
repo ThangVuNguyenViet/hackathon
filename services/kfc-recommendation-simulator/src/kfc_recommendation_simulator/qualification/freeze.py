@@ -175,6 +175,10 @@ def _verify_precommit(
         raise FrozenConfigurationError("qualification precommit evidence is missing")
     if _sha256(precommit.evidence_path) != precommit.evidence_sha256:
         raise FrozenConfigurationError("qualification precommit evidence was replaced")
+    if precommit.evidence_path.stat().st_mode & 0o222:
+        raise FrozenConfigurationError(
+            "qualification precommit evidence must remain immutable"
+        )
     precommit_created_after_selection = (
         configuration.exists()
         and _birth_time_ns(precommit.evidence_path) > _birth_time_ns(configuration)
