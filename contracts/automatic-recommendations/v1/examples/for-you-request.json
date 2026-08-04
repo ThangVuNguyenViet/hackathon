@@ -1,0 +1,14 @@
+{
+  "schemaVersion": "kfc-automatic-recommendation-v1",
+  "requestId": "request-for-you-001",
+  "storeId": "KFCVN0002",
+  "fulfilmentMode": "delivery",
+  "locale": "vi-VN",
+  "cart": {
+    "cartId": "cart-for-you-001",
+    "revision": "cart-revision-for-you-001",
+    "subtotal": { "amount": 0, "currency": "VND" },
+    "lines": []
+  },
+  "verifiedCustomerRef": "customer-verified-001"
+}

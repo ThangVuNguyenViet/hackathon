@@ -209,3 +209,54 @@ export function parseAutomaticRecommendationImpression(value: unknown) {
 export function parseAutomaticRecommendationOutcome(value: unknown) {
   return outcomeSchema.parse(value);
 }
+
+const problemSchema = z
+  .object({
+    type: z.string().url(),
+    title: z.string().trim().min(1),
+    status: z.union([
+      z.literal(400),
+      z.literal(404),
+      z.literal(409),
+      z.literal(503),
+    ]),
+    code: z.enum([
+      'invalid_request',
+      'recommendation_not_found',
+      'identity_conflict',
+      'stale_or_invalid_action',
+      'recommendation_infrastructure_unavailable',
+    ]),
+    retryable: z.boolean(),
+    requestId: opaqueIdSchema.nullable().optional(),
+  })
+  .strict()
+  .superRefine((problem, context) => {
+    if (problem.retryable !== (problem.status === 503)) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['retryable'],
+        message: 'Only infrastructure-unavailable responses are retryable',
+      });
+    }
+  });
+
+const inspectionSchema = z
+  .object({
+    schemaVersion: z.literal('kfc-automatic-inspection-v1'),
+    recommendationId: opaqueIdSchema,
+    requestDigest: sha256Schema,
+    cartDigest: sha256Schema,
+    model: modelBindingSchema.nullable(),
+    candidateEvidence: z.array(z.record(z.string(), z.unknown())),
+    persistenceEvidence: z.record(z.string(), z.unknown()),
+  })
+  .strict();
+
+export function parseAutomaticRecommendationProblem(value: unknown) {
+  return problemSchema.parse(value);
+}
+
+export function parseAutomaticRecommendationInspection(value: unknown) {
+  return inspectionSchema.parse(value);
+}

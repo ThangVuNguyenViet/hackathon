@@ -1,0 +1,8 @@
+{
+  "type": "https://contracts.kfc.invalid/problems/invalid-request",
+  "title": "Invalid recommendation request",
+  "status": 400,
+  "code": "invalid_request",
+  "retryable": false,
+  "requestId": "request-invalid-001"
+}

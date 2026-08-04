@@ -1,0 +1,32 @@
+{
+  "schemaVersion": "kfc-automatic-contract-manifest-v1",
+  "canonicalDigest": "18bc66980c853f79b11a4d59f746da37533edbdf158beb087eeb184ee969f474",
+  "representations": {
+    "node": "services/kfc-agent-backend/src/recommendations/contracts/automatic-recommendation.ts",
+    "python": "services/kfc-recommendation-scorer/src/kfc_recommendation_scorer/contract_digest.py",
+    "dart": "apps/kfc_live_monitor_flutter/lib/features/automatic_recommendations/domain/automatic_recommendation_contract.dart"
+  },
+  "authorityFiles": [
+    "openapi.json",
+    "schemas/automatic-recommendation.schema.json",
+    "schemas/automatic-scorer.schema.json"
+  ],
+  "examples": [
+    { "file": "examples/local-favorite-request.json", "kind": "local_favorite_request" },
+    { "file": "examples/for-you-request.json", "kind": "for_you_request" },
+    { "file": "examples/modifier-upsell-request.json", "kind": "modifier_upsell_request" },
+    { "file": "examples/smart-cross-sell-request.json", "kind": "smart_cross_sell_request" },
+    { "file": "examples/recommended-response.json", "kind": "recommendation_response" },
+    { "file": "examples/empty-response.json", "kind": "recommendation_response" },
+    { "file": "examples/paused-response.json", "kind": "recommendation_response" },
+    { "file": "examples/impression-request.json", "kind": "impression_request" },
+    { "file": "examples/outcome-request.json", "kind": "outcome_request" },
+    { "file": "examples/problem-400.json", "kind": "problem_details" },
+    { "file": "examples/problem-404.json", "kind": "problem_details" },
+    { "file": "examples/problem-409.json", "kind": "problem_details" },
+    { "file": "examples/problem-503.json", "kind": "problem_details" },
+    { "file": "examples/inspection-response.json", "kind": "inspection_response" },
+    { "file": "examples/scorer-request.json", "kind": "scorer_request" },
+    { "file": "examples/scorer-response.json", "kind": "scorer_response" }
+  ]
+}

@@ -1,0 +1,16 @@
+{
+  "schemaVersion": "kfc-automatic-inspection-v1",
+  "recommendationId": "recommendation-local-001",
+  "requestDigest": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+  "cartDigest": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+  "model": {
+    "bundleId": "qualified-bundle-001",
+    "bundleDigest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "modelRevision": "local-favorite-model-001",
+    "calibrationRevision": "local-favorite-calibration-001",
+    "featureSchema": "local-favorite-features-v1",
+    "datasetDigest": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+  },
+  "candidateEvidence": [{ "candidateId": "product:20732", "eligible": true }],
+  "persistenceEvidence": { "decisionCommitted": true, "evidenceCommitted": true }
+}

@@ -1,0 +1,21 @@
+{
+  "schemaVersion": "kfc-automatic-recommendation-v1",
+  "requestId": "request-cross-sell-001",
+  "storeId": "KFCVN0002",
+  "fulfilmentMode": "pickup",
+  "locale": "vi-VN",
+  "cart": {
+    "cartId": "cart-cross-sell-001",
+    "revision": "cart-revision-cross-sell-001",
+    "subtotal": { "amount": 89000, "currency": "VND" },
+    "lines": [
+      {
+        "lineId": "cart-line-001",
+        "sellableItemId": "20732",
+        "quantity": 1,
+        "unitPrice": { "amount": 89000, "currency": "VND" },
+        "modifiers": []
+      }
+    ]
+  }
+}

@@ -1,5 +1,8 @@
 import { z } from 'zod';
 
+export const AUTOMATIC_RECOMMENDATION_CONTRACT_DIGEST =
+  '18bc66980c853f79b11a4d59f746da37533edbdf158beb087eeb184ee969f474';
+
 export const automaticRecommendationOperations = {
   local_favorite: '/v1/recommendations/local-favorites',
   for_you: '/v1/recommendations/for-you',
@@ -117,7 +120,9 @@ export function parseAutomaticRecommendationRequest(
 
 export {
   parseAutomaticRecommendationImpression,
+  parseAutomaticRecommendationInspection,
   parseAutomaticRecommendationOutcome,
+  parseAutomaticRecommendationProblem,
   parseAutomaticRecommendationResponse,
 } from './automatic-recommendation-response.js';
 export {

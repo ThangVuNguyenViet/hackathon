@@ -1,0 +1,18 @@
+{
+  "schemaVersion": "kfc-automatic-scorer-v1",
+  "requestId": "request-local-001",
+  "recommendationType": "local_favorite",
+  "model": {
+    "bundleId": "qualified-bundle-001",
+    "bundleDigest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "modelRevision": "local-favorite-model-001",
+    "featureSchema": "local-favorite-features-v1"
+  },
+  "candidates": [
+    {
+      "candidateId": "product:20732",
+      "eligibility": "eligible",
+      "features": { "priceImpactVnd": 89000, "daypart": "lunch" }
+    }
+  ]
+}

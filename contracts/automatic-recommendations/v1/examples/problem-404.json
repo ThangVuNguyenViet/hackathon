@@ -1,0 +1,8 @@
+{
+  "type": "https://contracts.kfc.invalid/problems/recommendation-not-found",
+  "title": "Recommendation not found",
+  "status": 404,
+  "code": "recommendation_not_found",
+  "retryable": false,
+  "requestId": null
+}
