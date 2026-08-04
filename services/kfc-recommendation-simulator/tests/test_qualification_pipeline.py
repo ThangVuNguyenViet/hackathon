@@ -51,25 +51,32 @@ class QualificationSmokePipelineTest(unittest.TestCase):
             for type_evidence in evidence["types"].values():
                 self.assertEqual(
                     set(type_evidence["challengers"]),
-                    {"logistic", "lightgbm", "xgboost"},
+                    {"logistic", "lightgbm", "xgboost", "mlp"},
                 )
                 for challenger in type_evidence["challengers"].values():
                     self.assertEqual(set(challenger["heads"]), {"selection", "joint"})
                 ranking = type_evidence["untouchedTest"]["rankingEvidence"]
-                self.assertEqual(ranking["status"], "insufficient_evidence")
+                self.assertEqual(ranking["status"], "evaluated")
                 self.assertGreater(
                     ranking["eligibleCandidateRows"], ranking["shownCandidateRows"]
                 )
-                self.assertGreater(ranking["unlabelledEligibleCandidateRows"], 0)
-                self.assertNotIn("rankingIntervals", type_evidence["untouchedTest"])
+                self.assertEqual(
+                    ranking["eligibleCandidateRows"], ranking["relevanceRows"]
+                )
+                self.assertTrue(ranking["relevanceOpenedAfterConfigurationFreeze"])
+                self.assertEqual(
+                    set(ranking["combined"]["pairedDifferences"]),
+                    {"model_vs_popularity", "model_vs_random"},
+                )
+                self.assertIn("recallAtK", ranking["combined"])
             self.assertTrue(evidence["freeze"]["verifiedBeforeUntouchedTest"])
             self.assertTrue(evidence["freeze"]["verifiedAfterUntouchedTest"])
             self.assertTrue(evidence["freeze"]["tamperProbeRejected"])
             if evidence["status"] == "failed_qualification":
                 self.assertFalse((root / "result" / "qualified-model-bundle").exists())
-                self.assertTrue(
+                self.assertFalse(
                     any(
-                        "candidate-level relevance" in reason
+                        "lack evaluation-only candidate-level relevance" in reason
                         for reason in evidence["failureReasons"]
                     )
                 )

@@ -12,8 +12,9 @@ import xgboost as xgb
 from numpy.typing import NDArray
 from scipy import sparse
 from sklearn.linear_model import LogisticRegression
+from sklearn.neural_network import MLPClassifier
 
-ModelFamily = Literal["logistic", "lightgbm", "xgboost"]
+ModelFamily = Literal["logistic", "lightgbm", "xgboost", "mlp"]
 Matrix = NDArray[np.float64] | sparse.csr_matrix
 
 
@@ -78,6 +79,36 @@ class _XgboostNativePredictor:
         return np.asarray(self.booster.predict(xgb.DMatrix(features)), dtype=np.float64)
 
 
+@dataclass(frozen=True)
+class _MlpNativePredictor:
+    coefficients: tuple[NDArray[np.float64], ...]
+    intercepts: tuple[NDArray[np.float64], ...]
+    activation: str
+    output_activation: str
+    family: ModelFamily = "mlp"
+
+    def predict_probability(self, features: Matrix) -> NDArray[np.float64]:
+        activation = features.toarray() if sparse.issparse(features) else features
+        activation = np.asarray(activation, dtype=np.float64)
+        for layer_index, (coefficients, intercept) in enumerate(
+            zip(self.coefficients, self.intercepts, strict=True)
+        ):
+            activation = activation @ coefficients + intercept
+            is_output = layer_index == len(self.coefficients) - 1
+            function = self.output_activation if is_output else self.activation
+            if function == "relu":
+                activation = np.maximum(activation, 0.0)
+            elif function == "tanh":
+                activation = np.tanh(activation)
+            elif function == "logistic":
+                activation = 1.0 / (
+                    1.0 + np.exp(-np.clip(activation, -40.0, 40.0))
+                )
+            elif function != "identity":
+                raise ValueError(f"unsupported MLP activation: {function}")
+        return np.asarray(activation, dtype=np.float64).reshape(-1)
+
+
 def fit_binary_model(
     family: ModelFamily,
     features: Matrix,
@@ -130,6 +161,23 @@ def fit_binary_model(
         }
         defaults.update(parameters)
         estimator = xgb.XGBClassifier(**defaults)
+    elif family == "mlp":
+        defaults = {
+            "hidden_layer_sizes": (16,),
+            "activation": "relu",
+            "solver": "adam",
+            "alpha": 0.01,
+            "batch_size": "auto",
+            "learning_rate_init": 0.001,
+            "max_iter": 100,
+            "early_stopping": True,
+            "validation_fraction": 0.1,
+            "n_iter_no_change": 8,
+            "random_state": seed,
+            "shuffle": True,
+        }
+        defaults.update(parameters)
+        estimator = MLPClassifier(**defaults)
     else:
         raise ValueError(f"unsupported model family: {family}")
     estimator.fit(features, labels, sample_weight=weights)
@@ -168,10 +216,33 @@ def save_native_model(
         library = "lightgbm"
         model_path = output / "model.txt"
         model.estimator.booster_.save_model(str(model_path))
-    else:
+    elif model.family == "xgboost":
         library = "xgboost"
         model_path = output / "model.json"
         model.estimator.save_model(model_path)
+    else:
+        library = "scikit-learn"
+        model_path = output / "model.json"
+        payload = {
+            "schemaVersion": "kfc-mlp-model-v1",
+            "library": library,
+            "libraryVersion": version(library),
+            "coefficients": [
+                np.asarray(coefficients, dtype=np.float64).tolist()
+                for coefficients in model.estimator.coefs_
+            ],
+            "intercepts": [
+                np.asarray(intercept, dtype=np.float64).tolist()
+                for intercept in model.estimator.intercepts_
+            ],
+            "activation": model.estimator.activation,
+            "outputActivation": model.estimator.out_activation_,
+            "classes": np.asarray(model.estimator.classes_).tolist(),
+            "hyperparameters": model.hyperparameters,
+        }
+        model_path.write_text(
+            json.dumps(payload, sort_keys=True, indent=2) + "\n", encoding="utf-8"
+        )
     golden_path = output / "golden-predictions.json"
     golden_path.write_text(
         json.dumps(
@@ -211,6 +282,22 @@ def load_native_predictor(artifact: NativeModelArtifact) -> BinaryPredictor:
         return _LightGbmNativePredictor(
             lgb.Booster(model_file=str(artifact.model_path))
         )
-    booster = xgb.Booster()
-    booster.load_model(artifact.model_path)
-    return _XgboostNativePredictor(booster)
+    if artifact.family == "xgboost":
+        booster = xgb.Booster()
+        booster.load_model(artifact.model_path)
+        return _XgboostNativePredictor(booster)
+    value = json.loads(artifact.model_path.read_text(encoding="utf-8"))
+    if value.get("schemaVersion") != "kfc-mlp-model-v1":
+        raise ValueError("unsupported MLP artifact schema")
+    return _MlpNativePredictor(
+        tuple(
+            np.asarray(coefficients, dtype=np.float64)
+            for coefficients in value["coefficients"]
+        ),
+        tuple(
+            np.asarray(intercept, dtype=np.float64)
+            for intercept in value["intercepts"]
+        ),
+        str(value["activation"]),
+        str(value["outputActivation"]),
+    )

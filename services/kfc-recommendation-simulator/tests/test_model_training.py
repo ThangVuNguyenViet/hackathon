@@ -68,6 +68,7 @@ class NativeModelArtifactTest(unittest.TestCase):
             "logistic": ".json",
             "lightgbm": ".txt",
             "xgboost": ".json",
+            "mlp": ".json",
         }
 
         with tempfile.TemporaryDirectory() as directory:

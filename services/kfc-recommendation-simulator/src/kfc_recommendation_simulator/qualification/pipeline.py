@@ -6,7 +6,6 @@ import shutil
 import subprocess
 from collections import defaultdict
 from collections.abc import Iterable, Mapping
-from contextlib import suppress
 from dataclasses import dataclass
 from importlib.metadata import version
 from pathlib import Path
@@ -26,7 +25,10 @@ from .calibration import (
     fit_calibrator,
 )
 from .composer import ScoredCandidate, compose_candidates
-from .datasets import load_untouched_model_table
+from .datasets import (
+    load_untouched_candidate_relevance_table,
+    load_untouched_model_table,
+)
 from .features import FeatureEncoder
 from .freeze import (
     FrozenConfigurationError,
@@ -34,7 +36,7 @@ from .freeze import (
     precommit_qualification,
     verify_frozen_configuration,
 )
-from .metrics import binary_metrics, normal_mean_interval
+from .metrics import binary_metrics, normal_mean_interval, recall_at_k
 from .models import (
     FittedBinaryModel,
     NativeModelArtifact,
@@ -53,7 +55,7 @@ RECOMMENDATION_TYPES = (
     "modifier_upsell",
     "smart_cross_sell",
 )
-MODEL_FAMILIES = ("logistic", "lightgbm", "xgboost")
+MODEL_FAMILIES = ("logistic", "lightgbm", "xgboost", "mlp")
 HEAD_LABELS = {
     "selection": "selected",
     "joint": "selectedThroughCheckout",
@@ -238,6 +240,19 @@ def _base_configuration(manifest: Mapping[str, Any]) -> dict[str, Any]:
                 "reg_alpha": 0.1,
                 "reg_lambda": 1.0,
                 "tree_method": "hist",
+            },
+            "mlp": {
+                "hidden_layer_sizes": [16],
+                "activation": "relu",
+                "solver": "adam",
+                "alpha": 0.01,
+                "batch_size": "auto",
+                "learning_rate_init": 0.001,
+                "max_iter": 100,
+                "early_stopping": True,
+                "validation_fraction": 0.1,
+                "n_iter_no_change": 8,
+                "shuffle": True,
             },
         },
         "modelSeed": 2_026_080_5,
@@ -446,6 +461,8 @@ def _train_type(
                     else "lightgbm-text"
                     if family == "lightgbm"
                     else "xgboost-json"
+                    if family == "xgboost"
+                    else "mlp-weights-json"
                 ),
                 "modelSha256": _sha256(artifact.model_path),
                 "goldenPredictionsSha256": _sha256(artifact.golden_predictions_path),
@@ -598,9 +615,35 @@ def _slice_names(facts: Mapping[str, Any]) -> tuple[str, ...]:
     return tuple(values)
 
 
+def _ranking_summary(
+    ndcg_by_policy: Mapping[str, list[float]],
+    recall_by_policy: Mapping[str, list[float]],
+) -> dict[str, Any]:
+    model = np.asarray(ndcg_by_policy["model"], dtype=np.float64)
+    return {
+        "opportunityCount": len(model),
+        "policyIntervals": {
+            policy: normal_mean_interval(np.asarray(values, dtype=np.float64))
+            for policy, values in sorted(ndcg_by_policy.items())
+        },
+        "pairedDifferences": {
+            f"model_vs_{policy}": normal_mean_interval(
+                model - np.asarray(values, dtype=np.float64)
+            )
+            for policy, values in sorted(ndcg_by_policy.items())
+            if policy != "model"
+        },
+        "recallAtK": {
+            policy: normal_mean_interval(np.asarray(values, dtype=np.float64))
+            for policy, values in sorted(recall_by_policy.items())
+        },
+    }
+
+
 def _evaluate_type(
     trained: _TrainedType,
     test_table: pa.Table,
+    relevance_table: pa.Table,
     source_facts: Mapping[str, Mapping[str, Any]],
     configuration: Mapping[str, Any],
 ) -> tuple[dict[str, Any], bool]:
@@ -632,10 +675,54 @@ def _evaluate_type(
     groups: dict[tuple[int, str], list[int]] = defaultdict(list)
     for index, row in enumerate(rows):
         groups[(int(row["seed"]), str(row["opportunityId"]))].append(index)
+    relevance_rows = relevance_table.filter(
+        pc.equal(
+            relevance_table["recommendationType"], trained.recommendation_type
+        )
+    ).to_pylist()
+    model_candidate_keys = {
+        (int(row["seed"]), str(row["opportunityId"]), str(row["candidateId"]))
+        for row in rows
+    }
+    relevance_by_key = {
+        (int(row["seed"]), str(row["opportunityId"]), str(row["candidateId"])): row
+        for row in relevance_rows
+    }
+    if len(relevance_by_key) != len(relevance_rows):
+        raise InsufficientRankingEvidence(
+            "candidate relevance contains duplicate candidate identifiers"
+        )
+    if set(relevance_by_key) != model_candidate_keys:
+        raise InsufficientRankingEvidence(
+            "candidate relevance does not exactly cover the model-visible candidate set"
+        )
+    relevance_versions = {
+        (
+            str(row["evaluationDefinitionVersion"]),
+            str(row["evaluationDefinitionDigest"]),
+            str(row["intervention"]),
+        )
+        for row in relevance_rows
+    }
+    if len(relevance_versions) != 1:
+        raise InsufficientRankingEvidence(
+            "candidate relevance must use one immutable evaluation definition"
+        )
+    relevance_version, relevance_digest, relevance_intervention = next(
+        iter(relevance_versions)
+    )
     coverage_by_seed_slice: dict[tuple[int, str], dict[str, list[int]]] = defaultdict(
         lambda: defaultdict(list)
     )
     shown_indices_by_seed_slice: dict[tuple[int, str], list[int]] = defaultdict(list)
+    combined_ndcg: dict[str, list[float]] = defaultdict(list)
+    combined_recall: dict[str, list[float]] = defaultdict(list)
+    per_seed_ndcg: dict[int, dict[str, list[float]]] = defaultdict(
+        lambda: defaultdict(list)
+    )
+    per_seed_recall: dict[int, dict[str, list[float]]] = defaultdict(
+        lambda: defaultdict(list)
+    )
     invalid = {
         "jointProbabilityAboveSelection": int(
             np.sum(joint_probability > selection_probability)
@@ -645,10 +732,6 @@ def _evaluate_type(
         "eligibilityViolations": 0,
         "modifierValidityViolations": 0,
     }
-    ranking_identifiable = all(
-        row["selectedThroughCheckout"] is not None for row in rows
-    )
-    missing_ranking_rows = sum(row["selectedThroughCheckout"] is None for row in rows)
     per_seed_ranking_counts: dict[str, dict[str, int]] = {}
     for seed in sorted({int(row["seed"]) for row in rows}):
         seed_rows = [row for row in rows if int(row["seed"]) == seed]
@@ -699,27 +782,6 @@ def _evaluate_type(
         )
         if not valid_cardinality:
             invalid["invalidComposerCardinality"] += 1
-        if ranking_identifiable:
-            evaluate_opportunity_ndcg(
-                candidate_rows,
-                score_by_candidate={
-                    str(rows[index]["candidateId"]): float(
-                        joint_probability[index] * int(rows[index]["priceImpactVnd"])
-                    )
-                    for index in indices
-                },
-                k=desired_size,
-            )
-        else:
-            with suppress(InsufficientRankingEvidence):
-                evaluate_opportunity_ndcg(
-                    candidate_rows,
-                    score_by_candidate={
-                        str(rows[index]["candidateId"]): float(joint_probability[index])
-                        for index in indices
-                    },
-                    k=desired_size,
-                )
         facts = source_facts[str(candidate_rows[0]["journeyId"])]
         random_order = sorted(
             indices,
@@ -736,6 +798,63 @@ def _evaluate_type(
                 str(rows[index]["candidateId"]),
             ),
         )
+        score_by_policy = {
+            "model": {
+                str(rows[index]["candidateId"]): float(
+                    joint_probability[index] * int(rows[index]["priceImpactVnd"])
+                )
+                for index in indices
+            },
+            "random": {
+                str(rows[index]["candidateId"]): _stable_random_score(
+                    seed, opportunity, str(rows[index]["candidateId"])
+                )
+                for index in indices
+            },
+            "popularity": {
+                str(rows[index]["candidateId"]): float(
+                    rows[index]["priorItemOrderCount"]
+                )
+                for index in indices
+            },
+        }
+        relevance_by_candidate = {
+            str(rows[index]["candidateId"]): float(
+                relevance_by_key[
+                    (seed, opportunity, str(rows[index]["candidateId"]))
+                ]["gradedRelevance"]
+            )
+            for index in indices
+        }
+        retained_by_candidate = {
+            str(rows[index]["candidateId"]): int(
+                relevance_by_key[
+                    (seed, opportunity, str(rows[index]["candidateId"]))
+                ]["potentialRetained"]
+            )
+            for index in indices
+        }
+        for policy, scores in score_by_policy.items():
+            ndcg_value = evaluate_opportunity_ndcg(
+                candidate_rows,
+                score_by_candidate=scores,
+                relevance_by_candidate=relevance_by_candidate,
+                k=desired_size,
+            )
+            ordered_candidate_ids = sorted(
+                scores, key=lambda candidate_id: (-scores[candidate_id], candidate_id)
+            )
+            recall_value = recall_at_k(
+                [
+                    retained_by_candidate[candidate_id]
+                    for candidate_id in ordered_candidate_ids
+                ],
+                k=desired_size,
+            )
+            combined_ndcg[policy].append(ndcg_value)
+            combined_recall[policy].append(recall_value)
+            per_seed_ndcg[seed][policy].append(ndcg_value)
+            per_seed_recall[seed][policy].append(recall_value)
 
         def baseline_composed(
             order: list[int],
@@ -828,7 +947,19 @@ def _evaluate_type(
         and selection_metrics["ece"] <= float(GATE_CONFIGURATION["maximumEce"])
         and joint_metrics["ece"] <= float(GATE_CONFIGURATION["maximumEce"])
     )
-    ranking_pass = False
+    ranking_summary = _ranking_summary(combined_ndcg, combined_recall)
+    per_seed_ranking = {
+        str(seed): _ranking_summary(per_seed_ndcg[seed], per_seed_recall[seed])
+        | per_seed_ranking_counts[str(seed)]
+        for seed in sorted(per_seed_ndcg)
+    }
+    paired = ranking_summary["pairedDifferences"]
+    ranking_pass = (
+        paired["model_vs_random"]["lower95"]
+        > float(GATE_CONFIGURATION["rankingPairedLower95MustExceed"])
+        and paired["model_vs_popularity"]["lower95"]
+        > float(GATE_CONFIGURATION["rankingPairedLower95MustExceed"])
+    )
     validity_pass = all(value == 0 for value in invalid.values())
     gate = calibration_pass and ranking_pass and slice_pass and validity_pass
     evidence = {
@@ -838,22 +969,18 @@ def _evaluate_type(
         "selectionCalibration": selection_metrics,
         "jointCalibration": joint_metrics,
         "rankingEvidence": {
-            "status": "insufficient_evidence",
+            "status": "evaluated",
             "eligibleCandidateRows": len(rows),
             "shownCandidateRows": len(shown_rows),
-            "unlabelledEligibleCandidateRows": missing_ranking_rows,
-            "perSeed": per_seed_ranking_counts,
-            "reason": (
-                "Canonical NDCG requires the full eligible candidate set and "
-                "candidate-level relevance sufficient to compute ideal DCG; "
-                "unshown model-visible candidates are deliberately unlabelled."
-            ),
-            "requiredTask3DataContract": (
-                "Add evaluation-only per-candidate relevance or potential-outcome "
-                "evidence for every eligible candidate, sufficient for ideal DCG. "
-                "Keep it physically absent from training and model-visible loaders."
-            ),
-            "oracleUsedForModelRanking": False,
+            "relevanceRows": len(relevance_rows),
+            "evaluationDefinitionVersion": relevance_version,
+            "evaluationDefinitionDigest": relevance_digest,
+            "intervention": relevance_intervention,
+            "relevanceOpenedAfterConfigurationFreeze": True,
+            "perSeed": per_seed_ranking,
+            "combined": ranking_summary,
+            "oracleUsedForModelSelection": False,
+            "passed": ranking_pass,
         },
         "perSeedSlices": slice_evidence,
         "invalidCounters": invalid,
@@ -1068,11 +1195,14 @@ def run_model_qualification(
 
         verify_frozen_configuration(selected_path, frozen, world_root=world)
         test_table = load_untouched_model_table(world, selected_path, frozen)
+        relevance_table = load_untouched_candidate_relevance_table(
+            world, selected_path, frozen
+        )
         source_facts = _source_slices(world)
         type_gates: dict[str, bool] = {}
         for recommendation_type, trained in trained_types.items():
             test_evidence, model_gate = _evaluate_type(
-                trained, test_table, source_facts, selected
+                trained, test_table, relevance_table, source_facts, selected
             )
             trained.evidence["untouchedTest"] = test_evidence
             type_gates[recommendation_type] = model_gate
@@ -1124,6 +1254,9 @@ def run_model_qualification(
                 "datasetArtifactSha256": manifest["artifacts"][
                     "model-visible/training-examples.parquet"
                 ]["sha256"],
+                "candidateRelevanceArtifactSha256": manifest["artifacts"][
+                    "evaluation/candidate-relevance.parquet"
+                ]["sha256"],
             },
             "contracts": {
                 "canonicalWireDigest": contract_manifest["canonicalDigest"],
@@ -1144,7 +1277,10 @@ def run_model_qualification(
                 "frozenConfigurationSha256": _sha256(frozen_path),
             },
             "freeze": {
+                "worldPrecommitVerifiedBeforeSelection": True,
+                "worldPrecommitSha256": precommit.evidence_sha256,
                 "verifiedBeforeUntouchedTest": True,
+                "relevanceOpenedOnlyAfterConfigurationFreeze": True,
                 "verifiedAfterUntouchedTest": True,
                 "tamperProbeRejected": tamper_rejected,
             },
@@ -1167,18 +1303,6 @@ def run_model_qualification(
         }
         if status != "qualified":
             evidence["failureReasons"] = [
-                *(
-                    [
-                        "ranking: full eligible candidate sets lack evaluation-only "
-                        "candidate-level relevance required for ideal DCG"
-                    ]
-                    if any(
-                        trained.evidence["untouchedTest"]["rankingEvidence"]["status"]
-                        == "insufficient_evidence"
-                        for trained in trained_types.values()
-                    )
-                    else []
-                ),
                 *[
                     f"{recommendation_type}: promotion gate failed"
                     for recommendation_type, passed in type_gates.items()
