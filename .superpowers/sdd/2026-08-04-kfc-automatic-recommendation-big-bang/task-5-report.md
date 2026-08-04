@@ -54,6 +54,12 @@ qualification. The scientific limitation is preserved instead of bypassed.
   Identical retries return the original stored response and timestamps without a
   second scorer call or S3 orphan. Failed owners release only their exact pending
   claim so immutable-orphan recovery can safely take over.
+- Pending bindings are fenced leases, not permanent locks. Every acquire stores a
+  unique owner token and bounded expiry; takeover, post-S3 renewal, final commit,
+  and release condition on the exact owner and canonical digest. Expired decision
+  and event owners cannot commit, renew, or delete a successor claim. A verified
+  versioned S3 orphan is adoptable after lease expiry, while a crash before S3 is
+  recoverable by the next request. Deterministic clocks cover both loss windows.
 - Decision and event evidence use an immutable content-addressed object write
   before a transactional ledger commit. Same-payload retries remain stable across
   wall-clock changes. A changed binding conflicts without rewriting evidence.
@@ -95,7 +101,7 @@ The implementation followed explicit RED/GREEN cycles for:
 
 ## Fresh verification
 
-- Complete automatic-recommendation Node suites: **88 passed**, 0 failed.
+- Complete automatic-recommendation Node suites: **92 passed**, 0 failed.
 - Complete Python scorer suite: **14 passed**, 0 failed.
 - TypeScript typecheck: passed.
 - Maintained-file format gate: passed.
@@ -103,7 +109,7 @@ The implementation followed explicit RED/GREEN cycles for:
   Task 5 added no warning budget.
 - Scoped Ruff format and lint for all Task 5 Python files: passed.
 - Python bytecode compilation: passed.
-- Architecture check: **471 files**, 900-line ceiling, no baseline growth.
+- Architecture check: **472 files**, 900-line ceiling, no baseline growth.
 - `git diff --check`: passed.
 
 The repository-wide backend test command also completed: **2,527 passed, 12

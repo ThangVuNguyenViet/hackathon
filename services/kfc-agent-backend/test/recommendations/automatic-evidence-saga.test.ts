@@ -1,9 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import { PutObjectCommand } from '@aws-sdk/client-s3';
 import {
+  DeleteCommand,
   GetCommand,
   PutCommand,
   TransactWriteCommand,
+  UpdateCommand,
 } from '@aws-sdk/lib-dynamodb';
 import { createHash } from 'node:crypto';
 import {
@@ -96,13 +98,14 @@ it('writes immutable evidence before one transactional decision and idempotency 
 it('replays the same evidence identity even when retry wall-clock time changes', async () => {
   const objects = new InMemoryAutomaticEvidenceObjectStore();
   const ledger = new InMemoryAutomaticRecommendationLedger();
-  let minute = 0;
+  let now = new Date('2026-08-05T00:00:00.000Z');
   const saga = createAutomaticEvidenceSaga({
     objects,
     ledger,
-    clock: () => new Date(`2026-08-05T00:0${minute++}:00.000Z`),
+    clock: () => now,
   });
   await saga.commitDecision(decision);
+  now = new Date('2026-08-05T00:01:00.000Z');
   await expect(saga.commitDecision(decision)).resolves.toMatchObject({
     status: 'committed',
   });
@@ -346,6 +349,39 @@ it('retains an immutable orphan when the transaction fails and reconciles it lat
   expect(ledger.decisions()).toHaveLength(1);
 });
 
+it('adopts an exact orphan after its crashed owner lease expires', async () => {
+  class CrashLedger extends InMemoryAutomaticRecommendationLedger {
+    override async releaseDecisionClaim() {
+      // Simulates task loss: no cleanup executes after the immutable S3 write.
+    }
+  }
+  const objects = new InMemoryAutomaticEvidenceObjectStore();
+  const ledger = new CrashLedger({ failTransactions: 1 });
+  let now = new Date(0);
+  let owner = 0;
+  const saga = createAutomaticEvidenceSaga({
+    objects,
+    ledger,
+    clock: () => now,
+    ownerToken: () => `owner-${owner++}`,
+    claimLeaseMs: 10,
+  });
+  await expect(saga.commitDecision(decision)).rejects.toMatchObject({
+    code: 'transaction_failed',
+  });
+  expect(objects.objects()).toHaveLength(1);
+  now = new Date(11);
+  await expect(saga.reconcileOrphans()).resolves.toEqual({
+    inspected: 1,
+    repaired: 1,
+    failed: 0,
+  });
+  expect(ledger.decisions()).toHaveLength(1);
+  expect(ledger.decisions()[0]).toMatchObject({
+    evidenceVersionId: expect.stringMatching(/^memory:/u),
+  });
+});
+
 it('rejects corrupted orphan bytes before a ledger transaction', async () => {
   const ledger = new InMemoryAutomaticRecommendationLedger();
   const saga = createAutomaticEvidenceSaga({
@@ -579,6 +615,8 @@ it('commits a decision and its idempotency binding in one DynamoDB transaction',
       evidenceDigest: 'a'.repeat(64),
       evidenceSizeBytes: 100,
       evidence: decision,
+      ownerToken: 'owner-1',
+      nowEpochMs: 10,
     }),
   ).toBe('committed');
   expect(transactions).toHaveLength(1);
@@ -588,7 +626,7 @@ it('commits a decision and its idempotency binding in one DynamoDB transaction',
       expect.objectContaining({
         Update: expect.objectContaining({
           ConditionExpression:
-            '#state = :pending AND payloadDigest = :payloadDigest',
+            '#state = :pending AND payloadDigest = :payloadDigest AND ownerToken = :ownerToken AND leaseExpiresAtEpochMs >= :nowEpochMs',
         }),
       }),
       expect.objectContaining({
@@ -634,10 +672,191 @@ it('claims a Dynamo request identity before effects and makes other instances wa
     requestDigest: decision.requestDigest,
     cartDigest: decision.cartDigest,
     contextDigest: decision.contextDigest,
+    ownerToken: 'owner-1',
+    nowEpochMs: 10,
+    leaseExpiresAtEpochMs: 110,
   };
   await expect(ledger.claimDecision(claim)).resolves.toBe('acquired');
-  await expect(ledger.claimDecision(claim)).resolves.toBe('pending');
+  await expect(
+    ledger.claimDecision({ ...claim, ownerToken: 'owner-2' }),
+  ).resolves.toBe('pending');
   await expect(
     ledger.claimDecision({ ...claim, contextDigest: '8'.repeat(64) }),
   ).rejects.toBeInstanceOf(AutomaticRecommendationIdentityConflictError);
+});
+
+it('fences stale decision owners after deterministic lease takeover', async () => {
+  const ledger = new InMemoryAutomaticRecommendationLedger();
+  const binding = {
+    idempotencyKey: decision.idempotencyKey,
+    requestDigest: decision.requestDigest,
+    cartDigest: decision.cartDigest,
+    contextDigest: decision.contextDigest,
+  };
+  await expect(
+    ledger.claimDecision({
+      ...binding,
+      ownerToken: 'owner-old',
+      nowEpochMs: 0,
+      leaseExpiresAtEpochMs: 100,
+    }),
+  ).resolves.toBe('acquired');
+  await expect(
+    ledger.claimDecision({
+      ...binding,
+      ownerToken: 'owner-new',
+      nowEpochMs: 50,
+      leaseExpiresAtEpochMs: 150,
+    }),
+  ).resolves.toBe('pending');
+  await expect(
+    ledger.claimDecision({
+      ...binding,
+      ownerToken: 'owner-new',
+      nowEpochMs: 101,
+      leaseExpiresAtEpochMs: 201,
+    }),
+  ).resolves.toBe('acquired');
+  await ledger.releaseDecisionClaim({
+    idempotencyKey: binding.idempotencyKey,
+    requestDigest: binding.requestDigest,
+    ownerToken: 'owner-old',
+  });
+  await expect(
+    ledger.commitDecision({
+      idempotencyKey: binding.idempotencyKey,
+      evidenceKey: 'old',
+      evidenceVersionId: 'old',
+      evidenceDigest: '1'.repeat(64),
+      evidenceSizeBytes: 1,
+      evidence: decision,
+      ownerToken: 'owner-old',
+      nowEpochMs: 102,
+    }),
+  ).rejects.toMatchObject({ code: 'idempotency_conflict' });
+  await expect(
+    ledger.commitDecision({
+      idempotencyKey: binding.idempotencyKey,
+      evidenceKey: 'new',
+      evidenceVersionId: 'new',
+      evidenceDigest: '2'.repeat(64),
+      evidenceSizeBytes: 2,
+      evidence: decision,
+      ownerToken: 'owner-new',
+      nowEpochMs: 102,
+    }),
+  ).resolves.toBe('committed');
+});
+
+it('fences stale event owners and stale release cannot delete a takeover', async () => {
+  const ledger = new InMemoryAutomaticRecommendationLedger();
+  const binding = {
+    idempotencyKey: event.idempotencyKey,
+    payloadDigest: event.payloadDigest,
+  };
+  await ledger.claimEvent({
+    ...binding,
+    ownerToken: 'event-old',
+    nowEpochMs: 0,
+    leaseExpiresAtEpochMs: 10,
+  });
+  await expect(
+    ledger.claimEvent({
+      ...binding,
+      ownerToken: 'event-new',
+      nowEpochMs: 11,
+      leaseExpiresAtEpochMs: 111,
+    }),
+  ).resolves.toBe('acquired');
+  await ledger.releaseEventClaim({ ...binding, ownerToken: 'event-old' });
+  await expect(
+    ledger.commitEvent({
+      idempotencyKey: binding.idempotencyKey,
+      evidenceKey: 'event-old',
+      evidenceVersionId: 'old',
+      evidenceDigest: '3'.repeat(64),
+      evidenceSizeBytes: 3,
+      evidence: event,
+      ownerToken: 'event-old',
+      nowEpochMs: 12,
+    }),
+  ).rejects.toMatchObject({ code: 'idempotency_conflict' });
+  await expect(
+    ledger.commitEvent({
+      idempotencyKey: binding.idempotencyKey,
+      evidenceKey: 'event-new',
+      evidenceVersionId: 'new',
+      evidenceDigest: '4'.repeat(64),
+      evidenceSizeBytes: 4,
+      evidence: event,
+      ownerToken: 'event-new',
+      nowEpochMs: 12,
+    }),
+  ).resolves.toBe('committed');
+});
+
+it('Dynamo takeover and release conditions fence the exact lease owner', async () => {
+  const updates: UpdateCommand[] = [];
+  const deletes: DeleteCommand[] = [];
+  const ledger = new DynamoDbAutomaticRecommendationLedger({
+    tableName: 'automatic-ledger',
+    client: {
+      send: async (command) => {
+        if (command instanceof PutCommand) {
+          const error = new Error('exists');
+          error.name = 'ConditionalCheckFailedException';
+          throw error;
+        }
+        if (command instanceof GetCommand)
+          return {
+            Item: {
+              state: 'pending',
+              payloadDigest: decision.requestDigest,
+              cartDigest: decision.cartDigest,
+              contextDigest: decision.contextDigest,
+              ownerToken: 'owner-old',
+              leaseExpiresAtEpochMs: 10,
+            },
+          };
+        if (command instanceof UpdateCommand) {
+          updates.push(command);
+          return {};
+        }
+        if (command instanceof DeleteCommand) {
+          deletes.push(command);
+          return {};
+        }
+        throw new Error('unexpected command');
+      },
+    },
+  });
+  await expect(
+    ledger.claimDecision({
+      idempotencyKey: decision.idempotencyKey,
+      requestDigest: decision.requestDigest,
+      cartDigest: decision.cartDigest,
+      contextDigest: decision.contextDigest,
+      ownerToken: 'owner-new',
+      nowEpochMs: 11,
+      leaseExpiresAtEpochMs: 111,
+    }),
+  ).resolves.toBe('acquired');
+  expect(updates[0]?.input).toMatchObject({
+    ConditionExpression: expect.stringContaining('ownerToken = :previousOwner'),
+    ExpressionAttributeValues: expect.objectContaining({
+      ':previousOwner': 'owner-old',
+      ':ownerToken': 'owner-new',
+    }),
+  });
+  await ledger.releaseDecisionClaim({
+    idempotencyKey: decision.idempotencyKey,
+    requestDigest: decision.requestDigest,
+    ownerToken: 'owner-old',
+  });
+  expect(deletes[0]?.input).toMatchObject({
+    ConditionExpression: expect.stringContaining('ownerToken = :ownerToken'),
+    ExpressionAttributeValues: expect.objectContaining({
+      ':ownerToken': 'owner-old',
+    }),
+  });
 });

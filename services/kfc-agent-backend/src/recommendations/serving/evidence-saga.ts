@@ -1,21 +1,17 @@
 import { createHash } from 'node:crypto';
+import { randomUUID } from 'node:crypto';
 import {
   parseAutomaticDecisionEvidence,
   parseAutomaticEventEvidence,
-  parseJsonValue,
   type AutomaticDecisionEvidence,
   type AutomaticEventEvidence,
 } from './evidence-contracts.js';
-import {
-  automaticRecommendationIdentityDigest,
-  parseAutomaticRecommendationRequest,
-} from '../contracts/automatic-recommendation.js';
-import { parseAutomaticRecommendationResponse } from '../contracts/automatic-recommendation-response.js';
 
 export type {
   AutomaticDecisionEvidence,
   AutomaticEventEvidence,
 } from './evidence-contracts.js';
+export { createAutomaticRecommendationServingRuntime } from './decision-runtime.js';
 
 type EvidenceEnvelope =
   | {
@@ -60,19 +56,41 @@ export interface AutomaticRecommendationLedger {
     requestDigest: string;
     cartDigest: string;
     contextDigest: string;
+    ownerToken: string;
+    nowEpochMs: number;
+    leaseExpiresAtEpochMs: number;
   }): Promise<'acquired' | 'pending' | 'replayed'>;
   claimEvent(input: {
     idempotencyKey: string;
     payloadDigest: string;
+    ownerToken: string;
+    nowEpochMs: number;
+    leaseExpiresAtEpochMs: number;
   }): Promise<'acquired' | 'pending' | 'replayed'>;
-  releaseDecisionClaim(
-    idempotencyKey: string,
-    requestDigest: string,
-  ): Promise<void>;
-  releaseEventClaim(
-    idempotencyKey: string,
-    payloadDigest: string,
-  ): Promise<void>;
+  renewDecisionClaim(input: {
+    idempotencyKey: string;
+    requestDigest: string;
+    ownerToken: string;
+    nowEpochMs: number;
+    leaseExpiresAtEpochMs: number;
+  }): Promise<void>;
+  renewEventClaim(input: {
+    idempotencyKey: string;
+    payloadDigest: string;
+    ownerToken: string;
+    nowEpochMs: number;
+    leaseExpiresAtEpochMs: number;
+  }): Promise<void>;
+  releaseDecisionClaim(input: {
+    idempotencyKey: string;
+    requestDigest: string;
+    ownerToken: string;
+  }): Promise<void>;
+  releaseEventClaim(input: {
+    idempotencyKey: string;
+    payloadDigest: string;
+    ownerToken: string;
+  }): Promise<void>;
   readDecision(
     idempotencyKey: string,
   ): Promise<AutomaticDecisionEvidence | null>;
@@ -84,6 +102,8 @@ export interface AutomaticRecommendationLedger {
     evidenceDigest: string;
     evidenceSizeBytes: number;
     evidence: AutomaticDecisionEvidence;
+    ownerToken: string;
+    nowEpochMs: number;
   }): Promise<'committed' | 'replayed'>;
   commitEvent(input: {
     idempotencyKey: string;
@@ -92,6 +112,8 @@ export interface AutomaticRecommendationLedger {
     evidenceDigest: string;
     evidenceSizeBytes: number;
     evidence: AutomaticEventEvidence;
+    ownerToken: string;
+    nowEpochMs: number;
   }): Promise<'committed' | 'replayed'>;
   hasEvidence(digest: string): Promise<boolean>;
 }
@@ -188,10 +210,15 @@ function objectFor(envelope: EvidenceEnvelope): ImmutableEvidenceObject {
 export function createAutomaticEvidenceSaga({
   objects,
   ledger,
+  clock,
+  ownerToken = randomUUID,
+  claimLeaseMs = 30_000,
 }: {
   objects: AutomaticEvidenceObjectStore;
   ledger: AutomaticRecommendationLedger;
   clock: () => Date;
+  ownerToken?: () => string;
+  claimLeaseMs?: number;
 }) {
   const eventFlights = new Map<
     string,
@@ -205,7 +232,7 @@ export function createAutomaticEvidenceSaga({
     }
     throw new AutomaticEvidencePersistenceError('transaction_failed');
   }
-  async function persist(envelope: EvidenceEnvelope) {
+  async function persist(envelope: EvidenceEnvelope, claimOwner: string) {
     const object = objectFor(envelope);
     let pointer: DurableEvidencePointer;
     try {
@@ -225,6 +252,24 @@ export function createAutomaticEvidenceSaga({
         cause: error,
       });
     }
+    const renewNowEpochMs = clock().getTime();
+    if (envelope.kind === 'decision') {
+      await ledger.renewDecisionClaim({
+        idempotencyKey: envelope.payload.idempotencyKey,
+        requestDigest: envelope.payload.requestDigest,
+        ownerToken: claimOwner,
+        nowEpochMs: renewNowEpochMs,
+        leaseExpiresAtEpochMs: renewNowEpochMs + claimLeaseMs,
+      });
+    } else {
+      await ledger.renewEventClaim({
+        idempotencyKey: envelope.payload.idempotencyKey,
+        payloadDigest: envelope.payload.payloadDigest,
+        ownerToken: claimOwner,
+        nowEpochMs: renewNowEpochMs,
+        leaseExpiresAtEpochMs: renewNowEpochMs + claimLeaseMs,
+      });
+    }
     try {
       const status =
         envelope.kind === 'decision'
@@ -235,6 +280,8 @@ export function createAutomaticEvidenceSaga({
               evidenceDigest: object.digest,
               evidenceSizeBytes: object.sizeBytes,
               evidence: envelope.payload,
+              ownerToken: claimOwner,
+              nowEpochMs: clock().getTime(),
             })
           : await ledger.commitEvent({
               idempotencyKey: envelope.payload.idempotencyKey,
@@ -243,6 +290,8 @@ export function createAutomaticEvidenceSaga({
               evidenceDigest: object.digest,
               evidenceSizeBytes: object.sizeBytes,
               evidence: envelope.payload,
+              ownerToken: claimOwner,
+              nowEpochMs: clock().getTime(),
             });
       return {
         status: status === 'replayed' ? 'committed' : status,
@@ -252,21 +301,6 @@ export function createAutomaticEvidenceSaga({
         evidenceSizeBytes: object.sizeBytes,
       };
     } catch (error) {
-      if (envelope.kind === 'decision') {
-        await ledger
-          .releaseDecisionClaim(
-            envelope.payload.idempotencyKey,
-            envelope.payload.requestDigest,
-          )
-          .catch(() => undefined);
-      } else {
-        await ledger
-          .releaseEventClaim(
-            envelope.payload.idempotencyKey,
-            envelope.payload.payloadDigest,
-          )
-          .catch(() => undefined);
-      }
       if (error instanceof AutomaticEvidencePersistenceError) throw error;
       throw new AutomaticEvidencePersistenceError('transaction_failed', {
         cause: error,
@@ -275,35 +309,70 @@ export function createAutomaticEvidenceSaga({
   }
 
   return {
-    claimDecision: (input: {
+    async claimDecision(input: {
       idempotencyKey: string;
       requestDigest: string;
       cartDigest: string;
       contextDigest: string;
-    }) => ledger.claimDecision(input),
-    releaseDecisionClaim: (idempotencyKey: string, requestDigest: string) =>
-      ledger.releaseDecisionClaim(idempotencyKey, requestDigest),
+    }) {
+      const token = ownerToken();
+      const nowEpochMs = clock().getTime();
+      const status = await ledger.claimDecision({
+        ...input,
+        ownerToken: token,
+        nowEpochMs,
+        leaseExpiresAtEpochMs: nowEpochMs + claimLeaseMs,
+      });
+      return { status, ownerToken: token };
+    },
+    releaseDecisionClaim: (input: {
+      idempotencyKey: string;
+      requestDigest: string;
+      ownerToken: string;
+    }) => ledger.releaseDecisionClaim(input),
     readDecision: (idempotencyKey: string) =>
       ledger.readDecision(idempotencyKey),
     async commitDecision(value: AutomaticDecisionEvidence) {
       const parsed = parseAutomaticDecisionEvidence(value);
-      const claim = await ledger.claimDecision(parsed);
+      const token = ownerToken();
+      const nowEpochMs = clock().getTime();
+      const claim = await ledger.claimDecision({
+        ...parsed,
+        ownerToken: token,
+        nowEpochMs,
+        leaseExpiresAtEpochMs: nowEpochMs + claimLeaseMs,
+      });
       if (claim === 'replayed') return { status: 'committed' as const };
       if (claim === 'pending') {
         throw new AutomaticEvidencePersistenceError('transaction_failed');
       }
-      return persist({
-        schemaVersion: 'kfc-automatic-evidence-v1',
-        kind: 'decision',
-        payload: parsed,
-      });
+      try {
+        return await persist(
+          {
+            schemaVersion: 'kfc-automatic-evidence-v1',
+            kind: 'decision',
+            payload: parsed,
+          },
+          token,
+        );
+      } catch (error) {
+        await ledger.releaseDecisionClaim({
+          idempotencyKey: parsed.idempotencyKey,
+          requestDigest: parsed.requestDigest,
+          ownerToken: token,
+        });
+        throw error;
+      }
     },
-    commitClaimedDecision(value: AutomaticDecisionEvidence) {
-      return persist({
-        schemaVersion: 'kfc-automatic-evidence-v1',
-        kind: 'decision',
-        payload: parseAutomaticDecisionEvidence(value),
-      });
+    commitClaimedDecision(value: AutomaticDecisionEvidence, token: string) {
+      return persist(
+        {
+          schemaVersion: 'kfc-automatic-evidence-v1',
+          kind: 'decision',
+          payload: parseAutomaticDecisionEvidence(value),
+        },
+        token,
+      );
     },
     async commitEvent(value: AutomaticEventEvidence) {
       const parsed = parseAutomaticEventEvidence(value);
@@ -321,7 +390,14 @@ export function createAutomaticEvidenceSaga({
         }
         return flight.promise;
       }
-      const claim = await ledger.claimEvent(parsed);
+      const token = ownerToken();
+      const nowEpochMs = clock().getTime();
+      const claim = await ledger.claimEvent({
+        ...parsed,
+        ownerToken: token,
+        nowEpochMs,
+        leaseExpiresAtEpochMs: nowEpochMs + claimLeaseMs,
+      });
       if (claim === 'replayed') return { status: 'committed' as const };
       if (claim === 'pending') {
         const winner = await waitForEvent(parsed.idempotencyKey);
@@ -330,17 +406,27 @@ export function createAutomaticEvidenceSaga({
         }
         return { status: 'committed' as const };
       }
-      const promise = persist({
-        schemaVersion: 'kfc-automatic-evidence-v1',
-        kind: 'event',
-        payload: parsed,
-      });
+      const promise = persist(
+        {
+          schemaVersion: 'kfc-automatic-evidence-v1',
+          kind: 'event',
+          payload: parsed,
+        },
+        token,
+      );
       eventFlights.set(parsed.idempotencyKey, {
         payloadDigest: parsed.payloadDigest,
         promise,
       });
       try {
         return await promise;
+      } catch (error) {
+        await ledger.releaseEventClaim({
+          idempotencyKey: parsed.idempotencyKey,
+          payloadDigest: parsed.payloadDigest,
+          ownerToken: token,
+        });
+        throw error;
       } finally {
         if (eventFlights.get(parsed.idempotencyKey)?.promise === promise) {
           eventFlights.delete(parsed.idempotencyKey);
@@ -368,11 +454,16 @@ export function createAutomaticEvidenceSaga({
           }
           const envelope = parseEvidenceEnvelope(object.body);
           if (envelope.kind === 'decision') {
+            const token = ownerToken();
+            const nowEpochMs = clock().getTime();
             const claim = await ledger.claimDecision({
               idempotencyKey: envelope.payload.idempotencyKey,
               requestDigest: envelope.payload.requestDigest,
               cartDigest: envelope.payload.cartDigest,
               contextDigest: envelope.payload.contextDigest,
+              ownerToken: token,
+              nowEpochMs,
+              leaseExpiresAtEpochMs: nowEpochMs + claimLeaseMs,
             });
             if (claim !== 'acquired') continue;
             await ledger.commitDecision({
@@ -382,11 +473,18 @@ export function createAutomaticEvidenceSaga({
               evidenceDigest: object.digest,
               evidenceSizeBytes: object.sizeBytes,
               evidence: envelope.payload,
+              ownerToken: token,
+              nowEpochMs,
             });
           } else {
+            const token = ownerToken();
+            const nowEpochMs = clock().getTime();
             const claim = await ledger.claimEvent({
               idempotencyKey: envelope.payload.idempotencyKey,
               payloadDigest: envelope.payload.payloadDigest,
+              ownerToken: token,
+              nowEpochMs,
+              leaseExpiresAtEpochMs: nowEpochMs + claimLeaseMs,
             });
             if (claim !== 'acquired') continue;
             await ledger.commitEvent({
@@ -396,6 +494,8 @@ export function createAutomaticEvidenceSaga({
               evidenceDigest: object.digest,
               evidenceSizeBytes: object.sizeBytes,
               evidence: envelope.payload,
+              ownerToken: token,
+              nowEpochMs,
             });
           }
           repaired += 1;
@@ -460,9 +560,18 @@ export class InMemoryAutomaticRecommendationLedger implements AutomaticRecommend
   >();
   private readonly decisionClaims = new Map<
     string,
-    { requestDigest: string; cartDigest: string; contextDigest: string }
+    {
+      requestDigest: string;
+      cartDigest: string;
+      contextDigest: string;
+      ownerToken: string;
+      leaseExpiresAtEpochMs: number;
+    }
   >();
-  private readonly eventClaims = new Map<string, string>();
+  private readonly eventClaims = new Map<
+    string,
+    { payloadDigest: string; ownerToken: string; leaseExpiresAtEpochMs: number }
+  >();
   private failures: number;
 
   constructor({ failTransactions = 0 }: { failTransactions?: number } = {}) {
@@ -485,9 +594,19 @@ export class InMemoryAutomaticRecommendationLedger implements AutomaticRecommend
       evidenceDigest: string;
       evidenceSizeBytes: number;
       evidence: T;
+      ownerToken: string;
+      nowEpochMs: number;
+      claim: { ownerToken: string; leaseExpiresAtEpochMs: number } | undefined;
     },
   ): 'committed' | 'replayed' {
     this.failIfRequested();
+    if (
+      input.claim === undefined ||
+      input.claim.ownerToken !== input.ownerToken ||
+      input.claim.leaseExpiresAtEpochMs < input.nowEpochMs
+    ) {
+      throw new AutomaticEvidencePersistenceError('idempotency_conflict');
+    }
     const existing = state.get(input.idempotencyKey);
     if (existing !== undefined) {
       if (existing.evidenceDigest !== input.evidenceDigest) {
@@ -506,8 +625,13 @@ export class InMemoryAutomaticRecommendationLedger implements AutomaticRecommend
     evidenceDigest: string;
     evidenceSizeBytes: number;
     evidence: AutomaticDecisionEvidence;
+    ownerToken: string;
+    nowEpochMs: number;
   }): Promise<'committed' | 'replayed'> {
-    const result = this.commit(this.decisionState, input);
+    const result = this.commit(this.decisionState, {
+      ...input,
+      claim: this.decisionClaims.get(input.idempotencyKey),
+    });
     this.decisionClaims.delete(input.idempotencyKey);
     return result;
   }
@@ -519,8 +643,13 @@ export class InMemoryAutomaticRecommendationLedger implements AutomaticRecommend
     evidenceDigest: string;
     evidenceSizeBytes: number;
     evidence: AutomaticEventEvidence;
+    ownerToken: string;
+    nowEpochMs: number;
   }): Promise<'committed' | 'replayed'> {
-    const result = this.commit(this.eventState, input);
+    const result = this.commit(this.eventState, {
+      ...input,
+      claim: this.eventClaims.get(input.idempotencyKey),
+    });
     this.eventClaims.delete(input.idempotencyKey);
     return result;
   }
@@ -530,6 +659,9 @@ export class InMemoryAutomaticRecommendationLedger implements AutomaticRecommend
     requestDigest: string;
     cartDigest: string;
     contextDigest: string;
+    ownerToken: string;
+    nowEpochMs: number;
+    leaseExpiresAtEpochMs: number;
   }): Promise<'acquired' | 'pending' | 'replayed'> {
     const durable = this.decisionState.get(input.idempotencyKey)?.evidence;
     if (durable !== undefined) {
@@ -549,7 +681,9 @@ export class InMemoryAutomaticRecommendationLedger implements AutomaticRecommend
         claim.contextDigest !== input.contextDigest
       )
         throw new AutomaticRecommendationIdentityConflictError();
-      return 'pending';
+      if (claim.leaseExpiresAtEpochMs > input.nowEpochMs) return 'pending';
+      this.decisionClaims.set(input.idempotencyKey, input);
+      return 'acquired';
     }
     this.decisionClaims.set(input.idempotencyKey, input);
     return 'acquired';
@@ -558,6 +692,9 @@ export class InMemoryAutomaticRecommendationLedger implements AutomaticRecommend
   async claimEvent(input: {
     idempotencyKey: string;
     payloadDigest: string;
+    ownerToken: string;
+    nowEpochMs: number;
+    leaseExpiresAtEpochMs: number;
   }): Promise<'acquired' | 'pending' | 'replayed'> {
     const durable = this.eventState.get(input.idempotencyKey)?.evidence;
     if (durable !== undefined) {
@@ -568,26 +705,76 @@ export class InMemoryAutomaticRecommendationLedger implements AutomaticRecommend
     }
     const claim = this.eventClaims.get(input.idempotencyKey);
     if (claim !== undefined) {
-      if (claim !== input.payloadDigest) {
+      if (claim.payloadDigest !== input.payloadDigest) {
         throw new AutomaticRecommendationIdentityConflictError();
       }
-      return 'pending';
+      if (claim.leaseExpiresAtEpochMs > input.nowEpochMs) return 'pending';
+      this.eventClaims.set(input.idempotencyKey, input);
+      return 'acquired';
     }
-    this.eventClaims.set(input.idempotencyKey, input.payloadDigest);
+    this.eventClaims.set(input.idempotencyKey, input);
     return 'acquired';
   }
 
-  async releaseDecisionClaim(idempotencyKey: string, requestDigest: string) {
+  async renewDecisionClaim(input: {
+    idempotencyKey: string;
+    requestDigest: string;
+    ownerToken: string;
+    nowEpochMs: number;
+    leaseExpiresAtEpochMs: number;
+  }) {
+    const claim = this.decisionClaims.get(input.idempotencyKey);
     if (
-      this.decisionClaims.get(idempotencyKey)?.requestDigest === requestDigest
+      claim?.requestDigest !== input.requestDigest ||
+      claim.ownerToken !== input.ownerToken ||
+      claim.leaseExpiresAtEpochMs < input.nowEpochMs
+    )
+      throw new AutomaticEvidencePersistenceError('idempotency_conflict');
+    this.decisionClaims.set(input.idempotencyKey, { ...claim, ...input });
+  }
+
+  async renewEventClaim(input: {
+    idempotencyKey: string;
+    payloadDigest: string;
+    ownerToken: string;
+    nowEpochMs: number;
+    leaseExpiresAtEpochMs: number;
+  }) {
+    const claim = this.eventClaims.get(input.idempotencyKey);
+    if (
+      claim?.payloadDigest !== input.payloadDigest ||
+      claim.ownerToken !== input.ownerToken ||
+      claim.leaseExpiresAtEpochMs < input.nowEpochMs
+    )
+      throw new AutomaticEvidencePersistenceError('idempotency_conflict');
+    this.eventClaims.set(input.idempotencyKey, { ...claim, ...input });
+  }
+
+  async releaseDecisionClaim(input: {
+    idempotencyKey: string;
+    requestDigest: string;
+    ownerToken: string;
+  }) {
+    const claim = this.decisionClaims.get(input.idempotencyKey);
+    if (
+      claim?.requestDigest === input.requestDigest &&
+      claim.ownerToken === input.ownerToken
     ) {
-      this.decisionClaims.delete(idempotencyKey);
+      this.decisionClaims.delete(input.idempotencyKey);
     }
   }
 
-  async releaseEventClaim(idempotencyKey: string, payloadDigest: string) {
-    if (this.eventClaims.get(idempotencyKey) === payloadDigest) {
-      this.eventClaims.delete(idempotencyKey);
+  async releaseEventClaim(input: {
+    idempotencyKey: string;
+    payloadDigest: string;
+    ownerToken: string;
+  }) {
+    const claim = this.eventClaims.get(input.idempotencyKey);
+    if (
+      claim?.payloadDigest === input.payloadDigest &&
+      claim.ownerToken === input.ownerToken
+    ) {
+      this.eventClaims.delete(input.idempotencyKey);
     }
   }
 
@@ -616,178 +803,4 @@ export class InMemoryAutomaticRecommendationLedger implements AutomaticRecommend
   idempotencyRecords() {
     return [...this.decisionState.keys(), ...this.eventState.keys()];
   }
-}
-
-export function createAutomaticRecommendationServingRuntime({
-  engine,
-  evidence,
-  contractDigest,
-  clock = () => new Date(),
-  technicalEvidence,
-}: {
-  engine: {
-    decide(
-      type: AutomaticDecisionEvidence['recommendationType'],
-      request: unknown,
-    ): Promise<unknown>;
-  };
-  evidence: {
-    commitDecision(value: AutomaticDecisionEvidence): Promise<unknown>;
-    commitClaimedDecision(value: AutomaticDecisionEvidence): Promise<unknown>;
-    claimDecision(input: {
-      idempotencyKey: string;
-      requestDigest: string;
-      cartDigest: string;
-      contextDigest: string;
-    }): Promise<'acquired' | 'pending' | 'replayed'>;
-    releaseDecisionClaim(
-      idempotencyKey: string,
-      requestDigest: string,
-    ): Promise<void>;
-    readDecision(
-      idempotencyKey: string,
-    ): Promise<AutomaticDecisionEvidence | null>;
-  };
-  contractDigest: string;
-  clock?: () => Date;
-  technicalEvidence: (input: {
-    request: ReturnType<typeof parseAutomaticRecommendationRequest>;
-    response: ReturnType<typeof parseAutomaticRecommendationResponse>;
-  }) => AutomaticDecisionEvidence['technical'];
-}) {
-  const flights = new Map<
-    string,
-    {
-      requestDigest: string;
-      promise: Promise<ReturnType<typeof parseAutomaticRecommendationResponse>>;
-    }
-  >();
-  return {
-    async decide(
-      recommendationType: AutomaticDecisionEvidence['recommendationType'],
-      request: unknown,
-    ) {
-      const binding = parseAutomaticRecommendationRequest(
-        recommendationType,
-        request,
-      );
-      const operationPath = {
-        local_favorite: '/v1/recommendations/local-favorites',
-        for_you: '/v1/recommendations/for-you',
-        modifier_upsell: '/v1/recommendations/modifier-upsells',
-        smart_cross_sell: '/v1/recommendations/smart-cross-sells',
-      }[recommendationType];
-      const requestDigest = automaticRecommendationIdentityDigest({
-        operationPath,
-        identityType: recommendationType,
-        payload: binding,
-      });
-      const cartDigest = automaticRecommendationIdentityDigest({
-        operationPath: `${operationPath}/cart`,
-        identityType: 'cart',
-        payload: binding.cart,
-      });
-      const contextDigest = automaticRecommendationIdentityDigest({
-        operationPath: `${operationPath}/context`,
-        identityType: 'trusted-context-binding',
-        payload: {
-          storeId: binding.storeId,
-          fulfilmentMode: binding.fulfilmentMode,
-          locale: binding.locale,
-          orderingJourneyRef: binding.orderingJourneyRef,
-          opportunityRef: binding.opportunityRef,
-          ...('verifiedCustomerRef' in binding
-            ? { verifiedCustomerRef: binding.verifiedCustomerRef }
-            : {}),
-          ...('parentCartLineId' in binding
-            ? { parentCartLineId: binding.parentCartLineId }
-            : {}),
-        },
-      });
-      const durable = await evidence.readDecision(binding.requestId);
-      if (durable !== null) {
-        if (
-          durable.requestDigest !== requestDigest ||
-          durable.cartDigest !== cartDigest ||
-          durable.contextDigest !== contextDigest ||
-          durable.recommendationType !== recommendationType
-        ) {
-          throw new AutomaticRecommendationIdentityConflictError();
-        }
-        return parseAutomaticRecommendationResponse(durable.response);
-      }
-      const flight = flights.get(binding.requestId);
-      if (flight !== undefined) {
-        if (flight.requestDigest !== requestDigest) {
-          throw new AutomaticRecommendationIdentityConflictError();
-        }
-        return flight.promise;
-      }
-      const claim = await evidence.claimDecision({
-        idempotencyKey: binding.requestId,
-        requestDigest,
-        cartDigest,
-        contextDigest,
-      });
-      if (claim !== 'acquired') {
-        for (let attempt = 0; attempt < 50; attempt += 1) {
-          const winner = await evidence.readDecision(binding.requestId);
-          if (winner !== null) {
-            if (
-              winner.requestDigest !== requestDigest ||
-              winner.cartDigest !== cartDigest ||
-              winner.contextDigest !== contextDigest
-            )
-              throw new AutomaticRecommendationIdentityConflictError();
-            return parseAutomaticRecommendationResponse(winner.response);
-          }
-          await new Promise((resolve) => setTimeout(resolve, 10));
-        }
-        throw new AutomaticEvidencePersistenceError('transaction_failed');
-      }
-      const promise = (async () => {
-        try {
-          const response = parseAutomaticRecommendationResponse(
-            await engine.decide(recommendationType, binding),
-          );
-          await evidence.commitClaimedDecision({
-            idempotencyKey: binding.requestId,
-            recommendationId: response.recommendationId,
-            requestId: binding.requestId,
-            requestDigest,
-            contextDigest,
-            orderingJourneyRef: binding.orderingJourneyRef,
-            opportunityRef: binding.opportunityRef,
-            recommendationType,
-            storeId: binding.storeId,
-            fulfilmentMode: binding.fulfilmentMode,
-            locale: binding.locale,
-            cartId: binding.cart.cartId,
-            cartRevision: binding.cart.revision,
-            cartDigest,
-            catalogRevision: response.catalogRevision,
-            decisionTime: clock().toISOString(),
-            expiresAt: response.expiresAt,
-            contractDigest,
-            response: parseJsonValue(response),
-            technical: technicalEvidence({ request: binding, response }),
-          });
-          return response;
-        } catch (error) {
-          await evidence
-            .releaseDecisionClaim(binding.requestId, requestDigest)
-            .catch(() => undefined);
-          throw error;
-        }
-      })();
-      flights.set(binding.requestId, { requestDigest, promise });
-      try {
-        return await promise;
-      } finally {
-        if (flights.get(binding.requestId)?.promise === promise) {
-          flights.delete(binding.requestId);
-        }
-      }
-    },
-  };
 }

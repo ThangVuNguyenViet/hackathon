@@ -9,6 +9,7 @@ import {
   PutCommand,
   QueryCommand,
   TransactWriteCommand,
+  UpdateCommand,
 } from '@aws-sdk/lib-dynamodb';
 import { createHash } from 'node:crypto';
 import {
@@ -211,6 +212,8 @@ interface LedgerInput<T> {
   evidenceDigest: string;
   evidenceSizeBytes: number;
   evidence: T;
+  ownerToken: string;
+  nowEpochMs: number;
 }
 
 export class DynamoDbAutomaticRecommendationLedger implements AutomaticRecommendationLedger {
@@ -225,6 +228,9 @@ export class DynamoDbAutomaticRecommendationLedger implements AutomaticRecommend
       payloadDigest: string;
       cartDigest?: string;
       contextDigest?: string;
+      ownerToken: string;
+      nowEpochMs: number;
+      leaseExpiresAtEpochMs: number;
     },
   ): Promise<'acquired' | 'pending' | 'replayed'> {
     const key = {
@@ -239,6 +245,8 @@ export class DynamoDbAutomaticRecommendationLedger implements AutomaticRecommend
             ...key,
             kind,
             state: 'pending',
+            ownerToken: input.ownerToken,
+            leaseExpiresAtEpochMs: input.leaseExpiresAtEpochMs,
             payloadDigest: input.payloadDigest,
             ...(input.cartDigest ? { cartDigest: input.cartDigest } : {}),
             ...(input.contextDigest
@@ -263,7 +271,39 @@ export class DynamoDbAutomaticRecommendationLedger implements AutomaticRecommend
       ) {
         throw new AutomaticRecommendationIdentityConflictError();
       }
-      return existing.state === 'committed' ? 'replayed' : 'pending';
+      if (existing.state === 'committed') return 'replayed';
+      if (
+        typeof existing.leaseExpiresAtEpochMs !== 'number' ||
+        existing.leaseExpiresAtEpochMs > input.nowEpochMs
+      )
+        return 'pending';
+      try {
+        await this.options.client.send(
+          new UpdateCommand({
+            TableName: this.options.tableName,
+            Key: key,
+            ConditionExpression:
+              '#state = :pending AND payloadDigest = :payloadDigest AND ownerToken = :previousOwner AND leaseExpiresAtEpochMs = :previousExpiry',
+            UpdateExpression:
+              'SET ownerToken = :ownerToken, leaseExpiresAtEpochMs = :leaseExpiresAtEpochMs',
+            ExpressionAttributeNames: { '#state': 'state' },
+            ExpressionAttributeValues: {
+              ':pending': 'pending',
+              ':payloadDigest': input.payloadDigest,
+              ':previousOwner': existing.ownerToken,
+              ':previousExpiry': existing.leaseExpiresAtEpochMs,
+              ':ownerToken': input.ownerToken,
+              ':leaseExpiresAtEpochMs': input.leaseExpiresAtEpochMs,
+            },
+          }),
+        );
+        return 'acquired';
+      } catch (takeoverError) {
+        if (awsErrorName(takeoverError) !== 'ConditionalCheckFailedException') {
+          throw takeoverError;
+        }
+        return 'pending';
+      }
     }
   }
 
@@ -272,16 +312,28 @@ export class DynamoDbAutomaticRecommendationLedger implements AutomaticRecommend
     requestDigest: string;
     cartDigest: string;
     contextDigest: string;
+    ownerToken: string;
+    nowEpochMs: number;
+    leaseExpiresAtEpochMs: number;
   }) {
     return this.claim('decision', {
       idempotencyKey: input.idempotencyKey,
       payloadDigest: input.requestDigest,
       cartDigest: input.cartDigest,
       contextDigest: input.contextDigest,
+      ownerToken: input.ownerToken,
+      nowEpochMs: input.nowEpochMs,
+      leaseExpiresAtEpochMs: input.leaseExpiresAtEpochMs,
     });
   }
 
-  claimEvent(input: { idempotencyKey: string; payloadDigest: string }) {
+  claimEvent(input: {
+    idempotencyKey: string;
+    payloadDigest: string;
+    ownerToken: string;
+    nowEpochMs: number;
+    leaseExpiresAtEpochMs: number;
+  }) {
     return this.claim('event', input);
   }
 
@@ -289,6 +341,7 @@ export class DynamoDbAutomaticRecommendationLedger implements AutomaticRecommend
     kind: 'decision' | 'event',
     idempotencyKey: string,
     payloadDigest: string,
+    ownerToken: string,
   ) {
     try {
       await this.options.client.send(
@@ -299,11 +352,12 @@ export class DynamoDbAutomaticRecommendationLedger implements AutomaticRecommend
             sk: 'BINDING',
           },
           ConditionExpression:
-            '#state = :pending AND payloadDigest = :payloadDigest',
+            '#state = :pending AND payloadDigest = :payloadDigest AND ownerToken = :ownerToken',
           ExpressionAttributeNames: { '#state': 'state' },
           ExpressionAttributeValues: {
             ':pending': 'pending',
             ':payloadDigest': payloadDigest,
+            ':ownerToken': ownerToken,
           },
         }),
       );
@@ -313,12 +367,95 @@ export class DynamoDbAutomaticRecommendationLedger implements AutomaticRecommend
     }
   }
 
-  releaseDecisionClaim(idempotencyKey: string, requestDigest: string) {
-    return this.releaseClaim('decision', idempotencyKey, requestDigest);
+  releaseDecisionClaim(input: {
+    idempotencyKey: string;
+    requestDigest: string;
+    ownerToken: string;
+  }) {
+    return this.releaseClaim(
+      'decision',
+      input.idempotencyKey,
+      input.requestDigest,
+      input.ownerToken,
+    );
   }
 
-  releaseEventClaim(idempotencyKey: string, payloadDigest: string) {
-    return this.releaseClaim('event', idempotencyKey, payloadDigest);
+  releaseEventClaim(input: {
+    idempotencyKey: string;
+    payloadDigest: string;
+    ownerToken: string;
+  }) {
+    return this.releaseClaim(
+      'event',
+      input.idempotencyKey,
+      input.payloadDigest,
+      input.ownerToken,
+    );
+  }
+
+  private async renewClaim(
+    kind: 'decision' | 'event',
+    input: {
+      idempotencyKey: string;
+      payloadDigest: string;
+      ownerToken: string;
+      nowEpochMs: number;
+      leaseExpiresAtEpochMs: number;
+    },
+  ) {
+    try {
+      await this.options.client.send(
+        new UpdateCommand({
+          TableName: this.options.tableName,
+          Key: {
+            pk: `IDEMPOTENCY#${kind}#${input.idempotencyKey}`,
+            sk: 'BINDING',
+          },
+          ConditionExpression:
+            '#state = :pending AND payloadDigest = :payloadDigest AND ownerToken = :ownerToken AND leaseExpiresAtEpochMs >= :nowEpochMs',
+          UpdateExpression:
+            'SET leaseExpiresAtEpochMs = :leaseExpiresAtEpochMs',
+          ExpressionAttributeNames: { '#state': 'state' },
+          ExpressionAttributeValues: {
+            ':pending': 'pending',
+            ':payloadDigest': input.payloadDigest,
+            ':ownerToken': input.ownerToken,
+            ':nowEpochMs': input.nowEpochMs,
+            ':leaseExpiresAtEpochMs': input.leaseExpiresAtEpochMs,
+          },
+        }),
+      );
+    } catch (error) {
+      if (awsErrorName(error) === 'ConditionalCheckFailedException') {
+        throw new AutomaticEvidencePersistenceError('idempotency_conflict', {
+          cause: error,
+        });
+      }
+      throw error;
+    }
+  }
+
+  renewDecisionClaim(input: {
+    idempotencyKey: string;
+    requestDigest: string;
+    ownerToken: string;
+    nowEpochMs: number;
+    leaseExpiresAtEpochMs: number;
+  }) {
+    return this.renewClaim('decision', {
+      ...input,
+      payloadDigest: input.requestDigest,
+    });
+  }
+
+  renewEventClaim(input: {
+    idempotencyKey: string;
+    payloadDigest: string;
+    ownerToken: string;
+    nowEpochMs: number;
+    leaseExpiresAtEpochMs: number;
+  }) {
+    return this.renewClaim('event', input);
   }
 
   private async commit<
@@ -354,7 +491,7 @@ export class DynamoDbAutomaticRecommendationLedger implements AutomaticRecommend
                 TableName: this.options.tableName,
                 Key: { pk: bindingKey, sk: 'BINDING' },
                 ConditionExpression:
-                  '#state = :pending AND payloadDigest = :payloadDigest',
+                  '#state = :pending AND payloadDigest = :payloadDigest AND ownerToken = :ownerToken AND leaseExpiresAtEpochMs >= :nowEpochMs',
                 UpdateExpression:
                   'SET #state = :committed, evidenceKey = :evidenceKey, evidenceVersionId = :evidenceVersionId, evidenceDigest = :evidenceDigest, evidenceSizeBytes = :evidenceSizeBytes, recommendationId = :recommendationId',
                 ExpressionAttributeNames: { '#state': 'state' },
@@ -362,6 +499,8 @@ export class DynamoDbAutomaticRecommendationLedger implements AutomaticRecommend
                   ':pending': 'pending',
                   ':committed': 'committed',
                   ':payloadDigest': payloadDigest,
+                  ':ownerToken': input.ownerToken,
+                  ':nowEpochMs': input.nowEpochMs,
                   ':evidenceKey': pointer.evidenceKey,
                   ':evidenceVersionId': pointer.evidenceVersionId,
                   ':evidenceDigest': pointer.evidenceDigest,
@@ -398,7 +537,8 @@ export class DynamoDbAutomaticRecommendationLedger implements AutomaticRecommend
         existing.evidenceVersionId === pointer.evidenceVersionId &&
         existing.evidenceDigest === pointer.evidenceDigest &&
         existing.evidenceSizeBytes === pointer.evidenceSizeBytes &&
-        existing.payloadDigest === payloadDigest
+        existing.payloadDigest === payloadDigest &&
+        existing.ownerToken === input.ownerToken
       ) {
         return 'replayed';
       }
