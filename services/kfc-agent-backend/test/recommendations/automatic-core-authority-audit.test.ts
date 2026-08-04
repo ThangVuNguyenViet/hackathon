@@ -226,6 +226,7 @@ describe('automatic recommendation single-authority source and config audit', ()
     expect(recommendationDirectories.sort()).toEqual([
       'automatic-core',
       'contracts',
+      'serving',
     ]);
 
     const workflowRoot = path.join(repositoryRoot, '.github/workflows');

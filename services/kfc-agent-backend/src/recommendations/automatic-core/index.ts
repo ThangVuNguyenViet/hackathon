@@ -39,6 +39,7 @@ export type {
   AutomaticQualifiedRecommendationBundle,
   AutomaticRecommendationIdPort,
   AutomaticRecommendationScorerPort,
+  AutomaticScorerRequest,
   AutomaticScoredCandidate,
   AutomaticRecommendationRequest,
   AutomaticRecommendationType,
