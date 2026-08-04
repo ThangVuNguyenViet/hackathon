@@ -1,6 +1,27 @@
 {
   "schemaVersion": "kfc-synthetic-world-qualification-proof-v3",
   "sourceSha": "a37bbab7cd92e2e8d3d2bbc04e1574094f86c317",
+  "authorizationVerificationAmendment": {
+    "implementationSha": "483117f6f8f18ae1649a5991553e692620072ca4",
+    "scope": "recheck canonical qualification precommit write bits at every freeze authorization and untouched-loader verification",
+    "generatedDataChanged": false,
+    "artifactRegenerationRequired": false,
+    "rationale": "verification-only change; generated rows, schemas, manifest, causal semantics, source-contract binding, and artifact digests are unchanged",
+    "freshProcessModeTamper": {
+      "ownerWriteBit": "rejected",
+      "groupWriteBit": "rejected",
+      "otherWriteBit": "rejected"
+    },
+    "gates": {
+      "simulatorRuff": "PASS",
+      "simulatorCompile": "PASS",
+      "simulatorTests": 57,
+      "scorerCompile": "PASS",
+      "scorerTests": 9,
+      "backendAuthorityTests": 5,
+      "gitDiffCheck": "PASS"
+    }
+  },
   "qualification": {
     "workingDirectory": "services/kfc-recommendation-simulator",
     "command": "/usr/bin/time -l uv run --locked --no-dev kfc-recommendation-simulator generate --profile qualification --output /tmp/kfc-round3-r4-qualification.NZUw3z --world-revision synthetic-causal-world-v5",

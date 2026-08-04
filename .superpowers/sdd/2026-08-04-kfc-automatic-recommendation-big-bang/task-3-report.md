@@ -1,13 +1,14 @@
-# Task 3 repair report — evaluation candidate relevance, review-fix round 4
+# Task 3 repair report — evaluation candidate relevance, C8 amendment
 
 ## Result
 
-The round-3 independent-review findings C6, C7, and I4 are repaired at exact
-implementation checkpoint `a37bbab7cd92e2e8d3d2bbc04e1574094f86c317`
-(`fix(recommendations): precommit complete relevance evaluation`). The fresh
-500,000-journey v5 world passed the new semantic audits and all retained Task 3
-causal-world, physical-boundary, cardinality, composer, drift, and information-
-boundary audits.
+The round-3 findings C6, C7, and I4 and the round-4 C8 finding are repaired at
+current implementation checkpoint `483117f6f8f18ae1649a5991553e692620072ca4`
+(`fix(recommendations): reverify precommit immutability`). The fresh
+500,000-journey v5 world generated at
+`a37bbab7cd92e2e8d3d2bbc04e1574094f86c317` passed the semantic audits and all
+retained Task 3 causal-world, physical-boundary, cardinality, composer, drift,
+and information-boundary audits.
 
 No Task 4 model, calibrator, threshold, gate, or bundle behavior was weakened or
 changed. This remains synthetic-only qualification evidence and does not claim
@@ -70,6 +71,23 @@ compatibility with real KFC data or authorize real-customer exposure.
   It predated the selected configuration; digest, source-binding, and
   write-bit audits had zero violations.
 
+## C8 — immutability rechecked at every authorization boundary
+
+- `_verify_precommit` now checks `st_mode & 0o222` every time a precommit is
+  used to authorize configuration freeze or an untouched evaluation loader.
+- Restoring owner, group, or other write access after precommit consumption now
+  fails closed even when the file bytes, SHA-256, manifest binding, birth time,
+  world digest, and source-contract digest remain unchanged.
+- The regression executes the complete precommit-select-freeze-mode-tamper-
+  loader sequence in a fresh Python process. It first failed because mode
+  `0644` still opened untouched rows, then passed after the shared verification
+  check was added.
+- This verification-only repair changes no generated data, schema, manifest,
+  causal equation, relevance value, source-contract input, or artifact digest.
+  The retained 500,000-journey world therefore remains valid; the machine proof
+  records the generation SHA and the later authorization-verification SHA
+  separately.
+
 ## Strict TDD evidence
 
 1. The C6 test first failed because no-recommendation opportunities omitted
@@ -89,15 +107,19 @@ compatibility with real KFC data or authorize real-customer exposure.
 5. Additional C7 red cases covered cross-world reuse and exact-byte token
    replacement after configuration selection. Source/world/digest/birth-order
    verification made both green while preserving the valid fresh-process path.
+6. The C8 fresh-process regression first failed with `write bit 200 was
+   accepted` after changing the canonical precommit to mode `0644`. Rechecking
+   all owner/group/other write bits inside `_verify_precommit` made the complete
+   tamper matrix green.
 
 ## Final 500,000-journey proof
 
 The retained machine proof is
 `.superpowers/sdd/2026-08-04-kfc-automatic-recommendation-big-bang/task-3-qualification-proof.json`.
 Its SHA-256 is
-`c5a09876b4714b26c140c224b195e5300e35fcfebf177010340a78de03f18259`.
+`609f37b6751d00cc6797719d890a77191438ac157cb634646e8008759382815c`.
 
-The exact implementation SHA above generated ten seeds of 50,000 journeys:
+The qualification-data checkpoint generated ten seeds of 50,000 journeys:
 
 - 500,000 journeys, 1,500,000 opportunities, 804,837 exposures, and 4,000,000
   paired oracle rows;
@@ -126,7 +148,7 @@ The exact implementation SHA above generated ten seeds of 50,000 journeys:
 
 - `uv run ruff check .` — PASS.
 - `uv run python -m compileall -q src tests` — PASS.
-- `uv run python -m unittest discover -s tests -v` — PASS: 56 simulator
+- `uv run python -m unittest discover -s tests -v` — PASS: 57 simulator
   tests.
 - `PYTHONPATH=src python3 -m compileall -q src tests` in the scorer — PASS.
 - `PYTHONPATH=src python3 -m unittest discover -s tests -v` in the scorer —
