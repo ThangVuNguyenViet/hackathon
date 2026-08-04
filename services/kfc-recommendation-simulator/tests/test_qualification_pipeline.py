@@ -11,8 +11,8 @@ from kfc_recommendation_simulator.profiles import PROFILES
 
 
 class QualificationSmokePipelineTest(unittest.TestCase):
-    def test_smoke_benchmarks_dual_heads_and_never_partially_promotes(self) -> None:
-        """Catches a challenger/type being skipped or a failed partial release."""
+    def test_smoke_benchmarks_every_family_threshold_and_fails_closed(self) -> None:
+        """Catches test access or fallback when no validation candidate passes."""
 
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
@@ -38,6 +38,7 @@ class QualificationSmokePipelineTest(unittest.TestCase):
             )
 
             self.assertEqual(exit_code, 2)
+            self.assertEqual(evidence["status"], "failed_selection")
             self.assertRegex(evidence["source"]["gitSha"], r"^[a-f0-9]{40}$")
             self.assertEqual(
                 set(evidence["types"]),
@@ -55,31 +56,20 @@ class QualificationSmokePipelineTest(unittest.TestCase):
                 )
                 for challenger in type_evidence["challengers"].values():
                     self.assertEqual(set(challenger["heads"]), {"selection", "joint"})
-                ranking = type_evidence["untouchedTest"]["rankingEvidence"]
-                self.assertEqual(ranking["status"], "evaluated")
-                self.assertGreater(
-                    ranking["eligibleCandidateRows"], ranking["shownCandidateRows"]
-                )
-                self.assertEqual(
-                    ranking["eligibleCandidateRows"], ranking["relevanceRows"]
-                )
-                self.assertTrue(ranking["relevanceOpenedAfterConfigurationFreeze"])
-                self.assertEqual(
-                    set(ranking["combined"]["pairedDifferences"]),
-                    {"model_vs_popularity", "model_vs_random"},
-                )
-                self.assertIn("recallAtK", ranking["combined"])
-            self.assertTrue(evidence["freeze"]["verifiedBeforeUntouchedTest"])
-            self.assertTrue(evidence["freeze"]["verifiedAfterUntouchedTest"])
-            self.assertTrue(evidence["freeze"]["tamperProbeRejected"])
-            if evidence["status"] == "failed_qualification":
-                self.assertFalse((root / "result" / "qualified-model-bundle").exists())
-                self.assertFalse(
-                    any(
-                        "lack evaluation-only candidate-level relevance" in reason
-                        for reason in evidence["failureReasons"]
-                    )
-                )
+                    self.assertEqual(len(challenger["validationThresholds"]), 9)
+                    for head in challenger["heads"].values():
+                        self.assertGreater(head["trainEffectiveSampleSize"], 0)
+                        self.assertGreater(head["calibrationEffectiveSampleSize"], 0)
+                        self.assertGreater(head["validationEffectiveSampleSize"], 0)
+                self.assertEqual(type_evidence["selectionStatus"], "failed")
+                self.assertIsNone(type_evidence["champion"])
+            self.assertTrue(evidence["freeze"]["worldPrecommitVerifiedBeforeSelection"])
+            self.assertFalse(evidence["freeze"]["selectedConfigurationWritten"])
+            self.assertFalse(evidence["freeze"]["untouchedTestOpened"])
+            self.assertFalse(evidence["freeze"]["candidateRelevanceOpened"])
+            self.assertFalse((result_root / "selected-configuration.json").exists())
+            self.assertFalse((result_root / "frozen-configuration.json").exists())
+            self.assertFalse((result_root / "qualified-model-bundle").exists())
 
 
 if __name__ == "__main__":

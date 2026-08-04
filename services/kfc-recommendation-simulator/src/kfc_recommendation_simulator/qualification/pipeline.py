@@ -18,7 +18,7 @@ import pyarrow.parquet as pq
 
 from ..loader import _read_manifest, load_training_table
 from ..schemas import FEATURE_FIELDS, schema_digest
-from .artifacts import emit_qualified_bundle
+from .artifacts import emit_consistent_qualified_bundle
 from .calibration import (
     CalibrationModel,
     enforce_joint_probability_bound,
@@ -43,7 +43,18 @@ from .models import (
     fit_binary_model,
     save_native_model,
 )
+from .policy_evaluation import (
+    POLICY_OUTCOME_DEFINITION,
+    evaluate_learned_policy_outcomes,
+    journey_clustered_weighted_interval,
+)
 from .ranking import InsufficientRankingEvidence, evaluate_opportunity_ndcg
+from .selection import (
+    CHAMPION_SELECTION_ORDER,
+    NoEligibleChallengerError,
+    select_gate_first_champion,
+)
+from .validation import evaluate_validation_thresholds
 from .weighting import (
     clipped_inverse_propensity_weights,
     effective_sample_size,
@@ -265,14 +276,13 @@ def _base_configuration(manifest: Mapping[str, Any]) -> dict[str, Any]:
             "isotonicMinimumBrierImprovement": 0.002,
         },
         "thresholdSelection": {
-            "objectiveOrder": [
-                "retained_value_lower_95",
-                "retained_value_mean",
-                "coverage",
-                "smaller_threshold",
-            ],
             "candidates": [0.0, 0.01, 0.02, 0.03, 0.05, 0.075, 0.1, 0.15, 0.2],
         },
+        "validationCandidateGates": list(
+            ("calibration", "coverage", "ranking", "business", "validity")
+        ),
+        "championSelectionOrder": list(CHAMPION_SELECTION_ORDER),
+        "policyOutcomeDefinition": POLICY_OUTCOME_DEFINITION,
         "featureContract": _feature_contract(),
         "composerContract": COMPOSER_CONTRACT,
         "promotionGates": GATE_CONFIGURATION,
@@ -382,15 +392,28 @@ class _TrainedType:
     threshold_path: Path
 
 
+class _TypeSelectionFailure(NoEligibleChallengerError):
+    def __init__(self, recommendation_type: str, evidence: dict[str, Any]) -> None:
+        super().__init__(
+            f"{recommendation_type}: no challenger passed every validation gate"
+        )
+        self.recommendation_type = recommendation_type
+        self.evidence = evidence
+
+
 def _train_type(
     table: pa.Table,
     recommendation_type: str,
     staging: Path,
     configuration: Mapping[str, Any],
+    source_facts: Mapping[str, Mapping[str, Any]],
 ) -> _TrainedType:
     training_rows = _filter_rows(table, recommendation_type, "training")
     calibration_rows = _filter_rows(table, recommendation_type, "calibration")
     validation_rows = _filter_rows(table, recommendation_type, "validation")
+    validation_all_rows = _filter_rows(
+        table, recommendation_type, "validation", shown_only=False
+    )
     if not training_rows or not calibration_rows or not validation_rows:
         raise ValueError(f"insufficient split support for {recommendation_type}")
     encoder = FeatureEncoder.fit(
@@ -401,7 +424,10 @@ def _train_type(
     )
     train_x = encoder.transform(training_rows)
     calibration_x = encoder.transform(calibration_rows)
-    validation_x = encoder.transform(validation_rows)
+    validation_x = encoder.transform(validation_all_rows)
+    validation_shown_indices = [
+        index for index, row in enumerate(validation_all_rows) if row["shown"]
+    ]
     maximum_weight = float(configuration["inversePropensityMaximumWeight"])
     challengers: dict[str, _Challenger] = {}
     for family in MODEL_FAMILIES:
@@ -451,9 +477,17 @@ def _train_type(
                 "validationRows": len(validation_rows),
                 "trainPositiveCount": int(train_y.sum()),
                 "trainEffectiveSampleSize": effective_sample_size(train_weights),
+                "calibrationEffectiveSampleSize": effective_sample_size(
+                    calibration_weights
+                ),
+                "validationEffectiveSampleSize": effective_sample_size(
+                    validation_weights
+                ),
                 "calibration": calibration_evidence,
                 "validation": binary_metrics(
-                    validation_y, validation_probability, validation_weights
+                    validation_y,
+                    validation_probability[validation_shown_indices],
+                    validation_weights,
                 ),
                 "modelFormat": (
                     "logistic-coefficients-json"
@@ -480,7 +514,28 @@ def _train_type(
             validation_rows, HEAD_LABELS["selection"], maximum_weight
         )
         head_evidence["joint"]["validation"] = binary_metrics(
-            joint_y, probabilities["joint"], validation_weights
+            joint_y,
+            probabilities["joint"][validation_shown_indices],
+            validation_weights,
+        )
+        validation_thresholds = evaluate_validation_thresholds(
+            recommendation_type=recommendation_type,
+            rows=validation_all_rows,
+            selection_probability=probabilities["selection"],
+            joint_probability=probabilities["joint"],
+            thresholds=configuration["thresholdSelection"]["candidates"],
+            desired_size_by_journey={
+                journey_id: int(facts["desiredSmartSlateSize"])
+                for journey_id, facts in source_facts.items()
+            },
+            maximum_weight=maximum_weight,
+            maximum_ece=float(configuration["promotionGates"]["maximumEce"]),
+            coverage_fraction=float(
+                configuration["promotionGates"]["coverageFractionOfBetterBaseline"]
+            ),
+            ranking_lower_bound=float(
+                configuration["promotionGates"]["rankingPairedLower95MustExceed"]
+            ),
         )
         artifact_bytes = sum(
             artifact.model_path.stat().st_size for artifact in artifacts.values()
@@ -495,30 +550,62 @@ def _train_type(
                 "heads": head_evidence,
                 "artifactBytes": artifact_bytes,
                 "validationSelectionBrier": binary_metrics(
-                    selection_y, probabilities["selection"], validation_weights
+                    selection_y,
+                    probabilities["selection"][validation_shown_indices],
+                    validation_weights,
                 )["brier"],
                 "validationJointBrier": head_evidence["joint"]["validation"]["brier"],
+                "validationThresholds": validation_thresholds,
             },
         )
-    champion = min(
-        challengers.values(),
-        key=lambda challenger: (
-            challenger.evidence["validationJointBrier"],
-            challenger.evidence["validationSelectionBrier"],
-            challenger.evidence["artifactBytes"],
-            challenger.family,
-        ),
-    )
-    joint_y, validation_weights = _labels_weights(
-        validation_rows, HEAD_LABELS["joint"], maximum_weight
-    )
-    threshold, threshold_evidence = _select_threshold(
-        champion.validation_probability["joint"],
-        joint_y,
-        np.asarray([row["priceImpactVnd"] for row in validation_rows], dtype=float),
-        validation_weights,
-        configuration["thresholdSelection"]["candidates"],
-    )
+    selection_candidates = {
+        f"{family}@{threshold}": {
+            "gates": threshold_evidence["gates"],
+            "retainedRevenueLower95Vnd": threshold_evidence[
+                "retainedRevenuePerOpportunityVnd95"
+            ]["lower95"],
+            "aovLower95Vnd": threshold_evidence["aovVnd95"]["lower95"],
+            "rankingLower95": threshold_evidence["rankingLower95"],
+            "artifactBytes": challenger.evidence["artifactBytes"],
+        }
+        for family, challenger in challengers.items()
+        for threshold, threshold_evidence in challenger.evidence[
+            "validationThresholds"
+        ].items()
+    }
+    selection_evidence = {
+        "splitRows": {
+            "training": len(training_rows),
+            "calibration": len(calibration_rows),
+            "validation": len(validation_rows),
+            "validationEligible": len(validation_all_rows),
+        },
+        "featureCount": len(encoder.feature_names),
+        "challengers": {
+            family: challenger.evidence for family, challenger in challengers.items()
+        },
+        "championSelectionOrder": list(CHAMPION_SELECTION_ORDER),
+        "untouchedTestRowsObservedDuringSelection": 0,
+    }
+    try:
+        champion_key = select_gate_first_champion(selection_candidates)
+    except NoEligibleChallengerError as error:
+        raise _TypeSelectionFailure(
+            recommendation_type,
+            selection_evidence
+            | {
+                "selectionStatus": "failed",
+                "champion": None,
+                "championCandidate": None,
+                "failureReason": str(error),
+            },
+        ) from error
+    champion_family, threshold_text = champion_key.split("@", maxsplit=1)
+    champion = challengers[champion_family]
+    threshold = float(threshold_text)
+    threshold_evidence = champion.evidence["validationThresholds"][
+        str(float(threshold))
+    ]
     type_root = staging / recommendation_type
     encoder_path = type_root / "feature-encoder.json"
     encoder_path.write_bytes(_canonical_json(encoder.to_dict(), pretty=True))
@@ -534,32 +621,19 @@ def _train_type(
                 "schemaVersion": "kfc-abstention-threshold-v1",
                 "recommendationType": recommendation_type,
                 "threshold": threshold,
-                "selectionEvidence": threshold_evidence,
+                "validationPolicyEvidence": threshold_evidence,
             },
             pretty=True,
         )
     )
-    evidence = {
-        "splitRows": {
-            "training": len(training_rows),
-            "calibration": len(calibration_rows),
-            "validation": len(validation_rows),
-        },
-        "featureCount": len(encoder.feature_names),
+    evidence = selection_evidence | {
         "featureEncoderSha256": _sha256(encoder_path),
-        "challengers": {
-            family: challenger.evidence for family, challenger in challengers.items()
-        },
+        "selectionStatus": "passed",
         "champion": champion.family,
-        "championSelectionOrder": [
-            "validationJointBrier",
-            "validationSelectionBrier",
-            "artifactBytes",
-            "familyIdentity",
-        ],
+        "championCandidate": champion_key,
+        "championSelectionOrder": list(CHAMPION_SELECTION_ORDER),
         "abstentionThreshold": threshold,
         "thresholdSelection": threshold_evidence,
-        "untouchedTestRowsObservedDuringSelection": 0,
     }
     return _TrainedType(
         recommendation_type,
@@ -578,7 +652,7 @@ def _stable_random_score(seed: int, opportunity: str, candidate: str) -> float:
     return int.from_bytes(digest[:8], "big") / 2**64
 
 
-def _source_slices(world: Path) -> dict[str, dict[str, Any]]:
+def _source_facts(world: Path, *, split: str) -> dict[str, dict[str, Any]]:
     table = pq.read_table(
         world / "source" / "journeys.parquet",
         columns=[
@@ -594,7 +668,7 @@ def _source_slices(world: Path) -> dict[str, dict[str, Any]]:
             "desiredSmartSlateSize",
         ],
     )
-    table = table.filter(pc.equal(table["split"], "untouched_test"))
+    table = table.filter(pc.equal(table["split"], split))
     return {row["journeyId"]: row for row in table.to_pylist()}
 
 
@@ -646,7 +720,7 @@ def _evaluate_type(
     relevance_table: pa.Table,
     source_facts: Mapping[str, Mapping[str, Any]],
     configuration: Mapping[str, Any],
-) -> tuple[dict[str, Any], bool]:
+) -> tuple[dict[str, Any], bool, dict[str, list[dict[str, Any]]]]:
     rows = _filter_rows(
         test_table,
         trained.recommendation_type,
@@ -715,6 +789,10 @@ def _evaluate_type(
         lambda: defaultdict(list)
     )
     shown_indices_by_seed_slice: dict[tuple[int, str], list[int]] = defaultdict(list)
+    invalid_by_seed_slice: dict[tuple[int, str], dict[str, int]] = defaultdict(
+        lambda: defaultdict(int)
+    )
+    policy_decisions: dict[str, list[dict[str, Any]]] = defaultdict(list)
     combined_ndcg: dict[str, list[float]] = defaultdict(list)
     combined_recall: dict[str, list[float]] = defaultdict(list)
     per_seed_ndcg: dict[int, dict[str, list[float]]] = defaultdict(
@@ -724,9 +802,7 @@ def _evaluate_type(
         lambda: defaultdict(list)
     )
     invalid = {
-        "jointProbabilityAboveSelection": int(
-            np.sum(joint_probability > selection_probability)
-        ),
+        "jointProbabilityAboveSelection": 0,
         "invalidComposerCardinality": 0,
         "paddingViolations": 0,
         "eligibilityViolations": 0,
@@ -780,8 +856,39 @@ def _evaluate_type(
         valid_cardinality = len(composed) in (
             {0, 3, 4} if trained.recommendation_type == "smart_cross_sell" else {0, 1}
         )
-        if not valid_cardinality:
-            invalid["invalidComposerCardinality"] += 1
+        local_invalid = {
+            "jointProbabilityAboveSelection": int(
+                np.sum(joint_probability[indices] > selection_probability[indices])
+            ),
+            "invalidComposerCardinality": int(not valid_cardinality),
+            "paddingViolations": int(
+                trained.recommendation_type == "smart_cross_sell"
+                and 0 < len(composed) < 3
+            ),
+            "eligibilityViolations": sum(
+                candidate.candidate_id
+                not in {str(row["candidateId"]) for row in candidate_rows}
+                for candidate in composed
+            ),
+            "modifierValidityViolations": 0,
+        }
+        if trained.recommendation_type == "modifier_upsell":
+            row_by_candidate = {
+                str(row["candidateId"]): row for row in candidate_rows
+            }
+            local_invalid["modifierValidityViolations"] = sum(
+                not bool(
+                    row_by_candidate[candidate.candidate_id][
+                        "modifierOptionAvailable"
+                    ]
+                )
+                or not bool(
+                    row_by_candidate[candidate.candidate_id]["modifierOptionSafe"]
+                )
+                for candidate in composed
+            )
+        for name, count in local_invalid.items():
+            invalid[name] += count
         facts = source_facts[str(candidate_rows[0]["journeyId"])]
         random_order = sorted(
             indices,
@@ -884,11 +991,29 @@ def _evaluate_type(
 
         random_composed = baseline_composed(random_order)
         popularity_composed = baseline_composed(popularity_order)
+        for policy, policy_composed in (
+            ("learned", composed),
+            ("random", random_composed),
+            ("popularity", popularity_composed),
+        ):
+            policy_decisions[policy].append(
+                {
+                    "seed": seed,
+                    "journeyId": str(candidate_rows[0]["journeyId"]),
+                    "opportunityId": opportunity,
+                    "recommendationType": trained.recommendation_type,
+                    "candidateIds": [
+                        candidate.candidate_id for candidate in policy_composed
+                    ],
+                }
+            )
         for slice_name in _slice_names(facts):
             values = coverage_by_seed_slice[(seed, slice_name)]
             values["model"].append(int(bool(composed)))
             values["random"].append(int(bool(random_composed)))
             values["popularity"].append(int(bool(popularity_composed)))
+            for name, count in local_invalid.items():
+                invalid_by_seed_slice[(seed, slice_name)][name] += count
         for index in indices:
             if not rows[index]["shown"]:
                 continue
@@ -903,7 +1028,12 @@ def _evaluate_type(
         required = max(random_coverage, popularity_coverage) * float(
             GATE_CONFIGURATION["coverageFractionOfBetterBaseline"]
         )
-        passed = model_coverage >= required
+        coverage_pass = model_coverage >= required
+        slice_invalid = {
+            key: invalid_by_seed_slice[(seed, slice_name)].get(key, 0)
+            for key in invalid
+        }
+        passed = coverage_pass and all(value == 0 for value in slice_invalid.values())
         slice_pass = slice_pass and passed
         slice_indices = shown_indices_by_seed_slice[(seed, slice_name)]
         slice_rows = [rows[index] for index in slice_indices]
@@ -934,7 +1064,7 @@ def _evaluate_type(
                 slice_selection_y.astype(float)
             ),
             "jointOutcomeInterval95": normal_mean_interval(slice_joint_y.astype(float)),
-            "invalidCounters": {key: 0 for key in invalid},
+            "invalidCounters": slice_invalid,
             "passed": passed,
         }
     selection_metrics = binary_metrics(
@@ -996,107 +1126,236 @@ def _evaluate_type(
         },
         "passed": gate,
     }
-    return evidence, gate
+    return evidence, gate, dict(policy_decisions)
 
 
-def _paired_aov_interval(
-    left_revenue: np.ndarray,
-    left_checkout: np.ndarray,
-    right_revenue: np.ndarray,
-    right_checkout: np.ndarray,
-) -> dict[str, float]:
-    left_rate = float(left_checkout.mean())
-    right_rate = float(right_checkout.mean())
-    left_aov = float(left_revenue.sum() / max(1, left_checkout.sum()))
-    right_aov = float(right_revenue.sum() / max(1, right_checkout.sum()))
-    influence = (left_revenue - left_aov * left_checkout) / max(left_rate, 1e-12) - (
-        right_revenue - right_aov * right_checkout
-    ) / max(right_rate, 1e-12)
-    interval = normal_mean_interval(influence)
-    difference = left_aov - right_aov
-    half_width = interval["upper95"] - interval["estimate"]
-    return {
-        "estimate": difference,
-        "lower95": difference - half_width,
-        "upper95": difference + half_width,
-        "leftAov": left_aov,
-        "rightAov": right_aov,
-    }
-
-
-def _business_comparison(
-    left: Mapping[str, list[float]], right: Mapping[str, list[float]]
+def _learned_business_comparison(
+    left_rows: list[Mapping[str, Any]], right_rows: list[Mapping[str, Any]]
 ) -> dict[str, Any]:
-    left_revenue = np.asarray(left["revenue"], dtype=float)
-    right_revenue = np.asarray(right["revenue"], dtype=float)
-    left_checkout = np.asarray(left["checkout"], dtype=float)
-    right_checkout = np.asarray(right["checkout"], dtype=float)
-    return {
-        "journeys": len(left_revenue),
-        "aovDifferenceVnd95": _paired_aov_interval(
-            left_revenue, left_checkout, right_revenue, right_checkout
-        ),
-        "revenuePerStartedJourneyDifferenceVnd95": normal_mean_interval(
-            left_revenue - right_revenue
-        ),
-        "checkoutConversionDifference95": normal_mean_interval(
-            left_checkout - right_checkout
-        ),
-        "abandonmentDifference95": normal_mean_interval(
-            (1.0 - left_checkout) - (1.0 - right_checkout)
-        ),
-    }
-
-
-def _business_evidence(
-    world: Path, source_facts: Mapping[str, Mapping[str, Any]]
-) -> dict[str, Any]:
-    journey_ids = set(source_facts)
-    values: dict[int, dict[str, dict[str, list[float]]]] = defaultdict(
-        lambda: defaultdict(lambda: {"revenue": [], "checkout": []})
+    left = {str(row["journeyId"]): row for row in left_rows}
+    right = {str(row["journeyId"]): row for row in right_rows}
+    if set(left) != set(right):
+        raise ValueError("business policies must cover exactly paired journeys")
+    journey_ids = sorted(left)
+    weights = [
+        (float(left[journey_id]["weight"]) + float(right[journey_id]["weight"]))
+        / 2
+        for journey_id in journey_ids
+    ]
+    left_revenue = [
+        float(left[journey_id]["finalMerchandiseSubtotalVnd"])
+        for journey_id in journey_ids
+    ]
+    right_revenue = [
+        float(right[journey_id]["finalMerchandiseSubtotalVnd"])
+        for journey_id in journey_ids
+    ]
+    left_checkout = [
+        float(left[journey_id]["checkout"]) for journey_id in journey_ids
+    ]
+    right_checkout = [
+        float(right[journey_id]["checkout"]) for journey_id in journey_ids
+    ]
+    weighted_left_checkout = sum(
+        value * weight
+        for value, weight in zip(left_checkout, weights, strict=True)
     )
+    weighted_right_checkout = sum(
+        value * weight
+        for value, weight in zip(right_checkout, weights, strict=True)
+    )
+    left_aov = sum(
+        value * weight
+        for value, weight in zip(left_revenue, weights, strict=True)
+    ) / max(weighted_left_checkout, 1e-12)
+    right_aov = sum(
+        value * weight
+        for value, weight in zip(right_revenue, weights, strict=True)
+    ) / max(weighted_right_checkout, 1e-12)
+    total_weight = sum(weights)
+    left_rate = weighted_left_checkout / total_weight
+    right_rate = weighted_right_checkout / total_weight
+    aov_influence = [
+        (left_value - left_aov * left_converted) / max(left_rate, 1e-12)
+        - (right_value - right_aov * right_converted)
+        / max(right_rate, 1e-12)
+        for left_value, left_converted, right_value, right_converted in zip(
+            left_revenue,
+            left_checkout,
+            right_revenue,
+            right_checkout,
+            strict=True,
+        )
+    ]
+    aov_influence_interval = journey_clustered_weighted_interval(
+        values=aov_influence,
+        weights=weights,
+        journey_ids=journey_ids,
+    )
+    aov_difference = left_aov - right_aov
+    aov_half_width = float(aov_influence_interval["upper95"]) - float(
+        aov_influence_interval["estimate"]
+    )
+
+    def paired_interval(values: list[float]) -> dict[str, float | int]:
+        return journey_clustered_weighted_interval(
+            values=values,
+            weights=weights,
+            journey_ids=journey_ids,
+        )
+
+    return {
+        "journeys": len(journey_ids),
+        "effectiveSampleSize": float(
+            sum(weights) ** 2 / sum(weight * weight for weight in weights)
+        ),
+        "aovDifferenceVnd95": {
+            "estimate": aov_difference,
+            "lower95": aov_difference - aov_half_width,
+            "upper95": aov_difference + aov_half_width,
+            "leftAov": left_aov,
+            "rightAov": right_aov,
+            "journeyClusterCount": len(journey_ids),
+        },
+        "revenuePerStartedJourneyDifferenceVnd95": paired_interval(
+            [
+                left_value - right_value
+                for left_value, right_value in zip(
+                    left_revenue, right_revenue, strict=True
+                )
+            ]
+        ),
+        "checkoutConversionDifference95": paired_interval(
+            [
+                left_value - right_value
+                for left_value, right_value in zip(
+                    left_checkout, right_checkout, strict=True
+                )
+            ]
+        ),
+        "abandonmentDifference95": paired_interval(
+            [
+                (1.0 - left_value) - (1.0 - right_value)
+                for left_value, right_value in zip(
+                    left_checkout, right_checkout, strict=True
+                )
+            ]
+        ),
+    }
+
+
+def _no_recommendation_baseline(
+    world: Path, source_facts: Mapping[str, Mapping[str, Any]]
+) -> dict[str, dict[str, Any]]:
+    journey_ids = set(source_facts)
+    baseline: dict[str, dict[str, Any]] = {}
     parquet = pq.ParquetFile(world / "oracle" / "potential-outcomes.parquet")
     columns = [
         "seed",
         "journeyId",
         "condition",
+        "baseCartSubtotalVnd",
         "checkout",
         "finalMerchandiseSubtotalVnd",
     ]
     for batch in parquet.iter_batches(batch_size=100_000, columns=columns):
         for row in batch.to_pylist():
-            if row["journeyId"] not in journey_ids:
-                continue
-            target = values[int(row["seed"])][str(row["condition"])]
-            target["revenue"].append(float(row["finalMerchandiseSubtotalVnd"]))
-            target["checkout"].append(float(row["checkout"]))
+            journey_id = str(row["journeyId"])
+            if (
+                journey_id in journey_ids
+                and row["condition"] == "no_recommendation"
+            ):
+                baseline[journey_id] = row
+    if set(baseline) != journey_ids:
+        raise ValueError("no-recommendation oracle lacks paired journey support")
+    return baseline
+
+
+def _business_evidence(
+    world: Path,
+    source_facts: Mapping[str, Mapping[str, Any]],
+    relevance_table: pa.Table,
+    decisions_by_type: Mapping[str, Mapping[str, list[dict[str, Any]]]],
+) -> dict[str, Any]:
+    baseline = _no_recommendation_baseline(world, source_facts)
+    relevance_by_candidate = {
+        (int(row["seed"]), str(row["opportunityId"]), str(row["candidateId"])): row
+        for row in relevance_table.to_pylist()
+    }
+    combined_decisions = [
+        decision
+        for recommendation_type in RECOMMENDATION_TYPES
+        for decision in decisions_by_type[recommendation_type]["learned"]
+    ]
+    policies: dict[str, list[dict[str, Any]]] = {
+        "learned": evaluate_learned_policy_outcomes(
+            baseline,
+            relevance_by_candidate,
+            combined_decisions,
+            policy_name="learned_frozen_champions_and_composer",
+        ),
+        "no_recommendation": evaluate_learned_policy_outcomes(
+            baseline, relevance_by_candidate, [], policy_name="no_recommendation"
+        ),
+    }
+    for policy in ("random", "popularity"):
+        decisions = [
+            decision
+            for recommendation_type in RECOMMENDATION_TYPES
+            for decision in decisions_by_type[recommendation_type][policy]
+        ]
+        policies[policy] = evaluate_learned_policy_outcomes(
+            baseline,
+            relevance_by_candidate,
+            decisions,
+            policy_name=policy,
+        )
+    for recommendation_type in RECOMMENDATION_TYPES:
+        decisions = [
+            decision
+            for other_type in RECOMMENDATION_TYPES
+            if other_type != recommendation_type
+            for decision in decisions_by_type[other_type]["learned"]
+        ]
+        policies[f"ablate_{recommendation_type}"] = (
+            evaluate_learned_policy_outcomes(
+                baseline,
+                relevance_by_candidate,
+                decisions,
+                policy_name=f"ablate_{recommendation_type}",
+            )
+        )
     comparisons = {
         "combined_vs_no_recommendation": "no_recommendation",
-        "combined_vs_random": "random_eligible",
+        "combined_vs_random": "random",
         "combined_vs_popularity": "popularity",
         **{
             f"{recommendation_type}_vs_ablation": f"ablate_{recommendation_type}"
             for recommendation_type in RECOMMENDATION_TYPES
         },
     }
-    per_seed: dict[str, Any] = {}
-    combined: dict[str, dict[str, list[float]]] = defaultdict(
-        lambda: {"revenue": [], "checkout": []}
-    )
-    for seed, conditions in sorted(values.items()):
-        per_seed[str(seed)] = {}
-        for name, right_condition in comparisons.items():
-            per_seed[str(seed)][name] = _business_comparison(
-                conditions["automatic"], conditions[right_condition]
+    seeds = sorted({int(row["seed"]) for row in policies["learned"]})
+    per_seed = {
+        str(seed): {
+            name: _learned_business_comparison(
+                [row for row in policies["learned"] if int(row["seed"]) == seed],
+                [row for row in policies[right] if int(row["seed"]) == seed],
             )
-        for condition, metrics in conditions.items():
-            combined[condition]["revenue"].extend(metrics["revenue"])
-            combined[condition]["checkout"].extend(metrics["checkout"])
-    combined_comparisons = {
-        name: _business_comparison(combined["automatic"], combined[right_condition])
-        for name, right_condition in comparisons.items()
+            for name, right in comparisons.items()
+        }
+        for seed in seeds
     }
-    return {"perSeed": per_seed, "combined": combined_comparisons}
+    combined = {
+        name: _learned_business_comparison(policies["learned"], policies[right])
+        for name, right in comparisons.items()
+    }
+    return {
+        "policyOutcomeDefinition": POLICY_OUTCOME_DEFINITION,
+        "oracleConditionsRead": ["no_recommendation"],
+        "learnedPolicyBound": True,
+        "perSeed": per_seed,
+        "combined": combined,
+    }
 
 
 def _business_gate(comparison: Mapping[str, Any], *, require_positive: bool) -> bool:
@@ -1120,8 +1379,8 @@ def _business_gate(comparison: Mapping[str, Any], *, require_positive: bool) -> 
 class QualificationResult:
     status: str
     evidence_path: Path
-    selected_configuration_path: Path
-    frozen_configuration_path: Path
+    selected_configuration_path: Path | None
+    frozen_configuration_path: Path | None
     bundle_path: Path | None
 
 
@@ -1143,13 +1402,88 @@ def run_model_qualification(
     if "untouched_test" in set(training_table["split"].to_pylist()):
         raise AssertionError("selection loader exposed untouched test")
     trained_types: dict[str, _TrainedType] = {}
+    selection_failures: dict[str, dict[str, Any]] = {}
+    validation_source_facts = _source_facts(world, split="validation")
     try:
         for recommendation_type in RECOMMENDATION_TYPES:
-            trained_types[recommendation_type] = _train_type(
-                training_table,
-                recommendation_type,
-                staging,
-                configuration,
+            try:
+                trained_types[recommendation_type] = _train_type(
+                    training_table,
+                    recommendation_type,
+                    staging,
+                    configuration,
+                    validation_source_facts,
+                )
+            except _TypeSelectionFailure as error:
+                selection_failures[recommendation_type] = error.evidence
+        if selection_failures:
+            type_evidence = {
+                recommendation_type: (
+                    selection_failures[recommendation_type]
+                    if recommendation_type in selection_failures
+                    else trained_types[recommendation_type].evidence
+                )
+                for recommendation_type in RECOMMENDATION_TYPES
+            }
+            evidence = {
+                "schemaVersion": "kfc-model-qualification-evidence-v2",
+                "status": "failed_selection",
+                "syntheticOnlyDisclaimer": SYNTHETIC_ONLY_DISCLAIMER,
+                "profile": manifest["profile"],
+                "source": configuration["source"],
+                "world": {
+                    "worldDigest": manifest["worldDigest"],
+                    "manifestSha256": _sha256(
+                        world / "manifests" / "synthetic-world.json"
+                    ),
+                },
+                "freeze": {
+                    "worldPrecommitVerifiedBeforeSelection": True,
+                    "worldPrecommitSha256": precommit.evidence_sha256,
+                    "selectedConfigurationWritten": False,
+                    "configurationFrozen": False,
+                    "untouchedTestOpened": False,
+                    "candidateRelevanceOpened": False,
+                },
+                "libraries": configuration["libraries"],
+                "types": type_evidence,
+                "gates": {
+                    "validationSelection": {
+                        recommendation_type: recommendation_type
+                        not in selection_failures
+                        for recommendation_type in RECOMMENDATION_TYPES
+                    },
+                    "atomicAllFour": False,
+                },
+                "artifactInventory": _artifact_evidence(
+                    staging.rglob("*"), staging
+                ),
+                "servingBundleEmitted": False,
+                "failureReasons": [
+                    f"{recommendation_type}: no family/threshold candidate passed "
+                    "every pre-freeze validation gate"
+                    for recommendation_type in RECOMMENDATION_TYPES
+                    if recommendation_type in selection_failures
+                ],
+            }
+            evidence_path = output / "qualification-evidence.json"
+            evidence_path.write_bytes(_canonical_json(evidence, pretty=True))
+            status_path = output / "qualification-status.json"
+            status_path.write_bytes(
+                _canonical_json(
+                    {
+                        "schemaVersion": "kfc-model-qualification-status-v1",
+                        "status": "failed_selection",
+                        "bundlePath": None,
+                        "evidenceSha256": _sha256(evidence_path),
+                        "syntheticOnlyDisclaimer": SYNTHETIC_ONLY_DISCLAIMER,
+                    },
+                    pretty=True,
+                )
+            )
+            shutil.rmtree(staging)
+            return QualificationResult(
+                "failed_selection", evidence_path, None, None, None
             )
         feature_contract_digest = _digest_value(configuration["featureContract"])
         composer_contract_digest = _digest_value(configuration["composerContract"])
@@ -1198,20 +1532,24 @@ def run_model_qualification(
         relevance_table = load_untouched_candidate_relevance_table(
             world, selected_path, frozen
         )
-        source_facts = _source_slices(world)
+        source_facts = _source_facts(world, split="untouched_test")
         type_gates: dict[str, bool] = {}
+        decisions_by_type: dict[str, dict[str, list[dict[str, Any]]]] = {}
         for recommendation_type, trained in trained_types.items():
-            test_evidence, model_gate = _evaluate_type(
+            test_evidence, model_gate, policy_decisions = _evaluate_type(
                 trained, test_table, relevance_table, source_facts, selected
             )
             trained.evidence["untouchedTest"] = test_evidence
             type_gates[recommendation_type] = model_gate
-        business = _business_evidence(world, source_facts)
+            decisions_by_type[recommendation_type] = policy_decisions
+        business = _business_evidence(
+            world, source_facts, relevance_table, decisions_by_type
+        )
         for recommendation_type in RECOMMENDATION_TYPES:
             comparison = business["combined"][f"{recommendation_type}_vs_ablation"]
             business_pass = _business_gate(comparison, require_positive=False)
             trained_types[recommendation_type].evidence["businessGate"] = {
-                "comparison": f"automatic_vs_ablate_{recommendation_type}",
+                "comparison": f"learned_vs_ablate_{recommendation_type}",
                 "metrics": comparison,
                 "passed": business_pass,
             }
@@ -1311,11 +1649,9 @@ def run_model_qualification(
                 *([] if combined_gate else ["combined: promotion gate failed"]),
             ]
         evidence_path = output / "qualification-evidence.json"
-        evidence_path.write_bytes(_canonical_json(evidence, pretty=True))
         bundle_path: Path | None = None
         if status == "qualified":
             payload_files: dict[str, Path] = {
-                "evidence/qualification-evidence.json": evidence_path,
                 "configuration/selected-configuration.json": selected_path,
                 "configuration/frozen-configuration.json": frozen_path,
             }
@@ -1334,10 +1670,6 @@ def run_model_qualification(
                     payload_files[f"{prefix}/{head}/golden-predictions.json"] = (
                         artifact.golden_predictions_path
                     )
-            qualification_evidence_digest = _sha256(evidence_path)
-            payload_digests = {
-                relative: _sha256(path) for relative, path in payload_files.items()
-            }
             bundle_binding = {
                 "schemaVersion": "kfc-qualified-model-bundle-v1",
                 "syntheticOnlyDisclaimer": SYNTHETIC_ONLY_DISCLAIMER,
@@ -1346,7 +1678,6 @@ def run_model_qualification(
                 "featureContractDigest": feature_contract_digest,
                 "composerContractDigest": composer_contract_digest,
                 "configurationDigest": _sha256(selected_path),
-                "qualificationEvidenceDigest": qualification_evidence_digest,
                 "qualificationRunIds": [
                     f"synthetic-{seed}" for seed in manifest["profile"]["seeds"]
                 ],
@@ -1355,20 +1686,17 @@ def run_model_qualification(
                     for recommendation_type, trained in trained_types.items()
                 },
                 "libraries": selected["libraries"],
-                "payloadDigests": payload_digests,
             }
-            bundle_manifest = bundle_binding | {
-                "bundleDigest": _digest_value(bundle_binding)
-            }
-            bundle_path = emit_qualified_bundle(
+            bundle_path, _ = emit_consistent_qualified_bundle(
                 output / "qualified-model-bundle",
+                evidence_path=evidence_path,
+                evidence=evidence,
                 type_gate_results=type_gates,
                 combined_gate_result=combined_gate,
                 payload_files=payload_files,
-                manifest=bundle_manifest,
+                manifest_binding=bundle_binding,
             )
-            evidence["servingBundleEmitted"] = True
-            evidence["qualifiedBundleDigest"] = bundle_manifest["bundleDigest"]
+        else:
             evidence_path.write_bytes(_canonical_json(evidence, pretty=True))
         shutil.rmtree(staging)
         status_path = output / "qualification-status.json"

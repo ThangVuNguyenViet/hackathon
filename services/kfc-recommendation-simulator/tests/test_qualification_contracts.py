@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import json
 import tempfile
 import unittest
@@ -11,6 +12,7 @@ from kfc_recommendation_simulator.generator import generate_world
 from kfc_recommendation_simulator.profiles import GenerationProfile
 from kfc_recommendation_simulator.qualification.artifacts import (
     AtomicBundleError,
+    emit_consistent_qualified_bundle,
     emit_qualified_bundle,
 )
 from kfc_recommendation_simulator.qualification.calibration import (
@@ -202,6 +204,53 @@ class AtomicBundleTest(unittest.TestCase):
                     manifest={"syntheticOnly": True},
                 )
             self.assertFalse(output.exists())
+
+    def test_success_bundle_and_external_evidence_are_one_immutable_value(self) -> None:
+        """Catches copying false evidence then mutating only the external file."""
+
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            payload = root / "model.json"
+            payload.write_text('{"model":"qualified"}\n', encoding="utf-8")
+            external_evidence = root / "qualification-evidence.json"
+
+            bundle, manifest = emit_consistent_qualified_bundle(
+                root / "qualified-model-bundle",
+                evidence_path=external_evidence,
+                evidence={
+                    "schemaVersion": "test-qualification-v1",
+                    "status": "qualified",
+                    "servingBundleEmitted": False,
+                },
+                type_gate_results={
+                    "local_favorite": True,
+                    "for_you": True,
+                    "modifier_upsell": True,
+                    "smart_cross_sell": True,
+                },
+                combined_gate_result=True,
+                payload_files={"models/model.json": payload},
+                manifest_binding={"schemaVersion": "test-bundle-v1"},
+            )
+
+            internal_evidence = bundle / "evidence/qualification-evidence.json"
+            self.assertEqual(
+                internal_evidence.read_bytes(), external_evidence.read_bytes()
+            )
+            self.assertEqual(internal_evidence.stat().st_mode & 0o222, 0)
+            self.assertEqual(external_evidence.stat().st_mode & 0o222, 0)
+            value = json.loads(internal_evidence.read_text(encoding="utf-8"))
+            self.assertTrue(value["servingBundleEmitted"])
+            evidence_digest = hashlib.sha256(internal_evidence.read_bytes()).hexdigest()
+            self.assertEqual(manifest["qualificationEvidenceDigest"], evidence_digest)
+            self.assertEqual(
+                manifest["payloadDigests"]["evidence/qualification-evidence.json"],
+                evidence_digest,
+            )
+            on_disk_manifest = json.loads(
+                (bundle / "bundle-manifest.json").read_text(encoding="utf-8")
+            )
+            self.assertEqual(on_disk_manifest, manifest)
 
 
 if __name__ == "__main__":
