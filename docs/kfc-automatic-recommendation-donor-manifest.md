@@ -1,6 +1,6 @@
 # KFC automatic recommendation donor manifest
 
-Status: Slice 0 implementation inventory
+Status: Slice 2 path-level disposition inventory closed
 
 Baseline: `origin/main` at `b6149c727b18d1d36f0a495fad73b0baff709eca`
 
@@ -10,6 +10,15 @@ This manifest accounts for the recommendation surfaces present in the donor.
 Nothing from that branch is merged wholesale. An Adopt entry means the behavior
 may be reimplemented after contract review; it does not make the donor runtime
 authoritative.
+
+The machine-checkable path-level authority is
+`docs/kfc-automatic-recommendation-donor-dispositions.json`. It captures 297
+exact donor paths at `fc5fcafbaf7e0f00afbdd668ab90f6be0439b947` and assigns
+each path exactly one of `Adopt`, `Redesign`, `Delete`, `Preserve unrelated`, or
+`Historical superseded`. The capture includes runtime modules, scripts,
+configuration, CI, documentation, evidence, tests, assets, migrations, and
+cross-cutting imports. The maintained backend authority audit verifies the
+capture and the absence of alternate serving authority in the clean boundary.
 
 ## Adopt after contract review
 

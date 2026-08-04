@@ -17,6 +17,7 @@
     "check": "npm run format:check && npm run lint && npm run lint:strict && npm run check:agent-sdk-boundaries && npm run typecheck && npm run test:ci",
     "check:agent-sdk-boundaries": "node scripts/check-direct-agent-sdk-boundaries.mjs",
     "check:architecture": "node ../../scripts/check-source-file-size.mjs",
+    "check:automatic-recommendation-authority": "vitest run test/recommendations/automatic-core-authority-audit.test.ts",
     "start": "node dist/src/index.js",
     "test": "vitest run",
     "test:live:scenarios": "set -a; [ ! -f ../../.env ] || . ../../.env; set +a; RUN_LIVE_AI_SCENARIOS=1 vitest run test/scenarios/live-ai-scenario-replay.test.ts",

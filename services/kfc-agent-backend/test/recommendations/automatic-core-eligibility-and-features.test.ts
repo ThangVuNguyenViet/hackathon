@@ -1,0 +1,339 @@
+import { describe, expect, it } from 'vitest';
+import {
+  AUTOMATIC_FEATURE_SCHEMA_DIGEST,
+  AUTOMATIC_FEATURE_SCHEMA_VERSION,
+  buildAutomaticRecommendationFeatureRows,
+  discoverAutomaticRecommendationCandidates,
+  evaluateAutomaticRecommendationEligibility,
+  resolveAutomaticRecommendationContext,
+  type AutomaticCatalogSnapshot,
+  type AutomaticRecommendationContext,
+  type AutomaticRecommendationContextPorts,
+} from '../../src/recommendations/automatic-core/index.js';
+
+const catalog: AutomaticCatalogSnapshot = {
+  catalogRevision: 'catalog-revision-eligibility-001',
+  resolvedAt: '2026-08-04T05:00:00.000Z',
+  timeZone: 'Asia/Ho_Chi_Minh',
+  items: [
+    {
+      sellableItemId: 'parent-1',
+      name: 'Chicken Meal',
+      imageUrl: null,
+      categoryId: 'meal',
+      unitPriceVnd: 80000,
+      sellable: true,
+      safe: true,
+      availableFulfilmentModes: ['pickup'],
+      promotionActive: false,
+      modifierGroups: [
+        {
+          groupPath: ['meal', 'side'],
+          options: [
+            {
+              optionId: 'fries-large',
+              name: 'Large Fries',
+              imageUrl: null,
+              priceImpactVnd: 15000,
+              available: true,
+              safe: true,
+            },
+            {
+              optionId: 'unsafe-side',
+              name: 'Unsafe Side',
+              imageUrl: null,
+              priceImpactVnd: 5000,
+              available: true,
+              safe: false,
+            },
+          ],
+        },
+      ],
+    },
+    {
+      sellableItemId: 'eligible-1',
+      name: 'Eligible Side',
+      imageUrl: null,
+      categoryId: 'side',
+      unitPriceVnd: 30000,
+      sellable: true,
+      safe: true,
+      availableFulfilmentModes: ['pickup'],
+      promotionActive: true,
+      modifierGroups: [],
+    },
+    {
+      sellableItemId: 'delivery-only-1',
+      name: 'Delivery Only',
+      imageUrl: null,
+      categoryId: 'drink',
+      unitPriceVnd: 20000,
+      sellable: true,
+      safe: true,
+      availableFulfilmentModes: ['delivery'],
+      promotionActive: false,
+      modifierGroups: [],
+    },
+    {
+      sellableItemId: 'unsafe-1',
+      name: 'Unsafe Product',
+      imageUrl: null,
+      categoryId: 'side',
+      unitPriceVnd: 10000,
+      sellable: true,
+      safe: false,
+      availableFulfilmentModes: ['pickup'],
+      promotionActive: false,
+      modifierGroups: [],
+    },
+    {
+      sellableItemId: 'retired-1',
+      name: 'Retired Product',
+      imageUrl: null,
+      categoryId: 'side',
+      unitPriceVnd: 10000,
+      sellable: false,
+      safe: true,
+      availableFulfilmentModes: ['pickup'],
+      promotionActive: false,
+      modifierGroups: [],
+    },
+  ],
+};
+
+const commonRequest = {
+  schemaVersion: 'kfc-automatic-recommendation-v1' as const,
+  requestId: 'request-eligibility-001',
+  storeId: 'KFCVN0002',
+  fulfilmentMode: 'pickup' as const,
+  locale: 'vi-VN',
+  orderingJourneyRef: 'journey-eligibility-001',
+  opportunityRef: 'opportunity-eligibility-001',
+  cart: {
+    cartId: 'cart-eligibility-001',
+    revision: 'cart-revision-eligibility-001',
+    subtotal: { amount: 80000, currency: 'VND' as const },
+    lines: [
+      {
+        lineId: 'line-parent-1',
+        sellableItemId: 'parent-1',
+        quantity: 1,
+        unitPrice: { amount: 80000, currency: 'VND' as const },
+        modifiers: [],
+      },
+    ],
+  },
+};
+
+const ports: AutomaticRecommendationContextPorts = {
+  catalog: { readSnapshot: async () => catalog },
+  history: {
+    readCompletedHistory: async (verifiedCustomerRef) => ({
+      verifiedCustomerRef,
+      historyRevision: 'history-revision-001',
+      completedOrderCount: 3,
+      itemOrderCounts: { 'eligible-1': 2 },
+      categoryOrderCounts: { side: 2 },
+    }),
+  },
+  exposure: { readState: async () => 'enabled' },
+  clock: { now: () => new Date('2026-08-04T05:15:00.000Z') },
+};
+
+async function readyContext(
+  recommendationType:
+    'for_you' | 'local_favorite' | 'modifier_upsell' | 'smart_cross_sell',
+): Promise<AutomaticRecommendationContext> {
+  const request =
+    recommendationType === 'for_you'
+      ? { ...commonRequest, verifiedCustomerRef: 'customer-001' }
+      : recommendationType === 'modifier_upsell'
+        ? { ...commonRequest, parentCartLineId: 'line-parent-1' }
+        : commonRequest;
+  const resolved = await resolveAutomaticRecommendationContext({
+    recommendationType,
+    request,
+    ports,
+  });
+  if (resolved.kind !== 'ready') {
+    throw new Error('Expected ready context');
+  }
+  return resolved.context;
+}
+
+describe('automatic recommendation Eligibility Policy', () => {
+  it('returns typed evidence for every product exclusion and keeps only valid candidates eligible', async () => {
+    const context = await readyContext('smart_cross_sell');
+    const decisions = evaluateAutomaticRecommendationEligibility(
+      context,
+      discoverAutomaticRecommendationCandidates(context),
+    );
+
+    expect(
+      decisions.map(({ candidate, status, evidence }) => ({
+        candidateId: candidate.candidateId,
+        status,
+        code: evidence.code,
+      })),
+    ).toEqual([
+      {
+        candidateId: 'product:parent-1',
+        status: 'excluded',
+        code: 'already_in_cart',
+      },
+      {
+        candidateId: 'product:eligible-1',
+        status: 'eligible',
+        code: 'eligible',
+      },
+      {
+        candidateId: 'product:delivery-only-1',
+        status: 'excluded',
+        code: 'unavailable_for_fulfilment',
+      },
+      {
+        candidateId: 'product:unsafe-1',
+        status: 'excluded',
+        code: 'unsafe_candidate',
+      },
+      {
+        candidateId: 'product:retired-1',
+        status: 'excluded',
+        code: 'not_sellable',
+      },
+    ]);
+  });
+
+  it('rejects an unavailable modifier and any candidate whose exact parent, path, or option binding is changed', async () => {
+    const context = await readyContext('modifier_upsell');
+    const candidates = discoverAutomaticRecommendationCandidates(context);
+    const valid = candidates[0];
+    if (valid === undefined || valid.action.type !== 'apply_modifier') {
+      throw new Error('Expected modifier candidate');
+    }
+    const tampered = {
+      ...valid,
+      candidateId: 'modifier:line-parent-1:wrong/path:fries-large',
+      action: { ...valid.action, groupPath: ['wrong', 'path'] },
+    };
+
+    expect(
+      evaluateAutomaticRecommendationEligibility(context, [
+        ...candidates,
+        tampered,
+      ]).map(({ candidate, status, evidence }) => ({
+        candidateId: candidate.candidateId,
+        status,
+        code: evidence.code,
+      })),
+    ).toEqual([
+      {
+        candidateId: 'modifier:line-parent-1:meal/side:fries-large',
+        status: 'eligible',
+        code: 'eligible',
+      },
+      {
+        candidateId: 'modifier:line-parent-1:meal/side:unsafe-side',
+        status: 'excluded',
+        code: 'unsafe_candidate',
+      },
+      {
+        candidateId: 'modifier:line-parent-1:wrong/path:fries-large',
+        status: 'excluded',
+        code: 'modifier_path_mismatch',
+      },
+    ]);
+  });
+
+  it('recomputes validity from the catalog so copied flags and unknown identities cannot bypass policy', async () => {
+    const context = await readyContext('smart_cross_sell');
+    const candidates = discoverAutomaticRecommendationCandidates(context);
+    const deliveryOnly = candidates.find(
+      ({ candidateId }) => candidateId === 'product:delivery-only-1',
+    );
+    const eligible = candidates.find(
+      ({ candidateId }) => candidateId === 'product:eligible-1',
+    );
+    if (
+      deliveryOnly === undefined ||
+      eligible === undefined ||
+      eligible.action.type !== 'add_product'
+    ) {
+      throw new Error('Expected product fixtures');
+    }
+
+    const spoofedAvailability = { ...deliveryOnly, available: true };
+    const unknownIdentity = {
+      ...eligible,
+      candidateId: 'product:unknown-1',
+      action: { ...eligible.action, sellableItemId: 'unknown-1' },
+    };
+
+    expect(
+      evaluateAutomaticRecommendationEligibility(context, [
+        spoofedAvailability,
+        unknownIdentity,
+      ]).map(({ evidence }) => evidence.code),
+    ).toEqual(['unavailable_for_fulfilment', 'candidate_not_in_catalog']);
+  });
+});
+
+describe('automatic recommendation versioned feature construction', () => {
+  it('constructs scorer rows only for eligible candidates with scalar pre-decision features', async () => {
+    const context = await readyContext('for_you');
+    const decisions = evaluateAutomaticRecommendationEligibility(
+      context,
+      discoverAutomaticRecommendationCandidates(context),
+    );
+
+    expect(AUTOMATIC_FEATURE_SCHEMA_VERSION).toBe('automatic-feature-v1');
+    expect(AUTOMATIC_FEATURE_SCHEMA_DIGEST).toMatch(/^[a-f0-9]{64}$/u);
+    expect(buildAutomaticRecommendationFeatureRows(context, decisions)).toEqual(
+      [
+        {
+          candidateId: 'product:eligible-1',
+          eligibility: 'eligible',
+          priceImpactVnd: 30000,
+          features: {
+            featureSchemaVersion: 'automatic-feature-v1',
+            recommendationType: 'for_you',
+            fulfilmentMode: 'pickup',
+            localHour: 12,
+            cartSubtotalVnd: 80000,
+            cartLineCount: 1,
+            candidateCategoryId: 'side',
+            priceImpactVnd: 30000,
+            promotionActive: true,
+            completedOrderCount: 3,
+            priorItemOrderCount: 2,
+            priorCategoryOrderCount: 2,
+          },
+        },
+      ],
+    );
+  });
+
+  it('includes the exact modifier parent and group path without nested feature values', async () => {
+    const context = await readyContext('modifier_upsell');
+    const decisions = evaluateAutomaticRecommendationEligibility(
+      context,
+      discoverAutomaticRecommendationCandidates(context),
+    );
+    const rows = buildAutomaticRecommendationFeatureRows(context, decisions);
+
+    expect(rows[0]).toMatchObject({
+      features: {
+        modifierParentSellableItemId: 'parent-1',
+        modifierGroupPath: 'meal/side',
+        modifierPriceRatio: 0.1875,
+      },
+    });
+    expect(
+      Object.values(rows[0]?.features ?? {}).every(
+        (value) =>
+          value === null ||
+          ['string', 'number', 'boolean'].includes(typeof value),
+      ),
+    ).toBe(true);
+  });
+});
