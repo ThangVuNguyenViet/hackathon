@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import unittest
 
+import kfc_recommendation_simulator.qualification.evaluation as evaluation_module
 from kfc_recommendation_simulator.qualification.ranking import (
     InsufficientRankingEvidence,
     evaluate_opportunity_ndcg,
@@ -10,6 +11,39 @@ from kfc_recommendation_simulator.qualification.ranking import (
 
 
 class RankingEvidenceBoundaryTest(unittest.TestCase):
+    def test_untouched_bounds_cluster_correlated_opportunities_by_journey(
+        self,
+    ) -> None:
+        """Catches treating repeated opportunities as independent promotion rows."""
+
+        summary_builder = getattr(
+            evaluation_module, "journey_clustered_ranking_summary", None
+        )
+        self.assertIsNotNone(
+            summary_builder, "journey-clustered ranking summary is missing"
+        )
+
+        evidence = summary_builder(
+            {
+                "model": [1.0, 1.0, 0.0, 0.0],
+                "random": [0.0, 0.0, 1.0, 1.0],
+                "popularity": [0.0, 0.0, 1.0, 1.0],
+            },
+            {
+                "model": [1.0, 1.0, 0.0, 0.0],
+                "random": [0.0, 0.0, 1.0, 1.0],
+                "popularity": [0.0, 0.0, 1.0, 1.0],
+            },
+            journey_ids=["journey-1", "journey-1", "journey-2", "journey-2"],
+        )
+
+        paired = evidence["pairedDifferences"]["model_vs_random"]
+        self.assertEqual(paired["journeyClusterCount"], 2)
+        self.assertAlmostEqual(paired["lower95"], -1.959963984540054)
+        self.assertEqual(
+            evidence["recallAtK"]["model"]["journeyClusterCount"], 2
+        )
+
     def test_one_rendered_action_does_not_collapse_the_eligible_ranking_set(
         self,
     ) -> None:

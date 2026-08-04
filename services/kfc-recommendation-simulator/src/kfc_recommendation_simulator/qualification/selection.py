@@ -12,8 +12,8 @@ VALIDATION_GATE_NAMES = (
 )
 CHAMPION_SELECTION_ORDER = (
     "all_validation_gates_pass",
-    "retained_revenue_lower_95_descending",
-    "aov_lower_95_descending",
+    "revenue_difference_lower_95_descending",
+    "aov_difference_lower_95_descending",
     "ranking_lower_95_descending",
     "artifact_bytes_ascending",
     "family_identity_ascending",
@@ -22,6 +22,21 @@ CHAMPION_SELECTION_ORDER = (
 
 class NoEligibleChallengerError(ValueError):
     """Raised rather than selecting a challenger that failed validation."""
+
+
+def build_selection_candidate(
+    threshold_evidence: Mapping[str, Any], *, artifact_bytes: int
+) -> dict[str, Any]:
+    comparison = threshold_evidence["businessComparisonVsNoRecommendation"]
+    return {
+        "gates": threshold_evidence["gates"],
+        "revenueDifferenceLower95Vnd": comparison[
+            "revenuePerStartedJourneyDifferenceVnd95"
+        ]["lower95"],
+        "aovDifferenceLower95Vnd": comparison["aovDifferenceVnd95"]["lower95"],
+        "rankingLower95": threshold_evidence["rankingLower95"],
+        "artifactBytes": artifact_bytes,
+    }
 
 
 def select_gate_first_champion(
@@ -39,8 +54,8 @@ def select_gate_first_champion(
     return min(
         eligible,
         key=lambda family: (
-            -float(eligible[family]["retainedRevenueLower95Vnd"]),
-            -float(eligible[family]["aovLower95Vnd"]),
+            -float(eligible[family]["revenueDifferenceLower95Vnd"]),
+            -float(eligible[family]["aovDifferenceLower95Vnd"]),
             -float(eligible[family]["rankingLower95"]),
             int(eligible[family]["artifactBytes"]),
             family,

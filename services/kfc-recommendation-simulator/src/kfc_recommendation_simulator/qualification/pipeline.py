@@ -34,6 +34,7 @@ from .configuration import (
 from .datasets import (
     load_untouched_candidate_relevance_table,
     load_untouched_model_table,
+    load_validation_policy_evaluation,
 )
 from .evaluation import _evaluate_type, _source_facts
 from .features import FeatureEncoder
@@ -53,6 +54,7 @@ from .models import (
 from .selection import (
     CHAMPION_SELECTION_ORDER,
     NoEligibleChallengerError,
+    build_selection_candidate,
     select_gate_first_champion,
 )
 from .validation import evaluate_validation_thresholds
@@ -159,6 +161,10 @@ def _train_type(
     staging: Path,
     configuration: Mapping[str, Any],
     source_facts: Mapping[str, Mapping[str, Any]],
+    validation_baseline: Mapping[str, Mapping[str, Any]],
+    validation_candidate_potentials: Mapping[
+        tuple[int, str, str], Mapping[str, Any]
+    ],
 ) -> _TrainedType:
     training_rows = _filter_rows(table, recommendation_type, "training")
     calibration_rows = _filter_rows(table, recommendation_type, "calibration")
@@ -288,6 +294,16 @@ def _train_type(
             ranking_lower_bound=float(
                 configuration["promotionGates"]["rankingPairedLower95MustExceed"]
             ),
+            baseline_by_journey=validation_baseline,
+            candidate_potentials=validation_candidate_potentials,
+            conversion_noninferiority_margin=float(
+                configuration["promotionGates"]["conversionNonInferiorityMargin"]
+            ),
+            abandonment_noninferiority_margin=float(
+                configuration["promotionGates"][
+                    "abandonmentNonInferiorityMargin"
+                ]
+            ),
         )
         artifact_bytes = sum(
             artifact.model_path.stat().st_size for artifact in artifacts.values()
@@ -311,15 +327,10 @@ def _train_type(
             },
         )
     selection_candidates = {
-        f"{family}@{threshold}": {
-            "gates": threshold_evidence["gates"],
-            "retainedRevenueLower95Vnd": threshold_evidence[
-                "retainedRevenuePerOpportunityVnd95"
-            ]["lower95"],
-            "aovLower95Vnd": threshold_evidence["aovVnd95"]["lower95"],
-            "rankingLower95": threshold_evidence["rankingLower95"],
-            "artifactBytes": challenger.evidence["artifactBytes"],
-        }
+        f"{family}@{threshold}": build_selection_candidate(
+            threshold_evidence,
+            artifact_bytes=challenger.evidence["artifactBytes"],
+        )
         for family, challenger in challengers.items()
         for threshold, threshold_evidence in challenger.evidence[
             "validationThresholds"
@@ -429,6 +440,13 @@ def run_model_qualification(
     trained_types: dict[str, _TrainedType] = {}
     selection_failures: dict[str, dict[str, Any]] = {}
     validation_source_facts = _source_facts(world, split="validation")
+    validation_relevance, validation_baseline = (
+        load_validation_policy_evaluation(world)
+    )
+    validation_candidate_potentials = {
+        (int(row["seed"]), str(row["opportunityId"]), str(row["candidateId"])): row
+        for row in validation_relevance.to_pylist()
+    }
     try:
         for recommendation_type in RECOMMENDATION_TYPES:
             try:
@@ -438,6 +456,8 @@ def run_model_qualification(
                     staging,
                     configuration,
                     validation_source_facts,
+                    validation_baseline,
+                    validation_candidate_potentials,
                 )
             except _TypeSelectionFailure as error:
                 selection_failures[recommendation_type] = error.evidence
@@ -469,6 +489,7 @@ def run_model_qualification(
                     "configurationFrozen": False,
                     "untouchedTestOpened": False,
                     "candidateRelevanceOpened": False,
+                    "validationPolicyEvaluationOpened": True,
                 },
                 "libraries": configuration["libraries"],
                 "types": type_evidence,

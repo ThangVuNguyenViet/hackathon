@@ -8,8 +8,77 @@ import pyarrow.compute as pc
 import pyarrow.parquet as pq
 
 from ..loader import InformationBoundaryError, _read_manifest
-from ..schemas import CANDIDATE_RELEVANCE_SCHEMA, TRAINING_SCHEMA
+from ..schemas import (
+    CANDIDATE_RELEVANCE_SCHEMA,
+    ORACLE_SCHEMA,
+    SOURCE_JOURNEY_SCHEMA,
+    TRAINING_SCHEMA,
+)
 from .freeze import FrozenConfiguration, verify_frozen_configuration
+
+
+def _verified_table(
+    root: Path,
+    manifest: dict[str, object],
+    relative_path: str,
+    schema: pa.Schema,
+    *,
+    filters: list[tuple[str, str, object]] | None = None,
+) -> pa.Table:
+    artifact_path = root / relative_path
+    artifact = manifest.get("artifacts", {}).get(relative_path, {})  # type: ignore[union-attr]
+    expected_digest = artifact.get("sha256") if isinstance(artifact, dict) else None
+    if hashlib.sha256(artifact_path.read_bytes()).hexdigest() != expected_digest:
+        raise InformationBoundaryError(
+            f"{relative_path} digest does not match manifest"
+        )
+    table = pq.read_table(artifact_path, filters=filters)
+    if table.schema != schema:
+        raise InformationBoundaryError(
+            f"{relative_path} does not match its immutable schema"
+        )
+    return table
+
+
+def load_validation_policy_evaluation(
+    world_root: Path | str,
+) -> tuple[pa.Table, dict[str, dict[str, object]]]:
+    """Load only predeclared validation potentials and paired baseline outcomes."""
+
+    root = Path(world_root).resolve()
+    manifest = _read_manifest(root)
+    source = _verified_table(
+        root,
+        manifest,
+        "source/journeys.parquet",
+        SOURCE_JOURNEY_SCHEMA,
+        filters=[("split", "=", "validation")],
+    )
+    journey_ids = {str(value) for value in source["journeyId"].to_pylist()}
+    relevance = _verified_table(
+        root,
+        manifest,
+        "evaluation/candidate-relevance.parquet",
+        CANDIDATE_RELEVANCE_SCHEMA,
+        filters=[("split", "=", "validation")],
+    )
+    oracle = _verified_table(
+        root,
+        manifest,
+        "oracle/potential-outcomes.parquet",
+        ORACLE_SCHEMA,
+        filters=[
+            ("journeyId", "in", sorted(journey_ids)),
+            ("condition", "=", "no_recommendation"),
+        ],
+    )
+    baseline_rows = oracle.to_pylist()
+    baseline = {str(row["journeyId"]): row for row in baseline_rows}
+    if set(baseline) != journey_ids:
+        raise InformationBoundaryError(
+            "validation baseline does not exactly cover validation journeys"
+        )
+    return relevance, baseline
 
 
 def load_untouched_model_table(

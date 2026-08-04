@@ -249,7 +249,13 @@ def _business_evidence(
     }
 
 
-def _business_gate(comparison: Mapping[str, Any], *, require_positive: bool) -> bool:
+def _business_gate(
+    comparison: Mapping[str, Any],
+    *,
+    require_positive: bool,
+    conversion_noninferiority_margin: float = 0.005,
+    abandonment_noninferiority_margin: float = 0.005,
+) -> bool:
     aov = comparison["aovDifferenceVnd95"]
     revenue = comparison["revenuePerStartedJourneyDifferenceVnd95"]
     conversion = comparison["checkoutConversionDifference95"]
@@ -261,6 +267,6 @@ def _business_gate(comparison: Mapping[str, Any], *, require_positive: bool) -> 
     )
     return (
         business_effect
-        and conversion["lower95"] >= -0.005
-        and abandonment["upper95"] <= 0.005
+        and conversion["lower95"] >= -conversion_noninferiority_margin
+        and abandonment["upper95"] <= abandonment_noninferiority_margin
     )

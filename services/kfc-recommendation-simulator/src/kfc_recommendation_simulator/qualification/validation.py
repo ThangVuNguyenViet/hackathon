@@ -8,9 +8,13 @@ from typing import Any
 import numpy as np
 from numpy.typing import NDArray
 
+from .business import _business_gate, _learned_business_comparison
 from .composer import ScoredCandidate, compose_candidates
 from .metrics import binary_metrics
-from .policy_evaluation import journey_clustered_weighted_interval
+from .policy_evaluation import (
+    evaluate_learned_policy_outcomes,
+    journey_clustered_weighted_interval,
+)
 from .weighting import clipped_inverse_propensity_weights, effective_sample_size
 
 
@@ -106,6 +110,10 @@ def evaluate_validation_thresholds(
     maximum_ece: float,
     coverage_fraction: float,
     ranking_lower_bound: float,
+    baseline_by_journey: Mapping[str, Mapping[str, Any]],
+    candidate_potentials: Mapping[tuple[int, str, str], Mapping[str, Any]],
+    conversion_noninferiority_margin: float,
+    abandonment_noninferiority_margin: float,
 ) -> dict[str, dict[str, Any]]:
     if not rows or len(rows) != len(selection_probability) or len(rows) != len(
         joint_probability
@@ -145,6 +153,14 @@ def evaluate_validation_thresholds(
     groups: dict[tuple[int, str], list[int]] = defaultdict(list)
     for index, row in enumerate(rows):
         groups[(int(row["seed"]), str(row["opportunityId"]))].append(index)
+    validation_journey_ids = {str(row["journeyId"]) for row in rows}
+    policy_baseline = {
+        journey_id: baseline_by_journey[journey_id]
+        for journey_id in sorted(validation_journey_ids)
+        if journey_id in baseline_by_journey
+    }
+    if set(policy_baseline) != validation_journey_ids:
+        raise ValueError("validation policy lacks paired no-recommendation journeys")
 
     evidence: dict[str, dict[str, Any]] = {}
     for threshold in thresholds:
@@ -162,6 +178,7 @@ def evaluate_validation_thresholds(
             "modifierValidityViolations": 0,
         }
         rendered_count = 0
+        model_decisions: list[dict[str, Any]] = []
         for (seed, opportunity_id), indices in sorted(groups.items()):
             group_rows = [rows[index] for index in indices]
             journey_id = str(group_rows[0]["journeyId"])
@@ -227,6 +244,17 @@ def evaluate_validation_thresholds(
                 ),
             }
             model_composed = composed_by_policy["model"]
+            model_decisions.append(
+                {
+                    "seed": seed,
+                    "journeyId": journey_id,
+                    "opportunityId": opportunity_id,
+                    "recommendationType": recommendation_type,
+                    "candidateIds": [
+                        candidate.candidate_id for candidate in model_composed
+                    ],
+                }
+            )
             rendered_count += len(model_composed)
             valid_cardinality = len(model_composed) in (
                 {0, 3, 4} if recommendation_type == "smart_cross_sell" else {0, 1}
@@ -263,8 +291,6 @@ def evaluate_validation_thresholds(
                 )
 
         policy_values: dict[str, list[float]] = defaultdict(list)
-        model_aov_revenue: list[float] = []
-        model_checkout: list[float] = []
         journey_ids: list[str] = []
         for row in shown_rows:
             key = (
@@ -277,15 +303,9 @@ def evaluate_validation_thresholds(
             for policy in selected_by_policy:
                 policy_values[policy].append(
                     retained * price * float(key in selected_by_policy[policy])
-                )
-            model_selected = float(key in selected_by_policy["model"])
-            model_checkout.append(retained * model_selected)
-            model_aov_revenue.append(
-                retained
-                * model_selected
-                * (float(row["cartSubtotalVnd"]) + price)
             )
-            journey_ids.append(str(row["journeyId"]))
+            journey_id = str(row["journeyId"])
+            journey_ids.append(journey_id)
 
         revenue_interval = journey_clustered_weighted_interval(
             values=policy_values["model"],
@@ -307,11 +327,29 @@ def evaluate_validation_thresholds(
             )
             for policy in ("random", "popularity")
         }
+        learned_outcomes = evaluate_learned_policy_outcomes(
+            policy_baseline,
+            candidate_potentials,
+            model_decisions,
+            policy_name=f"validation_{recommendation_type}_{float(threshold)}",
+        )
+        no_recommendation_outcomes = evaluate_learned_policy_outcomes(
+            policy_baseline,
+            candidate_potentials,
+            [],
+            policy_name="validation_no_recommendation",
+        )
+        business_comparison = _learned_business_comparison(
+            learned_outcomes, no_recommendation_outcomes
+        )
         aov_interval = _weighted_aov_interval(
-            revenue=model_aov_revenue,
-            checkout=model_checkout,
-            weights=weights,
-            journey_ids=journey_ids,
+            revenue=[
+                float(outcome["finalMerchandiseSubtotalVnd"])
+                for outcome in learned_outcomes
+            ],
+            checkout=[float(outcome["checkout"]) for outcome in learned_outcomes],
+            weights=[float(outcome["weight"]) for outcome in learned_outcomes],
+            journey_ids=[str(outcome["journeyId"]) for outcome in learned_outcomes],
         )
         model_coverage = float(np.mean(coverage["model"]))
         random_coverage = float(np.mean(coverage["random"]))
@@ -324,9 +362,11 @@ def evaluate_validation_thresholds(
             float(interval["lower95"]) > ranking_lower_bound
             for interval in ranking_differences.values()
         )
-        business_pass = (
-            float(revenue_interval["lower95"]) > 0
-            and float(aov_interval["lower95"]) > 0
+        business_pass = _business_gate(
+            business_comparison,
+            require_positive=False,
+            conversion_noninferiority_margin=conversion_noninferiority_margin,
+            abandonment_noninferiority_margin=abandonment_noninferiority_margin,
         )
         validity_pass = all(value == 0 for value in invalid.values())
         evidence[str(float(threshold))] = {
@@ -340,6 +380,7 @@ def evaluate_validation_thresholds(
             "requiredCoverage": required_coverage,
             "retainedRevenuePerOpportunityVnd95": revenue_interval,
             "aovVnd95": aov_interval,
+            "businessComparisonVsNoRecommendation": business_comparison,
             "rankingPairedDifferences": ranking_differences,
             "rankingLower95": min(
                 float(interval["lower95"])

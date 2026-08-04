@@ -15,6 +15,7 @@ import pyarrow.parquet as pq
 from kfc_recommendation_simulator.generator import generate_world
 from kfc_recommendation_simulator.loader import InformationBoundaryError
 from kfc_recommendation_simulator.profiles import GenerationProfile
+from kfc_recommendation_simulator.qualification import datasets as datasets_module
 from kfc_recommendation_simulator.qualification import freeze as freeze_module
 from kfc_recommendation_simulator.qualification.datasets import (
     load_untouched_candidate_relevance_table,
@@ -28,6 +29,35 @@ from kfc_recommendation_simulator.qualification.freeze import (
 
 
 class UntouchedDatasetBoundaryTest(unittest.TestCase):
+    def test_validation_policy_loader_exposes_only_validation_potentials(
+        self,
+    ) -> None:
+        """Catches validation policy evidence reading the protected test split."""
+
+        loader = getattr(
+            datasets_module, "load_validation_policy_evaluation", None
+        )
+        self.assertIsNotNone(loader, "validation policy loader is missing")
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            world = generate_world(
+                root / "worlds",
+                profile=GenerationProfile("validation-policy", 200, (19,)),
+                world_revision="validation-policy-v1",
+            )
+
+            relevance, baseline = loader(world)
+
+            self.assertGreater(relevance.num_rows, 0)
+            self.assertEqual(set(relevance["split"].to_pylist()), {"validation"})
+            self.assertTrue(baseline)
+            self.assertTrue(
+                all(
+                    row["condition"] == "no_recommendation"
+                    for row in baseline.values()
+                )
+            )
+
     def _world_and_freeze(
         self, root: Path
     ) -> tuple[Path, Path, FrozenConfiguration]:

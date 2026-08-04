@@ -14,6 +14,7 @@ import pyarrow.parquet as pq
 from .calibration import enforce_joint_probability_bound
 from .composer import ScoredCandidate, compose_candidates
 from .metrics import binary_metrics, normal_mean_interval, recall_at_k
+from .policy_evaluation import journey_clustered_weighted_interval
 from .ranking import InsufficientRankingEvidence, evaluate_opportunity_ndcg
 from .weighting import clipped_inverse_propensity_weights, effective_sample_size
 
@@ -81,26 +82,39 @@ def _slice_names(facts: Mapping[str, Any]) -> tuple[str, ...]:
     return tuple(values)
 
 
-def _ranking_summary(
+def journey_clustered_ranking_summary(
     ndcg_by_policy: Mapping[str, list[float]],
     recall_by_policy: Mapping[str, list[float]],
+    *,
+    journey_ids: list[str],
 ) -> dict[str, Any]:
     model = np.asarray(ndcg_by_policy["model"], dtype=np.float64)
+    if not journey_ids or len(journey_ids) != len(model):
+        raise ValueError("ranking values and journey clusters must be aligned")
+    weights = [1.0] * len(journey_ids)
+
+    def interval(values: list[float] | np.ndarray) -> dict[str, float | int]:
+        return journey_clustered_weighted_interval(
+            values=np.asarray(values, dtype=np.float64).tolist(),
+            weights=weights,
+            journey_ids=journey_ids,
+        )
+
     return {
         "opportunityCount": len(model),
         "policyIntervals": {
-            policy: normal_mean_interval(np.asarray(values, dtype=np.float64))
+            policy: interval(values)
             for policy, values in sorted(ndcg_by_policy.items())
         },
         "pairedDifferences": {
-            f"model_vs_{policy}": normal_mean_interval(
+            f"model_vs_{policy}": interval(
                 model - np.asarray(values, dtype=np.float64)
             )
             for policy, values in sorted(ndcg_by_policy.items())
             if policy != "model"
         },
         "recallAtK": {
-            policy: normal_mean_interval(np.asarray(values, dtype=np.float64))
+            policy: interval(values)
             for policy, values in sorted(recall_by_policy.items())
         },
     }
@@ -182,12 +196,14 @@ def _evaluate_type(
     policy_decisions: dict[str, list[dict[str, Any]]] = defaultdict(list)
     combined_ndcg: dict[str, list[float]] = defaultdict(list)
     combined_recall: dict[str, list[float]] = defaultdict(list)
+    combined_journey_ids: list[str] = []
     per_seed_ndcg: dict[int, dict[str, list[float]]] = defaultdict(
         lambda: defaultdict(list)
     )
     per_seed_recall: dict[int, dict[str, list[float]]] = defaultdict(
         lambda: defaultdict(list)
     )
+    per_seed_journey_ids: dict[int, list[str]] = defaultdict(list)
     invalid = {
         "jointProbabilityAboveSelection": 0,
         "invalidComposerCardinality": 0,
@@ -328,6 +344,9 @@ def _evaluate_type(
             )
             for index in indices
         }
+        ranking_journey_id = str(candidate_rows[0]["journeyId"])
+        combined_journey_ids.append(ranking_journey_id)
+        per_seed_journey_ids[seed].append(ranking_journey_id)
         for policy, scores in score_by_policy.items():
             ndcg_value = evaluate_opportunity_ndcg(
                 candidate_rows,
@@ -466,9 +485,17 @@ def _evaluate_type(
         and joint_metrics["ece"]
         <= float(configuration["promotionGates"]["maximumEce"])
     )
-    ranking_summary = _ranking_summary(combined_ndcg, combined_recall)
+    ranking_summary = journey_clustered_ranking_summary(
+        combined_ndcg,
+        combined_recall,
+        journey_ids=combined_journey_ids,
+    )
     per_seed_ranking = {
-        str(seed): _ranking_summary(per_seed_ndcg[seed], per_seed_recall[seed])
+        str(seed): journey_clustered_ranking_summary(
+            per_seed_ndcg[seed],
+            per_seed_recall[seed],
+            journey_ids=per_seed_journey_ids[seed],
+        )
         | per_seed_ranking_counts[str(seed)]
         for seed in sorted(per_seed_ndcg)
     }
