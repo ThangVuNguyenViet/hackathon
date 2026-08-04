@@ -1,0 +1,31 @@
+{
+  "name": "@kfc/recommendation-aws",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=24.0.0 <27"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run",
+    "synth": "npm run build && cdk synth --quiet",
+    "deploy:preflight": "npm run build && node dist/bin/deployment-preflight.js",
+    "check": "npm run typecheck && npm test && npm run synth"
+  },
+  "dependencies": {
+    "aws-cdk-lib": "2.263.0",
+    "constructs": "10.8.1"
+  },
+  "devDependencies": {
+    "@types/node": "24.10.1",
+    "aws-cdk": "2.1135.0",
+    "cdk-nag": "3.0.2",
+    "typescript": "5.9.3",
+    "vitest": "4.1.10"
+  },
+  "overrides": {
+    "brace-expansion": "5.0.9"
+  }
+}
