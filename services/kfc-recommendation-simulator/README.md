@@ -19,6 +19,7 @@ Each world has four physically separate data surfaces:
   oracle/potential-outcomes.parquet
   traffic/{arrivals-per-minute,scorer-candidate-shapes}.parquet
   manifests/synthetic-world.json
+  manifests/qualification-precommit.json
 ```
 
 The smoke profile produces 2,000 journeys for one seed, development produces
@@ -53,12 +54,21 @@ means every per-type and combined gate passed and one atomic four-model bundle
 was emitted. Exit code `2` means explicit failed qualification; no serving
 bundle or baseline substitute is emitted. Candidate-level singleton potential
 value is physically isolated in `evaluation/candidate-relevance.parquet`. Its
-versioned, manifest-bound expected retained VND defines graded relevance for
-honest full-set ideal DCG and paired model/random/popularity NDCG intervals.
-The dedicated untouched relevance loader verifies the frozen configuration
-token before reading this artifact. Oracle and candidate-relevance data are
-never used for training, calibration, threshold selection, champion selection,
-or model-visible ranking.
+versioned, manifest-bound expected retained VND responds to candidate
+desirability, basket/context fit, promotion, fulfilment, and contextual price
+burden. It defines graded relevance for honest full-set ideal DCG and paired
+model/random/popularity NDCG intervals. Eligibility uses the automatic
+reference path for every journey, including factual suppression, plus deduped
+factual-state extensions so no observed exposure is lost.
+
+The world generator owns a read-only qualification precommit whose SHA-256 is
+bound by the world manifest before configuration selection. The dedicated
+untouched loaders require that token, its world/source-contract binding, a
+configuration created later, and a v2 frozen configuration binding all of
+those digests. Evaluators cannot supply a token path or mint a new token after
+selection. Oracle and candidate-relevance data are never used for training,
+calibration, threshold selection, champion selection, or model-visible
+ranking.
 
 Training consumers call `load_training_table(world_root)`. That loader owns its
 path and exact schema; it cannot be redirected to `evaluation/` or `oracle/`.

@@ -31,6 +31,7 @@ from .features import FeatureEncoder
 from .freeze import (
     FrozenConfigurationError,
     freeze_configuration,
+    precommit_qualification,
     verify_frozen_configuration,
 )
 from .metrics import binary_metrics, normal_mean_interval
@@ -1008,6 +1009,8 @@ def run_model_qualification(
     staging = output / ".training-artifacts"
     staging.mkdir()
     manifest = _read_manifest(world)
+    selected_path = output / "selected-configuration.json"
+    precommit = precommit_qualification(world, selected_path)
     configuration = _base_configuration(manifest)
     training_table = load_training_table(world)
     if "untouched_test" in set(training_table["split"].to_pylist()):
@@ -1048,25 +1051,22 @@ def run_model_qualification(
                 for recommendation_type, trained in trained_types.items()
             },
         }
-        selected_path = output / "selected-configuration.json"
         selected_path.write_bytes(_canonical_json(selected, pretty=True))
         frozen_path = output / "frozen-configuration.json"
-        frozen = freeze_configuration(selected_path, frozen_path)
+        frozen = freeze_configuration(
+            selected_path, frozen_path, precommit=precommit
+        )
 
-        tamper_path = output / ".tamper-probe-configuration.json"
-        tamper_freeze_path = output / ".tamper-probe-freeze.json"
-        shutil.copyfile(selected_path, tamper_path)
-        tamper_frozen = freeze_configuration(tamper_path, tamper_freeze_path)
-        tamper_path.write_bytes(tamper_path.read_bytes() + b"\n")
+        selected_bytes = selected_path.read_bytes()
+        selected_path.write_bytes(selected_bytes + b"\n")
         tamper_rejected = False
         try:
-            verify_frozen_configuration(tamper_path, tamper_frozen)
+            verify_frozen_configuration(selected_path, frozen, world_root=world)
         except FrozenConfigurationError:
             tamper_rejected = True
-        tamper_path.unlink()
-        tamper_freeze_path.unlink()
+        selected_path.write_bytes(selected_bytes)
 
-        verify_frozen_configuration(selected_path, frozen)
+        verify_frozen_configuration(selected_path, frozen, world_root=world)
         test_table = load_untouched_model_table(world, selected_path, frozen)
         source_facts = _source_slices(world)
         type_gates: dict[str, bool] = {}

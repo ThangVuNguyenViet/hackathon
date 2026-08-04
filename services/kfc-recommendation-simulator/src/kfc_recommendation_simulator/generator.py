@@ -19,14 +19,27 @@ from .profiles import GenerationProfile
 from .schemas import ARTIFACT_SCHEMAS, FEATURE_FIELDS, schema_digest
 from .validation import count_invalid_rows
 
-WORLD_MANIFEST_VERSION = "kfc-synthetic-world-manifest-v4"
-GENERATOR_REVISION = "kfc-stateful-synthetic-causal-generator-v4"
-CANDIDATE_RELEVANCE_DEFINITION_VERSION = "candidate-singleton-value-v1"
+WORLD_MANIFEST_VERSION = "kfc-synthetic-world-manifest-v5"
+GENERATOR_REVISION = "kfc-stateful-synthetic-causal-generator-v5"
+CANDIDATE_RELEVANCE_DEFINITION_VERSION = "candidate-singleton-value-v2"
 CANDIDATE_RELEVANCE_DEFINITION = {
     "intervention": "render_only_this_eligible_candidate",
-    "selection": "min(0.88, 0.18 + 0.52 * journey affinity)",
-    "checkout": "0.64 after one selected candidate",
-    "removal": "0.10 after selection and checkout",
+    "eligibility": (
+        "automatic reference-path candidates plus deduplicated factual-state "
+        "extensions required to retain observed support"
+    ),
+    "selection": (
+        "bounded response to journey affinity, candidate desirability, promotion, "
+        "basket fit, and contextual price burden"
+    ),
+    "checkout": (
+        "bounded response to affinity, candidate desirability, fulfilment mode, "
+        "and post-action price burden"
+    ),
+    "removal": (
+        "bounded response to contextual price burden, candidate desirability, "
+        "and promotion"
+    ),
     "realizedValue": "price when selected, checked out, and not removed; else zero",
     "gradedRelevance": "expected retained incremental value in VND",
     "sharedExogenous": "sha256 candidate-keyed draws independent of ranking policy",
@@ -228,12 +241,61 @@ def _candidate_relevance_row(
     recommendation_type: str,
     candidate: Mapping[str, Any],
     affinity: float,
+    placement: Mapping[str, Any],
+    journey: Mapping[str, Any],
 ) -> dict[str, Any]:
     candidate_id = str(candidate["candidateId"])
     price_vnd = int(candidate["priceImpactVnd"])
-    selection_probability = min(0.88, 0.18 + 0.52 * affinity)
-    checkout_probability = 0.64
-    removal_probability = 0.10
+    promotion = float(bool(candidate["promotionActive"]))
+    complementarity = max(
+        0.0, float(candidate["basketComplementarityScore"])
+    )
+    association = min(1.0, int(candidate["basketAssociationCount"]) / 250)
+    candidate_desirability = min(
+        1.0,
+        0.68 * float(candidate["automaticScore"])
+        + 0.14 * complementarity
+        + 0.10 * association
+        + 0.08 * promotion,
+    )
+    cart_subtotal = int(placement["cartSubtotalBeforeVnd"])
+    contextual_price_burden = min(
+        1.0, price_vnd / max(1, cart_subtotal + 100_000)
+    )
+    post_action_price_burden = min(
+        1.0, price_vnd / max(1, cart_subtotal + price_vnd + 100_000)
+    )
+    selection_probability = min(
+        0.94,
+        max(
+            0.04,
+            0.08
+            + 0.35 * affinity
+            + 0.55 * candidate_desirability
+            - 0.18 * contextual_price_burden,
+        ),
+    )
+    checkout_probability = min(
+        0.95,
+        max(
+            0.45,
+            0.58
+            + 0.10 * affinity
+            + 0.08 * candidate_desirability
+            + 0.03 * float(journey["fulfilmentMode"] == "pickup")
+            - 0.12 * post_action_price_burden,
+        ),
+    )
+    removal_probability = min(
+        0.30,
+        max(
+            0.02,
+            0.16
+            + 0.12 * contextual_price_burden
+            - 0.08 * candidate_desirability
+            - 0.04 * promotion,
+        ),
+    )
     draw_key = (
         CANDIDATE_RELEVANCE_DEFINITION_VERSION,
         journey_id,
@@ -904,7 +966,19 @@ def generate_world(
             candidate_lookup = {
                 str(candidate["candidateId"]): candidate for candidate in all_candidates
             }
-            for placement in factual["_path"]:
+            canonical_path = potentials["automatic"]["_path"]
+            for placement, canonical_placement in zip(
+                factual["_path"], canonical_path, strict=True
+            ):
+                canonical_candidate_ids = list(
+                    canonical_placement["eligibleCandidateIds"]
+                )
+                canonical_candidate_set = set(canonical_candidate_ids)
+                evaluation_candidate_ids = canonical_candidate_ids + [
+                    candidate_id
+                    for candidate_id in placement["eligibleCandidateIds"]
+                    if candidate_id not in canonical_candidate_set
+                ]
                 members = placement["members"]
                 rendered_ids = [member["actionId"] for member in members]
                 selected_ids = [
@@ -930,7 +1004,7 @@ def generate_world(
                         "prerequisiteState": placement["prerequisiteState"],
                         "parentCartLineId": placement["parentCartLineId"],
                         "createdCartLineId": placement["createdCartLineId"],
-                        "candidateCount": len(placement["eligibleCandidateIds"]),
+                        "candidateCount": len(evaluation_candidate_ids),
                         "slateId": placement["slateId"],
                         "slateSize": len(members),
                         "slatePropensity": placement["slatePropensity"],
@@ -974,10 +1048,15 @@ def generate_world(
                             },
                         }
                     )
-                for candidate_id in placement["eligibleCandidateIds"]:
+                for candidate_id in evaluation_candidate_ids:
                     candidate = candidate_lookup[candidate_id]
                     member = member_by_candidate.get(candidate_id)
                     shown = member is not None
+                    candidate_placement = (
+                        canonical_placement
+                        if candidate_id in canonical_candidate_set
+                        else placement
+                    )
                     rows["evaluation/candidate-relevance.parquet"].append(
                         _candidate_relevance_row(
                             seed=seed,
@@ -987,12 +1066,14 @@ def generate_world(
                             recommendation_type=placement["recommendationType"],
                             candidate=candidate,
                             affinity=affinity,
+                            placement=candidate_placement,
+                            journey=journey,
                         )
                     )
                     features = _candidate_features(
                         candidate=candidate,
                         recommendation_type=placement["recommendationType"],
-                        placement=placement,
+                        placement=candidate_placement,
                         journey=journey,
                         customer=customer,
                         index=index,
@@ -1115,6 +1196,41 @@ def generate_world(
             "schemaDigest": schema_digest(schema),
             "sha256": hashlib.sha256(payload).hexdigest(),
         }
+    candidate_relevance_definition = {
+        "version": CANDIDATE_RELEVANCE_DEFINITION_VERSION,
+        "sha256": CANDIDATE_RELEVANCE_DEFINITION_DIGEST,
+        **CANDIDATE_RELEVANCE_DEFINITION,
+    }
+    source_contract_sha256 = hashlib.sha256(
+        _canonical_json(
+            {
+                "manifestSchemaVersion": WORLD_MANIFEST_VERSION,
+                "generatorRevision": GENERATOR_REVISION,
+                "candidateRelevanceDefinition": candidate_relevance_definition,
+                "artifactSchemaDigests": {
+                    path: evidence["schemaDigest"]
+                    for path, evidence in artifact_evidence.items()
+                },
+            }
+        )
+    ).hexdigest()
+    qualification_precommit_payload = {
+        "schemaVersion": "kfc-world-qualification-precommit-v1",
+        "stage": "world_generation_precommit",
+        "worldRevision": world_revision,
+        "generatorRevision": GENERATOR_REVISION,
+        "sourceContractSha256": source_contract_sha256,
+        "configurationFileName": "selected-configuration.json",
+    }
+    qualification_precommit_bytes = _canonical_json(
+        qualification_precommit_payload, pretty=True
+    )
+    qualification_precommit_path = (
+        world / "manifests" / "qualification-precommit.json"
+    )
+    qualification_precommit_path.parent.mkdir(parents=True, exist_ok=True)
+    qualification_precommit_path.write_bytes(qualification_precommit_bytes)
+    qualification_precommit_path.chmod(0o444)
     manifest = {
         "schemaVersion": WORLD_MANIFEST_VERSION,
         "worldRevision": world_revision,
@@ -1140,10 +1256,11 @@ def generate_world(
             ),
             "oracle": "paired treatment paths, latent facts, and potential outcomes",
         },
-        "candidateRelevanceDefinition": {
-            "version": CANDIDATE_RELEVANCE_DEFINITION_VERSION,
-            "sha256": CANDIDATE_RELEVANCE_DEFINITION_DIGEST,
-            **CANDIDATE_RELEVANCE_DEFINITION,
+        "candidateRelevanceDefinition": candidate_relevance_definition,
+        "qualificationPrecommit": {
+            "path": "manifests/qualification-precommit.json",
+            "sha256": hashlib.sha256(qualification_precommit_bytes).hexdigest(),
+            "sourceContractSha256": source_contract_sha256,
         },
         "randomStreams": stream_evidence,
         "streamSeedOverrides": overrides,

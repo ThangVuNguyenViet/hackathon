@@ -72,7 +72,7 @@ class SyntheticWorldTest(unittest.TestCase):
 
     def test_manifest_binds_exact_profile_schemas_and_artifact_digests(self) -> None:
         self.assertEqual(
-            self.manifest["schemaVersion"], "kfc-synthetic-world-manifest-v4"
+            self.manifest["schemaVersion"], "kfc-synthetic-world-manifest-v5"
         )
         self.assertEqual(self.manifest["artifactEncoding"], "parquet")
         self.assertEqual(self.manifest["profile"]["journeysPerSeed"], 2_000)
@@ -85,7 +85,7 @@ class SyntheticWorldTest(unittest.TestCase):
             self.assertGreater(evidence["rowCount"], 0)
             self.assertRegex(evidence["schemaDigest"], r"^[a-f0-9]{64}$")
         relevance = self.manifest["candidateRelevanceDefinition"]
-        self.assertEqual(relevance["version"], "candidate-singleton-value-v1")
+        self.assertEqual(relevance["version"], "candidate-singleton-value-v2")
         self.assertRegex(relevance["sha256"], r"^[a-f0-9]{64}$")
         self.assertEqual(
             relevance["sharedExogenous"],
@@ -103,6 +103,26 @@ class SyntheticWorldTest(unittest.TestCase):
             allow_nan=False,
         ).encode()
         self.assertEqual(hashlib.sha256(canonical).hexdigest(), expected)
+
+    def test_world_owns_immutable_preselection_authority(self) -> None:
+        """Catches allowing evaluators to mint their own precommit token."""
+
+        self.assertIn("qualificationPrecommit", self.manifest)
+        descriptor = self.manifest["qualificationPrecommit"]
+        token_path = self.world / descriptor["path"]
+        self.assertTrue(token_path.is_file())
+        self.assertEqual(
+            hashlib.sha256(token_path.read_bytes()).hexdigest(),
+            descriptor["sha256"],
+        )
+        token = json.loads(token_path.read_text(encoding="utf-8"))
+        self.assertEqual(token["stage"], "world_generation_precommit")
+        self.assertEqual(token["worldRevision"], self.manifest["worldRevision"])
+        self.assertEqual(
+            token["configurationFileName"], "selected-configuration.json"
+        )
+        self.assertRegex(token["sourceContractSha256"], r"^[a-f0-9]{64}$")
+        self.assertEqual(token_path.stat().st_mode & 0o222, 0)
 
     def test_environment_is_exactly_pinned_and_bound_to_manifest(self) -> None:
         project = tomllib.loads(

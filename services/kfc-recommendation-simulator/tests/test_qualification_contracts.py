@@ -7,6 +7,8 @@ from pathlib import Path
 
 import numpy as np
 
+from kfc_recommendation_simulator.generator import generate_world
+from kfc_recommendation_simulator.profiles import GenerationProfile
 from kfc_recommendation_simulator.qualification.artifacts import (
     AtomicBundleError,
     emit_qualified_bundle,
@@ -23,6 +25,7 @@ from kfc_recommendation_simulator.qualification.composer import (
 from kfc_recommendation_simulator.qualification.freeze import (
     FrozenConfigurationError,
     freeze_configuration,
+    precommit_qualification,
     verify_frozen_configuration,
 )
 from kfc_recommendation_simulator.qualification.weighting import (
@@ -37,12 +40,20 @@ class FrozenConfigurationTest(unittest.TestCase):
 
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
-            configuration = root / "configuration.json"
+            world = generate_world(
+                root / "worlds",
+                profile=GenerationProfile("freeze", 8, (41,)),
+                world_revision="freeze-v1",
+            )
+            configuration = root / "selected-configuration.json"
+            precommit = precommit_qualification(world, configuration)
             configuration.write_text(
                 json.dumps({"seed": 431, "champions": ["logistic"]}),
                 encoding="utf-8",
             )
-            frozen = freeze_configuration(configuration, root / "frozen.json")
+            frozen = freeze_configuration(
+                configuration, root / "frozen.json", precommit=precommit
+            )
             verify_frozen_configuration(configuration, frozen)
 
             configuration.write_text(

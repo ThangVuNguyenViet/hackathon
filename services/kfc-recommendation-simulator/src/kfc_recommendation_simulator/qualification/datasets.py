@@ -19,8 +19,10 @@ def load_untouched_model_table(
 ) -> pa.Table:
     """Evaluator-only access to the physically bound untouched model surface."""
 
-    verify_frozen_configuration(configuration_path, frozen)
     root = Path(world_root).resolve()
+    verify_frozen_configuration(
+        configuration_path, frozen, world_root=root
+    )
     manifest = _read_manifest(root)
     relative_path = "model-visible/training-examples.parquet"
     artifact_path = root / relative_path
@@ -45,8 +47,10 @@ def load_untouched_candidate_relevance_table(
 ) -> pa.Table:
     """Load held-out candidate value only after configuration freeze verification."""
 
-    verify_frozen_configuration(configuration_path, frozen)
     root = Path(world_root).resolve()
+    verify_frozen_configuration(
+        configuration_path, frozen, world_root=root
+    )
     manifest = _read_manifest(root)
     relative_path = "evaluation/candidate-relevance.parquet"
     artifact_path = root / relative_path
