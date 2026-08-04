@@ -7,14 +7,14 @@ name = "kfc-recommendation-simulator"
 version = "0.1.0"
 description = "Reproducible synthetic-only causal world for automatic recommendations"
 readme = "README.md"
-requires-python = ">=3.11"
-dependencies = ["pyarrow>=17,<24"]
+requires-python = "==3.11.14"
+dependencies = ["pyarrow==23.0.1"]
 
 [project.scripts]
 kfc-recommendation-simulator = "kfc_recommendation_simulator.cli:main"
 
 [dependency-groups]
-dev = ["ruff>=0.11,<1"]
+dev = ["ruff==0.16.1"]
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/kfc_recommendation_simulator"]

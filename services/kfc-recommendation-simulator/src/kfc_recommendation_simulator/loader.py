@@ -23,6 +23,11 @@ FORBIDDEN_TRAINING_FIELDS = frozenset(
         "cartMutation",
         "checkout",
         "abandonment",
+        "selectedActionIdsJson",
+        "retainedActionIdsJson",
+        "removedActionIdsJson",
+        "treatmentRevenueVnd",
+        "treatmentPathJson",
     }
 )
 TRAINING_SPLITS = ("training", "calibration", "validation")

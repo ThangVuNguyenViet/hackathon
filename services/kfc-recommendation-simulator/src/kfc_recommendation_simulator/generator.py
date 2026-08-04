@@ -2,8 +2,9 @@ from __future__ import annotations
 
 import hashlib
 import json
-import math
+import platform
 import random
+import sys
 from collections import Counter
 from collections.abc import Mapping
 from datetime import datetime, timedelta, timezone
@@ -13,12 +14,13 @@ from typing import Any
 import pyarrow as pa
 import pyarrow.parquet as pq
 
+from .causal import CONDITIONS, simulate_conditions
 from .profiles import GenerationProfile
 from .schemas import ARTIFACT_SCHEMAS, FEATURE_FIELDS, schema_digest
 from .validation import count_invalid_rows
 
-WORLD_MANIFEST_VERSION = "kfc-synthetic-world-manifest-v1"
-GENERATOR_REVISION = "kfc-synthetic-causal-generator-v1"
+WORLD_MANIFEST_VERSION = "kfc-synthetic-world-manifest-v2"
+GENERATOR_REVISION = "kfc-stateful-synthetic-causal-generator-v2"
 RANDOM_STREAM_NAMES = (
     "catalog",
     "population",
@@ -34,24 +36,16 @@ RECOMMENDATION_TYPES = (
     "modifier_upsell",
     "smart_cross_sell",
 )
-LOGGING_POLICIES = (
-    "stochastic_popularity",
-    "basket_association",
-    "promotion_biased",
-    "randomized_exploration",
-)
-CONDITIONS = (
-    "automatic",
-    "no_recommendation",
-    "random_eligible",
-    "popularity",
-    "ablate_local_favorite",
-    "ablate_for_you",
-    "ablate_modifier_upsell",
-    "ablate_smart_cross_sell",
-)
 FULFILMENT_MODES = ("pickup", "delivery")
 FEATURE_KEYS = tuple(name for name, _, _ in FEATURE_FIELDS)
+PARQUET_WRITER_SETTINGS = {
+    "formatVersion": "2.6",
+    "dataPageVersion": "2.0",
+    "compression": "zstd",
+    "compressionLevel": 3,
+    "dictionaryEncoding": True,
+    "writeStatistics": True,
+}
 
 
 def _canonical_json(value: Any, *, pretty: bool = False) -> bytes:
@@ -106,59 +100,54 @@ def _catalog(
     categories = ("chicken", "burger", "rice", "sides", "drinks", "dessert")
     products: list[dict[str, Any]] = []
     rows: list[dict[str, Any]] = []
-    for index in range(24):
-        price = 29_000 + 5_000 * (index % 13)
+    for index in range(48):
+        unit_price = 29_000 + 5_000 * (index % 13)
+        discount = 5_000 if index % 5 == 0 else 0
         product = {
-            "sellableItemId": f"item-{seed}-{index:02d}",
+            "sellableItemId": f"item-{seed}-{index:03d}",
+            "modifierOptionId": None,
             "categoryId": categories[index % len(categories)],
-            "unitPriceVnd": price,
-            "priceImpactVnd": price - (5_000 if index % 5 == 0 else 0),
-            "promotionActive": index % 5 == 0,
+            "unitPriceVnd": unit_price,
+            "priceImpactVnd": unit_price - discount,
+            "promotionActive": discount > 0,
             "localDemandCount": 40 + rng.randrange(600),
             "basketAssociationCount": 5 + rng.randrange(250),
             "basketComplementarityScore": round(rng.uniform(-0.2, 1.0), 6),
-            "coldCandidate": index >= 20,
+            "available": True,
+            "coldCandidate": index >= 40,
         }
         products.append(product)
-        rows.append(
-            {
-                "seed": seed,
-                "recordType": "product",
-                **product,
-                "modifierOptionId": None,
-            }
-        )
-    for index in range(8):
-        parent = products[index]
-        rows.append(
-            {
-                "seed": seed,
-                "recordType": "modifier_option",
+        rows.append({"seed": seed, "recordType": "product", **product})
+    for product_index, parent in enumerate(products):
+        for option_index in range(5):
+            option = {
                 "sellableItemId": parent["sellableItemId"],
-                "modifierOptionId": f"modifier-{seed}-{index:02d}",
+                "modifierOptionId": (
+                    f"modifier-{seed}-{product_index:03d}-{option_index:02d}"
+                ),
                 "categoryId": "modifier",
                 "unitPriceVnd": parent["unitPriceVnd"],
-                "priceImpactVnd": 5_000 + 2_000 * index,
+                "priceImpactVnd": 5_000 + 2_000 * option_index,
                 "promotionActive": False,
                 "localDemandCount": 10 + rng.randrange(100),
                 "basketAssociationCount": 5 + rng.randrange(60),
                 "basketComplementarityScore": round(rng.uniform(0.1, 0.9), 6),
-                "coldCandidate": index >= 6,
+                "available": True,
+                "coldCandidate": parent["coldCandidate"],
             }
-        )
+            rows.append({"seed": seed, "recordType": "modifier_option", **option})
     return rows, products
 
 
 def _population(
     seed: int, rng: random.Random
 ) -> tuple[list[dict[str, Any]], list[dict[str, Any]], dict[str, float]]:
-    visible: list[dict[str, Any]] = []
     customers: list[dict[str, Any]] = []
     latent: dict[str, float] = {}
     for index in range(160):
         cold = index >= 128
         customer_id = f"{'cold-' if cold else ''}customer-{seed}-{index:03d}"
-        returning = not cold and index % 4 != 0
+        returning = index % 4 != 0
         completed = rng.randrange(1, 30) if returning else 0
         customer = {
             "seed": seed,
@@ -168,9 +157,8 @@ def _population(
             "coldCustomer": cold,
         }
         customers.append(customer)
-        visible.append(dict(customer))
         latent[customer_id] = round(rng.betavariate(2.4, 2.0), 8)
-    return visible, customers, latent
+    return [dict(customer) for customer in customers], customers, latent
 
 
 def _split(index: int, size: int) -> str:
@@ -211,32 +199,217 @@ def _daypart(hour: int) -> str:
     return "late_night"
 
 
-def _empty_reason(
-    recommendation_type: str, index: int, returning_customer: bool
-) -> str | None:
-    if recommendation_type == "for_you" and (not returning_customer or index % 29 == 0):
-        return "insufficient_history"
-    if recommendation_type == "modifier_upsell" and index % 31 == 0:
-        return "parent_cart_line_not_found"
-    if recommendation_type == "smart_cross_sell" and index % 37 == 0:
-        return "empty_cart"
-    if recommendation_type == "local_favorite" and index % 53 == 0:
-        return "no_eligible_candidates"
-    return None
+def _stable_fraction(*values: object) -> float:
+    digest = hashlib.sha256("\0".join(map(str, values)).encode()).digest()
+    return int.from_bytes(digest[:8], "big") / 2**64
+
+
+def _actual_candidate(
+    raw: Mapping[str, Any], *, drift: bool, journey_index: int
+) -> dict[str, Any]:
+    candidate = dict(raw)
+    if not drift:
+        return candidate
+    category = str(candidate["categoryId"])
+    multiplier = 1.65 if category in {"sides", "drinks"} else 0.72
+    candidate["localDemandCount"] = max(
+        1, int(int(candidate["localDemandCount"]) * multiplier)
+    )
+    candidate["basketComplementarityScore"] = round(
+        max(
+            -1.0,
+            min(
+                1.0,
+                float(candidate["basketComplementarityScore"])
+                + (0.18 if category in {"sides", "drinks"} else -0.08),
+            ),
+        ),
+        6,
+    )
+    candidate["promotionActive"] = not bool(candidate["promotionActive"])
+    candidate["available"] = (
+        _stable_fraction(candidate["sellableItemId"], journey_index, "availability")
+        < 0.78
+    )
+    return candidate
+
+
+def _candidate(
+    raw: Mapping[str, Any],
+    *,
+    recommendation_type: str,
+    affinity: float,
+    journey_index: int,
+) -> dict[str, Any]:
+    modifier = recommendation_type == "modifier_upsell"
+    candidate_id = (
+        f"modifier:{raw['modifierOptionId']}"
+        if modifier
+        else f"product:{raw['sellableItemId']}"
+    )
+    demand = int(raw["localDemandCount"])
+    complement = float(raw["basketComplementarityScore"])
+    promotion = 1.0 if raw["promotionActive"] else 0.0
+    automatic_score = (
+        0.42 * affinity
+        + 0.28 * min(1.0, demand / 640)
+        + 0.20 * max(0.0, complement)
+        + 0.10 * promotion
+        + 0.000001 * (journey_index % 17)
+    )
+    return {
+        "candidateId": candidate_id,
+        "sellableItemId": raw["sellableItemId"],
+        "modifierOptionId": raw.get("modifierOptionId"),
+        "categoryId": raw["categoryId"],
+        "unitPriceVnd": int(raw["unitPriceVnd"]),
+        "priceImpactVnd": int(raw["priceImpactVnd"]),
+        "promotionActive": bool(raw["promotionActive"]),
+        "localDemandCount": demand,
+        "basketAssociationCount": int(raw["basketAssociationCount"]),
+        "basketComplementarityScore": complement,
+        "automaticScore": round(automatic_score, 9),
+    }
+
+
+def _products_for_categories(
+    products: list[dict[str, Any]],
+    categories: list[str],
+    *,
+    start: int,
+) -> list[dict[str, Any]]:
+    selected: list[dict[str, Any]] = []
+    for offset, category in enumerate(categories):
+        matching = [item for item in products if item["categoryId"] == category]
+        if not matching:
+            matching = products
+        selected.append(matching[(start + offset) % len(matching)])
+    return selected
+
+
+def _journey_candidates(
+    *,
+    products: list[dict[str, Any]],
+    catalog_rows: list[dict[str, Any]],
+    journey: Mapping[str, Any],
+    affinity: float,
+    index: int,
+) -> tuple[
+    list[dict[str, Any]],
+    dict[str, list[dict[str, Any]]],
+    list[dict[str, Any]],
+]:
+    drift = bool(journey["drift"])
+    actual_products = [
+        _actual_candidate(product, drift=drift, journey_index=index)
+        for product in products
+    ]
+    pool = (
+        [product for product in actual_products if product["coldCandidate"]]
+        if journey["coldCandidate"]
+        else [product for product in actual_products if not product["coldCandidate"]]
+    )
+    available = [product for product in pool if product["available"]]
+    if not available:
+        return [], {}, []
+    starter_raw = [] if index % 19 == 0 else available[:4]
+    starter_type = str(journey["starterRecommendationType"])
+    starter = [
+        _candidate(
+            item,
+            recommendation_type=starter_type,
+            affinity=affinity,
+            journey_index=index,
+        )
+        for item in starter_raw
+    ]
+    modifier_by_parent: dict[str, list[dict[str, Any]]] = {}
+    option_rows = [
+        row for row in catalog_rows if row["recordType"] == "modifier_option"
+    ]
+    for starter_candidate in starter:
+        parent_id = str(starter_candidate["sellableItemId"])
+        actual_options = [
+            _actual_candidate(row, drift=drift, journey_index=index)
+            for row in option_rows
+            if row["sellableItemId"] == parent_id
+        ]
+        if index % 23 == 0:
+            actual_options = []
+        modifier_by_parent[parent_id] = [
+            _candidate(
+                option,
+                recommendation_type="modifier_upsell",
+                affinity=affinity,
+                journey_index=index,
+            )
+            for option in actual_options
+            if option["available"]
+        ]
+    smart_category_cases = (
+        ["chicken", "sides"],
+        ["chicken", "sides", "drinks"],
+        ["chicken", "sides", "drinks", "dessert"],
+        ["chicken", "chicken", "sides", "sides", "chicken"],
+    )
+    smart_raw = _products_for_categories(
+        available,
+        smart_category_cases[index % len(smart_category_cases)],
+        start=index,
+    )
+    smart = [
+        _candidate(
+            item,
+            recommendation_type="smart_cross_sell",
+            affinity=affinity,
+            journey_index=index,
+        )
+        for item in smart_raw
+    ]
+    return starter, modifier_by_parent, smart
+
+
+def _exogenous(
+    *,
+    candidates: list[dict[str, Any]],
+    outcome_rng: random.Random,
+    policy_rng: random.Random,
+) -> dict[str, Any]:
+    return {
+        "selectionDraws": {
+            recommendation_type: outcome_rng.random()
+            for recommendation_type in RECOMMENDATION_TYPES
+        },
+        "choiceDraws": {
+            recommendation_type: outcome_rng.random()
+            for recommendation_type in RECOMMENDATION_TYPES
+        },
+        "removalDraws": {
+            recommendation_type: outcome_rng.random()
+            for recommendation_type in RECOMMENDATION_TYPES
+        },
+        "checkoutDraw": outcome_rng.random(),
+        "randomPriorities": {
+            recommendation_type: {
+                str(candidate["candidateId"]): policy_rng.random()
+                for candidate in candidates
+            }
+            for recommendation_type in RECOMMENDATION_TYPES
+        },
+    }
 
 
 def _candidate_features(
     *,
     candidate: Mapping[str, Any],
     recommendation_type: str,
+    placement: Mapping[str, Any],
     journey: Mapping[str, Any],
     customer: Mapping[str, Any],
     index: int,
 ) -> dict[str, Any]:
     modifier = recommendation_type == "modifier_upsell"
     smart = recommendation_type == "smart_cross_sell"
-    parent_line = f"line-{journey['journeyId']}" if modifier else None
-    parent_item = candidate["sellableItemId"] if modifier else None
     unit_price = int(candidate["unitPriceVnd"])
     price_impact = int(candidate["priceImpactVnd"])
     feature = {
@@ -247,19 +420,25 @@ def _candidate_features(
         "locale": "vi-VN",
         "localHour": int(str(journey["startedAt"])[11:13]),
         "daypart": journey["daypart"],
-        "catalogRevision": f"synthetic-catalog-{journey['seed']}-v1",
-        "cartSubtotalVnd": journey["cartSubtotalVnd"],
-        "cartLineCount": 1 + index % 3,
-        "cartDistinctCategoryCount": 1 + index % 2,
+        "catalogRevision": (
+            f"synthetic-catalog-{journey['seed']}-drift-v2"
+            if journey["drift"]
+            else f"synthetic-catalog-{journey['seed']}-baseline-v1"
+        ),
+        "cartSubtotalVnd": placement["cartSubtotalBeforeVnd"],
+        "cartLineCount": placement["cartLineCountBefore"],
+        "cartDistinctCategoryCount": min(3, placement["cartLineCountBefore"]),
         "candidateSellableItemId": candidate["sellableItemId"],
-        "candidateModifierOptionId": candidate.get("modifierOptionId")
+        "candidateModifierOptionId": candidate["modifierOptionId"]
         if modifier
         else None,
         "candidateCategoryId": candidate["categoryId"],
         "candidatePriceImpactVnd": price_impact,
         "candidateUnitPriceVnd": unit_price,
-        "candidateDiscountAmountVnd": unit_price - price_impact,
-        "candidateDiscountActive": price_impact < unit_price,
+        "candidateDiscountAmountVnd": 0
+        if modifier
+        else max(0, unit_price - price_impact),
+        "candidateDiscountActive": False if modifier else price_impact < unit_price,
         "promotionActive": candidate["promotionActive"],
         "completedOrderCount": customer["completedOrderCount"],
         "priorItemOrderCount": (index + int(candidate["localDemandCount"])) % 8,
@@ -270,14 +449,16 @@ def _candidate_features(
         "localDemandCount": int(candidate["localDemandCount"])
         if recommendation_type == "local_favorite"
         else None,
-        "modifierParentCartLineId": parent_line,
-        "modifierParentSellableItemId": parent_item,
+        "modifierParentCartLineId": placement["parentCartLineId"] if modifier else None,
+        "modifierParentSellableItemId": candidate["sellableItemId"]
+        if modifier
+        else None,
         "modifierGroupPath": "meal/size" if modifier else None,
         "modifierSelectionMode": "single" if modifier else None,
         "modifierOptionAvailable": True if modifier else None,
         "modifierOptionSafe": True if modifier else None,
         "modifierPriceRatio": round(price_impact / unit_price, 8) if modifier else None,
-        "remainingBudgetVnd": 250_000 - int(journey["cartSubtotalVnd"])
+        "remainingBudgetVnd": max(0, 250_000 - int(placement["cartSubtotalBeforeVnd"]))
         if modifier or smart
         else None,
         "basketAssociationCount": int(candidate["basketAssociationCount"])
@@ -287,103 +468,23 @@ def _candidate_features(
         if smart
         else None,
         "basketRedundancyCount": index % 2 if smart else None,
-        "basketCategoryDiversityCount": 1 + index % 3 if smart else None,
+        "basketCategoryDiversityCount": min(3, int(placement["cartLineCountBefore"]))
+        if smart
+        else None,
     }
     if tuple(feature) != FEATURE_KEYS:
-        raise AssertionError(
-            "candidate feature shape drifted from the accepted scorer contract"
-        )
+        raise AssertionError("candidate feature shape drifted from scorer contract")
     return feature
-
-
-def _candidates(
-    *,
-    recommendation_type: str,
-    journey: Mapping[str, Any],
-    customer: Mapping[str, Any],
-    products: list[dict[str, Any]],
-    catalog_rows: list[dict[str, Any]],
-    index: int,
-) -> list[dict[str, Any]]:
-    count = 2 + index % 4
-    cold = bool(journey["coldCandidate"])
-    candidates: list[dict[str, Any]] = []
-    if recommendation_type == "modifier_upsell":
-        option_rows = [
-            row for row in catalog_rows if row["recordType"] == "modifier_option"
-        ]
-        pool = option_rows[6:] if cold else option_rows[:6]
-    else:
-        pool = products[20:] if cold else products[:20]
-    for offset in range(count):
-        candidate = dict(pool[(index + offset) % len(pool)])
-        if recommendation_type == "modifier_upsell":
-            candidate_id = f"modifier:{candidate['modifierOptionId']}"
-        else:
-            candidate_id = f"product:{candidate['sellableItemId']}"
-        features = _candidate_features(
-            candidate=candidate,
-            recommendation_type=recommendation_type,
-            journey=journey,
-            customer=customer,
-            index=index + offset,
-        )
-        candidates.append(
-            {
-                "candidateId": candidate_id,
-                "eligibility": "eligible",
-                "priceImpactVnd": candidate["priceImpactVnd"],
-                "features": features,
-                "policyFacts": candidate,
-            }
-        )
-    return candidates
-
-
-def _propensities(candidates: list[dict[str, Any]], policy: str) -> list[float]:
-    if policy == "stochastic_popularity":
-        weights = [
-            1.0 + candidate["policyFacts"]["localDemandCount"]
-            for candidate in candidates
-        ]
-    elif policy == "basket_association":
-        weights = [
-            1.0 + candidate["policyFacts"]["basketAssociationCount"]
-            for candidate in candidates
-        ]
-    elif policy == "promotion_biased":
-        weights = [
-            4.0 if candidate["policyFacts"]["promotionActive"] else 1.0
-            for candidate in candidates
-        ]
-    else:
-        weights = [1.0] * len(candidates)
-    total = math.fsum(weights)
-    exploration = 0.20
-    return [
-        (1.0 - exploration) * weight / total + exploration / len(candidates)
-        for weight in weights
-    ]
-
-
-def _choose_index(propensities: list[float], rng: random.Random) -> int:
-    threshold = rng.random()
-    cumulative = 0.0
-    for index, propensity in enumerate(propensities):
-        cumulative += propensity
-        if threshold <= cumulative:
-            return index
-    return len(propensities) - 1
 
 
 def _model_binding(recommendation_type: str) -> dict[str, str]:
     return {
         "bundleId": "synthetic-unqualified-shape-only",
         "bundleDigest": "0" * 64,
-        "modelRevision": f"shape-{recommendation_type}-v1",
-        "calibratorRevision": "shape-calibrator-v1",
+        "modelRevision": f"shape-{recommendation_type}-v2",
+        "calibratorRevision": "shape-calibrator-v2",
         "featureSchemaDigest": "1" * 64,
-        "thresholdRevision": "shape-threshold-v1",
+        "thresholdRevision": "shape-threshold-v2",
         "composerContractDigest": "2" * 64,
         "qualificationRunId": "shape-export-only",
         "qualificationEvidenceDigest": "3" * 64,
@@ -393,82 +494,142 @@ def _model_binding(recommendation_type: str) -> dict[str, str]:
 def _scorer_request(
     recommendation_type: str,
     candidates: list[dict[str, Any]],
-    request_index: int,
+    request_id: str,
 ) -> dict[str, Any]:
     return {
         "schemaVersion": "kfc-automatic-scorer-v1",
-        "requestId": f"synthetic-shape-{recommendation_type}-{request_index}",
+        "requestId": request_id,
         "recommendationType": recommendation_type,
         "model": _model_binding(recommendation_type),
         "candidates": [
             {
                 key: candidate[key]
-                for key in ("candidateId", "eligibility", "priceImpactVnd", "features")
+                for key in (
+                    "candidateId",
+                    "eligibility",
+                    "priceImpactVnd",
+                    "features",
+                )
             }
             for candidate in candidates
         ],
     }
 
 
-def _condition_effect(condition: str, recommendation_type: str) -> float:
-    if condition == "no_recommendation":
-        return -1.0
-    if condition == "random_eligible":
-        return 0.03
-    if condition == "popularity":
-        return 0.06
-    if condition == f"ablate_{recommendation_type}":
-        return -1.0
-    if condition.startswith("ablate_"):
-        return 0.11
-    return 0.14
-
-
-def _potential_outcomes(
-    *,
-    seed: int,
-    journey: Mapping[str, Any],
+def _clone_shape_candidates(
+    template: Mapping[str, Any],
     recommendation_type: str,
-    affinity: float,
-    candidate_price: int,
-    has_candidate: bool,
-    rng: random.Random,
-) -> dict[str, dict[str, Any]]:
-    selection_draw = rng.random()
-    checkout_draw = rng.random()
-    retention_draw = rng.random()
-    base_subtotal = int(journey["cartSubtotalVnd"])
-    paired_ref = f"pair:{journey['journeyId']}"
-    outcomes: dict[str, dict[str, Any]] = {}
-    for condition in CONDITIONS:
-        effect = _condition_effect(condition, recommendation_type)
-        selection_probability = max(0.0, min(0.92, 0.08 + 0.55 * affinity + effect))
-        selected = (
-            has_candidate and effect >= 0 and selection_draw < selection_probability
+    count: int,
+    *,
+    category_count: int | None = None,
+) -> list[dict[str, Any]]:
+    clones: list[dict[str, Any]] = []
+    for index in range(count):
+        features = dict(template["features"])
+        sellable_id = f"shape-item-{recommendation_type}-{index:03d}"
+        features["candidateSellableItemId"] = sellable_id
+        features["candidateCategoryId"] = (
+            f"shape-category-{index % (category_count or count)}"
         )
-        checkout_probability = max(
-            0.05, min(0.98, 0.58 + 0.12 * affinity + (0.06 if selected else 0))
+        if recommendation_type == "modifier_upsell":
+            option_id = f"shape-option-{index:03d}"
+            features["candidateModifierOptionId"] = option_id
+            candidate_id = f"modifier:{option_id}"
+        else:
+            candidate_id = f"product:{sellable_id}"
+        clones.append(
+            {
+                "candidateId": candidate_id,
+                "eligibility": "eligible",
+                "priceImpactVnd": template["priceImpactVnd"],
+                "features": features,
+            }
         )
-        checkout = checkout_draw < checkout_probability
-        retained = selected and retention_draw >= 0.08
-        terminal = "checkout_completed" if checkout else "order_abandoned"
-        subtotal = (
-            base_subtotal + (candidate_price if checkout and retained else 0)
-            if checkout
-            else 0
+    return clones
+
+
+def _shape_rows(
+    templates: Mapping[str, Mapping[str, Any]],
+) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+    declarations = [
+        ("local_favorite_120", "local_favorite", 120, 3, 1, None),
+        ("local_favorite_240_stress", "local_favorite", 240, 3, 1, None),
+        ("for_you_120", "for_you", 120, 3, 1, None),
+        ("for_you_240_stress", "for_you", 240, 3, 1, None),
+        ("modifier_5", "modifier_upsell", 5, 3, 1, None),
+        ("modifier_17", "modifier_upsell", 17, 3, 1, None),
+        ("modifier_25", "modifier_upsell", 25, 3, 1, None),
+        ("smart_insufficient_2", "smart_cross_sell", 2, 2, 2, 2),
+        ("smart_default_3", "smart_cross_sell", 3, 3, 3, 3),
+        ("smart_max_4", "smart_cross_sell", 4, 4, 4, 4),
+        ("smart_no_padding", "smart_cross_sell", 5, 2, 2, 2),
+        ("smart_120", "smart_cross_sell", 120, 3, 3, 120),
+        ("smart_240_stress", "smart_cross_sell", 240, 3, 3, 240),
+    ]
+    rows: list[dict[str, Any]] = []
+    requests: list[dict[str, Any]] = []
+    for (
+        shape_class,
+        recommendation_type,
+        count,
+        rendered,
+        diversity,
+        categories,
+    ) in declarations:
+        candidates = _clone_shape_candidates(
+            templates[recommendation_type],
+            recommendation_type,
+            count,
+            category_count=categories,
         )
-        outcomes[condition] = {
-            "seed": seed,
-            "journeyId": journey["journeyId"],
-            "opportunityId": journey["opportunityId"],
-            "pairedComparisonRef": paired_ref,
-            "condition": condition,
-            "latentAffinity": affinity,
-            "potentialSelection": selected,
-            "terminalState": terminal,
-            "finalMerchandiseSubtotalVnd": subtotal,
-        }
-    return outcomes
+        request = _scorer_request(
+            recommendation_type,
+            candidates,
+            f"synthetic-{shape_class}",
+        )
+        requests.append(request)
+        rows.append(
+            {
+                "shapeClass": shape_class,
+                "recommendationType": recommendation_type,
+                "candidateCount": count,
+                "expectedRenderedCount": rendered,
+                "expectedMinimumCategoryDiversity": diversity,
+                "requestJson": _canonical_json(request).decode(),
+            }
+        )
+    return rows, requests
+
+
+def _qualification_traffic_rows() -> list[dict[str, Any]]:
+    rates: list[tuple[str, list[float], str]] = [
+        ("warmup_5_rps", [5.0] * 5, "lunch"),
+        ("ramp_to_50_rps", [9.5 + 4.5 * minute for minute in range(10)], "lunch"),
+        ("peak_50_rps", [50.0] * 30, "lunch"),
+        ("shock_100_rps", [100.0] * 2, "dinner"),
+        ("recovery_25_rps", [25.0] * 15, "dinner"),
+        ("drain_5_rps", [5.0] * 15, "dinner"),
+    ]
+    rows: list[dict[str, Any]] = []
+    minute_offset = 0
+    for phase, phase_rates, daypart in rates:
+        for target_rps in phase_rates:
+            rows.append(
+                {
+                    "trafficProfile": "aws_qualification_v1",
+                    "phase": phase,
+                    "seed": None,
+                    "minute": None,
+                    "minuteOffset": minute_offset,
+                    "durationSeconds": 60,
+                    "targetRps": target_rps,
+                    "daypart": daypart,
+                    "rush": phase in {"peak_50_rps", "shock_100_rps"},
+                    "arrivals": int(target_rps * 60),
+                }
+            )
+            minute_offset += 1
+    return rows
 
 
 def _write_row_group(
@@ -484,14 +645,28 @@ def _write_row_group(
         writer = pq.ParquetWriter(
             path,
             schema,
-            compression="NONE",
-            use_dictionary=False,
+            compression="zstd",
+            compression_level=3,
+            use_dictionary=True,
             write_statistics=True,
             version="2.6",
             data_page_version="2.0",
         )
         writers[key] = writer
     writer.write_table(pa.Table.from_pylist(rows, schema=schema))
+
+
+def _environment_binding() -> dict[str, Any]:
+    package_root = Path(__file__).resolve().parents[2]
+    lock_path = package_root / "uv.lock"
+    return {
+        "pythonImplementation": platform.python_implementation(),
+        "pythonVersion": platform.python_version(),
+        "pythonExecutableVersion": sys.version.split()[0],
+        "pyarrowVersion": pa.__version__,
+        "uvLockSha256": hashlib.sha256(lock_path.read_bytes()).hexdigest(),
+        "parquetWriter": PARQUET_WRITER_SETTINGS,
+    }
 
 
 def generate_world(
@@ -503,18 +678,15 @@ def generate_world(
 ) -> Path:
     if not world_revision or "/" in world_revision or ".." in world_revision:
         raise ValueError("world revision must be one safe path segment")
-    output = Path(output_root)
-    world = output / world_revision
+    world = Path(output_root) / world_revision
     if world.exists():
-        raise FileExistsError(
-            f"refusing to overwrite existing synthetic world: {world}"
-        )
+        raise FileExistsError(f"refusing to overwrite existing world: {world}")
     overrides = dict(stream_seed_overrides or {})
-    shape_requests: dict[tuple[str, int], dict[str, Any]] = {}
     stream_evidence: dict[str, dict[str, int]] = {}
     writers: dict[str, pq.ParquetWriter] = {}
     row_counts: Counter[str] = Counter()
     invalid_counters: Counter[str] = Counter()
+    shape_templates: dict[str, dict[str, Any]] = {}
 
     for seed_position, seed in enumerate(profile.seeds):
         rows: dict[str, list[dict[str, Any]]] = {path: [] for path in ARTIFACT_SCHEMAS}
@@ -526,193 +698,276 @@ def generate_world(
         )
         rows["source/catalog.parquet"].extend(catalog_rows)
         rows["source/population.parquet"].extend(population_rows)
-
         minute_counts: Counter[tuple[str, str, bool]] = Counter()
+
         for index in range(profile.journeys_per_seed):
             split = _split(index, profile.journeys_per_seed)
             untouched = split == "untouched_test"
             started_at = _journey_time(index, seed_position)
             daypart = _daypart(started_at.hour)
-            rush = daypart in {"lunch", "dinner"}
-            recommendation_type = RECOMMENDATION_TYPES[
-                index % len(RECOMMENDATION_TYPES)
-            ]
             customer_pool = customers[128:] if untouched else customers[:128]
             customer = customer_pool[streams["traffic"].randrange(len(customer_pool))]
+            affinity = latent_affinity[str(customer["customerId"])]
+            if untouched:
+                affinity = round(min(1.0, 0.15 + 0.80 * affinity), 8)
             journey_id = f"journey-{seed}-{index:06d}"
-            opportunity_id = f"opportunity-{seed}-{index:06d}"
-            cart_subtotal = 45_000 + 10_000 * streams["behavior"].randrange(12)
+            has_initial_cart = index % 5 != 0
+            initial_item = products[(index + 7) % 40] if has_initial_cart else None
+            cart_subtotal = int(initial_item["priceImpactVnd"]) if initial_item else 0
+            starter_type = (
+                "for_you"
+                if int(customer["completedOrderCount"]) > 0
+                else "local_favorite"
+            )
             journey = {
                 "seed": seed,
                 "journeyId": journey_id,
-                "opportunityId": opportunity_id,
+                "admissionOpportunityId": f"opportunity:{journey_id}:1",
                 "startedAt": started_at.isoformat(),
                 "split": split,
-                "storeId": f"held-out-store-{seed}"
-                if untouched
-                else f"store-{seed}-{index % 3}",
+                "storeId": (
+                    f"held-out-store-{seed}"
+                    if untouched
+                    else f"store-{seed}-{index % 3}"
+                ),
                 "customerId": customer["customerId"],
                 "returningCustomer": customer["returningCustomer"],
                 "fulfilmentMode": FULFILMENT_MODES[streams["traffic"].randrange(2)],
                 "daypart": daypart,
-                "recommendationType": recommendation_type,
+                "starterRecommendationType": starter_type,
                 "cartSubtotalVnd": cart_subtotal,
+                "initialCartLineCount": 1 if initial_item else 0,
+                "initialCartLineId": f"line:{journey_id}:initial"
+                if initial_item
+                else None,
+                "initialCartItemId": initial_item["sellableItemId"]
+                if initial_item
+                else None,
+                "desiredSmartSlateSize": 3 + (index % 2),
                 "heldOutStore": untouched,
                 "coldCustomer": untouched,
                 "coldCandidate": untouched,
                 "drift": untouched,
-                "rush": rush,
+                "demandMultiplier": 1.65 if untouched else 1.0,
+                "preferenceRegime": "shifted_sides_and_drinks"
+                if untouched
+                else "baseline",
+                "promotionRegime": "inverted" if untouched else "baseline",
+                "availabilityRate": 0.78 if untouched else 1.0,
+                "rush": daypart in {"lunch", "dinner"},
             }
             rows["source/journeys.parquet"].append(journey)
             minute_counts[
-                (started_at.isoformat(timespec="minutes"), daypart, rush)
+                (started_at.isoformat(timespec="minutes"), daypart, journey["rush"])
             ] += 1
-
-            empty_reason = _empty_reason(
-                recommendation_type, index, bool(customer["returningCustomer"])
+            starter, modifiers_by_parent, smart = _journey_candidates(
+                products=products,
+                catalog_rows=catalog_rows,
+                journey=journey,
+                affinity=affinity,
+                index=index,
             )
-            candidates = (
-                []
-                if empty_reason
-                else _candidates(
-                    recommendation_type=recommendation_type,
-                    journey=journey,
-                    customer=customer,
-                    products=products,
-                    catalog_rows=catalog_rows,
-                    index=index,
+            all_candidates = (
+                starter
+                + smart
+                + [
+                    candidate
+                    for candidates in modifiers_by_parent.values()
+                    for candidate in candidates
+                ]
+            )
+            exogenous = _exogenous(
+                candidates=all_candidates,
+                outcome_rng=streams["outcomes"],
+                policy_rng=streams["logging_policy"],
+            )
+            potentials = simulate_conditions(
+                journey=journey,
+                customer=customer,
+                affinity=affinity,
+                starter_candidates=starter,
+                modifier_candidates_by_parent=modifiers_by_parent,
+                smart_candidates=smart,
+                exogenous=exogenous,
+            )
+            for result in potentials.values():
+                rows["oracle/potential-outcomes.parquet"].append(
+                    {key: value for key, value in result.items() if key != "_path"}
                 )
-            )
-            policy = LOGGING_POLICIES[(index // 4) % len(LOGGING_POLICIES)]
             assigned_condition = CONDITIONS[
                 streams["splits"].randrange(len(CONDITIONS))
             ]
-            active_condition = assigned_condition not in {
-                "no_recommendation",
-                f"ablate_{recommendation_type}",
-            }
-            shown_index: int | None = None
-            propensities: list[float] = []
-            if candidates:
-                propensities = _propensities(candidates, policy)
-                if active_condition:
-                    shown_index = _choose_index(propensities, streams["logging_policy"])
-                shape_requests.setdefault(
-                    (recommendation_type, len(candidates)),
-                    _scorer_request(recommendation_type, candidates, index),
-                )
-
-            candidate_price = (
-                int(candidates[shown_index]["priceImpactVnd"])
-                if shown_index is not None
-                else 0
-            )
-            potentials = _potential_outcomes(
-                seed=seed,
-                journey=journey,
-                recommendation_type=recommendation_type,
-                affinity=latent_affinity[customer["customerId"]],
-                candidate_price=candidate_price,
-                has_candidate=bool(candidates),
-                rng=streams["outcomes"],
-            )
-            rows["oracle/potential-outcomes.parquet"].extend(potentials.values())
             factual = potentials[assigned_condition]
-            selected = bool(factual["potentialSelection"] and shown_index is not None)
-            checkout = factual["terminalState"] == "checkout_completed"
-            removed = (
-                selected
-                and checkout
-                and (factual["finalMerchandiseSubtotalVnd"] == cart_subtotal)
-            )
-            shown_candidate_id = (
-                candidates[shown_index]["candidateId"]
-                if shown_index is not None
-                else None
-            )
-            selected_candidate_id = shown_candidate_id if selected else None
-            rows["evaluation/opportunities.parquet"].append(
-                {
-                    "seed": seed,
-                    "journeyId": journey_id,
-                    "opportunityId": opportunity_id,
-                    "occurredAt": started_at.isoformat(),
-                    "recommendationType": recommendation_type,
-                    "placement": "starter"
-                    if recommendation_type in {"local_favorite", "for_you"}
-                    else "basket",
-                    "status": "empty" if empty_reason else "ready",
-                    "emptyReason": empty_reason,
-                    "assignedCondition": assigned_condition,
-                    "loggingPolicy": policy,
-                    "candidateCount": len(candidates),
-                    "shownCandidateId": shown_candidate_id,
-                    "renderedPosition": 1 if shown_index is not None else None,
-                    "exposurePropensity": (
-                        propensities[shown_index] if shown_index is not None else None
-                    ),
-                    "dismissed": shown_index is not None and not selected,
-                    "selectedCandidateId": selected_candidate_id,
-                    "acceptedItemRemoved": removed,
-                    "cartMutation": "removed_before_checkout"
-                    if removed
-                    else ("succeeded" if selected else "not_attempted"),
-                    "checkout": checkout,
-                    "abandonment": not checkout,
-                    "finalMerchandiseSubtotalVnd": factual[
-                        "finalMerchandiseSubtotalVnd"
-                    ],
-                }
-            )
             rows["evaluation/journeys.parquet"].append(
                 {
-                    "seed": seed,
-                    "journeyId": journey_id,
-                    "opportunityId": opportunity_id,
-                    "assignedCondition": assigned_condition,
-                    "pairedComparisonRef": factual["pairedComparisonRef"],
-                    "terminalState": factual["terminalState"],
-                    "checkout": checkout,
-                    "abandonment": not checkout,
-                    "finalMerchandiseSubtotalVnd": factual[
-                        "finalMerchandiseSubtotalVnd"
-                    ],
+                    key: factual[key]
+                    for key in (
+                        "seed",
+                        "journeyId",
+                        "condition",
+                        "pairedComparisonRef",
+                        "starterRecommendationType",
+                        "baseCartSubtotalVnd",
+                        "selectedActionIdsJson",
+                        "retainedActionIdsJson",
+                        "removedActionIdsJson",
+                        "treatmentRevenueVnd",
+                        "terminalState",
+                        "checkout",
+                        "finalMerchandiseSubtotalVnd",
+                    )
+                }
+                | {
+                    "assignedCondition": factual["condition"],
+                    "abandonment": not factual["checkout"],
                 }
             )
-            for candidate_index, candidate in enumerate(candidates):
-                is_shown = candidate_index == shown_index
-                training_row = {
-                    "seed": seed,
-                    "journeyId": journey_id,
-                    "opportunityId": opportunity_id,
-                    "split": split,
-                    "loggingPolicy": policy,
-                    "candidateId": candidate["candidateId"],
-                    "eligibility": "eligible",
-                    "priceImpactVnd": candidate["priceImpactVnd"],
-                    **candidate["features"],
-                    "shown": is_shown,
-                    "exposurePropensity": propensities[candidate_index]
-                    if is_shown
-                    else None,
-                    "selected": selected if is_shown else None,
-                    "selectedThroughCheckout": (selected and checkout and not removed)
-                    if is_shown
-                    else None,
+            candidate_lookup = {
+                str(candidate["candidateId"]): candidate for candidate in all_candidates
+            }
+            for placement in factual["_path"]:
+                members = placement["members"]
+                rendered_ids = [member["actionId"] for member in members]
+                selected_ids = [
+                    member["actionId"] for member in members if member["selected"]
+                ]
+                rows["evaluation/opportunities.parquet"].append(
+                    {
+                        "seed": seed,
+                        "journeyId": journey_id,
+                        "opportunityId": placement["opportunityId"],
+                        "occurredAt": (
+                            started_at + timedelta(seconds=placement["sequence"])
+                        ).isoformat(),
+                        "sequence": placement["sequence"],
+                        "recommendationType": placement["recommendationType"],
+                        "placement": "starter"
+                        if placement["sequence"] == 1
+                        else "basket",
+                        "status": placement["status"],
+                        "emptyReason": placement["emptyReason"],
+                        "assignedCondition": assigned_condition,
+                        "treatmentPolicy": placement["policyName"],
+                        "prerequisiteState": placement["prerequisiteState"],
+                        "parentCartLineId": placement["parentCartLineId"],
+                        "createdCartLineId": placement["createdCartLineId"],
+                        "candidateCount": len(placement["eligibleCandidateIds"]),
+                        "slateId": placement["slateId"],
+                        "slateSize": len(members),
+                        "slatePropensity": placement["slatePropensity"],
+                        "outcomeClass": placement["outcomeClass"],
+                        "renderedActionIdsJson": _canonical_json(rendered_ids).decode(),
+                        "selectedActionIdsJson": _canonical_json(selected_ids).decode(),
+                        "cartSubtotalBeforeVnd": placement["cartSubtotalBeforeVnd"],
+                        "cartSubtotalAfterVnd": placement["cartSubtotalAfterVnd"],
+                        "cartLineCountBefore": placement["cartLineCountBefore"],
+                        "cartLineCountAfter": placement["cartLineCountAfter"],
+                    }
+                )
+                member_by_candidate = {
+                    str(member["candidateId"]): member for member in members
                 }
-                rows["model-visible/training-examples.parquet"].append(training_row)
+                for member in members:
+                    rows["evaluation/exposures.parquet"].append(
+                        {
+                            "seed": seed,
+                            "journeyId": journey_id,
+                            "opportunityId": placement["opportunityId"],
+                            "assignedCondition": assigned_condition,
+                            "recommendationType": placement["recommendationType"],
+                            "slateId": placement["slateId"],
+                            **{
+                                key: member[key]
+                                for key in (
+                                    "actionId",
+                                    "candidateId",
+                                    "categoryId",
+                                    "renderedPosition",
+                                    "priceImpactVnd",
+                                    "slatePropensity",
+                                    "selectionPropensity",
+                                    "behaviorSelectionProbability",
+                                    "selected",
+                                    "retained",
+                                    "removed",
+                                )
+                            },
+                        }
+                    )
+                for candidate_id in placement["eligibleCandidateIds"]:
+                    candidate = candidate_lookup[candidate_id]
+                    member = member_by_candidate.get(candidate_id)
+                    shown = member is not None
+                    features = _candidate_features(
+                        candidate=candidate,
+                        recommendation_type=placement["recommendationType"],
+                        placement=placement,
+                        journey=journey,
+                        customer=customer,
+                        index=index,
+                    )
+                    training_candidate = {
+                        "candidateId": candidate_id,
+                        "eligibility": "eligible",
+                        "priceImpactVnd": candidate["priceImpactVnd"],
+                        "features": features,
+                    }
+                    shape_templates.setdefault(
+                        placement["recommendationType"], training_candidate
+                    )
+                    rows["model-visible/training-examples.parquet"].append(
+                        {
+                            "seed": seed,
+                            "journeyId": journey_id,
+                            "opportunityId": placement["opportunityId"],
+                            "split": split,
+                            "loggingPolicy": placement["policyName"],
+                            "candidateId": candidate_id,
+                            "eligibility": "eligible",
+                            "priceImpactVnd": candidate["priceImpactVnd"],
+                            **features,
+                            "shown": shown,
+                            "slateId": placement["slateId"] if shown else None,
+                            "renderedPosition": member["renderedPosition"]
+                            if shown
+                            else None,
+                            "slatePropensity": member["slatePropensity"]
+                            if shown
+                            else None,
+                            "selectionPropensity": member["selectionPropensity"]
+                            if shown
+                            else None,
+                            "exposurePropensity": member["selectionPropensity"]
+                            if shown
+                            else None,
+                            "selected": member["selected"] if shown else None,
+                            "selectedThroughCheckout": (
+                                member["selected"]
+                                and member["retained"]
+                                and factual["checkout"]
+                            )
+                            if shown
+                            else None,
+                        }
+                    )
 
-        for (minute, daypart, rush), arrivals in sorted(minute_counts.items()):
+        for minute_offset, ((minute, daypart, rush), arrivals) in enumerate(
+            sorted(minute_counts.items())
+        ):
             rows["traffic/arrivals-per-minute.parquet"].append(
                 {
+                    "trafficProfile": "synthetic_world_observed",
+                    "phase": daypart,
                     "seed": seed,
                     "minute": minute,
+                    "minuteOffset": minute_offset,
+                    "durationSeconds": 60,
+                    "targetRps": arrivals / 60,
                     "daypart": daypart,
                     "rush": rush,
                     "arrivals": arrivals,
                 }
             )
-
         seed_invalid = count_invalid_rows(
             training_rows=rows["model-visible/training-examples.parquet"],
             journey_rows=rows["evaluation/journeys.parquet"],
@@ -725,30 +980,20 @@ def generate_world(
             if relative_path == "traffic/scorer-candidate-shapes.parquet":
                 continue
             _write_row_group(
-                world / relative_path,
-                rows[relative_path],
-                schema,
-                writers,
+                world / relative_path, rows[relative_path], schema, writers
             )
             row_counts[relative_path] += len(rows[relative_path])
 
-    scorer_requests = [shape_requests[key] for key in sorted(shape_requests)]
-    shape_rows = [
-        {
-            "recommendationType": request["recommendationType"],
-            "candidateCount": len(request["candidates"]),
-            "requestJson": _canonical_json(request).decode(),
-        }
-        for request in scorer_requests
-    ]
+    missing_templates = set(RECOMMENDATION_TYPES).difference(shape_templates)
+    if missing_templates:
+        raise ValueError(f"missing scorer shape templates: {sorted(missing_templates)}")
+    shape_rows, scorer_requests = _shape_rows(shape_templates)
     shape_invalid = count_invalid_rows(
-        training_rows=(),
-        journey_rows=(),
-        scorer_requests=scorer_requests,
+        training_rows=(), journey_rows=(), scorer_requests=scorer_requests
     )
     invalid_counters.update(shape_invalid)
     if any(shape_invalid.values()):
-        raise ValueError(f"synthetic world validation failed: {shape_invalid}")
+        raise ValueError(f"scorer shape validation failed: {shape_invalid}")
     shape_path = "traffic/scorer-candidate-shapes.parquet"
     _write_row_group(
         world / shape_path,
@@ -757,6 +1002,15 @@ def generate_world(
         writers,
     )
     row_counts[shape_path] = len(shape_rows)
+    qualification_rows = _qualification_traffic_rows()
+    traffic_path = "traffic/arrivals-per-minute.parquet"
+    _write_row_group(
+        world / traffic_path,
+        qualification_rows,
+        ARTIFACT_SCHEMAS[traffic_path],
+        writers,
+    )
+    row_counts[traffic_path] += len(qualification_rows)
     for writer in writers.values():
         writer.close()
 
@@ -770,17 +1024,12 @@ def generate_world(
             "schemaDigest": schema_digest(schema),
             "sha256": hashlib.sha256(payload).hexdigest(),
         }
-
     manifest = {
         "schemaVersion": WORLD_MANIFEST_VERSION,
         "worldRevision": world_revision,
         "generatorRevision": GENERATOR_REVISION,
         "artifactEncoding": "parquet",
-        "parquetContract": {
-            "formatVersion": "2.6",
-            "compression": "NONE",
-            "dictionaryEncoding": False,
-        },
+        "environment": _environment_binding(),
         "syntheticOnlyDisclaimer": (
             "Synthetic qualification evidence only; this world does not claim "
             "compatibility with real KFC data."
@@ -792,14 +1041,10 @@ def generate_world(
             "totalJourneys": profile.total_journeys,
         },
         "physicalSurfaces": {
-            "source": "physical synthetic source adapter facts",
-            "model-visible": (
-                "pre-decision features plus factual shown-candidate labels"
-            ),
-            "evaluation": "condition assignments and observed terminal outcomes",
-            "oracle": (
-                "latent preferences and paired potential outcomes; evaluator only"
-            ),
+            "source": "pre-opportunity synthetic commerce facts",
+            "model-visible": "pre-decision features and factual shown labels only",
+            "evaluation": "factual lifecycle, exposure, and terminal evidence",
+            "oracle": "paired treatment paths, latent facts, and potential outcomes",
         },
         "randomStreams": stream_evidence,
         "streamSeedOverrides": overrides,
@@ -810,10 +1055,24 @@ def generate_world(
         },
         "conditionVocabulary": list(CONDITIONS),
         "fulfilmentVocabulary": list(FULFILMENT_MODES),
-        "exposurePolicy": {
-            "explorationRate": 0.20,
-            "knownPositiveSupport": True,
-            "policies": list(LOGGING_POLICIES),
+        "treatmentPolicies": {
+            "automatic": "automatic_proxy_scorer_composer_v1",
+            "random_eligible": "random_uniform_without_replacement",
+            "popularity": "popularity_descending_v1",
+            "ablations": "automatic proxy with exactly one named type suppressed",
+            "no_recommendation": "no action or slate",
+        },
+        "driftMechanism": {
+            "window": "untouched_test",
+            "demand": "sides/drinks x1.65; other categories x0.72",
+            "preferences": "affinity transformed to 0.15 + 0.80 * baseline",
+            "promotions": "baseline flags inverted",
+            "availabilityRate": 0.78,
+            "catalogRevision": "drift-v2",
+        },
+        "trafficProfiles": {
+            "peak": {"phase": "peak_50_rps", "targetRps": 50, "minutes": 30},
+            "shock": {"phase": "shock_100_rps", "targetRps": 100, "minutes": 2},
         },
         "qualityCounters": dict(invalid_counters),
         "artifacts": artifact_evidence,

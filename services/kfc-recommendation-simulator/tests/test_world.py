@@ -6,6 +6,7 @@ import os
 import subprocess
 import sys
 import tempfile
+import tomllib
 import unittest
 from pathlib import Path
 
@@ -35,6 +36,7 @@ EXPECTED_ARTIFACTS = {
     "source/journeys.parquet",
     "model-visible/training-examples.parquet",
     "evaluation/opportunities.parquet",
+    "evaluation/exposures.parquet",
     "evaluation/journeys.parquet",
     "oracle/potential-outcomes.parquet",
     "traffic/arrivals-per-minute.parquet",
@@ -69,7 +71,7 @@ class SyntheticWorldTest(unittest.TestCase):
 
     def test_manifest_binds_exact_profile_schemas_and_artifact_digests(self) -> None:
         self.assertEqual(
-            self.manifest["schemaVersion"], "kfc-synthetic-world-manifest-v1"
+            self.manifest["schemaVersion"], "kfc-synthetic-world-manifest-v2"
         )
         self.assertEqual(self.manifest["artifactEncoding"], "parquet")
         self.assertEqual(self.manifest["profile"]["journeysPerSeed"], 2_000)
@@ -93,6 +95,32 @@ class SyntheticWorldTest(unittest.TestCase):
             allow_nan=False,
         ).encode()
         self.assertEqual(hashlib.sha256(canonical).hexdigest(), expected)
+
+    def test_environment_is_exactly_pinned_and_bound_to_manifest(self) -> None:
+        project = tomllib.loads(
+            (SIMULATOR_ROOT / "pyproject.toml").read_text(encoding="utf-8")
+        )
+        self.assertEqual(project["project"]["requires-python"], "==3.11.14")
+        self.assertEqual(project["project"]["dependencies"], ["pyarrow==23.0.1"])
+        self.assertEqual(project["dependency-groups"]["dev"], ["ruff==0.16.1"])
+        environment = self.manifest["environment"]
+        self.assertEqual(environment["pythonVersion"], "3.11.14")
+        self.assertEqual(environment["pyarrowVersion"], "23.0.1")
+        self.assertEqual(
+            environment["uvLockSha256"],
+            hashlib.sha256((SIMULATOR_ROOT / "uv.lock").read_bytes()).hexdigest(),
+        )
+        self.assertEqual(
+            environment["parquetWriter"],
+            {
+                "formatVersion": "2.6",
+                "dataPageVersion": "2.0",
+                "compression": "zstd",
+                "compressionLevel": 3,
+                "dictionaryEncoding": True,
+                "writeStatistics": True,
+            },
+        )
 
     def test_identical_inputs_regenerate_every_public_byte(self) -> None:
         second = generate_world(
@@ -156,33 +184,34 @@ class SyntheticWorldTest(unittest.TestCase):
         opportunities = pq.read_table(
             self.world / "evaluation" / "opportunities.parquet"
         ).to_pylist()
-        exposed = [row for row in opportunities if row["shownCandidateId"] is not None]
+        exposures = pq.read_table(
+            self.world / "evaluation" / "exposures.parquet"
+        ).to_pylist()
         self.assertEqual(
-            {row["loggingPolicy"] for row in opportunities},
+            {row["treatmentPolicy"] for row in opportunities},
             {
-                "stochastic_popularity",
-                "basket_association",
-                "promotion_biased",
-                "randomized_exploration",
+                "automatic_proxy_scorer_composer_v1",
+                "no_recommendation",
+                "random_uniform_without_replacement",
+                "popularity_descending_v1",
             },
         )
         self.assertTrue(
             all(
-                row["renderedPosition"] == 1 and 0 < row["exposurePropensity"] <= 1
-                for row in exposed
+                row["renderedPosition"] >= 1
+                and 0 < row["slatePropensity"] <= 1
+                and 0 < row["selectionPropensity"] <= 1
+                for row in exposures
             )
         )
         self.assertEqual(
-            self.manifest["exposurePolicy"],
+            self.manifest["treatmentPolicies"],
             {
-                "explorationRate": 0.2,
-                "knownPositiveSupport": True,
-                "policies": [
-                    "stochastic_popularity",
-                    "basket_association",
-                    "promotion_biased",
-                    "randomized_exploration",
-                ],
+                "automatic": "automatic_proxy_scorer_composer_v1",
+                "random_eligible": "random_uniform_without_replacement",
+                "popularity": "popularity_descending_v1",
+                "ablations": "automatic proxy with exactly one named type suppressed",
+                "no_recommendation": "no action or slate",
             },
         )
 
@@ -244,6 +273,12 @@ class SyntheticWorldTest(unittest.TestCase):
         self.assertTrue(
             all(row["finalMerchandiseSubtotalVnd"] is not None for row in journeys)
         )
+        self.assertTrue(
+            all(
+                not row["checkout"] or row["finalMerchandiseSubtotalVnd"] > 0
+                for row in journeys
+            )
+        )
 
     def test_oracle_has_paired_complete_outcomes_for_every_condition(self) -> None:
         rows = pq.read_table(
@@ -269,23 +304,6 @@ class SyntheticWorldTest(unittest.TestCase):
         self.assertEqual(len(by_journey), 2_000)
         self.assertTrue(all(found == conditions for found in by_journey.values()))
 
-    def test_empty_opportunities_have_no_impossible_potential_selection(self) -> None:
-        opportunities = pq.read_table(
-            self.world / "evaluation" / "opportunities.parquet"
-        ).to_pylist()
-        empty_journeys = {
-            row["journeyId"] for row in opportunities if row["candidateCount"] == 0
-        }
-        oracle = pq.read_table(
-            self.world / "oracle" / "potential-outcomes.parquet"
-        ).to_pylist()
-        impossible = [
-            row
-            for row in oracle
-            if row["journeyId"] in empty_journeys and row["potentialSelection"]
-        ]
-        self.assertEqual(impossible, [])
-
     def test_candidate_shape_and_arrival_exports_are_strict_load_fixtures(self) -> None:
         shapes = pq.read_table(
             self.world / "traffic" / "scorer-candidate-shapes.parquet"
@@ -298,16 +316,114 @@ class SyntheticWorldTest(unittest.TestCase):
             request = json.loads(shape["requestJson"])
             self.assertEqual(len(request["candidates"]), shape["candidateCount"])
             parse_automatic_scorer_request(request)
+        self.assertEqual(
+            {row["shapeClass"] for row in shapes},
+            {
+                "local_favorite_120",
+                "local_favorite_240_stress",
+                "for_you_120",
+                "for_you_240_stress",
+                "modifier_5",
+                "modifier_17",
+                "modifier_25",
+                "smart_insufficient_2",
+                "smart_default_3",
+                "smart_max_4",
+                "smart_no_padding",
+                "smart_120",
+                "smart_240_stress",
+            },
+        )
         arrivals = pq.read_table(
             self.world / "traffic" / "arrivals-per-minute.parquet"
         ).to_pylist()
-        self.assertEqual(sum(row["arrivals"] for row in arrivals), 2_000)
+        observed = [
+            row
+            for row in arrivals
+            if row["trafficProfile"] == "synthetic_world_observed"
+        ]
+        qualification = [
+            row for row in arrivals if row["trafficProfile"] == "aws_qualification_v1"
+        ]
+        self.assertEqual(sum(row["arrivals"] for row in observed), 2_000)
         self.assertTrue(
-            any(row["rush"] and row["daypart"] == "lunch" for row in arrivals)
+            all(
+                row["arrivals"] == row["targetRps"] * row["durationSeconds"]
+                for row in qualification
+            )
+        )
+        self.assertEqual(
+            len([row for row in qualification if row["phase"] == "peak_50_rps"]),
+            30,
+        )
+        self.assertEqual(
+            len([row for row in qualification if row["phase"] == "shock_100_rps"]),
+            2,
         )
         self.assertTrue(
-            any(row["rush"] and row["daypart"] == "dinner" for row in arrivals)
+            any(row["rush"] and row["daypart"] == "lunch" for row in observed)
         )
+        self.assertTrue(
+            any(row["rush"] and row["daypart"] == "dinner" for row in observed)
+        )
+
+    def test_smart_slates_are_ordered_diverse_and_never_padded(self) -> None:
+        opportunities = pq.read_table(
+            self.world / "evaluation" / "opportunities.parquet"
+        ).to_pylist()
+        exposures = pq.read_table(
+            self.world / "evaluation" / "exposures.parquet"
+        ).to_pylist()
+        by_opportunity: dict[str, list[dict[str, object]]] = {}
+        for exposure in exposures:
+            by_opportunity.setdefault(exposure["opportunityId"], []).append(exposure)
+        smart = [
+            row
+            for row in opportunities
+            if row["recommendationType"] == "smart_cross_sell"
+        ]
+        self.assertEqual(len(smart), 2_000)
+        self.assertTrue(any(row["slateSize"] < 3 for row in smart))
+        self.assertTrue(any(row["slateSize"] == 3 for row in smart))
+        self.assertTrue(any(row["slateSize"] == 4 for row in smart))
+        for opportunity in smart:
+            self.assertLessEqual(opportunity["slateSize"], 4)
+            self.assertLessEqual(
+                opportunity["slateSize"], opportunity["candidateCount"]
+            )
+            members = sorted(
+                by_opportunity.get(opportunity["opportunityId"], []),
+                key=lambda member: member["renderedPosition"],
+            )
+            self.assertEqual(
+                [member["renderedPosition"] for member in members],
+                list(range(1, opportunity["slateSize"] + 1)),
+            )
+            if opportunity["treatmentPolicy"] == "automatic_proxy_scorer_composer_v1":
+                categories = [member["categoryId"] for member in members]
+                self.assertEqual(len(categories), len(set(categories)))
+
+    def test_untouched_drift_changes_actual_candidate_features(self) -> None:
+        rows = pq.read_table(
+            self.world / "model-visible" / "training-examples.parquet"
+        ).to_pylist()
+        baseline = [row for row in rows if row["split"] != "untouched_test"]
+        drift = [row for row in rows if row["split"] == "untouched_test"]
+        self.assertTrue(baseline)
+        self.assertTrue(drift)
+        self.assertEqual(
+            {row["catalogRevision"] for row in baseline},
+            {"synthetic-catalog-101-baseline-v1"},
+        )
+        self.assertEqual(
+            {row["catalogRevision"] for row in drift},
+            {"synthetic-catalog-101-drift-v2"},
+        )
+        self.assertNotEqual(
+            sum(row["promotionActive"] for row in baseline) / len(baseline),
+            sum(row["promotionActive"] for row in drift) / len(drift),
+        )
+        self.assertEqual(self.manifest["driftMechanism"]["window"], "untouched_test")
 
     def test_training_loader_physically_excludes_and_rejects_hidden_fields(
         self,
@@ -319,6 +435,8 @@ class SyntheticWorldTest(unittest.TestCase):
             "finalMerchandiseSubtotalVnd",
             "latentAffinity",
             "potentialSelection",
+            "treatmentPathJson",
+            "treatmentRevenueVnd",
         }
         self.assertTrue(forbidden.isdisjoint(table.column_names))
         with self.assertRaises(InformationBoundaryError):
