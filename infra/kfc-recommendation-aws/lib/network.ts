@@ -55,7 +55,7 @@ export const createNetwork = (scope: Construct, data: DataPlaneResources): Netwo
   ));
   s3Endpoint.addToPolicy(endpointPolicy(
     ["s3:GetObject", "s3:GetObjectVersion", "s3:PutObject", "s3:AbortMultipartUpload"],
-    [data.evidenceBucket.arnForObjects("evidence/*")],
+    [data.evidenceBucket.arnForObjects("automatic-recommendations/*")],
   ));
   // Fargate downloads ECR image layers from this regional S3 bucket. Without
   // it, tasks in the isolated subnets can authenticate to ECR but cannot pull.
@@ -143,6 +143,15 @@ export const createNetwork = (scope: Construct, data: DataPlaneResources): Netwo
   new CfnOutput(scope, "RecommendationVpcId", { value: vpc.vpcId });
   new CfnOutput(scope, "RecommendationVpcEndpointIds", {
     value: endpoints.map((endpoint) => endpoint.vpcEndpointId).join(","),
+  });
+  new CfnOutput(scope, "RecommendationPrivateSubnetIds", {
+    value: vpc.isolatedSubnets.map(({ subnetId }) => subnetId).join(","),
+  });
+  new CfnOutput(scope, "RecommendationPrivateRouteTableIds", {
+    value: vpc.isolatedSubnets.map(({ routeTable }) => routeTable.routeTableId).join(","),
+  });
+  new CfnOutput(scope, "RecommendationEndpointSecurityGroupId", {
+    value: endpointSecurityGroup.securityGroupId,
   });
   return { vpc, albSecurityGroup, taskSecurityGroup, vpcLinkSecurityGroup, endpointSecurityGroup, validationProbeSecurityGroup, endpoints };
 };

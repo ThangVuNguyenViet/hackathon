@@ -51,6 +51,16 @@ export interface AutomaticEvidenceObjectStore {
 }
 
 export interface AutomaticRecommendationLedger {
+  inspectRecommendation?(input: {
+    recommendationId: string;
+    limit: number;
+    cursor?: string;
+  }): Promise<{
+    decision: AutomaticDecisionEvidence | null;
+    events: readonly AutomaticEventEvidence[];
+    pointers: readonly DurableEvidencePointer[];
+    nextCursor: string | null;
+  }>;
   claimDecision(input: {
     idempotencyKey: string;
     requestDigest: string;
@@ -505,27 +515,20 @@ export function createAutomaticEvidenceSaga({
       }
       return { inspected: stored.length, repaired, failed };
     },
-    async inspect(recommendationId: string) {
-      const stored = await objects.list('automatic-recommendations/');
-      const evidence = stored.map((pointer) => ({
-        pointer,
-        envelope: parseEvidenceEnvelope(pointer.body),
-      }));
-      const decision = evidence.find(
-        ({ envelope }) =>
-          envelope.kind === 'decision' &&
-          envelope.payload.recommendationId === recommendationId,
-      );
-      if (decision === undefined || decision.envelope.kind !== 'decision') {
+    async inspect(recommendationId: string, limit = 25, cursor?: string) {
+      if (ledger.inspectRecommendation === undefined) {
+        throw new Error('bounded recommendation inspection is unavailable');
+      }
+      const inspected = await ledger.inspectRecommendation({
+        recommendationId,
+        limit,
+        cursor,
+      });
+      if (inspected.decision === null) {
         throw new Error('recommendation evidence was not found');
       }
-      const payload = decision.envelope.payload;
+      const payload = inspected.decision;
       const response = isRecord(payload.response) ? payload.response : {};
-      const events = evidence.filter(
-        ({ envelope }) =>
-          envelope.kind === 'event' &&
-          envelope.payload.recommendationId === recommendationId,
-      );
       return {
         schemaVersion: 'kfc-automatic-inspection-v1' as const,
         recommendationId,
@@ -534,16 +537,13 @@ export function createAutomaticEvidenceSaga({
         model: response.model ?? null,
         candidateEvidence: payload.technical.eligibilityDecisions,
         persistenceEvidence: {
-          decision: {
-            key: decision.pointer.key,
-            versionId: decision.pointer.versionId,
-            digest: decision.pointer.digest,
-          },
-          events: events.map(({ pointer }) => ({
+          pointers: inspected.pointers.map((pointer) => ({
             key: pointer.key,
             versionId: pointer.versionId,
             digest: pointer.digest,
           })),
+          eventCount: inspected.events.length,
+          nextCursor: inspected.nextCursor,
         },
       };
     },
@@ -826,6 +826,56 @@ export class InMemoryAutomaticRecommendationLedger implements AutomaticRecommend
 
   async readEvent(idempotencyKey: string) {
     return this.eventState.get(idempotencyKey)?.evidence ?? null;
+  }
+
+  async inspectRecommendation(input: {
+    recommendationId: string;
+    limit: number;
+    cursor?: string;
+  }) {
+    const decision = [...this.decisionState.values()].find(
+      ({ evidence }) => evidence.recommendationId === input.recommendationId,
+    );
+    const sorted = [...this.eventState.entries()]
+      .filter(
+        ([, value]) =>
+          value.evidence.recommendationId === input.recommendationId,
+      )
+      .sort(([left], [right]) => left.localeCompare(right));
+    const start =
+      input.cursor === undefined
+        ? 0
+        : Math.max(
+            0,
+            sorted.findIndex(
+              ([id]) =>
+                id === Buffer.from(input.cursor!, 'base64url').toString('utf8'),
+            ) + 1,
+          );
+    const page = sorted.slice(
+      start,
+      start + Math.max(1, Math.min(100, input.limit)),
+    );
+    const values = page.map(([, value]) => value);
+    const pointer = (value: LedgerRecord<unknown>): DurableEvidencePointer => ({
+      key: value.evidenceKey,
+      versionId: value.evidenceVersionId,
+      digest: value.evidenceDigest,
+      sizeBytes: value.evidenceSizeBytes,
+    });
+    const hasMore = start + page.length < sorted.length;
+    return {
+      decision: decision?.evidence ?? null,
+      events: values.map(({ evidence }) => evidence),
+      pointers: [
+        ...(decision === undefined ? [] : [pointer(decision)]),
+        ...values.map(pointer),
+      ],
+      nextCursor:
+        hasMore && page.length > 0
+          ? Buffer.from(page[page.length - 1]![0]).toString('base64url')
+          : null,
+    };
   }
 
   async hasEvidence(digest: string): Promise<boolean> {

@@ -3,7 +3,10 @@ export {
   automaticModelBinding,
   resolveQualifiedAutomaticRecommendationBundle,
 } from './bundles.js';
-export { composeAutomaticRecommendationSlate } from './composition.js';
+export {
+  AUTOMATIC_COMPOSER_CONTRACT_DIGEST,
+  composeAutomaticRecommendationSlate,
+} from './composition.js';
 export { resolveAutomaticRecommendationContext } from './context.js';
 export { createAutomaticRecommendationEngine } from './engine.js';
 export {

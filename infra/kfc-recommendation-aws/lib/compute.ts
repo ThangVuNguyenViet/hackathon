@@ -76,7 +76,7 @@ export const createCompute = (
       operatingSystemFamily: OperatingSystemFamily.LINUX,
     },
   });
-  data.evidenceBucket.grantReadWrite(task.taskRole, "evidence/*");
+  data.evidenceBucket.grantReadWrite(task.taskRole, "automatic-recommendations/*");
   data.stateTable.grantReadWriteData(task.taskRole);
   data.runtimeSecret.grantRead(task.taskRole);
   task.addToTaskRolePolicy(

@@ -39,6 +39,22 @@ function record(value: unknown): Record<string, unknown> {
   return Object.fromEntries(Object.entries(value));
 }
 
+function evidencePayload(item: Record<string, unknown>) {
+  const payload = { ...item };
+  for (const key of [
+    'pk',
+    'sk',
+    'kind',
+    'evidenceKey',
+    'evidenceVersionId',
+    'evidenceDigest',
+    'evidenceSizeBytes',
+  ]) {
+    delete payload[key];
+  }
+  return payload;
+}
+
 function awsErrorName(error: unknown): string | null {
   return error instanceof Error ? error.name : null;
 }
@@ -202,6 +218,23 @@ export class S3AutomaticEvidenceObjectStore implements AutomaticEvidenceObjectSt
         return this.readExact(key, versionId);
       }),
     );
+  }
+
+  async probeImmutable(releaseDigest: string): Promise<boolean> {
+    const body = JSON.stringify({
+      schemaVersion: 'kfc-automatic-evidence-readiness-v1',
+      releaseDigest,
+    });
+    const digest = createHash('sha256').update(body).digest('hex');
+    const key = `automatic-recommendations/readiness/${releaseDigest}/${digest}.json`;
+    const pointer = await this.putImmutable({
+      key,
+      digest,
+      sizeBytes: Buffer.byteLength(body),
+      body,
+    });
+    const stored = await this.readExact(pointer.key, pointer.versionId);
+    return stored.digest === digest && stored.body === body;
   }
 }
 
@@ -598,7 +631,7 @@ export class DynamoDbAutomaticRecommendationLedger implements AutomaticRecommend
     );
     return response.Item === undefined
       ? null
-      : parseAutomaticDecisionEvidence(response.Item);
+      : parseAutomaticDecisionEvidence(evidencePayload(record(response.Item)));
   }
 
   async readEvent(idempotencyKey: string) {
@@ -620,7 +653,95 @@ export class DynamoDbAutomaticRecommendationLedger implements AutomaticRecommend
     );
     return response.Item === undefined
       ? null
-      : parseAutomaticEventEvidence(response.Item);
+      : parseAutomaticEventEvidence(evidencePayload(record(response.Item)));
+  }
+
+  async inspectRecommendation(input: {
+    recommendationId: string;
+    limit: number;
+    cursor?: string;
+  }) {
+    const pk = `RECOMMENDATION#${input.recommendationId}`;
+    const decisionResponse = record(
+      await this.options.client.send(
+        new GetCommand({
+          TableName: this.options.tableName,
+          Key: { pk, sk: 'DECISION' },
+          ConsistentRead: true,
+        }),
+      ),
+    );
+    const decisionItem =
+      decisionResponse.Item === undefined
+        ? null
+        : record(decisionResponse.Item);
+    const exclusiveStartKey =
+      input.cursor === undefined
+        ? undefined
+        : (() => {
+            try {
+              const sk = Buffer.from(input.cursor, 'base64url').toString(
+                'utf8',
+              );
+              if (!sk.startsWith('EVENT#'))
+                throw new Error('invalid inspection cursor');
+              return { pk, sk };
+            } catch (error) {
+              throw new Error('invalid inspection cursor', { cause: error });
+            }
+          })();
+    const response = record(
+      await this.options.client.send(
+        new QueryCommand({
+          TableName: this.options.tableName,
+          KeyConditionExpression: 'pk = :pk AND begins_with(sk, :event)',
+          ExpressionAttributeValues: { ':pk': pk, ':event': 'EVENT#' },
+          ExclusiveStartKey: exclusiveStartKey,
+          Limit: Math.max(1, Math.min(100, input.limit)),
+          ConsistentRead: true,
+        }),
+      ),
+    );
+    const eventItems = Array.isArray(response.Items)
+      ? response.Items.map((item) => record(item))
+      : [];
+    const pointer = (item: Record<string, unknown>): DurableEvidencePointer => {
+      if (
+        typeof item.evidenceKey !== 'string' ||
+        typeof item.evidenceVersionId !== 'string' ||
+        typeof item.evidenceDigest !== 'string' ||
+        typeof item.evidenceSizeBytes !== 'number'
+      ) {
+        throw new Error('durable inspection pointer is invalid');
+      }
+      return {
+        key: item.evidenceKey,
+        versionId: item.evidenceVersionId,
+        digest: item.evidenceDigest,
+        sizeBytes: item.evidenceSizeBytes,
+      };
+    };
+    const lastKey =
+      response.LastEvaluatedKey === undefined
+        ? undefined
+        : record(response.LastEvaluatedKey);
+    return {
+      decision:
+        decisionItem === null
+          ? null
+          : parseAutomaticDecisionEvidence(evidencePayload(decisionItem)),
+      events: eventItems.map((item) =>
+        parseAutomaticEventEvidence(evidencePayload(item)),
+      ),
+      pointers: [
+        ...(decisionItem === null ? [] : [pointer(decisionItem)]),
+        ...eventItems.map(pointer),
+      ],
+      nextCursor:
+        typeof lastKey?.sk === 'string'
+          ? Buffer.from(lastKey.sk).toString('base64url')
+          : null,
+    };
   }
 
   async hasEvidence(digest: string): Promise<boolean> {

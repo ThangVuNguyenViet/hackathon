@@ -1,5 +1,5 @@
 import { DynamoDBClient, DescribeTableCommand } from '@aws-sdk/client-dynamodb';
-import { HeadBucketCommand, S3Client } from '@aws-sdk/client-s3';
+import { S3Client } from '@aws-sdk/client-s3';
 import { DynamoDBDocumentClient } from '@aws-sdk/lib-dynamodb';
 import type {
   AutomaticRecommendationScorerPort,
@@ -32,6 +32,8 @@ export function createAwsAutomaticRecommendationRuntime({
   readinessWarmup,
   createDecisionEngine,
   technicalEvidence,
+  releaseDigest,
+  trustedReadiness = async () => true,
   s3Client = new S3Client({ region }),
   dynamoClient = new DynamoDBClient({ region }),
   documentClient,
@@ -53,6 +55,8 @@ export function createAwsAutomaticRecommendationRuntime({
     request: Parameters<ReturnType<typeof createDecisionEngine>['decide']>[1];
     response: unknown;
   }): AutomaticDecisionEvidence['technical'];
+  releaseDigest: string;
+  trustedReadiness?: () => Promise<boolean>;
   s3Client?: S3Client;
   dynamoClient?: DynamoDBClient;
   documentClient?: DynamoDBDocumentClient;
@@ -67,11 +71,12 @@ export function createAwsAutomaticRecommendationRuntime({
     DynamoDBDocumentClient.from(dynamoClient, {
       marshallOptions: { removeUndefinedValues: true },
     });
+  const objects = new S3AutomaticEvidenceObjectStore({
+    bucket: evidenceBucket,
+    client: s3Client,
+  });
   const saga = createAutomaticEvidenceSaga({
-    objects: new S3AutomaticEvidenceObjectStore({
-      bucket: evidenceBucket,
-      client: s3Client,
-    }),
+    objects,
     ledger: new DynamoDbAutomaticRecommendationLedger({
       tableName: ledgerTable,
       client: documents,
@@ -87,24 +92,27 @@ export function createAwsAutomaticRecommendationRuntime({
   return createAutomaticRecommendationHttpRuntime({
     decisions,
     evidence: saga,
-    inspect: (recommendationId) => saga.inspect(recommendationId),
+    inspect: (recommendationId, page) =>
+      saga.inspect(recommendationId, page?.limit, page?.cursor),
     async readiness() {
-      const [scorerReady, storageReady, ledgerReady] = await Promise.all([
-        scorer.warmup(readinessWarmup),
-        s3Client.send(new HeadBucketCommand({ Bucket: evidenceBucket })).then(
-          () => true,
-          () => false,
-        ),
-        dynamoClient
-          .send(new DescribeTableCommand({ TableName: ledgerTable }))
-          .then(
+      const [scorerReady, storageReady, ledgerReady, trustedReady] =
+        await Promise.all([
+          scorer.warmup(readinessWarmup),
+          objects.probeImmutable(releaseDigest).then(
             () => true,
             () => false,
           ),
-      ]);
+          dynamoClient
+            .send(new DescribeTableCommand({ TableName: ledgerTable }))
+            .then(
+              () => true,
+              () => false,
+            ),
+          trustedReadiness().catch(() => false),
+        ]);
       return {
-        ok: scorerReady && storageReady && ledgerReady,
-        ...(!scorerReady || !storageReady || !ledgerReady
+        ok: scorerReady && storageReady && ledgerReady && trustedReady,
+        ...(!scorerReady || !storageReady || !ledgerReady || !trustedReady
           ? {
               message:
                 'scorer, versioned evidence storage, or ledger is unavailable',

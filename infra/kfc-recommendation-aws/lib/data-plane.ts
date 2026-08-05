@@ -1,5 +1,5 @@
 import { CfnOutput, Duration, RemovalPolicy } from "aws-cdk-lib";
-import { AttributeType, BillingMode, Table, TableEncryption } from "aws-cdk-lib/aws-dynamodb";
+import { AttributeType, BillingMode, ProjectionType, Table, TableEncryption } from "aws-cdk-lib/aws-dynamodb";
 import { AnyPrincipal, Effect, PolicyStatement } from "aws-cdk-lib/aws-iam";
 import { Key } from "aws-cdk-lib/aws-kms";
 import { BlockPublicAccess, Bucket, BucketEncryption } from "aws-cdk-lib/aws-s3";
@@ -45,12 +45,21 @@ export const createDataPlane = (scope: Construct): DataPlaneResources => {
       effect: Effect.DENY,
       principals: [new AnyPrincipal()],
       actions: ["s3:DeleteObject", "s3:DeleteObjectVersion"],
-      resources: [evidenceBucket.arnForObjects("evidence/*")],
+      resources: [evidenceBucket.arnForObjects("automatic-recommendations/*")],
+    }),
+  );
+  evidenceBucket.addToResourcePolicy(
+    new PolicyStatement({
+      sid: "DenyCompletedReleaseMutation",
+      effect: Effect.DENY,
+      principals: [new AnyPrincipal()],
+      actions: ["s3:DeleteObject", "s3:DeleteObjectVersion"],
+      resources: [evidenceBucket.arnForObjects("completed-releases/*")],
     }),
   );
   const stateTable = new Table(scope, "StateTable", {
-    partitionKey: { name: "PK", type: AttributeType.STRING },
-    sortKey: { name: "SK", type: AttributeType.STRING },
+    partitionKey: { name: "pk", type: AttributeType.STRING },
+    sortKey: { name: "sk", type: AttributeType.STRING },
     billingMode: BillingMode.PAY_PER_REQUEST,
     encryption: TableEncryption.CUSTOMER_MANAGED,
     encryptionKey: key,
@@ -67,6 +76,11 @@ export const createDataPlane = (scope: Construct): DataPlaneResources => {
       excludePunctuation: true,
       passwordLength: 48,
     },
+  });
+  stateTable.addGlobalSecondaryIndex({
+    indexName: "evidenceDigest-index",
+    partitionKey: { name: "evidenceDigest", type: AttributeType.STRING },
+    projectionType: ProjectionType.KEYS_ONLY,
   });
   new CfnOutput(scope, "RecommendationEvidenceBucketArn", { value: evidenceBucket.bucketArn });
   new CfnOutput(scope, "RecommendationStateTableArn", { value: stateTable.tableArn });

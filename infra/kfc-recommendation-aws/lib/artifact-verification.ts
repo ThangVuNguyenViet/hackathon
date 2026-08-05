@@ -223,14 +223,28 @@ export interface ReleaseImages {
   readonly adot: string;
 }
 
+export interface ReleaseTopology {
+  readonly certificateArn: string;
+  readonly internalAlbServerName: string;
+  readonly maximumTasks: number;
+  readonly sourceRevision: string;
+  readonly cdkRevision: string;
+  readonly previousReleaseDigest: string;
+  readonly allowRollbackToPaused: boolean;
+}
+
 export const releaseManifestMatches = (
   value: unknown,
   bindings: ActivationBindings,
   images: ReleaseImages,
+  topology: ReleaseTopology,
 ): boolean => {
   if (typeof value !== "object" || value === null) return false;
   const manifest = value as Record<string, unknown>;
   const manifestImages = manifest.images as Record<string, unknown> | undefined;
+  const infrastructure = manifest.infrastructure as Record<string, unknown> | undefined;
+  const task = manifest.task as Record<string, unknown> | undefined;
+  const rollback = manifest.rollback as Record<string, unknown> | undefined;
   return manifest.schemaVersion === "kfc-recommendation-release-v1" &&
     manifest.region === "ap-southeast-1" &&
     manifest.releaseDigest === bindings.releaseDigest &&
@@ -240,8 +254,17 @@ export const releaseManifestMatches = (
     manifest.featureDigest === bindings.featureDigest &&
     manifest.composerDigest === bindings.composerDigest &&
     manifestImages?.main === images.main &&
-    manifestImages.scorer === images.scorer &&
-    manifestImages.adot === images.adot;
+    manifestImages?.scorer === images.scorer &&
+    manifestImages?.adot === images.adot &&
+    infrastructure?.certificateArn === topology.certificateArn &&
+    infrastructure.internalAlbServerName === topology.internalAlbServerName &&
+    infrastructure.maximumTasks === topology.maximumTasks &&
+    task?.cpu === 1024 && task.memoryMiB === 3072 && task.architecture === "arm64" &&
+    task.mainPort === 8080 && task.scorerPort === 8081 &&
+    manifest.sourceRevision === topology.sourceRevision &&
+    manifest.cdkRevision === topology.cdkRevision &&
+    rollback?.previousReleaseDigest === topology.previousReleaseDigest &&
+    rollback.allowRollbackToPaused === topology.allowRollbackToPaused;
 };
 
 export const activationProofMatches = (
@@ -275,6 +298,11 @@ export interface VpcEndpointState {
   readonly VpcId?: string;
   readonly ServiceName?: string;
   readonly PolicyDocument?: unknown;
+  readonly VpcEndpointType?: string;
+  readonly RouteTableIds?: readonly string[];
+  readonly SubnetIds?: readonly string[];
+  readonly PrivateDnsEnabled?: boolean;
+  readonly Groups?: ReadonlyArray<{ GroupId?: string }>;
 }
 
 export const endpointsAreAvailable = (
@@ -320,6 +348,9 @@ export const endpointsMatchDeployment = (
     readonly vpcId: string;
     readonly evidenceBucketArn: string;
     readonly stateTableArn: string;
+    readonly routeTableIds: readonly string[];
+    readonly subnetIds: readonly string[];
+    readonly endpointSecurityGroupId: string;
   },
 ): boolean => {
   if (endpoints.length !== 8) return false;
@@ -327,13 +358,22 @@ export const endpointsMatchDeployment = (
   return Object.entries(endpointActions).every(([suffix, requiredActions]) => {
     const endpoint = byService.get(`com.amazonaws.${expected.region}.${suffix}`);
     if (endpoint?.State !== "available" || endpoint.VpcId !== expected.vpcId) return false;
+    const gateway = suffix === "s3" || suffix === "dynamodb";
+    if (gateway) {
+      if (endpoint.VpcEndpointType !== "Gateway" ||
+          JSON.stringify([...(endpoint.RouteTableIds ?? [])].sort()) !== JSON.stringify([...expected.routeTableIds].sort())) return false;
+    } else if (
+      endpoint.VpcEndpointType !== "Interface" || endpoint.PrivateDnsEnabled !== true ||
+      JSON.stringify([...(endpoint.SubnetIds ?? [])].sort()) !== JSON.stringify([...expected.subnetIds].sort()) ||
+      !(endpoint.Groups ?? []).some(({ GroupId }) => GroupId === expected.endpointSecurityGroupId)
+    ) return false;
     const statements = policyStatements(endpoint.PolicyDocument);
     const presentActions = new Set(statements.flatMap((statement) => values(statement.Action)));
     if (!requiredActions.every((action) => presentActions.has(action))) return false;
     const resources = new Set(statements.flatMap((statement) => values(statement.Resource)));
     if (suffix === "s3") {
       return resources.has(expected.evidenceBucketArn) &&
-        resources.has(`${expected.evidenceBucketArn}/evidence/*`) &&
+        resources.has(`${expected.evidenceBucketArn}/automatic-recommendations/*`) &&
         resources.has(`arn:aws:s3:::prod-${expected.region}-starport-layer-bucket/*`);
     }
     return suffix !== "dynamodb" || resources.has(expected.stateTableArn);

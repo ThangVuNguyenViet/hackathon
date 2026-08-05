@@ -187,11 +187,11 @@ export function createAwsTrustedContextPorts({
   documentClient: DynamoDBDocumentClient;
   catalog: AutomaticCatalogSnapshot;
 }): AutomaticRecommendationContextPorts {
-  const read = async (PK: string, SK: string): Promise<unknown> => {
+  const read = async (pk: string, sk: string): Promise<unknown> => {
     const result = await documentClient.send(
       new GetCommand({
         TableName: tableName,
-        Key: { PK, SK },
+        Key: { pk, sk },
         ConsistentRead: true,
       }),
     );
@@ -231,6 +231,42 @@ export function createAwsTrustedContextPorts({
     },
     clock: { now: () => new Date() },
   };
+}
+
+export async function verifyAwsTrustedSentinels({
+  tableName,
+  documentClient,
+  releaseDigest,
+  catalogDigest,
+}: {
+  tableName: string;
+  documentClient: DynamoDBDocumentClient;
+  releaseDigest: string;
+  catalogDigest: string;
+}): Promise<boolean> {
+  const get = async (pk: string, sk: string) =>
+    documentClient.send(
+      new GetCommand({
+        TableName: tableName,
+        Key: { pk, sk },
+        ConsistentRead: true,
+      }),
+    );
+  const [order, exposure, catalog] = await Promise.all([
+    get(
+      `JOURNEY#sentinel:${releaseDigest}`,
+      `OPPORTUNITY#sentinel:${releaseDigest}`,
+    ),
+    get('EXPOSURE', 'local_favorite'),
+    get(`RELEASE#${releaseDigest}`, 'CATALOG'),
+  ]);
+  return (
+    order.Item?.releaseDigest === releaseDigest &&
+    exposure.Item?.releaseDigest === releaseDigest &&
+    exposure.Item.snapshot === 'enabled' &&
+    catalog.Item?.releaseDigest === releaseDigest &&
+    catalog.Item.catalogDigest === catalogDigest
+  );
 }
 
 export function loadTrustedCatalog(

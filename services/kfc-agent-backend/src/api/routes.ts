@@ -160,12 +160,17 @@ export function registerRoutes(
       const params = z
         .object({ recommendationId: z.string().min(1) })
         .parse(request.params);
+      const page = z.object({
+        limit: z.coerce.number().int().min(1).max(100).default(25),
+        cursor: z.string().min(1).max(512).optional(),
+      }).parse(request.query);
       try {
         return reply
           .code(200)
           .send(
             await options.automaticRecommendations.inspect(
               params.recommendationId,
+              page,
             ),
           );
       } catch {
@@ -487,6 +492,9 @@ function recommendationIdentityConflict(reply: {
 
 function requiresDemoAdmin(rawUrl: string): boolean {
   const pathname = rawUrl.split('?', 1)[0] ?? rawUrl;
+  if (/^\/v1\/admin\/recommendations\/[^/]+\/inspection$/u.test(pathname)) {
+    return false;
+  }
   return (
     pathname.startsWith('/admin/') ||
     pathname.startsWith('/v1/admin/') ||

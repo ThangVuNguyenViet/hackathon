@@ -5,6 +5,11 @@ import type {
   AutomaticQualifiedRecommendationBundle,
   AutomaticRecommendationContextPorts,
 } from '../../src/recommendations/automatic-core/index.js';
+import {
+  AUTOMATIC_COMPOSER_CONTRACT_DIGEST,
+  AUTOMATIC_FEATURE_SCHEMA_DIGEST,
+} from '../../src/recommendations/automatic-core/index.js';
+import { AUTOMATIC_RECOMMENDATION_CONTRACT_DIGEST } from '../../src/recommendations/contracts/automatic-recommendation.js';
 import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
 import { DynamoDBDocumentClient } from '@aws-sdk/lib-dynamodb';
 
@@ -28,9 +33,9 @@ const completeEnv = {
   TRUSTED_CATALOG_PATH: '/opt/kfc/catalog/catalog.json',
   TRUSTED_CATALOG_DIGEST: 'a'.repeat(64),
   QUALIFIED_BUNDLE_DIGEST: 'b'.repeat(64),
-  AUTOMATIC_CONTRACT_DIGEST: 'c'.repeat(64),
-  AUTOMATIC_FEATURE_DIGEST: 'd'.repeat(64),
-  AUTOMATIC_COMPOSER_DIGEST: 'e'.repeat(64),
+  AUTOMATIC_CONTRACT_DIGEST: AUTOMATIC_RECOMMENDATION_CONTRACT_DIGEST,
+  AUTOMATIC_FEATURE_DIGEST: AUTOMATIC_FEATURE_SCHEMA_DIGEST,
+  AUTOMATIC_COMPOSER_DIGEST: AUTOMATIC_COMPOSER_CONTRACT_DIGEST,
   RELEASE_DIGEST: 'f'.repeat(64),
   RUNTIME_TOKEN: 'trusted-admin-token-that-is-at-least-32-characters',
 };
@@ -39,35 +44,35 @@ const bundle: AutomaticQualifiedRecommendationBundle = {
   schemaVersion: 'kfc-qualified-automatic-bundle-v1',
   bundleId: 'bundle:test',
   bundleDigest: 'b'.repeat(64),
-  composerContractDigest: 'e'.repeat(64),
+  composerContractDigest: AUTOMATIC_COMPOSER_CONTRACT_DIGEST,
   qualificationRunId: 'qualification:test',
   qualificationEvidenceDigest: '1'.repeat(64),
   models: {
     local_favorite: {
       modelRevision: 'model',
       calibratorRevision: 'calibrator',
-      featureSchemaDigest: 'd'.repeat(64),
+      featureSchemaDigest: AUTOMATIC_FEATURE_SCHEMA_DIGEST,
       thresholdRevision: 'threshold',
       minimumJointProbability: 0.5,
     },
     for_you: {
       modelRevision: 'model',
       calibratorRevision: 'calibrator',
-      featureSchemaDigest: 'd'.repeat(64),
+      featureSchemaDigest: AUTOMATIC_FEATURE_SCHEMA_DIGEST,
       thresholdRevision: 'threshold',
       minimumJointProbability: 0.5,
     },
     modifier_upsell: {
       modelRevision: 'model',
       calibratorRevision: 'calibrator',
-      featureSchemaDigest: 'd'.repeat(64),
+      featureSchemaDigest: AUTOMATIC_FEATURE_SCHEMA_DIGEST,
       thresholdRevision: 'threshold',
       minimumJointProbability: 0.5,
     },
     smart_cross_sell: {
       modelRevision: 'model',
       calibratorRevision: 'calibrator',
-      featureSchemaDigest: 'd'.repeat(64),
+      featureSchemaDigest: AUTOMATIC_FEATURE_SCHEMA_DIGEST,
       thresholdRevision: 'threshold',
       minimumJointProbability: 0.5,
     },
@@ -134,7 +139,26 @@ describe('AWS recommendation-only Main', () => {
     await server.close();
   });
 
-  it('uses the injected runtime secret for protected inspection', async () => {
+  it.each([
+    'AUTOMATIC_CONTRACT_DIGEST',
+    'AUTOMATIC_FEATURE_DIGEST',
+    'AUTOMATIC_COMPOSER_DIGEST',
+  ] as const)(
+    'rejects %s when it does not equal the compiled runtime contract',
+    async (digestName) => {
+      const createRuntime = vi.fn(() => runtime());
+      const server = createAwsRecommendationMainServer(
+        { ...completeEnv, [digestName]: '0'.repeat(64) },
+        { createRuntime, prepareTrustedComposition },
+      );
+      expect(createRuntime).not.toHaveBeenCalled();
+      const ready = await server.inject({ method: 'GET', url: '/ready' });
+      expect(ready.statusCode).toBe(503);
+      await server.close();
+    },
+  );
+
+  it('uses scoped API Gateway inspection without an undistributable second secret', async () => {
     const automatic = runtime();
     vi.mocked(automatic.inspect).mockResolvedValue({
       recommendationId: 'rec-1',
@@ -147,14 +171,6 @@ describe('AWS recommendation-only Main', () => {
       (
         await server.inject({
           url: '/v1/admin/recommendations/rec-1/inspection',
-        })
-      ).statusCode,
-    ).toBe(401);
-    expect(
-      (
-        await server.inject({
-          url: '/v1/admin/recommendations/rec-1/inspection',
-          headers: { 'x-kfc-demo-admin-token': completeEnv.RUNTIME_TOKEN },
         })
       ).statusCode,
     ).toBe(200);

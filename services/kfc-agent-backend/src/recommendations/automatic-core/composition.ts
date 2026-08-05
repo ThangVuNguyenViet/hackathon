@@ -4,6 +4,41 @@ import type {
   AutomaticScoredCandidate,
 } from './types.js';
 
+const composerContract = {
+  schemaVersion: 'kfc-qualified-composer-v1',
+  order:
+    'calibrated joint probability times valid price impact descending; Unicode candidate identity tie-break',
+  singleActionTypes: ['local_favorite', 'for_you', 'modifier_upsell'],
+  singleActionCardinality: 1,
+  smartCrossSell: {
+    minimumReadyCount: 3,
+    defaultRenderedCount: 3,
+    maximumRenderedCount: 4,
+    distinctCategory: true,
+    positiveProbability: true,
+    remainingBudgetRequired: true,
+    noPadding: true,
+  },
+};
+
+const canonicalComposerContract = (value: unknown): string => {
+  if (Array.isArray(value))
+    return `[${value.map(canonicalComposerContract).join(',')}]`;
+  if (value !== null && typeof value === 'object') {
+    return `{${Object.entries(value)
+      .sort(([left], [right]) => left.localeCompare(right))
+      .map(
+        ([key, entry]) =>
+          `${JSON.stringify(key)}:${canonicalComposerContract(entry)}`,
+      )
+      .join(',')}}`;
+  }
+  return JSON.stringify(value);
+};
+export const AUTOMATIC_COMPOSER_CONTRACT_DIGEST = createHash('sha256')
+  .update(canonicalComposerContract(composerContract))
+  .digest('hex');
+
 function compareUnicodeCodePoints(left: string, right: string): number {
   const leftPoints = [...left];
   const rightPoints = [...right];
@@ -54,3 +89,4 @@ export function composeAutomaticRecommendationSlate(
   }
   return selected;
 }
+import { createHash } from 'node:crypto';

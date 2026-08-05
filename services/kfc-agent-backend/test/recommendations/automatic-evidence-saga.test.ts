@@ -1,9 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { PutObjectCommand } from '@aws-sdk/client-s3';
+import { GetObjectCommand, PutObjectCommand } from '@aws-sdk/client-s3';
 import {
   DeleteCommand,
   GetCommand,
   PutCommand,
+  QueryCommand,
   TransactWriteCommand,
   UpdateCommand,
 } from '@aws-sdk/lib-dynamodb';
@@ -593,6 +594,42 @@ it('uses create-only S3 writes and verifies an existing object by digest', async
   });
 });
 
+it('proves deep readiness with an immutable write and exact versioned read', async () => {
+  const commands: object[] = [];
+  let body = '';
+  const store = new S3AutomaticEvidenceObjectStore({
+    bucket: 'evidence-bucket',
+    client: {
+      send: async (command) => {
+        commands.push(command);
+        if (command instanceof PutObjectCommand) {
+          body = String(command.input.Body);
+          return { VersionId: 'probe-version' };
+        }
+        if (command instanceof GetObjectCommand) {
+          const bytes = Buffer.from(body);
+          return {
+            VersionId: 'probe-version',
+            ContentLength: bytes.length,
+            Metadata: {
+              sha256: createHash('sha256').update(bytes).digest('hex'),
+              sizebytes: String(bytes.length),
+            },
+            Body: { transformToByteArray: async () => bytes },
+          };
+        }
+        throw new Error('unexpected command');
+      },
+    },
+  });
+  expect(await store.probeImmutable('a'.repeat(64))).toBe(true);
+  expect(commands).toHaveLength(2);
+  const put = commands.find((command) => command instanceof PutObjectCommand);
+  const get = commands.find((command) => command instanceof GetObjectCommand);
+  expect(put?.input.Key).toContain('automatic-recommendations/readiness/');
+  expect(get?.input.VersionId).toBe('probe-version');
+});
+
 it('commits a decision and its idempotency binding in one DynamoDB transaction', async () => {
   const transactions: TransactWriteCommand[] = [];
   const ledger = new DynamoDbAutomaticRecommendationLedger({
@@ -636,6 +673,55 @@ it('commits a decision and its idempotency binding in one DynamoDB transaction',
       }),
     ]),
   );
+});
+
+it('inspects by exact recommendation partition with a bounded cursor query', async () => {
+  const queries: QueryCommand[] = [];
+  const pointer = {
+    evidenceKey: `automatic-recommendations/decision/${'a'.repeat(64)}.json`,
+    evidenceVersionId: 'version-1',
+    evidenceDigest: 'a'.repeat(64),
+    evidenceSizeBytes: 100,
+  };
+  const ledger = new DynamoDbAutomaticRecommendationLedger({
+    tableName: 'recommendation-ledger',
+    client: {
+      send: async (command) => {
+        if (command instanceof GetCommand)
+          return { Item: { ...decision, ...pointer } };
+        if (command instanceof QueryCommand) {
+          queries.push(command);
+          return {
+            Items: [
+              {
+                ...event,
+                ...pointer,
+                evidenceKey: pointer.evidenceKey.replace(
+                  '/decision/',
+                  '/event/',
+                ),
+              },
+            ],
+            LastEvaluatedKey: {
+              pk: 'RECOMMENDATION#recommendation-1',
+              sk: 'EVENT#event-1',
+            },
+          };
+        }
+        throw new Error('unexpected command');
+      },
+    },
+  });
+  const inspected = await ledger.inspectRecommendation({
+    recommendationId: 'recommendation-1',
+    limit: 1,
+  });
+  expect(inspected.decision?.recommendationId).toBe('recommendation-1');
+  expect(inspected.events).toHaveLength(1);
+  expect(inspected.nextCursor).toBe(
+    Buffer.from('EVENT#event-1').toString('base64url'),
+  );
+  expect(queries[0]?.input).toMatchObject({ Limit: 1, ConsistentRead: true });
 });
 
 it('claims a Dynamo request identity before effects and makes other instances wait', async () => {

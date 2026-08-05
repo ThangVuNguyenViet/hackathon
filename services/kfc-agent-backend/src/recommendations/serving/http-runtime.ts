@@ -13,7 +13,10 @@ export interface AutomaticRecommendationHttpRuntime {
   decide(type: AutomaticRecommendationType, body: unknown): Promise<unknown>;
   recordImpression(recommendationId: string, body: unknown): Promise<void>;
   recordOutcome(recommendationId: string, body: unknown): Promise<void>;
-  inspect(recommendationId: string): Promise<unknown>;
+  inspect(
+    recommendationId: string,
+    page?: { limit: number; cursor?: string },
+  ): Promise<unknown>;
   readiness(): Promise<{ ok: boolean; message?: string }>;
   close(): Promise<void>;
 }
@@ -49,7 +52,10 @@ export function createAutomaticRecommendationHttpRuntime({
   };
   evidence: { commitEvent(event: AutomaticEventEvidence): Promise<unknown> };
   readiness: () => Promise<{ ok: boolean; message?: string }>;
-  inspect?: (recommendationId: string) => Promise<unknown>;
+  inspect?: (
+    recommendationId: string,
+    page?: { limit: number; cursor?: string },
+  ) => Promise<unknown>;
   close?: () => Promise<void>;
   clock?: () => Date;
 }): AutomaticRecommendationHttpRuntime {

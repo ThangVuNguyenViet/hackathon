@@ -26,9 +26,14 @@ Qualified Model Bundle digest, ACM certificate, and rollback target.
   interface endpoints. Every endpoint has an action-scoped endpoint policy.
   The task security group permits only DNS inside the VPC
   and TLS; without an internet route, TLS is constrained to those endpoints.
-- Evidence is versioned, KMS-encrypted, retained, and protected from object
-  deletion. DynamoDB uses KMS encryption, PITR, deletion protection, and
-  on-demand capacity. ECR repositories are immutable and scanned on push.
+- Evidence under `automatic-recommendations/*` is versioned, KMS-encrypted,
+  retained, and protected from object deletion. DynamoDB uses KMS encryption,
+  PITR, deletion protection, on-demand capacity, and a digest index for bounded
+  reconciliation. Release-bound synthetic order/journey, exposure, and catalog
+  sentinels are created with the stack. Deep readiness performs exact consistent
+  reads of those sentinels and a real immutable S3 write plus exact-version read;
+  a bucket metadata check is not considered readiness. ECR repositories are
+  immutable and scanned on push.
 - Once a completed live primary exists, native ECS 10%/5-minute canary uses two target groups, explicit production
   and test listener rules, the required ECS load-balancer infrastructure role,
   and alarm rollback. The circuit breaker is intentionally absent because AWS
@@ -40,10 +45,18 @@ Qualified Model Bundle digest, ACM certificate, and rollback target.
 
 Main runs the recommendation-only entrypoint; it does not open Postgres or
 start the conversational agent. Request commerce facts are never authorities.
-Order/history/exposure snapshots come from fixed DynamoDB PK/SK contracts, and
+Order/history/exposure snapshots come from fixed DynamoDB `pk`/`sk` contracts, and
 the synthetic catalog plus atomic QMB are immutable files baked into the
 qualified Main image and verified against release digests before composition.
 Missing state or artifacts keeps `/ready` closed.
+
+Public recommendation inspection does not require the generated internal admin
+secret. Its boundary is the exact Cognito
+`recommendations.inspection:read` JWT scope, the explicit API Gateway route,
+VPC Link, and an internal ALB that accepts ingress only from that link. Other
+administrative routes remain secret-protected and are not exposed by the public
+listener. Inspection uses an exact decision read plus a bounded, paginated
+DynamoDB query; it does not enumerate or download S3 object versions.
 
 ## Rush capacity and telemetry
 
@@ -71,6 +84,14 @@ npm run check
 npm run deploy:preflight
 ```
 
+Production images must be assembled from the qualified artifacts; the
+Dockerfiles have no production fallback. From the repository root, set
+`QUALIFIED_BUNDLE_ROOT`, `QUALIFIED_BUNDLE_DIGEST`, `TRUSTED_CATALOG_FILE`,
+`TRUSTED_CATALOG_DIGEST`, `MAIN_IMAGE_TAG`, and `SCORER_IMAGE_TAG`, then run
+`infra/kfc-recommendation-aws/bin/build-release-images.sh`. The script supplies
+named BuildKit contexts and copies the bundle to `/opt/kfc/bundle` and the
+catalog to `/opt/kfc/catalog/catalog.json`.
+
 Deployment is two phase. First deploy only `KfcRecommendationFoundation` to
 create immutable repositories and GitHub OIDC without needing images or a QMB.
 Then synthesize/deploy `KfcRecommendationSyntheticSandbox` with
@@ -85,10 +106,14 @@ through the first 0→1 promotion or subsequent canary bake.
 
 The preflight is read-only and never deploys. It verifies exact release and QMB
 content, the trusted catalog digest, all payload digests, linux/arm64 ECR manifests, ACM `ISSUED` plus SAN,
-eight endpoints whose live VPC, service and policy bindings match exactly, a
-completed contract-compatible rollback release with AWS/task provenance,
+eight endpoints whose live type, VPC, route-table/subnet, private-DNS,
+security-group, service, and policy bindings match exactly, a completed
+contract-compatible rollback release read from an exact immutable S3 key and
+version with AWS/task provenance,
 or explicit first-release rollback-to-paused, synthesized alarm-linked canary,
-trusted ports, mounted QMB, all runtime digests, ADOT `/healthcheck`, structured
+trusted ports, task CPU/memory/architecture, mounted QMB, compiled-equal runtime
+contract/feature/composer digests, certificate and capacity shape, source/CDK
+revision, rollback binding, ADOT `/healthcheck`, structured
 logs, telemetry, and a successful cross-runtime warmup. The preflight invokes
 the VPC validation Lambda and then observes the same
 immutable release in structured CloudWatch logs, an X-Ray segment, and native

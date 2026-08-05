@@ -4,17 +4,23 @@ import { DynamoDBDocumentClient } from '@aws-sdk/lib-dynamodb';
 import { z } from 'zod';
 import { buildServer } from '../../api/server.js';
 import { createOtelRuntimeProbe } from '../../observability/runtimeProbe.js';
-import { createAutomaticRecommendationEngine } from '../automatic-core/index.js';
+import {
+  AUTOMATIC_COMPOSER_CONTRACT_DIGEST,
+  AUTOMATIC_FEATURE_SCHEMA_DIGEST,
+  createAutomaticRecommendationEngine,
+} from '../automatic-core/index.js';
 import type {
   AutomaticQualifiedRecommendationBundle,
   AutomaticRecommendationContextPorts,
 } from '../automatic-core/index.js';
+import { AUTOMATIC_RECOMMENDATION_CONTRACT_DIGEST } from '../contracts/automatic-recommendation.js';
 import { createAwsAutomaticRecommendationRuntime } from './aws-runtime.js';
 import { createUnavailableAutomaticRecommendationHttpRuntime } from './http-runtime.js';
 import {
   createAwsTrustedContextPorts,
   loadQualifiedAutomaticBundle,
   loadTrustedCatalog,
+  verifyAwsTrustedSentinels,
 } from './aws-trusted-adapters.js';
 
 const digest = z.string().regex(/^[a-f0-9]{64}$/u);
@@ -68,6 +74,16 @@ export function createAwsRecommendationMainServer(
   }
   const env = parsed.data;
   try {
+    if (
+      env.AUTOMATIC_CONTRACT_DIGEST !==
+        AUTOMATIC_RECOMMENDATION_CONTRACT_DIGEST ||
+      env.AUTOMATIC_FEATURE_DIGEST !== AUTOMATIC_FEATURE_SCHEMA_DIGEST ||
+      env.AUTOMATIC_COMPOSER_DIGEST !== AUTOMATIC_COMPOSER_CONTRACT_DIGEST
+    ) {
+      throw new Error(
+        'release digests do not match the compiled automatic runtime',
+      );
+    }
     const trusted =
       dependencies.prepareTrustedComposition?.() ??
       (() => {
@@ -105,6 +121,14 @@ export function createAwsRecommendationMainServer(
       scorerBaseUrl: env.SCORER_URL,
       scorerMaxConcurrency: env.MAX_IN_FLIGHT,
       scorerTimeoutMs: env.SCORER_TIMEOUT_MS,
+      releaseDigest: env.RELEASE_DIGEST,
+      trustedReadiness: () =>
+        verifyAwsTrustedSentinels({
+          tableName: env.STATE_TABLE,
+          documentClient: documents,
+          releaseDigest: env.RELEASE_DIGEST,
+          catalogDigest: env.TRUSTED_CATALOG_DIGEST,
+        }),
       documentClient: documents,
       readinessWarmup: {
         schemaVersion: 'kfc-automatic-scorer-v1',

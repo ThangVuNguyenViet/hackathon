@@ -54,6 +54,17 @@ const exactFileDigest = (path: string | undefined, digest: string | undefined): 
   path !== undefined && digest !== undefined && existsSync(path) &&
   manifestDigestMatches(readFileSync(path), digest);
 
+const immutableAwsJson = (bucket: string | undefined, key: string | undefined, versionId: string | undefined): unknown => {
+  if (bucket === undefined || key === undefined || versionId === undefined) return undefined;
+  const root = mkdtempSync(join(tmpdir(), "kfc-release-record-"));
+  const path = join(root, "record.json");
+  try {
+    execFileSync("aws", ["s3api", "get-object", "--region", "ap-southeast-1", "--bucket", bucket,
+      "--key", key, "--version-id", versionId, path], { stdio: ["ignore", "ignore", "ignore"] });
+    return jsonFile(path);
+  } catch { return undefined; } finally { rmSync(root, { recursive: true, force: true }); }
+};
+
 const imageIsArm64 = (repository: string, digest: string | undefined): boolean => {
   if (digest === undefined) return false;
   const response = awsJson<BatchImage>([
@@ -140,7 +151,11 @@ const certificate = process.env.INTERNAL_ALB_CERTIFICATE_ARN === undefined ? und
     "acm", "describe-certificate", "--region", "ap-southeast-1",
     "--certificate-arn", process.env.INTERNAL_ALB_CERTIFICATE_ARN,
   ])?.Certificate;
-const previous = jsonFile(process.env.PREVIOUS_RELEASE_MANIFEST_PATH);
+const previous = immutableAwsJson(
+  process.env.EVIDENCE_BUCKET_NAME,
+  process.env.PREVIOUS_RELEASE_EVIDENCE_KEY,
+  process.env.PREVIOUS_RELEASE_EVIDENCE_VERSION_ID,
+);
 const releaseManifest = jsonFile(process.env.RELEASE_MANIFEST_PATH);
 const template = jsonFile(
   process.env.SYNTHESIZED_SERVICE_TEMPLATE_PATH ??
@@ -179,6 +194,9 @@ const facts: DeploymentFacts = {
     vpcId: process.env.RECOMMENDATION_VPC_ID ?? "",
     evidenceBucketArn: process.env.EVIDENCE_BUCKET_ARN ?? "",
     stateTableArn: process.env.STATE_TABLE_ARN ?? "",
+    routeTableIds: (process.env.PRIVATE_ROUTE_TABLE_IDS ?? "").split(",").filter(Boolean),
+    subnetIds: (process.env.PRIVATE_SUBNET_IDS ?? "").split(",").filter(Boolean),
+    endpointSecurityGroupId: process.env.ENDPOINT_SECURITY_GROUP_ID ?? "",
   }),
   bundlePresentAndVerified:
     qualifiedBundleManifestMatches(bundleManifest, bindings) && bundlePayloadsMatch,
@@ -188,6 +206,14 @@ const facts: DeploymentFacts = {
       main: process.env.MAIN_IMAGE_DIGEST ?? "",
       scorer: process.env.SCORER_IMAGE_DIGEST ?? "",
       adot: process.env.ADOT_IMAGE_DIGEST ?? "",
+    }, {
+      certificateArn: process.env.INTERNAL_ALB_CERTIFICATE_ARN ?? "",
+      internalAlbServerName: process.env.INTERNAL_ALB_SERVER_NAME ?? "",
+      maximumTasks: Number(process.env.MAXIMUM_TASKS ?? "NaN"),
+      sourceRevision: process.env.SOURCE_REVISION ?? "",
+      cdkRevision: process.env.CDK_SOURCE_REVISION ?? "",
+      previousReleaseDigest: process.env.PREVIOUS_RELEASE_DIGEST ?? "",
+      allowRollbackToPaused: process.env.ALLOW_ROLLBACK_TO_PAUSED === "true",
     }),
   mainImagePresentAndArm64: imageIsArm64(process.env.MAIN_REPOSITORY_NAME ?? "kfc-recommendation-main", process.env.MAIN_IMAGE_DIGEST),
   scorerImagePresentAndArm64: imageIsArm64(process.env.SCORER_REPOSITORY_NAME ?? "kfc-recommendation-scorer", process.env.SCORER_IMAGE_DIGEST),

@@ -192,21 +192,13 @@ describe('automatic recommendation HTTP routes', () => {
     await server.close();
   });
 
-  it('protects and serves the inspection backend contract', async () => {
+  it('serves inspection behind the scoped API Gateway network boundary without a second secret', async () => {
     const automaticRecommendations = runtime();
     const server = buildServer({
       automaticRecommendations,
-      demoAdminToken: 'trusted-inspection-token',
     });
     const path = '/v1/admin/recommendations/recommendation-1/inspection';
-    expect((await server.inject({ method: 'GET', url: path })).statusCode).toBe(
-      401,
-    );
-    const response = await server.inject({
-      method: 'GET',
-      url: path,
-      headers: { 'x-kfc-demo-admin-token': 'trusted-inspection-token' },
-    });
+    const response = await server.inject({ method: 'GET', url: path });
     expect(response.statusCode).toBe(200);
     expect(response.json()).toMatchObject({
       schemaVersion: 'kfc-automatic-inspection-v1',
@@ -214,6 +206,7 @@ describe('automatic recommendation HTTP routes', () => {
     });
     expect(automaticRecommendations.inspect).toHaveBeenCalledWith(
       'recommendation-1',
+      { limit: 25 },
     );
     await server.close();
   });

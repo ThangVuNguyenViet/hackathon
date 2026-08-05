@@ -303,7 +303,18 @@ describe("RecommendationSandboxStack", () => {
     expect(endpointPolicies).toContain("starport-layer-bucket/*");
     expect(endpointPolicies).toContain("prod-");
     expect(endpointPolicies).toContain("EvidenceBucket");
+    expect(endpointPolicies).toContain("automatic-recommendations/*");
+    expect(endpointPolicies).not.toContain("/evidence/*");
     expect(endpointPolicies).toContain("StateTable");
+  });
+
+  it("seeds release-bound order, exposure, and catalog sentinels", () => {
+    const customResources = JSON.stringify(synthesize().findResources("Custom::AWS"));
+    expect(customResources).toContain("JOURNEY#sentinel:");
+    expect(customResources).toContain("OPPORTUNITY#sentinel:");
+    expect(customResources).toContain("EXPOSURE");
+    expect(customResources).toContain("CATALOG");
+    expect(customResources).toContain("TrustedCatalogDigest");
   });
 
   it("grants the candidate VPC Lambda the complete AWS ENI lifecycle contract", () => {

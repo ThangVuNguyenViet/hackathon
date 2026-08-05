@@ -179,16 +179,23 @@ describe("immutable deployment artifact verification", () => {
       State: "available",
       VpcId: "vpc-exact",
       ServiceName: `com.amazonaws.${region}.${service}`,
-      PolicyDocument: { Version: "2012-10-17", Statement: [{ Effect: "Allow", Action: actions[service], Resource: service === "s3" ? ["arn:aws:s3:::evidence", "arn:aws:s3:::evidence/evidence/*", `arn:aws:s3:::prod-${region}-starport-layer-bucket/*`] : service === "dynamodb" ? ["arn:aws:dynamodb:ap-southeast-1:111122223333:table/state"] : "*" }] },
+      VpcEndpointType: service === "s3" || service === "dynamodb" ? "Gateway" : "Interface",
+      RouteTableIds: service === "s3" || service === "dynamodb" ? ["rtb-a", "rtb-b"] : undefined,
+      SubnetIds: service === "s3" || service === "dynamodb" ? undefined : ["subnet-a", "subnet-b"],
+      PrivateDnsEnabled: service === "s3" || service === "dynamodb" ? undefined : true,
+      Groups: service === "s3" || service === "dynamodb" ? undefined : [{ GroupId: "sg-endpoints" }],
+      PolicyDocument: { Version: "2012-10-17", Statement: [{ Effect: "Allow", Action: actions[service], Resource: service === "s3" ? ["arn:aws:s3:::evidence", "arn:aws:s3:::evidence/automatic-recommendations/*", `arn:aws:s3:::prod-${region}-starport-layer-bucket/*`] : service === "dynamodb" ? ["arn:aws:dynamodb:ap-southeast-1:111122223333:table/state"] : "*" }] },
     }));
     expect(endpointsMatchDeployment(endpoints, {
       region,
       vpcId: "vpc-exact",
       evidenceBucketArn: "arn:aws:s3:::evidence",
       stateTableArn: "arn:aws:dynamodb:ap-southeast-1:111122223333:table/state",
+      routeTableIds: ["rtb-a", "rtb-b"], subnetIds: ["subnet-a", "subnet-b"], endpointSecurityGroupId: "sg-endpoints",
     })).toBe(true);
     expect(endpointsMatchDeployment([{ ...endpoints[0], VpcId: "vpc-wrong" }, ...endpoints.slice(1)], {
       region, vpcId: "vpc-exact", evidenceBucketArn: "arn:aws:s3:::evidence", stateTableArn: "arn:aws:dynamodb:ap-southeast-1:111122223333:table/state",
+      routeTableIds: ["rtb-a", "rtb-b"], subnetIds: ["subnet-a", "subnet-b"], endpointSecurityGroupId: "sg-endpoints",
     })).toBe(false);
   });
 
@@ -198,9 +205,15 @@ describe("immutable deployment artifact verification", () => {
       featureDigest: "d".repeat(64), composerDigest: "e".repeat(64),
     };
     const images = { main: `sha256:${"1".repeat(64)}`, scorer: `sha256:${"2".repeat(64)}`, adot: `sha256:${"3".repeat(64)}` };
-    const manifest = { schemaVersion: "kfc-recommendation-release-v1", ...bindings, images, region: "ap-southeast-1" };
-    expect(releaseManifestMatches(manifest, bindings, images)).toBe(true);
-    expect(releaseManifestMatches({ ...manifest, region: "us-west-2" }, bindings, images)).toBe(false);
+    const topology = { certificateArn: "arn:certificate", internalAlbServerName: "recommendations.internal", maximumTasks: 4,
+      sourceRevision: "source-sha", cdkRevision: "cdk-sha", previousReleaseDigest: "previous", allowRollbackToPaused: false };
+    const manifest = { schemaVersion: "kfc-recommendation-release-v1", ...bindings, images, region: "ap-southeast-1",
+      infrastructure: { certificateArn: topology.certificateArn, internalAlbServerName: topology.internalAlbServerName, maximumTasks: 4 },
+      task: { cpu: 1024, memoryMiB: 3072, architecture: "arm64", mainPort: 8080, scorerPort: 8081 },
+      sourceRevision: topology.sourceRevision, cdkRevision: topology.cdkRevision,
+      rollback: { previousReleaseDigest: topology.previousReleaseDigest, allowRollbackToPaused: false } };
+    expect(releaseManifestMatches(manifest, bindings, images, topology)).toBe(true);
+    expect(releaseManifestMatches({ ...manifest, region: "us-west-2" }, bindings, images, topology)).toBe(false);
   });
 
   it("requires the exact seven protected recommendation routes and no default route", () => {
