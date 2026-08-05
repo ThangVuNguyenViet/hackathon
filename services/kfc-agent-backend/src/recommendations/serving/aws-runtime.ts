@@ -87,6 +87,7 @@ export function createAwsAutomaticRecommendationRuntime({
   return createAutomaticRecommendationHttpRuntime({
     decisions,
     evidence: saga,
+    inspect: (recommendationId) => saga.inspect(recommendationId),
     async readiness() {
       const [scorerReady, storageReady, ledgerReady] = await Promise.all([
         scorer.warmup(readinessWarmup),

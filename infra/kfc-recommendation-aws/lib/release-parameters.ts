@@ -8,6 +8,7 @@ export interface ReleaseParameters {
   readonly scorerImageDigest: CfnParameter;
   readonly adotImageDigest: CfnParameter;
   readonly qualifiedBundleDigest: CfnParameter;
+  readonly trustedCatalogDigest: CfnParameter;
   readonly automaticContractDigest: CfnParameter;
   readonly automaticFeatureDigest: CfnParameter;
   readonly automaticComposerDigest: CfnParameter;
@@ -45,6 +46,11 @@ export const createReleaseParameters = (scope: Construct): ReleaseParameters => 
     scope,
     "QualifiedBundleDigest",
     "Atomic four-ranker Qualified Model Bundle digest",
+  );
+  const trustedCatalogDigest = contentParameter(
+    scope,
+    "TrustedCatalogDigest",
+    "Immutable synthetic catalog snapshot baked into the qualified Main image",
   );
   const automaticContractDigest = contentParameter(
     scope,
@@ -108,6 +114,15 @@ export const createReleaseParameters = (scope: Construct): ReleaseParameters => 
     allowedValues: ["false", "true"],
     description: "Promote only after the exact candidate activation alarm and immutable evidence are verified",
   });
+  new CfnRule(scope, "ActivationRequiresCandidateValidationRule", {
+    assertions: [{
+      assert: Fn.conditionOr(
+        Fn.conditionEquals(activateProduction.valueAsString, "false"),
+        Fn.conditionEquals(validateCandidate.valueAsString, "true"),
+      ),
+      assertDescription: "ActivateProduction requires the exact candidate validation service to remain enabled",
+    }],
+  });
   const maximumTasks = new CfnParameter(scope, "MaximumTasks", {
     type: "Number",
     default: 4,
@@ -120,6 +135,7 @@ export const createReleaseParameters = (scope: Construct): ReleaseParameters => 
     scorerImageDigest,
     adotImageDigest,
     qualifiedBundleDigest,
+    trustedCatalogDigest,
     automaticContractDigest,
     automaticFeatureDigest,
     automaticComposerDigest,

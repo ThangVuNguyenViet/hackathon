@@ -35,8 +35,40 @@ export class RecommendationSandboxStack extends Stack {
     const validateCandidate = new CfnCondition(this, "ValidateCandidateCondition", {
       expression: Fn.conditionEquals(release.validateCandidate.valueAsString, "true"),
     });
+    const hasLivePrimary = new CfnCondition(this, "HasLivePrimaryCondition", {
+      expression: Fn.conditionNot(Fn.conditionEquals(release.previousReleaseDigest.valueAsString, "")),
+    });
     const cfnService = compute.service.node.defaultChild as CfnService;
     cfnService.desiredCount = Token.asNumber(Fn.conditionIf(activateProduction.logicalId, 1, 0));
+    // A first 0->1 activation has no live primary to split, so it is an
+    // explicitly validated rolling scale-up that can return to the completed
+    // paused service. Native 10% canary semantics begin only once provenance
+    // identifies a completed live primary release.
+    cfnService.addPropertyOverride(
+      "DeploymentConfiguration.Strategy",
+      Fn.conditionIf(hasLivePrimary.logicalId, "CANARY", "ROLLING"),
+    );
+    cfnService.addPropertyOverride(
+      "DeploymentConfiguration.CanaryConfiguration",
+      Fn.conditionIf(
+        hasLivePrimary.logicalId,
+        { CanaryPercent: 10, CanaryBakeTimeInMinutes: 5 },
+        { Ref: "AWS::NoValue" },
+      ),
+    );
+    cfnService.addPropertyOverride(
+      "LoadBalancers.0.AdvancedConfiguration",
+      Fn.conditionIf(
+        hasLivePrimary.logicalId,
+        {
+          AlternateTargetGroupArn: compute.alternateTargetGroupArn,
+          ProductionListenerRule: compute.productionListenerRuleArn,
+          TestListenerRule: compute.testListenerRuleArn,
+          RoleArn: compute.infrastructureRole.roleArn,
+        },
+        { Ref: "AWS::NoValue" },
+      ),
+    );
     const validationService = compute.validationService.node.defaultChild as CfnService;
     validationService.desiredCount = Token.asNumber(Fn.conditionIf(validateCandidate.logicalId, 1, 0));
     createHttpApi(this, network, compute, auth, release);

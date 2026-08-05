@@ -44,6 +44,9 @@ export interface ComputeResources {
   readonly alternateTargetGroupFullName: string;
   readonly validationTargetGroupFullName: string;
   readonly infrastructureRole: Role;
+  readonly alternateTargetGroupArn: string;
+  readonly productionListenerRuleArn: string;
+  readonly testListenerRuleArn: string;
   readonly logGroup: LogGroup;
 }
 
@@ -94,7 +97,8 @@ export const createCompute = (
     AWS_REGION: Stack.of(scope).region,
     ENVIRONMENT: "synthetic-sandbox",
     RELEASE_DIGEST: release.releaseDigest.valueAsString,
-    QUALIFIED_BUNDLE_DIGEST: release.qualifiedBundleDigest.valueAsString,
+      QUALIFIED_BUNDLE_DIGEST: release.qualifiedBundleDigest.valueAsString,
+      TRUSTED_CATALOG_DIGEST: release.trustedCatalogDigest.valueAsString,
     AUTOMATIC_CONTRACT_DIGEST: release.automaticContractDigest.valueAsString,
     AUTOMATIC_FEATURE_DIGEST: release.automaticFeatureDigest.valueAsString,
     AUTOMATIC_COMPOSER_DIGEST: release.automaticComposerDigest.valueAsString,
@@ -155,6 +159,7 @@ export const createCompute = (
     essential: true,
     cpu: 512,
     memoryLimitMiB: 1536,
+    command: ["node", "dist/src/recommendations/serving/aws-main.js"],
     environment: {
       ...commonEnvironment,
       NODE_MAJOR: "24",
@@ -163,8 +168,13 @@ export const createCompute = (
       MAX_IN_FLIGHT: "16",
       EVIDENCE_BUCKET: data.evidenceBucket.bucketName,
       STATE_TABLE: data.stateTable.tableName,
+      QUALIFIED_BUNDLE_PATH: "/opt/kfc/bundle",
+      TRUSTED_CATALOG_PATH: "/opt/kfc/catalog/catalog.json",
     },
-    secrets: { RUNTIME_TOKEN: EcsSecret.fromSecretsManager(data.runtimeSecret, "token") },
+    secrets: {
+      RUNTIME_TOKEN: EcsSecret.fromSecretsManager(data.runtimeSecret, "token"),
+      KFC_DEMO_ADMIN_TOKEN: EcsSecret.fromSecretsManager(data.runtimeSecret, "token"),
+    },
     logging: LogDrivers.awsLogs({ logGroup, streamPrefix: "main", mode: "non-blocking" as never }),
     healthCheck: {
       command: ["CMD-SHELL", "node -e \"fetch('http://127.0.0.1:8080/ready').then(r=>process.exit(r.status===200?0:1)).catch(()=>process.exit(1))\""],
@@ -348,6 +358,9 @@ export const createCompute = (
     alternateTargetGroupFullName: alternateTargetGroup.targetGroupFullName,
     validationTargetGroupFullName: validationTargetGroup.targetGroupFullName,
     infrastructureRole,
+    alternateTargetGroupArn: alternateTargetGroup.targetGroupArn,
+    productionListenerRuleArn: productionRule.listenerRuleArn,
+    testListenerRuleArn: testRule.listenerRuleArn,
     logGroup,
   };
 };

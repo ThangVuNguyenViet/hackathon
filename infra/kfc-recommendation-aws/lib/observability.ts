@@ -28,16 +28,18 @@ export const createObservability = (
     statistic: "p99",
     period: Duration.minutes(1),
   });
-  const target5xx = new Metric({
+  const targetGroups = [
+    ["Production", compute.targetGroupFullName],
+    ["Alternate", compute.alternateTargetGroupFullName],
+    ["Validation", compute.validationTargetGroupFullName],
+  ] as const;
+  const target5xxMetrics = targetGroups.map(([, targetGroup]) => new Metric({
     namespace: "AWS/ApplicationELB",
     metricName: "HTTPCode_Target_5XX_Count",
-    dimensionsMap: {
-      LoadBalancer: compute.loadBalancer.loadBalancerFullName,
-      TargetGroup: compute.targetGroupFullName,
-    },
+    dimensionsMap: { LoadBalancer: compute.loadBalancer.loadBalancerFullName, TargetGroup: targetGroup },
     statistic: "Sum",
     period: Duration.minutes(1),
-  });
+  }));
   const p99Alarm = new Alarm(scope, "P99LatencyAlarm", {
     metric: latency,
     threshold: 0.5,
@@ -47,20 +49,20 @@ export const createObservability = (
     evaluateLowSampleCountPercentile: "ignore",
     treatMissingData: TreatMissingData.NOT_BREACHING,
   });
-  const target5xxAlarm = new Alarm(scope, "Target5xxAlarm", {
-    metric: target5xx,
+  const target5xxAlarms = targetGroups.map(([name], index) => new Alarm(scope, `${name}Target5xxAlarm`, {
+    metric: target5xxMetrics[index],
     threshold: 1,
     comparisonOperator: ComparisonOperator.GREATER_THAN_OR_EQUAL_TO_THRESHOLD,
     evaluationPeriods: 2,
     treatMissingData: TreatMissingData.NOT_BREACHING,
-  });
-  const unhealthy = new Alarm(scope, "UnhealthyTargetsAlarm", {
+  }));
+  const unhealthyAlarms = targetGroups.map(([name, targetGroup]) => new Alarm(scope, `${name}UnhealthyTargetsAlarm`, {
     metric: new Metric({
       namespace: "AWS/ApplicationELB",
       metricName: "UnHealthyHostCount",
       dimensionsMap: {
         LoadBalancer: compute.loadBalancer.loadBalancerFullName,
-        TargetGroup: compute.targetGroupFullName,
+        TargetGroup: targetGroup,
       },
       statistic: "Maximum",
       period: Duration.minutes(1),
@@ -69,10 +71,10 @@ export const createObservability = (
     comparisonOperator: ComparisonOperator.GREATER_THAN_OR_EQUAL_TO_THRESHOLD,
     evaluationPeriods: 2,
     treatMissingData: TreatMissingData.NOT_BREACHING,
-  });
+  }));
   const releaseSafety = new CompositeAlarm(scope, "ReleaseSafetyComposite", {
     compositeAlarmName: "kfc-recommendation-sandbox-release-safety",
-    alarmRule: AlarmRule.anyOf(p99Alarm, target5xxAlarm, unhealthy),
+    alarmRule: AlarmRule.anyOf(p99Alarm, ...target5xxAlarms, ...unhealthyAlarms),
     alarmDescription: "Pause/rollback signal for sustained latency, target failures, or readiness failure",
   });
   new CfnOutput(scope, "ReleaseSafetyAlarmName", { value: releaseSafety.alarmName });
@@ -93,7 +95,7 @@ export const createObservability = (
     }),
     new GraphWidget({
       title: "Target failures",
-      left: [target5xx],
+      left: target5xxMetrics,
     }),
   );
 

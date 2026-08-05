@@ -103,6 +103,14 @@ const logicalId = (value: unknown): string | undefined => {
     : undefined;
 };
 
+const conditionBranch = (value: unknown): { condition?: string; whenTrue: unknown; whenFalse: unknown } => {
+  if (typeof value !== "object" || value === null) return { whenTrue: value, whenFalse: value };
+  const branch = (value as { "Fn::If"?: unknown })["Fn::If"];
+  return Array.isArray(branch) && branch.length === 3 && typeof branch[0] === "string"
+    ? { condition: branch[0], whenTrue: branch[1], whenFalse: branch[2] }
+    : { whenTrue: value, whenFalse: value };
+};
+
 export const templateHasAlarmLinkedCanaryRollback = (
   template: CloudFormationTemplate,
 ): boolean =>
@@ -110,8 +118,8 @@ export const templateHasAlarmLinkedCanaryRollback = (
     if (resource.Type !== "AWS::ECS::Service") return false;
     const configuration = resource.Properties?.DeploymentConfiguration as
       | {
-          Strategy?: string;
-          CanaryConfiguration?: { CanaryPercent?: number; CanaryBakeTimeInMinutes?: number };
+          Strategy?: unknown;
+          CanaryConfiguration?: unknown;
           Alarms?: { Enable?: boolean; Rollback?: boolean; AlarmNames?: unknown[] };
         }
       | undefined;
@@ -125,7 +133,19 @@ export const templateHasAlarmLinkedCanaryRollback = (
       };
     }> | undefined;
     const loadBalancer = loadBalancers?.[0];
-    const advanced = loadBalancer?.AdvancedConfiguration;
+    const strategy = conditionBranch(configuration?.Strategy);
+    const canary = conditionBranch(configuration?.CanaryConfiguration);
+    const advancedBranch = conditionBranch(loadBalancer?.AdvancedConfiguration);
+    const canaryConfiguration = canary.whenTrue as { CanaryPercent?: number; CanaryBakeTimeInMinutes?: number } | undefined;
+    const advanced = advancedBranch.whenTrue as {
+      AlternateTargetGroupArn?: unknown;
+      ProductionListenerRule?: unknown;
+      TestListenerRule?: unknown;
+      RoleArn?: unknown;
+    } | undefined;
+    const staticCanary = strategy.whenTrue === "CANARY" && strategy.condition === undefined;
+    const conditionalCanary = strategy.whenTrue === "CANARY" && strategy.whenFalse === "ROLLING" &&
+      strategy.condition !== undefined && strategy.condition === canary.condition && strategy.condition === advancedBranch.condition;
     const primaryId = logicalId(loadBalancer?.TargetGroupArn);
     const alternateId = logicalId(advanced?.AlternateTargetGroupArn);
     const productionRuleId = logicalId(advanced?.ProductionListenerRule);
@@ -139,10 +159,10 @@ export const templateHasAlarmLinkedCanaryRollback = (
       JSON.stringify(candidate.Properties?.Roles ?? []).includes(roleId ?? "missing"),
     ).map((candidate) => candidate.Properties?.PolicyDocument));
     return (
-      configuration?.Strategy === "CANARY" &&
-      (configuration.CanaryConfiguration?.CanaryPercent ?? 0) > 0 &&
-      (configuration.CanaryConfiguration?.CanaryBakeTimeInMinutes ?? 0) > 0 &&
-      configuration.Alarms?.Enable === true &&
+      (staticCanary || conditionalCanary) &&
+      (canaryConfiguration?.CanaryPercent ?? 0) > 0 &&
+      (canaryConfiguration?.CanaryBakeTimeInMinutes ?? 0) > 0 &&
+      configuration?.Alarms?.Enable === true &&
       configuration.Alarms.Rollback === true &&
       (configuration.Alarms.AlarmNames?.length ?? 0) > 0 &&
       primaryId !== undefined && alternateId !== undefined && primaryId !== alternateId &&
@@ -181,6 +201,7 @@ export const templateHasExactRecommendationRoutes = (template: CloudFormationTem
 export interface ActivationBindings {
   readonly releaseDigest: string;
   readonly bundleDigest: string;
+  readonly catalogDigest: string;
   readonly contractDigest: string;
   readonly featureDigest: string;
   readonly composerDigest: string;
@@ -214,6 +235,7 @@ export const releaseManifestMatches = (
     manifest.region === "ap-southeast-1" &&
     manifest.releaseDigest === bindings.releaseDigest &&
     manifest.bundleDigest === bindings.bundleDigest &&
+    manifest.catalogDigest === bindings.catalogDigest &&
     manifest.contractDigest === bindings.contractDigest &&
     manifest.featureDigest === bindings.featureDigest &&
     manifest.composerDigest === bindings.composerDigest &&
@@ -232,6 +254,7 @@ export const activationProofMatches = (
     proof.schemaVersion === "kfc-recommendation-activation-proof-v1" &&
     proof.releaseDigest === bindings.releaseDigest &&
     proof.bundleDigest === bindings.bundleDigest &&
+    proof.catalogDigest === bindings.catalogDigest &&
     proof.contractDigest === bindings.contractDigest &&
     proof.featureDigest === bindings.featureDigest &&
     proof.composerDigest === bindings.composerDigest &&
@@ -309,7 +332,9 @@ export const endpointsMatchDeployment = (
     if (!requiredActions.every((action) => presentActions.has(action))) return false;
     const resources = new Set(statements.flatMap((statement) => values(statement.Resource)));
     if (suffix === "s3") {
-      return resources.has(expected.evidenceBucketArn) && resources.has(`${expected.evidenceBucketArn}/evidence/*`);
+      return resources.has(expected.evidenceBucketArn) &&
+        resources.has(`${expected.evidenceBucketArn}/evidence/*`) &&
+        resources.has(`arn:aws:s3:::prod-${expected.region}-starport-layer-bucket/*`);
     }
     return suffix !== "dynamodb" || resources.has(expected.stateTableArn);
   });
@@ -317,7 +342,7 @@ export const endpointsMatchDeployment = (
 
 export const qualifiedBundleManifestMatches = (
   value: unknown,
-  bindings: Omit<ActivationBindings, "releaseDigest">,
+  bindings: Pick<ActivationBindings, "bundleDigest" | "contractDigest" | "featureDigest" | "composerDigest">,
 ): boolean => {
   if (typeof value !== "object" || value === null) return false;
   const manifest = value as Record<string, unknown>;

@@ -1,4 +1,4 @@
-import { CfnOutput } from "aws-cdk-lib";
+import { Aws, CfnOutput, Fn } from "aws-cdk-lib";
 import {
   FlowLogDestination,
   FlowLogTrafficType,
@@ -56,6 +56,12 @@ export const createNetwork = (scope: Construct, data: DataPlaneResources): Netwo
   s3Endpoint.addToPolicy(endpointPolicy(
     ["s3:GetObject", "s3:GetObjectVersion", "s3:PutObject", "s3:AbortMultipartUpload"],
     [data.evidenceBucket.arnForObjects("evidence/*")],
+  ));
+  // Fargate downloads ECR image layers from this regional S3 bucket. Without
+  // it, tasks in the isolated subnets can authenticate to ECR but cannot pull.
+  s3Endpoint.addToPolicy(endpointPolicy(
+    ["s3:GetObject"],
+    [Fn.join("", ["arn:", Aws.PARTITION, ":s3:::prod-", Aws.REGION, "-starport-layer-bucket/*"])],
   ));
   const dynamoEndpoint = vpc.addGatewayEndpoint("DynamoEndpoint", { service: GatewayVpcEndpointAwsService.DYNAMODB });
   dynamoEndpoint.addToPolicy(endpointPolicy([

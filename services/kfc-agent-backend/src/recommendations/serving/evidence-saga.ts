@@ -505,6 +505,48 @@ export function createAutomaticEvidenceSaga({
       }
       return { inspected: stored.length, repaired, failed };
     },
+    async inspect(recommendationId: string) {
+      const stored = await objects.list('automatic-recommendations/');
+      const evidence = stored.map((pointer) => ({
+        pointer,
+        envelope: parseEvidenceEnvelope(pointer.body),
+      }));
+      const decision = evidence.find(
+        ({ envelope }) =>
+          envelope.kind === 'decision' &&
+          envelope.payload.recommendationId === recommendationId,
+      );
+      if (decision === undefined || decision.envelope.kind !== 'decision') {
+        throw new Error('recommendation evidence was not found');
+      }
+      const payload = decision.envelope.payload;
+      const response = isRecord(payload.response) ? payload.response : {};
+      const events = evidence.filter(
+        ({ envelope }) =>
+          envelope.kind === 'event' &&
+          envelope.payload.recommendationId === recommendationId,
+      );
+      return {
+        schemaVersion: 'kfc-automatic-inspection-v1' as const,
+        recommendationId,
+        requestDigest: payload.requestDigest,
+        cartDigest: payload.cartDigest,
+        model: response.model ?? null,
+        candidateEvidence: payload.technical.eligibilityDecisions,
+        persistenceEvidence: {
+          decision: {
+            key: decision.pointer.key,
+            versionId: decision.pointer.versionId,
+            digest: decision.pointer.digest,
+          },
+          events: events.map(({ pointer }) => ({
+            key: pointer.key,
+            versionId: pointer.versionId,
+            digest: pointer.digest,
+          })),
+        },
+      };
+    },
   };
 }
 

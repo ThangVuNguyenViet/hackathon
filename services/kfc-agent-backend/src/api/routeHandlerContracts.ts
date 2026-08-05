@@ -405,10 +405,12 @@ export interface ReadinessCheckResult {
 export interface ReadinessOptions {
   database?: () => Promise<ReadinessCheckResult>;
   messengerToken?: () => Promise<ReadinessCheckResult>;
+  messengerRequired?: boolean;
   fixturesRoot?: string;
   openAiConfigured?: boolean;
   openAiRequired?: boolean;
   agentConfigured?: boolean;
+  agentGatesReadiness?: boolean;
   monitorConfigured?: boolean;
   zaloRequired?: boolean;
   langsmith?: {

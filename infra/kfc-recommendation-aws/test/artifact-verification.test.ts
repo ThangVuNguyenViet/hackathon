@@ -124,6 +124,7 @@ describe("immutable deployment artifact verification", () => {
     const bindings = {
       releaseDigest: "a".repeat(64),
       bundleDigest: "b".repeat(64),
+      catalogDigest: "f".repeat(64),
       contractDigest: "c".repeat(64),
       featureDigest: "d".repeat(64),
       composerDigest: "e".repeat(64),
@@ -178,7 +179,7 @@ describe("immutable deployment artifact verification", () => {
       State: "available",
       VpcId: "vpc-exact",
       ServiceName: `com.amazonaws.${region}.${service}`,
-      PolicyDocument: { Version: "2012-10-17", Statement: [{ Effect: "Allow", Action: actions[service], Resource: service === "s3" ? ["arn:aws:s3:::evidence", "arn:aws:s3:::evidence/evidence/*"] : service === "dynamodb" ? ["arn:aws:dynamodb:ap-southeast-1:111122223333:table/state"] : "*" }] },
+      PolicyDocument: { Version: "2012-10-17", Statement: [{ Effect: "Allow", Action: actions[service], Resource: service === "s3" ? ["arn:aws:s3:::evidence", "arn:aws:s3:::evidence/evidence/*", `arn:aws:s3:::prod-${region}-starport-layer-bucket/*`] : service === "dynamodb" ? ["arn:aws:dynamodb:ap-southeast-1:111122223333:table/state"] : "*" }] },
     }));
     expect(endpointsMatchDeployment(endpoints, {
       region,
@@ -193,7 +194,7 @@ describe("immutable deployment artifact verification", () => {
 
   it("requires semantic image, bundle, and contract bindings in the release manifest", () => {
     const bindings = {
-      releaseDigest: "a".repeat(64), bundleDigest: "b".repeat(64), contractDigest: "c".repeat(64),
+      releaseDigest: "a".repeat(64), bundleDigest: "b".repeat(64), catalogDigest: "f".repeat(64), contractDigest: "c".repeat(64),
       featureDigest: "d".repeat(64), composerDigest: "e".repeat(64),
     };
     const images = { main: `sha256:${"1".repeat(64)}`, scorer: `sha256:${"2".repeat(64)}`, adot: `sha256:${"3".repeat(64)}` };

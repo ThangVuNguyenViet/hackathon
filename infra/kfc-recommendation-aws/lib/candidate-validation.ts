@@ -69,7 +69,15 @@ export const createCandidateValidation = (
     resources: [`${logGroup.logGroupArn}:*`],
   }));
   role.addToPolicy(new PolicyStatement({
-    actions: ["ec2:CreateNetworkInterface", "ec2:DescribeNetworkInterfaces", "ec2:DeleteNetworkInterface"],
+    actions: [
+      "ec2:DescribeSubnets",
+      "ec2:DescribeSecurityGroups",
+      "ec2:DescribeNetworkInterfaces",
+      "ec2:CreateNetworkInterface",
+      "ec2:DeleteNetworkInterface",
+      "ec2:AssignPrivateIpAddresses",
+      "ec2:UnassignPrivateIpAddresses",
+    ],
     resources: ["*"],
   }));
   const runner = new LambdaFunction(scope, "CandidateValidationRunner", {

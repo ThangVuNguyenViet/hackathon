@@ -111,6 +111,7 @@ const executableRuntimeProbe = (releaseDigest: string): boolean => {
 const bindings: ActivationBindings = {
   releaseDigest: process.env.RELEASE_DIGEST ?? "",
   bundleDigest: process.env.QUALIFIED_BUNDLE_DIGEST ?? "",
+  catalogDigest: process.env.TRUSTED_CATALOG_DIGEST ?? "",
   contractDigest: process.env.AUTOMATIC_CONTRACT_DIGEST ?? "",
   featureDigest: process.env.AUTOMATIC_FEATURE_DIGEST ?? "",
   composerDigest: process.env.AUTOMATIC_COMPOSER_DIGEST ?? "",

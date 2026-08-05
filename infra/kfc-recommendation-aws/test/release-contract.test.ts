@@ -14,6 +14,7 @@ const validRelease = (): ReleaseInputs => ({
   scorerImageDigest: sha256("b"),
   adotImageDigest: sha256("c"),
   qualifiedBundleDigest: contentDigest("d"),
+  trustedCatalogDigest: contentDigest("1"),
   releaseDigest: contentDigest("e"),
   previousReleaseDigest: contentDigest("f"),
 });
@@ -29,6 +30,7 @@ describe("release deployment contract", () => {
     ["scorer image", { scorerImageDigest: "scorer:v1" }],
     ["ADOT image", { adotImageDigest: "sha256:short" }],
     ["bundle", { qualifiedBundleDigest: "" }],
+    ["trusted catalog", { trustedCatalogDigest: "" }],
     ["release", { releaseDigest: contentDigest("A") }],
   ])("rejects a non-deployable %s binding", (_label, override) => {
     expect(() => assertDeployableRelease({ ...validRelease(), ...override })).toThrow();

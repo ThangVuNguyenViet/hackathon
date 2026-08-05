@@ -166,8 +166,9 @@ export function createSystemRouteHandlers(context: RouteHandlerContext) {
       const agentConfigured =
         options.readiness?.agentConfigured ??
         Boolean(options.openAiAgent ?? options.agent);
+      const agentGatesReadiness = options.readiness?.agentGatesReadiness ?? true;
       const agent = {
-        ok: agentConfigured,
+        ok: agentGatesReadiness ? agentConfigured : true,
         required: false,
         configured: agentConfigured,
         provider: runtimeAgent?.provider ?? "unconfigured",

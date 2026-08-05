@@ -126,6 +126,19 @@ describe("RecommendationSandboxStack", () => {
     expect(main.HealthCheck).toEqual(
       expect.objectContaining({ Command: expect.arrayContaining([expect.stringContaining("/ready")]) }),
     );
+    expect(main.Command).toEqual(["node", "dist/src/recommendations/serving/aws-main.js"]);
+    const mainEnvironment = Object.fromEntries(
+      (main.Environment as Array<{ Name: string; Value: unknown }>).map(({ Name, Value }) => [Name, Value]),
+    );
+    expect(mainEnvironment).toEqual(expect.objectContaining({
+      QUALIFIED_BUNDLE_PATH: "/opt/kfc/bundle",
+      TRUSTED_CATALOG_PATH: "/opt/kfc/catalog/catalog.json",
+      TRUSTED_CATALOG_DIGEST: { Ref: "TrustedCatalogDigest" },
+    }));
+    expect(main.Secrets).toEqual(expect.arrayContaining([
+      expect.objectContaining({ Name: "RUNTIME_TOKEN" }),
+      expect.objectContaining({ Name: "KFC_DEMO_ADMIN_TOKEN" }),
+    ]));
     expect(main.DependsOn).toEqual(
       expect.arrayContaining([
         expect.objectContaining({ ContainerName: "scorer", Condition: "HEALTHY" }),
@@ -153,8 +166,12 @@ describe("RecommendationSandboxStack", () => {
     });
     template.hasResourceProperties("AWS::ECS::Service", {
       DeploymentConfiguration: Match.objectLike({
-        Strategy: "CANARY",
-        CanaryConfiguration: { CanaryPercent: 10, CanaryBakeTimeInMinutes: 5 },
+        Strategy: { "Fn::If": ["HasLivePrimaryCondition", "CANARY", "ROLLING"] },
+        CanaryConfiguration: { "Fn::If": [
+          "HasLivePrimaryCondition",
+          { CanaryPercent: 10, CanaryBakeTimeInMinutes: 5 },
+          { Ref: "AWS::NoValue" },
+        ] },
         Alarms: Match.objectLike({ Enable: true, Rollback: true }),
       }),
       DesiredCount: { "Fn::If": ["ActivateProductionCondition", 1, 0] },
@@ -163,12 +180,15 @@ describe("RecommendationSandboxStack", () => {
         Match.objectLike({
           ContainerName: "main",
           ContainerPort: 8080,
-          AdvancedConfiguration: Match.objectLike({
-            AlternateTargetGroupArn: Match.anyValue(),
-            ProductionListenerRule: Match.anyValue(),
-            TestListenerRule: Match.anyValue(),
-            RoleArn: Match.anyValue(),
-          }),
+          AdvancedConfiguration: Match.objectLike({ "Fn::If": Match.arrayWith([
+            "HasLivePrimaryCondition",
+            Match.objectLike({
+              AlternateTargetGroupArn: Match.anyValue(),
+              ProductionListenerRule: Match.anyValue(),
+              TestListenerRule: Match.anyValue(),
+              RoleArn: Match.anyValue(),
+            }),
+          ]) }),
         }),
       ]),
     });
@@ -280,8 +300,30 @@ describe("RecommendationSandboxStack", () => {
     for (const action of ["s3:ListBucketVersions", "s3:GetObjectVersion", "dynamodb:DeleteItem"]) {
       expect(endpointPolicies).toContain(action);
     }
+    expect(endpointPolicies).toContain("starport-layer-bucket/*");
+    expect(endpointPolicies).toContain("prod-");
     expect(endpointPolicies).toContain("EvidenceBucket");
     expect(endpointPolicies).toContain("StateTable");
+  });
+
+  it("grants the candidate VPC Lambda the complete AWS ENI lifecycle contract", () => {
+    const policies = JSON.stringify(synthesize().findResources("AWS::IAM::Policy"));
+    for (const action of [
+      "ec2:DescribeSubnets",
+      "ec2:DescribeSecurityGroups",
+      "ec2:DescribeNetworkInterfaces",
+      "ec2:CreateNetworkInterface",
+      "ec2:DeleteNetworkInterface",
+      "ec2:AssignPrivateIpAddresses",
+      "ec2:UnassignPrivateIpAddresses",
+    ]) expect(policies).toContain(action);
+  });
+
+  it("alarms on failures across primary, alternate, and validation target groups", () => {
+    const alarms = JSON.stringify(synthesize().findResources("AWS::CloudWatch::Alarm"));
+    expect(alarms).toContain("ProductionTargetGroup");
+    expect(alarms).toContain("AlternateTargetGroup");
+    expect(alarms).toContain("ValidationTargetGroup");
   });
 
   it("creates scoped Cognito M2M identities", () => {

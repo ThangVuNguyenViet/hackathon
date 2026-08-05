@@ -29,12 +29,21 @@ Qualified Model Bundle digest, ACM certificate, and rollback target.
 - Evidence is versioned, KMS-encrypted, retained, and protected from object
   deletion. DynamoDB uses KMS encryption, PITR, deletion protection, and
   on-demand capacity. ECR repositories are immutable and scanned on push.
-- Native ECS 10%/5-minute canary uses two target groups, explicit production
+- Once a completed live primary exists, native ECS 10%/5-minute canary uses two target groups, explicit production
   and test listener rules, the required ECS load-balancer infrastructure role,
   and alarm rollback. The circuit breaker is intentionally absent because AWS
   supports it only for rolling deployments. Every deploy binds Main,
   scorer, ADOT, Qualified Model Bundle, release, and previous-release digests.
-  A first release requires explicit `AllowRollbackToPaused=true`.
+  A first release has no traffic to split: it requires explicit
+  `AllowRollbackToPaused=true` and promotes the already validated task with a
+  rolling 0→1 scale-up. Subsequent releases use the native canary.
+
+Main runs the recommendation-only entrypoint; it does not open Postgres or
+start the conversational agent. Request commerce facts are never authorities.
+Order/history/exposure snapshots come from fixed DynamoDB PK/SK contracts, and
+the synthetic catalog plus atomic QMB are immutable files baked into the
+qualified Main image and verified against release digests before composition.
+Missing state or artifacts keeps `/ready` closed.
 
 ## Rush capacity and telemetry
 
@@ -70,11 +79,12 @@ Then synthesize/deploy `KfcRecommendationSyntheticSandbox` with
 definition and an in-VPC Lambda probes deep readiness every minute through a
 private validation listener. The release-specific alarm treats missing data as
 breaching. Keep validation running through the native canary, set
-`ActivateProduction=true` only after preflight passes, and disable validation
-only after the canary bake completes.
+`ActivateProduction=true` only after preflight passes. Activation requires
+`ValidateCandidate=true`, so the exact validation service remains available
+through the first 0→1 promotion or subsequent canary bake.
 
 The preflight is read-only and never deploys. It verifies exact release and QMB
-content, all payload digests, linux/arm64 ECR manifests, ACM `ISSUED` plus SAN,
+content, the trusted catalog digest, all payload digests, linux/arm64 ECR manifests, ACM `ISSUED` plus SAN,
 eight endpoints whose live VPC, service and policy bindings match exactly, a
 completed contract-compatible rollback release with AWS/task provenance,
 or explicit first-release rollback-to-paused, synthesized alarm-linked canary,

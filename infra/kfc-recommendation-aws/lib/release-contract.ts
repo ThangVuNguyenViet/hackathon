@@ -7,6 +7,7 @@ export interface ReleaseInputs {
   readonly scorerImageDigest: string;
   readonly adotImageDigest: string;
   readonly qualifiedBundleDigest: string;
+  readonly trustedCatalogDigest: string;
   readonly releaseDigest: string;
   readonly previousReleaseDigest?: string;
   readonly allowRollbackToPaused?: boolean;
@@ -32,6 +33,7 @@ export const assertDeployableRelease = <T extends ReleaseInputs>(release: T): T 
   requireDigest("scorer image", release.scorerImageDigest);
   requireDigest("ADOT image", release.adotImageDigest);
   requireContentDigest("Qualified Model Bundle", release.qualifiedBundleDigest);
+  requireContentDigest("trusted catalog", release.trustedCatalogDigest);
   requireContentDigest("release", release.releaseDigest);
   if (release.previousReleaseDigest === undefined) {
     if (!release.allowRollbackToPaused) {
