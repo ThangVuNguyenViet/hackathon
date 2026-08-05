@@ -60,25 +60,48 @@ export interface PreviousReleaseRecord {
   readonly releaseDigest?: string;
   readonly state?: string;
   readonly contractDigest?: string;
+  readonly accountId?: string;
+  readonly region?: string;
+  readonly completedAt?: string;
+  readonly taskDefinitionArn?: string;
 }
 
 export const previousReleaseIsCompletedAndCompatible = (
   record: PreviousReleaseRecord | undefined,
   expectedReleaseDigest: string,
   currentContractDigest: string,
+  provenance?: { readonly accountId: string; readonly region: string },
 ): boolean =>
   record?.state === "completed" &&
   record.releaseDigest === expectedReleaseDigest &&
   record.contractDigest === currentContractDigest &&
+  (provenance === undefined || (
+    record.accountId === provenance.accountId &&
+    record.region === provenance.region &&
+    typeof record.completedAt === "string" &&
+    !Number.isNaN(Date.parse(record.completedAt)) &&
+    record.taskDefinitionArn?.startsWith(
+      `arn:aws:ecs:${provenance.region}:${provenance.accountId}:task-definition/`,
+    ) === true
+  )) &&
   (DIGEST.test(expectedReleaseDigest) || CONTENT_DIGEST.test(expectedReleaseDigest)) &&
   (DIGEST.test(currentContractDigest) || CONTENT_DIGEST.test(currentContractDigest));
 
 interface CloudFormationTemplate {
   readonly Resources?: Record<string, {
     readonly Type?: string;
-    readonly Properties?: { readonly DeploymentConfiguration?: Record<string, unknown> };
+    readonly Properties?: Record<string, unknown>;
   }>;
 }
+
+const logicalId = (value: unknown): string | undefined => {
+  if (typeof value !== "object" || value === null) return undefined;
+  const intrinsic = value as { Ref?: unknown; "Fn::GetAtt"?: unknown };
+  if (typeof intrinsic.Ref === "string") return intrinsic.Ref;
+  return Array.isArray(intrinsic["Fn::GetAtt"]) && typeof intrinsic["Fn::GetAtt"]?.[0] === "string"
+    ? intrinsic["Fn::GetAtt"][0]
+    : undefined;
+};
 
 export const templateHasAlarmLinkedCanaryRollback = (
   template: CloudFormationTemplate,
@@ -89,21 +112,71 @@ export const templateHasAlarmLinkedCanaryRollback = (
       | {
           Strategy?: string;
           CanaryConfiguration?: { CanaryPercent?: number; CanaryBakeTimeInMinutes?: number };
-          DeploymentCircuitBreaker?: { Enable?: boolean; Rollback?: boolean };
           Alarms?: { Enable?: boolean; Rollback?: boolean; AlarmNames?: unknown[] };
         }
       | undefined;
+    const loadBalancers = resource.Properties?.LoadBalancers as Array<{
+      TargetGroupArn?: unknown;
+      AdvancedConfiguration?: {
+        AlternateTargetGroupArn?: unknown;
+        ProductionListenerRule?: unknown;
+        TestListenerRule?: unknown;
+        RoleArn?: unknown;
+      };
+    }> | undefined;
+    const loadBalancer = loadBalancers?.[0];
+    const advanced = loadBalancer?.AdvancedConfiguration;
+    const primaryId = logicalId(loadBalancer?.TargetGroupArn);
+    const alternateId = logicalId(advanced?.AlternateTargetGroupArn);
+    const productionRuleId = logicalId(advanced?.ProductionListenerRule);
+    const testRuleId = logicalId(advanced?.TestListenerRule);
+    const roleId = logicalId(advanced?.RoleArn);
+    const resources = template.Resources ?? {};
+    const productionRuleTargetsPrimary = JSON.stringify(resources[productionRuleId ?? ""]?.Properties?.Actions ?? []).includes(primaryId ?? "missing");
+    const testRuleTargetsAlternate = JSON.stringify(resources[testRuleId ?? ""]?.Properties?.Actions ?? []).includes(alternateId ?? "missing");
+    const rolePolicyActions = JSON.stringify(Object.values(resources).filter((candidate) =>
+      candidate.Type === "AWS::IAM::Policy" &&
+      JSON.stringify(candidate.Properties?.Roles ?? []).includes(roleId ?? "missing"),
+    ).map((candidate) => candidate.Properties?.PolicyDocument));
     return (
       configuration?.Strategy === "CANARY" &&
       (configuration.CanaryConfiguration?.CanaryPercent ?? 0) > 0 &&
       (configuration.CanaryConfiguration?.CanaryBakeTimeInMinutes ?? 0) > 0 &&
-      configuration.DeploymentCircuitBreaker?.Enable === true &&
-      configuration.DeploymentCircuitBreaker.Rollback === true &&
       configuration.Alarms?.Enable === true &&
       configuration.Alarms.Rollback === true &&
-      (configuration.Alarms.AlarmNames?.length ?? 0) > 0
+      (configuration.Alarms.AlarmNames?.length ?? 0) > 0 &&
+      primaryId !== undefined && alternateId !== undefined && primaryId !== alternateId &&
+      resources[primaryId]?.Type === "AWS::ElasticLoadBalancingV2::TargetGroup" &&
+      resources[alternateId]?.Type === "AWS::ElasticLoadBalancingV2::TargetGroup" &&
+      resources[productionRuleId ?? ""]?.Type === "AWS::ElasticLoadBalancingV2::ListenerRule" &&
+      resources[testRuleId ?? ""]?.Type === "AWS::ElasticLoadBalancingV2::ListenerRule" &&
+      productionRuleTargetsPrimary && testRuleTargetsAlternate &&
+      resources[roleId ?? ""]?.Type === "AWS::IAM::Role" &&
+      ["DescribeTargetHealth", "RegisterTargets", "DeregisterTargets", "ModifyListener", "ModifyRule"]
+        .every((action) => rolePolicyActions.includes(action))
     );
   });
+
+const recommendationRouteScopes = new Map([
+  ["POST /v1/recommendations/local-favorites", "recommendations/decision.write"],
+  ["POST /v1/recommendations/for-you", "recommendations/decision.write"],
+  ["POST /v1/recommendations/modifier-upsells", "recommendations/decision.write"],
+  ["POST /v1/recommendations/smart-cross-sells", "recommendations/decision.write"],
+  ["POST /v1/recommendations/{recommendationId}/impressions", "recommendations/event.write"],
+  ["POST /v1/recommendations/{recommendationId}/outcomes", "recommendations/event.write"],
+  ["GET /v1/admin/recommendations/{recommendationId}/inspection", "recommendations/inspection.read"],
+]);
+
+export const templateHasExactRecommendationRoutes = (template: CloudFormationTemplate): boolean => {
+  const routes = Object.values(template.Resources ?? {}).filter((resource) => resource.Type === "AWS::ApiGatewayV2::Route");
+  if (routes.length !== recommendationRouteScopes.size) return false;
+  return routes.every((route) => {
+    const routeKey = route.Properties?.RouteKey;
+    const scope = typeof routeKey === "string" ? recommendationRouteScopes.get(routeKey) : undefined;
+    return scope !== undefined && route.Properties?.AuthorizationType === "JWT" &&
+      JSON.stringify(route.Properties?.AuthorizationScopes) === JSON.stringify([scope]);
+  });
+};
 
 export interface ActivationBindings {
   readonly releaseDigest: string;
@@ -112,6 +185,42 @@ export interface ActivationBindings {
   readonly featureDigest: string;
   readonly composerDigest: string;
 }
+
+export const activationAlarmIsCurrent = (
+  alarm: { readonly StateValue?: string; readonly StateUpdatedTimestamp?: string } | undefined,
+  validationStartedAt: string,
+  evidenceTimestamp?: string,
+): boolean => {
+  const started = Date.parse(validationStartedAt);
+  const evidence = Date.parse(evidenceTimestamp ?? "");
+  return alarm?.StateValue === "OK" && !Number.isNaN(started) && !Number.isNaN(evidence) && evidence >= started;
+};
+
+export interface ReleaseImages {
+  readonly main: string;
+  readonly scorer: string;
+  readonly adot: string;
+}
+
+export const releaseManifestMatches = (
+  value: unknown,
+  bindings: ActivationBindings,
+  images: ReleaseImages,
+): boolean => {
+  if (typeof value !== "object" || value === null) return false;
+  const manifest = value as Record<string, unknown>;
+  const manifestImages = manifest.images as Record<string, unknown> | undefined;
+  return manifest.schemaVersion === "kfc-recommendation-release-v1" &&
+    manifest.region === "ap-southeast-1" &&
+    manifest.releaseDigest === bindings.releaseDigest &&
+    manifest.bundleDigest === bindings.bundleDigest &&
+    manifest.contractDigest === bindings.contractDigest &&
+    manifest.featureDigest === bindings.featureDigest &&
+    manifest.composerDigest === bindings.composerDigest &&
+    manifestImages?.main === images.main &&
+    manifestImages.scorer === images.scorer &&
+    manifestImages.adot === images.adot;
+};
 
 export const activationProofMatches = (
   value: unknown,
@@ -140,6 +249,9 @@ export const activationProofMatches = (
 export interface VpcEndpointState {
   readonly VpcEndpointId?: string;
   readonly State?: string;
+  readonly VpcId?: string;
+  readonly ServiceName?: string;
+  readonly PolicyDocument?: unknown;
 }
 
 export const endpointsAreAvailable = (
@@ -149,6 +261,58 @@ export const endpointsAreAvailable = (
   if (expectedIds.length !== 8 || new Set(expectedIds).size !== 8) return false;
   const states = new Map(endpoints.map((endpoint) => [endpoint.VpcEndpointId, endpoint.State]));
   return expectedIds.every((id) => states.get(id) === "available");
+};
+
+const endpointActions: Readonly<Record<string, readonly string[]>> = {
+  s3: ["s3:ListBucket", "s3:ListBucketVersions", "s3:GetObject", "s3:GetObjectVersion", "s3:PutObject", "s3:AbortMultipartUpload"],
+  dynamodb: ["dynamodb:DescribeTable", "dynamodb:GetItem", "dynamodb:PutItem", "dynamodb:UpdateItem", "dynamodb:DeleteItem", "dynamodb:Query", "dynamodb:TransactWriteItems"],
+  "ecr.api": ["ecr:GetAuthorizationToken", "ecr:BatchGetImage", "ecr:GetDownloadUrlForLayer", "ecr:BatchCheckLayerAvailability"],
+  "ecr.dkr": ["ecr:GetAuthorizationToken", "ecr:BatchGetImage", "ecr:GetDownloadUrlForLayer", "ecr:BatchCheckLayerAvailability"],
+  logs: ["logs:CreateLogStream", "logs:PutLogEvents"],
+  secretsmanager: ["secretsmanager:GetSecretValue", "secretsmanager:DescribeSecret"],
+  monitoring: ["cloudwatch:PutMetricData"],
+  xray: ["xray:PutTraceSegments", "xray:PutTelemetryRecords"],
+};
+
+const policyStatements = (value: unknown): ReadonlyArray<Record<string, unknown>> => {
+  try {
+    const policy = typeof value === "string" ? JSON.parse(value) as unknown : value;
+    if (typeof policy !== "object" || policy === null) return [];
+    const statement = (policy as { Statement?: unknown }).Statement;
+    return Array.isArray(statement) ? statement as Array<Record<string, unknown>> : [];
+  } catch {
+    return [];
+  }
+};
+
+const values = (value: unknown): readonly string[] =>
+  typeof value === "string" ? [value] : Array.isArray(value) && value.every((entry) => typeof entry === "string")
+    ? value
+    : [];
+
+export const endpointsMatchDeployment = (
+  endpoints: readonly VpcEndpointState[],
+  expected: {
+    readonly region: string;
+    readonly vpcId: string;
+    readonly evidenceBucketArn: string;
+    readonly stateTableArn: string;
+  },
+): boolean => {
+  if (endpoints.length !== 8) return false;
+  const byService = new Map(endpoints.map((endpoint) => [endpoint.ServiceName, endpoint]));
+  return Object.entries(endpointActions).every(([suffix, requiredActions]) => {
+    const endpoint = byService.get(`com.amazonaws.${expected.region}.${suffix}`);
+    if (endpoint?.State !== "available" || endpoint.VpcId !== expected.vpcId) return false;
+    const statements = policyStatements(endpoint.PolicyDocument);
+    const presentActions = new Set(statements.flatMap((statement) => values(statement.Action)));
+    if (!requiredActions.every((action) => presentActions.has(action))) return false;
+    const resources = new Set(statements.flatMap((statement) => values(statement.Resource)));
+    if (suffix === "s3") {
+      return resources.has(expected.evidenceBucketArn) && resources.has(`${expected.evidenceBucketArn}/evidence/*`);
+    }
+    return suffix !== "dynamodb" || resources.has(expected.stateTableArn);
+  });
 };
 
 export const qualifiedBundleManifestMatches = (

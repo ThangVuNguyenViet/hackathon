@@ -133,6 +133,7 @@ describe("RecommendationSandboxStack", () => {
       ]),
     );
     expect(adot.HealthCheck).toEqual(expect.objectContaining({ Command: expect.any(Array) }));
+    expect(adot.HealthCheck).toEqual(expect.objectContaining({ Command: ["CMD", "/healthcheck"] }));
     const scorerEnvironment = Object.fromEntries(
       (scorer.Environment as Array<{ Name: string; Value: unknown }>).map(({ Name, Value }) => [Name, Value]),
     );
@@ -152,16 +153,65 @@ describe("RecommendationSandboxStack", () => {
     });
     template.hasResourceProperties("AWS::ECS::Service", {
       DeploymentConfiguration: Match.objectLike({
-        DeploymentCircuitBreaker: { Enable: true, Rollback: true },
         Strategy: "CANARY",
         CanaryConfiguration: { CanaryPercent: 10, CanaryBakeTimeInMinutes: 5 },
         Alarms: Match.objectLike({ Enable: true, Rollback: true }),
       }),
-      DesiredCount: { "Fn::If": ["ActivateServiceCondition", 1, 0] },
+      DesiredCount: { "Fn::If": ["ActivateProductionCondition", 1, 0] },
       HealthCheckGracePeriodSeconds: 90,
       LoadBalancers: Match.arrayWith([
-        Match.objectLike({ ContainerName: "main", ContainerPort: 8080 }),
+        Match.objectLike({
+          ContainerName: "main",
+          ContainerPort: 8080,
+          AdvancedConfiguration: Match.objectLike({
+            AlternateTargetGroupArn: Match.anyValue(),
+            ProductionListenerRule: Match.anyValue(),
+            TestListenerRule: Match.anyValue(),
+            RoleArn: Match.anyValue(),
+          }),
+        }),
       ]),
+    });
+    template.resourceCountIs("AWS::ElasticLoadBalancingV2::TargetGroup", 3);
+    template.hasResourceProperties("AWS::IAM::Role", {
+      AssumeRolePolicyDocument: Match.objectLike({
+        Statement: Match.arrayWith([Match.objectLike({ Principal: { Service: "ecs.amazonaws.com" } })]),
+      }),
+    });
+    const policies = JSON.stringify(template.findResources("AWS::IAM::Policy"));
+    for (const action of [
+      "elasticloadbalancing:DescribeTargetHealth",
+      "elasticloadbalancing:RegisterTargets",
+      "elasticloadbalancing:DeregisterTargets",
+      "elasticloadbalancing:ModifyListener",
+      "elasticloadbalancing:ModifyRule",
+    ]) expect(policies).toContain(action);
+  });
+
+  it("runs an isolated exact-candidate validation service before production activation", () => {
+    const template = synthesize();
+    const services = Object.values(template.findResources("AWS::ECS::Service"));
+    expect(services).toHaveLength(2);
+    expect(services).toEqual(expect.arrayContaining([
+      expect.objectContaining({ Properties: expect.objectContaining({
+        DesiredCount: { "Fn::If": ["ValidateCandidateCondition", 1, 0] },
+      }) }),
+      expect.objectContaining({ Properties: expect.objectContaining({
+        DesiredCount: { "Fn::If": ["ActivateProductionCondition", 1, 0] },
+      }) }),
+    ]));
+    const taskDefinitions = services.map((service) => service.Properties.TaskDefinition);
+    expect(taskDefinitions[0]).toEqual(taskDefinitions[1]);
+    template.hasResourceProperties("AWS::Lambda::Function", Match.objectLike({
+      Runtime: "nodejs24.x",
+      VpcConfig: Match.objectLike({}),
+      Environment: { Variables: Match.objectLike({ RELEASE_DIGEST: { Ref: "ReleaseDigest" } }) },
+    }));
+    template.hasResourceProperties("AWS::CloudWatch::Alarm", {
+      Namespace: "KFC/RecommendationsActivation",
+      MetricName: "CandidateProbePassed",
+      TreatMissingData: "breaching",
+      Dimensions: [{ Name: "ReleaseDigest", Value: { Ref: "ReleaseDigest" } }],
     });
   });
 
@@ -226,6 +276,12 @@ describe("RecommendationSandboxStack", () => {
     const egressRules = Object.values(template.findResources("AWS::EC2::SecurityGroupEgress"));
     expect(egressRules.every((rule) => rule.Properties.FromPort !== 80)).toBe(true);
     expect(egressRules.every((rule) => rule.Properties.IpProtocol !== "-1")).toBe(true);
+    const endpointPolicies = JSON.stringify(template.findResources("AWS::EC2::VPCEndpoint"));
+    for (const action of ["s3:ListBucketVersions", "s3:GetObjectVersion", "dynamodb:DeleteItem"]) {
+      expect(endpointPolicies).toContain(action);
+    }
+    expect(endpointPolicies).toContain("EvidenceBucket");
+    expect(endpointPolicies).toContain("StateTable");
   });
 
   it("creates scoped Cognito M2M identities", () => {

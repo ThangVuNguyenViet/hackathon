@@ -16,6 +16,7 @@ import {
 import { LogGroup, RetentionDays } from "aws-cdk-lib/aws-logs";
 import { AnyPrincipal, PolicyStatement } from "aws-cdk-lib/aws-iam";
 import { Construct } from "constructs";
+import type { DataPlaneResources } from "./data-plane.js";
 
 export interface NetworkResources {
   readonly vpc: Vpc;
@@ -23,10 +24,11 @@ export interface NetworkResources {
   readonly taskSecurityGroup: SecurityGroup;
   readonly vpcLinkSecurityGroup: SecurityGroup;
   readonly endpointSecurityGroup: SecurityGroup;
+  readonly validationProbeSecurityGroup: SecurityGroup;
   readonly endpoints: readonly (GatewayVpcEndpoint | InterfaceVpcEndpoint)[];
 }
 
-export const createNetwork = (scope: Construct): NetworkResources => {
+export const createNetwork = (scope: Construct, data: DataPlaneResources): NetworkResources => {
   const flowLogs = new LogGroup(scope, "VpcFlowLogs", {
     logGroupName: "/kfc/recommendations/sandbox/vpc-flow",
     retention: RetentionDays.ONE_MONTH,
@@ -47,16 +49,24 @@ export const createNetwork = (scope: Construct): NetworkResources => {
   });
 
   const s3Endpoint = vpc.addGatewayEndpoint("S3Endpoint", { service: GatewayVpcEndpointAwsService.S3 });
-  s3Endpoint.addToPolicy(endpointPolicy(["s3:GetObject", "s3:PutObject", "s3:AbortMultipartUpload", "s3:ListBucket"]));
+  s3Endpoint.addToPolicy(endpointPolicy(
+    ["s3:ListBucket", "s3:ListBucketVersions"],
+    [data.evidenceBucket.bucketArn],
+  ));
+  s3Endpoint.addToPolicy(endpointPolicy(
+    ["s3:GetObject", "s3:GetObjectVersion", "s3:PutObject", "s3:AbortMultipartUpload"],
+    [data.evidenceBucket.arnForObjects("evidence/*")],
+  ));
   const dynamoEndpoint = vpc.addGatewayEndpoint("DynamoEndpoint", { service: GatewayVpcEndpointAwsService.DYNAMODB });
   dynamoEndpoint.addToPolicy(endpointPolicy([
     "dynamodb:DescribeTable",
     "dynamodb:GetItem",
     "dynamodb:PutItem",
     "dynamodb:UpdateItem",
+    "dynamodb:DeleteItem",
     "dynamodb:Query",
     "dynamodb:TransactWriteItems",
-  ]));
+  ], [data.stateTable.tableArn]));
 
   const endpointSecurityGroup = new SecurityGroup(scope, "EndpointSecurityGroup", {
     vpc,
@@ -107,18 +117,29 @@ export const createNetwork = (scope: Construct): NetworkResources => {
     allowAllOutbound: false,
     description: "Internal ALB accepts HTTPS only from API Gateway VPC Link",
   });
+  const validationProbeSecurityGroup = new SecurityGroup(scope, "ValidationProbeSecurityGroup", {
+    vpc,
+    allowAllOutbound: false,
+    description: "Candidate validation Lambda can reach only the internal validation listener and AWS endpoints",
+  });
   albSecurityGroup.addIngressRule(vpcLinkSecurityGroup, Port.tcp(443), "API Gateway VPC Link HTTPS");
   vpcLinkSecurityGroup.addEgressRule(albSecurityGroup, Port.tcp(443), "internal ALB HTTPS");
   taskSecurityGroup.addIngressRule(albSecurityGroup, Port.tcp(8080), "ALB to ready Main container");
   albSecurityGroup.addEgressRule(taskSecurityGroup, Port.tcp(8080), "ready Main target");
+  albSecurityGroup.addIngressRule(validationProbeSecurityGroup, Port.tcp(8082), "candidate validation probe");
+  validationProbeSecurityGroup.addEgressRule(albSecurityGroup, Port.tcp(8082), "candidate validation listener");
+  validationProbeSecurityGroup.addEgressRule(endpointSecurityGroup, Port.tcp(443), "validation evidence through endpoints");
+  endpointSecurityGroup.addIngressRule(validationProbeSecurityGroup, Port.tcp(443), "validation evidence through endpoints");
+  validationProbeSecurityGroup.addEgressRule(Peer.ipv4(vpc.vpcCidrBlock), Port.udp(53), "VPC DNS resolver");
+  validationProbeSecurityGroup.addEgressRule(Peer.ipv4(vpc.vpcCidrBlock), Port.tcp(53), "VPC DNS resolver");
 
   const endpoints = [s3Endpoint, dynamoEndpoint, ...interfaceEndpoints];
   new CfnOutput(scope, "RecommendationVpcId", { value: vpc.vpcId });
   new CfnOutput(scope, "RecommendationVpcEndpointIds", {
     value: endpoints.map((endpoint) => endpoint.vpcEndpointId).join(","),
   });
-  return { vpc, albSecurityGroup, taskSecurityGroup, vpcLinkSecurityGroup, endpointSecurityGroup, endpoints };
+  return { vpc, albSecurityGroup, taskSecurityGroup, vpcLinkSecurityGroup, endpointSecurityGroup, validationProbeSecurityGroup, endpoints };
 };
 
-const endpointPolicy = (actions: readonly string[]): PolicyStatement =>
-  new PolicyStatement({ principals: [new AnyPrincipal()], actions: [...actions], resources: ["*"] });
+const endpointPolicy = (actions: readonly string[], resources: readonly string[] = ["*"]): PolicyStatement =>
+  new PolicyStatement({ principals: [new AnyPrincipal()], actions: [...actions], resources: [...resources] });

@@ -25,6 +25,10 @@ function runtime(): AutomaticRecommendationHttpRuntime {
     decide: vi.fn(async () => ({ status: 'empty' })),
     recordImpression: vi.fn(async () => undefined),
     recordOutcome: vi.fn(async () => undefined),
+    inspect: vi.fn(async () => ({
+      schemaVersion: 'kfc-automatic-inspection-v1',
+      recommendationId: 'recommendation-1',
+    })),
     readiness: vi.fn(async () => ({ ok: true })),
     close: vi.fn(async () => undefined),
   };
@@ -185,6 +189,32 @@ describe('automatic recommendation HTTP routes', () => {
         })
       ).statusCode,
     ).toBe(503);
+    await server.close();
+  });
+
+  it('protects and serves the inspection backend contract', async () => {
+    const automaticRecommendations = runtime();
+    const server = buildServer({
+      automaticRecommendations,
+      demoAdminToken: 'trusted-inspection-token',
+    });
+    const path = '/v1/admin/recommendations/recommendation-1/inspection';
+    expect((await server.inject({ method: 'GET', url: path })).statusCode).toBe(
+      401,
+    );
+    const response = await server.inject({
+      method: 'GET',
+      url: path,
+      headers: { 'x-kfc-demo-admin-token': 'trusted-inspection-token' },
+    });
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toMatchObject({
+      schemaVersion: 'kfc-automatic-inspection-v1',
+      recommendationId: 'recommendation-1',
+    });
+    expect(automaticRecommendations.inspect).toHaveBeenCalledWith(
+      'recommendation-1',
+    );
     await server.close();
   });
 });

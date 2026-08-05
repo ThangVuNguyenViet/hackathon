@@ -45,6 +45,8 @@ const appEnvSchema = z.object({
   RELEASE_DEPLOYMENT_ID: z.string().optional().default("unknown"),
   RELEASE_BUILT_AT: z.string().optional().default(""),
   RELEASE_DIRTY: z.string().optional().default(""),
+  RELEASE_DIGEST: z.string().regex(/^[a-f0-9]{64}$/u).optional(),
+  OTEL_EXPORTER_OTLP_ENDPOINT: z.string().url().optional(),
   MESSENGER_VERIFY_TOKEN: z.string().optional().default(""),
   META_PAGE_ID: z.string().optional().default(""),
   META_APP_SECRET: z.string().optional().default(""),

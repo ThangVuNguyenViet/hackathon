@@ -106,6 +106,7 @@ import {
   type ShowcaseScenarioSource,
 } from '../showcase/showcase.js';
 import type { AutomaticRecommendationHttpRuntime } from '../recommendations/serving/http-runtime.js';
+import type { RuntimeProbe } from '../observability/runtimeProbe.js';
 
 export function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
@@ -452,6 +453,7 @@ export interface ReadinessOptions {
 
 export interface RouteOptions {
   automaticRecommendations?: AutomaticRecommendationHttpRuntime;
+  runtimeProbe?: RuntimeProbe;
   fixturesRoot?: string;
   demoAdminToken?: string;
   messengerVerifyToken?: string;

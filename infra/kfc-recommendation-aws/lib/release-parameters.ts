@@ -17,7 +17,8 @@ export interface ReleaseParameters {
   readonly certificateArn: CfnParameter;
   readonly internalAlbServerName: CfnParameter;
   readonly maximumTasks: CfnParameter;
-  readonly activateService: CfnParameter;
+  readonly validateCandidate: CfnParameter;
+  readonly activateProduction: CfnParameter;
 }
 
 const digestParameter = (scope: Construct, id: string, description: string): CfnParameter =>
@@ -95,11 +96,17 @@ export const createReleaseParameters = (scope: Construct): ReleaseParameters => 
       "^(?=.{1,253}$)([A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?\\.)+[A-Za-z]{2,63}$",
     description: "Private DNS name covered by the ACM certificate and used for API Gateway TLS SNI verification",
   });
-  const activateService = new CfnParameter(scope, "ActivateService", {
+  const validateCandidate = new CfnParameter(scope, "ValidateCandidate", {
     type: "String",
     default: "false",
     allowedValues: ["false", "true"],
-    description: "Fail-closed activation after deployment preflight verifies every immutable runtime artifact",
+    description: "Run one isolated exact-candidate task for deep readiness and telemetry validation",
+  });
+  const activateProduction = new CfnParameter(scope, "ActivateProduction", {
+    type: "String",
+    default: "false",
+    allowedValues: ["false", "true"],
+    description: "Promote only after the exact candidate activation alarm and immutable evidence are verified",
   });
   const maximumTasks = new CfnParameter(scope, "MaximumTasks", {
     type: "Number",
@@ -122,6 +129,7 @@ export const createReleaseParameters = (scope: Construct): ReleaseParameters => 
     certificateArn,
     internalAlbServerName,
     maximumTasks,
-    activateService,
+    validateCandidate,
+    activateProduction,
   };
 };

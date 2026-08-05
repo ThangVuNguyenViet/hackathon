@@ -1,4 +1,4 @@
-import { Duration, Stack } from "aws-cdk-lib";
+import { Duration, Stack, Validations } from "aws-cdk-lib";
 import { Certificate } from "aws-cdk-lib/aws-certificatemanager";
 import { SubnetType } from "aws-cdk-lib/aws-ec2";
 import {
@@ -7,6 +7,7 @@ import {
   ContainerInsights,
   ContainerImage,
   CpuArchitecture,
+  DeploymentStrategy,
   FargateService,
   FargateTaskDefinition,
   LogDrivers,
@@ -14,8 +15,16 @@ import {
   Protocol,
   Secret as EcsSecret,
 } from "aws-cdk-lib/aws-ecs";
-import { ApplicationLoadBalancer, ApplicationProtocol } from "aws-cdk-lib/aws-elasticloadbalancingv2";
-import { PolicyStatement } from "aws-cdk-lib/aws-iam";
+import {
+  ApplicationListenerRule,
+  ApplicationLoadBalancer,
+  ApplicationProtocol,
+  ApplicationTargetGroup,
+  ListenerAction,
+  ListenerCondition,
+  TargetType,
+} from "aws-cdk-lib/aws-elasticloadbalancingv2";
+import { PolicyStatement, Role, ServicePrincipal } from "aws-cdk-lib/aws-iam";
 import { LogGroup, RetentionDays } from "aws-cdk-lib/aws-logs";
 import { Construct } from "constructs";
 
@@ -27,9 +36,14 @@ import type { ImageRepositories } from "./image-repositories.js";
 export interface ComputeResources {
   readonly cluster: Cluster;
   readonly service: FargateService;
+  readonly validationService: FargateService;
+  readonly taskDefinition: FargateTaskDefinition;
   readonly loadBalancer: ApplicationLoadBalancer;
   readonly listenerArn: string;
   readonly targetGroupFullName: string;
+  readonly alternateTargetGroupFullName: string;
+  readonly validationTargetGroupFullName: string;
+  readonly infrastructureRole: Role;
   readonly logGroup: LogGroup;
 }
 
@@ -122,7 +136,7 @@ export const createCompute = (
     environment: { AWS_REGION: Stack.of(scope).region },
     logging: LogDrivers.awsLogs({ logGroup, streamPrefix: "adot", mode: "non-blocking" as never }),
     healthCheck: {
-      command: ["CMD-SHELL", "curl --fail --silent http://127.0.0.1:13133/ >/dev/null || exit 1"],
+      command: ["CMD", "/healthcheck"],
       interval: Duration.seconds(15),
       timeout: Duration.seconds(5),
       retries: 3,
@@ -176,11 +190,16 @@ export const createCompute = (
     assignPublicIp: false,
     vpcSubnets: { subnetType: SubnetType.PRIVATE_ISOLATED },
     securityGroups: [network.taskSecurityGroup],
-    circuitBreaker: { rollback: true },
+    deploymentStrategy: DeploymentStrategy.CANARY,
+    canaryConfiguration: { stepPercent: 10, stepBakeTime: Duration.minutes(5) },
     minHealthyPercent: 100,
     maxHealthyPercent: 200,
     healthCheckGracePeriod: Duration.seconds(90),
     enableExecuteCommand: false,
+  });
+  Validations.of(service).acknowledge({
+    id: "Annotation::@aws-cdk/aws-ecs:shouldUseCircuitBreaker",
+    reason: "The ECS deployment circuit breaker is valid only for rolling deployments; native CANARY uses deployment alarms with rollback.",
   });
   const loadBalancer = new ApplicationLoadBalancer(scope, "LoadBalancer", {
     vpc: network.vpc,
@@ -200,11 +219,13 @@ export const createCompute = (
     protocol: ApplicationProtocol.HTTPS,
     certificates: [certificate],
     open: false,
+    defaultAction: ListenerAction.fixedResponse(404),
   });
-  const targetGroup = listener.addTargets("MainTargets", {
+  const targetGroup = new ApplicationTargetGroup(scope, "ProductionTargetGroup", {
+    vpc: network.vpc,
     port: 8080,
     protocol: ApplicationProtocol.HTTP,
-    targets: [service.loadBalancerTarget({ containerName: "main", containerPort: 8080 })],
+    targetType: TargetType.IP,
     deregistrationDelay: Duration.seconds(60),
     healthCheck: {
       path: "/ready",
@@ -215,12 +236,118 @@ export const createCompute = (
       timeout: Duration.seconds(5),
     },
   });
+  targetGroup.addTarget(service.loadBalancerTarget({ containerName: "main", containerPort: 8080 }));
+  const alternateTargetGroup = new ApplicationTargetGroup(scope, "AlternateTargetGroup", {
+    vpc: network.vpc,
+    port: 8080,
+    protocol: ApplicationProtocol.HTTP,
+    targetType: TargetType.IP,
+    deregistrationDelay: Duration.seconds(60),
+    healthCheck: {
+      path: "/ready",
+      healthyHttpCodes: "200",
+      healthyThresholdCount: 2,
+      unhealthyThresholdCount: 2,
+      interval: Duration.seconds(15),
+      timeout: Duration.seconds(5),
+    },
+  });
+  const productionRule = new ApplicationListenerRule(scope, "ProductionListenerRule", {
+    listener,
+    priority: 10,
+    conditions: [ListenerCondition.pathPatterns(["/v1/*"])],
+    action: ListenerAction.forward([targetGroup]),
+  });
+  const testListener = loadBalancer.addListener("TestHttpsListener", {
+    port: 8443,
+    protocol: ApplicationProtocol.HTTPS,
+    certificates: [certificate],
+    open: false,
+    defaultAction: ListenerAction.fixedResponse(404),
+  });
+  const testRule = new ApplicationListenerRule(scope, "TestListenerRule", {
+    listener: testListener,
+    priority: 10,
+    conditions: [ListenerCondition.pathPatterns(["/*"])],
+    action: ListenerAction.forward([alternateTargetGroup]),
+  });
+  const validationTargetGroup = new ApplicationTargetGroup(scope, "ValidationTargetGroup", {
+    vpc: network.vpc,
+    port: 8080,
+    protocol: ApplicationProtocol.HTTP,
+    targetType: TargetType.IP,
+    healthCheck: { path: "/ready", healthyHttpCodes: "200" },
+  });
+  const validationService = new FargateService(scope, "ValidationService", {
+    cluster,
+    taskDefinition: task,
+    desiredCount: 1,
+    assignPublicIp: false,
+    vpcSubnets: { subnetType: SubnetType.PRIVATE_ISOLATED },
+    securityGroups: [network.taskSecurityGroup],
+    healthCheckGracePeriod: Duration.seconds(90),
+    enableExecuteCommand: false,
+    circuitBreaker: { rollback: true },
+    minHealthyPercent: 100,
+    maxHealthyPercent: 200,
+  });
+  validationTargetGroup.addTarget(
+    validationService.loadBalancerTarget({ containerName: "main", containerPort: 8080 }),
+  );
+  const validationListener = loadBalancer.addListener("ValidationListener", {
+    port: 8082,
+    protocol: ApplicationProtocol.HTTP,
+    open: false,
+    defaultAction: ListenerAction.fixedResponse(404),
+  });
+  new ApplicationListenerRule(scope, "ValidationListenerRule", {
+    listener: validationListener,
+    priority: 10,
+    conditions: [ListenerCondition.pathPatterns(["/ready"])],
+    action: ListenerAction.forward([validationTargetGroup]),
+  });
+  const infrastructureRole = new Role(scope, "EcsLoadBalancerInfrastructureRole", {
+    assumedBy: new ServicePrincipal("ecs.amazonaws.com"),
+  });
+  infrastructureRole.addToPolicy(new PolicyStatement({
+    actions: [
+      "elasticloadbalancing:DescribeListeners",
+      "elasticloadbalancing:DescribeRules",
+      "elasticloadbalancing:DescribeTargetGroups",
+      "elasticloadbalancing:DescribeTargetHealth",
+    ],
+    resources: ["*"],
+  }));
+  infrastructureRole.addToPolicy(new PolicyStatement({
+    actions: ["elasticloadbalancing:RegisterTargets", "elasticloadbalancing:DeregisterTargets"],
+    resources: [targetGroup.targetGroupArn, alternateTargetGroup.targetGroupArn],
+  }));
+  infrastructureRole.addToPolicy(new PolicyStatement({
+    actions: ["elasticloadbalancing:ModifyListener"],
+    resources: [listener.listenerArn, testListener.listenerArn],
+  }));
+  infrastructureRole.addToPolicy(new PolicyStatement({
+    actions: ["elasticloadbalancing:ModifyRule"],
+    resources: [productionRule.listenerRuleArn, testRule.listenerRuleArn],
+  }));
+  const cfnService = service.node.defaultChild as import("aws-cdk-lib/aws-ecs").CfnService;
+  cfnService.addPropertyOverride("LoadBalancers.0.AdvancedConfiguration", {
+    AlternateTargetGroupArn: alternateTargetGroup.targetGroupArn,
+    ProductionListenerRule: productionRule.listenerRuleArn,
+    TestListenerRule: testRule.listenerRuleArn,
+    RoleArn: infrastructureRole.roleArn,
+  });
   return {
     cluster,
     service,
+    validationService,
+    taskDefinition: task,
     loadBalancer,
     listenerArn: listener.listenerArn,
     targetGroupFullName: targetGroup.targetGroupFullName,
+    alternateTargetGroupFullName: alternateTargetGroup.targetGroupFullName,
+    validationTargetGroupFullName: validationTargetGroup.targetGroupFullName,
+    infrastructureRole,
     logGroup,
   };
 };

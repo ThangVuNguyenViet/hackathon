@@ -18,7 +18,9 @@ Qualified Model Bundle digest, ACM certificate, and rollback target.
   server name against the ISSUED ACM certificate.
 - One Fargate task contains digest-pinned Node 24 Main, Python scorer, and ADOT
   containers. Main starts only after the scorer is healthy and performs its
-  full application readiness contract at `/recommendations/ready`.
+  full application readiness contract at `/ready`. That path is available only
+  to target-group health checks and the isolated candidate-validation path; it
+  is not an API Gateway route.
 - No internet gateway, NAT, or public task IP. Isolated route tables expose S3/DynamoDB gateway
   endpoints and ECR API/DKR, Logs, Secrets Manager, Monitoring, and X-Ray
   interface endpoints. Every endpoint has an action-scoped endpoint policy.
@@ -27,14 +29,16 @@ Qualified Model Bundle digest, ACM certificate, and rollback target.
 - Evidence is versioned, KMS-encrypted, retained, and protected from object
   deletion. DynamoDB uses KMS encryption, PITR, deletion protection, and
   on-demand capacity. ECR repositories are immutable and scanned on push.
-- Native ECS 10%/5-minute canary, alarm rollback, and deployment circuit
-  breaker rollback are enabled. Every deploy binds Main,
+- Native ECS 10%/5-minute canary uses two target groups, explicit production
+  and test listener rules, the required ECS load-balancer infrastructure role,
+  and alarm rollback. The circuit breaker is intentionally absent because AWS
+  supports it only for rolling deployments. Every deploy binds Main,
   scorer, ADOT, Qualified Model Bundle, release, and previous-release digests.
   A first release requires explicit `AllowRollbackToPaused=true`.
 
 ## Rush capacity and telemetry
 
-The service stack defaults to `ActivateService=false`: desired count is zero
+The service stack defaults to `ActivateProduction=false`: desired count is zero
 and all scheduled/reactive scaling resources are conditionally absent. After
 preflight, off peak retains one warm task. Scheduled minimum capacity rises to two at
 10:00 and 16:30 and drains at 14:30 and 22:00 in
@@ -61,19 +65,26 @@ npm run deploy:preflight
 Deployment is two phase. First deploy only `KfcRecommendationFoundation` to
 create immutable repositories and GitHub OIDC without needing images or a QMB.
 Then synthesize/deploy `KfcRecommendationSyntheticSandbox` with
-`ActivateService=false`. Only after images, QMB, endpoints, TLS and the runtime
-activation proof pass may the service stack be updated with
-`ActivateService=true`.
+`ActivateProduction=false` and `ValidateCandidate=false`. To validate, set
+`ValidateCandidate=true`: one isolated service runs the exact production task
+definition and an in-VPC Lambda probes deep readiness every minute through a
+private validation listener. The release-specific alarm treats missing data as
+breaching. Keep validation running through the native canary, set
+`ActivateProduction=true` only after preflight passes, and disable validation
+only after the canary bake completes.
 
 The preflight is read-only and never deploys. It verifies exact release and QMB
 content, all payload digests, linux/arm64 ECR manifests, ACM `ISSUED` plus SAN,
-eight available endpoint IDs, a completed contract-compatible rollback release
+eight endpoints whose live VPC, service and policy bindings match exactly, a
+completed contract-compatible rollback release with AWS/task provenance,
 or explicit first-release rollback-to-paused, synthesized alarm-linked canary,
-trusted ports, mounted QMB, all runtime digests, ADOT health, structured logs,
-telemetry, and a successful cross-runtime warmup. The preflight must also call
-deep `/ready` itself and then observe the same
+trusted ports, mounted QMB, all runtime digests, ADOT `/healthcheck`, structured
+logs, telemetry, and a successful cross-runtime warmup. The preflight invokes
+the VPC validation Lambda and then observes the same
 immutable release in structured CloudWatch logs, an X-Ray segment, and native
-ALB request metrics. A hand-authored boolean proof cannot activate the service.
+ALB request metrics. It also requires a freshly updated `OK` activation alarm
+and an `OK` operational composite; a hand-authored local proof cannot activate
+the service.
 
 A real deployment additionally requires an existing scoped CDK bootstrap deployment role named by
 `CdkDeploymentRoleArn`; GitHub OIDC can assume only that role from the main

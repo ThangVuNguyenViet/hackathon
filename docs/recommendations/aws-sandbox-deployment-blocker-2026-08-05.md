@@ -14,14 +14,18 @@ verified previous compatible release exists in this task. Docker availability
 and image publication were not fabricated or inferred. No `cdk deploy`, ECR
 write, IAM mutation, or other cost-incurring AWS action was attempted.
 
-The service is therefore synthesized paused with desired count zero and no
-scheduled/reactive scaling resources. Activation also requires all eight
-deployed endpoints to be available, linux/arm64 image manifests, exact release
-and bundle payload hashes, an ISSUED certificate covering the VPC Link TLS SNI
-name, alarm-linked canary/circuit-breaker rollback, and retained runtime proof
-that `/ready`, trusted ports, mounted QMB, scorer contract/feature/composer
-digests, structured logs, healthy ADOT, telemetry, and cross-runtime warmup all
-passed. None of that evidence is fabricated here.
+Production is therefore synthesized paused with desired count zero and no
+scheduled/reactive scaling resources. Candidate validation is separately
+gated and also defaults to zero. Activation requires all eight live endpoints
+to match their exact VPC, services, actions and resource policies; linux/arm64
+image manifests; semantically bound release and bundle hashes; an ISSUED
+certificate covering the VPC Link TLS SNI name; a valid dual-target-group ECS
+canary; current `OK` release-specific and operational alarms; and executable
+in-VPC proof that `/ready`, trusted ports, mounted QMB, scorer contract/feature/
+composer digests, structured logs, ADOT `/healthcheck`, OTLP metrics/traces, and
+cross-runtime warmup all passed. Task 4 does not yet supply the QMB/trusted
+runtime composition, so the capability exists but activation remains
+fail-closed. None of that evidence is fabricated here.
 
 Offline proof remains valid for source structure only: TypeScript compilation,
 CDK assertion tests, CDK Nag checks, and `cdk synth` pass for

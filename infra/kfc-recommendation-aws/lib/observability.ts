@@ -1,4 +1,4 @@
-import { Duration } from "aws-cdk-lib";
+import { CfnOutput, Duration } from "aws-cdk-lib";
 import {
   Alarm,
   AlarmRule,
@@ -68,13 +68,14 @@ export const createObservability = (
     threshold: 1,
     comparisonOperator: ComparisonOperator.GREATER_THAN_OR_EQUAL_TO_THRESHOLD,
     evaluationPeriods: 2,
-    treatMissingData: TreatMissingData.BREACHING,
+    treatMissingData: TreatMissingData.NOT_BREACHING,
   });
   const releaseSafety = new CompositeAlarm(scope, "ReleaseSafetyComposite", {
     compositeAlarmName: "kfc-recommendation-sandbox-release-safety",
     alarmRule: AlarmRule.anyOf(p99Alarm, target5xxAlarm, unhealthy),
     alarmDescription: "Pause/rollback signal for sustained latency, target failures, or readiness failure",
   });
+  new CfnOutput(scope, "ReleaseSafetyAlarmName", { value: releaseSafety.alarmName });
 
   const dashboard = new Dashboard(scope, "Dashboard", {
     dashboardName: "kfc-recommendation-synthetic-sandbox",

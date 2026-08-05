@@ -1,4 +1,4 @@
-import { Duration, RemovalPolicy } from "aws-cdk-lib";
+import { CfnOutput, Duration, RemovalPolicy } from "aws-cdk-lib";
 import { AttributeType, BillingMode, Table, TableEncryption } from "aws-cdk-lib/aws-dynamodb";
 import { AnyPrincipal, Effect, PolicyStatement } from "aws-cdk-lib/aws-iam";
 import { Key } from "aws-cdk-lib/aws-kms";
@@ -68,6 +68,8 @@ export const createDataPlane = (scope: Construct): DataPlaneResources => {
       passwordLength: 48,
     },
   });
+  new CfnOutput(scope, "RecommendationEvidenceBucketArn", { value: evidenceBucket.bucketArn });
+  new CfnOutput(scope, "RecommendationStateTableArn", { value: stateTable.tableArn });
   return {
     key,
     evidenceBucket,

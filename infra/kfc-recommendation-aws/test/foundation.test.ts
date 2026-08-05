@@ -31,7 +31,8 @@ describe("two-phase deployment foundation", () => {
     template.resourceCountIs("AWS::IAM::OIDCProvider", 0);
     expect(template.toJSON().Parameters).toEqual(
       expect.objectContaining({
-        ActivateService: expect.objectContaining({ Default: "false" }),
+        ActivateProduction: expect.objectContaining({ Default: "false" }),
+        ValidateCandidate: expect.objectContaining({ Default: "false" }),
         MainRepositoryName: expect.any(Object),
         ScorerRepositoryName: expect.any(Object),
         AdotRepositoryName: expect.any(Object),
@@ -39,14 +40,14 @@ describe("two-phase deployment foundation", () => {
     );
     template.hasResourceProperties("AWS::ECS::Service", {
       DesiredCount: {
-        "Fn::If": ["ActivateServiceCondition", 1, 0],
+        "Fn::If": ["ActivateProductionCondition", 1, 0],
       },
     });
     for (const resource of Object.values(template.findResources("AWS::ApplicationAutoScaling::ScalableTarget"))) {
-      expect(resource.Condition).toBe("ActivateServiceCondition");
+      expect(resource.Condition).toBe("ActivateProductionCondition");
     }
     for (const resource of Object.values(template.findResources("AWS::ApplicationAutoScaling::ScalingPolicy"))) {
-      expect(resource.Condition).toBe("ActivateServiceCondition");
+      expect(resource.Condition).toBe("ActivateProductionCondition");
     }
     template.hasResourceProperties("AWS::ECS::TaskDefinition", {
       ContainerDefinitions: Match.arrayWith([

@@ -14,7 +14,8 @@ export interface DeploymentFacts {
   readonly previousReleaseCompletedAndCompatible: boolean;
   readonly allowRollbackToPaused: boolean;
   readonly alarmLinkedCanaryRollback: boolean;
-  readonly activationProofVerified: boolean;
+  readonly exactRoutesVerified: boolean;
+  readonly activationAlarmCurrent: boolean;
   readonly executableRuntimeProbeVerified: boolean;
 }
 
@@ -44,13 +45,13 @@ export const evaluateDeploymentGate = (facts: DeploymentFacts): readonly string[
     blockers.push("required VPC endpoint services are not verified in ap-southeast-1");
   }
   if (!facts.deployedEndpointsAvailable) {
-    blockers.push("all eight deployed VPC endpoints must be in available state");
+    blockers.push("all eight deployed endpoints must match exact VPC, service, state, and policy bindings");
   }
   if (!facts.bundlePresentAndVerified) {
     blockers.push("Qualified Model Bundle is absent or does not match its digest");
   }
   if (!facts.releaseManifestPresentAndVerified) {
-    blockers.push("release manifest is absent or does not match its digest");
+    blockers.push("release manifest is absent or does not match its file hash and semantic bindings");
   }
   if (!facts.mainImagePresentAndArm64) blockers.push("Main image digest is absent from ECR or is not linux/arm64");
   if (!facts.scorerImagePresentAndArm64) blockers.push("scorer image digest is absent from ECR or is not linux/arm64");
@@ -62,10 +63,13 @@ export const evaluateDeploymentGate = (facts: DeploymentFacts): readonly string[
     blockers.push("previous release is absent, incomplete, or contract-incompatible; first release must explicitly rollback to paused");
   }
   if (!facts.alarmLinkedCanaryRollback) {
-    blockers.push("synthesized ECS canary is not linked to alarm rollback and circuit-breaker rollback");
+    blockers.push("synthesized ECS canary topology or alarm rollback is invalid");
   }
-  if (!facts.activationProofVerified) {
-    blockers.push("runtime activation proof does not verify trusted ports, mounted QMB, digests, telemetry, ADOT health, and cross-runtime warmup");
+  if (!facts.exactRoutesVerified) {
+    blockers.push("synthesized API does not contain exactly the seven protected recommendation routes");
+  }
+  if (!facts.activationAlarmCurrent) {
+    blockers.push("release-specific candidate activation alarm is not current and OK");
   }
   if (!facts.executableRuntimeProbeVerified) {
     blockers.push("executable runtime probe did not prove deep readiness plus release-bound structured logs and X-Ray telemetry");

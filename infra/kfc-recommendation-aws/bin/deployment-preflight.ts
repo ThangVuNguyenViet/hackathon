@@ -1,29 +1,33 @@
 #!/usr/bin/env node
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { execFileSync } from "node:child_process";
 
 import {
-  activationProofMatches,
+  activationAlarmIsCurrent,
   certificateIsIssuedFor,
-  endpointsAreAvailable,
+  endpointsMatchDeployment,
   manifestDigestMatches,
   ociManifestSupports,
   previousReleaseIsCompletedAndCompatible,
   qualifiedBundleManifestMatches,
+  releaseManifestMatches,
   templateHasAlarmLinkedCanaryRollback,
+  templateHasExactRecommendationRoutes,
   type ActivationBindings,
 } from "../lib/artifact-verification.js";
 import { evaluateDeploymentGate, type DeploymentFacts } from "../lib/deployment-gate.js";
 
 interface CallerIdentity { readonly Account: string; readonly Arn: string }
 interface EndpointServices { readonly ServiceNames?: string[] }
-interface EndpointStates { readonly VpcEndpoints?: Array<{ VpcEndpointId?: string; State?: string }> }
+interface EndpointStates { readonly VpcEndpoints?: Array<{ VpcEndpointId?: string; State?: string; VpcId?: string; ServiceName?: string; PolicyDocument?: unknown }> }
 interface BatchImage { readonly images?: Array<{ imageManifest?: string }> }
 interface CertificateResponse { readonly Certificate?: { Status?: string; DomainName?: string; SubjectAlternativeNames?: string[] } }
 interface LogEvents { readonly events?: unknown[] }
 interface XrayTraces { readonly Traces?: Array<{ Segments?: Array<{ Document?: string }> }> }
-interface MetricPoints { readonly Datapoints?: unknown[] }
+interface MetricPoints { readonly Datapoints?: Array<{ Timestamp?: string; Sum?: number }> }
+interface AlarmResponse { readonly MetricAlarms?: Array<{ StateValue?: string; StateUpdatedTimestamp?: string }> }
 
 const awsJson = <T>(args: readonly string[]): T | undefined => {
   try {
@@ -61,20 +65,26 @@ const imageIsArm64 = (repository: string, digest: string | undefined): boolean =
   return ociManifestSupports(response?.images?.[0]?.imageManifest, digest, "linux", "arm64");
 };
 
-const executableRuntimeProbe = async (releaseDigest: string): Promise<boolean> => {
-  const baseUrl = process.env.MAIN_PROBE_URL;
-  const token = process.env.MAIN_PROBE_BEARER_TOKEN;
-  const traceId = process.env.RUNTIME_PROBE_TRACE_ID;
+const executableRuntimeProbe = (releaseDigest: string): boolean => {
+  const runnerName = process.env.CANDIDATE_VALIDATION_RUNNER_NAME;
   const loadBalancer = process.env.ALB_FULL_NAME;
-  if (baseUrl === undefined || token === undefined || traceId === undefined || loadBalancer === undefined) return false;
+  if (runnerName === undefined || loadBalancer === undefined) return false;
+  const invocationRoot = mkdtempSync(join(tmpdir(), "kfc-candidate-validation-"));
+  const payloadPath = join(invocationRoot, "payload.json");
+  let traceId: string | undefined;
   try {
-    const response = await fetch(`${baseUrl.replace(/\/$/, "")}/ready?deep=1`, {
-      headers: { authorization: `Bearer ${token}`, "x-kfc-runtime-probe": releaseDigest },
-      signal: AbortSignal.timeout(5_000),
-    });
-    const body = await response.json() as { checks?: { automaticRecommendations?: { ok?: boolean } } };
-    if (response.status !== 200 || body.checks?.automaticRecommendations?.ok !== true) return false;
-  } catch { return false; }
+    const invocation = awsJson<{ StatusCode?: number; FunctionError?: string }>([
+      "lambda", "invoke", "--region", "ap-southeast-1", "--function-name", runnerName,
+      "--cli-binary-format", "raw-in-base64-out", "--payload", "{}", payloadPath,
+    ]);
+    if (invocation?.StatusCode !== 200 || invocation.FunctionError !== undefined) return false;
+    const payload = jsonFile(payloadPath) as { ok?: boolean; releaseDigest?: string; traceId?: string } | undefined;
+    if (payload?.ok !== true || payload.releaseDigest !== releaseDigest || !/^[a-f0-9]{32}$/.test(payload.traceId ?? "")) return false;
+    traceId = payload.traceId;
+  } finally {
+    rmSync(invocationRoot, { recursive: true, force: true });
+  }
+  if (traceId === undefined) return false;
   const logs = awsJson<LogEvents>([
     "logs", "filter-log-events", "--region", "ap-southeast-1",
     "--log-group-name", "/kfc/recommendations/sandbox/application",
@@ -130,31 +140,69 @@ const certificate = process.env.INTERNAL_ALB_CERTIFICATE_ARN === undefined ? und
     "--certificate-arn", process.env.INTERNAL_ALB_CERTIFICATE_ARN,
   ])?.Certificate;
 const previous = jsonFile(process.env.PREVIOUS_RELEASE_MANIFEST_PATH);
+const releaseManifest = jsonFile(process.env.RELEASE_MANIFEST_PATH);
 const template = jsonFile(
   process.env.SYNTHESIZED_SERVICE_TEMPLATE_PATH ??
     "cdk.out/KfcRecommendationSyntheticSandbox.template.json",
 );
+const runtimeProbeVerified = executableRuntimeProbe(bindings.releaseDigest);
+const activationAlarm = process.env.CANDIDATE_ACTIVATION_ALARM_NAME === undefined ? undefined : awsJson<AlarmResponse>([
+  "cloudwatch", "describe-alarms", "--region", "ap-southeast-1", "--alarm-names",
+  process.env.CANDIDATE_ACTIVATION_ALARM_NAME,
+])?.MetricAlarms?.[0];
+const operationalAlarm = process.env.RELEASE_SAFETY_ALARM_NAME === undefined ? undefined : awsJson<{
+  CompositeAlarms?: Array<{ StateValue?: string }>;
+}>([
+  "cloudwatch", "describe-alarms", "--region", "ap-southeast-1", "--alarm-names",
+  process.env.RELEASE_SAFETY_ALARM_NAME,
+])?.CompositeAlarms?.[0];
+const validationStartedAt = process.env.CANDIDATE_VALIDATION_STARTED_AT ?? "";
+const activationMetric = Number.isNaN(Date.parse(validationStartedAt)) ? undefined : awsJson<MetricPoints>([
+  "cloudwatch", "get-metric-statistics", "--region", "ap-southeast-1",
+  "--namespace", "KFC/RecommendationsActivation", "--metric-name", "CandidateProbePassed",
+  "--dimensions", `Name=ReleaseDigest,Value=${bindings.releaseDigest}`,
+  "--start-time", validationStartedAt, "--end-time", new Date().toISOString(),
+  "--period", "60", "--statistics", "Sum",
+]);
+const activationEvidenceTimestamp = (activationMetric?.Datapoints ?? [])
+  .filter((point) => (point.Sum ?? 0) >= 1 && point.Timestamp !== undefined)
+  .sort((left, right) => Date.parse(right.Timestamp ?? "") - Date.parse(left.Timestamp ?? ""))[0]?.Timestamp;
 const facts: DeploymentFacts = {
   expectedAccount: process.env.EXPECTED_AWS_ACCOUNT ?? "",
   callerAccount: identity?.Account,
   callerArn: identity?.Arn,
   configuredRegion: awsText(["configure", "get", "region"]),
   endpointNames,
-  deployedEndpointsAvailable: endpointsAreAvailable(endpointStates?.VpcEndpoints ?? [], endpointIds),
+  deployedEndpointsAvailable: endpointsMatchDeployment(endpointStates?.VpcEndpoints ?? [], {
+    region: "ap-southeast-1",
+    vpcId: process.env.RECOMMENDATION_VPC_ID ?? "",
+    evidenceBucketArn: process.env.EVIDENCE_BUCKET_ARN ?? "",
+    stateTableArn: process.env.STATE_TABLE_ARN ?? "",
+  }),
   bundlePresentAndVerified:
     qualifiedBundleManifestMatches(bundleManifest, bindings) && bundlePayloadsMatch,
-  releaseManifestPresentAndVerified: exactFileDigest(process.env.RELEASE_MANIFEST_PATH, bindings.releaseDigest),
+  releaseManifestPresentAndVerified:
+    exactFileDigest(process.env.RELEASE_MANIFEST_PATH, process.env.RELEASE_MANIFEST_SHA256) &&
+    releaseManifestMatches(releaseManifest, bindings, {
+      main: process.env.MAIN_IMAGE_DIGEST ?? "",
+      scorer: process.env.SCORER_IMAGE_DIGEST ?? "",
+      adot: process.env.ADOT_IMAGE_DIGEST ?? "",
+    }),
   mainImagePresentAndArm64: imageIsArm64(process.env.MAIN_REPOSITORY_NAME ?? "kfc-recommendation-main", process.env.MAIN_IMAGE_DIGEST),
   scorerImagePresentAndArm64: imageIsArm64(process.env.SCORER_REPOSITORY_NAME ?? "kfc-recommendation-scorer", process.env.SCORER_IMAGE_DIGEST),
   adotImagePresentAndArm64: imageIsArm64(process.env.ADOT_REPOSITORY_NAME ?? "kfc-recommendation-adot", process.env.ADOT_IMAGE_DIGEST),
   certificateIssuedAndMatchesServerName: certificateIsIssuedFor(certificate, serverName),
   previousReleaseCompletedAndCompatible: previousReleaseIsCompletedAndCompatible(
     previous as never, process.env.PREVIOUS_RELEASE_DIGEST ?? "", bindings.contractDigest,
+    { accountId: identity?.Account ?? "", region: "ap-southeast-1" },
   ),
   allowRollbackToPaused: process.env.ALLOW_ROLLBACK_TO_PAUSED === "true",
   alarmLinkedCanaryRollback: templateHasAlarmLinkedCanaryRollback((template ?? {}) as never),
-  activationProofVerified: activationProofMatches(jsonFile(process.env.ACTIVATION_PROOF_PATH), bindings),
-  executableRuntimeProbeVerified: await executableRuntimeProbe(bindings.releaseDigest),
+  exactRoutesVerified: templateHasExactRecommendationRoutes((template ?? {}) as never),
+  activationAlarmCurrent:
+    activationAlarmIsCurrent(activationAlarm, validationStartedAt, activationEvidenceTimestamp) &&
+    operationalAlarm?.StateValue === "OK",
+  executableRuntimeProbeVerified: runtimeProbeVerified,
 };
 const blockers = evaluateDeploymentGate(facts);
 process.stdout.write(`${JSON.stringify({
