@@ -24,6 +24,10 @@ export function createAutomaticRecommendationServingRuntime({
       type: AutomaticDecisionEvidence['recommendationType'],
       request: unknown,
     ): Promise<unknown>;
+    decideWithEvidence?(
+      type: AutomaticDecisionEvidence['recommendationType'],
+      request: unknown,
+    ): Promise<{ response: unknown; execution: unknown }>;
   };
   evidence: {
     commitClaimedDecision(
@@ -53,6 +57,7 @@ export function createAutomaticRecommendationServingRuntime({
   technicalEvidence: (input: {
     request: ReturnType<typeof parseAutomaticRecommendationRequest>;
     response: ReturnType<typeof parseAutomaticRecommendationResponse>;
+    execution?: unknown;
   }) => AutomaticDecisionEvidence['technical'];
 }) {
   const flights = new Map<
@@ -147,8 +152,15 @@ export function createAutomaticRecommendationServingRuntime({
       }
       const promise = (async () => {
         try {
+          const engineDecision =
+            engine.decideWithEvidence === undefined
+              ? {
+                  response: await engine.decide(recommendationType, binding),
+                  execution: undefined,
+                }
+              : await engine.decideWithEvidence(recommendationType, binding);
           const response = parseAutomaticRecommendationResponse(
-            await engine.decide(recommendationType, binding),
+            engineDecision.response,
           );
           await evidence.commitClaimedDecision(
             {
@@ -171,7 +183,11 @@ export function createAutomaticRecommendationServingRuntime({
               expiresAt: response.expiresAt,
               contractDigest,
               response: parseJsonValue(response),
-              technical: technicalEvidence({ request: binding, response }),
+              technical: technicalEvidence({
+                request: binding,
+                response,
+                execution: engineDecision.execution,
+              }),
             },
             claim.ownerToken,
           );

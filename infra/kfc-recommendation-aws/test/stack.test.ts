@@ -2,29 +2,49 @@ import { App } from "aws-cdk-lib";
 import { Match, Template } from "aws-cdk-lib/assertions";
 import { describe, expect, it } from "vitest";
 
-import { RecommendationSandboxStack } from "../lib/recommendation-sandbox-stack.js";
+import { RecommendationCandidateStack } from "../lib/recommendation-candidate-stack.js";
+import { RecommendationPlatformStack } from "../lib/recommendation-platform-stack.js";
+import { RecommendationProductionStack } from "../lib/recommendation-production-stack.js";
 
-const synthesize = (): Template => {
+const synthesize = (): { platform: Template; candidate: Template; production: Template } => {
   const app = new App({ context: { githubRepository: "KFC/recommendations" } });
-  const stack = new RecommendationSandboxStack(app, "RecommendationSandbox", {
-    env: { account: "111122223333", region: "ap-southeast-1" },
+  const environment = { account: "111122223333", region: "ap-southeast-1" };
+  const platform = new RecommendationPlatformStack(app, "RecommendationPlatform", {
+    env: environment,
   });
-  return Template.fromStack(stack);
+  const candidate = new RecommendationCandidateStack(app, "RecommendationCandidate", {
+    env: environment,
+    platform,
+  });
+  const production = new RecommendationProductionStack(app, "RecommendationProduction", {
+    env: environment,
+    platform,
+    candidate,
+  });
+  return {
+    platform: Template.fromStack(platform),
+    candidate: Template.fromStack(candidate),
+    production: Template.fromStack(production),
+  };
 };
 
-describe("RecommendationSandboxStack", () => {
+const platformTemplate = (): Template => synthesize().platform;
+const candidateTemplate = (): Template => synthesize().candidate;
+const productionTemplate = (): Template => synthesize().production;
+
+describe("independent recommendation stacks", () => {
   it("rejects deployment outside AWS Singapore", () => {
     const app = new App();
-    expect(
-      () =>
-        new RecommendationSandboxStack(app, "WrongRegion", {
-          env: { account: "111122223333", region: "us-west-2" },
-        }),
-    ).toThrow("ap-southeast-1");
+    expect(() => new RecommendationPlatformStack(app, "WrongRegion", {
+      env: { account: "111122223333", region: "ap-southeast-1" },
+    })).not.toThrow();
+    expect(() => new RecommendationPlatformStack(app, "WrongRegion2", {
+      env: { account: "111122223333", region: "us-west-2" },
+    })).toThrow("ap-southeast-1");
   });
 
   it("uses a private no-NAT VPC with only approved endpoints", () => {
-    const template = synthesize();
+    const template = platformTemplate();
     template.resourceCountIs("AWS::EC2::NatGateway", 0);
     template.resourceCountIs("AWS::EC2::VPCEndpoint", 8);
     const endpoints = JSON.stringify(template.findResources("AWS::EC2::VPCEndpoint"));
@@ -48,7 +68,7 @@ describe("RecommendationSandboxStack", () => {
   });
 
   it("routes the default HTTP API through VPC Link V2 to an internal HTTPS ALB", () => {
-    const template = synthesize();
+    const template = platformTemplate();
     template.hasResourceProperties("AWS::ElasticLoadBalancingV2::LoadBalancer", {
       Scheme: "internal",
       Type: "application",
@@ -105,7 +125,7 @@ describe("RecommendationSandboxStack", () => {
   });
 
   it("runs digest-pinned Main, scorer, and ADOT containers behind guarded readiness", () => {
-    const template = synthesize();
+    const template = productionTemplate();
     template.hasResourceProperties("AWS::ECS::TaskDefinition", {
       ContainerDefinitions: Match.arrayWith([
         Match.objectLike({ Name: "scorer", Essential: true }),
@@ -159,69 +179,44 @@ describe("RecommendationSandboxStack", () => {
         AUTOMATIC_COMPOSER_DIGEST: { Ref: "AutomaticComposerDigest" },
       }),
     );
-    template.hasResourceProperties("AWS::ElasticLoadBalancingV2::TargetGroup", {
-      HealthCheckPath: "/ready",
-      Matcher: { HttpCode: "200" },
-      TargetType: "ip",
-    });
     template.hasResourceProperties("AWS::ECS::Service", {
       DeploymentConfiguration: Match.objectLike({
-        Strategy: { "Fn::If": ["HasLivePrimaryCondition", "CANARY", "ROLLING"] },
-        CanaryConfiguration: { "Fn::If": [
-          "HasLivePrimaryCondition",
-          { CanaryPercent: 10, CanaryBakeTimeInMinutes: 5 },
-          { Ref: "AWS::NoValue" },
-        ] },
+        Strategy: "CANARY",
+        CanaryConfiguration: { CanaryPercent: 10, CanaryBakeTimeInMinutes: 5 },
         Alarms: Match.objectLike({ Enable: true, Rollback: true }),
       }),
-      DesiredCount: { "Fn::If": ["ActivateProductionCondition", 1, 0] },
+      DesiredCount: 1,
       HealthCheckGracePeriodSeconds: 90,
       LoadBalancers: Match.arrayWith([
         Match.objectLike({
           ContainerName: "main",
           ContainerPort: 8080,
-          AdvancedConfiguration: Match.objectLike({ "Fn::If": Match.arrayWith([
-            "HasLivePrimaryCondition",
-            Match.objectLike({
-              AlternateTargetGroupArn: Match.anyValue(),
-              ProductionListenerRule: Match.anyValue(),
-              TestListenerRule: Match.anyValue(),
-              RoleArn: Match.anyValue(),
-            }),
-          ]) }),
+          AdvancedConfiguration: Match.objectLike({
+            AlternateTargetGroupArn: Match.anyValue(),
+            ProductionListenerRule: Match.anyValue(),
+            TestListenerRule: Match.anyValue(),
+            RoleArn: Match.anyValue(),
+          }),
         }),
       ]),
     });
-    template.resourceCountIs("AWS::ElasticLoadBalancingV2::TargetGroup", 3);
-    template.hasResourceProperties("AWS::IAM::Role", {
-      AssumeRolePolicyDocument: Match.objectLike({
-        Statement: Match.arrayWith([Match.objectLike({ Principal: { Service: "ecs.amazonaws.com" } })]),
-      }),
-    });
-    const policies = JSON.stringify(template.findResources("AWS::IAM::Policy"));
-    for (const action of [
-      "elasticloadbalancing:DescribeTargetHealth",
-      "elasticloadbalancing:RegisterTargets",
-      "elasticloadbalancing:DeregisterTargets",
-      "elasticloadbalancing:ModifyListener",
-      "elasticloadbalancing:ModifyRule",
-    ]) expect(policies).toContain(action);
+    expect(JSON.stringify(template.toJSON())).not.toContain("ActivateProduction");
   });
 
-  it("runs an isolated exact-candidate validation service before production activation", () => {
-    const template = synthesize();
-    const services = Object.values(template.findResources("AWS::ECS::Service"));
-    expect(services).toHaveLength(2);
-    expect(services).toEqual(expect.arrayContaining([
-      expect.objectContaining({ Properties: expect.objectContaining({
-        DesiredCount: { "Fn::If": ["ValidateCandidateCondition", 1, 0] },
-      }) }),
-      expect.objectContaining({ Properties: expect.objectContaining({
-        DesiredCount: { "Fn::If": ["ActivateProductionCondition", 1, 0] },
-      }) }),
-    ]));
-    const taskDefinitions = services.map((service) => service.Properties.TaskDefinition);
-    expect(taskDefinitions[0]).toEqual(taskDefinitions[1]);
+  it("keeps candidate and production task definitions in independently deployable stacks", () => {
+    const candidate = candidateTemplate();
+    const production = productionTemplate();
+    candidate.resourceCountIs("AWS::ECS::Service", 1);
+    candidate.resourceCountIs("AWS::ECS::TaskDefinition", 1);
+    production.resourceCountIs("AWS::ECS::Service", 1);
+    production.resourceCountIs("AWS::ECS::TaskDefinition", 1);
+    candidate.hasResourceProperties("AWS::ECS::Service", { DesiredCount: 1 });
+    production.hasResourceProperties("AWS::ECS::Service", { DesiredCount: 1 });
+    expect(JSON.stringify(candidate.toJSON())).not.toContain("ProductionService");
+    expect(JSON.stringify(production.toJSON())).not.toContain("CandidateValidationService");
+    expect(JSON.stringify(candidate.toJSON())).not.toContain("ActivateProduction");
+    expect(JSON.stringify(production.toJSON())).not.toContain("ActivateProduction");
+    const template = candidate;
     template.hasResourceProperties("AWS::Lambda::Function", Match.objectLike({
       Runtime: "nodejs24.x",
       VpcConfig: Match.objectLike({}),
@@ -236,7 +231,7 @@ describe("RecommendationSandboxStack", () => {
   });
 
   it("encrypts and retains immutable evidence and transactional state", () => {
-    const template = synthesize();
+    const template = platformTemplate();
     template.hasResourceProperties("AWS::S3::Bucket", {
       BucketEncryption: Match.objectLike({}),
       VersioningConfiguration: { Status: "Enabled" },
@@ -256,7 +251,7 @@ describe("RecommendationSandboxStack", () => {
   });
 
   it("prewarms rush capacity in Ho Chi Minh time and keeps reactive guardrails", () => {
-    const template = synthesize();
+    const template = productionTemplate();
     const scalableTargets = template.findResources("AWS::ApplicationAutoScaling::ScalableTarget");
     const serialized = JSON.stringify(scalableTargets);
     for (const schedule of ["cron(0 10 * * ? *)", "cron(30 14 * * ? *)", "cron(30 16 * * ? *)", "cron(0 22 * * ? *)"]) {
@@ -273,7 +268,7 @@ describe("RecommendationSandboxStack", () => {
   });
 
   it("retains structured telemetry and creates bounded alarms and a composite", () => {
-    const template = synthesize();
+    const template = productionTemplate();
     template.hasResourceProperties("AWS::Logs::LogGroup", { RetentionInDays: 30 });
     template.hasResourceProperties("AWS::CloudWatch::Dashboard", Match.objectLike({}));
     template.hasResourceProperties("AWS::CloudWatch::Alarm", {
@@ -287,7 +282,7 @@ describe("RecommendationSandboxStack", () => {
   });
 
   it("has no internet route and attaches policies to every private endpoint", () => {
-    const template = synthesize();
+    const template = platformTemplate();
     template.resourceCountIs("AWS::EC2::InternetGateway", 0);
     template.resourceCountIs("AWS::EC2::NatGateway", 0);
     for (const endpoint of Object.values(template.findResources("AWS::EC2::VPCEndpoint"))) {
@@ -308,17 +303,24 @@ describe("RecommendationSandboxStack", () => {
     expect(endpointPolicies).toContain("StateTable");
   });
 
-  it("seeds release-bound order, exposure, and catalog sentinels", () => {
-    const customResources = JSON.stringify(synthesize().findResources("Custom::AWS"));
-    expect(customResources).toContain("JOURNEY#sentinel:");
-    expect(customResources).toContain("OPPORTUNITY#sentinel:");
-    expect(customResources).toContain("EXPOSURE");
-    expect(customResources).toContain("CATALOG");
+  it("seeds non-overwriting release-scoped readiness sentinels for every authority", () => {
+    const customResources = JSON.stringify(candidateTemplate().findResources("Custom::AWS"));
+    expect(customResources).toContain("RELEASE#");
+    for (const sortKey of [
+      "ORDER",
+      "JOURNEY",
+      "CATALOG",
+      "EXPOSURE#local_favorite",
+      "EXPOSURE#for_you",
+      "EXPOSURE#modifier_upsell",
+      "EXPOSURE#smart_cross_sell",
+    ]) expect(customResources).toContain(sortKey);
+    expect(customResources).not.toContain('"S":"EXPOSURE"');
     expect(customResources).toContain("TrustedCatalogDigest");
   });
 
   it("grants the candidate VPC Lambda the complete AWS ENI lifecycle contract", () => {
-    const policies = JSON.stringify(synthesize().findResources("AWS::IAM::Policy"));
+    const policies = JSON.stringify(candidateTemplate().findResources("AWS::IAM::Policy"));
     for (const action of [
       "ec2:DescribeSubnets",
       "ec2:DescribeSecurityGroups",
@@ -331,14 +333,14 @@ describe("RecommendationSandboxStack", () => {
   });
 
   it("alarms on failures across primary, alternate, and validation target groups", () => {
-    const alarms = JSON.stringify(synthesize().findResources("AWS::CloudWatch::Alarm"));
+    const alarms = JSON.stringify(productionTemplate().findResources("AWS::CloudWatch::Alarm"));
     expect(alarms).toContain("ProductionTargetGroup");
     expect(alarms).toContain("AlternateTargetGroup");
     expect(alarms).toContain("ValidationTargetGroup");
   });
 
   it("creates scoped Cognito M2M identities", () => {
-    const template = synthesize();
+    const template = platformTemplate();
     template.hasResourceProperties("AWS::Cognito::UserPoolResourceServer", {
       Identifier: "recommendations",
       Scopes: Match.arrayWith([

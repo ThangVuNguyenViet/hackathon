@@ -16,5 +16,8 @@ describe("qualified release image assembly", () => {
     expect(build).toContain("${QUALIFIED_BUNDLE_ROOT:?required}");
     expect(build).toContain("--build-context \"qualified_bundle=$QUALIFIED_BUNDLE_ROOT\"");
     expect(build).toContain("--build-context \"trusted_catalog=$catalog_context\"");
+    expect(build.match(/--platform linux\/arm64/g)).toHaveLength(2);
+    expect(build).toContain("docker image inspect");
+    expect(build).toContain("linux/arm64");
   });
 });

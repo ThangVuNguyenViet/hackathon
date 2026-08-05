@@ -182,10 +182,12 @@ export function createAwsTrustedContextPorts({
   tableName,
   documentClient,
   catalog,
+  releaseDigest,
 }: {
   tableName: string;
   documentClient: DynamoDBDocumentClient;
   catalog: AutomaticCatalogSnapshot;
+  releaseDigest: string;
 }): AutomaticRecommendationContextPorts {
   const read = async (pk: string, sk: string): Promise<unknown> => {
     const result = await documentClient.send(
@@ -223,7 +225,10 @@ export function createAwsTrustedContextPorts({
     },
     exposure: {
       async readState(type) {
-        const state = await read('EXPOSURE', type);
+        const state = await read(
+          `RELEASE#${releaseDigest}`,
+          `EXPOSURE#${type}`,
+        );
         if (state !== 'enabled' && state !== 'paused')
           throw new Error('trusted exposure state is unavailable');
         return state;
@@ -252,20 +257,28 @@ export async function verifyAwsTrustedSentinels({
         ConsistentRead: true,
       }),
     );
-  const [order, exposure, catalog] = await Promise.all([
-    get(
-      `JOURNEY#sentinel:${releaseDigest}`,
-      `OPPORTUNITY#sentinel:${releaseDigest}`,
-    ),
-    get('EXPOSURE', 'local_favorite'),
-    get(`RELEASE#${releaseDigest}`, 'CATALOG'),
+  const releaseKey = `RELEASE#${releaseDigest}`;
+  const types = [
+    'local_favorite',
+    'for_you',
+    'modifier_upsell',
+    'smart_cross_sell',
+  ] as const;
+  const [order, journey, catalog, ...exposures] = await Promise.all([
+    get(releaseKey, 'ORDER'),
+    get(releaseKey, 'JOURNEY'),
+    get(releaseKey, 'CATALOG'),
+    ...types.map((type) => get(releaseKey, `EXPOSURE#${type}`)),
   ]);
   return (
     order.Item?.releaseDigest === releaseDigest &&
-    exposure.Item?.releaseDigest === releaseDigest &&
-    exposure.Item.snapshot === 'enabled' &&
+    journey.Item?.releaseDigest === releaseDigest &&
     catalog.Item?.releaseDigest === releaseDigest &&
-    catalog.Item.catalogDigest === catalogDigest
+    catalog.Item.catalogDigest === catalogDigest &&
+    exposures.every(
+      ({ Item }) =>
+        Item?.releaseDigest === releaseDigest && Item.snapshot === 'enabled',
+    )
   );
 }
 

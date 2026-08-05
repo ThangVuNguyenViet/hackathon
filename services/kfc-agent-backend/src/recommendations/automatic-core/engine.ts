@@ -32,6 +32,22 @@ type RecommendationResponse = ReturnType<
   typeof parseAutomaticRecommendationResponse
 >;
 
+export interface AutomaticEngineExecutionEvidence {
+  readonly contextBindings: unknown;
+  readonly potentialCandidates: readonly unknown[];
+  readonly eligibilityDecisions: readonly unknown[];
+  readonly featureReconciliation: unknown;
+  readonly scoresCalibration: unknown | null;
+  readonly composition: unknown;
+  readonly modelReleaseProvenance: unknown | null;
+  readonly traceLocator: string | null;
+}
+
+interface AutomaticEngineDecision {
+  readonly response: RecommendationResponse;
+  readonly execution: AutomaticEngineExecutionEvidence;
+}
+
 function expiresAt(instant: string, ttlMs: number): string {
   return new Date(new Date(instant).getTime() + ttlMs).toISOString();
 }
@@ -200,206 +216,294 @@ export function createAutomaticRecommendationEngine({
   ids: AutomaticRecommendationIdPort;
   recommendationTtlMs: number;
 }) {
+  const execute = async (
+    recommendationType: AutomaticRecommendationType,
+    requestValue: unknown,
+  ): Promise<AutomaticEngineDecision> => {
+    const complete = (
+      response: RecommendationResponse,
+      execution: Omit<AutomaticEngineExecutionEvidence, 'traceLocator'>,
+    ): AutomaticEngineDecision => ({
+      response,
+      execution: { ...execution, traceLocator: null },
+    });
+    let resolution;
+    try {
+      resolution = await resolveAutomaticRecommendationContext({
+        recommendationType,
+        request: requestValue,
+        ports: contextPorts,
+      });
+    } catch (error) {
+      if (
+        error instanceof ZodError ||
+        error instanceof AutomaticRecommendationBindingError
+      ) {
+        throw error;
+      }
+      throw new AutomaticRecommendationInfrastructureError('context', error);
+    }
+
+    const recommendationId = ids.nextRecommendationId();
+    const requestId =
+      typeof requestValue === 'object' &&
+      requestValue !== null &&
+      'requestId' in requestValue &&
+      typeof requestValue.requestId === 'string'
+        ? requestValue.requestId
+        : 'invalid-request';
+    const responseExpiry = expiresAt(
+      resolution.kind === 'ready'
+        ? resolution.context.decisionTime
+        : resolution.decisionTime,
+      recommendationTtlMs,
+    );
+
+    if (resolution.kind !== 'ready') {
+      const response = emptyOrPausedResponse({
+        requestId,
+        recommendationId,
+        recommendationType,
+        status: resolution.kind === 'paused' ? 'paused' : 'empty',
+        emptyReason: resolution.reason,
+        cartRevision: resolution.cartRevision,
+        catalogRevision: resolution.catalogRevision,
+        expires: responseExpiry,
+        counts: { potential: 0, eligible: 0, scored: 0, displayed: 0 },
+      });
+      return complete(response, {
+        contextBindings: {
+          resolution: resolution.kind,
+          cartRevision: resolution.cartRevision,
+          catalogRevision: resolution.catalogRevision,
+        },
+        potentialCandidates: [],
+        eligibilityDecisions: [],
+        featureReconciliation: { status: 'not_started' },
+        scoresCalibration: null,
+        composition: { status: response.status },
+        modelReleaseProvenance: null,
+      });
+    }
+
+    const context = resolution.context;
+    const candidates = discoverAutomaticRecommendationCandidates(context);
+    const eligibility = evaluateAutomaticRecommendationEligibility(
+      context,
+      candidates,
+    );
+    const eligibleCandidates = eligibility.filter(
+      ({ status }) => status === 'eligible',
+    );
+    if (eligibleCandidates.length === 0) {
+      const response = emptyOrPausedResponse({
+        requestId,
+        recommendationId,
+        recommendationType,
+        status: 'empty',
+        emptyReason: 'no_eligible_candidates',
+        cartRevision: context.order.cart.revision,
+        catalogRevision: context.catalog.catalogRevision,
+        expires: responseExpiry,
+        counts: {
+          potential: candidates.length,
+          eligible: 0,
+          scored: 0,
+          displayed: 0,
+        },
+      });
+      return complete(response, {
+        contextBindings: {
+          orderingJourneyRef: context.order.orderingJourneyRef,
+          opportunityRef: context.order.opportunityRef,
+          catalogRevision: context.catalog.catalogRevision,
+        },
+        potentialCandidates: candidates,
+        eligibilityDecisions: eligibility,
+        featureReconciliation: { status: 'not_started' },
+        scoresCalibration: null,
+        composition: { status: 'empty', reason: 'no_eligible_candidates' },
+        modelReleaseProvenance: null,
+      });
+    }
+
+    let bundle;
+    try {
+      bundle =
+        await resolveQualifiedAutomaticRecommendationBundle(
+          qualifiedBundlePort,
+        );
+    } catch (error) {
+      throw new AutomaticRecommendationInfrastructureError('bundle', error);
+    }
+    if (bundle === null) {
+      const response = emptyOrPausedResponse({
+        requestId,
+        recommendationId,
+        recommendationType,
+        status: 'empty',
+        emptyReason: 'no_qualified_model',
+        cartRevision: context.order.cart.revision,
+        catalogRevision: context.catalog.catalogRevision,
+        expires: responseExpiry,
+        counts: {
+          potential: candidates.length,
+          eligible: eligibleCandidates.length,
+          scored: 0,
+          displayed: 0,
+        },
+      });
+      return complete(response, {
+        contextBindings: {
+          orderingJourneyRef: context.order.orderingJourneyRef,
+          opportunityRef: context.order.opportunityRef,
+          catalogRevision: context.catalog.catalogRevision,
+        },
+        potentialCandidates: candidates,
+        eligibilityDecisions: eligibility,
+        featureReconciliation: { status: 'not_started' },
+        scoresCalibration: null,
+        composition: { status: 'empty', reason: 'no_qualified_model' },
+        modelReleaseProvenance: null,
+      });
+    }
+
+    const model = automaticModelBinding(bundle, recommendationType);
+    let featureRows;
+    let scorerRequest;
+    try {
+      featureRows = buildAutomaticRecommendationFeatureRows(
+        context,
+        eligibility,
+      );
+      scorerRequest = parseAutomaticScorerRequest({
+        schemaVersion: 'kfc-automatic-scorer-v1',
+        requestId,
+        recommendationType,
+        model,
+        candidates: featureRows,
+      });
+    } catch (error) {
+      throw new AutomaticRecommendationInfrastructureError('features', error);
+    }
+    let scorerResponse;
+    try {
+      scorerResponse = reconcileAutomaticScorerResponse(
+        scorerRequest,
+        await scorer.score(scorerRequest),
+      );
+    } catch (error) {
+      throw new AutomaticRecommendationInfrastructureError('scorer', error);
+    }
+
+    const candidateById = new Map(
+      eligibleCandidates.map(({ candidate }) => [
+        candidate.candidateId,
+        candidate,
+      ]),
+    );
+    const priceById = new Map(
+      featureRows.map(({ candidateId, priceImpactVnd }) => [
+        candidateId,
+        priceImpactVnd,
+      ]),
+    );
+    const threshold = bundle.models[recommendationType].minimumJointProbability;
+    const passingScores: AutomaticScoredCandidate[] = scorerResponse.scores
+      .filter(({ jointProbability }) => jointProbability > threshold)
+      .map((score) => {
+        const candidate = candidateById.get(score.candidateId);
+        const priceImpactVnd = priceById.get(score.candidateId);
+        if (candidate === undefined || priceImpactVnd === undefined) {
+          throw new AutomaticRecommendationInfrastructureError('scorer');
+        }
+        return {
+          candidate,
+          selectionProbability: score.selectionProbability,
+          jointProbability: score.jointProbability,
+          expectedRetainedValueVnd: priceImpactVnd * score.jointProbability,
+        };
+      });
+    if (passingScores.length === 0) {
+      const response = emptyOrPausedResponse({
+        requestId,
+        recommendationId,
+        recommendationType,
+        status: 'empty',
+        emptyReason: 'no_candidate_above_threshold',
+        cartRevision: context.order.cart.revision,
+        catalogRevision: context.catalog.catalogRevision,
+        expires: responseExpiry,
+        counts: {
+          potential: candidates.length,
+          eligible: eligibleCandidates.length,
+          scored: scorerResponse.scores.length,
+          displayed: 0,
+        },
+      });
+      return complete(response, {
+        contextBindings: {
+          orderingJourneyRef: context.order.orderingJourneyRef,
+          opportunityRef: context.order.opportunityRef,
+          catalogRevision: context.catalog.catalogRevision,
+        },
+        potentialCandidates: candidates,
+        eligibilityDecisions: eligibility,
+        featureReconciliation: { featureRows },
+        scoresCalibration: scorerResponse,
+        composition: {
+          status: 'empty',
+          reason: 'no_candidate_above_threshold',
+          passingCandidateIds: [],
+        },
+        modelReleaseProvenance: model,
+      });
+    }
+
+    const composed = composeAutomaticRecommendationSlate(
+      recommendationType,
+      passingScores,
+    );
+    const response = recommendedResponse({
+      requestId,
+      recommendationId,
+      recommendationType,
+      cartRevision: context.order.cart.revision,
+      catalogRevision: context.catalog.catalogRevision,
+      expires: responseExpiry,
+      model,
+      candidates: composed,
+      potential: candidates.length,
+      eligible: eligibleCandidates.length,
+      scored: scorerResponse.scores.length,
+    });
+    return complete(response, {
+      contextBindings: {
+        orderingJourneyRef: context.order.orderingJourneyRef,
+        opportunityRef: context.order.opportunityRef,
+        catalogRevision: context.catalog.catalogRevision,
+      },
+      potentialCandidates: candidates,
+      eligibilityDecisions: eligibility,
+      featureReconciliation: { featureRows },
+      scoresCalibration: scorerResponse,
+      composition: {
+        status: 'recommended',
+        passingCandidateIds: passingScores.map(
+          ({ candidate }) => candidate.candidateId,
+        ),
+        displayedCandidateIds: composed.map(({ candidateId }) => candidateId),
+      },
+      modelReleaseProvenance: model,
+    });
+  };
   return {
     async decide(
       recommendationType: AutomaticRecommendationType,
       requestValue: unknown,
     ): Promise<RecommendationResponse> {
-      let resolution;
-      try {
-        resolution = await resolveAutomaticRecommendationContext({
-          recommendationType,
-          request: requestValue,
-          ports: contextPorts,
-        });
-      } catch (error) {
-        if (
-          error instanceof ZodError ||
-          error instanceof AutomaticRecommendationBindingError
-        ) {
-          throw error;
-        }
-        throw new AutomaticRecommendationInfrastructureError('context', error);
-      }
-
-      const recommendationId = ids.nextRecommendationId();
-      const requestId =
-        typeof requestValue === 'object' &&
-        requestValue !== null &&
-        'requestId' in requestValue &&
-        typeof requestValue.requestId === 'string'
-          ? requestValue.requestId
-          : 'invalid-request';
-      const responseExpiry = expiresAt(
-        resolution.kind === 'ready'
-          ? resolution.context.decisionTime
-          : resolution.decisionTime,
-        recommendationTtlMs,
-      );
-
-      if (resolution.kind !== 'ready') {
-        return emptyOrPausedResponse({
-          requestId,
-          recommendationId,
-          recommendationType,
-          status: resolution.kind === 'paused' ? 'paused' : 'empty',
-          emptyReason: resolution.reason,
-          cartRevision: resolution.cartRevision,
-          catalogRevision: resolution.catalogRevision,
-          expires: responseExpiry,
-          counts: { potential: 0, eligible: 0, scored: 0, displayed: 0 },
-        });
-      }
-
-      const context = resolution.context;
-      const candidates = discoverAutomaticRecommendationCandidates(context);
-      const eligibility = evaluateAutomaticRecommendationEligibility(
-        context,
-        candidates,
-      );
-      const eligibleCandidates = eligibility.filter(
-        ({ status }) => status === 'eligible',
-      );
-      if (eligibleCandidates.length === 0) {
-        return emptyOrPausedResponse({
-          requestId,
-          recommendationId,
-          recommendationType,
-          status: 'empty',
-          emptyReason: 'no_eligible_candidates',
-          cartRevision: context.order.cart.revision,
-          catalogRevision: context.catalog.catalogRevision,
-          expires: responseExpiry,
-          counts: {
-            potential: candidates.length,
-            eligible: 0,
-            scored: 0,
-            displayed: 0,
-          },
-        });
-      }
-
-      let bundle;
-      try {
-        bundle =
-          await resolveQualifiedAutomaticRecommendationBundle(
-            qualifiedBundlePort,
-          );
-      } catch (error) {
-        throw new AutomaticRecommendationInfrastructureError('bundle', error);
-      }
-      if (bundle === null) {
-        return emptyOrPausedResponse({
-          requestId,
-          recommendationId,
-          recommendationType,
-          status: 'empty',
-          emptyReason: 'no_qualified_model',
-          cartRevision: context.order.cart.revision,
-          catalogRevision: context.catalog.catalogRevision,
-          expires: responseExpiry,
-          counts: {
-            potential: candidates.length,
-            eligible: eligibleCandidates.length,
-            scored: 0,
-            displayed: 0,
-          },
-        });
-      }
-
-      const model = automaticModelBinding(bundle, recommendationType);
-      let featureRows;
-      let scorerRequest;
-      try {
-        featureRows = buildAutomaticRecommendationFeatureRows(
-          context,
-          eligibility,
-        );
-        scorerRequest = parseAutomaticScorerRequest({
-          schemaVersion: 'kfc-automatic-scorer-v1',
-          requestId,
-          recommendationType,
-          model,
-          candidates: featureRows,
-        });
-      } catch (error) {
-        throw new AutomaticRecommendationInfrastructureError('features', error);
-      }
-      let scorerResponse;
-      try {
-        scorerResponse = reconcileAutomaticScorerResponse(
-          scorerRequest,
-          await scorer.score(scorerRequest),
-        );
-      } catch (error) {
-        throw new AutomaticRecommendationInfrastructureError('scorer', error);
-      }
-
-      const candidateById = new Map(
-        eligibleCandidates.map(({ candidate }) => [
-          candidate.candidateId,
-          candidate,
-        ]),
-      );
-      const priceById = new Map(
-        featureRows.map(({ candidateId, priceImpactVnd }) => [
-          candidateId,
-          priceImpactVnd,
-        ]),
-      );
-      const threshold =
-        bundle.models[recommendationType].minimumJointProbability;
-      const passingScores: AutomaticScoredCandidate[] = scorerResponse.scores
-        .filter(({ jointProbability }) => jointProbability > threshold)
-        .map((score) => {
-          const candidate = candidateById.get(score.candidateId);
-          const priceImpactVnd = priceById.get(score.candidateId);
-          if (candidate === undefined || priceImpactVnd === undefined) {
-            throw new AutomaticRecommendationInfrastructureError('scorer');
-          }
-          return {
-            candidate,
-            selectionProbability: score.selectionProbability,
-            jointProbability: score.jointProbability,
-            expectedRetainedValueVnd: priceImpactVnd * score.jointProbability,
-          };
-        });
-      if (passingScores.length === 0) {
-        return emptyOrPausedResponse({
-          requestId,
-          recommendationId,
-          recommendationType,
-          status: 'empty',
-          emptyReason: 'no_candidate_above_threshold',
-          cartRevision: context.order.cart.revision,
-          catalogRevision: context.catalog.catalogRevision,
-          expires: responseExpiry,
-          counts: {
-            potential: candidates.length,
-            eligible: eligibleCandidates.length,
-            scored: scorerResponse.scores.length,
-            displayed: 0,
-          },
-        });
-      }
-
-      const composed = composeAutomaticRecommendationSlate(
-        recommendationType,
-        passingScores,
-      );
-      return recommendedResponse({
-        requestId,
-        recommendationId,
-        recommendationType,
-        cartRevision: context.order.cart.revision,
-        catalogRevision: context.catalog.catalogRevision,
-        expires: responseExpiry,
-        model,
-        candidates: composed,
-        potential: candidates.length,
-        eligible: eligibleCandidates.length,
-        scored: scorerResponse.scores.length,
-      });
+      return (await execute(recommendationType, requestValue)).response;
     },
+    decideWithEvidence: execute,
   };
 }

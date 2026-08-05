@@ -1,18 +1,20 @@
-import { CfnCondition, Duration } from "aws-cdk-lib";
-import { CfnScalableTarget, CfnScalingPolicy } from "aws-cdk-lib/aws-applicationautoscaling";
-import { CfnAlarm, ComparisonOperator, Metric, TreatMissingData } from "aws-cdk-lib/aws-cloudwatch";
+import { Duration } from "aws-cdk-lib";
+import { CfnScalableTarget } from "aws-cdk-lib/aws-applicationautoscaling";
+import { ComparisonOperator, Metric, TreatMissingData } from "aws-cdk-lib/aws-cloudwatch";
 import { Construct } from "constructs";
 
-import type { ComputeResources } from "./compute.js";
+import type { PlatformComputeResources } from "./platform-compute.js";
+import type { ProductionServingResources } from "./production-serving.js";
 import type { ReleaseParameters } from "./release-parameters.js";
 
 export const createScaling = (
   scope: Construct,
-  compute: ComputeResources,
+  platform: PlatformComputeResources,
+  production: ProductionServingResources,
   release: ReleaseParameters,
-  activation: CfnCondition,
 ): void => {
-  const target = compute.service.autoScaleTaskCount({
+  if (release.maximumTasks === undefined) throw new Error("production maximum task capacity is required");
+  const target = production.service.autoScaleTaskCount({
     minCapacity: 1,
     maxCapacity: release.maximumTasks.valueAsNumber,
   });
@@ -36,15 +38,11 @@ export const createScaling = (
     scheduled("DinnerPrewarm", "cron(30 16 * * ? *)", 2, release.maximumTasks.valueAsNumber),
     scheduled("DinnerDrain", "cron(0 22 * * ? *)", 1, release.maximumTasks.valueAsNumber),
   ];
-  resource.cfnOptions.condition = activation;
-  for (const child of target.node.findAll()) {
-    if (child instanceof CfnScalingPolicy) child.cfnOptions.condition = activation;
-  }
 
   const capacityDiscovery = new Metric({
     namespace: "AWS/ApplicationELB",
     metricName: "RequestCountPerTarget",
-    dimensionsMap: { TargetGroup: compute.targetGroupFullName },
+    dimensionsMap: { TargetGroup: platform.targetGroup.targetGroupFullName },
     statistic: "Sum",
     period: Duration.minutes(1),
   }).createAlarm(scope, "CapacityDiscoveryRequired", {
@@ -54,7 +52,6 @@ export const createScaling = (
     treatMissingData: TreatMissingData.BREACHING,
     alarmDescription: "Fail-closed reminder: replace temporary max tasks with measured 70% safe-RPS target in Task 9",
   });
-  (capacityDiscovery.node.defaultChild as CfnAlarm).cfnOptions.condition = activation;
 };
 
 const scheduled = (

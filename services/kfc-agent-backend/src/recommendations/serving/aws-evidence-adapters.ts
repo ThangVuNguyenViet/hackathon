@@ -226,7 +226,7 @@ export class S3AutomaticEvidenceObjectStore implements AutomaticEvidenceObjectSt
       releaseDigest,
     });
     const digest = createHash('sha256').update(body).digest('hex');
-    const key = `automatic-recommendations/readiness/${releaseDigest}/${digest}.json`;
+    const key = `readiness-probes/${releaseDigest}/${digest}.json`;
     const pointer = await this.putImmutable({
       key,
       digest,

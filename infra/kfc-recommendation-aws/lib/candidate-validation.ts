@@ -1,13 +1,13 @@
-import { CfnCondition, CfnOutput, Duration, Fn } from "aws-cdk-lib";
+import { CfnOutput, Duration, Fn, Validations } from "aws-cdk-lib";
 import { Alarm, ComparisonOperator, Metric, TreatMissingData } from "aws-cdk-lib/aws-cloudwatch";
 import { PolicyStatement, Role, ServicePrincipal } from "aws-cdk-lib/aws-iam";
-import { CfnRule, Rule, Schedule } from "aws-cdk-lib/aws-events";
+import { Rule, Schedule } from "aws-cdk-lib/aws-events";
 import { LambdaFunction as LambdaTarget } from "aws-cdk-lib/aws-events-targets";
-import { CfnPermission, Code, Function as LambdaFunction, Runtime } from "aws-cdk-lib/aws-lambda";
+import { Code, Function as LambdaFunction, Runtime } from "aws-cdk-lib/aws-lambda";
 import { LogGroup, RetentionDays } from "aws-cdk-lib/aws-logs";
 import { Construct } from "constructs";
 
-import type { ComputeResources } from "./compute.js";
+import type { CandidateServingResources } from "./candidate-serving.js";
 import type { NetworkResources } from "./network.js";
 import type { ReleaseParameters } from "./release-parameters.js";
 
@@ -53,9 +53,8 @@ exports.handler = async () => {
 export const createCandidateValidation = (
   scope: Construct,
   network: NetworkResources,
-  compute: ComputeResources,
+  compute: CandidateServingResources,
   release: ReleaseParameters,
-  validateCandidate: CfnCondition,
 ): CandidateValidationResources => {
   const logGroup = new LogGroup(scope, "CandidateValidationLogs", {
     logGroupName: "/kfc/recommendations/sandbox/candidate-validation",
@@ -91,7 +90,7 @@ export const createCandidateValidation = (
     securityGroups: [network.validationProbeSecurityGroup],
     role,
     environment: {
-      CANDIDATE_PROBE_URL: `http://${compute.loadBalancer.loadBalancerDnsName}:8082`,
+      CANDIDATE_PROBE_URL: compute.probeUrl,
       RELEASE_DIGEST: release.releaseDigest.valueAsString,
     },
     logGroup,
@@ -101,14 +100,18 @@ export const createCandidateValidation = (
     resources: ["*"],
     conditions: { StringEquals: { "cloudwatch:namespace": "KFC/RecommendationsActivation" } },
   }));
-  const schedule = new Rule(scope, "CandidateValidationSchedule", {
+  for (const construct of role.node.findAll()) Validations.of(construct).acknowledge({
+    id: "AwsSolutions-IAM5",
+    reason: "The validation role uses only AWS ENI APIs without resource-level permissions and a wildcard stream suffix under one dedicated log group.",
+  });
+  for (const construct of role.node.findAll()) Validations.of(construct).acknowledge({
+    id: "AwsSolutions-IAM5[Resource::<CandidateValidationLogs28ED8219.Arn>:*]",
+    reason: "CloudWatch Logs requires a wildcard stream suffix under the single dedicated candidate-validation log group.",
+  });
+  new Rule(scope, "CandidateValidationSchedule", {
     schedule: Schedule.rate(Duration.minutes(1)),
     targets: [new LambdaTarget(runner, { retryAttempts: 0 })],
   });
-  (schedule.node.defaultChild as CfnRule).cfnOptions.condition = validateCandidate;
-  for (const child of schedule.node.findAll()) {
-    if (child instanceof CfnPermission) child.cfnOptions.condition = validateCandidate;
-  }
   const activationMetric = new Metric({
     namespace: "KFC/RecommendationsActivation",
     metricName: "CandidateProbePassed",

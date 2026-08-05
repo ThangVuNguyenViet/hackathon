@@ -7,6 +7,8 @@ import { execFileSync } from "node:child_process";
 import {
   activationAlarmIsCurrent,
   certificateIsIssuedFor,
+  completedReleaseMatchesLive,
+  deriveReleaseSourceBindings,
   endpointsMatchDeployment,
   manifestDigestMatches,
   ociManifestSupports,
@@ -16,6 +18,8 @@ import {
   templateHasAlarmLinkedCanaryRollback,
   templateHasExactRecommendationRoutes,
   type ActivationBindings,
+  type CompletedReleaseLiveEvidence,
+  type PreviousReleaseRecord,
 } from "../lib/artifact-verification.js";
 import { evaluateDeploymentGate, type DeploymentFacts } from "../lib/deployment-gate.js";
 
@@ -27,7 +31,7 @@ interface CertificateResponse { readonly Certificate?: { Status?: string; Domain
 interface LogEvents { readonly events?: unknown[] }
 interface XrayTraces { readonly Traces?: Array<{ Segments?: Array<{ Document?: string }> }> }
 interface MetricPoints { readonly Datapoints?: Array<{ Timestamp?: string; Sum?: number }> }
-interface AlarmResponse { readonly MetricAlarms?: Array<{ StateValue?: string; StateUpdatedTimestamp?: string }> }
+interface AlarmResponse { readonly MetricAlarms?: Array<{ AlarmName?: string; StateValue?: string; StateUpdatedTimestamp?: string }> }
 
 const awsJson = <T>(args: readonly string[]): T | undefined => {
   try {
@@ -54,6 +58,15 @@ const exactFileDigest = (path: string | undefined, digest: string | undefined): 
   path !== undefined && digest !== undefined && existsSync(path) &&
   manifestDigestMatches(readFileSync(path), digest);
 
+const gitHead = (): string | undefined => {
+  try {
+    return execFileSync("git", ["rev-parse", "HEAD"], {
+      encoding: "utf8",
+      stdio: ["ignore", "pipe", "ignore"],
+    }).trim();
+  } catch { return undefined; }
+};
+
 const immutableAwsJson = (bucket: string | undefined, key: string | undefined, versionId: string | undefined): unknown => {
   if (bucket === undefined || key === undefined || versionId === undefined) return undefined;
   const root = mkdtempSync(join(tmpdir(), "kfc-release-record-"));
@@ -79,7 +92,8 @@ const imageIsArm64 = (repository: string, digest: string | undefined): boolean =
 const executableRuntimeProbe = (releaseDigest: string): boolean => {
   const runnerName = process.env.CANDIDATE_VALIDATION_RUNNER_NAME;
   const loadBalancer = process.env.ALB_FULL_NAME;
-  if (runnerName === undefined || loadBalancer === undefined) return false;
+  const applicationLogGroup = process.env.CANDIDATE_APPLICATION_LOG_GROUP_NAME;
+  if (runnerName === undefined || loadBalancer === undefined || applicationLogGroup === undefined) return false;
   const invocationRoot = mkdtempSync(join(tmpdir(), "kfc-candidate-validation-"));
   const payloadPath = join(invocationRoot, "payload.json");
   let traceId: string | undefined;
@@ -98,7 +112,7 @@ const executableRuntimeProbe = (releaseDigest: string): boolean => {
   if (traceId === undefined) return false;
   const logs = awsJson<LogEvents>([
     "logs", "filter-log-events", "--region", "ap-southeast-1",
-    "--log-group-name", "/kfc/recommendations/sandbox/application",
+    "--log-group-name", applicationLogGroup,
     "--filter-pattern", `{ $.event = \"recommendation_runtime_probe\" && $.releaseDigest = \"${releaseDigest}\" }`,
     "--limit", "1",
   ]);
@@ -156,11 +170,46 @@ const previous = immutableAwsJson(
   process.env.PREVIOUS_RELEASE_EVIDENCE_KEY,
   process.env.PREVIOUS_RELEASE_EVIDENCE_VERSION_ID,
 );
+const previousRecord = previous as PreviousReleaseRecord | undefined;
+const previousLive: CompletedReleaseLiveEvidence = (() => {
+  if (
+    previousRecord?.serviceDeploymentArn === undefined ||
+    previousRecord.serviceRevisionArn === undefined ||
+    previousRecord.taskDefinitionArn === undefined ||
+    previousRecord.alarms === undefined
+  ) return {};
+  const deployment = awsJson<{ serviceDeployments?: CompletedReleaseLiveEvidence["deployment"][] }>([
+    "ecs", "describe-service-deployments", "--region", "ap-southeast-1",
+    "--service-deployment-arns", previousRecord.serviceDeploymentArn,
+  ])?.serviceDeployments?.[0];
+  const serviceRevision = awsJson<{ serviceRevisions?: CompletedReleaseLiveEvidence["serviceRevision"][] }>([
+    "ecs", "describe-service-revisions", "--region", "ap-southeast-1",
+    "--service-revision-arns", previousRecord.serviceRevisionArn,
+  ])?.serviceRevisions?.[0];
+  const taskDefinition = awsJson<{ taskDefinition?: CompletedReleaseLiveEvidence["taskDefinition"] }>([
+    "ecs", "describe-task-definition", "--region", "ap-southeast-1",
+    "--task-definition", previousRecord.taskDefinitionArn,
+  ])?.taskDefinition;
+  const alarmNames = previousRecord.alarms.flatMap(({ name }) => name === undefined ? [] : [name]);
+  const alarms = alarmNames.length === 0 ? undefined : awsJson<AlarmResponse>([
+    "cloudwatch", "describe-alarms", "--region", "ap-southeast-1",
+    "--alarm-names", ...alarmNames,
+  ])?.MetricAlarms;
+  return { deployment, serviceRevision, taskDefinition, alarms };
+})();
 const releaseManifest = jsonFile(process.env.RELEASE_MANIFEST_PATH);
-const template = jsonFile(
-  process.env.SYNTHESIZED_SERVICE_TEMPLATE_PATH ??
-    "cdk.out/KfcRecommendationSyntheticSandbox.template.json",
-);
+const templatePath = process.env.SYNTHESIZED_SERVICE_TEMPLATE_PATH ??
+  "cdk.out/KfcRecommendationProduction.template.json";
+const template = jsonFile(templatePath);
+const platformTemplatePath = process.env.SYNTHESIZED_PLATFORM_TEMPLATE_PATH ??
+  "cdk.out/KfcRecommendationPlatform.template.json";
+const platformTemplate = jsonFile(platformTemplatePath);
+const sourceBindings = (() => {
+  const revision = gitHead();
+  if (revision === undefined || !existsSync(templatePath)) return undefined;
+  try { return deriveReleaseSourceBindings(revision, readFileSync(templatePath)); }
+  catch { return undefined; }
+})();
 const runtimeProbeVerified = executableRuntimeProbe(bindings.releaseDigest);
 const activationAlarm = process.env.CANDIDATE_ACTIVATION_ALARM_NAME === undefined ? undefined : awsJson<AlarmResponse>([
   "cloudwatch", "describe-alarms", "--region", "ap-southeast-1", "--alarm-names",
@@ -210,8 +259,8 @@ const facts: DeploymentFacts = {
       certificateArn: process.env.INTERNAL_ALB_CERTIFICATE_ARN ?? "",
       internalAlbServerName: process.env.INTERNAL_ALB_SERVER_NAME ?? "",
       maximumTasks: Number(process.env.MAXIMUM_TASKS ?? "NaN"),
-      sourceRevision: process.env.SOURCE_REVISION ?? "",
-      cdkRevision: process.env.CDK_SOURCE_REVISION ?? "",
+      sourceRevision: sourceBindings?.sourceRevision ?? "",
+      cdkRevision: sourceBindings?.cdkRevision ?? "",
       previousReleaseDigest: process.env.PREVIOUS_RELEASE_DIGEST ?? "",
       allowRollbackToPaused: process.env.ALLOW_ROLLBACK_TO_PAUSED === "true",
     }),
@@ -220,12 +269,12 @@ const facts: DeploymentFacts = {
   adotImagePresentAndArm64: imageIsArm64(process.env.ADOT_REPOSITORY_NAME ?? "kfc-recommendation-adot", process.env.ADOT_IMAGE_DIGEST),
   certificateIssuedAndMatchesServerName: certificateIsIssuedFor(certificate, serverName),
   previousReleaseCompletedAndCompatible: previousReleaseIsCompletedAndCompatible(
-    previous as never, process.env.PREVIOUS_RELEASE_DIGEST ?? "", bindings.contractDigest,
+    previousRecord, process.env.PREVIOUS_RELEASE_DIGEST ?? "", bindings.contractDigest,
     { accountId: identity?.Account ?? "", region: "ap-southeast-1" },
-  ),
+  ) && completedReleaseMatchesLive(previousRecord, previousLive),
   allowRollbackToPaused: process.env.ALLOW_ROLLBACK_TO_PAUSED === "true",
   alarmLinkedCanaryRollback: templateHasAlarmLinkedCanaryRollback((template ?? {}) as never),
-  exactRoutesVerified: templateHasExactRecommendationRoutes((template ?? {}) as never),
+  exactRoutesVerified: templateHasExactRecommendationRoutes((platformTemplate ?? {}) as never),
   activationAlarmCurrent:
     activationAlarmIsCurrent(activationAlarm, validationStartedAt, activationEvidenceTimestamp) &&
     operationalAlarm?.StateValue === "OK",

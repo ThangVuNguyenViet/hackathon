@@ -1,9 +1,11 @@
 import { App } from "aws-cdk-lib";
-import { Match, Template } from "aws-cdk-lib/assertions";
+import { Template } from "aws-cdk-lib/assertions";
 import { describe, expect, it } from "vitest";
 
 import { RecommendationFoundationStack } from "../lib/recommendation-foundation-stack.js";
-import { RecommendationSandboxStack } from "../lib/recommendation-sandbox-stack.js";
+import { RecommendationCandidateStack } from "../lib/recommendation-candidate-stack.js";
+import { RecommendationPlatformStack } from "../lib/recommendation-platform-stack.js";
+import { RecommendationProductionStack } from "../lib/recommendation-production-stack.js";
 
 const environment = { account: "111122223333", region: "ap-southeast-1" };
 
@@ -23,39 +25,23 @@ describe("two-phase deployment foundation", () => {
     expect(template.toJSON().Parameters).not.toHaveProperty("MainImageDigest");
   });
 
-  it("keeps the service inactive until immutable artifacts are explicitly activated", () => {
+  it("keeps platform, candidate validation, and explicit production promotion independently deployable", () => {
     const app = new App({ context: { githubRepository: "KFC/recommendations" } });
-    const service = new RecommendationSandboxStack(app, "Service", { env: environment });
-    const template = Template.fromStack(service);
-    template.resourceCountIs("AWS::ECR::Repository", 0);
-    template.resourceCountIs("AWS::IAM::OIDCProvider", 0);
-    expect(template.toJSON().Parameters).toEqual(
-      expect.objectContaining({
-        ActivateProduction: expect.objectContaining({ Default: "false" }),
-        ValidateCandidate: expect.objectContaining({ Default: "false" }),
-        MainRepositoryName: expect.any(Object),
-        ScorerRepositoryName: expect.any(Object),
-        AdotRepositoryName: expect.any(Object),
-      }),
-    );
-    template.hasResourceProperties("AWS::ECS::Service", {
-      DesiredCount: {
-        "Fn::If": ["ActivateProductionCondition", 1, 0],
-      },
-    });
-    for (const resource of Object.values(template.findResources("AWS::ApplicationAutoScaling::ScalableTarget"))) {
-      expect(resource.Condition).toBe("ActivateProductionCondition");
-    }
-    for (const resource of Object.values(template.findResources("AWS::ApplicationAutoScaling::ScalingPolicy"))) {
-      expect(resource.Condition).toBe("ActivateProductionCondition");
-    }
-    template.hasResourceProperties("AWS::ECS::TaskDefinition", {
-      ContainerDefinitions: Match.arrayWith([
-        Match.objectLike({
-          Name: "main",
-          Image: Match.objectLike({ "Fn::Join": Match.anyValue() }),
-        }),
-      ]),
-    });
+    const platform = new RecommendationPlatformStack(app, "Platform", { env: environment });
+    const candidate = new RecommendationCandidateStack(app, "Candidate", { env: environment, platform });
+    const production = new RecommendationProductionStack(app, "Production", { env: environment, platform, candidate });
+    const platformTemplate = Template.fromStack(platform);
+    const candidateTemplate = Template.fromStack(candidate);
+    const productionTemplate = Template.fromStack(production);
+    platformTemplate.resourceCountIs("AWS::ECS::Service", 0);
+    platformTemplate.resourceCountIs("AWS::ECS::TaskDefinition", 0);
+    candidateTemplate.resourceCountIs("AWS::ECS::Service", 1);
+    candidateTemplate.hasResourceProperties("AWS::ECS::Service", { DesiredCount: 1 });
+    productionTemplate.resourceCountIs("AWS::ECS::Service", 1);
+    productionTemplate.hasResourceProperties("AWS::ECS::Service", { DesiredCount: 1 });
+    expect(JSON.stringify(candidateTemplate.toJSON())).not.toContain("ProductionService");
+    expect(JSON.stringify(productionTemplate.toJSON())).not.toContain("CandidateValidationService");
+    expect(JSON.stringify(candidateTemplate.toJSON())).not.toContain("ActivateProduction");
+    expect(JSON.stringify(productionTemplate.toJSON())).not.toContain("ActivateProduction");
   });
 });

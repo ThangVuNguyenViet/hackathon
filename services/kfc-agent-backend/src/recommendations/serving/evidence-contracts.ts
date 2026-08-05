@@ -101,6 +101,10 @@ export function parseAutomaticEventEvidence(value: unknown) {
   return automaticEventEvidenceSchema.parse(value);
 }
 
+export function parseAutomaticTechnicalEvidence(value: unknown) {
+  return automaticDecisionEvidenceSchema.shape.technical.parse(value);
+}
+
 export function parseJsonValue(value: unknown): JsonValue {
   return jsonValueSchema.parse(value);
 }

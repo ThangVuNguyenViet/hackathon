@@ -10,6 +10,7 @@ export const createSyntheticSentinels = (
   release: ReleaseParameters,
 ): void => {
   const releaseDigest = release.releaseDigest.valueAsString;
+  const releaseKey = `RELEASE#${releaseDigest}`;
   const catalogDigest = release.trustedCatalogDigest.valueAsString;
   const policy = AwsCustomResourcePolicy.fromStatements([
     new PolicyStatement({ actions: ["dynamodb:PutItem"], resources: [data.stateTable.tableArn] }),
@@ -26,42 +27,32 @@ export const createSyntheticSentinels = (
     onCreate: {
       service: "DynamoDB",
       action: "putItem",
-      parameters: { TableName: data.stateTable.tableName, Item: item },
-      physicalResourceId: PhysicalResourceId.of(`${id}-${releaseDigest}`),
-    },
-    onUpdate: {
-      service: "DynamoDB",
-      action: "putItem",
-      parameters: { TableName: data.stateTable.tableName, Item: item },
+      parameters: {
+        TableName: data.stateTable.tableName,
+        Item: item,
+        ConditionExpression: "attribute_not_exists(pk)",
+      },
       physicalResourceId: PhysicalResourceId.of(`${id}-${releaseDigest}`),
     },
     policy,
     role,
   });
   put("ReleaseOrderSentinel", {
-    pk: { S: `JOURNEY#sentinel:${releaseDigest}` },
-    sk: { S: `OPPORTUNITY#sentinel:${releaseDigest}` },
-    releaseDigest: { S: releaseDigest },
-    snapshot: { M: {
-      orderingJourneyRef: { S: `sentinel:${releaseDigest}` },
-      opportunityRef: { S: `sentinel:${releaseDigest}` },
-      storeId: { S: "synthetic-sentinel-store" },
-      fulfilmentMode: { S: "pickup" },
-      locale: { S: "vi-VN" },
-      cart: { M: {
-        cartId: { S: `sentinel:${releaseDigest}` }, revision: { S: releaseDigest },
-        subtotal: { M: { amount: { N: "0" }, currency: { S: "VND" } } },
-        lines: { L: [] },
-      } },
-      remainingBudgetVnd: { NULL: true }, parentCartLineId: { NULL: true }, verifiedCustomerRef: { NULL: true },
-    } },
+    pk: { S: releaseKey }, sk: { S: "ORDER" }, releaseDigest: { S: releaseDigest },
+    snapshot: { S: "available" },
   });
-  put("ReleaseExposureSentinel", {
-    pk: { S: "EXPOSURE" }, sk: { S: "local_favorite" },
-    releaseDigest: { S: releaseDigest }, snapshot: { S: "enabled" },
+  put("ReleaseJourneySentinel", {
+    pk: { S: releaseKey }, sk: { S: "JOURNEY" }, releaseDigest: { S: releaseDigest },
+    snapshot: { S: "available" },
   });
+  for (const type of ["local_favorite", "for_you", "modifier_upsell", "smart_cross_sell"]) {
+    put(`ReleaseExposure${type.replaceAll("_", "")}Sentinel`, {
+      pk: { S: releaseKey }, sk: { S: `EXPOSURE#${type}` },
+      releaseDigest: { S: releaseDigest }, snapshot: { S: "enabled" },
+    });
+  }
   put("ReleaseCatalogSentinel", {
-    pk: { S: `RELEASE#${releaseDigest}` }, sk: { S: "CATALOG" },
+    pk: { S: releaseKey }, sk: { S: "CATALOG" },
     releaseDigest: { S: releaseDigest }, catalogDigest: { S: catalogDigest },
   });
 };

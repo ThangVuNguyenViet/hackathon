@@ -14,6 +14,7 @@ import type {
   AutomaticRecommendationContextPorts,
 } from '../automatic-core/index.js';
 import { AUTOMATIC_RECOMMENDATION_CONTRACT_DIGEST } from '../contracts/automatic-recommendation.js';
+import { parseAutomaticTechnicalEvidence } from './evidence-contracts.js';
 import { createAwsAutomaticRecommendationRuntime } from './aws-runtime.js';
 import { createUnavailableAutomaticRecommendationHttpRuntime } from './http-runtime.js';
 import {
@@ -108,6 +109,7 @@ export function createAwsRecommendationMainServer(
               env.TRUSTED_CATALOG_PATH,
               env.TRUSTED_CATALOG_DIGEST,
             ),
+            releaseDigest: env.RELEASE_DIGEST,
           }),
         };
       })();
@@ -152,21 +154,12 @@ export function createAwsRecommendationMainServer(
           ids: { nextRecommendationId: () => `recommendation:${randomUUID()}` },
           recommendationTtlMs: 300_000,
         }),
-      technicalEvidence: () => ({
-        contextBindings: {
-          order: 'dynamodb',
-          catalog: 'digest-bound-file',
-          history: 'dynamodb',
-          exposure: 'dynamodb',
-        },
-        potentialCandidates: [],
-        eligibilityDecisions: [],
-        featureReconciliation: { authority: 'deterministic-core' },
-        scoresCalibration: null,
-        composition: { authority: 'deterministic-core' },
-        modelReleaseProvenance: { bundleDigest: bundle.bundleDigest },
-        traceLocator: null,
-      }),
+      technicalEvidence: ({ execution }) => {
+        if (execution === undefined) {
+          throw new Error('engine execution evidence is unavailable');
+        }
+        return parseAutomaticTechnicalEvidence(execution);
+      },
     });
     return buildServer({
       automaticRecommendations,

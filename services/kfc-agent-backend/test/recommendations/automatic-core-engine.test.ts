@@ -260,6 +260,31 @@ function engine({
   });
 }
 
+it('returns complete execution evidence from the same engine decision', async () => {
+  const result = await engine().decideWithEvidence(
+    'local_favorite',
+    baseRequest,
+  );
+  expect(result.response.status).toBe('recommended');
+  expect(result.execution.potentialCandidates.length).toBeGreaterThan(0);
+  expect(result.execution.eligibilityDecisions.length).toBe(
+    result.execution.potentialCandidates.length,
+  );
+  expect(result.execution.featureReconciliation).toMatchObject({
+    featureRows: expect.any(Array),
+  });
+  expect(result.execution.scoresCalibration).toMatchObject({
+    scores: expect.any(Array),
+  });
+  expect(result.execution.composition).toMatchObject({
+    status: 'recommended',
+    displayedCandidateIds: expect.any(Array),
+  });
+  expect(result.execution.modelReleaseProvenance).toMatchObject({
+    bundleDigest: completeBundle.bundleDigest,
+  });
+});
+
 describe('qualified automatic model bundle resolution', () => {
   it('accepts only one complete four-type bundle bound to the runtime feature schema', async () => {
     await expect(

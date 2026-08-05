@@ -4,17 +4,17 @@ import { LogGroup, RetentionDays } from "aws-cdk-lib/aws-logs";
 import { Construct } from "constructs";
 
 import type { AuthResources } from "./auth.js";
-import type { ComputeResources } from "./compute.js";
 import type { NetworkResources } from "./network.js";
-import type { ReleaseParameters } from "./release-parameters.js";
+import type { PlatformComputeResources } from "./platform-compute.js";
+import type { PlatformParameters } from "./platform-parameters.js";
 import { cognitoScopeFor, type CanonicalRecommendationScope } from "./scope-aliases.js";
 
 export const createHttpApi = (
   scope: Construct,
   network: NetworkResources,
-  compute: ComputeResources,
+  compute: PlatformComputeResources,
   auth: AuthResources,
-  release: ReleaseParameters,
+  release: PlatformParameters,
 ): CfnApi => {
   const api = new CfnApi(scope, "HttpApi", {
     name: "kfc-recommendation-synthetic-sandbox",

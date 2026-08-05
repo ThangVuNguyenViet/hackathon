@@ -50,6 +50,15 @@ export const createDataPlane = (scope: Construct): DataPlaneResources => {
   );
   evidenceBucket.addToResourcePolicy(
     new PolicyStatement({
+      sid: "DenyReadinessProbeDeletion",
+      effect: Effect.DENY,
+      principals: [new AnyPrincipal()],
+      actions: ["s3:DeleteObject", "s3:DeleteObjectVersion"],
+      resources: [evidenceBucket.arnForObjects("readiness-probes/*")],
+    }),
+  );
+  evidenceBucket.addToResourcePolicy(
+    new PolicyStatement({
       sid: "DenyCompletedReleaseMutation",
       effect: Effect.DENY,
       principals: [new AnyPrincipal()],

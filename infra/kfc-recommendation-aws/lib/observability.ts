@@ -13,30 +13,31 @@ import { CfnRule } from "aws-cdk-lib/aws-events";
 import { CfnResourcePolicy, LogGroup, RetentionDays } from "aws-cdk-lib/aws-logs";
 import { Construct } from "constructs";
 
-import type { ComputeResources } from "./compute.js";
-import type { ReleaseParameters } from "./release-parameters.js";
+import type { PlatformComputeResources } from "./platform-compute.js";
+import type { ProductionServingResources } from "./production-serving.js";
 
 export const createObservability = (
   scope: Construct,
-  compute: ComputeResources,
-  release: ReleaseParameters,
+  platform: PlatformComputeResources,
+  production: ProductionServingResources,
+  validationTargetGroupFullName: string,
 ): CompositeAlarm => {
   const latency = new Metric({
     namespace: "AWS/ApplicationELB",
     metricName: "TargetResponseTime",
-    dimensionsMap: { LoadBalancer: compute.loadBalancer.loadBalancerFullName },
+    dimensionsMap: { LoadBalancer: platform.loadBalancer.loadBalancerFullName },
     statistic: "p99",
     period: Duration.minutes(1),
   });
   const targetGroups = [
-    ["Production", compute.targetGroupFullName],
-    ["Alternate", compute.alternateTargetGroupFullName],
-    ["Validation", compute.validationTargetGroupFullName],
+    ["Production", platform.targetGroup.targetGroupFullName],
+    ["Alternate", platform.alternateTargetGroup.targetGroupFullName],
+    ["Validation", validationTargetGroupFullName],
   ] as const;
   const target5xxMetrics = targetGroups.map(([, targetGroup]) => new Metric({
     namespace: "AWS/ApplicationELB",
     metricName: "HTTPCode_Target_5XX_Count",
-    dimensionsMap: { LoadBalancer: compute.loadBalancer.loadBalancerFullName, TargetGroup: targetGroup },
+    dimensionsMap: { LoadBalancer: platform.loadBalancer.loadBalancerFullName, TargetGroup: targetGroup },
     statistic: "Sum",
     period: Duration.minutes(1),
   }));
@@ -61,7 +62,7 @@ export const createObservability = (
       namespace: "AWS/ApplicationELB",
       metricName: "UnHealthyHostCount",
       dimensionsMap: {
-        LoadBalancer: compute.loadBalancer.loadBalancerFullName,
+        LoadBalancer: platform.loadBalancer.loadBalancerFullName,
         TargetGroup: targetGroup,
       },
       statistic: "Maximum",
@@ -90,7 +91,7 @@ export const createObservability = (
     }),
     new GraphWidget({
       title: "ECS CPU / memory",
-      left: [compute.service.metricCpuUtilization(), compute.service.metricMemoryUtilization()],
+      left: [production.service.metricCpuUtilization(), production.service.metricMemoryUtilization()],
       leftAnnotations: [{ value: 65, label: "CPU scale" }, { value: 70, label: "memory scale" }],
     }),
     new GraphWidget({
@@ -121,7 +122,7 @@ export const createObservability = (
     eventPattern: {
       source: ["aws.ecs"],
       "detail-type": ["ECS Deployment State Change"],
-      detail: { clusterArn: [compute.cluster.clusterArn] },
+      detail: { clusterArn: [platform.cluster.clusterArn] },
     },
     targets: [{ arn: deploymentEvents.logGroupArn, id: "DeploymentEvents" }],
   });

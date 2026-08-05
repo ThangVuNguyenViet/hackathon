@@ -57,6 +57,10 @@ export const createNetwork = (scope: Construct, data: DataPlaneResources): Netwo
     ["s3:GetObject", "s3:GetObjectVersion", "s3:PutObject", "s3:AbortMultipartUpload"],
     [data.evidenceBucket.arnForObjects("automatic-recommendations/*")],
   ));
+  s3Endpoint.addToPolicy(endpointPolicy(
+    ["s3:GetObject", "s3:GetObjectVersion", "s3:PutObject", "s3:AbortMultipartUpload"],
+    [data.evidenceBucket.arnForObjects("readiness-probes/*")],
+  ));
   // Fargate downloads ECR image layers from this regional S3 bucket. Without
   // it, tasks in the isolated subnets can authenticate to ECR but cannot pull.
   s3Endpoint.addToPolicy(endpointPolicy(
@@ -72,7 +76,7 @@ export const createNetwork = (scope: Construct, data: DataPlaneResources): Netwo
     "dynamodb:DeleteItem",
     "dynamodb:Query",
     "dynamodb:TransactWriteItems",
-  ], [data.stateTable.tableArn]));
+  ], [data.stateTable.tableArn, `${data.stateTable.tableArn}/index/*`]));
 
   const endpointSecurityGroup = new SecurityGroup(scope, "EndpointSecurityGroup", {
     vpc,

@@ -3,10 +3,12 @@ import { describe, expect, it } from "vitest";
 
 import {
   certificateIsIssuedFor,
+  completedReleaseMatchesLive,
   activationProofMatches,
   activationAlarmIsCurrent,
   endpointsAreAvailable,
   endpointsMatchDeployment,
+  deriveReleaseSourceBindings,
   qualifiedBundleManifestMatches,
   releaseManifestMatches,
   manifestDigestMatches,
@@ -20,6 +22,15 @@ const digest = (value: string): string =>
   `sha256:${createHash("sha256").update(value).digest("hex")}`;
 
 describe("immutable deployment artifact verification", () => {
+  it("derives release source bindings from git HEAD and synthesized bytes", () => {
+    const sourceRevision = "a".repeat(40);
+    const assembly = Buffer.from("exact synthesized template");
+    expect(deriveReleaseSourceBindings(sourceRevision, assembly)).toEqual({
+      sourceRevision,
+      cdkRevision: createHash("sha256").update(assembly).digest("hex"),
+    });
+    expect(() => deriveReleaseSourceBindings("caller-supplied", assembly)).toThrow();
+  });
   it("matches complete file content to a sha256 digest", () => {
     expect(manifestDigestMatches(Buffer.from("release"), digest("release"))).toBe(true);
     expect(manifestDigestMatches(Buffer.from("release"), digest("release").slice(7))).toBe(true);
@@ -77,6 +88,71 @@ describe("immutable deployment artifact verification", () => {
     ).toBe(false);
   });
 
+  it("requires completed-release records to match live successful ECS, task, image, and alarm evidence", () => {
+    const completedAt = "2026-08-05T00:10:00.000Z";
+    const record = {
+      schemaVersion: "kfc-recommendation-completed-release-v1",
+      state: "completed",
+      releaseDigest: "b".repeat(64),
+      contractDigest: "c".repeat(64),
+      accountId: "111122223333",
+      region: "ap-southeast-1",
+      completedAt,
+      serviceArn: "arn:aws:ecs:ap-southeast-1:111122223333:service/kfc/recommendations",
+      serviceDeploymentArn: "arn:aws:ecs:ap-southeast-1:111122223333:service-deployment/kfc/recommendations/123",
+      serviceRevisionArn: "arn:aws:ecs:ap-southeast-1:111122223333:service-revision/kfc/recommendations/42",
+      taskDefinitionArn: "arn:aws:ecs:ap-southeast-1:111122223333:task-definition/kfc:42",
+      images: { main: `main@sha256:${"1".repeat(64)}`, scorer: `scorer@sha256:${"2".repeat(64)}`, adot: `adot@sha256:${"3".repeat(64)}` },
+      alarms: [
+        { name: "activation", stateUpdatedTimestamp: "2026-08-05T00:09:00.000Z" },
+        { name: "release-safety", stateUpdatedTimestamp: "2026-08-05T00:09:30.000Z" },
+      ],
+    };
+    const live = {
+      deployment: {
+        serviceDeploymentArn: record.serviceDeploymentArn,
+        serviceArn: record.serviceArn,
+        status: "SUCCESSFUL",
+        targetServiceRevision: {
+          arn: record.serviceRevisionArn,
+          requestedTaskCount: 2,
+          runningTaskCount: 2,
+          pendingTaskCount: 0,
+        },
+      },
+      serviceRevision: {
+        serviceRevisionArn: record.serviceRevisionArn,
+        serviceArn: record.serviceArn,
+        taskDefinition: record.taskDefinitionArn,
+      },
+      taskDefinition: {
+        taskDefinitionArn: record.taskDefinitionArn,
+        runtimePlatform: { operatingSystemFamily: "LINUX", cpuArchitecture: "ARM64" },
+        containerDefinitions: [
+          { name: "main", image: record.images.main, environment: [{ name: "RELEASE_DIGEST", value: record.releaseDigest }] },
+          { name: "scorer", image: record.images.scorer, environment: [{ name: "RELEASE_DIGEST", value: record.releaseDigest }] },
+          { name: "adot", image: record.images.adot },
+        ],
+      },
+      alarms: [
+        { AlarmName: "activation", StateValue: "OK", StateUpdatedTimestamp: "2026-08-05T00:09:00.000Z" },
+        { AlarmName: "release-safety", StateValue: "OK", StateUpdatedTimestamp: "2026-08-05T00:09:30.000Z" },
+      ],
+    };
+    expect(completedReleaseMatchesLive(record, live)).toBe(true);
+    expect(completedReleaseMatchesLive(record, {
+      ...live,
+      deployment: { ...live.deployment, status: "IN_PROGRESS" },
+    })).toBe(false);
+    expect(completedReleaseMatchesLive(record, {
+      ...live,
+      taskDefinition: { ...live.taskDefinition, containerDefinitions: [
+        ...live.taskDefinition.containerDefinitions.slice(0, 2),
+        { name: "adot", image: "adot@sha256:tampered" },
+      ] },
+    })).toBe(false);
+  });
+
   it("requires canary traffic, alarms, and both automatic rollback mechanisms", () => {
     const valid = {
       Resources: {
@@ -108,6 +184,25 @@ describe("immutable deployment artifact verification", () => {
       },
     };
     expect(templateHasAlarmLinkedCanaryRollback(valid)).toBe(true);
+    const imported = JSON.parse(JSON.stringify(valid)) as {
+      Resources: Record<string, { Properties?: Record<string, any> }>;
+    };
+    const service = imported.Resources.Service!.Properties!;
+    const loadBalancer = service.LoadBalancers[0];
+    loadBalancer.TargetGroupArn = { "Fn::ImportValue": "KfcRecommendationPlatform:PrimaryTarget" };
+    loadBalancer.AdvancedConfiguration = {
+      AlternateTargetGroupArn: { "Fn::ImportValue": "KfcRecommendationPlatform:AlternateTarget" },
+      ProductionListenerRule: { "Fn::ImportValue": "KfcRecommendationPlatform:ProductionRule" },
+      TestListenerRule: { "Fn::ImportValue": "KfcRecommendationPlatform:TestRule" },
+      RoleArn: { "Fn::ImportValue": "KfcRecommendationPlatform:InfrastructureRole" },
+    };
+    delete imported.Resources.Blue;
+    delete imported.Resources.Green;
+    delete imported.Resources.ProdRule;
+    delete imported.Resources.TestRule;
+    delete imported.Resources.InfrastructureRole;
+    delete imported.Resources.InfrastructurePolicy;
+    expect(templateHasAlarmLinkedCanaryRollback(imported)).toBe(true);
     expect(
       templateHasAlarmLinkedCanaryRollback({
         Resources: {
@@ -184,7 +279,7 @@ describe("immutable deployment artifact verification", () => {
       SubnetIds: service === "s3" || service === "dynamodb" ? undefined : ["subnet-a", "subnet-b"],
       PrivateDnsEnabled: service === "s3" || service === "dynamodb" ? undefined : true,
       Groups: service === "s3" || service === "dynamodb" ? undefined : [{ GroupId: "sg-endpoints" }],
-      PolicyDocument: { Version: "2012-10-17", Statement: [{ Effect: "Allow", Action: actions[service], Resource: service === "s3" ? ["arn:aws:s3:::evidence", "arn:aws:s3:::evidence/automatic-recommendations/*", `arn:aws:s3:::prod-${region}-starport-layer-bucket/*`] : service === "dynamodb" ? ["arn:aws:dynamodb:ap-southeast-1:111122223333:table/state"] : "*" }] },
+      PolicyDocument: { Version: "2012-10-17", Statement: [{ Effect: "Allow", Action: actions[service], Resource: service === "s3" ? ["arn:aws:s3:::evidence", "arn:aws:s3:::evidence/automatic-recommendations/*", "arn:aws:s3:::evidence/readiness-probes/*", `arn:aws:s3:::prod-${region}-starport-layer-bucket/*`] : service === "dynamodb" ? ["arn:aws:dynamodb:ap-southeast-1:111122223333:table/state", "arn:aws:dynamodb:ap-southeast-1:111122223333:table/state/index/*"] : "*" }] },
     }));
     expect(endpointsMatchDeployment(endpoints, {
       region,
@@ -197,6 +292,23 @@ describe("immutable deployment artifact verification", () => {
       region, vpcId: "vpc-exact", evidenceBucketArn: "arn:aws:s3:::evidence", stateTableArn: "arn:aws:dynamodb:ap-southeast-1:111122223333:table/state",
       routeTableIds: ["rtb-a", "rtb-b"], subnetIds: ["subnet-a", "subnet-b"], endpointSecurityGroupId: "sg-endpoints",
     })).toBe(false);
+    const expected = {
+      region, vpcId: "vpc-exact", evidenceBucketArn: "arn:aws:s3:::evidence", stateTableArn: "arn:aws:dynamodb:ap-southeast-1:111122223333:table/state",
+      routeTableIds: ["rtb-a", "rtb-b"], subnetIds: ["subnet-a", "subnet-b"], endpointSecurityGroupId: "sg-endpoints",
+    };
+    expect(endpointsMatchDeployment([
+      ...endpoints.slice(0, 2),
+      { ...endpoints[2], Groups: [{ GroupId: "sg-endpoints" }, { GroupId: "sg-extra" }] },
+      ...endpoints.slice(3),
+    ], expected)).toBe(false);
+    expect(endpointsMatchDeployment([
+      { ...endpoints[0], PolicyDocument: { Version: "2012-10-17", Statement: [{ Effect: "Allow", Action: [...(actions.s3 ?? []), "s3:DeleteObject"], Resource: ["arn:aws:s3:::evidence", "arn:aws:s3:::evidence/automatic-recommendations/*", "arn:aws:s3:::evidence/readiness-probes/*", `arn:aws:s3:::prod-${region}-starport-layer-bucket/*`] }] } },
+      ...endpoints.slice(1),
+    ], expected)).toBe(false);
+    expect(endpointsMatchDeployment([
+      { ...endpoints[0], PolicyDocument: { Version: "2012-10-17", Statement: [{ Effect: "Allow", Action: actions.s3, Resource: ["arn:aws:s3:::evidence", "arn:aws:s3:::evidence/automatic-recommendations/*", "arn:aws:s3:::evidence/readiness-probes/*", `arn:aws:s3:::prod-${region}-starport-layer-bucket/*`, "*"] }] } },
+      ...endpoints.slice(1),
+    ], expected)).toBe(false);
   });
 
   it("requires semantic image, bundle, and contract bindings in the release manifest", () => {

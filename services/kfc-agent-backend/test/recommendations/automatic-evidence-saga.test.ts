@@ -21,6 +21,7 @@ import {
   DynamoDbAutomaticRecommendationLedger,
   S3AutomaticEvidenceObjectStore,
 } from '../../src/recommendations/serving/aws-evidence-adapters.js';
+import { parseAutomaticTechnicalEvidence } from '../../src/recommendations/serving/evidence-contracts.js';
 
 const decision = {
   idempotencyKey: 'request-1',
@@ -522,6 +523,104 @@ it.each([
   },
 );
 
+it('persists and inspects the complete evidence returned by the engine execution', async () => {
+  const ledger = new InMemoryAutomaticRecommendationLedger();
+  const saga = createAutomaticEvidenceSaga({
+    objects: new InMemoryAutomaticEvidenceObjectStore(),
+    ledger,
+    clock: () => new Date('2026-08-05T00:00:00.000Z'),
+  });
+  const execution = {
+    ...decision.technical,
+    potentialCandidates: [{ candidateId: 'product:side' }],
+    eligibilityDecisions: [{ candidateId: 'product:side', status: 'eligible' }],
+    featureReconciliation: { featureRows: [{ candidateId: 'product:side' }] },
+    scoresCalibration: {
+      scores: [{ candidateId: 'product:side', jointProbability: 0.8 }],
+    },
+    composition: {
+      status: 'recommended',
+      displayedCandidateIds: ['product:side'],
+    },
+    modelReleaseProvenance: { bundleDigest: 'e'.repeat(64) },
+  };
+  const runtime = createAutomaticRecommendationServingRuntime({
+    engine: {
+      decide: async () => {
+        throw new Error('the evidence-aware engine path must be used');
+      },
+      decideWithEvidence: async () => ({
+        response: {
+          schemaVersion: 'kfc-automatic-recommendation-v1',
+          requestId: 'request-complete-evidence',
+          recommendationId: 'recommendation-complete-evidence',
+          recommendationType: 'local_favorite',
+          status: 'recommended',
+          emptyReason: null,
+          cartRevision: 'cart-revision-1',
+          catalogRevision: 'catalog-1',
+          expiresAt: '2026-08-05T00:05:00.000Z',
+          model: {
+            bundleId: 'bundle-1',
+            bundleDigest: 'e'.repeat(64),
+            modelRevision: 'model-1',
+            calibratorRevision: 'calibrator-1',
+            featureSchemaDigest: 'f'.repeat(64),
+            thresholdRevision: 'threshold-1',
+            composerContractDigest: '1'.repeat(64),
+            qualificationRunId: 'qualification-1',
+            qualificationEvidenceDigest: '2'.repeat(64),
+          },
+          proposals: [
+            {
+              actionId: 'action:complete:side',
+              action: {
+                type: 'add_product',
+                sellableItemId: 'side',
+                quantity: 1,
+                priceImpact: { amount: 10000, currency: 'VND' },
+              },
+              display: {
+                name: 'Side',
+                imageUrl: null,
+                priceImpact: { amount: 10000, currency: 'VND' },
+              },
+              reasonCodes: ['completes_your_meal'],
+            },
+          ],
+          counts: { potential: 1, eligible: 1, scored: 1, displayed: 1 },
+        },
+        execution,
+      }),
+    },
+    evidence: saga,
+    contractDigest: 'a'.repeat(64),
+    technicalEvidence: ({ execution: actual }) =>
+      parseAutomaticTechnicalEvidence(actual),
+  });
+  await runtime.decide('local_favorite', {
+    schemaVersion: 'kfc-automatic-recommendation-v1',
+    requestId: 'request-complete-evidence',
+    storeId: 'store-1',
+    fulfilmentMode: 'pickup',
+    locale: 'vi-VN',
+    orderingJourneyRef: 'journey-1',
+    opportunityRef: 'opportunity-1',
+    cart: {
+      cartId: 'cart-1',
+      revision: 'cart-revision-1',
+      subtotal: { amount: 0, currency: 'VND' },
+      lines: [],
+    },
+  });
+  expect(ledger.decisions()[0]?.evidence.technical).toEqual(execution);
+  await expect(
+    saga.inspect('recommendation-complete-evidence'),
+  ).resolves.toMatchObject({
+    candidateEvidence: execution.eligibilityDecisions,
+  });
+});
+
 it('stores events S3-first and rejects an idempotency key rebound to different evidence', async () => {
   const objects = new InMemoryAutomaticEvidenceObjectStore();
   const ledger = new InMemoryAutomaticRecommendationLedger();
@@ -626,7 +725,8 @@ it('proves deep readiness with an immutable write and exact versioned read', asy
   expect(commands).toHaveLength(2);
   const put = commands.find((command) => command instanceof PutObjectCommand);
   const get = commands.find((command) => command instanceof GetObjectCommand);
-  expect(put?.input.Key).toContain('automatic-recommendations/readiness/');
+  expect(put?.input.Key).toContain('readiness-probes/');
+  expect(put?.input.Key).not.toContain('automatic-recommendations/');
   expect(get?.input.VersionId).toBe('probe-version');
 });
 

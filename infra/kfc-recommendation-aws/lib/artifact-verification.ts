@@ -10,6 +10,19 @@ export const manifestDigestMatches = (content: Buffer, expected: string): boolea
   return timingSafeEqual(Buffer.from(actual), Buffer.from(expected));
 };
 
+export const deriveReleaseSourceBindings = (
+  gitHead: string,
+  synthesizedAssembly: Buffer,
+): { sourceRevision: string; cdkRevision: string } => {
+  if (!/^[a-f0-9]{40}(?:[a-f0-9]{24})?$/.test(gitHead)) {
+    throw new Error("source revision must be the exact git HEAD object ID");
+  }
+  return {
+    sourceRevision: gitHead,
+    cdkRevision: createHash("sha256").update(synthesizedAssembly).digest("hex"),
+  };
+};
+
 export interface CertificateDescription {
   readonly Status?: string;
   readonly DomainName?: string;
@@ -57,6 +70,7 @@ export const ociManifestSupports = (
 };
 
 export interface PreviousReleaseRecord {
+  readonly schemaVersion?: string;
   readonly releaseDigest?: string;
   readonly state?: string;
   readonly contractDigest?: string;
@@ -64,6 +78,11 @@ export interface PreviousReleaseRecord {
   readonly region?: string;
   readonly completedAt?: string;
   readonly taskDefinitionArn?: string;
+  readonly serviceArn?: string;
+  readonly serviceDeploymentArn?: string;
+  readonly serviceRevisionArn?: string;
+  readonly images?: Readonly<Record<string, string>>;
+  readonly alarms?: ReadonlyArray<{ readonly name?: string; readonly stateUpdatedTimestamp?: string }>;
 }
 
 export const previousReleaseIsCompletedAndCompatible = (
@@ -87,6 +106,92 @@ export const previousReleaseIsCompletedAndCompatible = (
   (DIGEST.test(expectedReleaseDigest) || CONTENT_DIGEST.test(expectedReleaseDigest)) &&
   (DIGEST.test(currentContractDigest) || CONTENT_DIGEST.test(currentContractDigest));
 
+export interface CompletedReleaseLiveEvidence {
+  readonly deployment?: {
+    readonly serviceDeploymentArn?: string;
+    readonly serviceArn?: string;
+    readonly status?: string;
+    readonly targetServiceRevision?: {
+      readonly arn?: string;
+      readonly requestedTaskCount?: number;
+      readonly runningTaskCount?: number;
+      readonly pendingTaskCount?: number;
+    };
+  };
+  readonly serviceRevision?: {
+    readonly serviceRevisionArn?: string;
+    readonly serviceArn?: string;
+    readonly taskDefinition?: string;
+  };
+  readonly taskDefinition?: {
+    readonly taskDefinitionArn?: string;
+    readonly runtimePlatform?: {
+      readonly operatingSystemFamily?: string;
+      readonly cpuArchitecture?: string;
+    };
+    readonly containerDefinitions?: ReadonlyArray<{
+      readonly name?: string;
+      readonly image?: string;
+      readonly environment?: ReadonlyArray<{ readonly name?: string; readonly value?: string }>;
+    }>;
+  };
+  readonly alarms?: ReadonlyArray<{
+    readonly AlarmName?: string;
+    readonly StateValue?: string;
+    readonly StateUpdatedTimestamp?: string;
+  }>;
+}
+
+export const completedReleaseMatchesLive = (
+  record: PreviousReleaseRecord | undefined,
+  live: CompletedReleaseLiveEvidence,
+): boolean => {
+  if (
+    record?.schemaVersion !== "kfc-recommendation-completed-release-v1" ||
+    record.state !== "completed" ||
+    record.serviceArn === undefined ||
+    record.serviceDeploymentArn === undefined ||
+    record.serviceRevisionArn === undefined ||
+    record.taskDefinitionArn === undefined ||
+    record.releaseDigest === undefined ||
+    record.images === undefined ||
+    record.alarms === undefined ||
+    live.deployment?.status !== "SUCCESSFUL" ||
+    live.deployment.serviceDeploymentArn !== record.serviceDeploymentArn ||
+    live.deployment.serviceArn !== record.serviceArn ||
+    live.deployment.targetServiceRevision?.arn !== record.serviceRevisionArn ||
+    live.deployment.targetServiceRevision.requestedTaskCount === undefined ||
+    live.deployment.targetServiceRevision.requestedTaskCount < 1 ||
+    live.deployment.targetServiceRevision.runningTaskCount !==
+      live.deployment.targetServiceRevision.requestedTaskCount ||
+    live.deployment.targetServiceRevision.pendingTaskCount !== 0 ||
+    live.serviceRevision?.serviceRevisionArn !== record.serviceRevisionArn ||
+    live.serviceRevision.serviceArn !== record.serviceArn ||
+    live.serviceRevision.taskDefinition !== record.taskDefinitionArn ||
+    live.taskDefinition?.taskDefinitionArn !== record.taskDefinitionArn ||
+    live.taskDefinition.runtimePlatform?.operatingSystemFamily !== "LINUX" ||
+    live.taskDefinition.runtimePlatform.cpuArchitecture !== "ARM64"
+  ) return false;
+  const containers = live.taskDefinition.containerDefinitions ?? [];
+  if (!exactSet(containers.flatMap(({ name }) => name === undefined ? [] : [name]), ["main", "scorer", "adot"])) return false;
+  for (const name of ["main", "scorer", "adot"]) {
+    const container = containers.find((candidate) => candidate.name === name);
+    if (container?.image !== record.images[name]) return false;
+    if (name !== "adot" && !(container.environment ?? []).some(
+      (entry) => entry.name === "RELEASE_DIGEST" && entry.value === record.releaseDigest,
+    )) return false;
+  }
+  if (!exactSet(
+    (live.alarms ?? []).flatMap(({ AlarmName }) => AlarmName === undefined ? [] : [AlarmName]),
+    record.alarms.flatMap(({ name }) => name === undefined ? [] : [name]),
+  )) return false;
+  return record.alarms.every((expected) => {
+    const alarm = live.alarms?.find(({ AlarmName }) => AlarmName === expected.name);
+    return alarm?.StateValue === "OK" &&
+      alarm.StateUpdatedTimestamp === expected.stateUpdatedTimestamp;
+  });
+};
+
 interface CloudFormationTemplate {
   readonly Resources?: Record<string, {
     readonly Type?: string;
@@ -101,6 +206,12 @@ const logicalId = (value: unknown): string | undefined => {
   return Array.isArray(intrinsic["Fn::GetAtt"]) && typeof intrinsic["Fn::GetAtt"]?.[0] === "string"
     ? intrinsic["Fn::GetAtt"][0]
     : undefined;
+};
+
+const importName = (value: unknown): string | undefined => {
+  if (typeof value !== "object" || value === null) return undefined;
+  const imported = (value as { "Fn::ImportValue"?: unknown })["Fn::ImportValue"];
+  return typeof imported === "string" ? imported : undefined;
 };
 
 const conditionBranch = (value: unknown): { condition?: string; whenTrue: unknown; whenFalse: unknown } => {
@@ -151,6 +262,13 @@ export const templateHasAlarmLinkedCanaryRollback = (
     const productionRuleId = logicalId(advanced?.ProductionListenerRule);
     const testRuleId = logicalId(advanced?.TestListenerRule);
     const roleId = logicalId(advanced?.RoleArn);
+    const importedTopology = [
+      loadBalancer?.TargetGroupArn,
+      advanced?.AlternateTargetGroupArn,
+      advanced?.ProductionListenerRule,
+      advanced?.TestListenerRule,
+      advanced?.RoleArn,
+    ].map(importName);
     const resources = template.Resources ?? {};
     const productionRuleTargetsPrimary = JSON.stringify(resources[productionRuleId ?? ""]?.Properties?.Actions ?? []).includes(primaryId ?? "missing");
     const testRuleTargetsAlternate = JSON.stringify(resources[testRuleId ?? ""]?.Properties?.Actions ?? []).includes(alternateId ?? "missing");
@@ -165,15 +283,17 @@ export const templateHasAlarmLinkedCanaryRollback = (
       configuration?.Alarms?.Enable === true &&
       configuration.Alarms.Rollback === true &&
       (configuration.Alarms.AlarmNames?.length ?? 0) > 0 &&
-      primaryId !== undefined && alternateId !== undefined && primaryId !== alternateId &&
-      resources[primaryId]?.Type === "AWS::ElasticLoadBalancingV2::TargetGroup" &&
-      resources[alternateId]?.Type === "AWS::ElasticLoadBalancingV2::TargetGroup" &&
-      resources[productionRuleId ?? ""]?.Type === "AWS::ElasticLoadBalancingV2::ListenerRule" &&
-      resources[testRuleId ?? ""]?.Type === "AWS::ElasticLoadBalancingV2::ListenerRule" &&
-      productionRuleTargetsPrimary && testRuleTargetsAlternate &&
-      resources[roleId ?? ""]?.Type === "AWS::IAM::Role" &&
-      ["DescribeTargetHealth", "RegisterTargets", "DeregisterTargets", "ModifyListener", "ModifyRule"]
-        .every((action) => rolePolicyActions.includes(action))
+      ((primaryId !== undefined && alternateId !== undefined && primaryId !== alternateId &&
+        resources[primaryId]?.Type === "AWS::ElasticLoadBalancingV2::TargetGroup" &&
+        resources[alternateId]?.Type === "AWS::ElasticLoadBalancingV2::TargetGroup" &&
+        resources[productionRuleId ?? ""]?.Type === "AWS::ElasticLoadBalancingV2::ListenerRule" &&
+        resources[testRuleId ?? ""]?.Type === "AWS::ElasticLoadBalancingV2::ListenerRule" &&
+        productionRuleTargetsPrimary && testRuleTargetsAlternate &&
+        resources[roleId ?? ""]?.Type === "AWS::IAM::Role" &&
+        ["DescribeTargetHealth", "RegisterTargets", "DeregisterTargets", "ModifyListener", "ModifyRule"]
+          .every((action) => rolePolicyActions.includes(action))) ||
+        (importedTopology.every((name) => name?.startsWith("KfcRecommendationPlatform:") === true) &&
+          new Set(importedTopology).size === importedTopology.length))
     );
   });
 
@@ -341,6 +461,12 @@ const values = (value: unknown): readonly string[] =>
     ? value
     : [];
 
+const exactSet = (actual: Iterable<string>, expected: readonly string[]): boolean => {
+  const left = [...new Set(actual)].sort();
+  const right = [...new Set(expected)].sort();
+  return JSON.stringify(left) === JSON.stringify(right);
+};
+
 export const endpointsMatchDeployment = (
   endpoints: readonly VpcEndpointState[],
   expected: {
@@ -355,6 +481,7 @@ export const endpointsMatchDeployment = (
 ): boolean => {
   if (endpoints.length !== 8) return false;
   const byService = new Map(endpoints.map((endpoint) => [endpoint.ServiceName, endpoint]));
+  if (byService.size !== 8) return false;
   return Object.entries(endpointActions).every(([suffix, requiredActions]) => {
     const endpoint = byService.get(`com.amazonaws.${expected.region}.${suffix}`);
     if (endpoint?.State !== "available" || endpoint.VpcId !== expected.vpcId) return false;
@@ -365,18 +492,24 @@ export const endpointsMatchDeployment = (
     } else if (
       endpoint.VpcEndpointType !== "Interface" || endpoint.PrivateDnsEnabled !== true ||
       JSON.stringify([...(endpoint.SubnetIds ?? [])].sort()) !== JSON.stringify([...expected.subnetIds].sort()) ||
-      !(endpoint.Groups ?? []).some(({ GroupId }) => GroupId === expected.endpointSecurityGroupId)
+      !exactSet((endpoint.Groups ?? []).flatMap(({ GroupId }) => GroupId === undefined ? [] : [GroupId]), [expected.endpointSecurityGroupId])
     ) return false;
     const statements = policyStatements(endpoint.PolicyDocument);
-    const presentActions = new Set(statements.flatMap((statement) => values(statement.Action)));
-    if (!requiredActions.every((action) => presentActions.has(action))) return false;
-    const resources = new Set(statements.flatMap((statement) => values(statement.Resource)));
+    if (statements.length === 0 || statements.some((statement) => statement.Effect !== "Allow")) return false;
+    const presentActions = statements.flatMap((statement) => values(statement.Action));
+    if (!exactSet(presentActions, requiredActions)) return false;
+    const resources = statements.flatMap((statement) => values(statement.Resource));
     if (suffix === "s3") {
-      return resources.has(expected.evidenceBucketArn) &&
-        resources.has(`${expected.evidenceBucketArn}/automatic-recommendations/*`) &&
-        resources.has(`arn:aws:s3:::prod-${expected.region}-starport-layer-bucket/*`);
+      return exactSet(resources, [
+        expected.evidenceBucketArn,
+        `${expected.evidenceBucketArn}/automatic-recommendations/*`,
+        `${expected.evidenceBucketArn}/readiness-probes/*`,
+        `arn:aws:s3:::prod-${expected.region}-starport-layer-bucket/*`,
+      ]);
     }
-    return suffix !== "dynamodb" || resources.has(expected.stateTableArn);
+    return suffix === "dynamodb"
+      ? exactSet(resources, [expected.stateTableArn, `${expected.stateTableArn}/index/*`])
+      : exactSet(resources, ["*"]);
   });
 };
 

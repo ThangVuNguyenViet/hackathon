@@ -54,6 +54,7 @@ export function createAwsAutomaticRecommendationRuntime({
   technicalEvidence(input: {
     request: Parameters<ReturnType<typeof createDecisionEngine>['decide']>[1];
     response: unknown;
+    execution?: unknown;
   }): AutomaticDecisionEvidence['technical'];
   releaseDigest: string;
   trustedReadiness?: () => Promise<boolean>;
