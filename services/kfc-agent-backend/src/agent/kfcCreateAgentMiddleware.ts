@@ -342,6 +342,9 @@ async function invokePhysicalProviderAttempt<Request>(input: {
       purpose,
       outcome: 'success',
       toolCallCount: result.tool_calls?.length ?? 0,
+      advertisedToolNames: [...input.runtime.advertisedToolNames],
+      includesValidateVoucher:
+        input.runtime.advertisedToolNames.includes('validateVoucher'),
     });
     return result;
   } catch (error) {
@@ -365,6 +368,9 @@ async function invokePhysicalProviderAttempt<Request>(input: {
       errorClass: classified.errorClass,
       retryable: classified.retryable,
       toolCallCount: 0,
+      advertisedToolNames: [...input.runtime.advertisedToolNames],
+      includesValidateVoucher:
+        input.runtime.advertisedToolNames.includes('validateVoucher'),
     });
     throw error;
   }
