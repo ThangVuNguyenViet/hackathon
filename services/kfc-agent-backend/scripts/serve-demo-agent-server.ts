@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-unsafe-type-assertion -- server script uses direct OpenAI client cast */
 import { existsSync, readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import type { OpenAIClient } from '@kfc/openai-agents-runtime';
@@ -33,9 +34,7 @@ const host = process.env.HOST?.trim() || '127.0.0.1';
 const apiKey = process.env.OPENAI_API_KEY?.trim();
 const modelName = process.env.KFC_AGENT_MODEL?.trim() || 'gpt-4.1-mini';
 
-const directOpenAiClient = apiKey
-  ? new OpenAI({ apiKey })
-  : undefined;
+const directOpenAiClient = apiKey ? new OpenAI({ apiKey }) : undefined;
 
 const openAiAgent = directOpenAiClient
   ? new OpenAiKfcAgent({
@@ -66,7 +65,9 @@ const fixtures = loadBundledGeneratedFixtures();
 
 const server = buildServer({
   openAiAgent,
-  agent: agentModel ? { model: agentModel, identity: agentIdentity } : undefined,
+  agent: agentModel
+    ? { model: agentModel, identity: agentIdentity }
+    : undefined,
   fixtures,
 });
 

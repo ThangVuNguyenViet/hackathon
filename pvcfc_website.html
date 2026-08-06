@@ -750,9 +750,10 @@
     }
 
     // Call Live AI Backend Endpoint (/chat/kfc/message) with Resilient Local Fallback
+    // Call Live AI Backend Endpoint (/chat/pvcfc/message) with Resilient Local Fallback
     async function callLiveAiBackend(text, responseMode, sessionId, customerId) {
       const payload = {
-        sessionId: 'kfc:' + sessionId,
+        sessionId: 'pvcfc:' + sessionId,
         customerId: customerId,
         clientMessageId: 'msg_' + Date.now() + '_' + Math.random().toString(36).substring(2, 8),
         text: text,
@@ -766,8 +767,11 @@
         }
       };
 
-      const urls = [PRIMARY_BACKEND_URL + '/chat/kfc/message', CLOUDFLARE_WORKER_URL + '/chat/kfc/message'];
-
+      const urls = [
+        PRIMARY_BACKEND_URL + '/chat/pvcfc/message',
+        CLOUDFLARE_WORKER_URL + '/chat/pvcfc/message',
+        PRIMARY_BACKEND_URL + '/chat/kfc/message'
+      ];
       for (const url of urls) {
         try {
           const controller = new AbortController();

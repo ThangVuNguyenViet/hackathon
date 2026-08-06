@@ -115,11 +115,11 @@ import {
   sha256Fingerprint,
   kfcSessionIdSchema,
   kfcChatPayloadSchema,
+  pvcfcChatPayloadSchema,
   kfcGenUiActionPayloadSchema,
   kfcSmartMenuBatchPayloadSchema,
   kfcCartDraftPayloadSchema,
   kfcModifierDraftPayloadSchema,
-  messengerHistorySyncPayloadSchema,
   staleMessengerRecoveryPayloadSchema,
   sessionControlPayloadSchema,
   dashboardSessionDefaultLookbackMs,
@@ -291,6 +291,48 @@ export function createChatRouteHandlers(context: RouteHandlerContext) {
         metadata: {
           rawEvent: { ...auditMetadata, source: 'kfc_chat' },
           ...(responseProfile ? { responseProfile } : {}),
+        },
+      });
+    },
+    async chatPvcfcMessage(body: unknown) {
+      const parsed = pvcfcChatPayloadSchema.safeParse(body);
+      if (!parsed.success) {
+        return {
+          status: 400,
+          body: {
+            errorCode: 'invalid_pvcfc_chat_payload',
+            issues: parsed.error.issues,
+          },
+        };
+      }
+
+      const responseProfile =
+        parsed.data.metadata?.showcaseResponseMode === 'text'
+          ? ('social' as const)
+          : parsed.data.metadata?.showcaseResponseMode === 'genui'
+            ? ('genui' as const)
+            : undefined;
+      const auditMetadata = { ...(parsed.data.metadata ?? {}) };
+      return kfcAgentResponse({
+        sessionId: parsed.data.sessionId,
+        customerId: parsed.data.customerId,
+        clientMessageId: parsed.data.clientMessageId,
+        text: parsed.data.text,
+        metadata: {
+          rawEvent: { ...auditMetadata, source: 'pvcfc_chat' },
+          ...(responseProfile ? { responseProfile } : {}),
+          verifiedBusinessContext: {
+            organization:
+              'Tổng Công ty Phân bón Dầu khí Cà Mau (PVCFC / Đạm Cà Mau)',
+            role: 'Trợ lý AI Nông Nghiệp Phân Bón Cà Mau',
+            products: [
+              'Đạm Cà Mau (Urea)',
+              'NPK Cà Mau 20-20-15',
+              'Organic OM Cà Mau',
+              'N46.Plus',
+              'Kali Cà Mau 61',
+            ],
+          },
         },
       });
     },
