@@ -994,8 +994,23 @@
               </div>
             `;
           }
+        } else if (text.toLowerCase().includes('bạn làm được gì') || text.toLowerCase().includes('làm được gì') || text.toLowerCase().includes('giúp gì') || text.toLowerCase().includes('tư vấn gì')) {
+          botText = `Dạ, Trợ lý AI Nông Nghiệp Phân Bón Cà Mau có thể hỗ trợ bà con các công việc sau:\n\n1. <strong>Tư vấn quy trình bón phân:</strong> Chọn loại phân bón phù hợp cho Lúa, Sầu riêng, Cà phê, Cây ăn trái theo vùng thổ nhưỡng.\n2. <strong>Tính toán lượng phân bón:</strong> Lập bảng tính số kg và số bao phân chi tiết theo diện tích (Héc-ta hoặc Công).\n3. <strong>Chẩn đoán & phục hồi cây:</strong> Xử lý lúa nghẹt phèn, vàng lá thối rễ và lập phác đồ cấp bách.\n4. <strong>Tra cứu đại lý & Kỹ sư:</strong> Tìm địa chỉ đại lý Phân Bón Cà Mau gần nhất và đăng ký Kỹ sư khảo sát đất tận vườn.`;
+          if (currentMode === 'genui') {
+            genUiHtml = `
+              <div class="genui-card">
+                <div class="genui-header"><i class="fa-solid fa-list-check"></i> Các Năng Lực Hỗ Trợ Bà Con (Phân Bón Cà Mau)</div>
+                <div style="font-size: 0.85rem; line-height: 1.6;">
+                  • 🌾 <strong>Lịch bón phân & thổ nhưỡng:</strong> Đất chua phèn, phù sa, đất đỏ Tây Nguyên.<br>
+                  • 🧮 <strong>Bảng tính tự động:</strong> Quy đổi ra số bao 50kg chính xác cho diện tích.<br>
+                  • 🩺 <strong>Chẩn đoán sâu bệnh:</strong> Phác đồ ngưng đạm, hạ phèn & rải vôi sinh học.<br>
+                  • 📍 <strong>Đại lý & Kỹ sư:</strong> Kết nối 17.000+ điểm bán & hẹn Kỹ sư đo pH tận vườn.
+                </div>
+              </div>
+            `;
+          }
         } else {
-          botText = `Dạ, Trợ lý AI Phân Bón Cà Mau đã ghi nhận câu hỏi của bà con về <strong>"${text}"</strong>. Đạm Cà Mau và NPK Cà Mau luôn sẵn sàng đồng hành giúp cây trồng sinh trưởng khỏe mạnh và đạt năng suất tối ưu!`;
+          botText = `Dạ, với thắc mắc này, bà con có thể chọn bón Đạm Cà Mau hoặc NPK Cà Mau theo đúng phác đồ thổ nhưỡng. Bà con có thể cho biết cụ thể loại cây trồng (Lúa, Sầu riêng, Cây ăn trái) và diện tích vườn để Trợ lý AI tính toán lượng phân bón chính xác nhất ạ!`;
         }
 
         botRow.innerHTML = `
