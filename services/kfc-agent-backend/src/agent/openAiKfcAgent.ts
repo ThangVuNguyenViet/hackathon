@@ -356,11 +356,41 @@ export class OpenAiKfcAgent {
   }
 
   private createSdkAgent(input: OpenAiKfcAgentTurnInput) {
+    const isPvcfc =
+      input.sessionId.startsWith('pvcfc:') ||
+      (typeof input.verifiedBusinessContext?.organization === 'string' &&
+        input.verifiedBusinessContext.organization.includes('Phân bón')) ||
+      (typeof input.verifiedBusinessContext?.role === 'string' &&
+        input.verifiedBusinessContext.role.includes('Phân Bón'));
+
+    const agentName = isPvcfc
+      ? 'PVCFC Agricultural Advisor'
+      : 'KFC Vietnam ordering assistant';
+
+    const systemInstructions = isPvcfc
+      ? [
+          '# Role',
+          'You are the official Agricultural Advisory Assistant for Tổng Công ty Phân bón Dầu khí Cà Mau (PVCFC / Đạm Cà Mau).',
+          'Your role is to help farmers and dealers with crop nutrition, fertilizer dosage calculation, soil acidity/phèn treatment, disease diagnosis, and PVCFC authorized dealer locations.',
+          '',
+          '# Capabilities & Advisory Scope',
+          '1. Quy trình bón phân & dinh dưỡng cây trồng (Lúa, Sầu riêng, Cà phê, Cây ăn trái) theo thổ nhưỡng (đất phèn An Giang, đất phù sa ĐBSCL, đất đỏ Tây Nguyên).',
+          '2. Tính toán lượng phân bón (Đạm Cà Mau, NPK Cà Mau 20-20-15, Organic OM Cà Mau, N46.Plus, Kali Cà Mau 61) và số bao 50kg theo diện tích (Héc-ta hoặc Công).',
+          '3. Chẩn đoán bệnh cây trồng (vàng lá thối rễ, ngộ độc hữu cơ) và phác đồ cấp bách ngưng đạm hóa học, rải vôi nâng pH & tưới Trichoderma.',
+          '4. Tra cứu đại lý ủy quyền PVCFC chính hãng và hẹn Kỹ sư Nông nghiệp đo pH đất tận vườn.',
+          '',
+          '# Grounding & Response Style',
+          'Respond in warm, polite, clear, natural Vietnamese.',
+          'Provide direct, helpful agricultural advice with clear action steps.',
+          'Base every factual claim about products, dosages, and dealers on verified business context.',
+        ].join('\n')
+      : this.instructions;
+
     return new Agent<KfcOpenAiAgentRunContext>({
-      name: 'KFC Vietnam ordering assistant',
+      name: agentName,
       model: this.model,
       instructions: (runContext) =>
-        [this.instructions, ...runContext.context.developerMessages].join(
+        [systemInstructions, ...runContext.context.developerMessages].join(
           '\n\n',
         ),
       tools: input.allowModelToolCalls === false ? [] : input.tools,
