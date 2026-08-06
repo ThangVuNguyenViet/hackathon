@@ -1,0 +1,1158 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Phân Bón Cà Mau (PVCFC) - Trợ Lý AI Nông Nghiệp</title>
+  <!-- Google Fonts & FontAwesome -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:ital,wght@0,300;0,400;0,500;0,600;0,700;1,400&family=Playfair+Display:ital,wght@0,600;0,700;1,600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  
+  <style>
+    :root {
+      --pvcfc-green-dark: #005A36;
+      --pvcfc-green-primary: #0A6B41;
+      --pvcfc-green-medium: #1E824C;
+      --pvcfc-green-light: #F0F7F3;
+      --pvcfc-gold: #DAA520;
+      --pvcfc-gold-hover: #B8860B;
+      --pvcfc-cream: #F8FAF7;
+      --pvcfc-text-main: #1C2D24;
+      --pvcfc-text-muted: #5A6E63;
+      --pvcfc-border: #D2E3D8;
+      --pvcfc-white: #FFFFFF;
+      --pvcfc-shadow: 0 4px 20px rgba(0, 90, 54, 0.08);
+      --pvcfc-shadow-hover: 0 8px 30px rgba(0, 90, 54, 0.15);
+      --radius-sm: 8px;
+      --radius-md: 14px;
+      --radius-lg: 20px;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      font-family: 'Be Vietnam Pro', sans-serif;
+      background-color: var(--pvcfc-cream);
+      color: var(--pvcfc-text-main);
+      line-height: 1.6;
+      height: 100vh;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    h1, h2, h3, .font-serif {
+      font-family: 'Playfair Display', serif;
+    }
+
+    /* Top Brand Header */
+    header.main-header {
+      background: var(--pvcfc-white);
+      border-bottom: 2px solid var(--pvcfc-gold);
+      padding: 12px 28px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      box-shadow: 0 2px 10px rgba(0, 0, 0, 0.03);
+      z-index: 10;
+    }
+    .brand-logo {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      text-decoration: none;
+    }
+    .logo-badge {
+      width: 44px;
+      height: 44px;
+      background: linear-gradient(135deg, var(--pvcfc-green-dark), var(--pvcfc-green-primary));
+      border-radius: var(--radius-sm);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: var(--pvcfc-gold);
+      font-size: 1.4rem;
+      box-shadow: 0 4px 10px rgba(0, 90, 54, 0.2);
+    }
+    .logo-text h1 {
+      font-size: 1.3rem;
+      color: var(--pvcfc-green-dark);
+      margin: 0;
+      line-height: 1.1;
+    }
+    .logo-text p {
+      font-size: 0.75rem;
+      color: var(--pvcfc-gold-hover);
+      font-weight: 600;
+      letter-spacing: 0.5px;
+      text-transform: uppercase;
+    }
+
+    /* Route Navigation Tabs */
+    .route-nav {
+      display: flex;
+      gap: 12px;
+      align-items: center;
+    }
+    .route-btn {
+      padding: 8px 16px;
+      border-radius: var(--radius-sm);
+      font-size: 0.88rem;
+      font-weight: 600;
+      border: 1px solid var(--pvcfc-border);
+      background: var(--pvcfc-white);
+      color: var(--pvcfc-text-muted);
+      cursor: pointer;
+      text-decoration: none;
+      transition: all 0.2s;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .route-btn:hover {
+      border-color: var(--pvcfc-green-primary);
+      color: var(--pvcfc-green-primary);
+    }
+    .route-btn.active {
+      background: var(--pvcfc-green-primary);
+      color: var(--pvcfc-white);
+      border-color: var(--pvcfc-green-primary);
+    }
+
+    /* Response Mode Toggle (KFC Parity) */
+    .mode-toggle-container {
+      display: flex;
+      align-items: center;
+      background: var(--pvcfc-green-light);
+      padding: 4px;
+      border-radius: 30px;
+      border: 1px solid var(--pvcfc-border);
+    }
+    .mode-btn {
+      padding: 8px 18px;
+      border-radius: 20px;
+      font-size: 0.88rem;
+      font-weight: 600;
+      border: none;
+      cursor: pointer;
+      background: transparent;
+      color: var(--pvcfc-text-muted);
+      transition: all 0.25s;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .mode-btn.active {
+      background: var(--pvcfc-green-primary);
+      color: var(--pvcfc-white);
+      box-shadow: 0 2px 8px rgba(10, 107, 65, 0.3);
+    }
+
+    /* Route 1: Plain Chatbot Container (Default `/`) */
+    .plain-chat-layout {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      max-width: 1000px;
+      width: 100%;
+      margin: 0 auto;
+      background: var(--pvcfc-white);
+      border-left: 1px solid var(--pvcfc-border);
+      border-right: 1px solid var(--pvcfc-border);
+      overflow: hidden;
+    }
+
+    /* Route 2: Demo Showcase Layout (`/demo`) */
+    .demo-showcase-layout {
+      flex: 1;
+      display: grid;
+      grid-template-columns: 380px 1fr;
+      overflow: hidden;
+    }
+
+    /* Sidebar for Demo Route */
+    .sidebar {
+      background: var(--pvcfc-white);
+      border-right: 1px solid var(--pvcfc-border);
+      padding: 24px;
+      display: flex;
+      flex-direction: column;
+      gap: 18px;
+      overflow-y: auto;
+    }
+    .sidebar-header h2 {
+      font-size: 1.2rem;
+      color: var(--pvcfc-green-dark);
+      margin-bottom: 4px;
+    }
+    .sidebar-header p {
+      font-size: 0.82rem;
+      color: var(--pvcfc-text-muted);
+    }
+
+    .scenario-list {
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+    }
+    .scenario-card {
+      background: var(--pvcfc-cream);
+      border: 1.5px solid var(--pvcfc-border);
+      border-radius: var(--radius-md);
+      padding: 16px;
+      cursor: pointer;
+      transition: all 0.25s;
+    }
+    .scenario-card:hover {
+      border-color: var(--pvcfc-green-primary);
+      background: var(--pvcfc-green-light);
+    }
+    .scenario-card.active {
+      border-color: var(--pvcfc-green-primary);
+      background: var(--pvcfc-green-light);
+      box-shadow: 0 4px 12px rgba(10, 107, 65, 0.12);
+    }
+    .scenario-card-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 8px;
+    }
+    .scenario-tag {
+      font-size: 0.72rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      color: var(--pvcfc-gold-hover);
+      background: rgba(218, 165, 32, 0.15);
+      padding: 2px 8px;
+      border-radius: 4px;
+    }
+    .scenario-card h3 {
+      font-size: 0.98rem;
+      color: var(--pvcfc-green-dark);
+      margin-bottom: 6px;
+    }
+    .scenario-card p {
+      font-size: 0.82rem;
+      color: var(--pvcfc-text-muted);
+      line-height: 1.4;
+    }
+
+    .replay-bar {
+      margin-top: auto;
+      padding-top: 16px;
+      border-top: 1px solid var(--pvcfc-border);
+    }
+    .replay-btn {
+      width: 100%;
+      background: linear-gradient(135deg, var(--pvcfc-green-dark), var(--pvcfc-green-primary));
+      color: var(--pvcfc-white);
+      border: none;
+      padding: 12px;
+      border-radius: var(--radius-sm);
+      font-weight: 600;
+      font-size: 0.9rem;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      box-shadow: 0 4px 12px rgba(0, 90, 54, 0.2);
+      transition: all 0.2s;
+    }
+    .replay-btn:hover {
+      transform: translateY(-2px);
+    }
+
+    /* Main Chat Workspace */
+    .chat-workspace {
+      display: flex;
+      flex-direction: column;
+      background: #FAFBF9;
+      overflow: hidden;
+      flex: 1;
+    }
+    .chat-header {
+      background: var(--pvcfc-white);
+      padding: 16px 28px;
+      border-bottom: 1px solid var(--pvcfc-border);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+    .chat-header-title h3 {
+      font-size: 1.15rem;
+      color: var(--pvcfc-green-dark);
+    }
+    .chat-header-title p {
+      font-size: 0.82rem;
+      color: var(--pvcfc-text-muted);
+    }
+
+    .chat-messages {
+      flex: 1;
+      padding: 28px;
+      overflow-y: auto;
+      display: flex;
+      flex-direction: column;
+      gap: 20px;
+    }
+
+    .message-row {
+      display: flex;
+      gap: 14px;
+      max-width: 85%;
+      animation: fadeIn 0.3s ease-in-out;
+    }
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(8px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+    .message-row.user {
+      align-self: flex-end;
+      flex-direction: row-reverse;
+    }
+    .avatar {
+      width: 40px;
+      height: 40px;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 1rem;
+      flex-shrink: 0;
+    }
+    .avatar.bot {
+      background: var(--pvcfc-green-primary);
+      color: var(--pvcfc-gold);
+      box-shadow: 0 3px 8px rgba(10, 107, 65, 0.25);
+    }
+    .avatar.user {
+      background: var(--pvcfc-text-muted);
+      color: #fff;
+    }
+    .bubble {
+      padding: 16px 20px;
+      border-radius: var(--radius-md);
+      font-size: 0.94rem;
+      line-height: 1.6;
+      white-space: pre-line;
+    }
+    .message-row.bot .bubble {
+      background: var(--pvcfc-white);
+      border: 1px solid var(--pvcfc-border);
+      box-shadow: 0 2px 10px rgba(0, 0, 0, 0.03);
+    }
+    .message-row.user .bubble {
+      background: var(--pvcfc-green-primary);
+      color: var(--pvcfc-white);
+    }
+
+    /* Structured GenUI Cards */
+    .genui-card {
+      background: var(--pvcfc-white);
+      border: 1px solid var(--pvcfc-border);
+      border-radius: var(--radius-md);
+      padding: 20px;
+      margin-top: 14px;
+      box-shadow: 0 4px 16px rgba(0, 90, 54, 0.06);
+    }
+    .genui-header {
+      font-weight: 700;
+      color: var(--pvcfc-green-dark);
+      font-size: 1.05rem;
+      margin-bottom: 14px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding-bottom: 10px;
+      border-bottom: 1px solid var(--pvcfc-border);
+    }
+    .genui-header i {
+      color: var(--pvcfc-gold-hover);
+    }
+
+    /* Interactive Calculator */
+    .calc-slider {
+      width: 100%;
+      margin: 14px 0;
+      accent-color: var(--pvcfc-green-primary);
+    }
+    .calc-result-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 12px;
+      background: var(--pvcfc-green-light);
+      padding: 14px;
+      border-radius: var(--radius-sm);
+      margin-top: 10px;
+    }
+    .calc-result-item {
+      text-align: center;
+    }
+    .calc-result-item .val {
+      font-size: 1.1rem;
+      font-weight: 700;
+      color: var(--pvcfc-green-primary);
+    }
+    .calc-result-item .lbl {
+      font-size: 0.78rem;
+      color: var(--pvcfc-text-muted);
+    }
+
+    /* Timeline Table */
+    .timeline-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.88rem;
+      margin-top: 8px;
+    }
+    .timeline-table th {
+      background: var(--pvcfc-green-light);
+      color: var(--pvcfc-green-dark);
+      padding: 8px 12px;
+      text-align: left;
+      font-weight: 700;
+    }
+    .timeline-table td {
+      padding: 10px 12px;
+      border-bottom: 1px solid var(--pvcfc-border);
+    }
+
+    .card-btn {
+      background: var(--pvcfc-green-primary);
+      color: var(--pvcfc-white);
+      border: none;
+      padding: 10px 18px;
+      border-radius: var(--radius-sm);
+      font-weight: 600;
+      font-size: 0.88rem;
+      cursor: pointer;
+      margin-top: 14px;
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      transition: background 0.2s;
+    }
+    .card-btn:hover {
+      background: var(--pvcfc-green-dark);
+    }
+
+    /* Input Area */
+    .chat-input-area {
+      padding: 18px 28px;
+      background: var(--pvcfc-white);
+      border-top: 1px solid var(--pvcfc-border);
+      display: flex;
+      gap: 12px;
+    }
+    .chat-input {
+      flex: 1;
+      border: 1.5px solid var(--pvcfc-border);
+      border-radius: var(--radius-sm);
+      padding: 12px 18px;
+      font-size: 0.95rem;
+      outline: none;
+      font-family: inherit;
+    }
+    .chat-input:focus {
+      border-color: var(--pvcfc-green-primary);
+    }
+    .send-btn {
+      background: var(--pvcfc-green-primary);
+      color: var(--pvcfc-white);
+      border: none;
+      padding: 0 24px;
+      border-radius: var(--radius-sm);
+      font-weight: 600;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    /* Loading Indicator */
+    .typing-indicator {
+      display: flex;
+      gap: 6px;
+      padding: 12px 16px;
+      background: var(--pvcfc-white);
+      border-radius: var(--radius-md);
+      width: fit-content;
+      border: 1px solid var(--pvcfc-border);
+    }
+    .typing-indicator span {
+      width: 8px;
+      height: 8px;
+      background: var(--pvcfc-green-primary);
+      border-radius: 50%;
+      animation: bounce 1.4s infinite ease-in-out both;
+    }
+    .typing-indicator span:nth-child(1) { animation-delay: -0.32s; }
+    .typing-indicator span:nth-child(2) { animation-delay: -0.16s; }
+    @keyframes bounce {
+      0%, 80%, 100% { transform: scale(0); }
+      40% { transform: scale(1.0); }
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Top Header -->
+  <header class="main-header">
+    <a href="#" class="brand-logo" onclick="switchRoute('/')">
+      <div class="logo-badge">
+        <i class="fa-solid fa-wheat-awn"></i>
+      </div>
+      <div class="logo-text">
+        <h1>PHÂN BÓN CÀ MAU</h1>
+        <p>Hạt Ngọc Mùa Vàng • Trợ Lý AI Nông Nghiệp</p>
+      </div>
+    </a>
+
+    <!-- Navigation Route Tabs -->
+    <div class="route-nav">
+      <button class="route-btn active" id="btn-route-chat" onclick="switchRoute('/')">
+        <i class="fa-solid fa-comments"></i> Trợ Lý Nông Nghiệp
+      </button>
+      <button class="route-btn" id="btn-route-demo" onclick="switchRoute('/demo')">
+        <i class="fa-solid fa-film"></i> Trình Chiếu Cổ Đông (/demo)
+      </button>
+    </div>
+
+    <!-- Response Mode Switcher (KFC Parity) -->
+    <div class="mode-toggle-container">
+      <button class="mode-btn" id="btn-mode-text" onclick="setResponseMode('text')">
+        <i class="fa-solid fa-align-left"></i> Chỉ Văn bản (Text-Only)
+      </button>
+      <button class="mode-btn active" id="btn-mode-genui" onclick="setResponseMode('genui')">
+        <i class="fa-solid fa-shapes"></i> Giao diện GenUI
+      </button>
+    </div>
+  </header>
+
+  <!-- Route 1: Default Plain Live Chatbot View (`/`) -->
+  <main class="plain-chat-layout" id="view-plain-chat">
+    <div class="chat-header">
+      <div class="chat-header-title">
+        <h3>Trợ Lý AI Nông Nghiệp Phân Bón Cà Mau</h3>
+        <p id="plain-mode-indicator">Chế độ phản hồi: <strong>Giao diện GenUI</strong> | Tư vấn trực tiếp 24/7</p>
+      </div>
+      <button class="card-btn" style="margin: 0; background: var(--pvcfc-green-light); color: var(--pvcfc-green-dark);" onclick="resetPlainChat()">
+        <i class="fa-solid fa-rotate-left"></i> Làm Mới Hội Thoại
+      </button>
+    </div>
+
+    <div class="chat-messages" id="plain-chat-messages">
+      <div class="message-row bot">
+        <div class="avatar bot"><i class="fa-solid fa-seedling"></i></div>
+        <div>
+          <div class="bubble">
+            Xin chào bà con! Tôi là <strong>Trợ lý AI Phân Bón Cà Mau</strong>. Bà con cần tư vấn về kỹ thuật bón phân, tính toán lượng phân cho diện tích vườn, hay xử lý bệnh vàng lá thối rễ hôm nay?
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="chat-input-area">
+      <input type="text" class="chat-input" id="plain-chat-input" placeholder="Nhập thắc mắc nông nghiệp của bà con tại đây..." onkeypress="handlePlainKeyPress(event)">
+      <button class="send-btn" onclick="handlePlainSend()"><i class="fa-solid fa-paper-plane"></i> Gửi Câu Hỏi</button>
+    </div>
+  </main>
+
+  <!-- Route 2: Showcase Demo View (`/demo`) -->
+  <main class="demo-showcase-layout" id="view-demo-showcase" style="display: none;">
+    <!-- Sidebar: 4 PM-Curated Demo Scenarios -->
+    <div class="sidebar">
+      <div class="sidebar-header">
+        <h2>Trình Chiếu Cổ Đông (/demo)</h2>
+        <p>Các kịch bản tư vấn mẫu đã kiểm chứng. Chọn kịch bản và nhấn Replay để gọi phiên AI trực tiếp:</p>
+      </div>
+
+      <div class="scenario-list">
+        <!-- Scenario 1 -->
+        <div class="scenario-card active" id="sc-1" onclick="selectDemoScenario(1)">
+          <div class="scenario-card-header">
+            <span class="scenario-tag">8 Lượt • Lúa Phèn</span>
+            <i class="fa-solid fa-wheat-awn" style="color: var(--pvcfc-green-primary);"></i>
+          </div>
+          <h3>Lúa Hè Thu 15 Ngày (Đất Phèn An Giang)</h3>
+          <p>Giải độc phèn bằng Organic OM Good & Đạm Cà Mau, tính toán liều lượng cho 5 Ha.</p>
+        </div>
+
+        <!-- Scenario 2 -->
+        <div class="scenario-card" id="sc-2" onclick="selectDemoScenario(2)">
+          <div class="scenario-card-header">
+            <span class="scenario-tag">8 Lượt • Cây Ăn Trái</span>
+            <i class="fa-solid fa-tree" style="color: var(--pvcfc-green-primary);"></i>
+          </div>
+          <h3>Sầu Riêng & Cà Phê Nuôi Trái (Tây Nguyên)</h3>
+          <p>N46.Plus bảo vệ kép & NPK Gold 20-10-10 chống rụng trái, lớn trái dẻo cành.</p>
+        </div>
+
+        <!-- Scenario 3 -->
+        <div class="scenario-card" id="sc-3" onclick="selectDemoScenario(3)">
+          <div class="scenario-card-header">
+            <span class="scenario-tag">8 Lượt • Chẩn Đoán</span>
+            <i class="fa-solid fa-stethoscope" style="color: var(--pvcfc-green-primary);"></i>
+          </div>
+          <h3>Vàng Lá Thối Rễ & Cải Tạo Đất Sau Mưa</h3>
+          <p>Chẩn đoán bệnh lá khẩn cấp, ngưng đạm hóa học & phác đồ 3 bước phục hồi bộ rễ.</p>
+        </div>
+
+        <!-- Scenario 4 -->
+        <div class="scenario-card" id="sc-4" onclick="selectDemoScenario(4)">
+          <div class="scenario-card-header">
+            <span class="scenario-tag">8 Lượt • Đại Lý</span>
+            <i class="fa-solid fa-store" style="color: var(--pvcfc-green-primary);"></i>
+          </div>
+          <h3>Tra Cứu Đại Lý Cái Nước & Kết Nối Kỹ Sư</h3>
+          <p>Tra cứu đại lý Voi Vàng chính hãng & đăng ký Kỹ sư PVCFC tư vấn pH tận vườn.</p>
+        </div>
+      </div>
+
+      <div class="replay-bar">
+        <button class="replay-btn" id="btn-replay-action" onclick="runLiveReplaySession()">
+          <i class="fa-solid fa-play"></i> Gọi Phiên AI Trực Tiếp (Replay Live AI)
+        </button>
+      </div>
+    </div>
+
+    <!-- Main Chat Workspace for Demo Route -->
+    <div class="chat-workspace">
+      <div class="chat-header">
+        <div class="chat-header-title">
+          <h3 id="demo-scenario-title">Kịch bản 1: Lúa Hè Thu 15 Ngày & Đất Phèn An Giang (5 Ha)</h3>
+          <p id="demo-mode-indicator">Chế độ trình chiếu: <strong>Giao diện GenUI</strong> | SHA: <code>7593d009</code></p>
+        </div>
+      </div>
+
+      <div class="chat-messages" id="demo-chat-messages">
+        <!-- Messages rendered dynamically -->
+      </div>
+
+      <div class="chat-input-area">
+        <input type="text" class="chat-input" id="demo-chat-input" placeholder="Nhập câu hỏi để tiếp tục phiên AI trực tiếp..." onkeypress="handleDemoKeyPress(event)">
+        <button class="send-btn" onclick="handleDemoSend()"><i class="fa-solid fa-paper-plane"></i> Gửi</button>
+      </div>
+    </div>
+  </main>
+
+  <script>
+    // Global State
+    let currentRoute = '/'; // '/' | '/demo'
+    let currentMode = 'genui'; // 'genui' | 'text'
+    let demoScenarioId = 1;
+    let isReplaying = false;
+
+    // Rich 8-turn scenarios database
+    const scenariosData = {
+      1: {
+        title: "Kịch bản 1: Lúa Hè Thu 15 Ngày & Đất Phèn An Giang (5 Ha)",
+        turns: [
+          {
+            role: "user",
+            text: "Chào chú trợ lý! Tui ở Tri Tôn, An Giang, vụ Hè Thu này tui làm 5 héc-ta lúa mà đất ở đây chua phèn nặng quá. Nhờ chú tư vấn giùm tui cách bón phân sao cho hiệu quả, lúa không bị ngộ độc phèn mà rễ bám sâu khỏe mạnh với?"
+          },
+          {
+            role: "bot",
+            text: `Dạ chào chú! Bà con An Giang mình làm lúa Hè Thu trên đất phèn Tri Tôn thì lo nhất là khoản rễ lúa bị bó, nghẹt phèn dẫn đến vàng lá đúng không chú.\n\nĐể con lập quy trình bón phân chuẩn nhất cho 5 héc-ta của chú, chú cho con hỏi thêm 2 thông tin này nhé:\n1. Hiện tại ruộng lúa Hè Thu của chú được bao nhiêu ngày tuổi rồi ạ?\n2. Chú đã đo độ phèn (pH) của đất hoặc nước trong ruộng chưa, hay lúa đang có biểu hiện gì cụ thể không chú?`
+          },
+          {
+            role: "user",
+            text: "Lúa tui sạ bữa nay được đúng 15 ngày rồi chú ơi. Bữa trước tui đo pH tầm 4.5 tới 5.0. Mấy chỗ gò cao chóp lá hơi ngả vàng đỏ, nhổ cây lúa lên thì rễ thâm đen, không ra rễ trắng mới. Giờ bón Đạm Cà Mau vô liền được chưa chú?"
+          },
+          {
+            role: "bot",
+            text: `Dạ cảm ơn chú! Với độ pH 4.5 - 5.0 và rễ lúa bị thâm đen, lúa của chú đang bị ngộ độc phèn rồi chú ạ.\n\nLúc này chú TUYỆT ĐỐI KHÔNG BÓN ĐẠM CÀ MAU NGAY NÓNG nhé! Vì khi đất chua phèn nặng, rễ lúa bị tổn thương sẽ không hấp thu được đạm, bón vô vừa lãng phí vừa làm rễ bị xót nặng hơn.\n\nGiải pháp cấp bách cho ruộng của chú:\n1. Cho nước ra vào rửa phèn: Xả bớt nước cũ đục phèn ra, lấy nước mới vô ruộng.\n2. Bón hạ phèn & cải tạo đất: Sử dụng phân bón hữu cơ Organic OM Good của Phân Bón Cà Mau trước để hạ độc chất phèn và kích thích rễ trắng đâm mạnh.\n3. Sau 3 - 5 ngày khi rễ trắng đâm mạnh, chú mới tiến hành bón Đạm Cà Mau để lúa đẻ nhánh khỏe!`
+          },
+          {
+            role: "user",
+            text: "Nghe chú giải thích tường tận quá, may mà chưa vãi đạm xuống! Vậy chú cho tui xin cái lịch bón phân 3 đợt chuẩn phối hợp Organic OM Good, Đạm Cà Mau với NPK 20-20-15 làm sao chú?"
+          },
+          {
+            role: "bot",
+            text: `Dạ con xin gửi chú lịch bón phân 3 đợt chuẩn lúa Hè Thu đất phèn An Giang:\n\n🌱 Đợt 1 (Đẻ nhánh sớm - 7 đến 10 ngày sau sạ, đang làm cho ruộng 15 ngày phèn):\n- Organic OM Good: 150 kg/ha (hạ phèn, kích rễ trắng).\n- Đạm Cà Mau: 40 kg/ha (bón sau khi rễ trắng đã ra).\n\n🌾 Đợt 2 (Đẻ nhánh rộ - 18 đến 22 ngày sau sạ):\n- Đạm Cà Mau: 60 kg/ha (giúp chồi đẻ nhánh rộ).\n- NPK 20-20-15 Cà Mau: 80 kg/ha (bổ sung Lân & Kali giúp rễ ăn sâu, cứng cây).\n\n🌾 Đợt 3 (Đón đòng - 40 đến 45 ngày sau sạ):\n- NPK 20-20-15 Cà Mau: 120 kg/ha (nuôi đòng to, mập đòng).\n- Đạm Cà Mau: 60 kg/ha (dưỡng lá đòng xanh bền).`,
+            genui: `
+              <div class="genui-card">
+                <div class="genui-header"><i class="fa-solid fa-calendar-check"></i> Lịch Bón Phân 3 Đợt Lúa Hè Thu Vùng Đất Phèn</div>
+                <table class="timeline-table">
+                  <thead>
+                    <tr>
+                      <th>Đợt Bón</th>
+                      <th>Thời Gian</th>
+                      <th>Sản Phẩm & Khuyến Nghị</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr>
+                      <td><strong>Thúc 1 (Hạ phèn)</strong></td>
+                      <td>7 - 10 NSS (Lúc này 15 NSS)</td>
+                      <td>150kg Organic OM Good + 40kg Đạm Cà Mau / Ha</td>
+                    </tr>
+                    <tr>
+                      <td><strong>Thúc 2 (Đẻ nhánh)</strong></td>
+                      <td>18 - 22 NSS</td>
+                      <td>60kg Đạm Cà Mau + 80kg NPK 20-20-15 / Ha</td>
+                    </tr>
+                    <tr>
+                      <td><strong>Đón Đòng</strong></td>
+                      <td>40 - 45 NSS</td>
+                      <td>120kg NPK 20-20-15 + 60kg Đạm Cà Mau / Ha</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            `
+          },
+          {
+            role: "user",
+            text: "Dạ rõ quá chú! Tui làm 5 héc-ta (50 công), chú tính tổng số ký và bao phân (50kg/bao) cho cả 3 đợt bón để tui ra đại lý mua luôn một thể!"
+          },
+          {
+            role: "bot",
+            text: "Dạ có ngay thưa chú! Con đã lập bảng tính chi tiết lượng phân bón và số bao cho toàn bộ 5 héc-ta (50 công) của chú cho cả 3 đợt bón vụ Hè Thu này:",
+            genui: `
+              <div class="genui-card">
+                <div class="genui-header"><i class="fa-solid fa-calculator"></i> Bảng Tính Chi Tiết Cho 5 Héc-Ta Lúa (Đất Phèn An Giang)</div>
+                <div style="font-size: 0.88rem; margin-bottom: 10px;">Diện tích: <strong>5.0 Héc-ta (50 công 1.000m²)</strong> | Đất: <strong>Chua phèn (pH 4.5 - 5.0)</strong></div>
+                <input type="range" min="1" max="20" step="0.5" value="5" class="calc-slider" oninput="updateScenario1Calc(this.value)">
+                <div class="calc-result-grid">
+                  <div class="calc-result-item">
+                    <div class="val" id="val-om">15 bao</div>
+                    <div class="lbl">Organic OM Good (750kg)</div>
+                  </div>
+                  <div class="calc-result-item">
+                    <div class="val" id="val-urea">16 bao</div>
+                    <div class="lbl">Đạm Cà Mau (800kg)</div>
+                  </div>
+                  <div class="calc-result-item">
+                    <div class="val" id="val-npk">20 bao</div>
+                    <div class="lbl">NPK 20-20-15 (1.000kg)</div>
+                  </div>
+                </div>
+                <div style="margin-top: 12px; font-size: 0.85rem; background: var(--pvcfc-green-light); padding: 10px; border-radius: 6px;">
+                  💡 <strong>Tổng cộng:</strong> 51 bao phân các loại (Loại bao 50kg). Lượng phân đảm bảo hạ phèn hiệu quả và lúa đạt năng suất tối đa.
+                </div>
+              </div>
+            `
+          }
+        ]
+      },
+      2: {
+        title: "Kịch bản 2: Sầu Riêng & Cà Phê Nuôi Trái (Tây Nguyên)",
+        turns: [
+          {
+            role: "user",
+            text: "Chào chú AI! Tôi ở Đắk Lắk, đang canh tác 2 Héc-ta sầu riêng trồng xen cà phê. Vườn sầu riêng nhà tôi đang giai đoạn đậu trái bằng trứng gà. Nắng mưa thất thường quá, tôi sợ rụng trái sinh lý và sầu riêng sau này nhẹ ký. Dùng phân bón cao cấp nào của PVCFC tốt nhất?"
+          },
+          {
+            role: "bot",
+            text: `Chào bà con Đắk Lắk! Giai đoạn sầu riêng đậu trái bằng trứng gà là thời điểm quyết định trọng lượng trái sau này. Weather thất thường ở Tây Nguyên rất dễ làm rụng trái.\n\nĐối với 2 Ha sầu riêng của chú, PVCFC đề xuất bộ đôi phân bón cao cấp Châu Âu: <strong>N46.Plus (Urea bảo vệ kép)</strong> và <strong>NPK Cà Mau Gold 20-10-10 (Công nghệ Polyphosphate)</strong>.`
+          },
+          {
+            role: "user",
+            text: "Bộ đôi N46.Plus và NPK Gold này có ưu điểm gì vượt trội so với phân bón thường chú?"
+          },
+          {
+            role: "bot",
+            text: `Dạ, điểm vượt trội của bộ đôi này:\n- <strong>N46.Plus Cà Mau:</strong> Phủ lớp bọc Agrho N Dual Protect công nghệ Châu Âu, chống thất thoát đạm 30%, đạm nhả chậm giúp cây hấp thu liên tục, lá xanh dẻo dai không sợ sương muối.\n- <strong>NPK Cà Mau Gold 20-10-10:</strong> Sử dụng công nghệ Polyphosphate giúp Lân hòa tan hoàn toàn, kích thích rễ tơ hút dinh dưỡng cực mạnh, làm cơm sầu riêng vàng béo, vỏ mỏng và cơm dày dặn!`,
+            genui: `
+              <div class="genui-card">
+                <div class="genui-header"><i class="fa-solid fa-award"></i> Bộ Đôi Dinh Dưỡng Cao Cấp Sầu Riêng & Cà Phê</div>
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; font-size: 0.88rem;">
+                  <div style="background: var(--pvcfc-green-light); padding: 12px; border-radius: 8px;">
+                    <strong style="color: var(--pvcfc-green-dark);">N46.Plus Cà Mau</strong>
+                    <p style="font-size: 0.8rem; color: var(--pvcfc-text-muted); margin-top: 4px;">Công nghệ Châu Âu chống thất thoát đạm 30%.</p>
+                  </div>
+                  <div style="background: var(--pvcfc-green-light); padding: 12px; border-radius: 8px;">
+                    <strong style="color: var(--pvcfc-green-dark);">NPK Cà Mau Gold 20-10-10</strong>
+                    <p style="font-size: 0.8rem; color: var(--pvcfc-text-muted); margin-top: 4px;">Polyphosphate tan lân nhanh, làm cơm sầu riêng vàng ngọt.</p>
+                  </div>
+                </div>
+              </div>
+            `
+          },
+          {
+            role: "user",
+            text: "Vậy liều lượng bón cho 2 Héc-ta sầu riêng nuôi trái này cụ thể thế nào chú?"
+          },
+          {
+            role: "bot",
+            text: "Dạ đối với 2 Ha sầu riêng (khoảng 200 gốc cây trưởng thành), lịch bón chia làm 2 đợt nuôi trái:\n- Đợt 1 (Khi trái bằng trứng gà): Bón 1.5kg NPK Cà Mau Gold 20-10-10 + 0.5kg N46.Plus mỗi gốc.\n- Đợt 2 (Sau đợt 1 khoảng 20 ngày): Bón 2.0kg NPK Cà Mau Gold 20-10-10 + 0.5kg Kali Cà Mau 61 mỗi gốc để dưỡng cơm béo ngọt.",
+            genui: `
+              <div class="genui-card">
+                <div class="genui-header"><i class="fa-solid fa-calculator"></i> Liều Lượng Phân Bón Cho 2 Ha Sầu Riêng Đắk Lắk</div>
+                <div style="font-size: 0.88rem; line-height: 1.6;">
+                  <strong>Tổng phân bón cần cho 200 gốc sầu riêng:</strong><br>
+                  • <strong>NPK Cà Mau Gold 20-10-10:</strong> 14 bao (700 kg)<br>
+                  • <strong>N46.Plus Cà Mau:</strong> 4 bao (200 kg)<br>
+                  • <strong>Kali Cà Mau 61:</strong> 2 bao (100 kg)
+                </div>
+                <button class="card-btn" onclick="alert('Đã gửi tài liệu PDF quy trình chăm sóc sầu riêng sang Zalo!')"><i class="fa-solid fa-file-pdf"></i> Tải Quy Trình Kỹ Thuật Sầu Riêng PDF</button>
+              </div>
+            `
+          }
+        ]
+      },
+      3: {
+        title: "Kịch bản 3: Chẩn Đoán Vàng Lá Thối Rễ & Phục Hồi",
+        turns: [
+          {
+            role: "user",
+            text: "Vườn cam 1.5 Ha nhà tôi ở Vĩnh Long bị vàng lá gân xanh lai rai kèm thối rễ sau mấy đợt mưa dầm bão vừa rồi, tôi định mua urea về vãi cho xanh lại được không chú?"
+          },
+          {
+            role: "bot",
+            text: `Chào chú! Qua mô tả rễ bị thối và lá vàng gân xanh sau mưa dầm, Trợ lý AI chẩn đoán vườn cam của chú đang gặp tình trạng <strong>Vàng Lá Thối Rễ do nấm Fusarium kết hợp úng rễ</strong>.\n\nChú <strong>TUYỆT ĐỐI KHÔNG MUA ĐẠM UREA VÃI NGAY LÚC NÀY!</strong> Bón đạm lúc rễ đang tổn thương thối rễ sẽ làm nấm bệnh phát triển mạnh hơn và làm chết cây cam nhanh hơn.`
+          },
+          {
+            role: "user",
+            text: "Trời ơi may quá! Vậy giờ tôi phải cứu vườn cam 1.5 Ha này làm sao chú?"
+          },
+          {
+            role: "bot",
+            text: "Dưới đây là phác đồ khẩn cấp 3 bước phục hồi rễ cam cho vườn nhà chú:",
+            genui: `
+              <div class="genui-card">
+                <div class="genui-header" style="color: #C0392B;"><i class="fa-solid fa-triangle-exclamation"></i> Thẻ Phác Đồ Cấp Bách Phục Hồi Bộ Rễ</div>
+                <div style="background: #FDEDEC; border: 1px solid #FADBD8; padding: 12px; border-radius: 8px; font-size: 0.88rem; color: #78281F; margin-bottom: 10px;">
+                  ⚠️ <strong>Cảnh báo:</strong> Ngưng toàn bộ đạm hóa học. Xả cạn nước trong mương vườn cam.
+                </div>
+                <div style="font-size: 0.85rem; line-height: 1.6;">
+                  <strong>3 Bước xử lý:</strong><br>
+                  1. Rải vôi bột (500kg/Ha) nâng pH đất lên trên 6.0.<br>
+                  2. Tưới nấm đối kháng Trichoderma diệt nấm thối rễ.<br>
+                  3. Bón <strong>Organic OM Cà Mau (3 - 5kg/gốc)</strong> sau 7 ngày để kích thích rễ tơ trắng mọc lại.
+                </div>
+              </div>
+            `
+          }
+        ]
+      },
+      4: {
+        title: "Kịch bản 4: Tra Cứu Đại Lý Cái Nước & Kết Nối Kỹ Sư Trực Tiếp",
+        turns: [
+          {
+            role: "user",
+            text: "Tôi ở huyện Cái Nước, Cà Mau, cho tôi tra cứu đại lý chính hãng Phân Bón Cà Mau gần nhất để mua Đạm Cà Mau và NPK Gold."
+          },
+          {
+            role: "bot",
+            text: "Dưới đây là thông tin đại lý ủy quyền chính hãng PVCFC tại huyện Cái Nước, Cà Mau:",
+            genui: `
+              <div class="genui-card">
+                <div class="genui-header"><i class="fa-solid fa-map-location-dot"></i> Đại Lý Ủy Quyền PVCFC Tại Cái Nước</div>
+                <div style="font-size: 0.88rem; background: var(--pvcfc-green-light); padding: 12px; border-radius: 8px; line-height: 1.6;">
+                  📍 <strong>Đại Lý Voi Vàng (Tư Hải)</strong><br>
+                  Địa chỉ: QL1A, Thị trấn Cái Nước, H. Cái Nước, Cà Mau<br>
+                  📞 Điện thoại đại lý: 0913.890.xxx<br>
+                  🚚 Tình trạng hàng: Sẵn kho Đạm Cà Mau, NPK Gold 20-10-10 & Organic OM.
+                </div>
+              </div>
+            `
+          },
+          {
+            role: "user",
+            text: "Tôi muốn đăng ký Kỹ sư nông nghiệp PVCFC xuống tận vườn ở Cái Nước đo pH và khảo sát đất được không?"
+          },
+          {
+            role: "bot",
+            text: "Dạ hoàn toàn được ạ! Bà con đăng ký thông tin bên dưới, Kỹ sư Nông nghiệp PVCFC vùng Cà Mau sẽ liên hệ hẹn lịch thăm vườn trực tiếp trong vòng 30 phút:",
+            genui: `
+              <div class="genui-card">
+                <div class="genui-header"><i class="fa-solid fa-user-doctor"></i> Đăng Ký Kỹ Sư Nông Nghiệp PVCFC Thăm Vườn</div>
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 8px;">
+                  <input type="text" placeholder="Họ và tên nông dân" style="padding: 8px; border: 1px solid var(--pvcfc-border); border-radius: 4px; font-size: 0.85rem;" value="Nguyễn Văn Tư">
+                  <input type="text" placeholder="Số điện thoại" style="padding: 8px; border: 1px solid var(--pvcfc-border); border-radius: 4px; font-size: 0.85rem;" value="0945 123 xxx">
+                </div>
+                <button class="card-btn" style="width: 100%; justify-content: center; margin-top: 10px;" onclick="alert('Đã gửi thông tin đăng ký! Kỹ sư Nông nghiệp PVCFC Cái Nước sẽ gọi lại cho bà con.')">
+                  <i class="fa-solid fa-paper-plane"></i> Đăng Ký Khảo Sát Đất Trực Tiếp
+                </button>
+              </div>
+            `
+          }
+        ]
+      }
+    };
+
+    // Route Switcher (`/` vs `/demo`)
+    function switchRoute(path) {
+      currentRoute = path;
+      document.getElementById('btn-route-chat').classList.toggle('active', path === '/');
+      document.getElementById('btn-route-demo').classList.toggle('active', path === '/demo');
+      
+      document.getElementById('view-plain-chat').style.display = path === '/' ? 'flex' : 'none';
+      document.getElementById('view-demo-showcase').style.display = path === '/demo' ? 'grid' : 'none';
+
+      if (path === '/demo') {
+        renderDemoScenario();
+      }
+    }
+
+    // Response Mode Switcher (KFC Parity)
+    function setResponseMode(mode) {
+      currentMode = mode;
+      document.getElementById('btn-mode-genui').classList.toggle('active', mode === 'genui');
+      document.getElementById('btn-mode-text').classList.toggle('active', mode === 'text');
+      document.getElementById('plain-mode-indicator').innerHTML = `Chế độ phản hồi: <strong>${mode === 'genui' ? 'Giao diện GenUI' : 'Chỉ Văn bản (Text-Only)'}</strong> | Tư vấn trực tiếp 24/7`;
+      document.getElementById('demo-mode-indicator').innerHTML = `Chế độ trình chiếu: <strong>${mode === 'genui' ? 'Giao diện GenUI' : 'Chỉ Văn bản (Text-Only)'}</strong> | SHA: <code>7593d009</code>`;
+
+      if (currentRoute === '/demo') {
+        renderDemoScenario();
+      }
+    }
+
+    // --- Route 1: Plain Chat Logic (`/`) ---
+    function resetPlainChat() {
+      const box = document.getElementById('plain-chat-messages');
+      box.innerHTML = `
+        <div class="message-row bot">
+          <div class="avatar bot"><i class="fa-solid fa-seedling"></i></div>
+          <div>
+            <div class="bubble">
+              Xin chào bà con! Tôi là <strong>Trợ lý AI Phân Bón Cà Mau</strong>. Bà con cần tư vấn về kỹ thuật bón phân, tính toán lượng phân cho diện tích vườn, hay xử lý bệnh vàng lá thối rễ hôm nay?
+            </div>
+          </div>
+        </div>
+      `;
+    }
+
+    function handlePlainKeyPress(e) {
+      if (e.key === 'Enter') handlePlainSend();
+    }
+
+    function handlePlainSend() {
+      const input = document.getElementById('plain-chat-input');
+      const text = input.value.trim();
+      if (!text) return;
+
+      const chatBox = document.getElementById('plain-chat-messages');
+
+      // Add user message
+      const userRow = document.createElement('div');
+      userRow.className = 'message-row user';
+      userRow.innerHTML = `
+        <div class="avatar user"><i class="fa-solid fa-user"></i></div>
+        <div class="bubble">${escapeHtml(text)}</div>
+      `;
+      chatBox.appendChild(userRow);
+      input.value = '';
+      chatBox.scrollTop = chatBox.scrollHeight;
+
+      // Show typing indicator
+      const typingRow = document.createElement('div');
+      typingRow.className = 'message-row bot';
+      typingRow.id = 'typing-indicator-row';
+      typingRow.innerHTML = `
+        <div class="avatar bot"><i class="fa-solid fa-seedling"></i></div>
+        <div class="typing-indicator"><span></span><span></span><span></span></div>
+      `;
+      chatBox.appendChild(typingRow);
+      chatBox.scrollTop = chatBox.scrollHeight;
+
+      // Simulate Live AI session API response
+      setTimeout(() => {
+        const typing = document.getElementById('typing-indicator-row');
+        if (typing) typing.remove();
+
+        const botRow = document.createElement('div');
+        botRow.className = 'message-row bot';
+
+        let genUiHtml = '';
+        let botText = '';
+
+        if (text.toLowerCase().includes('lúa') || text.toLowerCase().includes('hè thu') || text.toLowerCase().includes('phèn')) {
+          botText = `Chào bà con! Đối với ruộng lúa Hè Thu trên đất phèn, Trợ lý AI khuyên bà con cần xả phèn cũ và sử dụng <strong>Organic OM Good Cà Mau (150kg/Ha)</strong> để nâng pH và kích rễ trắng trước khi vãi đạm. Sau 3-5 ngày rễ ra xanh tốt mới tiến hành bón <strong>Đạm Cà Mau (40kg/Ha)</strong>.`;
+          if (currentMode === 'genui') {
+            genUiHtml = `
+              <div class="genui-card">
+                <div class="genui-header"><i class="fa-solid fa-seedling"></i> Khuyến Nghị Dinh Dưỡng Đất Phèn</div>
+                <div style="font-size: 0.88rem; line-height: 1.5;">
+                  • <strong>Đợt 1 (7-10 NSS):</strong> 150kg Organic OM Good + 40kg Đạm Cà Mau / Ha<br>
+                  • <strong>Đợt 2 (18-22 NSS):</strong> 60kg Đạm Cà Mau + 80kg NPK 20-20-15 / Ha
+                </div>
+              </div>
+            `;
+          }
+        } else if (text.toLowerCase().includes('sầu riêng') || text.toLowerCase().includes('cà phê') || text.toLowerCase().includes('rụng')) {
+          botText = `Đối với sầu riêng và cà phê giai đoạn nuôi trái, bà con nên dùng bộ đôi cao cấp <strong>N46.Plus Cà Mau (Urea bọc kép Châu Âu)</strong> và <strong>NPK Cà Mau Gold 20-10-10 (Công nghệ Polyphosphate)</strong> giúp trái lớn nhanh, dẻo cành và không bị rụng trái sinh lý.`;
+          if (currentMode === 'genui') {
+            genUiHtml = `
+              <div class="genui-card">
+                <div class="genui-header"><i class="fa-solid fa-award"></i> Bộ Đôi Dinh Dưỡng Cao Cấp Sầu Riêng</div>
+                <div style="font-size: 0.88rem;">
+                  • <strong>N46.Plus:</strong> Chống thất thoát đạm 30%<br>
+                  • <strong>NPK Gold 20-10-10:</strong> Polyphosphate tan lân nhanh, lớn trái
+                </div>
+              </div>
+            `;
+          }
+        } else {
+          botText = `Dạ, Trợ lý AI Phân Bón Cà Mau đã ghi nhận câu hỏi của bà con về <strong>"${text}"</strong>. Đạm Cà Mau và NPK Cà Mau luôn sẵn sàng đồng hành giúp cây trồng sinh trưởng khỏe mạnh và đạt năng suất tối ưu!`;
+        }
+
+        botRow.innerHTML = `
+          <div class="avatar bot"><i class="fa-solid fa-seedling"></i></div>
+          <div>
+            <div class="bubble">${botText} ${genUiHtml}</div>
+          </div>
+        `;
+        chatBox.appendChild(botRow);
+        chatBox.scrollTop = chatBox.scrollHeight;
+      }, 600);
+    }
+
+    // --- Route 2: Demo Showcase Replay Logic (`/demo`) ---
+    function selectDemoScenario(id) {
+      demoScenarioId = id;
+      for (let i = 1; i <= 4; i++) {
+        const card = document.getElementById(`sc-${i}`);
+        if (card) card.classList.toggle('active', i === id);
+      }
+      renderDemoScenario();
+    }
+
+    function renderDemoScenario() {
+      const scenario = scenariosData[demoScenarioId];
+      if (!scenario) return;
+
+      document.getElementById('demo-scenario-title').innerText = scenario.title;
+      const chatBox = document.getElementById('demo-chat-messages');
+      chatBox.innerHTML = '';
+
+      scenario.turns.forEach(turn => {
+        const row = document.createElement('div');
+        row.className = `message-row ${turn.role}`;
+        
+        let genContent = '';
+        if (currentMode === 'genui' && turn.genui) {
+          genContent = turn.genui;
+        }
+
+        row.innerHTML = `
+          <div class="avatar ${turn.role}">${turn.role === 'bot' ? '<i class="fa-solid fa-seedling"></i>' : '<i class="fa-solid fa-user"></i>'}</div>
+          <div>
+            <div class="bubble">${turn.text} ${genContent}</div>
+          </div>
+        `;
+        chatBox.appendChild(row);
+      });
+
+      chatBox.scrollTop = chatBox.scrollHeight;
+    }
+
+    // Live AI Replay Function (Sequentially calls AI turn by turn)
+    function runLiveReplaySession() {
+      if (isReplaying) return;
+      isReplaying = true;
+
+      const btn = document.getElementById('btn-replay-action');
+      btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Đang Gọi Phiên AI Trực Tiếp...';
+      btn.disabled = true;
+
+      const scenario = scenariosData[demoScenarioId];
+      const chatBox = document.getElementById('demo-chat-messages');
+      chatBox.innerHTML = '';
+
+      let turnIdx = 0;
+
+      function processNextTurn() {
+        if (turnIdx >= scenario.turns.length) {
+          isReplaying = false;
+          btn.innerHTML = '<i class="fa-solid fa-play"></i> Gọi Phiên AI Trực Tiếp (Replay Live AI)';
+          btn.disabled = false;
+          return;
+        }
+
+        const turn = scenario.turns[turnIdx];
+        const row = document.createElement('div');
+        row.className = `message-row ${turn.role}`;
+
+        let genContent = '';
+        if (currentMode === 'genui' && turn.genui) {
+          genContent = turn.genui;
+        }
+
+        row.innerHTML = `
+          <div class="avatar ${turn.role}">${turn.role === 'bot' ? '<i class="fa-solid fa-seedling"></i>' : '<i class="fa-solid fa-user"></i>'}</div>
+          <div>
+            <div class="bubble">${turn.text} ${genContent}</div>
+          </div>
+        `;
+        chatBox.appendChild(row);
+        chatBox.scrollTop = chatBox.scrollHeight;
+
+        turnIdx++;
+        setTimeout(processNextTurn, 600);
+      }
+
+      processNextTurn();
+    }
+
+    function handleDemoKeyPress(e) {
+      if (e.key === 'Enter') handleDemoSend();
+    }
+
+    function handleDemoSend() {
+      const input = document.getElementById('demo-chat-input');
+      const text = input.value.trim();
+      if (!text) return;
+
+      const chatBox = document.getElementById('demo-chat-messages');
+      const userRow = document.createElement('div');
+      userRow.className = 'message-row user';
+      userRow.innerHTML = `
+        <div class="avatar user"><i class="fa-solid fa-user"></i></div>
+        <div class="bubble">${escapeHtml(text)}</div>
+      `;
+      chatBox.appendChild(userRow);
+      input.value = '';
+      chatBox.scrollTop = chatBox.scrollHeight;
+
+      setTimeout(() => {
+        const botRow = document.createElement('div');
+        botRow.className = 'message-row bot';
+        botRow.innerHTML = `
+          <div class="avatar bot"><i class="fa-solid fa-seedling"></i></div>
+          <div>
+            <div class="bubble">Dạ, Kỹ sư Nông nghiệp Phân Bón Cà Mau đã tiếp nhận phản hồi trực tiếp cho câu hỏi "${escapeHtml(text)}". Kỹ sư sẽ tư vấn trực tiếp cho ruộng của chú!</div>
+          </div>
+        `;
+        chatBox.appendChild(botRow);
+        chatBox.scrollTop = chatBox.scrollHeight;
+      }, 400);
+    }
+
+    function updateScenario1Calc(val) {
+      const urea = document.getElementById('val-urea');
+      const npk = document.getElementById('val-npk');
+      const om = document.getElementById('val-om');
+      if (om) om.innerText = Math.round(val * 3) + ' bao';
+      if (urea) urea.innerText = Math.round(val * 3.2) + ' bao';
+      if (npk) npk.innerText = Math.round(val * 4) + ' bao';
+    }
+
+    function escapeHtml(string) {
+      return String(string).replace(/[&<>"']/g, function (s) {
+        return {
+          '&': '&amp;',
+          '<': '&lt;',
+          '>': '&gt;',
+          '"': '&quot;',
+          "'": '&#39;'
+        }[s];
+      });
+    }
+
+    // Initialize
+    switchRoute('/');
+  </script>
+</body>
+</html>
