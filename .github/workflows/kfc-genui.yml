@@ -37,11 +37,18 @@ jobs:
         working-directory: services/kfc-agent-backend
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       - uses: actions/setup-node@v4
         with:
           node-version: 22.13.0
           cache: npm
           cache-dependency-path: services/kfc-agent-backend/package-lock.json
+      - uses: actions/setup-python@v5
+        with:
+          python-version: 3.11.14
+      - run: python -m pip install --disable-pip-version-check -e services/kfc-recommendation-scorer
+        working-directory: ${{ github.workspace }}
       - run: npm ci
       - run: npm run check:architecture
       - run: npm run policies:check

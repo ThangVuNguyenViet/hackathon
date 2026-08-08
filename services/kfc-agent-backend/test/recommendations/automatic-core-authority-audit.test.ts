@@ -179,12 +179,11 @@ describe('automatic recommendation single-authority source and config audit', ()
     }
   });
 
-  it('traverses the target import graph and isolates explicitly preserved chat ranking', async () => {
+  it('keeps chat ranking out of the automatic recommendation graph', async () => {
     const targetEntrypoints = [path.join(coreRoot, 'index.ts')];
     const targetGraph = await relativeImportGraph(targetEntrypoints);
     const unrelatedChatAuthorityAllowlist = [
       path.join(backendRoot, 'src/ordering/recommendationRanking.ts'),
-      path.join(backendRoot, 'src/clients/catalogObservationClients.ts'),
     ];
     const forbiddenAuthority =
       /(merchandis|manual|shadow|fallback|popularity|random|personalize|sanity|keras|transformer|embedding|stategraph|openai|d1|@aws)/iu;
@@ -198,7 +197,7 @@ describe('automatic recommendation single-authority source and config audit', ()
       ).not.toMatch(forbiddenAuthority);
     }
 
-    const rankingImporters = [];
+    const rankingImporters: string[] = [];
     for (const file of await sourceFiles(path.join(backendRoot, 'src'))) {
       if (
         (await readFile(file, 'utf8')).includes(
@@ -208,9 +207,7 @@ describe('automatic recommendation single-authority source and config audit', ()
         rankingImporters.push(file);
       }
     }
-    expect(rankingImporters).toEqual([
-      path.join(backendRoot, 'src/clients/catalogObservationClients.ts'),
-    ]);
+    expect(rankingImporters).toEqual([]);
     expect(unrelatedChatAuthorityAllowlist).toEqual(
       expect.arrayContaining([
         ...rankingImporters,
