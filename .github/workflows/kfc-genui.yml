@@ -17,6 +17,8 @@ on:
       - "services/kfc-agent-backend/**"
       - "ai-talent-tracks/fnb/conversations/**"
       - ".github/workflows/kfc-genui.yml"
+      - "docs/superpowers/**"
+      - "docs/wayfinder/**"
   push:
     branches: [main]
     paths:
@@ -24,6 +26,8 @@ on:
       - "services/kfc-agent-backend/**"
       - "ai-talent-tracks/fnb/conversations/**"
       - ".github/workflows/kfc-genui.yml"
+      - "docs/superpowers/**"
+      - "docs/wayfinder/**"
 
 jobs:
   backend:
