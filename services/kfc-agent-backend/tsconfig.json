@@ -20,6 +20,8 @@
     "src/**/*.ts",
     "scripts/**/*.ts",
     "test/**/*.ts",
+    "packages/**/*.ts",
+    "packages/**/*.d.ts",
     "vitest.config.ts",
     "vitest.ci.config.ts"
   ]
