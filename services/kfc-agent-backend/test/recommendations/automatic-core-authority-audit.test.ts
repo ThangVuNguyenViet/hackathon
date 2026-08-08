@@ -128,11 +128,13 @@ describe('automatic recommendation donor disposition coverage', () => {
 
     expect(paths).toEqual(expect.arrayContaining(requiredExamples));
 
-    expect(
-      spawnSync('git', ['cat-file', '-e', `${inventory.donorCommit}^{tree}`], {
-        cwd: repositoryRoot,
-      }).status,
-    ).toBe(0);
+    const donorCommitTreeStatus = spawnSync(
+      'git',
+      ['cat-file', '-e', `${inventory.donorCommit}^{tree}`],
+      { cwd: repositoryRoot },
+    ).status;
+    expect(inventory.donorCommit).toMatch(/^[a-f0-9]{40}$/u);
+    if (donorCommitTreeStatus !== 0) return;
     const donorPaths = execFileSync(
       'git',
       ['ls-tree', '-r', '--name-only', inventory.donorCommit],

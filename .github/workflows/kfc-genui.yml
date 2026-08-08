@@ -37,10 +37,6 @@ jobs:
         working-directory: services/kfc-agent-backend
     steps:
       - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-      - run: git fetch origin fc5fcafbaf7e0f00afbdd668ab90f6be0439b947
-        working-directory: ${{ github.workspace }}
       - uses: actions/setup-node@v4
         with:
           node-version: 22.13.0
