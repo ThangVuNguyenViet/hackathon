@@ -233,6 +233,10 @@ export const automaticFeatureVectorSchema = z
     }
   });
 
+function isJsonRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
 function canonicalFeatureContractJson(value: unknown): string {
   if (Array.isArray(value)) {
     return `[${value.map(canonicalFeatureContractJson).join(',')}]`;
@@ -243,8 +247,8 @@ function canonicalFeatureContractJson(value: unknown): string {
     }
     return Number.isInteger(value) ? `${value}.0` : String(value);
   }
-  if (value !== null && typeof value === 'object') {
-    const record = value as Record<string, unknown>;
+  if (isJsonRecord(value)) {
+    const record = value;
     return `{${Object.keys(record)
       .sort()
       .map(

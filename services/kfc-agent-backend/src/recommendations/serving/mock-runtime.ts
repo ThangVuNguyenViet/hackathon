@@ -128,11 +128,9 @@ function responseFor(
   const proposals =
     type === 'modifier_upsell'
       ? (() => {
-          const modifierRequest = request as Extract<
-            AutomaticRecommendationRequest,
-            { parentCartLineId: string }
-          >;
-          const parentLine = modifierRequest.cart.lines.find(
+          const modifierRequest =
+            'parentCartLineId' in request ? request : undefined;
+          const parentLine = modifierRequest?.cart.lines.find(
             (line) => line.lineId === modifierRequest.parentCartLineId,
           );
           const parentItem = parentLine

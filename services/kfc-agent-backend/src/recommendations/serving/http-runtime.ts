@@ -14,6 +14,10 @@ import {
   type AutomaticEventEvidence,
 } from './evidence-contracts.js';
 
+function isJsonRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
 export interface AutomaticRecommendationHttpRuntime {
   decide(type: AutomaticRecommendationType, body: unknown): Promise<unknown>;
   recordImpression(recommendationId: string, body: unknown): Promise<void>;
@@ -211,13 +215,13 @@ export function createAutomaticRecommendationHttpClient(
     async readiness() {
       try {
         const body = await requestJson('/ready', { method: 'GET' }, [200, 503]);
-        if (typeof body !== 'object' || body === null || Array.isArray(body)) {
+        if (!isJsonRecord(body)) {
           return {
             ok: false,
             message: 'Automatic recommendation readiness was invalid',
           };
         }
-        const value = body as Record<string, unknown>;
+        const value = body;
         return {
           ok: value.ok === true,
           ...(typeof value.message === 'string'

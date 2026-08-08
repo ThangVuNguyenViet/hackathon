@@ -277,50 +277,53 @@ describe('catalog observation clients', () => {
       value: cart,
       message: 'updated',
     });
-    const decide = vi.fn(async (_type: 'smart_cross_sell', body: unknown) => {
-      const request = body as {
-        requestId: string;
-        cart: { revision: string };
-      };
-      return {
-        schemaVersion: 'kfc-automatic-recommendation-v1',
-        requestId: request.requestId,
-        recommendationId: 'rec:chat:1',
-        recommendationType: 'smart_cross_sell',
-        status: 'recommended',
-        emptyReason: null,
-        cartRevision: request.cart.revision,
-        catalogRevision: pinned.id,
-        expiresAt: '2026-08-08T10:00:00.000+00:00',
-        model: {
-          bundleId: 'bundle-1',
-          bundleDigest: 'a'.repeat(64),
-          modelRevision: 'model-1',
-          calibratorRevision: 'calibrator-1',
-          featureSchemaDigest: 'b'.repeat(64),
-          thresholdRevision: 'threshold-1',
-          composerContractDigest: 'c'.repeat(64),
-          qualificationRunId: 'run-1',
-          qualificationEvidenceDigest: 'd'.repeat(64),
-        },
-        proposals: [{
-          actionId: 'action:41172',
-          action: {
-            type: 'add_product',
-            sellableItemId: '41172',
-            quantity: 1,
-            priceImpact: { amount: 159000, currency: 'VND' },
+    const decide = vi.fn(
+      async (
+        _type: 'smart_cross_sell',
+        request: { requestId: string; cart: { revision: string } },
+      ) => {
+        return {
+          schemaVersion: 'kfc-automatic-recommendation-v1',
+          requestId: request.requestId,
+          recommendationId: 'rec:chat:1',
+          recommendationType: 'smart_cross_sell',
+          status: 'recommended',
+          emptyReason: null,
+          cartRevision: request.cart.revision,
+          catalogRevision: pinned.id,
+          expiresAt: '2026-08-08T10:00:00.000+00:00',
+          model: {
+            bundleId: 'bundle-1',
+            bundleDigest: 'a'.repeat(64),
+            modelRevision: 'model-1',
+            calibratorRevision: 'calibrator-1',
+            featureSchemaDigest: 'b'.repeat(64),
+            thresholdRevision: 'threshold-1',
+            composerContractDigest: 'c'.repeat(64),
+            qualificationRunId: 'run-1',
+            qualificationEvidenceDigest: 'd'.repeat(64),
           },
-          display: {
-            name: 'XoZonZa5CO_159',
-            imageUrl: null,
-            priceImpact: { amount: 159000, currency: 'VND' },
-          },
-          reasonCodes: ['completes_your_meal'],
-        }],
-        counts: { potential: 1, eligible: 1, scored: 1, displayed: 1 },
-      };
-    });
+          proposals: [
+            {
+              actionId: 'action:41172',
+              action: {
+                type: 'add_product',
+                sellableItemId: '41172',
+                quantity: 1,
+                priceImpact: { amount: 159000, currency: 'VND' },
+              },
+              display: {
+                name: 'XoZonZa5CO_159',
+                imageUrl: null,
+                priceImpact: { amount: 159000, currency: 'VND' },
+              },
+              reasonCodes: ['completes_your_meal'],
+            },
+          ],
+          counts: { potential: 1, eligible: 1, scored: 1, displayed: 1 },
+        };
+      },
+    );
     const recordImpression = vi.fn<AutomaticRecommendationHttpRuntime['recordImpression']>()
       .mockResolvedValue(undefined);
     const record = vi.fn().mockResolvedValue(undefined);
