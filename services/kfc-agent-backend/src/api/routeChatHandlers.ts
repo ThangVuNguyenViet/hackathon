@@ -115,7 +115,6 @@ import {
   sha256Fingerprint,
   kfcSessionIdSchema,
   kfcChatPayloadSchema,
-  pvcfcChatPayloadSchema,
   kfcGenUiActionPayloadSchema,
   kfcSmartMenuBatchPayloadSchema,
   kfcCartDraftPayloadSchema,
@@ -157,6 +156,7 @@ import {
 } from './routeHandlerSupport.js';
 
 import type { RouteHandlerContext } from './routeHandlerContext.js';
+import { createPvcfcChatHandler } from './pvcfcChatHandler.js';
 
 const clientItemSelectionSchema = z
   .object({
@@ -260,6 +260,7 @@ export function createChatRouteHandlers(context: RouteHandlerContext) {
     recoverStaleMessengerDeliveriesInternal,
     processMessengerAgentRunInternal,
   } = context;
+  const chatPvcfcMessage = createPvcfcChatHandler(kfcAgentResponse);
   return {
     async chatKfcMessage(body: unknown) {
       const parsed = kfcChatPayloadSchema.safeParse(body);
@@ -297,51 +298,7 @@ export function createChatRouteHandlers(context: RouteHandlerContext) {
         },
       });
     },
-    async chatPvcfcMessage(body: unknown) {
-      const parsed = pvcfcChatPayloadSchema.safeParse(body);
-      if (!parsed.success) {
-        return {
-          status: 400,
-          body: {
-            errorCode: 'invalid_pvcfc_chat_payload',
-            issues: parsed.error.issues,
-          },
-        };
-      }
-
-      const rawProfile =
-        parsed.data.metadata?.responseProfile ??
-        parsed.data.metadata?.showcaseResponseMode;
-      const responseProfile =
-        rawProfile === 'text' || rawProfile === 'social'
-          ? ('social' as const)
-          : rawProfile === 'genui'
-            ? ('genui' as const)
-            : undefined;
-      const auditMetadata = { ...(parsed.data.metadata ?? {}) };
-      return kfcAgentResponse({
-        sessionId: parsed.data.sessionId,
-        customerId: parsed.data.customerId,
-        clientMessageId: parsed.data.clientMessageId,
-        text: parsed.data.text,
-        metadata: {
-          rawEvent: { ...auditMetadata, source: 'pvcfc_chat' },
-          ...(responseProfile ? { responseProfile } : {}),
-          verifiedBusinessContext: {
-            organization:
-              'Tổng Công ty Phân bón Dầu khí Cà Mau (PVCFC / Đạm Cà Mau)',
-            role: 'Trợ lý AI Nông Nghiệp Phân Bón Cà Mau',
-            products: [
-              'Đạm Cà Mau (Urea)',
-              'NPK Cà Mau 20-20-15',
-              'Organic OM Cà Mau',
-              'N46.Plus',
-              'Kali Cà Mau 61',
-            ],
-          },
-        },
-      });
-    },
+    chatPvcfcMessage,
     async chatKfcStartRun(body: unknown) {
       return customerRuns.start(body);
     },

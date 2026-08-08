@@ -53,7 +53,7 @@ export function registerRoutes(server: FastifyInstance, options: RouteOptions = 
   server.get('/pvcfc', serveWebsite);
 
   server.get('/assets/:file', async (request, reply) => {
-    const params = request.params as { file: string };
+    const params = z.object({ file: z.string().min(1) }).parse(request.params);
     const safeFile = params.file.replace(/[^a-zA-Z0-9._-]/g, '');
     const assetCandidates = [
       resolve(process.cwd(), 'dist/client/assets', safeFile),
