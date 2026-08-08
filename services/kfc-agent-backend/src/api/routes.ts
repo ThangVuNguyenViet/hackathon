@@ -1,3 +1,5 @@
+import { existsSync, readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import { type FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import { AutomaticRecommendationIdentityConflictError } from '../recommendations/serving/evidence-saga.js';
@@ -44,6 +46,48 @@ export function registerRoutes(
         .send({ errorCode: decision.errorCode });
   });
 
+  const serveWebsite = (_request: unknown, reply: { type(ct: string): { send(content: string): unknown } }) => {
+    const candidatePaths = [
+      resolve(process.cwd(), 'dist/client/index.html'),
+      resolve(process.cwd(), 'client/index.html'),
+      resolve(process.cwd(), '../../apps/pvcfc_chat_web/dist/index.html'),
+      resolve(process.cwd(), '../pvcfc_chat_web/dist/index.html'),
+      resolve(process.cwd(), '../../pvcfc_website.html'),
+      resolve(process.cwd(), 'pvcfc_website.html'),
+    ];
+    for (const p of candidatePaths) {
+      if (existsSync(p)) {
+        return reply.type('text/html; charset=utf-8').send(readFileSync(p, 'utf8'));
+      }
+    }
+    return reply.type('text/html; charset=utf-8').send('<h1>PVCFC Backend</h1>');
+  };
+
+  server.get('/', serveWebsite);
+  server.get('/demo', serveWebsite);
+  server.get('/pvcfc', serveWebsite);
+
+  server.get('/assets/:file', async (request, reply) => {
+    const params = z.object({ file: z.string().min(1) }).parse(request.params);
+    const safeFile = params.file.replace(/[^a-zA-Z0-9._-]/g, '');
+    const assetCandidates = [
+      resolve(process.cwd(), 'dist/client/assets', safeFile),
+      resolve(process.cwd(), 'client/assets', safeFile),
+      resolve(process.cwd(), '../../apps/pvcfc_chat_web/dist/assets', safeFile),
+      resolve(process.cwd(), '../pvcfc_chat_web/dist/assets', safeFile),
+    ];
+    for (const p of assetCandidates) {
+      if (existsSync(p)) {
+        const ct = safeFile.endsWith('.css')
+          ? 'text/css; charset=utf-8'
+          : safeFile.endsWith('.js')
+            ? 'application/javascript; charset=utf-8'
+            : 'application/octet-stream';
+        return reply.type(ct).send(readFileSync(p));
+      }
+    }
+    return reply.code(404).send({ error: 'Asset not found' });
+  });
   server.get('/ready', async (request, reply) => {
     const query = z
       .object({ deep: z.enum(['0', '1']).optional() })
@@ -251,6 +295,9 @@ export function registerRoutes(
   );
   server.post('/chat/kfc/message', async (request, reply) => {
     return send(reply, await handlers.chatKfcMessage(request.body));
+  });
+server.post('/chat/pvcfc/message', async (request, reply) => {
+    return send(reply, await handlers.chatPvcfcMessage(request.body));
   });
   server.post('/chat/kfc/genui-action', async (request, reply) =>
     send(reply, await handlers.chatKfcGenUiAction(request.body)),

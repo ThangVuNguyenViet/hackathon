@@ -20,6 +20,11 @@ describe('KFC GenUI schema contract', () => {
       'orderTrackingStatus',
       'supportHandoff',
       'paymentMethodPicker',
+      'fertilizerSchedule',
+      'dosageCalculator',
+      'diagnosticProtocol',
+      'dealerLocator',
+      'capabilitiesOverview',
     ]);
   });
 

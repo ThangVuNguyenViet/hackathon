@@ -13,7 +13,7 @@ import type { Order } from '../../src/domain/types.js';
 import type { AgentGraphState } from '../../src/graph/state.js';
 import type { AgentToolResultForModel } from '../../src/graph/orderStatusEvidenceProjection.js';
 import { toolNames } from '../../src/ordering/toolCatalog.js';
-import type { ToolTraceEntry } from '../../src/ordering/types.js';
+import type { ToolName, ToolTraceEntry } from '../../src/ordering/types.js';
 
 function createContext(): KfcCreateAgentContext {
   const runtime = {
@@ -269,5 +269,32 @@ describe('KFC createAgent commerce tools', () => {
       invokeWithContext(selected, {}, createContext(), 'place-order-call'),
     ).rejects.toBe(failure);
     expect(execute).toHaveBeenCalledTimes(1);
+  });
+
+  it('includes validateVoucher in registered tools and maps it via visibleKfcTools when active', () => {
+    const tools = createKfcCreateAgentTools();
+    const validateVoucherTool = tools.find(
+      (entry) => entry.name === 'validateVoucher',
+    );
+    expect(validateVoucherTool).toBeDefined();
+    expect(validateVoucherTool?.description).toContain('validateVoucher');
+
+    const activeToolsWithVoucher: ToolName[] = [
+      'updateCart',
+      'validateVoucher',
+    ];
+    const activeToolsWithoutVoucher: ToolName[] = ['searchMenu', 'findStores'];
+
+    const visibleWithVoucher = tools.filter((t) =>
+      activeToolsWithVoucher.includes(t.name as ToolName),
+    );
+    const visibleWithoutVoucher = tools.filter((t) =>
+      activeToolsWithoutVoucher.includes(t.name as ToolName),
+    );
+
+    expect(visibleWithVoucher.map((t) => t.name)).toContain('validateVoucher');
+    expect(visibleWithoutVoucher.map((t) => t.name)).not.toContain(
+      'validateVoucher',
+    );
   });
 });

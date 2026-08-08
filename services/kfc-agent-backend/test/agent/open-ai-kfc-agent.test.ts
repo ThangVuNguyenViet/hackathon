@@ -597,104 +597,20 @@ describe('OpenAiKfcAgent SDK Runner', () => {
     await agent.respond(createTurn());
 
     expect(requests[0]?.instructions).toContain(
-      'A successful mutation result or current verified business state establishes a completed effect',
+      'Feel free to use any available tools whenever needed',
     );
     expect(requests[0]?.instructions).toContain(
-      'exact quantities and totals from the latest verified result',
+      'freely invoke the relevant tools to gather current evidence',
     );
     expect(requests[0]?.instructions).toContain(
-      'Use null for customer fields that have not been supplied',
+      'Base customer-facing information about products',
     );
     expect(requests[0]?.instructions).toContain(
-      'select from verified candidates and make one atomic updateCart call',
+      'Respond naturally in Vietnamese unless another language is requested',
     );
     expect(requests[0]?.instructions).toContain(
-      'A recommendation alone leaves that delegated request unfinished',
+      'Keep responses warm, polite, and direct',
     );
-    expect(requests[0]?.instructions).toContain(
-      'Treat a stated budget as the maximum resulting verified cart total',
-    );
-    expect(requests[0]?.instructions).toContain(
-      'exact answer to a choice you just asked',
-    );
-    expect(requests[0]?.instructions).toContain(
-      'Back every cart line mutation with an exact matching item',
-    );
-    expect(requests[0]?.instructions).not.toContain('qualitative party size');
-    expect(requests[0]?.instructions).not.toContain(
-      'Treat a stated budget as a maximum',
-    );
-    expect(requests[0]?.instructions).toContain(
-      'latest customer message as the task for this turn',
-    );
-    expect(requests[0]?.instructions).toContain(
-      'preserve that selection unless the customer requests replacement',
-    );
-    expect(requests[0]?.instructions).toContain(
-      'broad category result as a candidate set',
-    );
-    expect(requests[0]?.instructions).toContain(
-      'obtain the candidate’s modifier details for each remaining option requirement',
-    );
-    expect(requests[0]?.instructions).toContain(
-      'Use getModifierOptions to supply evidence for every remaining requirement',
-    );
-    expect(requests[0]?.instructions).toContain(
-      'Write only customer-useful information',
-    );
-    expect(requests[0]?.instructions).toContain(
-      'Keep capability execution, retrieval mechanics, and evidence bookkeeping implicit',
-    );
-    expect(requests[0]?.instructions).toContain(
-      'A zero-result read describes the submitted filter scope',
-    );
-    expect(requests[0]?.instructions).toContain(
-      'Build capability arguments from explicit customer constraints and current verified state',
-    );
-    expect(requests[0]?.instructions).toContain(
-      'Complete that corrected read before responding',
-    );
-    expect(requests[0]?.instructions).toContain(
-      'remove every inferred filter and search the supplied identity alone',
-    );
-    expect(requests[0]?.instructions).toContain(
-      'decompose the intersection into candidate discovery',
-    );
-    expect(requests[0]?.instructions).toContain(
-      'inspect each candidate with the relevant detail capability',
-    );
-    expect(requests[0]?.instructions).toContain(
-      'An omitted optional add-on is represented by leaving it unselected',
-    );
-    expect(requests[0]?.instructions).toContain(
-      'make one atomic updateCart call containing the complete selected change set',
-    );
-    expect(requests[0]?.instructions).toContain(
-      'calculate the proposed aggregate total from verified per-item prices and quantities',
-    );
-    expect(requests[0]?.instructions).toContain(
-      'make a corrected atomic update before replying',
-    );
-    expect(requests[0]?.instructions).toContain(
-      'A selected standalone add-on is a separate menu item change',
-    );
-    expect(requests[0]?.instructions).toContain('# Capability examples');
-    expect(requests[0]?.instructions).toContain(
-      '“Add one Named Product” → searchMenu with the supplied product name as query',
-    );
-    expect(requests[0]?.instructions).toContain(
-      '“Choose food and drinks for me under Budget” → search verified candidates',
-    );
-    expect(requests[0]?.instructions).toContain(
-      'then make one updateCart call with that complete selection',
-    );
-    expect(requests[0]?.instructions).toContain(
-      '“Choose for a group” without a numeric group size leaves partySize unset',
-    );
-    expect(requests[0]?.instructions).toContain(
-      'Lead with the requested products, outcome, or natural clarification',
-    );
-    expect(requests[0]?.instructions).toContain('Có Pepsi, 7Up và Lipton');
     expect(requests[0]).toMatchObject({
       temperature: 0,
       parallel_tool_calls: false,

@@ -1,0 +1,17 @@
+@import "tailwindcss";
+
+@theme {
+  --color-brand-primary: #0A6B41;
+  --color-brand-dark: #005A36;
+  --color-brand-light: #F0F7F3;
+  --color-brand-gold: #DAA520;
+  --color-page-bg: #F8FAF9;
+  --color-input-bg: #F3F4F6;
+  --font-sans: 'Be Vietnam Pro', sans-serif;
+}
+
+html, body, #root {
+  height: 100%;
+  margin: 0;
+  padding: 0;
+}
