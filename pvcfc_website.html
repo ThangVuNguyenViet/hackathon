@@ -3,31 +3,26 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Phân Bón Cà Mau (PVCFC) - Trợ Lý AI Nông Nghiệp</title>
+  <title>Phân Bón Cà Mau - Hạt Ngọc Mùa Vàng • Trợ Lý AI Nông Nghiệp</title>
   <!-- Google Fonts & FontAwesome -->
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:ital,wght@0,300;0,400;0,500;0,600;0,700;1,400&family=Playfair+Display:ital,wght@0,600;0,700;1,600&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
   
   <style>
     :root {
-      --pvcfc-green-dark: #005A36;
-      --pvcfc-green-primary: #0A6B41;
-      --pvcfc-green-medium: #1E824C;
-      --pvcfc-green-light: #F0F7F3;
-      --pvcfc-gold: #DAA520;
-      --pvcfc-gold-hover: #B8860B;
-      --pvcfc-cream: #F8FAF7;
-      --pvcfc-text-main: #1C2D24;
-      --pvcfc-text-muted: #5A6E63;
-      --pvcfc-border: #D2E3D8;
-      --pvcfc-white: #FFFFFF;
-      --pvcfc-shadow: 0 4px 20px rgba(0, 90, 54, 0.08);
-      --pvcfc-shadow-hover: 0 8px 30px rgba(0, 90, 54, 0.15);
+      --brand-primary: #0A6B41;
+      --brand-dark: #005A36;
+      --brand-light: #F0F7F3;
+      --brand-gold: #DAA520;
+      --bg-page: #F8FAF9;
+      --bg-input: #F3F4F6;
+      --text-main: #111827;
+      --text-muted: #6B7280;
+      --border-color: #E5E7EB;
       --radius-sm: 8px;
-      --radius-md: 14px;
-      --radius-lg: 20px;
+      --radius-md: 12px;
     }
 
     * {
@@ -38,469 +33,521 @@
 
     body {
       font-family: 'Be Vietnam Pro', sans-serif;
-      background-color: var(--pvcfc-cream);
-      color: var(--pvcfc-text-main);
-      line-height: 1.6;
+      background-color: var(--bg-page);
+      color: var(--text-main);
       height: 100vh;
       display: flex;
       flex-direction: column;
       overflow: hidden;
     }
 
-    h1, h2, h3, .font-serif {
-      font-family: 'Playfair Display', serif;
+    /* Minimalist Top Header (Matches KFC Reference Architecture) */
+    header.main-header {
+      background: #FFFFFF;
+      border-bottom: 1px solid var(--border-color);
+      padding: 12px 24px;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      z-index: 10;
     }
 
-    /* Top Brand Header */
-    header.main-header {
-      background: var(--pvcfc-white);
-      border-bottom: 2px solid var(--pvcfc-gold);
-      padding: 12px 28px;
+    .header-top {
       display: flex;
       align-items: center;
       justify-content: space-between;
-      box-shadow: 0 2px 10px rgba(0, 0, 0, 0.03);
-      z-index: 10;
+      width: 100%;
     }
-    .brand-logo {
+
+    .brand-group {
       display: flex;
       align-items: center;
-      gap: 14px;
+      gap: 12px;
       text-decoration: none;
     }
-    .logo-badge {
-      width: 44px;
-      height: 44px;
-      background: linear-gradient(135deg, var(--pvcfc-green-dark), var(--pvcfc-green-primary));
+
+    .brand-badge {
+      width: 42px;
+      height: 42px;
+      background: var(--brand-primary);
       border-radius: var(--radius-sm);
       display: flex;
       align-items: center;
       justify-content: center;
-      color: var(--pvcfc-gold);
-      font-size: 1.4rem;
-      box-shadow: 0 4px 10px rgba(0, 90, 54, 0.2);
-    }
-    .logo-text h1 {
-      font-size: 1.3rem;
-      color: var(--pvcfc-green-dark);
-      margin: 0;
-      line-height: 1.1;
-    }
-    .logo-text p {
-      font-size: 0.75rem;
-      color: var(--pvcfc-gold-hover);
-      font-weight: 600;
-      letter-spacing: 0.5px;
-      text-transform: uppercase;
+      color: #FFFFFF;
+      font-size: 1.1rem;
+      font-weight: 900;
+      flex-shrink: 0;
     }
 
-    /* Route Navigation Tabs */
+    .brand-text h1 {
+      font-size: 1.25rem;
+      font-weight: 800;
+      color: var(--brand-primary);
+      line-height: 1.2;
+      letter-spacing: -0.2px;
+    }
+
+    .brand-text p {
+      font-size: 0.82rem;
+      color: var(--text-muted);
+      font-weight: 400;
+    }
+
+    .header-right {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+    }
+
+    .header-icon {
+      color: var(--text-muted);
+      font-size: 1.2rem;
+    }
+
+    .header-bottom {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding-top: 2px;
+    }
+
+    /* Short Route Navigation Tabs (Trợ Lý | Replay) */
     .route-nav {
       display: flex;
-      gap: 12px;
-      align-items: center;
-    }
-    .route-btn {
-      padding: 8px 16px;
-      border-radius: var(--radius-sm);
-      font-size: 0.88rem;
-      font-weight: 600;
-      border: 1px solid var(--pvcfc-border);
-      background: var(--pvcfc-white);
-      color: var(--pvcfc-text-muted);
-      cursor: pointer;
-      text-decoration: none;
-      transition: all 0.2s;
-      display: flex;
-      align-items: center;
       gap: 6px;
     }
-    .route-btn:hover {
-      border-color: var(--pvcfc-green-primary);
-      color: var(--pvcfc-green-primary);
+    .route-btn {
+      padding: 5px 14px;
+      border-radius: var(--radius-sm);
+      font-size: 0.82rem;
+      font-weight: 600;
+      border: 1px solid var(--border-color);
+      background: #FFFFFF;
+      color: var(--text-muted);
+      cursor: pointer;
+      transition: all 0.15s;
     }
     .route-btn.active {
-      background: var(--pvcfc-green-primary);
-      color: var(--pvcfc-white);
-      border-color: var(--pvcfc-green-primary);
+      background: var(--brand-primary);
+      color: #FFFFFF;
+      border-color: var(--brand-primary);
     }
 
-    /* Response Mode Toggle (KFC Parity) */
-    .mode-toggle-container {
+    /* Response Mode Toggle Container (Generative UI | Text only) */
+    .mode-toggle {
       display: flex;
       align-items: center;
-      background: var(--pvcfc-green-light);
-      padding: 4px;
-      border-radius: 30px;
-      border: 1px solid var(--pvcfc-border);
+      background: var(--bg-input);
+      padding: 3px;
+      border-radius: var(--radius-sm);
+      gap: 2px;
     }
-    .mode-btn {
-      padding: 8px 18px;
-      border-radius: 20px;
-      font-size: 0.88rem;
+
+    .mode-pill {
+      padding: 6px 14px;
+      border-radius: 6px;
+      font-size: 0.82rem;
       font-weight: 600;
       border: none;
       cursor: pointer;
       background: transparent;
-      color: var(--pvcfc-text-muted);
-      transition: all 0.25s;
-      display: flex;
-      align-items: center;
-      gap: 8px;
-    }
-    .mode-btn.active {
-      background: var(--pvcfc-green-primary);
-      color: var(--pvcfc-white);
-      box-shadow: 0 2px 8px rgba(10, 107, 65, 0.3);
+      color: var(--text-muted);
+      transition: all 0.15s;
     }
 
-    .hotline-badge {
-      font-size: 0.85rem;
-      color: var(--pvcfc-green-dark);
-      font-weight: 600;
-      background: var(--pvcfc-green-light);
-      padding: 6px 14px;
-      border-radius: 20px;
-      border: 1px solid var(--pvcfc-border);
+    .mode-pill.active {
+      background: var(--brand-primary);
+      color: #FFFFFF;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.1);
     }
 
-    /* Route 1: Plain Chatbot Container (Default `/`) */
+    /* Main Chat Layout */
     .plain-chat-layout {
       flex: 1;
       display: flex;
       flex-direction: column;
-      max-width: 1000px;
+      max-width: 1040px;
       width: 100%;
       margin: 0 auto;
-      background: var(--pvcfc-white);
-      border-left: 1px solid var(--pvcfc-border);
-      border-right: 1px solid var(--pvcfc-border);
+      background: #FFFFFF;
+      border-left: 1px solid var(--border-color);
+      border-right: 1px solid var(--border-color);
       overflow: hidden;
     }
 
-    /* Route 2: Demo Showcase Layout (`/demo`) */
-    .demo-showcase-layout {
-      flex: 1;
-      display: grid;
-      grid-template-columns: 380px 1fr;
-      overflow: hidden;
+    /* Quick Suggestion Pills (Literal Text Transmission) */
+    .quick-suggestions-bar {
+      padding: 12px 24px;
+      display: flex;
+      gap: 10px;
+      background: #FFFFFF;
+      border-bottom: 1px solid var(--border-color);
+      overflow-x: auto;
     }
 
-    /* Sidebar for Demo Route */
-    .sidebar {
-      background: var(--pvcfc-white);
-      border-right: 1px solid var(--pvcfc-border);
-      padding: 24px;
-      display: flex;
-      flex-direction: column;
-      gap: 18px;
-      overflow-y: auto;
-    }
-    .sidebar-header h2 {
-      font-size: 1.2rem;
-      color: var(--pvcfc-green-dark);
-      margin-bottom: 4px;
-    }
-    .sidebar-header p {
-      font-size: 0.82rem;
-      color: var(--pvcfc-text-muted);
-    }
-
-    .scenario-list {
-      display: flex;
-      flex-direction: column;
-      gap: 14px;
-    }
-    .scenario-card {
-      background: var(--pvcfc-cream);
-      border: 1.5px solid var(--pvcfc-border);
-      border-radius: var(--radius-md);
-      padding: 16px;
-      cursor: pointer;
-      transition: all 0.25s;
-    }
-    .scenario-card:hover {
-      border-color: var(--pvcfc-green-primary);
-      background: var(--pvcfc-green-light);
-    }
-    .scenario-card.active {
-      border-color: var(--pvcfc-green-primary);
-      background: var(--pvcfc-green-light);
-      box-shadow: 0 4px 12px rgba(10, 107, 65, 0.12);
-    }
-    .scenario-card-header {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      margin-bottom: 8px;
-    }
-    .scenario-tag {
-      font-size: 0.72rem;
-      font-weight: 700;
-      text-transform: uppercase;
-      color: var(--pvcfc-gold-hover);
-      background: rgba(218, 165, 32, 0.15);
-      padding: 2px 8px;
-      border-radius: 4px;
-    }
-    .scenario-card h3 {
-      font-size: 0.98rem;
-      color: var(--pvcfc-green-dark);
-      margin-bottom: 6px;
-    }
-    .scenario-card p {
-      font-size: 0.82rem;
-      color: var(--pvcfc-text-muted);
-      line-height: 1.4;
-    }
-
-    .replay-bar {
-      margin-top: auto;
-      padding-top: 16px;
-      border-top: 1px solid var(--pvcfc-border);
-    }
-    .replay-btn {
-      width: 100%;
-      background: linear-gradient(135deg, var(--pvcfc-green-dark), var(--pvcfc-green-primary));
-      color: var(--pvcfc-white);
-      border: none;
-      padding: 12px;
+    .suggestion-pill {
+      padding: 7px 14px;
+      background: #FFFFFF;
+      border: 1px solid var(--border-color);
       border-radius: var(--radius-sm);
+      font-size: 0.85rem;
       font-weight: 600;
-      font-size: 0.9rem;
+      color: var(--text-main);
       cursor: pointer;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      gap: 8px;
-      box-shadow: 0 4px 12px rgba(0, 90, 54, 0.2);
-      transition: all 0.2s;
-    }
-    .replay-btn:hover {
-      transform: translateY(-2px);
+      white-space: nowrap;
+      transition: all 0.15s;
     }
 
-    /* Main Chat Workspace */
-    .chat-workspace {
-      display: flex;
-      flex-direction: column;
-      background: #FAFBF9;
-      overflow: hidden;
-      flex: 1;
-    }
-    .chat-header {
-      background: var(--pvcfc-white);
-      padding: 16px 28px;
-      border-bottom: 1px solid var(--pvcfc-border);
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-    }
-    .chat-header-title h3 {
-      font-size: 1.15rem;
-      color: var(--pvcfc-green-dark);
-    }
-    .chat-header-title p {
-      font-size: 0.82rem;
-      color: var(--pvcfc-text-muted);
+    .suggestion-pill:hover {
+      border-color: var(--brand-primary);
+      background: var(--brand-light);
+      color: var(--brand-dark);
     }
 
+    /* Chat Messages Area */
     .chat-messages {
       flex: 1;
-      padding: 28px;
+      padding: 24px;
       overflow-y: auto;
       display: flex;
       flex-direction: column;
-      gap: 20px;
+      gap: 16px;
     }
 
     .message-row {
       display: flex;
-      gap: 14px;
-      max-width: 85%;
-      animation: fadeIn 0.3s ease-in-out;
+      gap: 12px;
+      max-width: 700px;
+      animation: fadeIn 0.2s ease-out;
     }
     @keyframes fadeIn {
-      from { opacity: 0; transform: translateY(8px); }
+      from { opacity: 0; transform: translateY(4px); }
       to { opacity: 1; transform: translateY(0); }
     }
+
     .message-row.user {
       align-self: flex-end;
       flex-direction: row-reverse;
     }
+
     .avatar {
-      width: 40px;
-      height: 40px;
+      width: 32px;
+      height: 32px;
       border-radius: 50%;
       display: flex;
       align-items: center;
       justify-content: center;
-      font-size: 1rem;
+      font-size: 0.85rem;
       flex-shrink: 0;
     }
     .avatar.bot {
-      background: var(--pvcfc-green-primary);
-      color: var(--pvcfc-gold);
-      box-shadow: 0 3px 8px rgba(10, 107, 65, 0.25);
+      background: var(--brand-primary);
+      color: #FFFFFF;
     }
     .avatar.user {
-      background: var(--pvcfc-text-muted);
-      color: #fff;
-    }
-    .bubble {
-      padding: 16px 20px;
-      border-radius: var(--radius-md);
-      font-size: 0.94rem;
-      line-height: 1.6;
-      white-space: pre-line;
-    }
-    .message-row.bot .bubble {
-      background: var(--pvcfc-white);
-      border: 1px solid var(--pvcfc-border);
-      box-shadow: 0 2px 10px rgba(0, 0, 0, 0.03);
-    }
-    .message-row.user .bubble {
-      background: var(--pvcfc-green-primary);
-      color: var(--pvcfc-white);
+      background: var(--text-muted);
+      color: #FFFFFF;
     }
 
-    /* Structured GenUI Cards */
-    .genui-card {
-      background: var(--pvcfc-white);
-      border: 1px solid var(--pvcfc-border);
+    .bubble {
+      padding: 12px 16px;
       border-radius: var(--radius-md);
-      padding: 20px;
-      margin-top: 14px;
-      box-shadow: 0 4px 16px rgba(0, 90, 54, 0.06);
+      font-size: 0.92rem;
+      line-height: 1.55;
+      white-space: pre-line;
+    }
+
+    .message-row.bot .bubble {
+      background: #FFFFFF;
+      border: 1px solid var(--border-color);
+      color: var(--text-main);
+    }
+
+    .message-row.user .bubble {
+      background: var(--brand-primary);
+      color: #FFFFFF;
+    }
+
+    /* Declarative GenUI Cards (CopilotKit Pattern) */
+    .genui-card {
+      background: #FFFFFF;
+      border: 1px solid var(--border-color);
+      border-radius: var(--radius-md);
+      padding: 16px;
+      margin-top: 10px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.04);
     }
     .genui-header {
       font-weight: 700;
-      color: var(--pvcfc-green-dark);
-      font-size: 1.05rem;
-      margin-bottom: 14px;
+      color: var(--brand-dark);
+      font-size: 0.92rem;
+      margin-bottom: 10px;
       display: flex;
       align-items: center;
-      gap: 10px;
-      padding-bottom: 10px;
-      border-bottom: 1px solid var(--pvcfc-border);
-    }
-    .genui-header i {
-      color: var(--pvcfc-gold-hover);
+      gap: 8px;
+      padding-bottom: 8px;
+      border-bottom: 1px solid var(--border-color);
     }
 
-    /* Interactive Calculator */
-    .calc-slider {
-      width: 100%;
-      margin: 14px 0;
-      accent-color: var(--pvcfc-green-primary);
-    }
-    .calc-result-grid {
-      display: grid;
-      grid-template-columns: repeat(3, 1fr);
-      gap: 12px;
-      background: var(--pvcfc-green-light);
-      padding: 14px;
-      border-radius: var(--radius-sm);
-      margin-top: 10px;
-    }
-    .calc-result-item {
-      text-align: center;
-    }
-    .calc-result-item .val {
-      font-size: 1.1rem;
-      font-weight: 700;
-      color: var(--pvcfc-green-primary);
-    }
-    .calc-result-item .lbl {
-      font-size: 0.78rem;
-      color: var(--pvcfc-text-muted);
-    }
-
-    /* Timeline Table */
     .timeline-table {
       width: 100%;
       border-collapse: collapse;
-      font-size: 0.88rem;
-      margin-top: 8px;
+      font-size: 0.85rem;
+      margin-top: 6px;
     }
     .timeline-table th {
-      background: var(--pvcfc-green-light);
-      color: var(--pvcfc-green-dark);
-      padding: 8px 12px;
-      text-align: left;
-      font-weight: 700;
+    /* Declarative GenUI Cards (CopilotKit Pattern) */
+    .genui-card {
+      background: #FFFFFF;
+      border: 1px solid var(--border-color);
+      border-radius: var(--radius-md);
+      padding: 16px;
+      margin-top: 10px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.04);
     }
-    .timeline-table td {
-      padding: 10px 12px;
-      border-bottom: 1px solid var(--pvcfc-border);
+    .genui-header {
+      font-weight: 700;
+      color: var(--brand-dark);
+      font-size: 0.92rem;
+      margin-bottom: 10px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding-bottom: 8px;
+      border-bottom: 1px solid var(--border-color);
     }
 
-    .card-btn {
-      background: var(--pvcfc-green-primary);
-      color: var(--pvcfc-white);
-      border: none;
-      padding: 10px 18px;
+    /* Dedicated GenUI Card Actions (CopilotKit Parity) */
+    .genui-actions {
+      display: flex;
+      gap: 8px;
+      margin-top: 12px;
+      padding-top: 10px;
+      border-top: 1px dashed var(--border-color);
+      flex-wrap: wrap;
+    }
+    .genui-btn {
+      padding: 6px 12px;
       border-radius: var(--radius-sm);
+      font-size: 0.82rem;
       font-weight: 600;
-      font-size: 0.88rem;
       cursor: pointer;
-      margin-top: 14px;
       display: inline-flex;
       align-items: center;
-      gap: 8px;
-      transition: background 0.2s;
+      gap: 6px;
+      transition: all 0.15s;
     }
-    .card-btn:hover {
-      background: var(--pvcfc-green-dark);
+    .genui-btn-primary {
+      background: var(--brand-primary);
+      color: #FFFFFF;
+      border: none;
+    }
+    .genui-btn-primary:hover {
+      background: var(--brand-dark);
+    }
+    .genui-btn-secondary {
+      background: #FFFFFF;
+      color: var(--brand-primary);
+      border: 1px solid var(--brand-primary);
+    }
+    .genui-btn-secondary:hover {
+      background: var(--brand-light);
     }
 
-    /* Input Area */
-    .chat-input-area {
-      padding: 18px 28px;
-      background: var(--pvcfc-white);
-      border-top: 1px solid var(--pvcfc-border);
-      display: flex;
-      gap: 12px;
+    /* Human-In-The-Loop HITL Approval Card */
+    .hitl-card {
+      background: #FFFFFF;
+      border: 1.5px solid var(--brand-gold);
+      border-radius: var(--radius-md);
+      padding: 14px 16px;
+      margin-top: 10px;
+      box-shadow: 0 4px 14px rgba(218, 165, 32, 0.15);
     }
+    .hitl-header {
+      font-size: 0.88rem;
+      font-weight: 800;
+      color: var(--brand-dark);
+      margin-bottom: 4px;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .hitl-body {
+      font-size: 0.82rem;
+      color: var(--text-muted);
+      margin-bottom: 10px;
+    }
+    .hitl-actions {
+      display: flex;
+      gap: 8px;
+    }
+    .hitl-btn-confirm {
+      background: var(--brand-primary);
+      color: #FFFFFF;
+      border: none;
+      padding: 5px 12px;
+      border-radius: var(--radius-sm);
+      font-size: 0.8rem;
+      font-weight: 700;
+      cursor: pointer;
+    }
+    .hitl-btn-cancel {
+      background: #FFFFFF;
+      color: var(--text-muted);
+      border: 1px solid var(--border-color);
+      padding: 5px 12px;
+      border-radius: var(--radius-sm);
+      font-size: 0.8rem;
+      font-weight: 600;
+      cursor: pointer;
+    }
+    .calc-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 8px;
+      background: var(--brand-light);
+      padding: 12px;
+      border-radius: var(--radius-sm);
+      margin-top: 8px;
+      text-align: center;
+    }
+    .calc-val {
+      font-size: 1.05rem;
+      font-weight: 700;
+      color: var(--brand-primary);
+    }
+    .calc-lbl {
+      font-size: 0.75rem;
+      color: var(--text-muted);
+    }
+
+    /* Bottom Chat Input Bar */
+    .chat-input-area {
+      padding: 14px 24px;
+      background: #FFFFFF;
+      border-top: 1px solid var(--border-color);
+      display: flex;
+      gap: 10px;
+      align-items: center;
+    }
+
     .chat-input {
       flex: 1;
-      border: 1.5px solid var(--pvcfc-border);
+      background: var(--bg-input);
+      border: 1px solid var(--border-color);
       border-radius: var(--radius-sm);
-      padding: 12px 18px;
-      font-size: 0.95rem;
+      padding: 14px 18px;
+      font-size: 0.93rem;
       outline: none;
       font-family: inherit;
+      color: var(--text-main);
     }
+
     .chat-input:focus {
-      border-color: var(--pvcfc-green-primary);
+      border-color: var(--brand-primary);
+      background: #FFFFFF;
     }
+
     .send-btn {
-      background: var(--pvcfc-green-primary);
-      color: var(--pvcfc-white);
+      width: 44px;
+      height: 44px;
+      background: var(--brand-primary);
+      color: #FFFFFF;
       border: none;
-      padding: 0 24px;
       border-radius: var(--radius-sm);
-      font-weight: 600;
       cursor: pointer;
       display: flex;
       align-items: center;
-      gap: 8px;
+      justify-content: center;
+      font-size: 1.05rem;
+      flex-shrink: 0;
+      transition: background 0.15s;
+    }
+    .send-btn:hover {
+      background: var(--brand-dark);
+    }
+    .send-btn:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+
+    /* Demo Showcase Layout (/demo) */
+    .demo-showcase-layout {
+      flex: 1;
+      display: grid;
+      grid-template-columns: 320px 1fr;
+      overflow: hidden;
+    }
+    .sidebar {
+      background: #FFFFFF;
+      border-right: 1px solid var(--border-color);
+      padding: 18px;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      overflow-y: auto;
+    }
+    .sidebar-header h2 {
+      font-size: 1.05rem;
+      color: var(--brand-dark);
+    }
+    .sidebar-header p {
+      font-size: 0.78rem;
+      color: var(--text-muted);
+    }
+    .scenario-card {
+      background: var(--bg-page);
+      border: 1px solid var(--border-color);
+      border-radius: var(--radius-sm);
+      padding: 12px;
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+    .scenario-card:hover, .scenario-card.active {
+      border-color: var(--brand-primary);
+      background: var(--brand-light);
+    }
+    .scenario-card h3 {
+      font-size: 0.9rem;
+      color: var(--brand-dark);
+      margin-bottom: 4px;
+    }
+    .scenario-card p {
+      font-size: 0.78rem;
+      color: var(--text-muted);
+    }
+    .replay-btn {
+      width: 100%;
+      background: var(--brand-primary);
+      color: #FFFFFF;
+      border: none;
+      padding: 10px;
+      border-radius: var(--radius-sm);
+      font-weight: 600;
+      font-size: 0.85rem;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+      margin-top: auto;
     }
 
     /* Typing Indicator */
     .typing-indicator {
       display: flex;
-      gap: 6px;
-      padding: 12px 16px;
-      background: var(--pvcfc-white);
+      gap: 5px;
+      padding: 10px 14px;
+      background: #FFFFFF;
       border-radius: var(--radius-md);
       width: fit-content;
-      border: 1px solid var(--pvcfc-border);
+      border: 1px solid var(--border-color);
     }
     .typing-indicator span {
-      width: 8px;
-      height: 8px;
-      background: var(--pvcfc-green-primary);
+      width: 6px;
+      height: 6px;
+      background: var(--brand-primary);
       border-radius: 50%;
       animation: bounce 1.4s infinite ease-in-out both;
     }
@@ -514,155 +561,109 @@
 </head>
 <body>
 
-  <!-- Top Header -->
+  <!-- Top Minimalist Header -->
   <header class="main-header">
-    <a href="#" class="brand-logo" onclick="switchRoute('/')">
-      <div class="logo-badge">
-        <i class="fa-solid fa-wheat-awn"></i>
-      </div>
-      <div class="logo-text">
-        <h1>PHÂN BÓN CÀ MAU</h1>
-        <p>Hạt Ngọc Mùa Vàng • Trợ Lý AI Nông Nghiệp</p>
-      </div>
-    </a>
+    <div class="header-top">
+      <a href="#" class="brand-group" onclick="switchRoute('/')">
+        <div class="brand-badge">PVCFC</div>
+        <div class="brand-text">
+          <h1>Phân Bón Cà Mau</h1>
+          <p>Hạt Ngọc Mùa Vàng • Trợ Lý AI Nông Nghiệp</p>
+        </div>
+      </a>
 
-    <!-- Navigation Route Tabs -->
-    <div class="route-nav">
-      <button class="route-btn active" id="btn-route-chat" onclick="switchRoute('/')">
-        <i class="fa-solid fa-comments"></i> Trợ Lý Nông Nghiệp
-      </button>
-      <button class="route-btn" id="btn-route-demo" onclick="switchRoute('/demo')">
-        <i class="fa-solid fa-film"></i> Trình Chiếu Cổ Đông (/demo)
-      </button>
+      <div class="header-right">
+        <!-- Mode Toggle Container -->
+        <div class="mode-toggle">
+          <button class="mode-pill active" id="btn-mode-genui" onclick="setResponseMode('genui')">Generative UI</button>
+          <button class="mode-pill" id="btn-mode-text" onclick="setResponseMode('text')">Text only</button>
+        </div>
+        <i class="fa-regular fa-comment header-icon" title="Hỗ trợ nông nghiệp 24/7"></i>
+      </div>
     </div>
 
-    <!-- Response Mode Switcher (KFC Parity) -->
-    <div class="mode-toggle-container">
-      <button class="mode-btn active" id="btn-mode-genui" onclick="setResponseMode('genui')">
-        <i class="fa-solid fa-shapes"></i> Giao diện GenUI
-      </button>
-      <button class="mode-btn" id="btn-mode-text" onclick="setResponseMode('text')">
-        <i class="fa-solid fa-align-left"></i> Chỉ Văn bản (Text-Only)
-      </button>
-    </div>
-
-    <div class="hotline-badge">
-      <i class="fa-solid fa-headset"></i> Hotline Nông Dân: <strong>1800 888606</strong>
+    <!-- Short Route Navigation Tabs -->
+    <div class="header-bottom">
+      <div class="route-nav">
+        <button class="route-btn active" id="btn-route-chat" onclick="switchRoute('/')">Trợ Lý</button>
+        <button class="route-btn" id="btn-route-demo" onclick="switchRoute('/demo')">Replay</button>
+      </div>
     </div>
   </header>
 
-  <!-- Route 1: Default Plain Live Chatbot View (`/`) -->
+  <!-- Route 1: Default Chat Layout (`/`) -->
   <main class="plain-chat-layout" id="view-plain-chat">
-    <div class="chat-header">
-      <div class="chat-header-title">
-        <h3>Trợ Lý AI Nông Nghiệp Phân Bón Cà Mau</h3>
-        <p id="plain-mode-indicator">Chế độ phản hồi: <strong>Giao diện GenUI</strong> | Trực tuyến 24/7</p>
-      </div>
-      <button class="card-btn" style="margin: 0; background: var(--pvcfc-green-light); color: var(--pvcfc-green-dark);" onclick="resetPlainChat()">
-        <i class="fa-solid fa-rotate-left"></i> Phiên Mới
-      </button>
+    <!-- Pure Agronomy Quick Suggestions Bar (Transmits Exact Pill Label) -->
+    <div class="quick-suggestions-bar">
+      <button class="suggestion-pill" onclick="sendQuickPrompt('Tư vấn quy trình lúa')">Tư vấn quy trình lúa</button>
+      <button class="suggestion-pill" onclick="sendQuickPrompt('Tính lượng phân bón')">Tính lượng phân bón</button>
+      <button class="suggestion-pill" onclick="sendQuickPrompt('Chẩn đoán thối rễ')">Chẩn đoán thối rễ</button>
+      <button class="suggestion-pill" onclick="sendQuickPrompt('Hẹn Kỹ sư đo pH')">Hẹn Kỹ sư đo pH</button>
     </div>
 
+    <!-- Chat Messages Container -->
     <div class="chat-messages" id="plain-chat-messages">
       <div class="message-row bot">
         <div class="avatar bot"><i class="fa-solid fa-seedling"></i></div>
         <div>
-          <div class="bubble">
-            Xin chào bà con! Tôi là <strong>Trợ lý AI Phân Bón Cà Mau</strong>. Tôi có thể hỗ trợ bà con tư vấn kỹ thuật bón phân cho các loại cây trồng (Lúa, Sầu riêng, Cà phê, Cây ăn trái), tính toán số lượng bao phân theo héc-ta, chẩn đoán bệnh lá thối rễ, hoặc tra cứu đại lý PVCFC gần nhất. Bà con cần hỗ trợ gì hôm nay ạ?
-          </div>
+          <div class="bubble">Xin chào, Phân Bón Cà Mau có thể giúp bạn tư vấn kỹ thuật bón phân và chăm sóc cây trồng ngay tại đây.</div>
         </div>
       </div>
     </div>
 
+    <!-- Bottom Input Bar -->
     <div class="chat-input-area">
-      <input type="text" class="chat-input" id="plain-chat-input" placeholder="Nhập thắc mắc nông nghiệp của bà con tại đây..." onkeypress="handlePlainKeyPress(event)">
-      <button class="send-btn" id="btn-plain-send" onclick="handlePlainSend()"><i class="fa-solid fa-paper-plane"></i> Gửi Câu Hỏi</button>
+      <input type="text" class="chat-input" id="plain-chat-input" placeholder="Nhắn Phân Bón Cà Mau..." onkeypress="handlePlainKeyPress(event)">
+      <button class="send-btn" id="btn-plain-send" onclick="handlePlainSend()"><i class="fa-solid fa-paper-plane"></i></button>
     </div>
   </main>
 
-  <!-- Route 2: Demo Showcase View (`/demo`) -->
+  <!-- Route 2: Demo Showcase Layout (`/demo`) -->
   <main class="demo-showcase-layout" id="view-demo-showcase" style="display: none;">
-    <!-- Sidebar: 4 PM-Curated Demo Scenarios -->
     <div class="sidebar">
       <div class="sidebar-header">
-        <h2>Trình Chiếu Cổ Đông (/demo)</h2>
-        <p>Các kịch bản tư vấn mẫu. Nhấn nút bên dưới để phát lại từng lượt hội thoại trực tiếp:</p>
+        <h2>Trình Chiếu Replay (/demo)</h2>
+        <p>Chọn kịch bản mẫu và nhấn nút bên dưới để phát lại lượt gọi AI trực tiếp:</p>
       </div>
 
       <div class="scenario-list">
-        <!-- Scenario 1 -->
         <div class="scenario-card active" id="sc-1" onclick="selectDemoScenario(1)">
-          <div class="scenario-card-header">
-            <span class="scenario-tag">8 Lượt • Lúa Phèn</span>
-            <i class="fa-solid fa-wheat-awn" style="color: var(--pvcfc-green-primary);"></i>
-          </div>
-          <h3>Lúa Hè Thu 15 Ngày (Đất Phèn An Giang)</h3>
-          <p>Giải độc phèn bằng Organic OM Good & Đạm Cà Mau, tính toán liều lượng cho 5 Ha.</p>
+          <h3>Kịch bản 1: Tư vấn quy trình lúa Hè Thu (5 Ha)</h3>
+          <p>Giải độc phèn An Giang, phân bón N46.Plus & OM Good.</p>
         </div>
-
-        <!-- Scenario 2 -->
         <div class="scenario-card" id="sc-2" onclick="selectDemoScenario(2)">
-          <div class="scenario-card-header">
-            <span class="scenario-tag">8 Lượt • Cây Ăn Trái</span>
-            <i class="fa-solid fa-tree" style="color: var(--pvcfc-green-primary);"></i>
-          </div>
-          <h3>Sầu Riêng & Cà Phê Nuôi Trái (Tây Nguyên)</h3>
-          <p>N46.Plus bảo vệ kép & NPK Gold 20-10-10 chống rụng trái, lớn trái dẻo cành.</p>
+          <h3>Kịch bản 2: Tính lượng phân bón Sầu Riêng</h3>
+          <p>Bộ đôi N46.Plus & NPK Gold 20-10-10 nuôi trái.</p>
         </div>
-
-        <!-- Scenario 3 -->
         <div class="scenario-card" id="sc-3" onclick="selectDemoScenario(3)">
-          <div class="scenario-card-header">
-            <span class="scenario-tag">8 Lượt • Chẩn Đoán</span>
-            <i class="fa-solid fa-stethoscope" style="color: var(--pvcfc-green-primary);"></i>
-          </div>
-          <h3>Vàng Lá Thối Rễ & Cải Tạo Đất Sau Mưa</h3>
-          <p>Chẩn đoán bệnh lá khẩn cấp, ngưng đạm hóa học & phác đồ 3 bước phục hồi bộ rễ.</p>
+          <h3>Kịch bản 3: Chẩn đoán vàng lá thối rễ</h3>
+          <p>Phác đồ cấp bách phục hồi bộ rễ cây ăn trái sau mưa.</p>
         </div>
-
-        <!-- Scenario 4 -->
         <div class="scenario-card" id="sc-4" onclick="selectDemoScenario(4)">
-          <div class="scenario-card-header">
-            <span class="scenario-tag">8 Lượt • Đại Lý</span>
-            <i class="fa-solid fa-store" style="color: var(--pvcfc-green-primary);"></i>
-          </div>
-          <h3>Tra Cứu Đại Lý Cái Nước & Kết Nối Kỹ Sư</h3>
-          <p>Tra cứu đại lý Voi Vàng chính hãng & đăng ký Kỹ sư PVCFC tư vấn pH tận vườn.</p>
+          <h3>Kịch bản 4: Hẹn Kỹ sư đo pH & Tra cứu đại lý</h3>
+          <p>Đại lý Cái Nước chính hãng & hẹn Kỹ sư thăm vườn.</p>
         </div>
       </div>
 
-      <div class="replay-bar">
-        <button class="replay-btn" id="btn-replay-action" onclick="runLiveReplaySession()">
-          <i class="fa-solid fa-play"></i> Gọi Phiên AI Trực Tiếp (Live AI Replay)
-        </button>
-      </div>
+      <button class="replay-btn" id="btn-replay-action" onclick="runLiveReplaySession()">
+        <i class="fa-solid fa-play"></i> Phát Lại Live AI Replay
+      </button>
     </div>
 
-    <!-- Main Chat Workspace for Demo Route -->
-    <div class="chat-workspace">
-      <div class="chat-header">
-        <div class="chat-header-title">
-          <h3 id="demo-scenario-title">Kịch bản 1: Lúa Hè Thu 15 Ngày & Đất Phèn An Giang (5 Ha)</h3>
-          <p id="demo-mode-indicator">Chế độ trình chiếu: <strong>Giao diện GenUI</strong> | Phiên AI Trực Tiếp Deployed SHA: <code>ac32338a</code></p>
-        </div>
-      </div>
-
+    <div class="plain-chat-layout" style="border: none;">
       <div class="chat-messages" id="demo-chat-messages">
-        <!-- Messages rendered dynamically -->
+        <!-- Replay Messages -->
       </div>
-
       <div class="chat-input-area">
-        <input type="text" class="chat-input" id="demo-chat-input" placeholder="Nhập câu hỏi để gửi tiếp vào phiên AI trực tiếp..." onkeypress="handleDemoKeyPress(event)">
-        <button class="send-btn" id="btn-demo-send" onclick="handleDemoSend()"><i class="fa-solid fa-paper-plane"></i> Gửi Gợi Ý</button>
+        <input type="text" class="chat-input" id="demo-chat-input" placeholder="Nhắn Phân Bón Cà Mau..." onkeypress="handleDemoKeyPress(event)">
+        <button class="send-btn" id="btn-demo-send" onclick="handleDemoSend()"><i class="fa-solid fa-paper-plane"></i></button>
       </div>
     </div>
   </main>
 
   <script>
-    // Hostname-agnostic backend URL (resolves localhost/127.0.0.1 dynamically)
-    const host = window.location.hostname || 'localhost';
-    const PRIMARY_BACKEND_URL = `http://${host}:8787`;
-    const CLOUDFLARE_WORKER_URL = 'https://kfc-agent-backend-demo.thangvnv0806.workers.dev';
+    // Hostname-agnostic backend URL
+    const PRIMARY_BACKEND_URL = window.location.origin || 'http://localhost:8787';
 
     // Global State
     let currentRoute = '/'; // '/' | '/demo'
@@ -673,84 +674,7 @@
     let plainSessionId = 'pvcfc_live_' + Date.now();
     let plainCustomerId = 'customer_' + Math.floor(Math.random() * 10000);
 
-    // Dynamic Live AI Response Generator
-    async function getAgriculturalAiResponse(text, responseMode) {
-      const textLower = text.toLowerCase();
-      let botText = '';
-      let genUi = null;
-
-      if (textLower.includes('lúa') || textLower.includes('hè thu') || textLower.includes('phèn') || textLower.includes('tri tôn')) {
-        botText = `Chào bà con! Đối với lúa Hè Thu gieo sạ trên vùng đất chua phèn (pH từ 4.5 - 5.0), rễ lúa rất dễ bị thâm đen và ngộ độc phèn.\n\nTrợ lý AI khuyên bà con:\n1. Cho nước mới vào ruộng để xả bớt độc chất phèn cũ.\n2. Bón phân hữu cơ <strong>Organic OM Good Cà Mau (150kg/Ha)</strong> trước để giải độc đất và kích thích rễ tơ trắng đâm mạnh.\n3. Sau 3 - 5 ngày khi rễ lúa ra trắng khỏe, mới tiến hành bón <strong>Đạm Cà Mau (40kg/Ha)</strong> để lúa đẻ nhánh tập trung chú nhé!`;
-        if (responseMode === 'genui') {
-          genUi = {
-            type: "FertilizerScheduleCard",
-            title: "Lịch Bón Phân 3 Đợt Lúa Hè Thu Vùng Đất Phèn",
-            stages: [
-              { name: "Đợt 1 (Hạ phèn)", timing: "7 - 10 NSS", dosage: "150kg Organic OM Good + 40kg Đạm Cà Mau / Ha" },
-              { name: "Đợt 2 (Đẻ nhánh)", timing: "18 - 22 NSS", dosage: "60kg Đạm Cà Mau + 80kg NPK 20-20-15 / Ha" },
-              { name: "Đợt 3 (Đón đòng)", timing: "40 - 45 NSS", dosage: "120kg NPK 20-20-15 + 60kg Đạm Cà Mau / Ha" }
-            ]
-          };
-        }
-      } else if (textLower.includes('sầu riêng') || textLower.includes('cà phê') || textLower.includes('đắk lắk') || textLower.includes('rụng')) {
-        botText = `Đối với sầu riêng và cà phê Tây Nguyên giai đoạn nuôi trái (bằng trứng gà), thời tiết nắng mưa thất thường rất dễ làm rụng trái sinh lý.\n\nBà con nên áp dụng bộ đôi phân bón cao cấp Châu Âu của PVCFC:\n- <strong>N46.Plus Cà Mau:</strong> Phủ Agrho N Dual Protect chống thất thoát đạm 30%, đạm nhả chậm giúp dẻo cành.\n- <strong>NPK Cà Mau Gold 20-10-10:</strong> Công nghệ Polyphosphate tan lân nhanh, nuôi cơm sầu riêng vàng béo, vỏ mỏng và cơm dày dặn!`;
-        if (responseMode === 'genui') {
-          genUi = {
-            type: "ProductRecommendationCard",
-            title: "Bộ Đôi Dinh Dưỡng Cao Cấp Sầu Riêng & Cà Phê",
-            products: [
-              { name: "N46.Plus Cà Mau", feature: "Công nghệ Châu Âu chống thất thoát đạm 30%" },
-              { name: "NPK Cà Mau Gold 20-10-10", feature: "Polyphosphate tan lân nhanh, làm cơm sầu riêng vàng ngọt" }
-            ]
-          };
-        }
-      } else if (textLower.includes('vàng lá') || textLower.includes('thối rễ') || textLower.includes('mưa')) {
-        botText = `Trợ lý AI chẩn đoán vườn cây bị <strong>Vàng Lá Thối Rễ do nấm Fusarium & ngộ độc nước</strong> sau mưa lớn.\n\n⚠️ Bà con <strong>TUYỆT ĐỐI KHÔNG BÓN UREA HÓA HỌC NGAY LÚC NÀY!</strong> Bón đạm đạm lúc rễ bị tổn thương sẽ làm nấm phát triển mạnh hơn làm thối rễ chết cây.\n\nPhác đồ 3 bước cấp bách:\n1. Tháo cạn nước trong mương vườn.\n2. Rải vôi bột (500kg/Ha) nâng pH đất > 6.0.\n3. Bón <strong>Organic OM Cà Mau (3 - 5kg/gốc)</strong> sau 7 ngày để kích thích rễ tơ trắng mọc lại.`;
-        if (responseMode === 'genui') {
-          genUi = {
-            type: "DiagnosticProtocolCard",
-            title: "Phác Đồ Cấp Bách Phục Hồi Bộ Rễ Cây Ăn Trái",
-            warning: "Ngưng toàn bộ đạm hóa học. Xả cạn nước trong mương vườn.",
-            steps: [
-              "1. Rải vôi bột (500kg/Ha) nâng pH đất > 6.0",
-              "2. Tưới nấm đối kháng Trichoderma diệt nấm thối rễ",
-              "3. Bón Organic OM Cà Mau (3-5kg/gốc) sau 7 ngày để kích rễ trắng"
-            ]
-          };
-        }
-      } else if (textLower.includes('đại lý') || textLower.includes('cái nước') || textLower.includes('kỹ sư')) {
-        botText = `Thông tin đại lý ủy quyền chính hãng PVCFC tại huyện Cái Nước, Cà Mau:\n📍 <strong>Đại Lý Voi Vàng (Tư Hải)</strong> - QL1A, Thị trấn Cái Nước, H. Cái Nước, Cà Mau (📞 0913.890.xxx)\n\nBà con có thể đăng ký Kỹ sư Nông nghiệp PVCFC hẹn lịch xuống tận vườn đo pH đất miễn phí!`;
-        if (responseMode === 'genui') {
-          genUi = {
-            type: "DealerLocatorCard",
-            title: "Đại Lý Ủy Quyền PVCFC & Đăng Ký Kỹ Sư Thăm Vườn",
-            dealerName: "Đại Lý Voi Vàng (Tư Hải)",
-            address: "QL1A, Thị trấn Cái Nước, H. Cái Nước, Cà Mau",
-            phone: "0913.890.xxx",
-            callbackForm: true
-          };
-        }
-      } else {
-        botText = `Dạ, Trợ lý AI Phân Bón Cà Mau có thể hỗ trợ bà con các công việc sau:\n\n1. <strong>Tư vấn quy trình bón phân:</strong> Chọn loại phân bón phù hợp cho Lúa, Sầu riêng, Cà phê, Cây ăn trái theo vùng thổ nhưỡng.\n2. <strong>Tính toán lượng phân bón:</strong> Lập bảng tính số kg và số bao phân chi tiết theo diện tích (Héc-ta hoặc Công).\n3. <strong>Chẩn đoán & phục hồi cây:</strong> Xử lý lúa nghẹt phèn, vàng lá thối rễ và lập phác đồ cấp bách.\n4. <strong>Tra cứu đại lý & Kỹ sư:</strong> Tìm địa chỉ đại lý Phân Bón Cà Mau gần nhất và đăng ký Kỹ sư khảo sát đất tận vườn.`;
-        if (responseMode === 'genui') {
-          genUi = {
-            type: "CapabilitiesOverviewCard",
-            title: "Các Năng Lực Hỗ Trợ Bà Con (Phân Bón Cà Mau)",
-            items: [
-              "Lịch bón phân & thổ nhưỡng đất chua phèn, phù sa, Tây Nguyên",
-              "Bảng tính tự động quy đổi ra số bao 50kg theo Héc-ta",
-              "Chẩn đoán sâu bệnh & phác đồ ngưng đạm rải vôi sinh học",
-              "Kết nối 17.000+ đại lý & hẹn Kỹ sư Nông nghiệp đo pH tận vườn"
-            ]
-          };
-        }
-      }
-
-      return { text: botText, genUi };
-    }
-
-    // Call Live AI Backend Endpoint (/chat/kfc/message) with Resilient Local Fallback
-    // Call Live AI Backend Endpoint (/chat/pvcfc/message) with Resilient Local Fallback
+    // Call Live AI Backend Endpoint
     async function callLiveAiBackend(text, responseMode, sessionId, customerId) {
       const payload = {
         sessionId: 'pvcfc:' + sessionId,
@@ -758,94 +682,72 @@
         clientMessageId: 'msg_' + Date.now() + '_' + Math.random().toString(36).substring(2, 8),
         text: text,
         metadata: {
-          responseProfile: responseMode === 'genui' ? 'genui' : 'social',
-          verifiedBusinessContext: {
-            organization: 'Tổng Công ty Phân bón Dầu khí Cà Mau (PVCFC / Đạm Cà Mau)',
-            role: 'Trợ lý AI Nông Nghiệp Phân Bón Cà Mau',
-            products: ['Đạm Cà Mau (Urea)', 'NPK Cà Mau 20-20-15', 'Organic OM Cà Mau', 'N46.Plus', 'Kali Cà Mau 61']
-          }
+          responseProfile: responseMode === 'genui' ? 'genui' : 'social'
         }
       };
 
-      const urls = [
-        PRIMARY_BACKEND_URL + '/chat/pvcfc/message',
-        CLOUDFLARE_WORKER_URL + '/chat/pvcfc/message',
-        PRIMARY_BACKEND_URL + '/chat/kfc/message'
-      ];
-      for (const url of urls) {
-        try {
-          const controller = new AbortController();
-          const timer = setTimeout(() => controller.abort(), 12000);
+      try {
+        const controller = new AbortController();
+        const timer = setTimeout(() => controller.abort(), 45000);
+        const res = await fetch(PRIMARY_BACKEND_URL + '/chat/pvcfc/message', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
+          signal: controller.signal
+        });
+        clearTimeout(timer);
 
-          const res = await fetch(url, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(payload),
-            signal: controller.signal
-          });
-          clearTimeout(timer);
-
-          if (res.ok) {
-            const data = await res.json();
-            const textResponse = data.responseText || (data.assistantTurn && data.assistantTurn.text) || (data.presentation && data.presentation.text) || '';
-            if (textResponse && textResponse.length > 5) {
-              return {
-                ok: true,
-                text: textResponse,
-                genUi: data.genUi || (data.assistantTurn && data.assistantTurn.genUi) || null
-              };
-            }
-          }
-        } catch (err) {
-          // try next URL
+        if (res.ok) {
+          const data = await res.json();
+          const botText = data.responseText || data.presentation?.text || '';
+          const genUi = data.presentation?.genUi || data.genUi || null;
+          return { text: botText, genUi };
         }
+        const errData = await res.json().catch(() => ({}));
+        throw new Error(errData.message || `Lỗi máy chủ HTTP ${res.status}`);
+      } catch (err) {
+        throw new Error(err.message || 'Không thể kết nối máy chủ PVCFC AI');
       }
-
-      // Live AI Model Response Generator Fallback
-      return await getAgriculturalAiResponse(text, responseMode);
     }
 
-    // Fixed Customer Turn Scenarios for Demo Replay Route
     const demoScenariosData = {
       1: {
-        title: "Kịch bản 1: Lúa Hè Thu 15 Ngày & Đất Phèn An Giang (5 Ha)",
+        title: "Kịch bản 1: Tư vấn quy trình lúa Hè Thu (5 Ha)",
         userTurns: [
-          "Chào chú trợ lý! Tui ở Tri Tôn, An Giang, vụ Hè Thu này tui làm 5 héc-ta lúa mà đất ở đây chua phèn nặng quá. Nhờ chú tư vấn giùm tui cách bón phân sao cho hiệu quả, lúa không bị ngộ độc phèn mà rễ bám sâu khỏe mạnh với?",
-          "Lúa tui sạ bữa nay được đúng 15 ngày rồi chú ơi. Bữa trước tui đo pH tầm 4.5 tới 5.0. Mấy chỗ gò cao chóp lá hơi ngả vàng đỏ, nhổ cây lúa lên thì rễ thâm đen, không ra rễ trắng mới. Giờ bón Đạm Cà Mau vô liền được chưa chú?",
-          "Nghe chú giải thích tường tận quá, may mà chưa vãi đạm xuống! Vậy chú cho tui xin cái lịch bón phân 3 đợt chuẩn phối hợp Organic OM Good, Đạm Cà Mau với NPK 20-20-15 làm sao chú?",
-          "Dạ rõ quá chú! Tui làm 5 héc-ta (50 công), chú tính tổng số ký và bao phân (50kg/bao) cho cả 3 đợt bón để tui ra đại lý mua luôn một thể!"
+          "Tư vấn quy trình lúa",
+          "Lúa sạ 15 ngày, pH 4.5. Nhổ lúa lên rễ thâm đen. Bón Đạm Cà Mau vô liền được chưa?",
+          "Cho xin lịch bón phân 3 đợt chuẩn phối hợp Organic OM Good, Đạm Cà Mau với NPK 20-20-15?",
+          "Tui làm 5 héc-ta, tính tổng số ký và bao phân (50kg/bao) cho cả 3 đợt bón?"
         ]
       },
       2: {
-        title: "Kịch bản 2: Sầu Riêng & Cà Phê Nuôi Trái (Tây Nguyên)",
+        title: "Kịch bản 2: Tính lượng phân bón Sầu Riêng",
         userTurns: [
-          "Chào chú AI! Tôi ở Đắk Lắk, đang canh tác 2 Héc-ta sầu riêng trồng xen cà phê. Vườn sầu riêng nhà tôi đang giai đoạn đậu trái bằng trứng gà. Nắng mưa thất thường quá, tôi sợ rụng trái sinh lý và sầu riêng sau này nhẹ ký. Dùng phân bón cao cấp nào của PVCFC tốt nhất?",
-          "Bộ đôi N46.Plus và NPK Gold này có ưu điểm gì vượt trội so với phân bón thường chú?",
-          "Vậy liều lượng bón cho 2 Héc-ta sầu riêng nuôi trái này cụ thể thế nào chú?"
+          "Tính lượng phân bón",
+          "Bộ đôi N46.Plus và NPK Gold này có ưu điểm gì?",
+          "Liều lượng bón cho 2 Héc-ta sầu riêng nuôi trái thế nào?"
         ]
       },
       3: {
-        title: "Kịch bản 3: Chẩn Đoán Vàng Lá Thối Rễ & Phục Hồi",
+        title: "Kịch bản 3: Chẩn đoán vàng lá thối rễ",
         userTurns: [
-          "Vườn cam 1.5 Ha nhà tôi ở Vĩnh Long bị vàng lá gân xanh lai rai kèm thối rễ sau mấy đợt mưa dầm bão vừa rồi, tôi định mua urea về vãi cho xanh lại được không chú?",
-          "Trời ơi may quá! Vậy giờ tôi phải cứu vườn cam 1.5 Ha này làm sao chú?"
+          "Chẩn đoán thối rễ",
+          "Vĩnh Long mưa dầm bị thối rễ, giờ phải cứu vườn cam 1.5 Ha thế nào?"
         ]
       },
       4: {
-        title: "Kịch bản 4: Tra Cứu Đại Lý Cái Nước & Kết Nối Kỹ Sư",
+        title: "Kịch bản 4: Hẹn Kỹ sư đo pH & Tra cứu đại lý",
         userTurns: [
-          "Tôi ở huyện Cái Nước, Cà Mau, cho tôi tra cứu đại lý chính hãng Phân Bón Cà Mau gần nhất để mua Đạm Cà Mau và NPK Gold.",
-          "Tôi muốn đăng ký Kỹ sư nông nghiệp PVCFC xuống tận vườn ở Cái Nước đo pH và khảo sát đất được không?"
+          "Hẹn Kỹ sư đo pH",
+          "Tôi ở Cái Nước, Cà Mau, cho tra cứu đại lý chính hãng PVCFC gần nhất và hẹn kỹ sư?"
         ]
       }
     };
 
-    // Route Switcher (`/` vs `/demo`)
     function switchRoute(path) {
       currentRoute = path;
       document.getElementById('btn-route-chat').classList.toggle('active', path === '/');
       document.getElementById('btn-route-demo').classList.toggle('active', path === '/demo');
-      
       document.getElementById('view-plain-chat').style.display = path === '/' ? 'flex' : 'none';
       document.getElementById('view-demo-showcase').style.display = path === '/demo' ? 'grid' : 'none';
 
@@ -854,30 +756,15 @@
       }
     }
 
-    // Response Mode Switcher (KFC Parity)
     function setResponseMode(mode) {
       currentMode = mode;
       document.getElementById('btn-mode-genui').classList.toggle('active', mode === 'genui');
       document.getElementById('btn-mode-text').classList.toggle('active', mode === 'text');
-      document.getElementById('plain-mode-indicator').innerHTML = `Chế độ phản hồi: <strong>${mode === 'genui' ? 'Giao diện GenUI' : 'Chỉ Văn bản (Text-Only)'}</strong> | Trực tuyến 24/7`;
-      document.getElementById('demo-mode-indicator').innerHTML = `Chế độ trình chiếu: <strong>${mode === 'genui' ? 'Giao diện GenUI' : 'Chỉ Văn bản (Text-Only)'}</strong> | Phiên AI Trực Tiếp Deployed SHA: <code>ac32338a</code>`;
     }
 
-    // --- Route 1: Plain Chat Logic (`/`) ---
-    function resetPlainChat() {
-      plainSessionId = 'pvcfc_live_' + Date.now();
-      plainCustomerId = 'customer_' + Math.floor(Math.random() * 10000);
-      const box = document.getElementById('plain-chat-messages');
-      box.innerHTML = `
-        <div class="message-row bot">
-          <div class="avatar bot"><i class="fa-solid fa-seedling"></i></div>
-          <div>
-            <div class="bubble">
-              Xin chào bà con! Tôi là <strong>Trợ lý AI Phân Bón Cà Mau</strong>. Tôi có thể hỗ trợ bà con tư vấn kỹ thuật bón phân cho các loại cây trồng (Lúa, Sầu riêng, Cà phê, Cây ăn trái), tính toán số lượng bao phân theo héc-ta, chẩn đoán bệnh lá thối rễ, hoặc tra cứu đại lý PVCFC gần nhất. Bà con cần hỗ trợ gì hôm nay ạ?
-            </div>
-          </div>
-        </div>
-      `;
+    function sendQuickPrompt(promptText) {
+      document.getElementById('plain-chat-input').value = promptText;
+      handlePlainSend();
     }
 
     function handlePlainKeyPress(e) {
@@ -891,8 +778,6 @@
       if (!text) return;
 
       const chatBox = document.getElementById('plain-chat-messages');
-
-      // User Bubble
       const userRow = document.createElement('div');
       userRow.className = 'message-row user';
       userRow.innerHTML = `
@@ -904,7 +789,6 @@
       sendBtn.disabled = true;
       chatBox.scrollTop = chatBox.scrollHeight;
 
-      // Show typing indicator
       const typingRow = document.createElement('div');
       typingRow.className = 'message-row bot';
       typingRow.id = 'plain-typing-indicator';
@@ -915,7 +799,6 @@
       chatBox.appendChild(typingRow);
       chatBox.scrollTop = chatBox.scrollHeight;
 
-      // Invoke Live OpenAI Model via Backend API / Fallback
       try {
         const result = await callLiveAiBackend(text, currentMode, plainSessionId, plainCustomerId);
         const typing = document.getElementById('plain-typing-indicator');
@@ -926,7 +809,7 @@
 
         let genUiHtml = '';
         if (currentMode === 'genui' && result.genUi) {
-          genUiHtml = renderGenUiCard(result.genUi);
+          genUiHtml = renderDeclarativeGenUiCard(result.genUi);
         }
 
         botRow.innerHTML = `
@@ -943,12 +826,8 @@
         const errorRow = document.createElement('div');
         errorRow.className = 'message-row bot';
         errorRow.innerHTML = `
-          <div class="avatar bot"><i class="fa-solid fa-exclamation-triangle"></i></div>
-          <div>
-            <div class="bubble" style="background: #FDEDEC; border-color: #FADBD8; color: #78281F;">
-              Không thể kết nối với hệ thống AI Phân Bón Cà Mau. Vui lòng kiểm tra lại kết nối mạng hoặc thử lại.
-            </div>
-          </div>
+          <div class="avatar bot"><i class="fa-solid fa-triangle-exclamation"></i></div>
+          <div><div class="bubble" style="background:#FFF5F5; border-color:#FED7D7; color:#C53030;">Không thể kết nối máy chủ PVCFC AI.</div></div>
         `;
         chatBox.appendChild(errorRow);
       } finally {
@@ -957,7 +836,6 @@
       }
     }
 
-    // --- Route 2: Demo Showcase Replay Logic (`/demo`) ---
     function selectDemoScenario(id) {
       demoScenarioId = id;
       for (let i = 1; i <= 4; i++) {
@@ -970,25 +848,21 @@
     function renderDemoScenarioPreview() {
       const scenario = demoScenariosData[demoScenarioId];
       if (!scenario) return;
-
-      document.getElementById('demo-scenario-title').innerText = scenario.title;
       const chatBox = document.getElementById('demo-chat-messages');
       chatBox.innerHTML = `
-        <div style="text-align: center; color: var(--pvcfc-text-muted); padding: 40px 20px; font-size: 0.95rem;">
-          <i class="fa-solid fa-play" style="font-size: 2rem; color: var(--pvcfc-green-primary); margin-bottom: 12px; display: block;"></i>
-          Nhấn nút <strong>"Phát Lại Gọi Phiên AI Trực Tiếp (Live AI Replay)"</strong> bên góc trái để khởi tạo phiên AI trực tiếp gửi từng lượt câu hỏi của kịch bản này tới mô hình OpenAI.
+        <div style="text-align: center; color: var(--text-muted); padding: 40px 20px; font-size: 0.9rem;">
+          <i class="fa-solid fa-play" style="font-size: 1.8rem; color: var(--brand-primary); margin-bottom: 8px; display: block;"></i>
+          Nhấn nút <strong>"Phát Lại Live AI Replay"</strong> để gửi từng lượt câu hỏi kịch bản tới mô hình OpenAI.
         </div>
       `;
     }
 
-    // Live AI Replay Function (Sequentially invokes OpenAI model turn by turn over API)
     async function runLiveReplaySession() {
       if (isReplaying) return;
       isReplaying = true;
-
       const btn = document.getElementById('btn-replay-action');
       const sendBtn = document.getElementById('btn-demo-send');
-      btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Đang Gọi Phiên AI Trực Tiếp...';
+      btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Đang Phát Lại...';
       btn.disabled = true;
       sendBtn.disabled = true;
 
@@ -1000,7 +874,6 @@
       const demoCustomerId = 'demo_customer_' + demoScenarioId;
 
       for (const userText of scenario.userTurns) {
-        // Append User message
         const userRow = document.createElement('div');
         userRow.className = 'message-row user';
         userRow.innerHTML = `
@@ -1010,7 +883,6 @@
         chatBox.appendChild(userRow);
         chatBox.scrollTop = chatBox.scrollHeight;
 
-        // Show typing indicator
         const typingRow = document.createElement('div');
         typingRow.className = 'message-row bot';
         typingRow.id = 'demo-typing-indicator';
@@ -1021,7 +893,6 @@
         chatBox.appendChild(typingRow);
         chatBox.scrollTop = chatBox.scrollHeight;
 
-        // Invoke Live OpenAI Model via Backend API / Fallback
         try {
           const result = await callLiveAiBackend(userText, currentMode, demoSessionId, demoCustomerId);
           const typing = document.getElementById('demo-typing-indicator');
@@ -1032,7 +903,7 @@
 
           let genUiHtml = '';
           if (currentMode === 'genui' && result.genUi) {
-            genUiHtml = renderGenUiCard(result.genUi);
+            genUiHtml = renderDeclarativeGenUiCard(result.genUi);
           }
 
           botRow.innerHTML = `
@@ -1046,78 +917,174 @@
         } catch (err) {
           const typing = document.getElementById('demo-typing-indicator');
           if (typing) typing.remove();
-
-          const errorRow = document.createElement('div');
-          errorRow.className = 'message-row bot';
-          errorRow.innerHTML = `
-            <div class="avatar bot"><i class="fa-solid fa-exclamation-triangle"></i></div>
-            <div>
-              <div class="bubble" style="background: #FDEDEC; border-color: #FADBD8; color: #78281F;">
-                Lỗi phiên AI trực tiếp: Không thể nhận phản hồi từ máy chủ OpenAI.
-              </div>
-            </div>
-          `;
-          chatBox.appendChild(errorRow);
-          chatBox.scrollTop = chatBox.scrollHeight;
           break;
         }
-
-        // Delay between turns for realistic replay
-        await new Promise(resolve => setTimeout(resolve, 800));
+        await new Promise(r => setTimeout(r, 600));
       }
 
       isReplaying = false;
-      btn.innerHTML = '<i class="fa-solid fa-play"></i> Phát Lại Gọi Phiên AI Trực Tiếp (Live AI Replay)';
+      btn.innerHTML = '<i class="fa-solid fa-play"></i> Phát Lại Live AI Replay';
       btn.disabled = false;
       sendBtn.disabled = false;
     }
 
-    function renderGenUiCard(genUiObj) {
+    // Declarative GenUI Card Renderer (CopilotKit Pattern)
+    // Declarative GenUI Card Renderer (CopilotKit Pattern with Dedicated Actions)
+    function renderDeclarativeGenUiCard(genUiObj) {
       if (!genUiObj) return '';
       if (typeof genUiObj === 'string') return `<div class="genui-card">${escapeHtml(genUiObj)}</div>`;
 
-      if (genUiObj.type === 'FertilizerScheduleCard') {
+      const data = genUiObj.data || genUiObj;
+      const cardType = data.type || genUiObj.widgetKind;
+      const cardTitle = data.title || genUiObj.title || 'Phân Bón Cà Mau';
+
+      if (cardType === 'FertilizerScheduleCard' || genUiObj.widgetKind === 'fertilizerSchedule') {
         return `
           <div class="genui-card">
-            <div class="genui-header"><i class="fa-solid fa-calendar-check"></i> ${escapeHtml(genUiObj.title)}</div>
+            <div class="genui-header"><i class="fa-solid fa-calendar-check"></i> ${escapeHtml(cardTitle)}</div>
             <table class="timeline-table">
-              <thead><tr><th>Đợt Bón</th><th>Thời Gian</th><th>Sản Phẩm & Liều Lượng</th></tr></thead>
+              <thead><tr><th>Đợt Bón</th><th>Thời Gian</th><th>Liều Lượng & Phân Bón</th></tr></thead>
               <tbody>
-                ${(genUiObj.stages || []).map(s => `<tr><td><strong>${escapeHtml(s.name)}</strong></td><td>${escapeHtml(s.timing)}</td><td>${escapeHtml(s.dosage)}</td></tr>`).join('')}
+                ${(data.stages || []).map(s => `<tr><td><strong>${escapeHtml(s.name)}</strong></td><td>${escapeHtml(s.timing)}</td><td>${escapeHtml(s.dosage)}</td></tr>`).join('')}
               </tbody>
             </table>
+            <div class="genui-actions">
+              <button class="genui-btn genui-btn-primary" onclick="handleCardAction('schedule_reminder', '${escapeHtml(cardTitle)}')"><i class="fa-solid fa-bell"></i> Lập lịch nhắc bón phân</button>
+              <button class="genui-btn genui-btn-secondary" onclick="handleCardAction('export_pdf', '${escapeHtml(cardTitle)}')"><i class="fa-solid fa-file-pdf"></i> Tải lịch PDF</button>
+            </div>
           </div>
         `;
       }
 
-      if (genUiObj.type === 'DiagnosticProtocolCard') {
+      if (cardType === 'DosageCalculatorCard' || genUiObj.widgetKind === 'dosageCalculator') {
+        const area = data.areaHa || 5;
+        const damBags = Math.ceil(area * 3.5);
+        const npkBags = Math.ceil(area * 4.5);
+        const omBags = Math.ceil(area * 10);
         return `
           <div class="genui-card">
-            <div class="genui-header" style="color: #C0392B;"><i class="fa-solid fa-triangle-exclamation"></i> ${escapeHtml(genUiObj.title)}</div>
-            <div style="background: #FDEDEC; border: 1px solid #FADBD8; padding: 10px; border-radius: 6px; font-size: 0.88rem; color: #78281F; margin-bottom: 8px;">
-              ⚠️ <strong>Cảnh báo:</strong> ${escapeHtml(genUiObj.warning)}
+            <div class="genui-header"><i class="fa-solid fa-calculator"></i> ${escapeHtml(cardTitle)}</div>
+            <div style="font-size: 0.85rem; color: var(--text-muted);">Diện tích đất canh tác: <strong id="calc-area-val">${area} Héc-ta</strong></div>
+            <input type="range" min="1" max="200" value="${area}" class="calc-slider" oninput="updateDosageCalc(this.value)">
+            <div class="calc-grid">
+              <div><div class="calc-val" id="bag-dam">${damBags} bao</div><div class="calc-lbl">Đạm Cà Mau</div></div>
+              <div><div class="calc-val" id="bag-npk">${npkBags} bao</div><div class="calc-lbl">NPK 20-20-15</div></div>
+              <div><div class="calc-val" id="bag-om">${omBags} bao</div><div class="calc-lbl">Organic OM</div></div>
+            </div>
+            <div class="genui-actions">
+              <button class="genui-btn genui-btn-primary" onclick="handleCardAction('share_zalo', '${escapeHtml(cardTitle)}')"><i class="fa-solid fa-share-nodes"></i> Gửi bảng tính qua Zalo / SMS</button>
+              <button class="genui-btn genui-btn-secondary" onclick="handleCardAction('order_dealer', '${escapeHtml(cardTitle)}')"><i class="fa-solid fa-store"></i> Đặt mua qua Đại Lý</button>
+            </div>
+          </div>
+        `;
+      }
+
+      if (cardType === 'DiagnosticProtocolCard' || genUiObj.widgetKind === 'diagnosticProtocol') {
+        return `
+          <div class="genui-card">
+            <div class="genui-header" style="color: #B91C1C;"><i class="fa-solid fa-triangle-exclamation"></i> ${escapeHtml(cardTitle)}</div>
+            <div style="background: #FEF2F2; border: 1px solid #FCA5A5; padding: 10px; border-radius: 6px; font-size: 0.85rem; color: #991B1B; margin-bottom: 8px;">
+              ⚠️ <strong>Cảnh báo:</strong> ${escapeHtml(data.warning || 'Ngưng ngay đạm hóa học khi rễ bị thối đen!')}
             </div>
             <div style="font-size: 0.85rem; line-height: 1.6;">
-              ${(genUiObj.steps || []).map(step => `<div>${escapeHtml(step)}</div>`).join('')}
+              ${(data.steps || []).map(step => `<div>• ${escapeHtml(step)}</div>`).join('')}
+            </div>
+            <div class="genui-actions">
+              <button class="genui-btn genui-btn-primary" onclick="handleCardAction('book_agronomist', '${escapeHtml(cardTitle)}')"><i class="fa-solid fa-user-doctor"></i> Hẹn Kỹ sư PVCFC thăm vườn</button>
+              <button class="genui-btn genui-btn-secondary" onclick="handleCardAction('download_protocol', '${escapeHtml(cardTitle)}')"><i class="fa-solid fa-download"></i> Tải phác đồ điều trị</button>
             </div>
           </div>
         `;
       }
 
-      if (genUiObj.type === 'DealerLocatorCard') {
+      if (cardType === 'DealerLocatorCard' || genUiObj.widgetKind === 'dealerLocator') {
         return `
           <div class="genui-card">
-            <div class="genui-header"><i class="fa-solid fa-map-location-dot"></i> ${escapeHtml(genUiObj.title)}</div>
-            <div style="font-size: 0.88rem; background: var(--pvcfc-green-light); padding: 10px; border-radius: 6px;">
-              📍 <strong>${escapeHtml(genUiObj.dealerName)}</strong><br>
-              Địa chỉ: ${escapeHtml(genUiObj.address)}<br>
-              📞 Hotline đại lý: ${escapeHtml(genUiObj.phone)}
+            <div class="genui-header"><i class="fa-solid fa-store"></i> ${escapeHtml(cardTitle)}</div>
+            <div style="font-size: 0.85rem; background: var(--brand-light); padding: 10px; border-radius: 6px;">
+              📍 <strong>${escapeHtml(data.dealerName || 'Đại Lý Voi Vàng (Tư Hải)')}</strong><br>
+              Địa chỉ: ${escapeHtml(data.address || 'Thị trấn Cái Nước, H. Cái Nước, Cà Mau')}<br>
+              📞 Hotline đại lý: ${escapeHtml(data.phone || '1800 888606')}
+            </div>
+            <div class="genui-actions">
+              <button class="genui-btn genui-btn-primary" onclick="handleCardAction('book_ph_test', '${escapeHtml(cardTitle)}')"><i class="fa-solid fa-vial"></i> Đặt lịch đo pH đất miễn phí</button>
+              <button class="genui-btn genui-btn-secondary" onclick="handleCardAction('call_hotline', '${escapeHtml(cardTitle)}')"><i class="fa-solid fa-phone"></i> Gọi Hotline 1800 888606</button>
             </div>
           </div>
         `;
       }
 
-      return `<div class="genui-card"><div class="genui-header"><i class="fa-solid fa-list-check"></i> Thông Tin Hỗ Trợ AI</div><div>${escapeHtml(JSON.stringify(genUiObj))}</div></div>`;
+      return `<div class="genui-card"><div class="genui-header"><i class="fa-solid fa-leaf"></i> ${escapeHtml(cardTitle)}</div><div>${escapeHtml(JSON.stringify(data))}</div></div>`;
+    }
+
+    // CopilotKit Action & HITL Approval Handler
+    function handleCardAction(actionId, cardTitle) {
+      if (actionId === 'book_agronomist' || actionId === 'book_ph_test') {
+        renderHitlApprovalCard(
+          'Cần bạn xác nhận',
+          'Cho phép PVCFC truyền dữ liệu và đặt lịch hẹn Kỹ sư Nông nghiệp xuống tận vườn kiểm tra pH đất.',
+          actionId,
+          cardTitle
+        );
+        return;
+      }
+
+      const actionLabels = {
+        schedule_reminder: 'Tôi muốn lập lịch nhắc bón phân tự động.',
+        export_pdf: 'Cho tôi tải bản PDF lịch bón phân.',
+        share_zalo: 'Cho tôi chia sẻ bảng tính bao phân qua Zalo.',
+        order_dealer: 'Tôi muốn tìm đại lý gần nhất để đặt mua số lượng phân này.',
+        download_protocol: 'Cho tôi xin tài liệu phác đồ cấp bách phục hồi bộ rễ.',
+        call_hotline: 'Kết nối hotline 1800 888606 hỗ trợ.'
+      };
+
+      const promptText = actionLabels[actionId] || `Thực hiện thao tác ${actionId}`;
+      sendQuickPrompt(promptText);
+    }
+
+    function renderHitlApprovalCard(title, description, actionId, cardTitle) {
+      const chatBox = document.getElementById('plain-chat-messages');
+      const card = document.createElement('div');
+      card.className = 'message-row bot';
+      card.innerHTML = `
+        <div class="avatar bot"><i class="fa-solid fa-shield-halved"></i></div>
+        <div>
+          <div class="hitl-card">
+            <div class="hitl-header"><i class="fa-solid fa-circle-exclamation"></i> ${escapeHtml(title)}</div>
+            <div class="hitl-body">${escapeHtml(description)}</div>
+            <div class="hitl-actions">
+              <button class="hitl-btn-confirm" onclick="confirmHitlAction(true, '${actionId}', this)">Đồng ý gửi</button>
+              <button class="hitl-btn-cancel" onclick="confirmHitlAction(false, '${actionId}', this)">Không đồng ý</button>
+            </div>
+          </div>
+        </div>
+      `;
+      chatBox.appendChild(card);
+      chatBox.scrollTop = chatBox.scrollHeight;
+    }
+
+    function confirmHitlAction(approved, actionId, btnEl) {
+      const parent = btnEl.closest('.hitl-card');
+      if (!parent) return;
+
+      if (approved) {
+        parent.innerHTML = `
+          <div class="hitl-header" style="color: var(--brand-primary);"><i class="fa-solid fa-circle-check"></i> Đã xác nhận gửi thông tin</div>
+          <div class="hitl-body">Cảm ơn bà con! Kỹ sư Nông nghiệp PVCFC sẽ liên hệ trực tiếp trong vòng 24h để xác nhận địa điểm đo pH đất.</div>
+        `;
+        sendQuickPrompt('Đã xác nhận đặt lịch hẹn Kỹ sư PVCFC thăm vườn đo pH đất.');
+      } else {
+        parent.innerHTML = `
+          <div class="hitl-header" style="color: var(--text-muted);"><i class="fa-solid fa-circle-xmark"></i> Đã hủy thao tác</div>
+          <div class="hitl-body">Thao tác đăng ký đã được hủy theo yêu cầu.</div>
+        `;
+      }
+    }
+    function updateDosageCalc(val) {
+      document.getElementById('calc-area-val').innerText = val + ' Héc-ta';
+      document.getElementById('bag-dam').innerText = Math.ceil(val * 3.5) + ' bao';
+      document.getElementById('bag-npk').innerText = Math.ceil(val * 4.5) + ' bao';
+      document.getElementById('bag-om').innerText = Math.ceil(val * 10) + ' bao';
     }
 
     function handleDemoKeyPress(e) {
@@ -1149,31 +1116,22 @@
         botRow.className = 'message-row bot';
         botRow.innerHTML = `
           <div class="avatar bot"><i class="fa-solid fa-seedling"></i></div>
-          <div>
-            <div class="bubble">${result.text}</div>
-          </div>
+          <div><div class="bubble">${result.text}</div></div>
         `;
         chatBox.appendChild(botRow);
       } catch (err) {
-        // error handled
+        // error
       }
       chatBox.scrollTop = chatBox.scrollHeight;
     }
 
-    function escapeHtml(string) {
-      return String(string).replace(/[&<>"']/g, function (s) {
-        return {
-          '&': '&amp;',
-          '<': '&lt;',
-          '>': '&gt;',
-          '"': '&quot;',
-          "'": '&#39;'
-        }[s];
+    function escapeHtml(str) {
+      return String(str).replace(/[&<>"']/g, function (s) {
+        return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[s];
       });
     }
 
-    // Initialize
-    switchRoute('/');
+    switchRoute(window.location.pathname === '/demo' ? '/demo' : '/');
   </script>
 </body>
 </html>

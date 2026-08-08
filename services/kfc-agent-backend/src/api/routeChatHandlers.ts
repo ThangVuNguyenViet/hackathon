@@ -273,10 +273,13 @@ export function createChatRouteHandlers(context: RouteHandlerContext) {
         };
       }
 
+      const rawProfile =
+        parsed.data.metadata?.responseProfile ??
+        parsed.data.metadata?.showcaseResponseMode;
       const responseProfile =
-        parsed.data.metadata?.showcaseResponseMode === 'text'
+        rawProfile === 'text' || rawProfile === 'social'
           ? ('social' as const)
-          : parsed.data.metadata?.showcaseResponseMode === 'genui'
+          : rawProfile === 'genui'
             ? ('genui' as const)
             : undefined;
       const auditMetadata = { ...(parsed.data.metadata ?? {}) };
@@ -306,10 +309,13 @@ export function createChatRouteHandlers(context: RouteHandlerContext) {
         };
       }
 
+      const rawProfile =
+        parsed.data.metadata?.responseProfile ??
+        parsed.data.metadata?.showcaseResponseMode;
       const responseProfile =
-        parsed.data.metadata?.showcaseResponseMode === 'text'
+        rawProfile === 'text' || rawProfile === 'social'
           ? ('social' as const)
-          : parsed.data.metadata?.showcaseResponseMode === 'genui'
+          : rawProfile === 'genui'
             ? ('genui' as const)
             : undefined;
       const auditMetadata = { ...(parsed.data.metadata ?? {}) };
