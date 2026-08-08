@@ -385,10 +385,13 @@ describe('buildServerOptionsFromEnv', () => {
     expect(options.mockClientOptions?.fulfillmentQuoteProvider).toBeUndefined();
   });
 
-  it('fails closed when the default gateway provider is not configured', () => {
-    expect(() => buildServerOptionsFromEnv(loadEnv({ PORT: '18090' } as NodeJS.ProcessEnv))).toThrow(
-      'KFC_COMMERCE_GATEWAY_BASE_URL, KFC_COMMERCE_GATEWAY_TOKEN, KFC_MENU_API_URL, and KFC_COMMERCE_ENVIRONMENT are required',
+  it('defaults to fixture commerce when no gateway is configured', () => {
+    const options = buildServerOptionsFromEnv(
+      loadEnv({ PORT: '18090' } as NodeJS.ProcessEnv),
     );
+    expect(options.readiness?.commerce).toMatchObject({ mode: 'fixture' });
+    expect(options.kfcCommerceGateway).toBeUndefined();
+    expect(options.catalog).toBeUndefined();
   });
 
   it('bounds and maps the catalog freshness fallback', () => {

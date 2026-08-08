@@ -8,8 +8,11 @@ import {
 } from "./channels/messengerHistory.js";
 import { loadEnv } from "./config/env.js";
 import { createPostgresPersistence } from "./persistence/postgresStore.js";
-import { createUnavailableAutomaticRecommendationHttpRuntime } from "./recommendations/serving/index.js";
-
+import { loadBundledGeneratedFixtures } from "./fixtures/bundledFixtures.js";
+import { createMockClients } from "./mock/createMockClients.js";
+import {
+  createMockAutomaticRecommendationHttpRuntime,
+} from "./recommendations/serving/index.js";
 const env = loadEnv();
 const baseOptions = buildServerOptionsFromEnv(env);
 const persistence = await createPostgresPersistence({
@@ -34,20 +37,33 @@ const messengerHistorySync =
         }),
       )
     : undefined;
-// The automatic engine requires trusted order, catalog, history, exposure, and
-// Qualified Model Bundle ports. Main owns an explicit fail-closed provider
-// until those production authorities are configured; request bodies are never
-// promoted into trusted context.
+const fixtures = loadBundledGeneratedFixtures();
+const fixtureProvider = createMockClients(fixtures);
 const automaticRecommendations =
-  createUnavailableAutomaticRecommendationHttpRuntime(
-    "trusted automatic recommendation context ports are not configured",
-  );
+  createMockAutomaticRecommendationHttpRuntime(fixtures);
+const automaticRecommendationStoreId =
+  fixtures.stores[0]?.storeId ?? "fixture-store";
+const automaticRecommendationContext = (sessionId: string) => ({
+  storeId: automaticRecommendationStoreId,
+  fulfilmentMode: "pickup" as const,
+  locale: "vi-VN",
+  orderingJourneyRef: `chat:${sessionId}:ordering-journey`,
+  opportunityRef: `chat:${sessionId}:automatic-recommendation`,
+});
 const server = buildServer({
   ...baseOptions,
+  fixtures,
+  kfcCommerceProvider: {
+    cart: fixtureProvider.cart,
+    inventory: fixtureProvider.inventory,
+    storeLocator: fixtureProvider.storeLocator,
+    fulfillment: fixtureProvider.fulfillment,
+  },
   store: persistence.store,
   checkpointer: persistence.checkpointer,
   dashboard,
   messengerHistorySync,
+  automaticRecommendationContext,
   automaticRecommendations,
   readiness: {
     ...baseOptions.readiness,

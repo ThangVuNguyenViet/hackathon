@@ -8,6 +8,7 @@ from pathlib import Path
 from kfc_recommendation_simulator.cli import main
 from kfc_recommendation_simulator.generator import generate_world
 from kfc_recommendation_simulator.profiles import PROFILES
+from kfc_recommendation_simulator.qualification.configuration import _base_configuration
 
 
 class QualificationSmokePipelineTest(unittest.TestCase):
@@ -39,6 +40,11 @@ class QualificationSmokePipelineTest(unittest.TestCase):
 
             self.assertEqual(exit_code, 2)
             self.assertEqual(evidence["status"], "failed_selection")
+            self.assertEqual(
+                evidence["syntheticOnlyDisclaimer"],
+                "Synthetic qualification evidence only; this does not claim "
+                "compatibility with real KFC data or authorize real-customer exposure.",
+            )
             self.assertRegex(evidence["source"]["gitSha"], r"^[a-f0-9]{40}$")
             self.assertEqual(
                 set(evidence["types"]),
@@ -71,6 +77,28 @@ class QualificationSmokePipelineTest(unittest.TestCase):
             self.assertFalse((result_root / "frozen-configuration.json").exists())
             self.assertFalse((result_root / "qualified-model-bundle").exists())
 
+
+    def test_predeclared_regularized_challenger_is_versioned(self) -> None:
+        configuration = _base_configuration(
+            {
+                "worldDigest": "a" * 64,
+                "profile": "development",
+                "splitStrategy": "journey-hash-v1",
+            }
+        )
+        self.assertEqual(
+            configuration["configurationRevision"],
+            "kfc-model-qualification-v3-regularized-challenger-20260806",
+        )
+        self.assertEqual(configuration["modelSeed"], 2_026_080_7)
+        self.assertIn("lower-capacity", configuration["challengerDeclaration"])
+        self.assertEqual(configuration["challengers"]["logistic"]["C"], 0.1)
+        self.assertEqual(configuration["challengers"]["lightgbm"]["n_estimators"], 48)
+        self.assertEqual(configuration["challengers"]["xgboost"]["n_estimators"], 48)
+        self.assertEqual(
+            configuration["challengers"]["mlp"]["hidden_layer_sizes"],
+            [4],
+        )
 
 if __name__ == "__main__":
     unittest.main()

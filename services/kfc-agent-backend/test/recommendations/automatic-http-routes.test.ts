@@ -1,7 +1,10 @@
 import { describe, expect, it, vi } from 'vitest';
 import { buildServer } from '../../src/api/server.js';
 import type { AutomaticRecommendationHttpRuntime } from '../../src/recommendations/serving/http-runtime.js';
-import { createUnavailableAutomaticRecommendationHttpRuntime } from '../../src/recommendations/serving/http-runtime.js';
+import {
+  createAutomaticRecommendationHttpClient,
+  createUnavailableAutomaticRecommendationHttpRuntime,
+} from '../../src/recommendations/serving/http-runtime.js';
 import { AutomaticRecommendationIdentityConflictError } from '../../src/recommendations/serving/evidence-saga.js';
 
 const request = {
@@ -209,5 +212,76 @@ describe('automatic recommendation HTTP routes', () => {
       { limit: 25 },
     );
     await server.close();
+  });
+  it('validates shared requests and event payloads at the network boundary', async () => {
+    const smartRequest = {
+      ...request,
+      cart: {
+        ...request.cart,
+        lines: [
+          {
+            lineId: 'line-1',
+            sellableItemId: 'item-1',
+            quantity: 1,
+            unitPrice: { amount: 10_000, currency: 'VND' },
+            modifiers: [],
+          },
+        ],
+      },
+    };
+    const fetchImpl = vi
+      .fn<typeof fetch>()
+      .mockImplementation(async (input) => {
+        const url = String(input);
+        if (url.endsWith('/ready')) {
+          return new Response(JSON.stringify({ ok: true }), { status: 200 });
+        }
+        if (url.endsWith('/impressions')) {
+          return new Response(null, { status: 204 });
+        }
+        return new Response(
+          JSON.stringify({
+            schemaVersion: 'kfc-automatic-recommendation-v1',
+            requestId: 'request-1',
+            recommendationId: 'recommendation-1',
+            recommendationType: 'smart_cross_sell',
+            status: 'empty',
+            emptyReason: 'no_eligible_candidates',
+            cartRevision: 'cart-revision-1',
+            catalogRevision: 'catalog-revision-1',
+            expiresAt: '2026-08-08T10:00:00.000+00:00',
+            model: null,
+            proposals: [],
+            counts: { potential: 0, eligible: 0, scored: 0, displayed: 0 },
+          }),
+          { status: 200 },
+        );
+      });
+    const client = createAutomaticRecommendationHttpClient({
+      baseUrl: 'https://recommendations.example/',
+      fetchImpl,
+    });
+
+    await expect(
+      client.decide('smart_cross_sell', smartRequest),
+    ).resolves.toMatchObject({
+      recommendationId: 'recommendation-1',
+      status: 'empty',
+    });
+    await expect(
+      client.recordImpression('recommendation-1', {
+        schemaVersion: 'kfc-automatic-recommendation-event-v1',
+        eventId: 'event-1',
+        channel: 'chat',
+        occurredAt: '2026-08-08T09:00:00.000Z',
+        orderingJourneyRef: 'journey-1',
+        opportunityRef: 'opportunity-1',
+        cartRevision: 'cart-revision-1',
+        renderedActions: [{ actionId: 'action-1', renderedPosition: 1 }],
+      }),
+    ).resolves.toBeUndefined();
+    await expect(client.readiness()).resolves.toEqual({ ok: true });
+    await expect(client.decide('smart_cross_sell', {})).rejects.toThrow();
+    expect(fetchImpl).toHaveBeenCalledTimes(3);
   });
 });

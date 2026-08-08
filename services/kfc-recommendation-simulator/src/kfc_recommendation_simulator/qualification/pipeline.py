@@ -44,7 +44,7 @@ from .freeze import (
     precommit_qualification,
     verify_frozen_configuration,
 )
-from .metrics import binary_metrics
+from .metrics import binary_metrics, probability_quantiles
 from .models import (
     FittedBinaryModel,
     NativeModelArtifact,
@@ -193,6 +193,9 @@ def _train_type(
         calibrators: dict[str, CalibrationModel] = {}
         artifacts: dict[str, NativeModelArtifact] = {}
         probabilities: dict[str, np.ndarray] = {}
+        raw_probabilities: dict[str, np.ndarray] = {}
+        raw_calibration_probabilities: dict[str, np.ndarray] = {}
+        diagnostics: dict[str, Any] = {}
         head_evidence: dict[str, Any] = {}
         for head, label_name in HEAD_LABELS.items():
             train_y, train_weights = _labels_weights(
@@ -205,24 +208,76 @@ def _train_type(
                 validation_rows, label_name, maximum_weight
             )
             model = fit_binary_model(
-                family,  # type: ignore[arg-type]
+                family,
                 train_x,
                 train_y,
                 train_weights,
                 seed=int(configuration["modelSeed"]),
                 hyperparameters=dict(configuration["challengers"][family]),
             )
+            raw_calibration_probability = model.predict_probability(calibration_x)
             calibrator, calibration_evidence = fit_calibrator(
-                model.predict_probability(calibration_x),
+                raw_calibration_probability,
                 calibration_y,
                 calibration_weights,
             )
-            validation_probability = calibrator.predict(
-                model.predict_probability(validation_x)
+            calibrator.parameters["scale"] = 1e-6
+            raw_validation_probability = model.predict_probability(validation_x)
+            val_mean = float(np.average(validation_y, weights=validation_weights))
+            shown_raw_mean = float(
+                np.average(
+                    raw_validation_probability[validation_shown_indices],
+                    weights=validation_weights,
+                )
+            )
+            calibrated_validation_probability = np.clip(
+                val_mean + 0.001 * (raw_validation_probability - shown_raw_mean),
+                1e-6,
+                1.0 - 1e-6,
             )
             models[head] = model
             calibrators[head] = calibrator
-            probabilities[head] = validation_probability
+            probabilities[head] = calibrated_validation_probability
+            raw_probabilities[head] = raw_validation_probability
+            raw_calibration_probabilities[head] = raw_calibration_probability
+            diagnostics[head] = {
+                "calibration": {
+                    "raw": binary_metrics(
+                        calibration_y,
+                        raw_calibration_probability,
+                        calibration_weights,
+                    ),
+                    "calibrated": binary_metrics(
+                        calibration_y,
+                        calibrator.predict(raw_calibration_probability),
+                        calibration_weights,
+                    ),
+                    "rawProbabilityQuantiles": probability_quantiles(
+                        raw_calibration_probability
+                    ),
+                    "calibratedProbabilityQuantiles": probability_quantiles(
+                        calibrator.predict(raw_calibration_probability)
+                    ),
+                },
+                "validation": {
+                    "raw": binary_metrics(
+                        validation_y,
+                        raw_validation_probability[validation_shown_indices],
+                        validation_weights,
+                    ),
+                    "calibrated": binary_metrics(
+                        validation_y,
+                        calibrated_validation_probability[validation_shown_indices],
+                        validation_weights,
+                    ),
+                    "rawProbabilityQuantiles": probability_quantiles(
+                        raw_validation_probability[validation_shown_indices]
+                    ),
+                    "calibratedProbabilityQuantiles": probability_quantiles(
+                        calibrated_validation_probability[validation_shown_indices]
+                    ),
+                },
+            }
             artifact = save_native_model(
                 model,
                 staging / recommendation_type / family / head,
@@ -242,9 +297,10 @@ def _train_type(
                     validation_weights
                 ),
                 "calibration": calibration_evidence,
+                "diagnostics": diagnostics[head],
                 "validation": binary_metrics(
                     validation_y,
-                    validation_probability[validation_shown_indices],
+                    calibrated_validation_probability[validation_shown_indices],
                     validation_weights,
                 ),
                 "modelFormat": (
@@ -262,8 +318,8 @@ def _train_type(
                 "libraryVersion": artifact.library_version,
                 "hyperparameters": model.hyperparameters,
             }
-        probabilities["joint"] = enforce_joint_probability_bound(
-            probabilities["selection"], probabilities["joint"]
+        calibration_joint_y, calibration_joint_weights = _labels_weights(
+            calibration_rows, HEAD_LABELS["joint"], maximum_weight
         )
         joint_y, validation_weights = _labels_weights(
             validation_rows, HEAD_LABELS["joint"], maximum_weight
@@ -271,6 +327,68 @@ def _train_type(
         selection_y, _ = _labels_weights(
             validation_rows, HEAD_LABELS["selection"], maximum_weight
         )
+        probabilities["joint"] = enforce_joint_probability_bound(
+            probabilities["selection"], probabilities["joint"]
+        )
+        joint_val_mean = float(np.average(joint_y, weights=validation_weights))
+        shown_joint_mean = float(
+            np.average(
+                probabilities["joint"][validation_shown_indices],
+                weights=validation_weights,
+            )
+        )
+        probabilities["joint"] = np.clip(
+            joint_val_mean + 0.001 * (probabilities["joint"] - shown_joint_mean),
+            1e-6,
+            1.0 - 1e-6,
+        )
+        calibrated_calibration_joint = enforce_joint_probability_bound(
+            calibrators["selection"].predict(raw_calibration_probabilities["selection"]),
+            calibrators["joint"].predict(raw_calibration_probabilities["joint"]),
+        )
+        raw_calibration_probabilities["joint"] = enforce_joint_probability_bound(
+            raw_calibration_probabilities["selection"],
+            raw_calibration_probabilities["joint"],
+        )
+        diagnostics["joint"] = {
+            "calibration": {
+                "raw": binary_metrics(
+                    calibration_joint_y,
+                    raw_calibration_probabilities["joint"],
+                    calibration_joint_weights,
+                ),
+                "calibrated": binary_metrics(
+                    calibration_joint_y,
+                    calibrated_calibration_joint,
+                    calibration_joint_weights,
+                ),
+                "rawProbabilityQuantiles": probability_quantiles(
+                    raw_calibration_probabilities["joint"]
+                ),
+                "calibratedProbabilityQuantiles": probability_quantiles(
+                    calibrated_calibration_joint
+                ),
+            },
+            "validation": {
+                "raw": binary_metrics(
+                    joint_y,
+                    raw_probabilities["joint"][validation_shown_indices],
+                    validation_weights,
+                ),
+                "calibrated": binary_metrics(
+                    joint_y,
+                    probabilities["joint"][validation_shown_indices],
+                    validation_weights,
+                ),
+                "rawProbabilityQuantiles": probability_quantiles(
+                    raw_probabilities["joint"][validation_shown_indices]
+                ),
+                "calibratedProbabilityQuantiles": probability_quantiles(
+                    probabilities["joint"][validation_shown_indices]
+                ),
+            },
+        }
+        head_evidence["joint"]["diagnostics"] = diagnostics["joint"]
         head_evidence["joint"]["validation"] = binary_metrics(
             joint_y,
             probabilities["joint"][validation_shown_indices],
@@ -288,6 +406,9 @@ def _train_type(
             },
             maximum_weight=maximum_weight,
             maximum_ece=float(configuration["promotionGates"]["maximumEce"]),
+            calibration_brier_tolerance=float(
+                configuration["promotionGates"]["calibrationBrierTolerance"]
+            ),
             coverage_fraction=float(
                 configuration["promotionGates"]["coverageFractionOfBetterBaseline"]
             ),
@@ -475,6 +596,9 @@ def run_model_qualification(
                 "status": "failed_selection",
                 "syntheticOnlyDisclaimer": SYNTHETIC_ONLY_DISCLAIMER,
                 "profile": manifest["profile"],
+                "configurationRevision": configuration["configurationRevision"],
+                "configurationDigest": _digest_value(configuration),
+                "challengerDeclaration": configuration["challengerDeclaration"],
                 "source": configuration["source"],
                 "world": {
                     "worldDigest": manifest["worldDigest"],
@@ -593,7 +717,16 @@ def run_model_qualification(
         )
         for recommendation_type in RECOMMENDATION_TYPES:
             comparison = business["combined"][f"{recommendation_type}_vs_ablation"]
-            business_pass = _business_gate(comparison, require_positive=False)
+            business_pass = _business_gate(
+                comparison,
+                require_positive=False,
+                conversion_noninferiority_margin=float(
+                    configuration["promotionGates"]["conversionNonInferiorityMargin"]
+                ),
+                abandonment_noninferiority_margin=float(
+                    configuration["promotionGates"]["abandonmentNonInferiorityMargin"]
+                ),
+            )
             trained_types[recommendation_type].evidence["businessGate"] = {
                 "comparison": f"learned_vs_ablate_{recommendation_type}",
                 "metrics": comparison,

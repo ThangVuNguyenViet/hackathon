@@ -30,10 +30,20 @@ from kfc_recommendation_simulator.qualification.freeze import (
     precommit_qualification,
     verify_frozen_configuration,
 )
+from kfc_recommendation_simulator.qualification.metrics import probability_quantiles
 from kfc_recommendation_simulator.qualification.weighting import (
     clipped_inverse_propensity_weights,
     effective_sample_size,
 )
+
+
+class CalibrationDiagnosticTest(unittest.TestCase):
+    def test_probability_quantiles_are_stable_and_bounded(self) -> None:
+        result = probability_quantiles(np.asarray([0.1, 0.2, 0.9]))
+
+        self.assertEqual(result["p00"], 0.1)
+        self.assertEqual(result["p50"], 0.2)
+        self.assertEqual(result["p100"], 0.9)
 
 
 class FrozenConfigurationTest(unittest.TestCase):

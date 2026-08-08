@@ -3,11 +3,12 @@ FROM node:24-bookworm-slim
 WORKDIR /app
 
 COPY package*.json ./
+COPY packages/openai-agents-runtime ./packages/openai-agents-runtime
 RUN npm ci
 
 COPY tsconfig.json ./
+COPY tsconfig.runtime.json ./
 COPY src ./src
-COPY scripts ./scripts
 COPY fixtures ./fixtures
 COPY knowledge ./knowledge
 
@@ -23,7 +24,7 @@ RUN test -n "$QUALIFIED_BUNDLE_DIGEST" \
     && test -s /opt/kfc/catalog/catalog.json \
     && echo "$TRUSTED_CATALOG_DIGEST  /opt/kfc/catalog/catalog.json" | sha256sum -c -
 
-RUN npm run build
+RUN NODE_OPTIONS=--max-old-space-size=4096 npx tsc -p tsconfig.runtime.json
 RUN npm prune --omit=dev
 
 ENV NODE_ENV=production
@@ -32,4 +33,4 @@ ENV QUALIFIED_BUNDLE_PATH=/opt/kfc/bundle \
     TRUSTED_CATALOG_PATH=/opt/kfc/catalog/catalog.json
 EXPOSE 8080
 
-CMD ["node", "dist/src/index.js"]
+CMD ["node", "dist/src/recommendations/serving/aws-main.js"]

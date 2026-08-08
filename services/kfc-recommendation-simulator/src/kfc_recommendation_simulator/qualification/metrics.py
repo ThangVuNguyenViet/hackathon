@@ -55,6 +55,22 @@ def binary_metrics(
     }
 
 
+def probability_quantiles(
+    probability: NDArray[np.float64],
+) -> dict[str, float]:
+    values = np.clip(np.asarray(probability, dtype=np.float64), 0.0, 1.0)
+    percentiles = (0, 0.01, 0.05, 0.25, 0.5, 0.75, 0.95, 0.99, 1)
+    if values.size == 0:
+        return {
+            f"p{int(percentile * 100):02d}": 0.0
+            for percentile in percentiles
+        }
+    return {
+        f"p{int(percentile * 100):02d}": float(np.quantile(values, percentile))
+        for percentile in percentiles
+    }
+
+
 def normal_mean_interval(values: NDArray[np.float64]) -> dict[str, float]:
     array = np.asarray(values, dtype=np.float64)
     mean = float(array.mean()) if len(array) else 0.0

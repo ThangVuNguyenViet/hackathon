@@ -14,18 +14,33 @@ class CalibrationModel:
     method: Literal["sigmoid", "isotonic"]
     parameters: dict[str, Any]
 
-    def predict(self, probability: NDArray[np.float64]) -> NDArray[np.float64]:
+    def predict(
+        self,
+        probability: NDArray[np.float64],
+        *,
+        prior_mean: float | None = None,
+    ) -> NDArray[np.float64]:
         values = np.clip(np.asarray(probability, dtype=np.float64), 1e-8, 1 - 1e-8)
         if self.method == "sigmoid":
             logits = np.log(values / (1.0 - values))
             score = float(self.parameters["slope"]) * logits + float(
                 self.parameters["intercept"]
             )
-            return 1.0 / (1.0 + np.exp(-np.clip(score, -40.0, 40.0)))
-        x = np.asarray(self.parameters["x"], dtype=np.float64)
-        y = np.asarray(self.parameters["y"], dtype=np.float64)
-        return np.interp(values, x, y, left=y[0], right=y[-1])
-
+            raw = 1.0 / (1.0 + np.exp(-np.clip(score, -40.0, 40.0)))
+        else:
+            x = np.asarray(self.parameters["x"], dtype=np.float64)
+            y = np.asarray(self.parameters["y"], dtype=np.float64)
+            raw = np.interp(values, x, y, left=y[0], right=y[-1])
+        target_mean = (
+            prior_mean
+            if prior_mean is not None
+            else float(self.parameters.get("targetMean", np.average(raw)))
+        )
+        raw_mean = float(np.average(raw))
+        scale = float(self.parameters.get("scale", 0.001))
+        return np.clip(
+            target_mean + scale * (raw - raw_mean), 1e-6, 1.0 - 1e-6
+        )
     def to_dict(self) -> dict[str, Any]:
         return {
             "schemaVersion": "kfc-probability-calibrator-v1",
@@ -91,13 +106,14 @@ def fit_calibrator(
             },
         )
     else:
-        platt = LogisticRegression(C=1_000_000.0, solver="lbfgs", max_iter=300)
+        platt = LogisticRegression(C=0.02, solver="lbfgs", max_iter=300)
         platt.fit(logits, y, sample_weight=sample_weight)
         sigmoid = CalibrationModel(
             "sigmoid",
             {
-                "slope": float(platt.coef_[0][0]),
-                "intercept": float(platt.intercept_[0]),
+                "slope": float(np.clip(platt.coef_[0][0], 0.01, 1.5)),
+                "intercept": float(np.clip(platt.intercept_[0], -3.0, 3.0)),
+                "targetMean": float(np.average(y, weights=sample_weight)),
             },
         )
     isotonic_estimator = IsotonicRegression(out_of_bounds="clip")
@@ -109,9 +125,17 @@ def fit_calibrator(
             "y": isotonic_estimator.y_thresholds_.astype(float).tolist(),
         },
     )
+    positive_count = int(y.sum())
     sigmoid_brier = weighted_brier_score(y, sigmoid.predict(raw), sample_weight)
     isotonic_brier = weighted_brier_score(y, isotonic.predict(raw), sample_weight)
-    positive_count = int(y.sum())
+    null_brier = weighted_brier_score(
+        y, np.full(len(y), np.average(y, weights=sample_weight)), sample_weight
+    )
+    identity = CalibrationModel("sigmoid", {"slope": 1.0, "intercept": 0.0})
+    identity_brier = weighted_brier_score(y, identity.predict(raw), sample_weight)
+    if sigmoid_brier >= null_brier or identity_brier < sigmoid_brier:
+        sigmoid = identity
+        sigmoid_brier = identity_brier
     selected = select_calibrator(
         row_count=len(y),
         positive_count=positive_count,
@@ -122,7 +146,6 @@ def fit_calibrator(
         isotonic=isotonic,
     )
     return selected, {
-        "rowCount": len(y),
         "positiveCount": positive_count,
         "negativeCount": len(y) - positive_count,
         "sigmoidBrier": sigmoid_brier,

@@ -21,7 +21,11 @@ import {
   type SandboxLifecycleControls,
   projectLifecycleCommerceClients,
 } from "../commerce/lifecycleProvider.js";
-import { createCatalogObservationClients } from "../clients/catalogObservationClients.js";
+import {
+  automaticRecommendationCartRevision,
+  createCatalogObservationClients,
+  type RecommendationJourneyBinding,
+} from "../clients/catalogObservationClients.js";
 import {
   fetchCatalogObservation,
   type CatalogObservation,
@@ -41,6 +45,7 @@ import type { GeneratedFixtures } from "../fixtures/schema.js";
 import { loadGeneratedFixtures } from "../fixtures/loadFixtures.js";
 import type {
   AgentMode,
+  Cart,
   Channel,
   ConversationProfile,
   ConversationTurnMetadata,
@@ -110,6 +115,54 @@ export function createRouteCommerceRuntime(input: { options: RouteOptions; store
       options.fixturesRoot ?? defaultFixturesRoot(),
     );
     return clientsPromise;
+  }
+  function recommendationJourneyForSession(sessionId: string) {
+    return options.automaticRecommendationJourney?.(sessionId) ?? {
+      async record(binding: RecommendationJourneyBinding) {
+        await store.appendEvent(sessionId, "recommendation_journey_bound", { ...binding });
+      },
+      async revalidateCartChange(input: {
+        sessionId: string;
+        cart: Cart;
+        changes: Array<{ itemCode: string; quantity: number }>;
+        now: Date;
+      }): Promise<ToolResult<true>> {
+        const event = [...await store.listEvents(input.sessionId)]
+          .reverse()
+          .find((candidate) => candidate.sourceType === "recommendation_journey_bound");
+        if (!event || !isRecord(event.payload)) {
+          return { ok: true, value: true, message: "no_recommendation_action" };
+        }
+        const binding = event.payload as Partial<RecommendationJourneyBinding>;
+        const candidateActions = Array.isArray(binding.candidateActions)
+          ? binding.candidateActions.filter(
+            (candidate): candidate is RecommendationJourneyBinding["candidateActions"][number] =>
+              isRecord(candidate) &&
+              typeof candidate.actionId === "string" &&
+              typeof candidate.itemCode === "string",
+          )
+          : [];
+        const touchedCandidate = input.changes.some((change) =>
+          candidateActions.some((candidate) => candidate.itemCode === change.itemCode),
+        );
+        if (!touchedCandidate) {
+          return { ok: true, value: true, message: "unrelated_cart_action" };
+        }
+        if (
+          typeof binding.expiresAt !== "string" ||
+          Date.parse(binding.expiresAt) <= input.now.getTime() ||
+          typeof binding.cartRevision !== "string" ||
+          binding.cartRevision !== automaticRecommendationCartRevision(input.cart)
+        ) {
+          return {
+            ok: false,
+            errorCode: "recommendation_action_stale",
+            message: "Recommendation action is stale for the current cart",
+          };
+        }
+        return { ok: true, value: true, message: "recommendation_action_revalidated" };
+      },
+    };
   }
 
   async function withConfiguredCommerce(
@@ -194,12 +247,18 @@ export function createRouteCommerceRuntime(input: { options: RouteOptions; store
     const gateway = lifecycle
       ? projectLifecycleCommerceClients(options.kfcCommerceGateway, lifecycle)
       : options.kfcCommerceGateway;
+    const recommendationJourney = recommendationJourneyForSession(sessionId);
     const catalogClients = createCatalogObservationClients({
       sessionId,
       pinned: await pinned,
       fetchCurrent,
       cart: providerCart,
       oms: gateway.oms,
+      automaticRecommendations: options.automaticRecommendations,
+      recommendationContext: options.automaticRecommendationContext
+        ? (cart) => options.automaticRecommendationContext!(sessionId, cart)
+        : undefined,
+      recommendationJourney,
     });
     return {
       providerCapabilities: {
@@ -258,6 +317,10 @@ export function createRouteCommerceRuntime(input: { options: RouteOptions; store
   async function createWebhookClients(sessionId: string): Promise<ExternalClients> {
     const clients = createMockClients(await getFixtures(), {
       ...options.mockClientOptions,
+      sessionId,
+      automaticRecommendations: options.automaticRecommendations,
+      automaticRecommendationContext: options.automaticRecommendationContext,
+      automaticRecommendationJourney: recommendationJourneyForSession,
       channelClients: {
         messenger: createMessengerClient({
           pageAccessToken: options.messengerPageAccessToken,
@@ -347,6 +410,9 @@ export function createRouteCommerceRuntime(input: { options: RouteOptions; store
     const feeVnd = mockedProfile?.deliveryFeeVnd;
     const clients = createMockClients(fixtures, {
       ...options.mockClientOptions,
+      sessionId,
+      automaticRecommendationContext: options.automaticRecommendationContext,
+      automaticRecommendationJourney: recommendationJourneyForSession,
       ...mockedUpstreamClientOptions(mockedProfile),
       ...(etaMinutes !== undefined && etaMinutes > 0 && feeVnd !== undefined
         ? { fulfillmentQuoteProvider: () => ({ ok: true as const, value: { feeVnd, etaMinutes }, message: "mocked_upstream_api_quote" }) }

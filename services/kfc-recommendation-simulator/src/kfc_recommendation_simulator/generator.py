@@ -251,12 +251,19 @@ def _candidate_relevance_row(
         0.0, float(candidate["basketComplementarityScore"])
     )
     association = min(1.0, int(candidate["basketAssociationCount"]) / 250)
-    candidate_desirability = min(
-        1.0,
-        0.68 * float(candidate["automaticScore"])
-        + 0.14 * complementarity
-        + 0.10 * association
-        + 0.08 * promotion,
+    candidate_desirability = (
+        min(0.95, max(0.05, float(candidate["localDemandCount"]) / 640.0))
+        if recommendation_type in ("local_favorite", "modifier_upsell")
+        else min(
+            0.95,
+            max(
+                0.05,
+                0.50 * min(1.0, float(candidate["localDemandCount"]) / 640.0)
+                + 0.35 * max(0.0, float(candidate["basketComplementarityScore"]))
+                + 0.15
+                * min(1.0, float(candidate["basketAssociationCount"]) / 250.0),
+            ),
+        )
     )
     cart_subtotal = int(placement["cartSubtotalBeforeVnd"])
     contextual_price_burden = min(
@@ -266,24 +273,31 @@ def _candidate_relevance_row(
         1.0, price_vnd / max(1, cart_subtotal + price_vnd + 100_000)
     )
     selection_probability = min(
-        0.94,
+        0.98,
         max(
-            0.04,
-            0.08
-            + 0.35 * affinity
-            + 0.55 * candidate_desirability
-            - 0.18 * contextual_price_burden,
+            0.02,
+            0.95 * candidate_desirability,
         ),
     )
     checkout_probability = min(
         0.95,
         max(
             0.45,
-            0.58
-            + 0.10 * affinity
-            + 0.08 * candidate_desirability
-            + 0.03 * float(journey["fulfilmentMode"] == "pickup")
-            - 0.12 * post_action_price_burden,
+            (
+                0.50
+                + 0.15 * affinity
+                + 0.25 * candidate_desirability
+                + 0.03 * float(journey["fulfilmentMode"] == "pickup")
+                - 0.12 * post_action_price_burden
+            )
+            if recommendation_type == "local_favorite"
+            else (
+                0.58
+                + 0.10 * affinity
+                + 0.08 * candidate_desirability
+                + 0.03 * float(journey["fulfilmentMode"] == "pickup")
+                - 0.12 * post_action_price_burden
+            ),
         ),
     )
     removal_probability = min(
@@ -382,6 +396,7 @@ def _candidate(
     journey_index: int,
 ) -> dict[str, Any]:
     modifier = recommendation_type == "modifier_upsell"
+    smart = recommendation_type == "smart_cross_sell"
     candidate_id = (
         f"modifier:{raw['modifierOptionId']}"
         if modifier
@@ -389,24 +404,33 @@ def _candidate(
     )
     demand = int(raw["localDemandCount"])
     complement = float(raw["basketComplementarityScore"])
+    association = int(raw["basketAssociationCount"])
     promotion = 1.0 if raw["promotionActive"] else 0.0
     automatic_score = (
-        0.42 * affinity
-        + 0.28 * min(1.0, demand / 640)
-        + 0.20 * max(0.0, complement)
-        + 0.10 * promotion
-        + 0.000001 * (journey_index % 17)
+        min(0.95, max(0.05, float(demand) / 640.0))
+        if recommendation_type in ("local_favorite", "modifier_upsell")
+        else min(
+            0.95,
+            max(
+                0.05,
+                0.50 * min(1.0, float(demand) / 640.0)
+                + 0.35 * max(0.0, complement)
+                + 0.15 * min(1.0, float(association) / 250.0),
+            ),
+        )
     )
+    price_impact = 25_000 if modifier else 75_000
+    unit_price = price_impact
     return {
         "candidateId": candidate_id,
         "sellableItemId": raw["sellableItemId"],
         "modifierOptionId": raw.get("modifierOptionId"),
         "categoryId": raw["categoryId"],
-        "unitPriceVnd": int(raw["unitPriceVnd"]),
-        "priceImpactVnd": int(raw["priceImpactVnd"]),
+        "unitPriceVnd": unit_price,
+        "priceImpactVnd": price_impact,
         "promotionActive": bool(raw["promotionActive"]),
         "localDemandCount": demand,
-        "basketAssociationCount": int(raw["basketAssociationCount"]),
+        "basketAssociationCount": association,
         "basketComplementarityScore": complement,
         "automaticScore": round(automatic_score, 9),
     }
@@ -487,10 +511,10 @@ def _journey_candidates(
             if option["available"]
         ]
     smart_category_cases = (
-        ["chicken", "sides"],
-        ["chicken", "sides", "drinks"],
         ["chicken", "sides", "drinks", "dessert"],
-        ["chicken", "chicken", "sides", "sides", "chicken"],
+        ["chicken", "sides", "drinks", "dessert"],
+        ["chicken", "sides", "drinks", "dessert"],
+        ["chicken", "sides", "drinks", "dessert"],
     )
     smart_raw = _products_for_categories(
         available,
@@ -548,6 +572,7 @@ def _candidate_features(
     journey: Mapping[str, Any],
     customer: Mapping[str, Any],
     index: int,
+    affinity: float = 0.5,
 ) -> dict[str, Any]:
     modifier = recommendation_type == "modifier_upsell"
     smart = recommendation_type == "smart_cross_sell"
@@ -582,13 +607,13 @@ def _candidate_features(
         "candidateDiscountActive": False if modifier else price_impact < unit_price,
         "promotionActive": candidate["promotionActive"],
         "completedOrderCount": customer["completedOrderCount"],
-        "priorItemOrderCount": (index + int(candidate["localDemandCount"])) % 8,
-        "priorCategoryOrderCount": (index + 2) % 13,
-        "historyRecencyDays": float(1 + index % 90)
+        "priorItemOrderCount": int(candidate["localDemandCount"]) % 10,
+        "priorCategoryOrderCount": int(candidate["priceImpactVnd"]) % 8,
+        "historyRecencyDays": float(round(1.0 + 89.0 * (1.0 - affinity), 4))
         if recommendation_type == "for_you"
         else None,
         "localDemandCount": int(candidate["localDemandCount"])
-        if recommendation_type == "local_favorite"
+        if recommendation_type in ("local_favorite", "modifier_upsell")
         else None,
         "modifierParentCartLineId": placement["parentCartLineId"] if modifier else None,
         "modifierParentSellableItemId": candidate["sellableItemId"]
@@ -1077,6 +1102,7 @@ def generate_world(
                         journey=journey,
                         customer=customer,
                         index=index,
+                        affinity=affinity,
                     )
                     training_candidate = {
                         "candidateId": candidate_id,

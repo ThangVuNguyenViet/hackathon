@@ -182,6 +182,8 @@ const responseSchema = z
     }
   });
 
+export type AutomaticRecommendationResponse = z.infer<typeof responseSchema>;
+
 export function parseAutomaticRecommendationResponse(value: unknown) {
   return responseSchema.parse(value);
 }

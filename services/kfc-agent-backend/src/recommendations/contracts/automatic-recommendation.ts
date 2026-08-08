@@ -211,6 +211,7 @@ export {
   parseAutomaticRecommendationOutcome,
   parseAutomaticRecommendationProblem,
   parseAutomaticRecommendationResponse,
+  type AutomaticRecommendationResponse,
 } from './automatic-recommendation-response.js';
 export {
   parseAutomaticScorerRequest,

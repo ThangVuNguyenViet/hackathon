@@ -441,7 +441,9 @@ describe('automatic recommendation versioned feature construction', () => {
     );
 
     expect(AUTOMATIC_FEATURE_SCHEMA_VERSION).toBe('automatic-feature-v1');
-    expect(AUTOMATIC_FEATURE_SCHEMA_DIGEST).toMatch(/^[a-f0-9]{64}$/u);
+    expect(AUTOMATIC_FEATURE_SCHEMA_DIGEST).toBe(
+      '35b710d0b73e7419038e83bc9c39f93feb38564d793726cd47021fa2dbc8421b',
+    );
     const rows = buildAutomaticRecommendationFeatureRows(context, decisions);
     expect(rows).toHaveLength(1);
     expect(rows[0]).toMatchObject({

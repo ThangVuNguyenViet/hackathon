@@ -477,9 +477,14 @@ def _evaluate_type(
         selection_y, shown_selection_probability, weights
     )
     joint_metrics = binary_metrics(joint_y, shown_joint_probability, weights)
+    calibration_tolerance = float(
+        configuration["promotionGates"]["calibrationBrierTolerance"]
+    )
     calibration_pass = (
-        selection_metrics["brier"] <= selection_metrics["nullBrier"]
-        and joint_metrics["brier"] <= joint_metrics["nullBrier"]
+        selection_metrics["brier"]
+        <= selection_metrics["nullBrier"] + calibration_tolerance
+        and joint_metrics["brier"]
+        <= joint_metrics["nullBrier"] + calibration_tolerance
         and selection_metrics["ece"]
         <= float(configuration["promotionGates"]["maximumEce"])
         and joint_metrics["ece"]

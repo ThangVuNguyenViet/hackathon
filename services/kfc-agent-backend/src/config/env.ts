@@ -60,7 +60,7 @@ const appEnvSchema = z.object({
   ZALO_APP_ID: z.string().optional().default(""),
   ZALO_APP_SECRET: z.string().optional().default(""),
   ZALO_API_BASE_URL: z.string().optional().default(""),
-  KFC_COMMERCE_MODE: z.enum(["fixture", "gateway"]).default("gateway"),
+  KFC_COMMERCE_MODE: z.enum(["fixture", "gateway"]).default("fixture"),
   KFC_COMMERCE_ENVIRONMENT: z.enum(["production", "sandbox"]).optional(),
   KFC_MENU_API_URL: z.string().optional(),
   CATALOG_TTL_SECONDS: z.coerce.number().int().min(30).max(3600).optional(),

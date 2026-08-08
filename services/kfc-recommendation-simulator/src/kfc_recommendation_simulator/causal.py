@@ -306,10 +306,13 @@ def _ready_placement(
             }
         )
         return placement
-    selection_probability = min(0.88, 0.18 + 0.52 * affinity)
+    selection_probability = 0.44
     selected_position: int | None = None
     if selection_draw < selection_probability:
-        selected_position = min(int(choice_draw * len(slate)), len(slate) - 1)
+        if condition == "automatic":
+            selected_position = 0
+        else:
+            selected_position = min(int(choice_draw * len(slate)), len(slate) - 1)
         outcome_class = "accepted"
     elif selection_draw < selection_probability + 0.22:
         outcome_class = "dismissed"

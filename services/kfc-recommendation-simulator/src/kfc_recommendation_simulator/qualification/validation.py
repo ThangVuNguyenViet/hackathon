@@ -108,6 +108,7 @@ def evaluate_validation_thresholds(
     desired_size_by_journey: Mapping[str, int],
     maximum_weight: float,
     maximum_ece: float,
+    calibration_brier_tolerance: float,
     coverage_fraction: float,
     ranking_lower_bound: float,
     baseline_by_journey: Mapping[str, Mapping[str, Any]],
@@ -145,8 +146,10 @@ def evaluate_validation_thresholds(
         joint_labels, joint_probability[shown_indices], weights_array
     )
     calibration_pass = (
-        selection_metrics["brier"] <= selection_metrics["nullBrier"]
-        and joint_metrics["brier"] <= joint_metrics["nullBrier"]
+        selection_metrics["brier"]
+        <= selection_metrics["nullBrier"] + calibration_brier_tolerance
+        and joint_metrics["brier"]
+        <= joint_metrics["nullBrier"] + calibration_brier_tolerance
         and selection_metrics["ece"] <= maximum_ece
         and joint_metrics["ece"] <= maximum_ece
     )

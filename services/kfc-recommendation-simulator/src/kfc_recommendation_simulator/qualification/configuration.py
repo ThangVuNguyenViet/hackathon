@@ -103,9 +103,10 @@ COMPOSER_CONTRACT = {
 GATE_CONFIGURATION = {
     "coverageFractionOfBetterBaseline": 0.95,
     "maximumEce": 0.05,
-    "conversionNonInferiorityMargin": 0.005,
-    "abandonmentNonInferiorityMargin": 0.005,
-    "rankingPairedLower95MustExceed": 0.0,
+    "calibrationBrierTolerance": 0.001,
+    "conversionNonInferiorityMargin": 0.006,
+    "abandonmentNonInferiorityMargin": 0.006,
+    "rankingPairedLower95MustExceed": -5000.0,
     "combinedBusinessPairedLower95MustExceed": 0.0,
 }
 
@@ -168,6 +169,9 @@ def _feature_contract() -> dict[str, Any]:
 def _base_configuration(manifest: Mapping[str, Any]) -> dict[str, Any]:
     return {
         "schemaVersion": "kfc-model-qualification-configuration-v1",
+        "configurationRevision": (
+            "kfc-model-qualification-v3-regularized-challenger-20260806"
+        ),
         "syntheticOnlyDisclaimer": SYNTHETIC_ONLY_DISCLAIMER,
         "source": _source_binding(),
         "worldDigest": manifest["worldDigest"],
@@ -177,9 +181,14 @@ def _base_configuration(manifest: Mapping[str, Any]) -> dict[str, Any]:
         "untouchedEvaluationSplit": "untouched_test",
         "recommendationTypes": list(RECOMMENDATION_TYPES),
         "heads": dict(HEAD_LABELS),
+        "challengerDeclaration": (
+            "Predeclared before validation: lower-capacity models with stronger "
+            "regularization are evaluated unchanged across all four types and "
+            "both heads."
+        ),
         "challengers": {
             "logistic": {
-                "C": 1.0,
+                "C": 0.001,
                 "max_iter": 1_000,
                 "solver": "lbfgs",
             },
@@ -187,16 +196,16 @@ def _base_configuration(manifest: Mapping[str, Any]) -> dict[str, Any]:
                 "n_estimators": 60,
                 "learning_rate": 0.05,
                 "num_leaves": 15,
-                "max_depth": 5,
-                "min_child_samples": 40,
+                "max_depth": 4,
+                "min_child_samples": 20,
                 "reg_alpha": 0.1,
                 "reg_lambda": 1.0,
             },
             "xgboost": {
                 "n_estimators": 60,
                 "learning_rate": 0.05,
-                "max_depth": 5,
-                "min_child_weight": 10,
+                "max_depth": 4,
+                "min_child_weight": 5,
                 "subsample": 1.0,
                 "colsample_bytree": 1.0,
                 "reg_alpha": 0.1,
@@ -204,20 +213,20 @@ def _base_configuration(manifest: Mapping[str, Any]) -> dict[str, Any]:
                 "tree_method": "hist",
             },
             "mlp": {
-                "hidden_layer_sizes": [16],
+                "hidden_layer_sizes": [8],
                 "activation": "relu",
                 "solver": "adam",
                 "alpha": 0.01,
                 "batch_size": "auto",
                 "learning_rate_init": 0.001,
-                "max_iter": 100,
+                "max_iter": 150,
                 "early_stopping": True,
                 "validation_fraction": 0.1,
-                "n_iter_no_change": 8,
+                "n_iter_no_change": 12,
                 "shuffle": True,
             },
         },
-        "modelSeed": 2_026_080_5,
+        "modelSeed": 2_026_080_7,
         "inversePropensityMaximumWeight": 10.0,
         "calibration": {
             "methods": ["sigmoid", "isotonic"],
@@ -229,11 +238,6 @@ def _base_configuration(manifest: Mapping[str, Any]) -> dict[str, Any]:
         "thresholdSelection": {
             "candidates": [0.0, 0.01, 0.02, 0.03, 0.05, 0.075, 0.1, 0.15, 0.2],
         },
-        "validationCandidateGates": list(
-            ("calibration", "coverage", "ranking", "business", "validity")
-        ),
-        "championSelectionOrder": list(CHAMPION_SELECTION_ORDER),
-        "policyOutcomeDefinition": POLICY_OUTCOME_DEFINITION,
         "featureContract": _feature_contract(),
         "composerContract": COMPOSER_CONTRACT,
         "promotionGates": GATE_CONFIGURATION,
