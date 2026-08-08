@@ -119,7 +119,6 @@ import {
   kfcSmartMenuBatchPayloadSchema,
   kfcCartDraftPayloadSchema,
   kfcModifierDraftPayloadSchema,
-  messengerHistorySyncPayloadSchema,
   staleMessengerRecoveryPayloadSchema,
   sessionControlPayloadSchema,
   dashboardSessionDefaultLookbackMs,
@@ -157,6 +156,7 @@ import {
 } from './routeHandlerSupport.js';
 
 import type { RouteHandlerContext } from './routeHandlerContext.js';
+import { createPvcfcChatHandler } from './pvcfcChatHandler.js';
 
 const clientItemSelectionSchema = z
   .object({
@@ -260,6 +260,7 @@ export function createChatRouteHandlers(context: RouteHandlerContext) {
     recoverStaleMessengerDeliveriesInternal,
     processMessengerAgentRunInternal,
   } = context;
+  const chatPvcfcMessage = createPvcfcChatHandler(kfcAgentResponse);
   return {
     async chatKfcMessage(body: unknown) {
       const parsed = kfcChatPayloadSchema.safeParse(body);
@@ -273,10 +274,13 @@ export function createChatRouteHandlers(context: RouteHandlerContext) {
         };
       }
 
+      const rawProfile =
+        parsed.data.metadata?.responseProfile ??
+        parsed.data.metadata?.showcaseResponseMode;
       const responseProfile =
-        parsed.data.metadata?.showcaseResponseMode === 'text'
+        rawProfile === 'text' || rawProfile === 'social'
           ? ('social' as const)
-          : parsed.data.metadata?.showcaseResponseMode === 'genui'
+          : rawProfile === 'genui'
             ? ('genui' as const)
             : undefined;
       const auditMetadata = { ...(parsed.data.metadata ?? {}) };
@@ -294,6 +298,7 @@ export function createChatRouteHandlers(context: RouteHandlerContext) {
         },
       });
     },
+    chatPvcfcMessage,
     async chatKfcStartRun(body: unknown) {
       return customerRuns.start(body);
     },

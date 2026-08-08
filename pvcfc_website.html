@@ -1,0 +1,1137 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Phân Bón Cà Mau - Hạt Ngọc Mùa Vàng • Trợ Lý AI Nông Nghiệp</title>
+  <!-- Google Fonts & FontAwesome -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  
+  <style>
+    :root {
+      --brand-primary: #0A6B41;
+      --brand-dark: #005A36;
+      --brand-light: #F0F7F3;
+      --brand-gold: #DAA520;
+      --bg-page: #F8FAF9;
+      --bg-input: #F3F4F6;
+      --text-main: #111827;
+      --text-muted: #6B7280;
+      --border-color: #E5E7EB;
+      --radius-sm: 8px;
+      --radius-md: 12px;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      font-family: 'Be Vietnam Pro', sans-serif;
+      background-color: var(--bg-page);
+      color: var(--text-main);
+      height: 100vh;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    /* Minimalist Top Header (Matches KFC Reference Architecture) */
+    header.main-header {
+      background: #FFFFFF;
+      border-bottom: 1px solid var(--border-color);
+      padding: 12px 24px;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      z-index: 10;
+    }
+
+    .header-top {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      width: 100%;
+    }
+
+    .brand-group {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      text-decoration: none;
+    }
+
+    .brand-badge {
+      width: 42px;
+      height: 42px;
+      background: var(--brand-primary);
+      border-radius: var(--radius-sm);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: #FFFFFF;
+      font-size: 1.1rem;
+      font-weight: 900;
+      flex-shrink: 0;
+    }
+
+    .brand-text h1 {
+      font-size: 1.25rem;
+      font-weight: 800;
+      color: var(--brand-primary);
+      line-height: 1.2;
+      letter-spacing: -0.2px;
+    }
+
+    .brand-text p {
+      font-size: 0.82rem;
+      color: var(--text-muted);
+      font-weight: 400;
+    }
+
+    .header-right {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+    }
+
+    .header-icon {
+      color: var(--text-muted);
+      font-size: 1.2rem;
+    }
+
+    .header-bottom {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding-top: 2px;
+    }
+
+    /* Short Route Navigation Tabs (Trợ Lý | Replay) */
+    .route-nav {
+      display: flex;
+      gap: 6px;
+    }
+    .route-btn {
+      padding: 5px 14px;
+      border-radius: var(--radius-sm);
+      font-size: 0.82rem;
+      font-weight: 600;
+      border: 1px solid var(--border-color);
+      background: #FFFFFF;
+      color: var(--text-muted);
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+    .route-btn.active {
+      background: var(--brand-primary);
+      color: #FFFFFF;
+      border-color: var(--brand-primary);
+    }
+
+    /* Response Mode Toggle Container (Generative UI | Text only) */
+    .mode-toggle {
+      display: flex;
+      align-items: center;
+      background: var(--bg-input);
+      padding: 3px;
+      border-radius: var(--radius-sm);
+      gap: 2px;
+    }
+
+    .mode-pill {
+      padding: 6px 14px;
+      border-radius: 6px;
+      font-size: 0.82rem;
+      font-weight: 600;
+      border: none;
+      cursor: pointer;
+      background: transparent;
+      color: var(--text-muted);
+      transition: all 0.15s;
+    }
+
+    .mode-pill.active {
+      background: var(--brand-primary);
+      color: #FFFFFF;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+    }
+
+    /* Main Chat Layout */
+    .plain-chat-layout {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      max-width: 1040px;
+      width: 100%;
+      margin: 0 auto;
+      background: #FFFFFF;
+      border-left: 1px solid var(--border-color);
+      border-right: 1px solid var(--border-color);
+      overflow: hidden;
+    }
+
+    /* Quick Suggestion Pills (Literal Text Transmission) */
+    .quick-suggestions-bar {
+      padding: 12px 24px;
+      display: flex;
+      gap: 10px;
+      background: #FFFFFF;
+      border-bottom: 1px solid var(--border-color);
+      overflow-x: auto;
+    }
+
+    .suggestion-pill {
+      padding: 7px 14px;
+      background: #FFFFFF;
+      border: 1px solid var(--border-color);
+      border-radius: var(--radius-sm);
+      font-size: 0.85rem;
+      font-weight: 600;
+      color: var(--text-main);
+      cursor: pointer;
+      white-space: nowrap;
+      transition: all 0.15s;
+    }
+
+    .suggestion-pill:hover {
+      border-color: var(--brand-primary);
+      background: var(--brand-light);
+      color: var(--brand-dark);
+    }
+
+    /* Chat Messages Area */
+    .chat-messages {
+      flex: 1;
+      padding: 24px;
+      overflow-y: auto;
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+    }
+
+    .message-row {
+      display: flex;
+      gap: 12px;
+      max-width: 700px;
+      animation: fadeIn 0.2s ease-out;
+    }
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(4px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    .message-row.user {
+      align-self: flex-end;
+      flex-direction: row-reverse;
+    }
+
+    .avatar {
+      width: 32px;
+      height: 32px;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 0.85rem;
+      flex-shrink: 0;
+    }
+    .avatar.bot {
+      background: var(--brand-primary);
+      color: #FFFFFF;
+    }
+    .avatar.user {
+      background: var(--text-muted);
+      color: #FFFFFF;
+    }
+
+    .bubble {
+      padding: 12px 16px;
+      border-radius: var(--radius-md);
+      font-size: 0.92rem;
+      line-height: 1.55;
+      white-space: pre-line;
+    }
+
+    .message-row.bot .bubble {
+      background: #FFFFFF;
+      border: 1px solid var(--border-color);
+      color: var(--text-main);
+    }
+
+    .message-row.user .bubble {
+      background: var(--brand-primary);
+      color: #FFFFFF;
+    }
+
+    /* Declarative GenUI Cards (CopilotKit Pattern) */
+    .genui-card {
+      background: #FFFFFF;
+      border: 1px solid var(--border-color);
+      border-radius: var(--radius-md);
+      padding: 16px;
+      margin-top: 10px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.04);
+    }
+    .genui-header {
+      font-weight: 700;
+      color: var(--brand-dark);
+      font-size: 0.92rem;
+      margin-bottom: 10px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding-bottom: 8px;
+      border-bottom: 1px solid var(--border-color);
+    }
+
+    .timeline-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.85rem;
+      margin-top: 6px;
+    }
+    .timeline-table th {
+    /* Declarative GenUI Cards (CopilotKit Pattern) */
+    .genui-card {
+      background: #FFFFFF;
+      border: 1px solid var(--border-color);
+      border-radius: var(--radius-md);
+      padding: 16px;
+      margin-top: 10px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.04);
+    }
+    .genui-header {
+      font-weight: 700;
+      color: var(--brand-dark);
+      font-size: 0.92rem;
+      margin-bottom: 10px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding-bottom: 8px;
+      border-bottom: 1px solid var(--border-color);
+    }
+
+    /* Dedicated GenUI Card Actions (CopilotKit Parity) */
+    .genui-actions {
+      display: flex;
+      gap: 8px;
+      margin-top: 12px;
+      padding-top: 10px;
+      border-top: 1px dashed var(--border-color);
+      flex-wrap: wrap;
+    }
+    .genui-btn {
+      padding: 6px 12px;
+      border-radius: var(--radius-sm);
+      font-size: 0.82rem;
+      font-weight: 600;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      transition: all 0.15s;
+    }
+    .genui-btn-primary {
+      background: var(--brand-primary);
+      color: #FFFFFF;
+      border: none;
+    }
+    .genui-btn-primary:hover {
+      background: var(--brand-dark);
+    }
+    .genui-btn-secondary {
+      background: #FFFFFF;
+      color: var(--brand-primary);
+      border: 1px solid var(--brand-primary);
+    }
+    .genui-btn-secondary:hover {
+      background: var(--brand-light);
+    }
+
+    /* Human-In-The-Loop HITL Approval Card */
+    .hitl-card {
+      background: #FFFFFF;
+      border: 1.5px solid var(--brand-gold);
+      border-radius: var(--radius-md);
+      padding: 14px 16px;
+      margin-top: 10px;
+      box-shadow: 0 4px 14px rgba(218, 165, 32, 0.15);
+    }
+    .hitl-header {
+      font-size: 0.88rem;
+      font-weight: 800;
+      color: var(--brand-dark);
+      margin-bottom: 4px;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .hitl-body {
+      font-size: 0.82rem;
+      color: var(--text-muted);
+      margin-bottom: 10px;
+    }
+    .hitl-actions {
+      display: flex;
+      gap: 8px;
+    }
+    .hitl-btn-confirm {
+      background: var(--brand-primary);
+      color: #FFFFFF;
+      border: none;
+      padding: 5px 12px;
+      border-radius: var(--radius-sm);
+      font-size: 0.8rem;
+      font-weight: 700;
+      cursor: pointer;
+    }
+    .hitl-btn-cancel {
+      background: #FFFFFF;
+      color: var(--text-muted);
+      border: 1px solid var(--border-color);
+      padding: 5px 12px;
+      border-radius: var(--radius-sm);
+      font-size: 0.8rem;
+      font-weight: 600;
+      cursor: pointer;
+    }
+    .calc-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 8px;
+      background: var(--brand-light);
+      padding: 12px;
+      border-radius: var(--radius-sm);
+      margin-top: 8px;
+      text-align: center;
+    }
+    .calc-val {
+      font-size: 1.05rem;
+      font-weight: 700;
+      color: var(--brand-primary);
+    }
+    .calc-lbl {
+      font-size: 0.75rem;
+      color: var(--text-muted);
+    }
+
+    /* Bottom Chat Input Bar */
+    .chat-input-area {
+      padding: 14px 24px;
+      background: #FFFFFF;
+      border-top: 1px solid var(--border-color);
+      display: flex;
+      gap: 10px;
+      align-items: center;
+    }
+
+    .chat-input {
+      flex: 1;
+      background: var(--bg-input);
+      border: 1px solid var(--border-color);
+      border-radius: var(--radius-sm);
+      padding: 14px 18px;
+      font-size: 0.93rem;
+      outline: none;
+      font-family: inherit;
+      color: var(--text-main);
+    }
+
+    .chat-input:focus {
+      border-color: var(--brand-primary);
+      background: #FFFFFF;
+    }
+
+    .send-btn {
+      width: 44px;
+      height: 44px;
+      background: var(--brand-primary);
+      color: #FFFFFF;
+      border: none;
+      border-radius: var(--radius-sm);
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 1.05rem;
+      flex-shrink: 0;
+      transition: background 0.15s;
+    }
+    .send-btn:hover {
+      background: var(--brand-dark);
+    }
+    .send-btn:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+
+    /* Demo Showcase Layout (/demo) */
+    .demo-showcase-layout {
+      flex: 1;
+      display: grid;
+      grid-template-columns: 320px 1fr;
+      overflow: hidden;
+    }
+    .sidebar {
+      background: #FFFFFF;
+      border-right: 1px solid var(--border-color);
+      padding: 18px;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      overflow-y: auto;
+    }
+    .sidebar-header h2 {
+      font-size: 1.05rem;
+      color: var(--brand-dark);
+    }
+    .sidebar-header p {
+      font-size: 0.78rem;
+      color: var(--text-muted);
+    }
+    .scenario-card {
+      background: var(--bg-page);
+      border: 1px solid var(--border-color);
+      border-radius: var(--radius-sm);
+      padding: 12px;
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+    .scenario-card:hover, .scenario-card.active {
+      border-color: var(--brand-primary);
+      background: var(--brand-light);
+    }
+    .scenario-card h3 {
+      font-size: 0.9rem;
+      color: var(--brand-dark);
+      margin-bottom: 4px;
+    }
+    .scenario-card p {
+      font-size: 0.78rem;
+      color: var(--text-muted);
+    }
+    .replay-btn {
+      width: 100%;
+      background: var(--brand-primary);
+      color: #FFFFFF;
+      border: none;
+      padding: 10px;
+      border-radius: var(--radius-sm);
+      font-weight: 600;
+      font-size: 0.85rem;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+      margin-top: auto;
+    }
+
+    /* Typing Indicator */
+    .typing-indicator {
+      display: flex;
+      gap: 5px;
+      padding: 10px 14px;
+      background: #FFFFFF;
+      border-radius: var(--radius-md);
+      width: fit-content;
+      border: 1px solid var(--border-color);
+    }
+    .typing-indicator span {
+      width: 6px;
+      height: 6px;
+      background: var(--brand-primary);
+      border-radius: 50%;
+      animation: bounce 1.4s infinite ease-in-out both;
+    }
+    .typing-indicator span:nth-child(1) { animation-delay: -0.32s; }
+    .typing-indicator span:nth-child(2) { animation-delay: -0.16s; }
+    @keyframes bounce {
+      0%, 80%, 100% { transform: scale(0); }
+      40% { transform: scale(1.0); }
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Top Minimalist Header -->
+  <header class="main-header">
+    <div class="header-top">
+      <a href="#" class="brand-group" onclick="switchRoute('/')">
+        <div class="brand-badge">PVCFC</div>
+        <div class="brand-text">
+          <h1>Phân Bón Cà Mau</h1>
+          <p>Hạt Ngọc Mùa Vàng • Trợ Lý AI Nông Nghiệp</p>
+        </div>
+      </a>
+
+      <div class="header-right">
+        <!-- Mode Toggle Container -->
+        <div class="mode-toggle">
+          <button class="mode-pill active" id="btn-mode-genui" onclick="setResponseMode('genui')">Generative UI</button>
+          <button class="mode-pill" id="btn-mode-text" onclick="setResponseMode('text')">Text only</button>
+        </div>
+        <i class="fa-regular fa-comment header-icon" title="Hỗ trợ nông nghiệp 24/7"></i>
+      </div>
+    </div>
+
+    <!-- Short Route Navigation Tabs -->
+    <div class="header-bottom">
+      <div class="route-nav">
+        <button class="route-btn active" id="btn-route-chat" onclick="switchRoute('/')">Trợ Lý</button>
+        <button class="route-btn" id="btn-route-demo" onclick="switchRoute('/demo')">Replay</button>
+      </div>
+    </div>
+  </header>
+
+  <!-- Route 1: Default Chat Layout (`/`) -->
+  <main class="plain-chat-layout" id="view-plain-chat">
+    <!-- Pure Agronomy Quick Suggestions Bar (Transmits Exact Pill Label) -->
+    <div class="quick-suggestions-bar">
+      <button class="suggestion-pill" onclick="sendQuickPrompt('Tư vấn quy trình lúa')">Tư vấn quy trình lúa</button>
+      <button class="suggestion-pill" onclick="sendQuickPrompt('Tính lượng phân bón')">Tính lượng phân bón</button>
+      <button class="suggestion-pill" onclick="sendQuickPrompt('Chẩn đoán thối rễ')">Chẩn đoán thối rễ</button>
+      <button class="suggestion-pill" onclick="sendQuickPrompt('Hẹn Kỹ sư đo pH')">Hẹn Kỹ sư đo pH</button>
+    </div>
+
+    <!-- Chat Messages Container -->
+    <div class="chat-messages" id="plain-chat-messages">
+      <div class="message-row bot">
+        <div class="avatar bot"><i class="fa-solid fa-seedling"></i></div>
+        <div>
+          <div class="bubble">Xin chào, Phân Bón Cà Mau có thể giúp bạn tư vấn kỹ thuật bón phân và chăm sóc cây trồng ngay tại đây.</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Bottom Input Bar -->
+    <div class="chat-input-area">
+      <input type="text" class="chat-input" id="plain-chat-input" placeholder="Nhắn Phân Bón Cà Mau..." onkeypress="handlePlainKeyPress(event)">
+      <button class="send-btn" id="btn-plain-send" onclick="handlePlainSend()"><i class="fa-solid fa-paper-plane"></i></button>
+    </div>
+  </main>
+
+  <!-- Route 2: Demo Showcase Layout (`/demo`) -->
+  <main class="demo-showcase-layout" id="view-demo-showcase" style="display: none;">
+    <div class="sidebar">
+      <div class="sidebar-header">
+        <h2>Trình Chiếu Replay (/demo)</h2>
+        <p>Chọn kịch bản mẫu và nhấn nút bên dưới để phát lại lượt gọi AI trực tiếp:</p>
+      </div>
+
+      <div class="scenario-list">
+        <div class="scenario-card active" id="sc-1" onclick="selectDemoScenario(1)">
+          <h3>Kịch bản 1: Tư vấn quy trình lúa Hè Thu (5 Ha)</h3>
+          <p>Giải độc phèn An Giang, phân bón N46.Plus & OM Good.</p>
+        </div>
+        <div class="scenario-card" id="sc-2" onclick="selectDemoScenario(2)">
+          <h3>Kịch bản 2: Tính lượng phân bón Sầu Riêng</h3>
+          <p>Bộ đôi N46.Plus & NPK Gold 20-10-10 nuôi trái.</p>
+        </div>
+        <div class="scenario-card" id="sc-3" onclick="selectDemoScenario(3)">
+          <h3>Kịch bản 3: Chẩn đoán vàng lá thối rễ</h3>
+          <p>Phác đồ cấp bách phục hồi bộ rễ cây ăn trái sau mưa.</p>
+        </div>
+        <div class="scenario-card" id="sc-4" onclick="selectDemoScenario(4)">
+          <h3>Kịch bản 4: Hẹn Kỹ sư đo pH & Tra cứu đại lý</h3>
+          <p>Đại lý Cái Nước chính hãng & hẹn Kỹ sư thăm vườn.</p>
+        </div>
+      </div>
+
+      <button class="replay-btn" id="btn-replay-action" onclick="runLiveReplaySession()">
+        <i class="fa-solid fa-play"></i> Phát Lại Live AI Replay
+      </button>
+    </div>
+
+    <div class="plain-chat-layout" style="border: none;">
+      <div class="chat-messages" id="demo-chat-messages">
+        <!-- Replay Messages -->
+      </div>
+      <div class="chat-input-area">
+        <input type="text" class="chat-input" id="demo-chat-input" placeholder="Nhắn Phân Bón Cà Mau..." onkeypress="handleDemoKeyPress(event)">
+        <button class="send-btn" id="btn-demo-send" onclick="handleDemoSend()"><i class="fa-solid fa-paper-plane"></i></button>
+      </div>
+    </div>
+  </main>
+
+  <script>
+    // Hostname-agnostic backend URL
+    const PRIMARY_BACKEND_URL = window.location.origin || 'http://localhost:8787';
+
+    // Global State
+    let currentRoute = '/'; // '/' | '/demo'
+    let currentMode = 'genui'; // 'genui' | 'text'
+    let demoScenarioId = 1;
+    let isReplaying = false;
+
+    let plainSessionId = 'pvcfc_live_' + Date.now();
+    let plainCustomerId = 'customer_' + Math.floor(Math.random() * 10000);
+
+    // Call Live AI Backend Endpoint
+    async function callLiveAiBackend(text, responseMode, sessionId, customerId) {
+      const payload = {
+        sessionId: 'pvcfc:' + sessionId,
+        customerId: customerId,
+        clientMessageId: 'msg_' + Date.now() + '_' + Math.random().toString(36).substring(2, 8),
+        text: text,
+        metadata: {
+          responseProfile: responseMode === 'genui' ? 'genui' : 'social'
+        }
+      };
+
+      try {
+        const controller = new AbortController();
+        const timer = setTimeout(() => controller.abort(), 45000);
+        const res = await fetch(PRIMARY_BACKEND_URL + '/chat/pvcfc/message', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
+          signal: controller.signal
+        });
+        clearTimeout(timer);
+
+        if (res.ok) {
+          const data = await res.json();
+          const botText = data.responseText || data.presentation?.text || '';
+          const genUi = data.presentation?.genUi || data.genUi || null;
+          return { text: botText, genUi };
+        }
+        const errData = await res.json().catch(() => ({}));
+        throw new Error(errData.message || `Lỗi máy chủ HTTP ${res.status}`);
+      } catch (err) {
+        throw new Error(err.message || 'Không thể kết nối máy chủ PVCFC AI');
+      }
+    }
+
+    const demoScenariosData = {
+      1: {
+        title: "Kịch bản 1: Tư vấn quy trình lúa Hè Thu (5 Ha)",
+        userTurns: [
+          "Tư vấn quy trình lúa",
+          "Lúa sạ 15 ngày, pH 4.5. Nhổ lúa lên rễ thâm đen. Bón Đạm Cà Mau vô liền được chưa?",
+          "Cho xin lịch bón phân 3 đợt chuẩn phối hợp Organic OM Good, Đạm Cà Mau với NPK 20-20-15?",
+          "Tui làm 5 héc-ta, tính tổng số ký và bao phân (50kg/bao) cho cả 3 đợt bón?"
+        ]
+      },
+      2: {
+        title: "Kịch bản 2: Tính lượng phân bón Sầu Riêng",
+        userTurns: [
+          "Tính lượng phân bón",
+          "Bộ đôi N46.Plus và NPK Gold này có ưu điểm gì?",
+          "Liều lượng bón cho 2 Héc-ta sầu riêng nuôi trái thế nào?"
+        ]
+      },
+      3: {
+        title: "Kịch bản 3: Chẩn đoán vàng lá thối rễ",
+        userTurns: [
+          "Chẩn đoán thối rễ",
+          "Vĩnh Long mưa dầm bị thối rễ, giờ phải cứu vườn cam 1.5 Ha thế nào?"
+        ]
+      },
+      4: {
+        title: "Kịch bản 4: Hẹn Kỹ sư đo pH & Tra cứu đại lý",
+        userTurns: [
+          "Hẹn Kỹ sư đo pH",
+          "Tôi ở Cái Nước, Cà Mau, cho tra cứu đại lý chính hãng PVCFC gần nhất và hẹn kỹ sư?"
+        ]
+      }
+    };
+
+    function switchRoute(path) {
+      currentRoute = path;
+      document.getElementById('btn-route-chat').classList.toggle('active', path === '/');
+      document.getElementById('btn-route-demo').classList.toggle('active', path === '/demo');
+      document.getElementById('view-plain-chat').style.display = path === '/' ? 'flex' : 'none';
+      document.getElementById('view-demo-showcase').style.display = path === '/demo' ? 'grid' : 'none';
+
+      if (path === '/demo') {
+        renderDemoScenarioPreview();
+      }
+    }
+
+    function setResponseMode(mode) {
+      currentMode = mode;
+      document.getElementById('btn-mode-genui').classList.toggle('active', mode === 'genui');
+      document.getElementById('btn-mode-text').classList.toggle('active', mode === 'text');
+    }
+
+    function sendQuickPrompt(promptText) {
+      document.getElementById('plain-chat-input').value = promptText;
+      handlePlainSend();
+    }
+
+    function handlePlainKeyPress(e) {
+      if (e.key === 'Enter') handlePlainSend();
+    }
+
+    async function handlePlainSend() {
+      const input = document.getElementById('plain-chat-input');
+      const sendBtn = document.getElementById('btn-plain-send');
+      const text = input.value.trim();
+      if (!text) return;
+
+      const chatBox = document.getElementById('plain-chat-messages');
+      const userRow = document.createElement('div');
+      userRow.className = 'message-row user';
+      userRow.innerHTML = `
+        <div class="avatar user"><i class="fa-solid fa-user"></i></div>
+        <div class="bubble">${escapeHtml(text)}</div>
+      `;
+      chatBox.appendChild(userRow);
+      input.value = '';
+      sendBtn.disabled = true;
+      chatBox.scrollTop = chatBox.scrollHeight;
+
+      const typingRow = document.createElement('div');
+      typingRow.className = 'message-row bot';
+      typingRow.id = 'plain-typing-indicator';
+      typingRow.innerHTML = `
+        <div class="avatar bot"><i class="fa-solid fa-seedling"></i></div>
+        <div class="typing-indicator"><span></span><span></span><span></span></div>
+      `;
+      chatBox.appendChild(typingRow);
+      chatBox.scrollTop = chatBox.scrollHeight;
+
+      try {
+        const result = await callLiveAiBackend(text, currentMode, plainSessionId, plainCustomerId);
+        const typing = document.getElementById('plain-typing-indicator');
+        if (typing) typing.remove();
+
+        const botRow = document.createElement('div');
+        botRow.className = 'message-row bot';
+
+        let genUiHtml = '';
+        if (currentMode === 'genui' && result.genUi) {
+          genUiHtml = renderDeclarativeGenUiCard(result.genUi);
+        }
+
+        botRow.innerHTML = `
+          <div class="avatar bot"><i class="fa-solid fa-seedling"></i></div>
+          <div>
+            <div class="bubble">${result.text} ${genUiHtml}</div>
+          </div>
+        `;
+        chatBox.appendChild(botRow);
+      } catch (err) {
+        const typing = document.getElementById('plain-typing-indicator');
+        if (typing) typing.remove();
+
+        const errorRow = document.createElement('div');
+        errorRow.className = 'message-row bot';
+        errorRow.innerHTML = `
+          <div class="avatar bot"><i class="fa-solid fa-triangle-exclamation"></i></div>
+          <div><div class="bubble" style="background:#FFF5F5; border-color:#FED7D7; color:#C53030;">Không thể kết nối máy chủ PVCFC AI.</div></div>
+        `;
+        chatBox.appendChild(errorRow);
+      } finally {
+        sendBtn.disabled = false;
+        chatBox.scrollTop = chatBox.scrollHeight;
+      }
+    }
+
+    function selectDemoScenario(id) {
+      demoScenarioId = id;
+      for (let i = 1; i <= 4; i++) {
+        const card = document.getElementById(`sc-${i}`);
+        if (card) card.classList.toggle('active', i === id);
+      }
+      renderDemoScenarioPreview();
+    }
+
+    function renderDemoScenarioPreview() {
+      const scenario = demoScenariosData[demoScenarioId];
+      if (!scenario) return;
+      const chatBox = document.getElementById('demo-chat-messages');
+      chatBox.innerHTML = `
+        <div style="text-align: center; color: var(--text-muted); padding: 40px 20px; font-size: 0.9rem;">
+          <i class="fa-solid fa-play" style="font-size: 1.8rem; color: var(--brand-primary); margin-bottom: 8px; display: block;"></i>
+          Nhấn nút <strong>"Phát Lại Live AI Replay"</strong> để gửi từng lượt câu hỏi kịch bản tới mô hình OpenAI.
+        </div>
+      `;
+    }
+
+    async function runLiveReplaySession() {
+      if (isReplaying) return;
+      isReplaying = true;
+      const btn = document.getElementById('btn-replay-action');
+      const sendBtn = document.getElementById('btn-demo-send');
+      btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Đang Phát Lại...';
+      btn.disabled = true;
+      sendBtn.disabled = true;
+
+      const scenario = demoScenariosData[demoScenarioId];
+      const chatBox = document.getElementById('demo-chat-messages');
+      chatBox.innerHTML = '';
+
+      const demoSessionId = 'pvcfc_demo_' + demoScenarioId + '_' + Date.now();
+      const demoCustomerId = 'demo_customer_' + demoScenarioId;
+
+      for (const userText of scenario.userTurns) {
+        const userRow = document.createElement('div');
+        userRow.className = 'message-row user';
+        userRow.innerHTML = `
+          <div class="avatar user"><i class="fa-solid fa-user"></i></div>
+          <div class="bubble">${escapeHtml(userText)}</div>
+        `;
+        chatBox.appendChild(userRow);
+        chatBox.scrollTop = chatBox.scrollHeight;
+
+        const typingRow = document.createElement('div');
+        typingRow.className = 'message-row bot';
+        typingRow.id = 'demo-typing-indicator';
+        typingRow.innerHTML = `
+          <div class="avatar bot"><i class="fa-solid fa-seedling"></i></div>
+          <div class="typing-indicator"><span></span><span></span><span></span></div>
+        `;
+        chatBox.appendChild(typingRow);
+        chatBox.scrollTop = chatBox.scrollHeight;
+
+        try {
+          const result = await callLiveAiBackend(userText, currentMode, demoSessionId, demoCustomerId);
+          const typing = document.getElementById('demo-typing-indicator');
+          if (typing) typing.remove();
+
+          const botRow = document.createElement('div');
+          botRow.className = 'message-row bot';
+
+          let genUiHtml = '';
+          if (currentMode === 'genui' && result.genUi) {
+            genUiHtml = renderDeclarativeGenUiCard(result.genUi);
+          }
+
+          botRow.innerHTML = `
+            <div class="avatar bot"><i class="fa-solid fa-seedling"></i></div>
+            <div>
+              <div class="bubble">${result.text} ${genUiHtml}</div>
+            </div>
+          `;
+          chatBox.appendChild(botRow);
+          chatBox.scrollTop = chatBox.scrollHeight;
+        } catch (err) {
+          const typing = document.getElementById('demo-typing-indicator');
+          if (typing) typing.remove();
+          break;
+        }
+        await new Promise(r => setTimeout(r, 600));
+      }
+
+      isReplaying = false;
+      btn.innerHTML = '<i class="fa-solid fa-play"></i> Phát Lại Live AI Replay';
+      btn.disabled = false;
+      sendBtn.disabled = false;
+    }
+
+    // Declarative GenUI Card Renderer (CopilotKit Pattern)
+    // Declarative GenUI Card Renderer (CopilotKit Pattern with Dedicated Actions)
+    function renderDeclarativeGenUiCard(genUiObj) {
+      if (!genUiObj) return '';
+      if (typeof genUiObj === 'string') return `<div class="genui-card">${escapeHtml(genUiObj)}</div>`;
+
+      const data = genUiObj.data || genUiObj;
+      const cardType = data.type || genUiObj.widgetKind;
+      const cardTitle = data.title || genUiObj.title || 'Phân Bón Cà Mau';
+
+      if (cardType === 'FertilizerScheduleCard' || genUiObj.widgetKind === 'fertilizerSchedule') {
+        return `
+          <div class="genui-card">
+            <div class="genui-header"><i class="fa-solid fa-calendar-check"></i> ${escapeHtml(cardTitle)}</div>
+            <table class="timeline-table">
+              <thead><tr><th>Đợt Bón</th><th>Thời Gian</th><th>Liều Lượng & Phân Bón</th></tr></thead>
+              <tbody>
+                ${(data.stages || []).map(s => `<tr><td><strong>${escapeHtml(s.name)}</strong></td><td>${escapeHtml(s.timing)}</td><td>${escapeHtml(s.dosage)}</td></tr>`).join('')}
+              </tbody>
+            </table>
+            <div class="genui-actions">
+              <button class="genui-btn genui-btn-primary" onclick="handleCardAction('schedule_reminder', '${escapeHtml(cardTitle)}')"><i class="fa-solid fa-bell"></i> Lập lịch nhắc bón phân</button>
+              <button class="genui-btn genui-btn-secondary" onclick="handleCardAction('export_pdf', '${escapeHtml(cardTitle)}')"><i class="fa-solid fa-file-pdf"></i> Tải lịch PDF</button>
+            </div>
+          </div>
+        `;
+      }
+
+      if (cardType === 'DosageCalculatorCard' || genUiObj.widgetKind === 'dosageCalculator') {
+        const area = data.areaHa || 5;
+        const damBags = Math.ceil(area * 3.5);
+        const npkBags = Math.ceil(area * 4.5);
+        const omBags = Math.ceil(area * 10);
+        return `
+          <div class="genui-card">
+            <div class="genui-header"><i class="fa-solid fa-calculator"></i> ${escapeHtml(cardTitle)}</div>
+            <div style="font-size: 0.85rem; color: var(--text-muted);">Diện tích đất canh tác: <strong id="calc-area-val">${area} Héc-ta</strong></div>
+            <input type="range" min="1" max="200" value="${area}" class="calc-slider" oninput="updateDosageCalc(this.value)">
+            <div class="calc-grid">
+              <div><div class="calc-val" id="bag-dam">${damBags} bao</div><div class="calc-lbl">Đạm Cà Mau</div></div>
+              <div><div class="calc-val" id="bag-npk">${npkBags} bao</div><div class="calc-lbl">NPK 20-20-15</div></div>
+              <div><div class="calc-val" id="bag-om">${omBags} bao</div><div class="calc-lbl">Organic OM</div></div>
+            </div>
+            <div class="genui-actions">
+              <button class="genui-btn genui-btn-primary" onclick="handleCardAction('share_zalo', '${escapeHtml(cardTitle)}')"><i class="fa-solid fa-share-nodes"></i> Gửi bảng tính qua Zalo / SMS</button>
+              <button class="genui-btn genui-btn-secondary" onclick="handleCardAction('order_dealer', '${escapeHtml(cardTitle)}')"><i class="fa-solid fa-store"></i> Đặt mua qua Đại Lý</button>
+            </div>
+          </div>
+        `;
+      }
+
+      if (cardType === 'DiagnosticProtocolCard' || genUiObj.widgetKind === 'diagnosticProtocol') {
+        return `
+          <div class="genui-card">
+            <div class="genui-header" style="color: #B91C1C;"><i class="fa-solid fa-triangle-exclamation"></i> ${escapeHtml(cardTitle)}</div>
+            <div style="background: #FEF2F2; border: 1px solid #FCA5A5; padding: 10px; border-radius: 6px; font-size: 0.85rem; color: #991B1B; margin-bottom: 8px;">
+              ⚠️ <strong>Cảnh báo:</strong> ${escapeHtml(data.warning || 'Ngưng ngay đạm hóa học khi rễ bị thối đen!')}
+            </div>
+            <div style="font-size: 0.85rem; line-height: 1.6;">
+              ${(data.steps || []).map(step => `<div>• ${escapeHtml(step)}</div>`).join('')}
+            </div>
+            <div class="genui-actions">
+              <button class="genui-btn genui-btn-primary" onclick="handleCardAction('book_agronomist', '${escapeHtml(cardTitle)}')"><i class="fa-solid fa-user-doctor"></i> Hẹn Kỹ sư PVCFC thăm vườn</button>
+              <button class="genui-btn genui-btn-secondary" onclick="handleCardAction('download_protocol', '${escapeHtml(cardTitle)}')"><i class="fa-solid fa-download"></i> Tải phác đồ điều trị</button>
+            </div>
+          </div>
+        `;
+      }
+
+      if (cardType === 'DealerLocatorCard' || genUiObj.widgetKind === 'dealerLocator') {
+        return `
+          <div class="genui-card">
+            <div class="genui-header"><i class="fa-solid fa-store"></i> ${escapeHtml(cardTitle)}</div>
+            <div style="font-size: 0.85rem; background: var(--brand-light); padding: 10px; border-radius: 6px;">
+              📍 <strong>${escapeHtml(data.dealerName || 'Đại Lý Voi Vàng (Tư Hải)')}</strong><br>
+              Địa chỉ: ${escapeHtml(data.address || 'Thị trấn Cái Nước, H. Cái Nước, Cà Mau')}<br>
+              📞 Hotline đại lý: ${escapeHtml(data.phone || '1800 888606')}
+            </div>
+            <div class="genui-actions">
+              <button class="genui-btn genui-btn-primary" onclick="handleCardAction('book_ph_test', '${escapeHtml(cardTitle)}')"><i class="fa-solid fa-vial"></i> Đặt lịch đo pH đất miễn phí</button>
+              <button class="genui-btn genui-btn-secondary" onclick="handleCardAction('call_hotline', '${escapeHtml(cardTitle)}')"><i class="fa-solid fa-phone"></i> Gọi Hotline 1800 888606</button>
+            </div>
+          </div>
+        `;
+      }
+
+      return `<div class="genui-card"><div class="genui-header"><i class="fa-solid fa-leaf"></i> ${escapeHtml(cardTitle)}</div><div>${escapeHtml(JSON.stringify(data))}</div></div>`;
+    }
+
+    // CopilotKit Action & HITL Approval Handler
+    function handleCardAction(actionId, cardTitle) {
+      if (actionId === 'book_agronomist' || actionId === 'book_ph_test') {
+        renderHitlApprovalCard(
+          'Cần bạn xác nhận',
+          'Cho phép PVCFC truyền dữ liệu và đặt lịch hẹn Kỹ sư Nông nghiệp xuống tận vườn kiểm tra pH đất.',
+          actionId,
+          cardTitle
+        );
+        return;
+      }
+
+      const actionLabels = {
+        schedule_reminder: 'Tôi muốn lập lịch nhắc bón phân tự động.',
+        export_pdf: 'Cho tôi tải bản PDF lịch bón phân.',
+        share_zalo: 'Cho tôi chia sẻ bảng tính bao phân qua Zalo.',
+        order_dealer: 'Tôi muốn tìm đại lý gần nhất để đặt mua số lượng phân này.',
+        download_protocol: 'Cho tôi xin tài liệu phác đồ cấp bách phục hồi bộ rễ.',
+        call_hotline: 'Kết nối hotline 1800 888606 hỗ trợ.'
+      };
+
+      const promptText = actionLabels[actionId] || `Thực hiện thao tác ${actionId}`;
+      sendQuickPrompt(promptText);
+    }
+
+    function renderHitlApprovalCard(title, description, actionId, cardTitle) {
+      const chatBox = document.getElementById('plain-chat-messages');
+      const card = document.createElement('div');
+      card.className = 'message-row bot';
+      card.innerHTML = `
+        <div class="avatar bot"><i class="fa-solid fa-shield-halved"></i></div>
+        <div>
+          <div class="hitl-card">
+            <div class="hitl-header"><i class="fa-solid fa-circle-exclamation"></i> ${escapeHtml(title)}</div>
+            <div class="hitl-body">${escapeHtml(description)}</div>
+            <div class="hitl-actions">
+              <button class="hitl-btn-confirm" onclick="confirmHitlAction(true, '${actionId}', this)">Đồng ý gửi</button>
+              <button class="hitl-btn-cancel" onclick="confirmHitlAction(false, '${actionId}', this)">Không đồng ý</button>
+            </div>
+          </div>
+        </div>
+      `;
+      chatBox.appendChild(card);
+      chatBox.scrollTop = chatBox.scrollHeight;
+    }
+
+    function confirmHitlAction(approved, actionId, btnEl) {
+      const parent = btnEl.closest('.hitl-card');
+      if (!parent) return;
+
+      if (approved) {
+        parent.innerHTML = `
+          <div class="hitl-header" style="color: var(--brand-primary);"><i class="fa-solid fa-circle-check"></i> Đã xác nhận gửi thông tin</div>
+          <div class="hitl-body">Cảm ơn bà con! Kỹ sư Nông nghiệp PVCFC sẽ liên hệ trực tiếp trong vòng 24h để xác nhận địa điểm đo pH đất.</div>
+        `;
+        sendQuickPrompt('Đã xác nhận đặt lịch hẹn Kỹ sư PVCFC thăm vườn đo pH đất.');
+      } else {
+        parent.innerHTML = `
+          <div class="hitl-header" style="color: var(--text-muted);"><i class="fa-solid fa-circle-xmark"></i> Đã hủy thao tác</div>
+          <div class="hitl-body">Thao tác đăng ký đã được hủy theo yêu cầu.</div>
+        `;
+      }
+    }
+    function updateDosageCalc(val) {
+      document.getElementById('calc-area-val').innerText = val + ' Héc-ta';
+      document.getElementById('bag-dam').innerText = Math.ceil(val * 3.5) + ' bao';
+      document.getElementById('bag-npk').innerText = Math.ceil(val * 4.5) + ' bao';
+      document.getElementById('bag-om').innerText = Math.ceil(val * 10) + ' bao';
+    }
+
+    function handleDemoKeyPress(e) {
+      if (e.key === 'Enter') handleDemoSend();
+    }
+
+    async function handleDemoSend() {
+      const input = document.getElementById('demo-chat-input');
+      const text = input.value.trim();
+      if (!text || isReplaying) return;
+
+      const chatBox = document.getElementById('demo-chat-messages');
+      const userRow = document.createElement('div');
+      userRow.className = 'message-row user';
+      userRow.innerHTML = `
+        <div class="avatar user"><i class="fa-solid fa-user"></i></div>
+        <div class="bubble">${escapeHtml(text)}</div>
+      `;
+      chatBox.appendChild(userRow);
+      input.value = '';
+      chatBox.scrollTop = chatBox.scrollHeight;
+
+      const demoSessionId = 'pvcfc_demo_' + demoScenarioId + '_custom';
+      const demoCustomerId = 'demo_customer_' + demoScenarioId;
+
+      try {
+        const result = await callLiveAiBackend(text, currentMode, demoSessionId, demoCustomerId);
+        const botRow = document.createElement('div');
+        botRow.className = 'message-row bot';
+        botRow.innerHTML = `
+          <div class="avatar bot"><i class="fa-solid fa-seedling"></i></div>
+          <div><div class="bubble">${result.text}</div></div>
+        `;
+        chatBox.appendChild(botRow);
+      } catch (err) {
+        // error
+      }
+      chatBox.scrollTop = chatBox.scrollHeight;
+    }
+
+    function escapeHtml(str) {
+      return String(str).replace(/[&<>"']/g, function (s) {
+        return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[s];
+      });
+    }
+
+    switchRoute(window.location.pathname === '/demo' ? '/demo' : '/');
+  </script>
+</body>
+</html>

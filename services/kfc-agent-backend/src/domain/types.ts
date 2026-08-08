@@ -1,27 +1,25 @@
-import type { KfcGenUiAttachment } from "../genui/kfcGenUi.js";
-import type { CustomerCommand } from "./customerCommand.js";
-import type { OrderStatusDeliveryEstimate } from "./orderStatusEvidence.js";
-import type {
-  StateGraphTurnProofBinding,
-} from './stateGraphTurnProof.js';
+import type { KfcGenUiAttachment } from '../genui/kfcGenUi.js';
+import type { CustomerCommand } from './customerCommand.js';
+import type { OrderStatusDeliveryEstimate } from './orderStatusEvidence.js';
+import type { StateGraphTurnProofBinding } from './stateGraphTurnProof.js';
 
 export type Channel =
-  "messenger" | "zalo" | "kfc" | "messenger_mock" | "zalo_mock";
+  'messenger' | 'zalo' | 'kfc' | 'messenger_mock' | 'zalo_mock';
 
 export type CustomerAccessScope =
-  | "customer:read"
-  | "membership:read"
-  | "membership:write"
-  | "order:read"
-  | "order:write"
-  | "payment:read"
-  | "payment:write"
-  | "handoff:write";
+  | 'customer:read'
+  | 'membership:read'
+  | 'membership:write'
+  | 'order:read'
+  | 'order:write'
+  | 'payment:read'
+  | 'payment:write'
+  | 'handoff:write';
 
 export type AuthenticationEvidence =
-  | { state: "none" | "unknown" }
+  | { state: 'none' | 'unknown' }
   | {
-      state: "verified";
+      state: 'verified';
       method: string;
       issuer: string;
       audience: string;
@@ -33,14 +31,14 @@ export type AuthenticationEvidence =
 /** Trusted runtime authority. Request payloads and model output must never populate this. */
 export interface CustomerAccessContext {
   tenantScope: string;
-  customerSurface: "kfc-app-chat" | "messenger" | "zalo";
+  customerSurface: 'kfc-app-chat' | 'messenger' | 'zalo';
   sessionRef: string;
-  surfaceSubjectRef: string | "not-applicable" | "unknown";
-  kfcSubjectRef: string | "none" | "unknown";
-  authenticationState: "unauthenticated" | "authenticated" | "unknown";
-  membershipState: "member" | "non-member" | "unknown";
-  channelAccountLinkState: "linked" | "unlinked" | "not-applicable" | "unknown";
-  subjectBindingState: "verified" | "unverified" | "unknown";
+  surfaceSubjectRef: string | 'not-applicable' | 'unknown';
+  kfcSubjectRef: string | 'none' | 'unknown';
+  authenticationState: 'unauthenticated' | 'authenticated' | 'unknown';
+  membershipState: 'member' | 'non-member' | 'unknown';
+  channelAccountLinkState: 'linked' | 'unlinked' | 'not-applicable' | 'unknown';
+  subjectBindingState: 'verified' | 'unverified' | 'unknown';
   authenticationEvidence: AuthenticationEvidence;
   authorizedScopes: CustomerAccessScope[];
 }
@@ -167,20 +165,23 @@ export interface DeliveryAdministrativeOptions {
 }
 
 export type OrderStatus =
-  | "previewed"
-  | "created"
-  | "preparing"
-  | "delivering"
-  | "completed"
-  | "cancelled";
-export type PaymentStatus = "not_started" | "pending" | "paid" | "failed";
+  | 'previewed'
+  | 'created'
+  | 'preparing'
+  | 'delivering'
+  | 'completed'
+  | 'cancelled';
+export type PaymentStatus = 'not_started' | 'pending' | 'paid' | 'failed';
 
 export interface CommerceProviderProvenanceEntry {
   implementation: string;
   source: string;
 }
 
-export type CommerceProviderProvenance = Record<string, CommerceProviderProvenanceEntry>;
+export type CommerceProviderProvenance = Record<
+  string,
+  CommerceProviderProvenanceEntry
+>;
 
 export interface Order {
   id: string;
@@ -192,17 +193,17 @@ export interface Order {
   /** Current provider-observed delivery window from an order-status read. */
   deliveryEstimate?: OrderStatusDeliveryEstimate;
   posTicketId?: string;
-  posStatus?: "accepted" | "preparing" | "ready" | "cancelled" | "rejected";
+  posStatus?: 'accepted' | 'preparing' | 'ready' | 'cancelled' | 'rejected';
   commerceOrderId?: string;
   omsOrderId?: string;
   commerceOutcome?: string;
   commerceCustomerStatus?: string;
-  commerceEnvironment?: "sandbox" | "production";
+  commerceEnvironment?: 'sandbox' | 'production';
   commerceProviderProvenance?: CommerceProviderProvenance;
 }
 
 export type ConversationAttachmentType =
-  "image" | "file" | "link" | "sticker" | "audio" | "location" | "unknown";
+  'image' | 'file' | 'link' | 'sticker' | 'audio' | 'location' | 'unknown';
 
 export interface ConversationAttachment {
   type: ConversationAttachmentType;
@@ -224,9 +225,10 @@ export interface ConversationTurnMetadata {
   stateGraphProof?: StateGraphTurnProofBinding;
   /** Legacy untrusted audit metadata. It is never structured-action authority. */
   customerCommand?: CustomerCommand;
-  authorType?: "ai_agent" | "human_agent";
+  authorType?: 'ai_agent' | 'human_agent';
   agentId?: string;
-  responseProfile?: "genui" | "social";
+  responseProfile?: 'genui' | 'social';
+  verifiedBusinessContext?: Record<string, unknown>;
   release?: {
     gitSha: string;
     deploymentId: string;
@@ -236,16 +238,16 @@ export interface ConversationTurnMetadata {
 }
 
 export interface ConversationProfile {
-  channel: Extract<Channel, "messenger" | "zalo">;
+  channel: Extract<Channel, 'messenger' | 'zalo'>;
   externalUserId: string;
   displayName: string | null;
   avatarUrl: string | null;
   profileSource:
-    | "messenger_webhook"
-    | "messenger_profile_api"
-    | "zalo_webhook"
-    | "zalo_profile_api"
-    | "manual";
+    | 'messenger_webhook'
+    | 'messenger_profile_api'
+    | 'zalo_webhook'
+    | 'zalo_profile_api'
+    | 'manual';
   profileUpdatedAt: string;
 }
 
@@ -253,29 +255,29 @@ export interface ConversationTurn {
   id: string;
   sessionId: string;
   channel: Channel;
-  role: "user" | "assistant" | "tool" | "system";
+  role: 'user' | 'assistant' | 'tool' | 'system';
   text: string;
   externalMessageId: string | null;
   externalUserId: string | null;
   deliveryStatus:
-    | "received"
-    | "pending"
-    | "sent"
-    | "failed"
-    | "outcome_unknown"
-    | "not_applicable";
+    | 'received'
+    | 'pending'
+    | 'sent'
+    | 'failed'
+    | 'outcome_unknown'
+    | 'not_applicable';
   metadata: ConversationTurnMetadata | null;
   createdAt: string;
 }
 
-export type PendingCustomerTurnSteerMode = "steering" | "record_only";
+export type PendingCustomerTurnSteerMode = 'steering' | 'record_only';
 export type PendingCustomerTurnStatus =
-  "pending" | "claimed" | "superseded" | "ignored";
+  'pending' | 'claimed' | 'superseded' | 'ignored';
 
 export interface PendingCustomerTurn {
   turnId: string;
   sessionId: string;
-  channel: Extract<Channel, "messenger" | "zalo">;
+  channel: Extract<Channel, 'messenger' | 'zalo'>;
   externalMessageId: string;
   externalUserId: string;
   text: string;
@@ -287,27 +289,27 @@ export interface PendingCustomerTurn {
 }
 
 export type AgentRunStatus =
-  | "scheduled"
-  | "running"
-  | "completed"
-  | "superseded"
-  | "failed"
-  | "reconciliation_required";
+  | 'scheduled'
+  | 'running'
+  | 'completed'
+  | 'superseded'
+  | 'failed'
+  | 'reconciliation_required';
 export type AgentRunDeliveryStatus =
-  | "pending"
-  | "sent"
-  | "failed"
-  | "suppressed"
-  | "outcome_unknown"
-  | "not_applicable";
-export type ToolSideEffectClass = "read" | "reversible" | "irreversible";
+  | 'pending'
+  | 'sent'
+  | 'failed'
+  | 'suppressed'
+  | 'outcome_unknown'
+  | 'not_applicable';
+export type ToolSideEffectClass = 'read' | 'reversible' | 'irreversible';
 
 export interface AgentRun {
   id: string;
   sessionId: string;
   generation: number;
   sessionAuthorityGeneration: number;
-  channel: Extract<Channel, "messenger" | "zalo">;
+  channel: Extract<Channel, 'messenger' | 'zalo'>;
   externalUserId: string;
   status: AgentRunStatus;
   /** Monotonic execution ownership epoch. Zero means never claimed. */
@@ -351,7 +353,13 @@ export interface ToolResult<T> {
   errorCode?: string;
   message: string;
   provenance?: Array<{
-    fixtureMode: "public_crawl_seed" | "authenticated_chrome_seed" | "mock_external_state" | "test_only" | "demo_mock_seed" | "provider_runtime";
+    fixtureMode:
+      | 'public_crawl_seed'
+      | 'authenticated_chrome_seed'
+      | 'mock_external_state'
+      | 'test_only'
+      | 'demo_mock_seed'
+      | 'provider_runtime';
     sourceFile: string;
     sourceUrl?: string;
     sourceApi?: string;
@@ -362,60 +370,60 @@ export interface DashboardEvent {
   id: string;
   sessionId: string;
   type:
-    | "session_updated"
-    | "conversation_turn_created"
-    | "customer_message_received"
-    | "assistant_reply_skipped"
-    | "assistant_reply_sent"
-    | "agent_run_pending"
-    | "agent_run_scheduled"
-    | "agent_run_started"
-    | "agent_run_superseded"
-    | "agent_run_delivery_suppressed"
-    | "agent_run_delivered"
-    | "cart_changed"
-    | "voucher_applied"
-    | "voucher_rejected"
-    | "payment_link_created"
-    | "payment_failed"
-    | "payment_paid"
-    | "order_previewed"
-    | "order_created"
-    | "handoff_required"
-    | "session_intelligence_updated"
-    | "session_resolved";
+    | 'session_updated'
+    | 'conversation_turn_created'
+    | 'customer_message_received'
+    | 'assistant_reply_skipped'
+    | 'assistant_reply_sent'
+    | 'agent_run_pending'
+    | 'agent_run_scheduled'
+    | 'agent_run_started'
+    | 'agent_run_superseded'
+    | 'agent_run_delivery_suppressed'
+    | 'agent_run_delivered'
+    | 'cart_changed'
+    | 'voucher_applied'
+    | 'voucher_rejected'
+    | 'payment_link_created'
+    | 'payment_failed'
+    | 'payment_paid'
+    | 'order_previewed'
+    | 'order_created'
+    | 'handoff_required'
+    | 'session_intelligence_updated'
+    | 'session_resolved';
   payload: Record<string, unknown>;
   createdAt: string;
 }
 
 export type MonitorOrderStage =
-  | "collecting_info"
-  | "cart_ready"
-  | "fulfillment_pending"
-  | "payment_issue"
-  | "confirmed";
+  | 'collecting_info'
+  | 'cart_ready'
+  | 'fulfillment_pending'
+  | 'payment_issue'
+  | 'confirmed';
 
-export type MonitorRiskLevel = "low" | "medium" | "high" | "critical";
+export type MonitorRiskLevel = 'low' | 'medium' | 'high' | 'critical';
 
 export type MonitorSessionIntelligenceSource =
-  "ai_monitor_judge" | "runtime_rule_fallback";
+  'ai_monitor_judge' | 'runtime_rule_fallback';
 
 export type MonitorIntelligenceReason =
-  | "awaiting_customer_info"
-  | "cart_verified"
-  | "missing_address"
-  | "missing_fulfillment"
-  | "order_previewed"
-  | "order_created"
-  | "payment_link_pending"
-  | "payment_failed"
-  | "payment_paid"
-  | "handoff_required"
-  | "human_joined"
-  | "ai_resumed"
-  | "failed_delivery"
-  | "tool_execution_failed"
-  | "safety_gate_blocked";
+  | 'awaiting_customer_info'
+  | 'cart_verified'
+  | 'missing_address'
+  | 'missing_fulfillment'
+  | 'order_previewed'
+  | 'order_created'
+  | 'payment_link_pending'
+  | 'payment_failed'
+  | 'payment_paid'
+  | 'handoff_required'
+  | 'human_joined'
+  | 'ai_resumed'
+  | 'failed_delivery'
+  | 'tool_execution_failed'
+  | 'safety_gate_blocked';
 
 export interface MonitorSessionIntelligence {
   schemaVersion: 1;
@@ -427,7 +435,7 @@ export interface MonitorSessionIntelligence {
   evaluatedCustomerTurnCount: number;
   reasons: MonitorIntelligenceReason[];
   evidence: {
-    dashboardEventTypes: DashboardEvent["type"][];
+    dashboardEventTypes: DashboardEvent['type'][];
     toolNames: string[];
     escalationReasons: string[];
     safetyGateReasons: string[];
@@ -443,22 +451,22 @@ export interface MonitorSessionIntelligence {
     posTicketId?: string;
     outcome?: string;
     customerStatus?: string;
-    environment: "sandbox" | "production";
+    environment: 'sandbox' | 'production';
     providerProvenance: CommerceProviderProvenance;
   };
 }
 
 export type SessionUpdateType =
-  | "store_assigned"
-  | "delivery_quote"
-  | "invoice_requested"
-  | "tool_called"
-  | "fulfillment_quoted"
-  | "promotion_answered"
-  | "content_evidence_found"
-  | "handoff_resolved"
-  | "human_joined"
-  | "human_message_sent"
-  | "ai_resumed";
+  | 'store_assigned'
+  | 'delivery_quote'
+  | 'invoice_requested'
+  | 'tool_called'
+  | 'fulfillment_quoted'
+  | 'promotion_answered'
+  | 'content_evidence_found'
+  | 'handoff_resolved'
+  | 'human_joined'
+  | 'human_message_sent'
+  | 'ai_resumed';
 
-export type AgentMode = "ai_active" | "human_paused" | "resolved";
+export type AgentMode = 'ai_active' | 'human_paused' | 'resolved';

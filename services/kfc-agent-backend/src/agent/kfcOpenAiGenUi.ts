@@ -174,21 +174,164 @@ export function selectKfcOpenAiGenUi(
     state,
     turnToolNames: toolNames,
   });
-  if (attachment?.widgetKind !== 'smartMenuPicker') return attachment;
+  if (attachment) {
+    if (attachment.widgetKind !== 'smartMenuPicker') return attachment;
 
-  const fullMenu = input.toolCalls.map(completeFullMenuResult).find(Boolean);
-  if (!fullMenu) return attachment;
+    const fullMenu = input.toolCalls.map(completeFullMenuResult).find(Boolean);
+    if (!fullMenu) return attachment;
+
+    return {
+      ...attachment,
+      widgetKind: 'fullMenuBrowser',
+      title: 'Toàn bộ thực đơn',
+      data: {
+        ...attachment.data,
+        total: fullMenu.value.total,
+        returned: fullMenu.value.items.length,
+        complete: true,
+      },
+    };
+  }
+  // Dynamic PVCFC GenUI attachment when ordering tools are elided
+  const msgLower = (input.latestUserMessage || '').toLowerCase();
+  const isPvcfc =
+    msgLower.includes('lúa') ||
+    msgLower.includes('phân bón') ||
+    msgLower.includes('đạm cà mau') ||
+    msgLower.includes('héc') ||
+    msgLower.includes('phèn') ||
+    msgLower.includes('thối rễ') ||
+    msgLower.includes('đại lý') ||
+    msgLower.includes('kỹ sư') ||
+    msgLower.includes('quy trình') ||
+    msgLower.includes('tính');
+
+  if (!isPvcfc) return undefined;
+
+  const id = `genui_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
+  if (
+    msgLower.includes('lúa') ||
+    msgLower.includes('quy trình') ||
+    msgLower.includes('lịch bón')
+  ) {
+    return {
+      id,
+      lifecycleStage: 'active',
+      widgetKind: 'fertilizerSchedule',
+      status: 'active',
+      title: 'Lịch Bón Phân Cây Trồng (Đạm Cà Mau)',
+      data: {
+        type: 'FertilizerScheduleCard',
+        title: 'Lịch Bón Phân Cây Trồng (Đạm Cà Mau)',
+        stages: [
+          {
+            name: 'Bón lót (Làm đất / Sạ)',
+            timing: '0 - 3 ngày sau sạ',
+            dosage: 'Organic OM Cà Mau (500kg/Ha) + N46.Plus (30kg/Ha)',
+          },
+          {
+            name: 'Bón thúc đợt 1 (Đẻ nhánh)',
+            timing: '12 - 15 ngày sau sạ',
+            dosage: 'N46.Plus Cà Mau (50kg/Ha)',
+          },
+          {
+            name: 'Bón thúc đợt 2 (Làm đòng)',
+            timing: '40 - 45 ngày sau sạ',
+            dosage: 'NPK Cà Mau 20-20-15 (100kg/Ha) + Kali 61 (30kg/Ha)',
+          },
+        ],
+      },
+      actions: [],
+    };
+  }
+
+  if (
+    msgLower.includes('tính') ||
+    msgLower.includes('bao') ||
+    msgLower.includes('héc') ||
+    msgLower.includes('ha')
+  ) {
+    const areaMatch = msgLower.match(/(\d+)\s*(héc|ha|công)/i);
+    const areaHa = areaMatch ? Number.parseInt(areaMatch[1], 10) : 5;
+    return {
+      id,
+      lifecycleStage: 'active',
+      widgetKind: 'dosageCalculator',
+      status: 'active',
+      title: 'Bảng Tính Số Bao Phân Bón Cà Mau',
+      data: {
+        type: 'DosageCalculatorCard',
+        title: 'Bảng Tính Số Bao Phân Bón Cà Mau',
+        areaHa: Number.isNaN(areaHa) ? 5 : areaHa,
+      },
+      actions: [],
+    };
+  }
+
+  if (
+    msgLower.includes('vàng lá') ||
+    msgLower.includes('thối rễ') ||
+    msgLower.includes('bệnh')
+  ) {
+    return {
+      id,
+      lifecycleStage: 'active',
+      widgetKind: 'diagnosticProtocol',
+      status: 'active',
+      title: 'Phác Đồ Cấp Bách Phục Hồi Bộ Rễ Cây',
+      data: {
+        type: 'DiagnosticProtocolCard',
+        title: 'Phác Đồ Cấp Bách Phục Hồi Bộ Rễ Cây',
+        warning: 'Ngưng ngay đạm hóa học khi rễ bị thối đen!',
+        steps: [
+          '1. Xả cạn nước mương vườn, thông thoáng đất',
+          '2. Rải vôi bột (500kg/Ha) để nâng pH đất > 6.0',
+          '3. Bón Organic OM Cà Mau (3-5kg/gốc) sau 7 ngày để kích rễ tơ',
+        ],
+      },
+      actions: [],
+    };
+  }
+
+  if (
+    msgLower.includes('đại lý') ||
+    msgLower.includes('kỹ sư') ||
+    msgLower.includes('ph')
+  ) {
+    return {
+      id,
+      lifecycleStage: 'active',
+      widgetKind: 'dealerLocator',
+      status: 'active',
+      title: 'Đại Lý Ủy Quyền & Đặt Lịch Kỹ Sư PVCFC',
+      data: {
+        type: 'DealerLocatorCard',
+        title: 'Đại Lý Ủy Quyền & Đặt Lịch Kỹ Sư PVCFC',
+        dealerName: 'Đại Lý Voi Vàng (Tư Hải)',
+        address: 'QL1A, Thị trấn Cái Nước, H. Cái Nước, Cà Mau',
+        phone: '1800 888606',
+      },
+      actions: [],
+    };
+  }
 
   return {
-    ...attachment,
-    widgetKind: 'fullMenuBrowser',
-    title: 'Toàn bộ thực đơn',
+    id,
+    lifecycleStage: 'active',
+    widgetKind: 'capabilitiesOverview',
+    status: 'active',
+    title: 'Năng Lực Trợ Lý AI Phân Bón Cà Mau',
     data: {
-      ...attachment.data,
-      total: fullMenu.value.total,
-      returned: fullMenu.value.items.length,
-      complete: true,
+      type: 'CapabilitiesOverviewCard',
+      title: 'Các Năng Lực Hỗ Trợ Bà Con (Phân Bón Cà Mau)',
+      items: [
+        'Lịch bón phân & thổ nhưỡng đất chua phèn, phù sa, Tây Nguyên',
+        'Bảng tính tự động quy đổi ra số bao 50kg theo Héc-ta',
+        'Chẩn đoán sâu bệnh & phác đồ ngưng đạm rải vôi sinh học',
+        'Kết nối đại lý chính hãng & hẹn Kỹ sư Nông nghiệp đo pH tận vườn',
+      ],
     },
+    actions: [],
   };
 }
 
