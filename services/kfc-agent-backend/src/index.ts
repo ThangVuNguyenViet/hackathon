@@ -8,7 +8,11 @@ import {
 } from "./channels/messengerHistory.js";
 import { loadEnv } from "./config/env.js";
 import { createPostgresPersistence } from "./persistence/postgresStore.js";
-
+import { loadBundledGeneratedFixtures } from "./fixtures/bundledFixtures.js";
+import { createMockClients } from "./mock/createMockClients.js";
+import {
+  createMockAutomaticRecommendationHttpRuntime,
+} from "./recommendations/serving/index.js";
 const env = loadEnv();
 const baseOptions = buildServerOptionsFromEnv(env);
 const persistence = await createPostgresPersistence({
@@ -33,12 +37,34 @@ const messengerHistorySync =
         }),
       )
     : undefined;
+const fixtures = loadBundledGeneratedFixtures();
+const fixtureProvider = createMockClients(fixtures);
+const automaticRecommendations =
+  createMockAutomaticRecommendationHttpRuntime(fixtures);
+const automaticRecommendationStoreId =
+  fixtures.stores[0]?.storeId ?? "fixture-store";
+const automaticRecommendationContext = (sessionId: string) => ({
+  storeId: automaticRecommendationStoreId,
+  fulfilmentMode: "pickup" as const,
+  locale: "vi-VN",
+  orderingJourneyRef: `chat:${sessionId}:ordering-journey`,
+  opportunityRef: `chat:${sessionId}:automatic-recommendation`,
+});
 const server = buildServer({
   ...baseOptions,
+  fixtures,
+  kfcCommerceProvider: {
+    cart: fixtureProvider.cart,
+    inventory: fixtureProvider.inventory,
+    storeLocator: fixtureProvider.storeLocator,
+    fulfillment: fixtureProvider.fulfillment,
+  },
   store: persistence.store,
   checkpointer: persistence.checkpointer,
   dashboard,
   messengerHistorySync,
+  automaticRecommendationContext,
+  automaticRecommendations,
   readiness: {
     ...baseOptions.readiness,
     database: async () => {

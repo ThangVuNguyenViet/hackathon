@@ -1,0 +1,763 @@
+import {
+  GetObjectCommand,
+  ListObjectVersionsCommand,
+  PutObjectCommand,
+} from '@aws-sdk/client-s3';
+import {
+  GetCommand,
+  DeleteCommand,
+  PutCommand,
+  QueryCommand,
+  TransactWriteCommand,
+  UpdateCommand,
+} from '@aws-sdk/lib-dynamodb';
+import { createHash } from 'node:crypto';
+import {
+  AutomaticEvidencePersistenceError,
+  AutomaticRecommendationIdentityConflictError,
+  type AutomaticDecisionEvidence,
+  type AutomaticEventEvidence,
+  type AutomaticEvidenceObjectStore,
+  type AutomaticRecommendationLedger,
+  type DurableEvidencePointer,
+  type ImmutableEvidenceObject,
+  type StoredEvidenceObject,
+} from './evidence-saga.js';
+import {
+  parseAutomaticDecisionEvidence,
+  parseAutomaticEventEvidence,
+} from './evidence-contracts.js';
+
+interface AwsCommandClient {
+  send(command: object): Promise<unknown>;
+}
+
+function record(value: unknown): Record<string, unknown> {
+  if (value === null || typeof value !== 'object' || Array.isArray(value)) {
+    throw new Error('AWS response must be an object');
+  }
+  return Object.fromEntries(Object.entries(value));
+}
+
+function evidencePayload(item: Record<string, unknown>) {
+  const payload = { ...item };
+  for (const key of [
+    'pk',
+    'sk',
+    'kind',
+    'evidenceKey',
+    'evidenceVersionId',
+    'evidenceDigest',
+    'evidenceSizeBytes',
+  ]) {
+    delete payload[key];
+  }
+  return payload;
+}
+
+function awsErrorName(error: unknown): string | null {
+  return error instanceof Error ? error.name : null;
+}
+
+async function bodyBytes(value: unknown): Promise<Uint8Array> {
+  if (
+    value !== null &&
+    typeof value === 'object' &&
+    'transformToByteArray' in value &&
+    typeof value.transformToByteArray === 'function'
+  ) {
+    return value.transformToByteArray();
+  }
+  throw new Error('S3 response body cannot be read');
+}
+
+export class S3AutomaticEvidenceObjectStore implements AutomaticEvidenceObjectStore {
+  constructor(
+    private readonly options: { bucket: string; client: AwsCommandClient },
+  ) {}
+
+  private async readExact(
+    key: string,
+    versionId: string,
+  ): Promise<StoredEvidenceObject> {
+    const response = record(
+      await this.options.client.send(
+        new GetObjectCommand({
+          Bucket: this.options.bucket,
+          Key: key,
+          VersionId: versionId,
+        }),
+      ),
+    );
+    const bytes = await bodyBytes(response.Body);
+    const body = Buffer.from(bytes).toString('utf8');
+    const metadata = record(response.Metadata ?? {});
+    const digest = createHash('sha256').update(bytes).digest('hex');
+    const sizeBytes = bytes.byteLength;
+    if (
+      response.VersionId !== versionId ||
+      metadata.sha256 !== digest ||
+      Number(metadata.sizebytes) !== sizeBytes ||
+      response.ContentLength !== sizeBytes
+    ) {
+      throw new Error('versioned S3 evidence bytes do not match metadata');
+    }
+    return { key, versionId, digest, sizeBytes, body };
+  }
+
+  async putImmutable(
+    object: ImmutableEvidenceObject,
+  ): Promise<DurableEvidencePointer> {
+    const actualDigest = createHash('sha256').update(object.body).digest('hex');
+    if (
+      actualDigest !== object.digest ||
+      Buffer.byteLength(object.body) !== object.sizeBytes ||
+      !object.key.endsWith(`/${object.digest}.json`)
+    ) {
+      throw new Error('S3 evidence input does not match content address');
+    }
+    try {
+      const response = record(
+        await this.options.client.send(
+          new PutObjectCommand({
+            Bucket: this.options.bucket,
+            Key: object.key,
+            Body: object.body,
+            ContentType: 'application/json',
+            IfNoneMatch: '*',
+            Metadata: {
+              sha256: object.digest,
+              sizebytes: String(object.sizeBytes),
+            },
+          }),
+        ),
+      );
+      if (
+        typeof response.VersionId !== 'string' ||
+        response.VersionId.length === 0
+      ) {
+        throw new Error('versioned S3 write returned no version ID');
+      }
+      return {
+        key: object.key,
+        versionId: response.VersionId,
+        digest: object.digest,
+        sizeBytes: object.sizeBytes,
+      };
+    } catch (error) {
+      if (awsErrorName(error) !== 'PreconditionFailed') throw error;
+      const versions = await this.versions(object.key);
+      if (versions.length !== 1) {
+        throw new Error('immutable S3 key has conflicting versions');
+      }
+      const existing = await this.readExact(object.key, versions[0]);
+      if (
+        existing.digest !== object.digest ||
+        existing.sizeBytes !== object.sizeBytes ||
+        existing.body !== object.body
+      ) {
+        throw new Error('immutable S3 evidence content conflict');
+      }
+      return existing;
+    }
+  }
+
+  private async versions(
+    exactKey?: string,
+    prefix?: string,
+  ): Promise<string[]> {
+    const versions: string[] = [];
+    let keyMarker: string | undefined;
+    let versionIdMarker: string | undefined;
+    do {
+      const response = record(
+        await this.options.client.send(
+          new ListObjectVersionsCommand({
+            Bucket: this.options.bucket,
+            Prefix: exactKey ?? prefix,
+            KeyMarker: keyMarker,
+            VersionIdMarker: versionIdMarker,
+          }),
+        ),
+      );
+      const entries = Array.isArray(response.Versions) ? response.Versions : [];
+      for (const value of entries) {
+        const entry = record(value);
+        if (
+          typeof entry.Key === 'string' &&
+          typeof entry.VersionId === 'string' &&
+          (exactKey === undefined || entry.Key === exactKey)
+        ) {
+          versions.push(`${entry.Key}\0${entry.VersionId}`);
+        }
+      }
+      keyMarker =
+        response.IsTruncated === true &&
+        typeof response.NextKeyMarker === 'string'
+          ? response.NextKeyMarker
+          : undefined;
+      versionIdMarker =
+        keyMarker !== undefined &&
+        typeof response.NextVersionIdMarker === 'string'
+          ? response.NextVersionIdMarker
+          : undefined;
+    } while (keyMarker !== undefined);
+    return exactKey === undefined
+      ? versions
+      : versions.map((value) => value.split('\0')[1] ?? '');
+  }
+
+  async list(prefix: string): Promise<readonly StoredEvidenceObject[]> {
+    const versions = await this.versions(undefined, prefix);
+    return Promise.all(
+      versions.map((binding) => {
+        const [key, versionId] = binding.split('\0');
+        if (key === undefined || versionId === undefined) {
+          throw new Error('invalid S3 object version binding');
+        }
+        return this.readExact(key, versionId);
+      }),
+    );
+  }
+
+  async probeImmutable(releaseDigest: string): Promise<boolean> {
+    const body = JSON.stringify({
+      schemaVersion: 'kfc-automatic-evidence-readiness-v1',
+      releaseDigest,
+    });
+    const digest = createHash('sha256').update(body).digest('hex');
+    const key = `readiness-probes/${releaseDigest}/${digest}.json`;
+    const pointer = await this.putImmutable({
+      key,
+      digest,
+      sizeBytes: Buffer.byteLength(body),
+      body,
+    });
+    const stored = await this.readExact(pointer.key, pointer.versionId);
+    return stored.digest === digest && stored.body === body;
+  }
+}
+
+interface LedgerInput<T> {
+  idempotencyKey: string;
+  evidenceKey: string;
+  evidenceVersionId: string;
+  evidenceDigest: string;
+  evidenceSizeBytes: number;
+  evidence: T;
+  ownerToken: string;
+  nowEpochMs: number;
+}
+
+export class DynamoDbAutomaticRecommendationLedger implements AutomaticRecommendationLedger {
+  constructor(
+    private readonly options: { tableName: string; client: AwsCommandClient },
+  ) {}
+
+  private async claim(
+    kind: 'decision' | 'event',
+    input: {
+      idempotencyKey: string;
+      payloadDigest: string;
+      cartDigest?: string;
+      contextDigest?: string;
+      ownerToken: string;
+      nowEpochMs: number;
+      leaseExpiresAtEpochMs: number;
+    },
+  ): Promise<'acquired' | 'pending' | 'replayed'> {
+    const key = {
+      pk: `IDEMPOTENCY#${kind}#${input.idempotencyKey}`,
+      sk: 'BINDING',
+    };
+    try {
+      await this.options.client.send(
+        new PutCommand({
+          TableName: this.options.tableName,
+          Item: {
+            ...key,
+            kind,
+            state: 'pending',
+            ownerToken: input.ownerToken,
+            leaseExpiresAtEpochMs: input.leaseExpiresAtEpochMs,
+            payloadDigest: input.payloadDigest,
+            ...(input.cartDigest ? { cartDigest: input.cartDigest } : {}),
+            ...(input.contextDigest
+              ? { contextDigest: input.contextDigest }
+              : {}),
+          },
+          ConditionExpression: 'attribute_not_exists(pk)',
+        }),
+      );
+      return 'acquired';
+    } catch (error) {
+      if (awsErrorName(error) !== 'ConditionalCheckFailedException')
+        throw error;
+      const existing = await this.readBinding(kind, input.idempotencyKey);
+      if (
+        existing === null ||
+        existing.payloadDigest !== input.payloadDigest ||
+        (input.cartDigest !== undefined &&
+          existing.cartDigest !== input.cartDigest) ||
+        (input.contextDigest !== undefined &&
+          existing.contextDigest !== input.contextDigest)
+      ) {
+        throw new AutomaticRecommendationIdentityConflictError();
+      }
+      if (existing.state === 'committed') return 'replayed';
+      if (
+        typeof existing.leaseExpiresAtEpochMs !== 'number' ||
+        existing.leaseExpiresAtEpochMs > input.nowEpochMs
+      )
+        return 'pending';
+      try {
+        await this.options.client.send(
+          new UpdateCommand({
+            TableName: this.options.tableName,
+            Key: key,
+            ConditionExpression:
+              '#state = :pending AND payloadDigest = :payloadDigest AND ownerToken = :previousOwner AND leaseExpiresAtEpochMs = :previousExpiry',
+            UpdateExpression:
+              'SET ownerToken = :ownerToken, leaseExpiresAtEpochMs = :leaseExpiresAtEpochMs',
+            ExpressionAttributeNames: { '#state': 'state' },
+            ExpressionAttributeValues: {
+              ':pending': 'pending',
+              ':payloadDigest': input.payloadDigest,
+              ':previousOwner': existing.ownerToken,
+              ':previousExpiry': existing.leaseExpiresAtEpochMs,
+              ':ownerToken': input.ownerToken,
+              ':leaseExpiresAtEpochMs': input.leaseExpiresAtEpochMs,
+            },
+          }),
+        );
+        return 'acquired';
+      } catch (takeoverError) {
+        if (awsErrorName(takeoverError) !== 'ConditionalCheckFailedException') {
+          throw takeoverError;
+        }
+        return 'pending';
+      }
+    }
+  }
+
+  claimDecision(input: {
+    idempotencyKey: string;
+    requestDigest: string;
+    cartDigest: string;
+    contextDigest: string;
+    ownerToken: string;
+    nowEpochMs: number;
+    leaseExpiresAtEpochMs: number;
+  }) {
+    return this.claim('decision', {
+      idempotencyKey: input.idempotencyKey,
+      payloadDigest: input.requestDigest,
+      cartDigest: input.cartDigest,
+      contextDigest: input.contextDigest,
+      ownerToken: input.ownerToken,
+      nowEpochMs: input.nowEpochMs,
+      leaseExpiresAtEpochMs: input.leaseExpiresAtEpochMs,
+    });
+  }
+
+  claimEvent(input: {
+    idempotencyKey: string;
+    payloadDigest: string;
+    ownerToken: string;
+    nowEpochMs: number;
+    leaseExpiresAtEpochMs: number;
+  }) {
+    return this.claim('event', input);
+  }
+
+  private async releaseClaim(
+    kind: 'decision' | 'event',
+    idempotencyKey: string,
+    payloadDigest: string,
+    ownerToken: string,
+  ) {
+    try {
+      await this.options.client.send(
+        new DeleteCommand({
+          TableName: this.options.tableName,
+          Key: {
+            pk: `IDEMPOTENCY#${kind}#${idempotencyKey}`,
+            sk: 'BINDING',
+          },
+          ConditionExpression:
+            '#state = :pending AND payloadDigest = :payloadDigest AND ownerToken = :ownerToken',
+          ExpressionAttributeNames: { '#state': 'state' },
+          ExpressionAttributeValues: {
+            ':pending': 'pending',
+            ':payloadDigest': payloadDigest,
+            ':ownerToken': ownerToken,
+          },
+        }),
+      );
+    } catch (error) {
+      if (awsErrorName(error) !== 'ConditionalCheckFailedException')
+        throw error;
+    }
+  }
+
+  releaseDecisionClaim(input: {
+    idempotencyKey: string;
+    requestDigest: string;
+    ownerToken: string;
+  }) {
+    return this.releaseClaim(
+      'decision',
+      input.idempotencyKey,
+      input.requestDigest,
+      input.ownerToken,
+    );
+  }
+
+  releaseEventClaim(input: {
+    idempotencyKey: string;
+    payloadDigest: string;
+    ownerToken: string;
+  }) {
+    return this.releaseClaim(
+      'event',
+      input.idempotencyKey,
+      input.payloadDigest,
+      input.ownerToken,
+    );
+  }
+
+  private async renewClaim(
+    kind: 'decision' | 'event',
+    input: {
+      idempotencyKey: string;
+      payloadDigest: string;
+      ownerToken: string;
+      nowEpochMs: number;
+      leaseExpiresAtEpochMs: number;
+    },
+  ) {
+    try {
+      await this.options.client.send(
+        new UpdateCommand({
+          TableName: this.options.tableName,
+          Key: {
+            pk: `IDEMPOTENCY#${kind}#${input.idempotencyKey}`,
+            sk: 'BINDING',
+          },
+          ConditionExpression:
+            '#state = :pending AND payloadDigest = :payloadDigest AND ownerToken = :ownerToken AND leaseExpiresAtEpochMs >= :nowEpochMs',
+          UpdateExpression:
+            'SET leaseExpiresAtEpochMs = :leaseExpiresAtEpochMs',
+          ExpressionAttributeNames: { '#state': 'state' },
+          ExpressionAttributeValues: {
+            ':pending': 'pending',
+            ':payloadDigest': input.payloadDigest,
+            ':ownerToken': input.ownerToken,
+            ':nowEpochMs': input.nowEpochMs,
+            ':leaseExpiresAtEpochMs': input.leaseExpiresAtEpochMs,
+          },
+        }),
+      );
+    } catch (error) {
+      if (awsErrorName(error) === 'ConditionalCheckFailedException') {
+        throw new AutomaticEvidencePersistenceError('idempotency_conflict', {
+          cause: error,
+        });
+      }
+      throw error;
+    }
+  }
+
+  renewDecisionClaim(input: {
+    idempotencyKey: string;
+    requestDigest: string;
+    ownerToken: string;
+    nowEpochMs: number;
+    leaseExpiresAtEpochMs: number;
+  }) {
+    return this.renewClaim('decision', {
+      ...input,
+      payloadDigest: input.requestDigest,
+    });
+  }
+
+  renewEventClaim(input: {
+    idempotencyKey: string;
+    payloadDigest: string;
+    ownerToken: string;
+    nowEpochMs: number;
+    leaseExpiresAtEpochMs: number;
+  }) {
+    return this.renewClaim('event', input);
+  }
+
+  private async commit<
+    T extends AutomaticDecisionEvidence | AutomaticEventEvidence,
+  >(
+    kind: 'decision' | 'event',
+    input: LedgerInput<T>,
+  ): Promise<'committed' | 'replayed'> {
+    const bindingKey = `IDEMPOTENCY#${kind}#${input.idempotencyKey}`;
+    const pointer = {
+      evidenceKey: input.evidenceKey,
+      evidenceVersionId: input.evidenceVersionId,
+      evidenceDigest: input.evidenceDigest,
+      evidenceSizeBytes: input.evidenceSizeBytes,
+    };
+    const payloadDigest =
+      'requestDigest' in input.evidence
+        ? input.evidence.requestDigest
+        : input.evidence.payloadDigest;
+    const durable = {
+      pk: `RECOMMENDATION#${input.evidence.recommendationId}`,
+      sk: kind === 'decision' ? 'DECISION' : `EVENT#${input.idempotencyKey}`,
+      kind,
+      ...pointer,
+      ...input.evidence,
+    };
+    try {
+      await this.options.client.send(
+        new TransactWriteCommand({
+          TransactItems: [
+            {
+              Update: {
+                TableName: this.options.tableName,
+                Key: { pk: bindingKey, sk: 'BINDING' },
+                ConditionExpression:
+                  '#state = :pending AND payloadDigest = :payloadDigest AND ownerToken = :ownerToken AND leaseExpiresAtEpochMs >= :nowEpochMs',
+                UpdateExpression:
+                  'SET #state = :committed, evidenceKey = :evidenceKey, evidenceVersionId = :evidenceVersionId, evidenceDigest = :evidenceDigest, evidenceSizeBytes = :evidenceSizeBytes, recommendationId = :recommendationId',
+                ExpressionAttributeNames: { '#state': 'state' },
+                ExpressionAttributeValues: {
+                  ':pending': 'pending',
+                  ':committed': 'committed',
+                  ':payloadDigest': payloadDigest,
+                  ':ownerToken': input.ownerToken,
+                  ':nowEpochMs': input.nowEpochMs,
+                  ':evidenceKey': pointer.evidenceKey,
+                  ':evidenceVersionId': pointer.evidenceVersionId,
+                  ':evidenceDigest': pointer.evidenceDigest,
+                  ':evidenceSizeBytes': pointer.evidenceSizeBytes,
+                  ':recommendationId': input.evidence.recommendationId,
+                },
+              },
+            },
+            {
+              Put: {
+                TableName: this.options.tableName,
+                Item: durable,
+                ConditionExpression: 'attribute_not_exists(pk)',
+              },
+            },
+          ],
+        }),
+      );
+      return 'committed';
+    } catch (error) {
+      if (awsErrorName(error) !== 'TransactionCanceledException') throw error;
+      const response = record(
+        await this.options.client.send(
+          new GetCommand({
+            TableName: this.options.tableName,
+            Key: { pk: bindingKey, sk: 'BINDING' },
+            ConsistentRead: true,
+          }),
+        ),
+      );
+      const existing = record(response.Item ?? {});
+      if (
+        existing.evidenceKey === pointer.evidenceKey &&
+        existing.evidenceVersionId === pointer.evidenceVersionId &&
+        existing.evidenceDigest === pointer.evidenceDigest &&
+        existing.evidenceSizeBytes === pointer.evidenceSizeBytes &&
+        existing.payloadDigest === payloadDigest &&
+        existing.ownerToken === input.ownerToken
+      ) {
+        return 'replayed';
+      }
+      throw new AutomaticEvidencePersistenceError('idempotency_conflict', {
+        cause: error,
+      });
+    }
+  }
+
+  commitDecision(
+    input: LedgerInput<AutomaticDecisionEvidence>,
+  ): Promise<'committed' | 'replayed'> {
+    return this.commit('decision', input);
+  }
+
+  commitEvent(
+    input: LedgerInput<AutomaticEventEvidence>,
+  ): Promise<'committed' | 'replayed'> {
+    return this.commit('event', input);
+  }
+
+  private async readBinding(
+    kind: 'decision' | 'event',
+    idempotencyKey: string,
+  ) {
+    const response = record(
+      await this.options.client.send(
+        new GetCommand({
+          TableName: this.options.tableName,
+          Key: {
+            pk: `IDEMPOTENCY#${kind}#${idempotencyKey}`,
+            sk: 'BINDING',
+          },
+          ConsistentRead: true,
+        }),
+      ),
+    );
+    return response.Item === undefined ? null : record(response.Item);
+  }
+
+  async readDecision(idempotencyKey: string) {
+    const binding = await this.readBinding('decision', idempotencyKey);
+    if (binding === null || typeof binding.recommendationId !== 'string') {
+      return null;
+    }
+    const response = record(
+      await this.options.client.send(
+        new GetCommand({
+          TableName: this.options.tableName,
+          Key: {
+            pk: `RECOMMENDATION#${binding.recommendationId}`,
+            sk: 'DECISION',
+          },
+          ConsistentRead: true,
+        }),
+      ),
+    );
+    return response.Item === undefined
+      ? null
+      : parseAutomaticDecisionEvidence(evidencePayload(record(response.Item)));
+  }
+
+  async readEvent(idempotencyKey: string) {
+    const binding = await this.readBinding('event', idempotencyKey);
+    if (binding === null || typeof binding.recommendationId !== 'string') {
+      return null;
+    }
+    const response = record(
+      await this.options.client.send(
+        new GetCommand({
+          TableName: this.options.tableName,
+          Key: {
+            pk: `RECOMMENDATION#${binding.recommendationId}`,
+            sk: `EVENT#${idempotencyKey}`,
+          },
+          ConsistentRead: true,
+        }),
+      ),
+    );
+    return response.Item === undefined
+      ? null
+      : parseAutomaticEventEvidence(evidencePayload(record(response.Item)));
+  }
+
+  async inspectRecommendation(input: {
+    recommendationId: string;
+    limit: number;
+    cursor?: string;
+  }) {
+    const pk = `RECOMMENDATION#${input.recommendationId}`;
+    const decisionResponse = record(
+      await this.options.client.send(
+        new GetCommand({
+          TableName: this.options.tableName,
+          Key: { pk, sk: 'DECISION' },
+          ConsistentRead: true,
+        }),
+      ),
+    );
+    const decisionItem =
+      decisionResponse.Item === undefined
+        ? null
+        : record(decisionResponse.Item);
+    const exclusiveStartKey =
+      input.cursor === undefined
+        ? undefined
+        : (() => {
+            try {
+              const sk = Buffer.from(input.cursor, 'base64url').toString(
+                'utf8',
+              );
+              if (!sk.startsWith('EVENT#'))
+                throw new Error('invalid inspection cursor');
+              return { pk, sk };
+            } catch (error) {
+              throw new Error('invalid inspection cursor', { cause: error });
+            }
+          })();
+    const response = record(
+      await this.options.client.send(
+        new QueryCommand({
+          TableName: this.options.tableName,
+          KeyConditionExpression: 'pk = :pk AND begins_with(sk, :event)',
+          ExpressionAttributeValues: { ':pk': pk, ':event': 'EVENT#' },
+          ExclusiveStartKey: exclusiveStartKey,
+          Limit: Math.max(1, Math.min(100, input.limit)),
+          ConsistentRead: true,
+        }),
+      ),
+    );
+    const eventItems = Array.isArray(response.Items)
+      ? response.Items.map((item) => record(item))
+      : [];
+    const pointer = (item: Record<string, unknown>): DurableEvidencePointer => {
+      if (
+        typeof item.evidenceKey !== 'string' ||
+        typeof item.evidenceVersionId !== 'string' ||
+        typeof item.evidenceDigest !== 'string' ||
+        typeof item.evidenceSizeBytes !== 'number'
+      ) {
+        throw new Error('durable inspection pointer is invalid');
+      }
+      return {
+        key: item.evidenceKey,
+        versionId: item.evidenceVersionId,
+        digest: item.evidenceDigest,
+        sizeBytes: item.evidenceSizeBytes,
+      };
+    };
+    const lastKey =
+      response.LastEvaluatedKey === undefined
+        ? undefined
+        : record(response.LastEvaluatedKey);
+    return {
+      decision:
+        decisionItem === null
+          ? null
+          : parseAutomaticDecisionEvidence(evidencePayload(decisionItem)),
+      events: eventItems.map((item) =>
+        parseAutomaticEventEvidence(evidencePayload(item)),
+      ),
+      pointers: [
+        ...(decisionItem === null ? [] : [pointer(decisionItem)]),
+        ...eventItems.map(pointer),
+      ],
+      nextCursor:
+        typeof lastKey?.sk === 'string'
+          ? Buffer.from(lastKey.sk).toString('base64url')
+          : null,
+    };
+  }
+
+  async hasEvidence(digest: string): Promise<boolean> {
+    const response = record(
+      await this.options.client.send(
+        new QueryCommand({
+          TableName: this.options.tableName,
+          IndexName: 'evidenceDigest-index',
+          KeyConditionExpression: 'evidenceDigest = :digest',
+          ExpressionAttributeValues: { ':digest': digest },
+          Select: 'COUNT',
+          Limit: 1,
+          ConsistentRead: false,
+        }),
+      ),
+    );
+    return typeof response.Count === 'number' && response.Count > 0;
+  }
+}

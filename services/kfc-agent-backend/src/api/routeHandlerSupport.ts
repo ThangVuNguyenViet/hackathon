@@ -353,6 +353,7 @@ export async function checkFixtures(
 }
 
 export function checkMessengerConfig(options: RouteOptions): ReadinessCheckResult {
+  const required = options.readiness?.messengerRequired ?? true;
   const missing = [
     !options.messengerVerifyToken ? "MESSENGER_VERIFY_TOKEN" : undefined,
     !options.metaAppSecret ? "META_APP_SECRET" : undefined,
@@ -362,10 +363,10 @@ export function checkMessengerConfig(options: RouteOptions): ReadinessCheckResul
   ].filter((value): value is string => Boolean(value));
   const configured = missing.length === 0;
   return {
-    ok: configured,
+    ok: configured || !required,
     configured,
-    required: true,
-    message: configured ? undefined : `Missing ${missing.join(", ")}`,
+    required,
+    message: configured || !required ? undefined : `Missing ${missing.join(", ")}`,
   };
 }
 

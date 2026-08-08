@@ -1,0 +1,24 @@
+[build-system]
+requires = ["hatchling>=1.27,<2"]
+build-backend = "hatchling.build"
+
+[project]
+name = "kfc-recommendation-scorer"
+version = "0.1.0"
+description = "Fail-closed localhost scorer for qualified KFC recommendation bundles"
+requires-python = "==3.11.14"
+dependencies = [
+  "lightgbm==4.6.0",
+  "numpy==2.3.2",
+  "xgboost==3.0.2",
+]
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/kfc_recommendation_scorer"]
+
+[tool.ruff]
+line-length = 88
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "SIM", "RUF"]

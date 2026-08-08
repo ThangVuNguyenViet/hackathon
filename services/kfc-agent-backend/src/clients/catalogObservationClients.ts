@@ -1,4 +1,5 @@
 import type {
+  CartChange,
   CartClient,
   ExternalCallContext,
   IrreversibleConfirmationAuthority,
@@ -9,12 +10,20 @@ import type {
 import type { Cart, MenuItem, MenuModifierGroup, ToolResult } from '../domain/types.js';
 import type { GeneratedMenuModifier } from '../fixtures/schema.js';
 import {
+  automaticRecommendationIdentityDigest,
+  parseAutomaticRecommendationRequest,
+  parseAutomaticRecommendationResponse,
+  type AutomaticRecommendationResponse,
+  type AutomaticRecommendationType,
+  validateAutomaticRecommendationBinding,
+} from '../recommendations/contracts/automatic-recommendation.js';
+import type { AutomaticRecommendationHttpRuntime } from '../recommendations/serving/http-runtime.js';
+import {
   revalidateCatalogPin,
   type CatalogItemFact,
   type CatalogObservation,
 } from '../catalog/catalogObservation.js';
 import { createVerifiedCommerceProjection } from '../commerce/verifiedCommerceProjection.js';
-import { rankEligibleRecommendations } from '../ordering/recommendationRanking.js';
 import {
   matchMenuModifierQueries,
   menuCategoryMatches,
@@ -29,11 +38,97 @@ function ok<T>(value: T): ToolResult<T> {
   return { ok: true, value, message: 'verified_catalog_observation' };
 }
 
-function fail<T>(message: string): ToolResult<T> {
-  return { ok: false, errorCode: 'catalog_observation_stale', message };
+function fail<T>(
+  message: string,
+  errorCode = 'catalog_observation_stale',
+): ToolResult<T> {
+  return { ok: false, errorCode, message };
 }
 
 type RawGroup = CatalogItemFact['modifierGroups'][number];
+
+export interface ChatRecommendationContext {
+  storeId: string;
+  fulfilmentMode: 'pickup' | 'delivery';
+  locale: string;
+  orderingJourneyRef: string;
+  opportunityRef: string;
+  verifiedCustomerRef?: string;
+}
+
+export interface RecommendationJourneyBinding {
+  recommendationId: string;
+  requestId: string;
+  recommendationType: AutomaticRecommendationType;
+  channel: 'chat';
+  cartRevision: string;
+  catalogRevision: string;
+  orderingJourneyRef: string;
+  opportunityRef: string;
+  expiresAt: string;
+  candidateActions: Array<{
+    actionId: string;
+    itemCode: string;
+    renderedPosition: number;
+  }>;
+}
+
+export interface RecommendationJourneyStore {
+  record(binding: RecommendationJourneyBinding): Promise<void>;
+  revalidateCartChange?(input: {
+    sessionId: string;
+    cart: Cart;
+    changes: CartChange[];
+    now: Date;
+  }): Promise<ToolResult<true>>;
+}
+
+export interface CatalogObservationClientOptions {
+  sessionId: string;
+  pinned: CatalogObservation;
+  fetchCurrent(
+    externalCallContext: ExternalCallContext,
+  ): Promise<CatalogObservation>;
+  cart: CartClient;
+  oms: OmsClient;
+  now?: () => Date;
+  automaticRecommendations?: AutomaticRecommendationHttpRuntime;
+  recommendationContext?:
+    | ChatRecommendationContext
+    | ((cart: Cart) => ChatRecommendationContext | Promise<ChatRecommendationContext>);
+  recommendationJourney?: RecommendationJourneyStore;
+}
+export function automaticRecommendationCartRevision(cart: Cart): string {
+  return automaticRecommendationIdentityDigest({
+    operationPath: '/v1/recommendations/cart',
+    identityType: 'cart_revision',
+    payload: cart,
+  });
+}
+
+function toAutomaticRecommendationCart(cart: Cart, revision: string) {
+  return {
+    cartId: cart.id,
+    revision,
+    subtotal: { amount: cart.subtotalVnd, currency: 'VND' as const },
+    lines: cart.items.map((item, index) => ({
+      lineId: `${cart.id}:line:${index + 1}`,
+      sellableItemId: item.itemCode,
+      quantity: item.quantity,
+      unitPrice: { amount: item.unitPriceVnd, currency: 'VND' as const },
+      modifiers: (item.modifiers ?? []).map((modifier) => ({
+        groupPath: [modifier.groupId],
+        optionId: modifier.modifierId,
+        quantity: modifier.quantity,
+        priceImpact: {
+          amount: modifier.priceDeltaVnd,
+          currency: 'VND' as const,
+        },
+      })),
+    })),
+  };
+}
+
 
 function modifierSearchText(groups: readonly MenuModifierGroup[]): string {
   const text: string[] = [];
@@ -146,16 +241,6 @@ function toMenuItem(item: CatalogItemFact): MenuItem {
   };
 }
 
-export interface CatalogObservationClientOptions {
-  sessionId: string;
-  pinned: CatalogObservation;
-  fetchCurrent(
-    externalCallContext: ExternalCallContext,
-  ): Promise<CatalogObservation>;
-  cart: CartClient;
-  oms: OmsClient;
-  now?: () => Date;
-}
 
 export function createCatalogObservationClients(options: CatalogObservationClientOptions): {
   confirmationAuthority: IrreversibleConfirmationAuthority;
@@ -329,6 +414,20 @@ export function createCatalogObservationClients(options: CatalogObservationClien
 
   const recommendation: RecommendationClient = {
     async recommendAddOns(cart, externalCallContext) {
+      const runtime = options.automaticRecommendations;
+      if (!runtime) {
+        return fail(
+          'Automatic recommendation release client is not configured',
+          'recommendation_runtime_unavailable',
+        );
+      }
+      const contextSource = options.recommendationContext;
+      if (!contextSource) {
+        return fail(
+          'Automatic recommendation context is not configured',
+          'recommendation_context_unavailable',
+        );
+      }
       const observation = await discoveryObservation(externalCallContext);
       try {
         createVerifiedCommerceProjection({
@@ -352,26 +451,151 @@ export function createCatalogObservationClients(options: CatalogObservationClien
       } catch (error) {
         return fail(error instanceof Error ? error.message : 'Catalog projection is stale');
       }
-      const inCart = new Set(cart.items.map((item) => item.itemCode));
-      return ok(rankEligibleRecommendations(observation.items.map((item) => ({
-        itemCode: item.itemCode,
-        eligible: !inCart.has(item.itemCode),
-        value: toMenuItem(item),
-        score: {
-          requestMatch: 0,
-          partySizeFit: 0,
-          budgetFit: -item.priceVnd,
-          preferenceMatch: 0,
-          cartDisruption: 0,
-        },
-      }))).map((candidate) => candidate.value));
+      let context: ChatRecommendationContext;
+      try {
+        context = typeof contextSource === 'function'
+          ? await contextSource(cart)
+          : contextSource;
+      } catch (error) {
+        return fail(
+          error instanceof Error
+            ? error.message
+            : 'Automatic recommendation context could not be resolved',
+          'recommendation_context_unavailable',
+        );
+      }
+      const cartRevision = automaticRecommendationCartRevision(cart);
+      const request = parseAutomaticRecommendationRequest('smart_cross_sell', {
+        schemaVersion: 'kfc-automatic-recommendation-v1',
+        requestId: `chat:${options.sessionId}:smart-cross-sell:${cartRevision}`,
+        storeId: context.storeId,
+        fulfilmentMode: context.fulfilmentMode,
+        locale: context.locale,
+        orderingJourneyRef: context.orderingJourneyRef,
+        opportunityRef: context.opportunityRef,
+        cart: toAutomaticRecommendationCart(cart, cartRevision),
+      });
+      let response: AutomaticRecommendationResponse;
+      try {
+        response = validateAutomaticRecommendationBinding(
+          'smart_cross_sell',
+          request,
+          await runtime.decide('smart_cross_sell', request),
+        );
+      } catch (error) {
+        return fail(
+          error instanceof Error
+            ? error.message
+            : 'Automatic recommendation response was invalid',
+          'recommendation_response_invalid',
+        );
+      }
+      if (response.cartRevision !== cartRevision) {
+        return fail(
+          'Automatic recommendation response is bound to a different cart',
+          'recommendation_response_stale',
+        );
+      }
+      if (response.catalogRevision !== observation.id) {
+        return fail(
+          'Automatic recommendation response is bound to a different catalog',
+          'recommendation_response_stale',
+        );
+      }
+      try {
+        const candidateActions = response.proposals.map((proposal, index) => {
+          const action = proposal.action;
+          if (action.type !== 'add_product') {
+            throw new Error('Chat recommendations may only add products');
+          }
+          const item = observation.items.find(
+            (candidate) => candidate.itemCode === action.sellableItemId,
+          );
+          if (!item || item.priceVnd !== action.priceImpact.amount) {
+            throw new Error(
+              `Recommendation candidate ${action.sellableItemId} is not current catalog authority`,
+            );
+          }
+          return {
+            item: toMenuItem(item),
+            actionId: proposal.actionId,
+            itemCode: item.itemCode,
+            renderedPosition: index + 1,
+          };
+        });
+        const binding: RecommendationJourneyBinding = {
+          recommendationId: response.recommendationId,
+          requestId: response.requestId,
+          recommendationType: response.recommendationType,
+          channel: 'chat',
+          cartRevision: response.cartRevision,
+          catalogRevision: response.catalogRevision,
+          orderingJourneyRef: context.orderingJourneyRef,
+          opportunityRef: context.opportunityRef,
+          expiresAt: response.expiresAt,
+          candidateActions: candidateActions.map((candidate) => ({
+            actionId: candidate.actionId,
+            itemCode: candidate.itemCode,
+            renderedPosition: candidate.renderedPosition,
+          })),
+        };
+        await options.recommendationJourney?.record(binding);
+        if (candidateActions.length > 0) {
+          await runtime.recordImpression(response.recommendationId, {
+            schemaVersion: 'kfc-automatic-recommendation-event-v1',
+            eventId: `chat:${response.recommendationId}:impression`,
+            channel: 'chat',
+            occurredAt: (options.now?.() ?? new Date()).toISOString(),
+            orderingJourneyRef: context.orderingJourneyRef,
+            opportunityRef: context.opportunityRef,
+            cartRevision: response.cartRevision,
+            renderedActions: candidateActions.map((candidate) => ({
+              actionId: candidate.actionId,
+              renderedPosition: candidate.renderedPosition,
+            })),
+          });
+        }
+        return ok(candidateActions.map((candidate) => candidate.item));
+      } catch (error) {
+        return fail(
+          error instanceof Error
+            ? error.message
+            : 'Automatic recommendation evidence could not be persisted',
+          'recommendation_evidence_unavailable',
+        );
+      }
     },
+  };
+
+  const revalidateJourney = async (
+    current: Cart,
+    changes: CartChange[],
+  ): Promise<ToolResult<true>> => {
+    const validator = options.recommendationJourney?.revalidateCartChange;
+    if (!validator) return ok(true);
+    try {
+      return await validator({
+        sessionId: options.sessionId,
+        cart: current,
+        changes,
+        now: options.now?.() ?? new Date(),
+      });
+    } catch (error) {
+      return fail(
+        error instanceof Error
+          ? error.message
+          : 'Recommendation cart action revalidation failed',
+        'recommendation_action_stale',
+      );
+    }
   };
 
   const cart: CartClient = {
     createCart: (sessionId, externalCallContext) =>
       options.cart.createCart(sessionId, externalCallContext),
     async applyChanges(current, changes, externalCallContext) {
+      const journeyChecked = await revalidateJourney(current, changes);
+      if (!journeyChecked.ok) return fail<Cart>(journeyChecked.message, journeyChecked.errorCode);
       const checked = await verify(
         [
           ...current.items.map((item) => item.itemCode),
@@ -394,6 +618,12 @@ export function createCatalogObservationClients(options: CatalogObservationClien
       modifiers,
       externalCallContext,
     ) {
+      const journeyChecked = await revalidateJourney(current, [{
+        itemCode,
+        quantity,
+        ...(modifiers === undefined ? {} : { modifiers }),
+      }]);
+      if (!journeyChecked.ok) return fail<Cart>(journeyChecked.message, journeyChecked.errorCode);
       const checked = await verify(
         [...current.items.map((item) => item.itemCode), itemCode],
         externalCallContext,
@@ -408,8 +638,15 @@ export function createCatalogObservationClients(options: CatalogObservationClien
           )
         : fail<Cart>(checked.message);
     },
-    previewCart: (current, externalCallContext) =>
-      options.cart.previewCart(current, externalCallContext),
+    async previewCart(current, externalCallContext) {
+      const checked = await verify(
+        current.items.map((item) => item.itemCode),
+        externalCallContext,
+      );
+      return checked.ok
+        ? options.cart.previewCart(current, externalCallContext)
+        : fail<Cart>(checked.message);
+    },
   };
 
   const verifyCart = async (

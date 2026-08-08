@@ -19,6 +19,7 @@ import { createHttpPosClient } from '../commerce/httpPosClient.js';
 import { createOmsWithPos } from '../commerce/omsWithPos.js';
 import { LangSmithAgentTracer } from '../observability/langsmithAgentTracer.js';
 import { LangSmithShowcaseScenarioSource } from '../showcase/showcase.js';
+import { createOtelRuntimeProbe } from '../observability/runtimeProbe.js';
 
 function optionalValue(value: string | undefined): string | undefined {
   const normalized = value?.trim();
@@ -174,6 +175,14 @@ export function buildServerOptionsFromEnv(
       ? createHttpPosClient({ baseUrl: posBaseUrl, token: posToken })
       : undefined;
   return {
+    ...(env.RELEASE_DIGEST && env.OTEL_EXPORTER_OTLP_ENDPOINT
+      ? {
+          runtimeProbe: createOtelRuntimeProbe({
+            endpoint: env.OTEL_EXPORTER_OTLP_ENDPOINT,
+            releaseDigest: env.RELEASE_DIGEST,
+          }),
+        }
+      : {}),
     demoAdminToken: optionalValue(env.KFC_DEMO_ADMIN_TOKEN),
     messengerVerifyToken: optionalValue(env.MESSENGER_VERIFY_TOKEN),
     metaAppSecret: optionalValue(env.META_APP_SECRET),
