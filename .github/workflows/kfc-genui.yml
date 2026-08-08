@@ -39,6 +39,8 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
+      - run: git fetch origin codex/kfc-kiosk-recommendation-prototype
+        working-directory: ${{ github.workspace }}
       - uses: actions/setup-node@v4
         with:
           node-version: 22.13.0
