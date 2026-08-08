@@ -296,7 +296,7 @@ export function registerRoutes(
   server.post('/chat/kfc/message', async (request, reply) => {
     return send(reply, await handlers.chatKfcMessage(request.body));
   });
-server.post('/chat/pvcfc/message', async (request, reply) => {
+  server.post('/chat/pvcfc/message', async (request, reply) => {
     return send(reply, await handlers.chatPvcfcMessage(request.body));
   });
   server.post('/chat/kfc/genui-action', async (request, reply) =>
