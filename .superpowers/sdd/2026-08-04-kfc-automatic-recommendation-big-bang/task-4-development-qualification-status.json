@@ -1,0 +1,7 @@
+{
+  "bundlePath": null,
+  "evidenceSha256": "288e2afae94b5fd51b90f612d1bb2a9f40060766033a71a9c436fb93001c1b3c",
+  "schemaVersion": "kfc-model-qualification-status-v1",
+  "status": "failed_selection",
+  "syntheticOnlyDisclaimer": "Synthetic qualification evidence only; this does not claim compatibility with real KFC data or authorize real-customer exposure."
+}

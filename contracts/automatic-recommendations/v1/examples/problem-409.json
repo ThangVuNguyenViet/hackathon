@@ -1,0 +1,8 @@
+{
+  "type": "https://contracts.kfc.invalid/problems/identity-conflict",
+  "title": "Request identity conflicts with stored content",
+  "status": 409,
+  "code": "identity_conflict",
+  "retryable": false,
+  "requestId": "request-local-001"
+}

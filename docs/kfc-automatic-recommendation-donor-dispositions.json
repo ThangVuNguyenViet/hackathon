@@ -1,0 +1,1297 @@
+{
+  "schemaVersion": "kfc-automatic-donor-disposition-v1",
+  "donorCommit": "fc5fcafbaf7e0f00afbdd668ab90f6be0439b947",
+  "capture": {
+    "description": "Exact tracked donor paths selected from recommendation-owned roots plus config, CI, scripts, documentation, evidence, and cross-cutting source references.",
+    "pathCount": 299,
+    "roots": [
+      ".superpowers/sdd/2026-07-27-kfc-chat-recommendation-demo-completion/",
+      ".superpowers/sdd/2026-07-27-kfc-recommendation-contracts/",
+      "apps/kfc-recommendation-explainer-prototype/",
+      "contracts/recommendations/",
+      "docs/recommendation-engine/",
+      "docs/wayfinder/kfc-product-recommendation-poc/assets/",
+      "qualification/kfc-recommendation/",
+      "services/kfc-agent-backend/fixtures/recommendations/",
+      "services/kfc-agent-backend/src/recommendations/",
+      "services/kfc-agent-backend/test/recommendations/",
+      "services/kfc-recommendation-sanity/",
+      "services/kfc-recommendation-shadow-runtime/",
+      "services/kfc-recommendation-simulator/",
+      "tools/demo-videos/kfc-recommendation-engine-tutorial/"
+    ],
+    "explicitPaths": [
+      ".github/workflows/kfc-genui.yml",
+      ".github/workflows/openai-geo-canary.yml",
+      "apps/kfc_live_monitor_flutter/integration_test/customer_chat_genui_conversation_test.dart",
+      "apps/kfc_live_monitor_flutter/lib/features/customer_chat/domain/kfc_recommendation_offer_models.dart",
+      "apps/kfc_live_monitor_flutter/lib/features/customer_chat/presentation/genui/widgets/recommendation_offer.dart",
+      "apps/kfc_live_monitor_flutter/test/features/customer_chat/presentation/recommendation_offer_test.dart",
+      "apps/kfc_live_monitor_flutter/test/goldens/customer_chat_genui/components/recommendationOffer.png",
+      "docs/live-scenario-harness.md",
+      "docs/plans/2026-07-30-kfc-recommendation-demo-tutorial.md",
+      "docs/superpowers/plans/2026-07-27-kfc-chat-recommendation-demo-completion.md",
+      "docs/superpowers/plans/2026-07-27-kfc-recommendation-contracts.md",
+      "docs/superpowers/plans/2026-07-27-kfc-recommendation-decision-engine.md",
+      "docs/superpowers/plans/2026-07-27-kfc-recommendation-durable-api.md",
+      "docs/wayfinder/kfc-product-recommendation-poc/implementation-provenance.json",
+      "docs/wayfinder/kfc-product-recommendation-poc/implementation-ready-specification.md",
+      "services/kfc-agent-backend/.env.example",
+      "services/kfc-agent-backend/README.md",
+      "services/kfc-agent-backend/migrations/0024_recommendation_events.sql",
+      "services/kfc-agent-backend/migrations/0025_recommendation_demo_customer_history.sql",
+      "services/kfc-agent-backend/migrations/0026_recommendation_qualification_customers.sql",
+      "services/kfc-agent-backend/migrations/0027_recommendation_qualification_store_authority.sql",
+      "services/kfc-agent-backend/migrations/0028_automatic_recommendation_engine.sql",
+      "services/kfc-agent-backend/migrations/0029_automatic_recommendation_technical_chunks.sql",
+      "services/kfc-agent-backend/package-lock.json",
+      "services/kfc-agent-backend/package.json",
+      "services/kfc-agent-backend/scripts/compose-automatic-slates.ts",
+      "services/kfc-agent-backend/scripts/finalize-recommendation-qualification.ts",
+      "services/kfc-agent-backend/src/agent/agentState.ts",
+      "services/kfc-agent-backend/src/agent/agentTurn.ts",
+      "services/kfc-agent-backend/src/api/routeAgentRuntime.ts",
+      "services/kfc-agent-backend/src/api/routeHandlerContracts.ts",
+      "services/kfc-agent-backend/src/api/routeHandlers.ts",
+      "services/kfc-agent-backend/src/api/routeMessengerRuntime.ts",
+      "services/kfc-agent-backend/src/api/routeRecommendationHandlers.ts",
+      "services/kfc-agent-backend/src/api/routes.ts",
+      "services/kfc-agent-backend/src/api/serverOptions.ts",
+      "services/kfc-agent-backend/src/businessPacks/kfcVietnam/kfcVietnamPack.ts",
+      "services/kfc-agent-backend/src/config/env.ts",
+      "services/kfc-agent-backend/src/genui/kfcGenUiSelector.ts",
+      "services/kfc-agent-backend/src/liveEvidence/liveScenarioEvidenceCompleteness.ts",
+      "services/kfc-agent-backend/src/liveEvidence/liveScenarioSession.ts",
+      "services/kfc-agent-backend/src/ordering/recommendationRanking.ts",
+      "services/kfc-agent-backend/src/ordering/types.ts",
+      "services/kfc-agent-backend/src/persistence/d1StoreAgentOperations.ts",
+      "services/kfc-agent-backend/src/persistence/d1StoreRecommendationOperations.ts",
+      "services/kfc-agent-backend/src/persistence/d1StoreSupport.ts",
+      "services/kfc-agent-backend/src/qualification/qualificationManifest.ts",
+      "services/kfc-agent-backend/src/worker.ts",
+      "services/kfc-agent-backend/src/workerReadiness.ts",
+      "services/kfc-agent-backend/src/workerRouteOptions.ts",
+      "services/kfc-agent-backend/test/agent/verified-state-projection.test.ts",
+      "services/kfc-agent-backend/test/api/automatic-recommendation-routes.test.ts",
+      "services/kfc-agent-backend/test/api/kfc-genui-guest-action.test.ts",
+      "services/kfc-agent-backend/test/architecture/deployment-model-config.test.ts",
+      "services/kfc-agent-backend/test/businessPacks/kfc-vietnam-pack.test.ts",
+      "services/kfc-agent-backend/test/genui/recommendation-offer-selector.test.ts",
+      "services/kfc-agent-backend/test/liveEvidence/live-scenario-evidence-completeness.test.ts",
+      "services/kfc-agent-backend/test/liveEvidence/live-scenario-http-client.test.ts",
+      "services/kfc-agent-backend/test/liveEvidence/live-scenario-session.test.ts",
+      "services/kfc-agent-backend/test/liveEvidence/live-scenario-terminal.test.ts",
+      "services/kfc-agent-backend/test/liveEvidence/live-scenario-test-evidence.ts",
+      "services/kfc-agent-backend/test/observability/recommendation-tracing.test.ts",
+      "services/kfc-agent-backend/test/ordering/automatic-recommendation-tools.test.ts",
+      "services/kfc-agent-backend/test/qualification/qualification-manifest.test.ts",
+      "services/kfc-agent-backend/test/scenarios/scenario-script.test.ts",
+      "services/kfc-agent-backend/wrangler.toml"
+    ]
+  },
+  "allowedDispositions": [
+    "Adopt",
+    "Redesign",
+    "Delete",
+    "Preserve unrelated",
+    "Historical superseded"
+  ],
+  "entries": [
+    {
+      "path": ".github/workflows/kfc-genui.yml",
+      "disposition": "Preserve unrelated"
+    },
+    {
+      "path": ".github/workflows/openai-geo-canary.yml",
+      "disposition": "Preserve unrelated"
+    },
+    {
+      "path": ".superpowers/sdd/2026-07-27-kfc-chat-recommendation-demo-completion/task-4-report.md",
+      "disposition": "Historical superseded"
+    },
+    {
+      "path": ".superpowers/sdd/2026-07-27-kfc-recommendation-contracts/final-review-fix-report.md",
+      "disposition": "Historical superseded"
+    },
+    {
+      "path": "apps/kfc-recommendation-explainer-prototype/README.md",
+      "disposition": "Delete"
+    },
+    {
+      "path": "apps/kfc-recommendation-explainer-prototype/package-lock.json",
+      "disposition": "Delete"
+    },
+    {
+      "path": "apps/kfc-recommendation-explainer-prototype/package.json",
+      "disposition": "Delete"
+    },
+    {
+      "path": "apps/kfc-recommendation-explainer-prototype/public/index.html",
+      "disposition": "Delete"
+    },
+    {
+      "path": "apps/kfc-recommendation-explainer-prototype/public/styles.css",
+      "disposition": "Delete"
+    },
+    {
+      "path": "apps/kfc-recommendation-explainer-prototype/public/workbench.js",
+      "disposition": "Delete"
+    },
+    {
+      "path": "apps/kfc-recommendation-explainer-prototype/register-local-evidence.py",
+      "disposition": "Delete"
+    },
+    {
+      "path": "apps/kfc-recommendation-explainer-prototype/schema.sql",
+      "disposition": "Delete"
+    },
+    {
+      "path": "apps/kfc-recommendation-explainer-prototype/serve.sh",
+      "disposition": "Delete"
+    },
+    {
+      "path": "apps/kfc-recommendation-explainer-prototype/start-demo.sh",
+      "disposition": "Delete"
+    },
+    {
+      "path": "apps/kfc-recommendation-explainer-prototype/test/cart-revision.test.ts",
+      "disposition": "Delete"
+    },
+    {
+      "path": "apps/kfc-recommendation-explainer-prototype/test/exact-explanation-fixture.ts",
+      "disposition": "Delete"
+    },
+    {
+      "path": "apps/kfc-recommendation-explainer-prototype/test/start-demo-preflight.test.ts",
+      "disposition": "Delete"
+    },
+    {
+      "path": "apps/kfc-recommendation-explainer-prototype/test/why-evidence.test.ts",
+      "disposition": "Delete"
+    },
+    {
+      "path": "apps/kfc-recommendation-explainer-prototype/test/workbench-automatic.test.ts",
+      "disposition": "Delete"
+    },
+    {
+      "path": "apps/kfc-recommendation-explainer-prototype/test/workbench-conflict.test.ts",
+      "disposition": "Delete"
+    },
+    {
+      "path": "apps/kfc-recommendation-explainer-prototype/test/workbench-dom.test.ts",
+      "disposition": "Delete"
+    },
+    {
+      "path": "apps/kfc-recommendation-explainer-prototype/worker.ts",
+      "disposition": "Delete"
+    },
+    {
+      "path": "apps/kfc-recommendation-explainer-prototype/wrangler.toml",
+      "disposition": "Delete"
+    },
+    {
+      "path": "apps/kfc_live_monitor_flutter/integration_test/customer_chat_genui_conversation_test.dart",
+      "disposition": "Preserve unrelated"
+    },
+    {
+      "path": "apps/kfc_live_monitor_flutter/lib/features/customer_chat/domain/kfc_recommendation_offer_models.dart",
+      "disposition": "Adopt"
+    },
+    {
+      "path": "apps/kfc_live_monitor_flutter/lib/features/customer_chat/presentation/genui/widgets/recommendation_offer.dart",
+      "disposition": "Adopt"
+    },
+    {
+      "path": "apps/kfc_live_monitor_flutter/test/features/customer_chat/presentation/recommendation_offer_test.dart",
+      "disposition": "Adopt"
+    },
+    {
+      "path": "apps/kfc_live_monitor_flutter/test/goldens/customer_chat_genui/components/recommendationOffer.png",
+      "disposition": "Adopt"
+    },
+    {
+      "path": "contracts/recommendations/v1/examples/instant-conformance.json",
+      "disposition": "Redesign"
+    },
+    {
+      "path": "contracts/recommendations/v1/examples/invalid-contract-values.json",
+      "disposition": "Redesign"
+    },
+    {
+      "path": "contracts/recommendations/v1/examples/valid-decision-request.json",
+      "disposition": "Redesign"
+    },
+    {
+      "path": "contracts/recommendations/v1/examples/valid-decision-response.json",
+      "disposition": "Redesign"
+    },
+    {
+      "path": "contracts/recommendations/v1/examples/valid-impression-request.json",
+      "disposition": "Redesign"
+    },
+    {
+      "path": "contracts/recommendations/v1/examples/valid-outcome-request.json",
+      "disposition": "Redesign"
+    },
+    {
+      "path": "contracts/recommendations/v1/examples/valid-recommendation-event.json",
+      "disposition": "Redesign"
+    },
+    {
+      "path": "contracts/recommendations/v1/examples/valid-recommendation-state.json",
+      "disposition": "Redesign"
+    },
+    {
+      "path": "contracts/recommendations/v1/kfc-recommendation.schema.json",
+      "disposition": "Redesign"
+    },
+    {
+      "path": "docs/live-scenario-harness.md",
+      "disposition": "Historical superseded"
+    },
+    {
+      "path": "docs/plans/2026-07-30-kfc-recommendation-demo-tutorial.md",
+      "disposition": "Historical superseded"
+    },
+    {
+      "path": "docs/recommendation-engine/automatic-ranking-deep-dive.evidence.json",
+      "disposition": "Historical superseded"
+    },
+    {
+      "path": "docs/recommendation-engine/automatic-ranking-deep-dive.md",
+      "disposition": "Historical superseded"
+    },
+    {
+      "path": "docs/recommendation-engine/browser-capture-manifest.json",
+      "disposition": "Historical superseded"
+    },
+    {
+      "path": "docs/recommendation-engine/screenshots/01-workbench-five-role-decision.png",
+      "disposition": "Historical superseded"
+    },
+    {
+      "path": "docs/recommendation-engine/screenshots/02-why-these-items.png",
+      "disposition": "Historical superseded"
+    },
+    {
+      "path": "docs/recommendation-engine/screenshots/03-mlflow-nine-span-trace.png",
+      "disposition": "Historical superseded"
+    },
+    {
+      "path": "docs/recommendation-engine/screenshots/04-mlflow-model-score-evidence.png",
+      "disposition": "Historical superseded"
+    },
+    {
+      "path": "docs/superpowers/plans/2026-07-27-kfc-chat-recommendation-demo-completion.md",
+      "disposition": "Historical superseded"
+    },
+    {
+      "path": "docs/superpowers/plans/2026-07-27-kfc-recommendation-contracts.md",
+      "disposition": "Historical superseded"
+    },
+    {
+      "path": "docs/superpowers/plans/2026-07-27-kfc-recommendation-decision-engine.md",
+      "disposition": "Historical superseded"
+    },
+    {
+      "path": "docs/superpowers/plans/2026-07-27-kfc-recommendation-durable-api.md",
+      "disposition": "Historical superseded"
+    },
+    {
+      "path": "docs/wayfinder/kfc-product-recommendation-poc/assets/cms-options-research.md",
+      "disposition": "Historical superseded"
+    },
+    {
+      "path": "docs/wayfinder/kfc-product-recommendation-poc/assets/recommender-framework-options.md",
+      "disposition": "Historical superseded"
+    },
+    {
+      "path": "docs/wayfinder/kfc-product-recommendation-poc/implementation-provenance.json",
+      "disposition": "Historical superseded"
+    },
+    {
+      "path": "docs/wayfinder/kfc-product-recommendation-poc/implementation-ready-specification.md",
+      "disposition": "Historical superseded"
+    },
+    {
+      "path": "qualification/kfc-recommendation/README.md",
+      "disposition": "Redesign"
+    },
+    {
+      "path": "qualification/kfc-recommendation/evaluation-template.json",
+      "disposition": "Redesign"
+    },
+    {
+      "path": "qualification/kfc-recommendation/narratives/01-returning-customer-flagship.json",
+      "disposition": "Redesign"
+    },
+    {
+      "path": "qualification/kfc-recommendation/narratives/02-anonymous-local-favorite.json",
+      "disposition": "Redesign"
+    },
+    {
+      "path": "qualification/kfc-recommendation/narratives/03-modifier-accepted.json",
+      "disposition": "Redesign"
+    },
+    {
+      "path": "qualification/kfc-recommendation/narratives/04-modifier-empty-skipped.json",
+      "disposition": "Redesign"
+    },
+    {
+      "path": "qualification/kfc-recommendation/narratives/05-sanity-replacement.json",
+      "disposition": "Redesign"
+    },
+    {
+      "path": "qualification/kfc-recommendation/narratives/06-sanity-suppression.json",
+      "disposition": "Redesign"
+    },
+    {
+      "path": "qualification/kfc-recommendation/narratives/07-explicit-request-after-proactive.json",
+      "disposition": "Redesign"
+    },
+    {
+      "path": "qualification/kfc-recommendation/narratives/08-once-only-enforcement.json",
+      "disposition": "Redesign"
+    },
+    {
+      "path": "qualification/kfc-recommendation/operator-runbook.md",
+      "disposition": "Redesign"
+    },
+    {
+      "path": "services/kfc-agent-backend/.env.example",
+      "disposition": "Redesign"
+    },
+    {
+      "path": "services/kfc-agent-backend/README.md",
+      "disposition": "Redesign"
+    },
+    {
+      "path": "services/kfc-agent-backend/fixtures/recommendations/promotion-snapshot-v1.json",
+      "disposition": "Redesign"
+    },
+    {
+      "path": "services/kfc-agent-backend/fixtures/recommendations/ranking-statistics-v1.json",
+      "disposition": "Redesign"
+    },
+    {
+      "path": "services/kfc-agent-backend/fixtures/recommendations/sanity-policy-snapshot-v1.json",
+      "disposition": "Delete"
+    },
+    {
+      "path": "services/kfc-agent-backend/migrations/0024_recommendation_events.sql",
+      "disposition": "Redesign"
+    },
+    {
+      "path": "services/kfc-agent-backend/migrations/0025_recommendation_demo_customer_history.sql",
+      "disposition": "Redesign"
+    },
+    {
+      "path": "services/kfc-agent-backend/migrations/0026_recommendation_qualification_customers.sql",
+      "disposition": "Redesign"
+    },
+    {
+      "path": "services/kfc-agent-backend/migrations/0027_recommendation_qualification_store_authority.sql",
+      "disposition": "Redesign"
+    },
+    {
+      "path": "services/kfc-agent-backend/migrations/0028_automatic_recommendation_engine.sql",
+      "disposition": "Redesign"
+    },
+    {
+      "path": "services/kfc-agent-backend/migrations/0029_automatic_recommendation_technical_chunks.sql",
+      "disposition": "Redesign"
+    },
+    {
+      "path": "services/kfc-agent-backend/package-lock.json",
+      "disposition": "Redesign"
+    },
+    {
+      "path": "services/kfc-agent-backend/package.json",
+      "disposition": "Redesign"
+    },
+    {
+      "path": "services/kfc-agent-backend/scripts/compose-automatic-slates.ts",
+      "disposition": "Redesign"
+    },
+    {
+      "path": "services/kfc-agent-backend/scripts/finalize-recommendation-qualification.ts",
+      "disposition": "Redesign"
+    },
+    {
+      "path": "services/kfc-agent-backend/src/agent/agentState.ts",
+      "disposition": "Preserve unrelated"
+    },
+    {
+      "path": "services/kfc-agent-backend/src/agent/agentTurn.ts",
+      "disposition": "Preserve unrelated"
+    },
+    {
+      "path": "services/kfc-agent-backend/src/api/routeAgentRuntime.ts",
+      "disposition": "Redesign"
+    },
+    {
+      "path": "services/kfc-agent-backend/src/api/routeHandlerContracts.ts",
+      "disposition": "Redesign"
+    },
+    {
+      "path": "services/kfc-agent-backend/src/api/routeHandlers.ts",
+      "disposition": "Redesign"
+    },
+    {
+      "path": "services/kfc-agent-backend/src/api/routeMessengerRuntime.ts",
+      "disposition": "Redesign"
+    },
+    {
+      "path": "services/kfc-agent-backend/src/api/routeRecommendationHandlers.ts",
+      "disposition": "Redesign"
+    },
+    {
+      "path": "services/kfc-agent-backend/src/api/routes.ts",
+      "disposition": "Redesign"
+    },
+    {
+      "path": "services/kfc-agent-backend/src/api/serverOptions.ts",
+      "disposition": "Redesign"
+    },
+    {
+      "path": "services/kfc-agent-backend/src/businessPacks/kfcVietnam/kfcVietnamPack.ts",
+      "disposition": "Preserve unrelated"
+    },
+    {
+      "path": "services/kfc-agent-backend/src/config/env.ts",
+      "disposition": "Redesign"
+    },
+    {
+      "path": "services/kfc-agent-backend/src/genui/kfcGenUiSelector.ts",
+      "disposition": "Preserve unrelated"
+    },
+    {
+      "path": "services/kfc-agent-backend/src/liveEvidence/liveScenarioEvidenceCompleteness.ts",
+      "disposition": "Preserve unrelated"
+    },
+    {
+      "path": "services/kfc-agent-backend/src/liveEvidence/liveScenarioSession.ts",
+      "disposition": "Preserve unrelated"
+    },
+    {
+      "path": "services/kfc-agent-backend/src/ordering/recommendationRanking.ts",
+      "disposition": "Preserve unrelated"
+    },
+    {
+      "path": "services/kfc-agent-backend/src/ordering/types.ts",
+      "disposition": "Preserve unrelated"
+    },
+    {
+      "path": "services/kfc-agent-backend/src/persistence/d1StoreAgentOperations.ts",
+      "disposition": "Redesign"
+    },
+    {
+      "path": "services/kfc-agent-backend/src/persistence/d1StoreRecommendationOperations.ts",
+      "disposition": "Redesign"
+    },
+    {
+      "path": "services/kfc-agent-backend/src/persistence/d1StoreSupport.ts",
+      "disposition": "Redesign"
+    },
+    {
+      "path": "services/kfc-agent-backend/src/qualification/qualificationManifest.ts",
+      "disposition": "Preserve unrelated"
+    },
+    {
+      "path": "services/kfc-agent-backend/src/recommendations/application/bundled-tool-authority.ts",
+      "disposition": "Redesign"
+    },
+    {
+      "path": "services/kfc-agent-backend/src/recommendations/application/context-factory.ts",
+      "disposition": "Redesign"
+    },
+    {
+      "path": "services/kfc-agent-backend/src/recommendations/application/create-bundled-engine.ts",
+      "disposition": "Redesign"
+    },
+    {
+      "path": "services/kfc-agent-backend/src/recommendations/application/decision-engine.ts",
+      "disposition": "Redesign"
+    },
+    {
+      "path": "services/kfc-agent-backend/src/recommendations/application/inspection-service.ts",
+      "disposition": "Redesign"
+    },
+    {
+      "path": "services/kfc-agent-backend/src/recommendations/application/product-order-flow.ts",
+      "disposition": "Redesign"
+    },
+    {
+      "path": "services/kfc-agent-backend/src/recommendations/application/recommendation-service.ts",
+      "disposition": "Redesign"
+    },
+    {
+      "path": "services/kfc-agent-backend/src/recommendations/application/service-types.ts",
+      "disposition": "Redesign"
+    },
+    {
+      "path": "services/kfc-agent-backend/src/recommendations/application/tool-availability.ts",
+      "disposition": "Redesign"
+    },
+    {
+      "path": "services/kfc-agent-backend/src/recommendations/application/tool-execution.ts",
+      "disposition": "Redesign"
+    },
+    {
+      "path": "services/kfc-agent-backend/src/recommendations/application/types.ts",
+      "disposition": "Redesign"
+    },
+    {
+      "path": "services/kfc-agent-backend/src/recommendations/automatic/application.ts",
+      "disposition": "Redesign"
+    },
+    {
+      "path": "services/kfc-agent-backend/src/recommendations/automatic/bundled-components.ts",
+      "disposition": "Redesign"
+    },
+    {
+      "path": "services/kfc-agent-backend/src/recommendations/automatic/chat-service.ts",
+      "disposition": "Redesign"
+    },
+    {
+      "path": "services/kfc-agent-backend/src/recommendations/automatic/contracts.ts",
+      "disposition": "Redesign"
+    },
+    {
+      "path": "services/kfc-agent-backend/src/recommendations/automatic/d1-persistence.ts",
+      "disposition": "Redesign"
+    },
+    {
+      "path": "services/kfc-agent-backend/src/recommendations/automatic/engine.ts",
+      "disposition": "Adopt"
+    },
+    {
+      "path": "services/kfc-agent-backend/src/recommendations/automatic/evidence-contracts.ts",
+      "disposition": "Adopt"
+    },
+    {
+      "path": "services/kfc-agent-backend/src/recommendations/automatic/model-runtime.ts",
+      "disposition": "Adopt"
+    },
+    {
+      "path": "services/kfc-agent-backend/src/recommendations/automatic/otel-tracer.ts",
+      "disposition": "Adopt"
+    },
+    {
+      "path": "services/kfc-agent-backend/src/recommendations/automatic/qualified-models.ts",
+      "disposition": "Adopt"
+    },
+    {
+      "path": "services/kfc-agent-backend/src/recommendations/automatic/runtime.ts",
+      "disposition": "Redesign"
+    },
+    {
+      "path": "services/kfc-agent-backend/src/recommendations/automatic/tracing.ts",
+      "disposition": "Adopt"
+    },
+    {
+      "path": "services/kfc-agent-backend/src/recommendations/domain/canonical-instant.ts",
+      "disposition": "Adopt"
+    },
+    {
+      "path": "services/kfc-agent-backend/src/recommendations/domain/contracts.ts",
+      "disposition": "Adopt"
+    },
+    {
+      "path": "services/kfc-agent-backend/src/recommendations/domain/identities.ts",
+      "disposition": "Adopt"
+    },
+    {
+      "path": "services/kfc-agent-backend/src/recommendations/domain/schemas.ts",
+      "disposition": "Adopt"
+    },
+    {
+      "path": "services/kfc-agent-backend/src/recommendations/domain/versions.ts",
+      "disposition": "Adopt"
+    },
+    {
+      "path": "services/kfc-agent-backend/src/recommendations/eligibility/enumerate-candidates.ts",
+      "disposition": "Adopt"
+    },
+    {
+      "path": "services/kfc-agent-backend/src/recommendations/eligibility/evaluate-eligibility.ts",
+      "disposition": "Adopt"
+    },
+    {
+      "path": "services/kfc-agent-backend/src/recommendations/eligibility/types.ts",
+      "disposition": "Adopt"
+    },
+    {
+      "path": "services/kfc-agent-backend/src/recommendations/history/repository.ts",
+      "disposition": "Redesign"
+    },
+    {
+      "path": "services/kfc-agent-backend/src/recommendations/history/stored-demo-history-repository.ts",
+      "disposition": "Redesign"
+    },
+    {
+      "path": "services/kfc-agent-backend/src/recommendations/merchandising/local-policy-repository.ts",
+      "disposition": "Delete"
+    },
+    {
+      "path": "services/kfc-agent-backend/src/recommendations/merchandising/policy.ts",
+      "disposition": "Delete"
+    },
+    {
+      "path": "services/kfc-agent-backend/src/recommendations/merchandising/repository.ts",
+      "disposition": "Delete"
+    },
+    {
+      "path": "services/kfc-agent-backend/src/recommendations/merchandising/resolve-policies.ts",
+      "disposition": "Delete"
+    },
+    {
+      "path": "services/kfc-agent-backend/src/recommendations/merchandising/sanity-schema.ts",
+      "disposition": "Delete"
+    },
+    {
+      "path": "services/kfc-agent-backend/src/recommendations/observability/recommendation-tracing.ts",
+      "disposition": "Adopt"
+    },
+    {
+      "path": "services/kfc-agent-backend/src/recommendations/persistence/repository.ts",
+      "disposition": "Adopt"
+    },
+    {
+      "path": "services/kfc-agent-backend/src/recommendations/persistence/types.ts",
+      "disposition": "Adopt"
+    },
+    {
+      "path": "services/kfc-agent-backend/src/recommendations/ranking/contextual-popularity.ts",
+      "disposition": "Delete"
+    },
+    {
+      "path": "services/kfc-agent-backend/src/recommendations/ranking/for-you-affinity.ts",
+      "disposition": "Delete"
+    },
+    {
+      "path": "services/kfc-agent-backend/src/recommendations/ranking/incremental-value.ts",
+      "disposition": "Delete"
+    },
+    {
+      "path": "services/kfc-agent-backend/src/recommendations/ranking/ranker-repository.ts",
+      "disposition": "Delete"
+    },
+    {
+      "path": "services/kfc-agent-backend/src/recommendations/ranking/smart-cross-blend.ts",
+      "disposition": "Delete"
+    },
+    {
+      "path": "services/kfc-agent-backend/src/recommendations/ranking/types.ts",
+      "disposition": "Delete"
+    },
+    {
+      "path": "services/kfc-agent-backend/src/recommendations/shadow/contracts.ts",
+      "disposition": "Delete"
+    },
+    {
+      "path": "services/kfc-agent-backend/src/recommendations/shadow/feature-rows.ts",
+      "disposition": "Delete"
+    },
+    {
+      "path": "services/kfc-agent-backend/src/recommendations/shadow/http-shadow-scorer.ts",
+      "disposition": "Delete"
+    },
+    {
+      "path": "services/kfc-agent-backend/src/recommendations/snapshots/bundled-repositories.ts",
+      "disposition": "Redesign"
+    },
+    {
+      "path": "services/kfc-agent-backend/src/recommendations/snapshots/repositories.ts",
+      "disposition": "Redesign"
+    },
+    {
+      "path": "services/kfc-agent-backend/src/recommendations/snapshots/schemas.ts",
+      "disposition": "Redesign"
+    },
+    {
+      "path": "services/kfc-agent-backend/src/recommendations/snapshots/types.ts",
+      "disposition": "Redesign"
+    },
+    {
+      "path": "services/kfc-agent-backend/src/recommendations/state/state-machine.ts",
+      "disposition": "Redesign"
+    },
+    {
+      "path": "services/kfc-agent-backend/src/recommendations/state/types.ts",
+      "disposition": "Redesign"
+    },
+    {
+      "path": "services/kfc-agent-backend/src/worker.ts",
+      "disposition": "Redesign"
+    },
+    {
+      "path": "services/kfc-agent-backend/src/workerReadiness.ts",
+      "disposition": "Redesign"
+    },
+    {
+      "path": "services/kfc-agent-backend/src/workerRouteOptions.ts",
+      "disposition": "Redesign"
+    },
+    {
+      "path": "services/kfc-agent-backend/test/agent/verified-state-projection.test.ts",
+      "disposition": "Preserve unrelated"
+    },
+    {
+      "path": "services/kfc-agent-backend/test/api/automatic-recommendation-routes.test.ts",
+      "disposition": "Redesign"
+    },
+    {
+      "path": "services/kfc-agent-backend/test/api/kfc-genui-guest-action.test.ts",
+      "disposition": "Redesign"
+    },
+    {
+      "path": "services/kfc-agent-backend/test/architecture/deployment-model-config.test.ts",
+      "disposition": "Redesign"
+    },
+    {
+      "path": "services/kfc-agent-backend/test/businessPacks/kfc-vietnam-pack.test.ts",
+      "disposition": "Preserve unrelated"
+    },
+    {
+      "path": "services/kfc-agent-backend/test/genui/recommendation-offer-selector.test.ts",
+      "disposition": "Preserve unrelated"
+    },
+    {
+      "path": "services/kfc-agent-backend/test/liveEvidence/live-scenario-evidence-completeness.test.ts",
+      "disposition": "Preserve unrelated"
+    },
+    {
+      "path": "services/kfc-agent-backend/test/liveEvidence/live-scenario-http-client.test.ts",
+      "disposition": "Preserve unrelated"
+    },
+    {
+      "path": "services/kfc-agent-backend/test/liveEvidence/live-scenario-session.test.ts",
+      "disposition": "Preserve unrelated"
+    },
+    {
+      "path": "services/kfc-agent-backend/test/liveEvidence/live-scenario-terminal.test.ts",
+      "disposition": "Preserve unrelated"
+    },
+    {
+      "path": "services/kfc-agent-backend/test/liveEvidence/live-scenario-test-evidence.ts",
+      "disposition": "Preserve unrelated"
+    },
+    {
+      "path": "services/kfc-agent-backend/test/observability/recommendation-tracing.test.ts",
+      "disposition": "Redesign"
+    },
+    {
+      "path": "services/kfc-agent-backend/test/ordering/automatic-recommendation-tools.test.ts",
+      "disposition": "Preserve unrelated"
+    },
+    {
+      "path": "services/kfc-agent-backend/test/qualification/qualification-manifest.test.ts",
+      "disposition": "Preserve unrelated"
+    },
+    {
+      "path": "services/kfc-agent-backend/test/recommendations/automatic-application.test.ts",
+      "disposition": "Redesign"
+    },
+    {
+      "path": "services/kfc-agent-backend/test/recommendations/automatic-bundled-components.test.ts",
+      "disposition": "Redesign"
+    },
+    {
+      "path": "services/kfc-agent-backend/test/recommendations/automatic-contract.test.ts",
+      "disposition": "Redesign"
+    },
+    {
+      "path": "services/kfc-agent-backend/test/recommendations/automatic-d1-persistence.test.ts",
+      "disposition": "Redesign"
+    },
+    {
+      "path": "services/kfc-agent-backend/test/recommendations/automatic-engine.test.ts",
+      "disposition": "Redesign"
+    },
+    {
+      "path": "services/kfc-agent-backend/test/recommendations/automatic-model-runtime.test.ts",
+      "disposition": "Redesign"
+    },
+    {
+      "path": "services/kfc-agent-backend/test/recommendations/automatic-otel-tracer.test.ts",
+      "disposition": "Redesign"
+    },
+    {
+      "path": "services/kfc-agent-backend/test/recommendations/automatic-tracing.test.ts",
+      "disposition": "Redesign"
+    },
+    {
+      "path": "services/kfc-agent-backend/test/recommendations/decision-engine.test.ts",
+      "disposition": "Redesign"
+    },
+    {
+      "path": "services/kfc-agent-backend/test/recommendations/deterministic-rankers.test.ts",
+      "disposition": "Redesign"
+    },
+    {
+      "path": "services/kfc-agent-backend/test/recommendations/domain-contract.test.ts",
+      "disposition": "Redesign"
+    },
+    {
+      "path": "services/kfc-agent-backend/test/recommendations/eligibility.test.ts",
+      "disposition": "Redesign"
+    },
+    {
+      "path": "services/kfc-agent-backend/test/recommendations/implementation-provenance.test.ts",
+      "disposition": "Redesign"
+    },
+    {
+      "path": "services/kfc-agent-backend/test/recommendations/json-schema-contract.test.ts",
+      "disposition": "Redesign"
+    },
+    {
+      "path": "services/kfc-agent-backend/test/recommendations/product-order-flow.test.ts",
+      "disposition": "Redesign"
+    },
+    {
+      "path": "services/kfc-agent-backend/test/recommendations/recommendation-service.test.ts",
+      "disposition": "Redesign"
+    },
+    {
+      "path": "services/kfc-agent-backend/test/recommendations/recommendation-tool-availability.test.ts",
+      "disposition": "Redesign"
+    },
+    {
+      "path": "services/kfc-agent-backend/test/recommendations/repository-contract.test.ts",
+      "disposition": "Redesign"
+    },
+    {
+      "path": "services/kfc-agent-backend/test/recommendations/shadow-scorer.test.ts",
+      "disposition": "Redesign"
+    },
+    {
+      "path": "services/kfc-agent-backend/test/recommendations/snapshot-repositories.test.ts",
+      "disposition": "Redesign"
+    },
+    {
+      "path": "services/kfc-agent-backend/test/recommendations/state-machine.test.ts",
+      "disposition": "Redesign"
+    },
+    {
+      "path": "services/kfc-agent-backend/test/scenarios/scenario-script.test.ts",
+      "disposition": "Preserve unrelated"
+    },
+    {
+      "path": "services/kfc-agent-backend/wrangler.toml",
+      "disposition": "Redesign"
+    },
+    {
+      "path": "services/kfc-recommendation-sanity/README.md",
+      "disposition": "Delete"
+    },
+    {
+      "path": "services/kfc-recommendation-sanity/package-lock.json",
+      "disposition": "Delete"
+    },
+    {
+      "path": "services/kfc-recommendation-sanity/package.json",
+      "disposition": "Delete"
+    },
+    {
+      "path": "services/kfc-recommendation-sanity/sanity.cli.ts",
+      "disposition": "Delete"
+    },
+    {
+      "path": "services/kfc-recommendation-sanity/sanity.config.ts",
+      "disposition": "Delete"
+    },
+    {
+      "path": "services/kfc-recommendation-sanity/scripts/seed-policies.ts",
+      "disposition": "Delete"
+    },
+    {
+      "path": "services/kfc-recommendation-shadow-runtime/.dockerignore",
+      "disposition": "Delete"
+    },
+    {
+      "path": "services/kfc-recommendation-shadow-runtime/.gitignore",
+      "disposition": "Delete"
+    },
+    {
+      "path": "services/kfc-recommendation-shadow-runtime/Dockerfile",
+      "disposition": "Delete"
+    },
+    {
+      "path": "services/kfc-recommendation-shadow-runtime/README.md",
+      "disposition": "Delete"
+    },
+    {
+      "path": "services/kfc-recommendation-shadow-runtime/requirements.txt",
+      "disposition": "Delete"
+    },
+    {
+      "path": "services/kfc-recommendation-shadow-runtime/serve.py",
+      "disposition": "Delete"
+    },
+    {
+      "path": "services/kfc-recommendation-simulator/.gitignore",
+      "disposition": "Redesign"
+    },
+    {
+      "path": "services/kfc-recommendation-simulator/README.md",
+      "disposition": "Redesign"
+    },
+    {
+      "path": "services/kfc-recommendation-simulator/manifests/automatic-artifact-index.synthetic.json",
+      "disposition": "Redesign"
+    },
+    {
+      "path": "services/kfc-recommendation-simulator/manifests/automatic-models.synthetic.json",
+      "disposition": "Redesign"
+    },
+    {
+      "path": "services/kfc-recommendation-simulator/pyproject.toml",
+      "disposition": "Redesign"
+    },
+    {
+      "path": "services/kfc-recommendation-simulator/scripts/build-automatic-deep-dive-evidence.py",
+      "disposition": "Redesign"
+    },
+    {
+      "path": "services/kfc-recommendation-simulator/scripts/publish-hugging-face-model.py",
+      "disposition": "Redesign"
+    },
+    {
+      "path": "services/kfc-recommendation-simulator/src/kfc_recommendation_simulator/__init__.py",
+      "disposition": "Redesign"
+    },
+    {
+      "path": "services/kfc-recommendation-simulator/src/kfc_recommendation_simulator/artifacts.py",
+      "disposition": "Redesign"
+    },
+    {
+      "path": "services/kfc-recommendation-simulator/src/kfc_recommendation_simulator/automatic/__init__.py",
+      "disposition": "Redesign"
+    },
+    {
+      "path": "services/kfc-recommendation-simulator/src/kfc_recommendation_simulator/automatic/catalog.py",
+      "disposition": "Redesign"
+    },
+    {
+      "path": "services/kfc-recommendation-simulator/src/kfc_recommendation_simulator/automatic/contracts.py",
+      "disposition": "Redesign"
+    },
+    {
+      "path": "services/kfc-recommendation-simulator/src/kfc_recommendation_simulator/automatic/synthetic.py",
+      "disposition": "Redesign"
+    },
+    {
+      "path": "services/kfc-recommendation-simulator/src/kfc_recommendation_simulator/automatic/training.py",
+      "disposition": "Redesign"
+    },
+    {
+      "path": "services/kfc-recommendation-simulator/src/kfc_recommendation_simulator/benchmark.py",
+      "disposition": "Redesign"
+    },
+    {
+      "path": "services/kfc-recommendation-simulator/src/kfc_recommendation_simulator/benchmark_data.py",
+      "disposition": "Redesign"
+    },
+    {
+      "path": "services/kfc-recommendation-simulator/src/kfc_recommendation_simulator/benchmark_orchestration.py",
+      "disposition": "Redesign"
+    },
+    {
+      "path": "services/kfc-recommendation-simulator/src/kfc_recommendation_simulator/benchmark_worker.py",
+      "disposition": "Redesign"
+    },
+    {
+      "path": "services/kfc-recommendation-simulator/src/kfc_recommendation_simulator/cli.py",
+      "disposition": "Redesign"
+    },
+    {
+      "path": "services/kfc-recommendation-simulator/src/kfc_recommendation_simulator/embedding_worker.py",
+      "disposition": "Redesign"
+    },
+    {
+      "path": "services/kfc-recommendation-simulator/src/kfc_recommendation_simulator/embeddings.py",
+      "disposition": "Redesign"
+    },
+    {
+      "path": "services/kfc-recommendation-simulator/src/kfc_recommendation_simulator/feature_contracts.py",
+      "disposition": "Redesign"
+    },
+    {
+      "path": "services/kfc-recommendation-simulator/src/kfc_recommendation_simulator/models.py",
+      "disposition": "Redesign"
+    },
+    {
+      "path": "services/kfc-recommendation-simulator/src/kfc_recommendation_simulator/modifier_benchmark.py",
+      "disposition": "Redesign"
+    },
+    {
+      "path": "services/kfc-recommendation-simulator/src/kfc_recommendation_simulator/modifier_benchmark_worker.py",
+      "disposition": "Redesign"
+    },
+    {
+      "path": "services/kfc-recommendation-simulator/src/kfc_recommendation_simulator/publication.py",
+      "disposition": "Redesign"
+    },
+    {
+      "path": "services/kfc-recommendation-simulator/src/kfc_recommendation_simulator/rankers.py",
+      "disposition": "Redesign"
+    },
+    {
+      "path": "services/kfc-recommendation-simulator/src/kfc_recommendation_simulator/recommendation_contracts.py",
+      "disposition": "Redesign"
+    },
+    {
+      "path": "services/kfc-recommendation-simulator/src/kfc_recommendation_simulator/serving/__init__.py",
+      "disposition": "Redesign"
+    },
+    {
+      "path": "services/kfc-recommendation-simulator/src/kfc_recommendation_simulator/serving/bundle.py",
+      "disposition": "Redesign"
+    },
+    {
+      "path": "services/kfc-recommendation-simulator/src/kfc_recommendation_simulator/serving/model.py",
+      "disposition": "Redesign"
+    },
+    {
+      "path": "services/kfc-recommendation-simulator/src/kfc_recommendation_simulator/simulator.py",
+      "disposition": "Redesign"
+    },
+    {
+      "path": "services/kfc-recommendation-simulator/tests/test_automatic_deep_dive_evidence.py",
+      "disposition": "Redesign"
+    },
+    {
+      "path": "services/kfc-recommendation-simulator/tests/test_automatic_deep_dive_generator.py",
+      "disposition": "Redesign"
+    },
+    {
+      "path": "services/kfc-recommendation-simulator/tests/test_automatic_engine_models.py",
+      "disposition": "Redesign"
+    },
+    {
+      "path": "services/kfc-recommendation-simulator/tests/test_benchmark_contract.py",
+      "disposition": "Redesign"
+    },
+    {
+      "path": "services/kfc-recommendation-simulator/tests/test_benchmark_orchestration.py",
+      "disposition": "Redesign"
+    },
+    {
+      "path": "services/kfc-recommendation-simulator/tests/test_publication.py",
+      "disposition": "Redesign"
+    },
+    {
+      "path": "services/kfc-recommendation-simulator/tests/test_recommendation_contracts.py",
+      "disposition": "Redesign"
+    },
+    {
+      "path": "services/kfc-recommendation-simulator/tests/test_shadow_runtime.py",
+      "disposition": "Redesign"
+    },
+    {
+      "path": "services/kfc-recommendation-simulator/tests/test_shadow_serving.py",
+      "disposition": "Redesign"
+    },
+    {
+      "path": "services/kfc-recommendation-simulator/tests/test_simulator_contract.py",
+      "disposition": "Redesign"
+    },
+    {
+      "path": "services/kfc-recommendation-simulator/uv.lock",
+      "disposition": "Redesign"
+    },
+    {
+      "path": "services/kfc-recommendation-simulator/worlds/benchmark.json",
+      "disposition": "Redesign"
+    },
+    {
+      "path": "services/kfc-recommendation-simulator/worlds/sanity-policies.json",
+      "disposition": "Redesign"
+    },
+    {
+      "path": "services/kfc-recommendation-simulator/worlds/smoke.json",
+      "disposition": "Redesign"
+    },
+    {
+      "path": "tools/demo-videos/kfc-recommendation-engine-tutorial/.gitignore",
+      "disposition": "Historical superseded"
+    },
+    {
+      "path": "tools/demo-videos/kfc-recommendation-engine-tutorial/README.md",
+      "disposition": "Historical superseded"
+    },
+    {
+      "path": "tools/demo-videos/kfc-recommendation-engine-tutorial/docs/narration-script.md",
+      "disposition": "Historical superseded"
+    },
+    {
+      "path": "tools/demo-videos/kfc-recommendation-engine-tutorial/docs/render-manifest.json",
+      "disposition": "Historical superseded"
+    },
+    {
+      "path": "tools/demo-videos/kfc-recommendation-engine-tutorial/docs/storyboard.md",
+      "disposition": "Historical superseded"
+    },
+    {
+      "path": "tools/demo-videos/kfc-recommendation-engine-tutorial/docs/verification-report.md",
+      "disposition": "Historical superseded"
+    },
+    {
+      "path": "tools/demo-videos/kfc-recommendation-engine-tutorial/package-lock.json",
+      "disposition": "Historical superseded"
+    },
+    {
+      "path": "tools/demo-videos/kfc-recommendation-engine-tutorial/package.json",
+      "disposition": "Historical superseded"
+    },
+    {
+      "path": "tools/demo-videos/kfc-recommendation-engine-tutorial/public/captures/authenticated-checkout-cart.jpg",
+      "disposition": "Historical superseded"
+    },
+    {
+      "path": "tools/demo-videos/kfc-recommendation-engine-tutorial/public/captures/authenticated-for-you-empty.jpg",
+      "disposition": "Historical superseded"
+    },
+    {
+      "path": "tools/demo-videos/kfc-recommendation-engine-tutorial/public/captures/canonical-final-for-you.jpg",
+      "disposition": "Historical superseded"
+    },
+    {
+      "path": "tools/demo-videos/kfc-recommendation-engine-tutorial/public/captures/canonical-mlflow-model-score.jpg",
+      "disposition": "Historical superseded"
+    },
+    {
+      "path": "tools/demo-videos/kfc-recommendation-engine-tutorial/public/captures/canonical-mlflow-nine-span-trace.jpg",
+      "disposition": "Historical superseded"
+    },
+    {
+      "path": "tools/demo-videos/kfc-recommendation-engine-tutorial/public/captures/canonical-post-reload-persistence.jpg",
+      "disposition": "Historical superseded"
+    },
+    {
+      "path": "tools/demo-videos/kfc-recommendation-engine-tutorial/public/captures/canonical-why-these-items.jpg",
+      "disposition": "Historical superseded"
+    },
+    {
+      "path": "tools/demo-videos/kfc-recommendation-engine-tutorial/public/captures/checkout-history-created.jpg",
+      "disposition": "Historical superseded"
+    },
+    {
+      "path": "tools/demo-videos/kfc-recommendation-engine-tutorial/public/captures/initial-final-for-you.jpg",
+      "disposition": "Historical superseded"
+    },
+    {
+      "path": "tools/demo-videos/kfc-recommendation-engine-tutorial/public/captures/initial-reload-proof.jpg",
+      "disposition": "Historical superseded"
+    },
+    {
+      "path": "tools/demo-videos/kfc-recommendation-engine-tutorial/public/captures/menu-item-added.jpg",
+      "disposition": "Historical superseded"
+    },
+    {
+      "path": "tools/demo-videos/kfc-recommendation-engine-tutorial/public/captures/modifier-offer.jpg",
+      "disposition": "Historical superseded"
+    },
+    {
+      "path": "tools/demo-videos/kfc-recommendation-engine-tutorial/public/captures/modifier-trusted-add.jpg",
+      "disposition": "Historical superseded"
+    },
+    {
+      "path": "tools/demo-videos/kfc-recommendation-engine-tutorial/public/captures/reset-guest-startup.jpg",
+      "disposition": "Historical superseded"
+    },
+    {
+      "path": "tools/demo-videos/kfc-recommendation-engine-tutorial/public/captures/smart-cross-sell-offer.jpg",
+      "disposition": "Historical superseded"
+    },
+    {
+      "path": "tools/demo-videos/kfc-recommendation-engine-tutorial/public/captures/smart-model-score.jpg",
+      "disposition": "Historical superseded"
+    },
+    {
+      "path": "tools/demo-videos/kfc-recommendation-engine-tutorial/public/captures/smart-trace-nine-spans.jpg",
+      "disposition": "Historical superseded"
+    },
+    {
+      "path": "tools/demo-videos/kfc-recommendation-engine-tutorial/public/captures/smart-trusted-add.jpg",
+      "disposition": "Historical superseded"
+    },
+    {
+      "path": "tools/demo-videos/kfc-recommendation-engine-tutorial/remotion.config.ts",
+      "disposition": "Historical superseded"
+    },
+    {
+      "path": "tools/demo-videos/kfc-recommendation-engine-tutorial/scripts/generate-voiceover.mjs",
+      "disposition": "Historical superseded"
+    },
+    {
+      "path": "tools/demo-videos/kfc-recommendation-engine-tutorial/scripts/render-stills.mjs",
+      "disposition": "Historical superseded"
+    },
+    {
+      "path": "tools/demo-videos/kfc-recommendation-engine-tutorial/scripts/render-video.mjs",
+      "disposition": "Historical superseded"
+    },
+    {
+      "path": "tools/demo-videos/kfc-recommendation-engine-tutorial/scripts/stage-assets.mjs",
+      "disposition": "Historical superseded"
+    },
+    {
+      "path": "tools/demo-videos/kfc-recommendation-engine-tutorial/src/Root.tsx",
+      "disposition": "Historical superseded"
+    },
+    {
+      "path": "tools/demo-videos/kfc-recommendation-engine-tutorial/src/Tutorial.tsx",
+      "disposition": "Historical superseded"
+    },
+    {
+      "path": "tools/demo-videos/kfc-recommendation-engine-tutorial/src/components/Captions.tsx",
+      "disposition": "Historical superseded"
+    },
+    {
+      "path": "tools/demo-videos/kfc-recommendation-engine-tutorial/src/components/Diagrams.tsx",
+      "disposition": "Historical superseded"
+    },
+    {
+      "path": "tools/demo-videos/kfc-recommendation-engine-tutorial/src/data/captions.json",
+      "disposition": "Historical superseded"
+    },
+    {
+      "path": "tools/demo-videos/kfc-recommendation-engine-tutorial/src/data/capture-provenance.json",
+      "disposition": "Historical superseded"
+    },
+    {
+      "path": "tools/demo-videos/kfc-recommendation-engine-tutorial/src/data/narration.json",
+      "disposition": "Historical superseded"
+    },
+    {
+      "path": "tools/demo-videos/kfc-recommendation-engine-tutorial/src/data/smart-trace-capture-manifest.json",
+      "disposition": "Historical superseded"
+    },
+    {
+      "path": "tools/demo-videos/kfc-recommendation-engine-tutorial/src/data/timing.json",
+      "disposition": "Historical superseded"
+    },
+    {
+      "path": "tools/demo-videos/kfc-recommendation-engine-tutorial/src/data/tutorial-provenance.json",
+      "disposition": "Historical superseded"
+    },
+    {
+      "path": "tools/demo-videos/kfc-recommendation-engine-tutorial/src/data/voiceover-provenance.json",
+      "disposition": "Historical superseded"
+    },
+    {
+      "path": "tools/demo-videos/kfc-recommendation-engine-tutorial/src/index.ts",
+      "disposition": "Historical superseded"
+    },
+    {
+      "path": "tools/demo-videos/kfc-recommendation-engine-tutorial/src/theme.ts",
+      "disposition": "Historical superseded"
+    },
+    {
+      "path": "tools/demo-videos/kfc-recommendation-engine-tutorial/tsconfig.json",
+      "disposition": "Historical superseded"
+    }
+  ]
+}

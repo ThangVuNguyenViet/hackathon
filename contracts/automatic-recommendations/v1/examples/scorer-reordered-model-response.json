@@ -1,0 +1,23 @@
+{
+  "schemaVersion": "kfc-automatic-scorer-v1",
+  "requestId": "request-local-001",
+  "model": {
+    "qualificationEvidenceDigest": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+    "qualificationRunId": "qualification-run-001",
+    "composerContractDigest": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+    "thresholdRevision": "local-favorite-threshold-001",
+    "featureSchemaDigest": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+    "calibratorRevision": "local-favorite-calibrator-001",
+    "modelRevision": "local-favorite-model-001",
+    "bundleDigest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "bundleId": "qualified-bundle-001"
+  },
+  "scores": [
+    {
+      "candidateId": "product:20732",
+      "selectionProbability": 0.4,
+      "jointProbability": 0.3,
+      "explanationValues": { "localDemand": 0.25, "priceImpact": -0.1 }
+    }
+  ]
+}

@@ -1,0 +1,131 @@
+import { DynamoDBClient, DescribeTableCommand } from '@aws-sdk/client-dynamodb';
+import { S3Client } from '@aws-sdk/client-s3';
+import { DynamoDBDocumentClient } from '@aws-sdk/lib-dynamodb';
+import type {
+  AutomaticRecommendationScorerPort,
+  AutomaticScorerRequest,
+} from '../automatic-core/index.js';
+import type { AutomaticRecommendationType } from '../contracts/automatic-recommendation.js';
+import { AUTOMATIC_RECOMMENDATION_CONTRACT_DIGEST } from '../contracts/automatic-recommendation.js';
+import {
+  DynamoDbAutomaticRecommendationLedger,
+  S3AutomaticEvidenceObjectStore,
+} from './aws-evidence-adapters.js';
+import {
+  createAutomaticEvidenceSaga,
+  createAutomaticRecommendationServingRuntime,
+  type AutomaticDecisionEvidence,
+} from './evidence-saga.js';
+import {
+  createAutomaticRecommendationHttpRuntime,
+  type AutomaticRecommendationHttpRuntime,
+} from './http-runtime.js';
+import { createPersistentAutomaticScorerClient } from './scorer-client.js';
+
+export function createAwsAutomaticRecommendationRuntime({
+  region,
+  evidenceBucket,
+  ledgerTable,
+  scorerBaseUrl,
+  scorerMaxConcurrency,
+  scorerTimeoutMs,
+  readinessWarmup,
+  createDecisionEngine,
+  technicalEvidence,
+  releaseDigest,
+  trustedReadiness = async () => true,
+  s3Client = new S3Client({ region }),
+  dynamoClient = new DynamoDBClient({ region }),
+  documentClient,
+}: {
+  region: string;
+  evidenceBucket: string;
+  ledgerTable: string;
+  scorerBaseUrl: string;
+  scorerMaxConcurrency: number;
+  scorerTimeoutMs: number;
+  readinessWarmup: AutomaticScorerRequest;
+  createDecisionEngine(scorer: AutomaticRecommendationScorerPort): {
+    decide(
+      type: AutomaticRecommendationType,
+      request: unknown,
+    ): Promise<unknown>;
+  };
+  technicalEvidence(input: {
+    request: Parameters<ReturnType<typeof createDecisionEngine>['decide']>[1];
+    response: unknown;
+    execution?: unknown;
+  }): AutomaticDecisionEvidence['technical'];
+  releaseDigest: string;
+  trustedReadiness?: () => Promise<boolean>;
+  s3Client?: S3Client;
+  dynamoClient?: DynamoDBClient;
+  documentClient?: DynamoDBDocumentClient;
+}): AutomaticRecommendationHttpRuntime {
+  const scorer = createPersistentAutomaticScorerClient({
+    baseUrl: scorerBaseUrl,
+    maxConcurrency: scorerMaxConcurrency,
+    timeoutMs: scorerTimeoutMs,
+  });
+  const documents =
+    documentClient ??
+    DynamoDBDocumentClient.from(dynamoClient, {
+      marshallOptions: { removeUndefinedValues: true },
+    });
+  const objects = new S3AutomaticEvidenceObjectStore({
+    bucket: evidenceBucket,
+    client: s3Client,
+  });
+  const saga = createAutomaticEvidenceSaga({
+    objects,
+    ledger: new DynamoDbAutomaticRecommendationLedger({
+      tableName: ledgerTable,
+      client: documents,
+    }),
+    clock: () => new Date(),
+  });
+  const decisions = createAutomaticRecommendationServingRuntime({
+    engine: createDecisionEngine(scorer),
+    evidence: saga,
+    contractDigest: AUTOMATIC_RECOMMENDATION_CONTRACT_DIGEST,
+    technicalEvidence,
+  });
+  return createAutomaticRecommendationHttpRuntime({
+    decisions,
+    evidence: saga,
+    inspect: (recommendationId, page) =>
+      saga.inspect(recommendationId, page?.limit, page?.cursor),
+    async readiness() {
+      const [scorerReady, storageReady, ledgerReady, trustedReady] =
+        await Promise.all([
+          scorer.warmup(readinessWarmup),
+          objects.probeImmutable(releaseDigest).then(
+            () => true,
+            () => false,
+          ),
+          dynamoClient
+            .send(new DescribeTableCommand({ TableName: ledgerTable }))
+            .then(
+              () => true,
+              () => false,
+            ),
+          trustedReadiness().catch(() => false),
+        ]);
+      return {
+        ok: scorerReady && storageReady && ledgerReady && trustedReady,
+        ...(!scorerReady || !storageReady || !ledgerReady || !trustedReady
+          ? {
+              message:
+                'scorer, versioned evidence storage, or ledger is unavailable',
+            }
+          : {}),
+      };
+    },
+    async close() {
+      scorer.close();
+      documents.destroy?.();
+      if (documents !== dynamoClient) dynamoClient.destroy?.();
+      s3Client.destroy?.();
+    },
+  });
+}

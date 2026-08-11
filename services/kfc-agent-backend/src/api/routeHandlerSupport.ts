@@ -370,8 +370,7 @@ export function checkMessengerConfig(options: RouteOptions): ReadinessCheckResul
     ok: configured || !required,
     configured,
     required,
-    message:
-      configured || !required ? undefined : `Missing ${missing.join(", ")}`,
+    message: configured || !required ? undefined : `Missing ${missing.join(", ")}`,
   };
 }
 

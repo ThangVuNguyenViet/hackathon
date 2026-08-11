@@ -1,0 +1,43 @@
+{
+  "schemaVersion": "kfc-automatic-recommendation-v1",
+  "requestId": "request-modifier-001",
+  "recommendationId": "recommendation-modifier-mismatch-001",
+  "recommendationType": "modifier_upsell",
+  "status": "recommended",
+  "emptyReason": null,
+  "cartRevision": "cart-revision-modifier-001",
+  "catalogRevision": "catalog-revision-001",
+  "expiresAt": "2026-08-04T13:30:00Z",
+  "model": {
+    "bundleId": "qualified-bundle-001",
+    "bundleDigest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "modelRevision": "modifier-model-001",
+    "calibratorRevision": "modifier-calibrator-001",
+    "featureSchemaDigest": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+    "thresholdRevision": "modifier-threshold-001",
+    "composerContractDigest": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+    "qualificationRunId": "qualification-run-001",
+    "qualificationEvidenceDigest": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"
+  },
+  "proposals": [
+    {
+      "actionId": "modifier:cart-line-other-001:option-001",
+      "action": {
+        "type": "apply_modifier",
+        "parentCartLineId": "cart-line-other-001",
+        "parentSellableItemId": "20732",
+        "optionId": "option-001",
+        "groupPath": ["group-001"],
+        "quantity": 1,
+        "priceImpact": { "amount": 5000, "currency": "VND" }
+      },
+      "display": {
+        "name": "Thêm phô mai",
+        "imageUrl": null,
+        "priceImpact": { "amount": 5000, "currency": "VND" }
+      },
+      "reasonCodes": ["completes_your_item"]
+    }
+  ],
+  "counts": { "potential": 1, "eligible": 1, "scored": 1, "displayed": 1 }
+}

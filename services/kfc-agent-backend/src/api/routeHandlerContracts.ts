@@ -14,6 +14,11 @@ import type {
   MessengerClient,
   MessengerSenderAction,
 } from '../clients/interfaces.js';
+import {
+  createCatalogObservationClients,
+  type ChatRecommendationContext,
+  type RecommendationJourneyStore,
+} from '../clients/catalogObservationClients.js';
 import type { KfcCommerceGatewayClients } from '../clients/kfcCommerceGateway.js';
 import {
   LifecycleError,
@@ -25,7 +30,6 @@ import {
   type SandboxLifecycleControls,
   projectLifecycleCommerceClients,
 } from '../commerce/lifecycleProvider.js';
-import { createCatalogObservationClients } from '../clients/catalogObservationClients.js';
 import {
   fetchCatalogObservation,
   type CatalogObservation,
@@ -45,6 +49,7 @@ import type { GeneratedFixtures } from '../fixtures/schema.js';
 import { loadGeneratedFixtures } from '../fixtures/loadFixtures.js';
 import type {
   AgentMode,
+  Cart,
   Channel,
   ConversationProfile,
   ConversationTurnMetadata,
@@ -106,6 +111,8 @@ import {
   ShowcaseValidationError,
   type ShowcaseScenarioSource,
 } from '../showcase/showcase.js';
+import type { AutomaticRecommendationHttpRuntime } from '../recommendations/serving/http-runtime.js';
+import type { RuntimeProbe } from '../observability/runtimeProbe.js';
 
 export function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
@@ -424,6 +431,7 @@ export interface ReadinessOptions {
   openAiConfigured?: boolean;
   openAiRequired?: boolean;
   agentConfigured?: boolean;
+  agentGatesReadiness?: boolean;
   monitorConfigured?: boolean;
   zaloRequired?: boolean;
   langsmith?: {
@@ -467,6 +475,15 @@ export interface ReadinessOptions {
 }
 
 export interface RouteOptions {
+  automaticRecommendations?: AutomaticRecommendationHttpRuntime;
+  automaticRecommendationContext?: (
+    sessionId: string,
+    cart: Cart,
+  ) => ChatRecommendationContext | Promise<ChatRecommendationContext>;
+  automaticRecommendationJourney?: (
+    sessionId: string,
+  ) => RecommendationJourneyStore;
+  runtimeProbe?: RuntimeProbe;
   fixturesRoot?: string;
   demoAdminToken?: string;
   messengerVerifyToken?: string;

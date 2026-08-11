@@ -38,6 +38,8 @@ import {
 } from './mockInventoryAuthority.js';
 import { mockConfirmationProviderRevision } from './mockConfirmationAuthority.js';
 import type { MockedUpstreamApiProfile } from './mockedUpstreamProfile.js';
+import { mockCatalogRevision } from './mockCatalogRevision.js';
+import { createMockRecommendationClient } from './mockRecommendationClient.js';
 export type { MockClientOptions } from './mockClientOptions.js';
 export type { MockedUpstreamApiProfile } from './mockedUpstreamProfile.js';
 
@@ -92,6 +94,7 @@ function priceCart(items: CartItem[], voucherCode: string | null, deliveryFeeVnd
   };
 }
 
+
 function priceItem(basePriceVnd: number, modifiers?: SelectedModifier[]): number {
   return (
     basePriceVnd + (modifiers?.reduce((sum, modifier) => sum + modifier.priceDeltaVnd * modifier.quantity, 0) ?? 0)
@@ -124,7 +127,7 @@ export function createMockClients(fixtures: GeneratedFixtures, options: MockClie
   }
   const currentMockedUpstreamProfile = (): MockedUpstreamApiProfile | undefined =>
     options.mockedUpstreamApiProvider?.();
-  const catalogRevision = `fixture:${JSON.stringify(fixtures.menuItems.map((item) => [item.code, item.priceVnd, item.available]))}`;
+  const catalogRevision = mockCatalogRevision(fixtures);
   const providerRevision = (): string =>
     mockConfirmationProviderRevision(currentMockedUpstreamProfile());
   const currentUnavailableItemCodes = (): Set<string> =>
@@ -513,11 +516,11 @@ export function createMockClients(fixtures: GeneratedFixtures, options: MockClie
         });
       },
     },
-    recommendation: {
-      async recommendAddOns() {
-        return ok(data.recommendAddOns().map(toMenuItem));
-      },
-    },
+    recommendation: createMockRecommendationClient(
+      fixtures,
+      options,
+      menuByCode,
+    ),
     promotion: {
       async searchPromotions(query) {
         return ok(data.searchPromotionOffers({ query }));

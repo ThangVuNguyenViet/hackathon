@@ -1,0 +1,139 @@
+import { z } from 'zod';
+import { automaticFeatureVectorSchema } from './automatic-features.js';
+
+const opaqueIdSchema = z
+  .string()
+  .trim()
+  .min(1)
+  .max(256)
+  .regex(/^[A-Za-z0-9][A-Za-z0-9._:/-]*$/u);
+const sha256Schema = z.string().regex(/^[a-f0-9]{64}$/u);
+const recommendationTypeSchema = z.enum([
+  'local_favorite',
+  'for_you',
+  'modifier_upsell',
+  'smart_cross_sell',
+]);
+const modelBindingSchema = z
+  .object({
+    bundleId: opaqueIdSchema,
+    bundleDigest: sha256Schema,
+    modelRevision: opaqueIdSchema,
+    calibratorRevision: opaqueIdSchema,
+    featureSchemaDigest: sha256Schema,
+    thresholdRevision: opaqueIdSchema,
+    composerContractDigest: sha256Schema,
+    qualificationRunId: opaqueIdSchema,
+    qualificationEvidenceDigest: sha256Schema,
+  })
+  .strict();
+const scorerRequestSchema = z
+  .object({
+    schemaVersion: z.literal('kfc-automatic-scorer-v1'),
+    requestId: opaqueIdSchema,
+    recommendationType: recommendationTypeSchema,
+    model: modelBindingSchema,
+    candidates: z
+      .array(
+        z
+          .object({
+            candidateId: opaqueIdSchema,
+            eligibility: z.literal('eligible'),
+            priceImpactVnd: z.number().int().nonnegative(),
+            features: automaticFeatureVectorSchema,
+          })
+          .strict()
+          .superRefine((candidate, context) => {
+            if (
+              candidate.priceImpactVnd !==
+              candidate.features.candidatePriceImpactVnd
+            ) {
+              context.addIssue({
+                code: z.ZodIssueCode.custom,
+                path: ['features', 'candidatePriceImpactVnd'],
+                message: 'Candidate price impact must match its feature vector',
+              });
+            }
+          }),
+      )
+      .min(1),
+  })
+  .strict()
+  .superRefine((request, context) => {
+    request.candidates.forEach((candidate, index) => {
+      if (
+        candidate.features.recommendationType !== request.recommendationType
+      ) {
+        context.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ['candidates', index, 'features', 'recommendationType'],
+          message: 'Candidate feature type must match the scorer request',
+        });
+      }
+    });
+  });
+
+const scorerResponseSchema = z
+  .object({
+    schemaVersion: z.literal('kfc-automatic-scorer-v1'),
+    requestId: opaqueIdSchema,
+    model: modelBindingSchema,
+    scores: z.array(
+      z
+        .object({
+          candidateId: opaqueIdSchema,
+          selectionProbability: z.number().min(0).max(1),
+          jointProbability: z.number().min(0).max(1),
+          explanationValues: z.record(
+            z.string(),
+            z.number().finite().min(-1).max(1),
+          ),
+        })
+        .strict()
+        .superRefine((score, context) => {
+          if (score.jointProbability > score.selectionProbability) {
+            context.addIssue({
+              code: z.ZodIssueCode.custom,
+              path: ['jointProbability'],
+              message: 'Joint probability cannot exceed selection probability',
+            });
+          }
+        }),
+    ),
+  })
+  .strict();
+
+export function parseAutomaticScorerRequest(value: unknown) {
+  return scorerRequestSchema.parse(value);
+}
+
+export function parseAutomaticScorerResponse(value: unknown) {
+  return scorerResponseSchema.parse(value);
+}
+
+export function reconcileAutomaticScorerResponse(
+  requestValue: unknown,
+  responseValue: unknown,
+) {
+  const request = parseAutomaticScorerRequest(requestValue);
+  const response = parseAutomaticScorerResponse(responseValue);
+  if (request.requestId !== response.requestId) {
+    throw new Error('Scorer response request identity does not match');
+  }
+  if (JSON.stringify(request.model) !== JSON.stringify(response.model)) {
+    throw new Error('Scorer response model binding does not match');
+  }
+  const candidateIds = request.candidates.map(({ candidateId }) => candidateId);
+  const scoreIds = response.scores.map(({ candidateId }) => candidateId);
+  if (
+    new Set(candidateIds).size !== candidateIds.length ||
+    new Set(scoreIds).size !== scoreIds.length ||
+    candidateIds.length !== scoreIds.length ||
+    candidateIds.some((candidateId) => !new Set(scoreIds).has(candidateId))
+  ) {
+    throw new Error(
+      'Scorer response must contain one score for every candidate',
+    );
+  }
+  return response;
+}

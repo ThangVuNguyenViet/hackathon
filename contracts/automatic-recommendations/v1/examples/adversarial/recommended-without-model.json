@@ -1,0 +1,3 @@
+{
+  "schemaVersion": "kfc-automatic-recommendation-v1", "requestId": "request-adversarial-002", "recommendationId": "recommendation-adversarial-002", "recommendationType": "local_favorite", "status": "recommended", "emptyReason": null, "cartRevision": "cart-revision-local-001", "catalogRevision": "catalog-revision-001", "expiresAt": "2026-08-04T13:30:00Z", "model": null, "proposals": [], "counts": { "potential": 0, "eligible": 0, "scored": 0, "displayed": 0 }
+}

@@ -1,0 +1,33 @@
+[build-system]
+requires = ["hatchling>=1.27,<2"]
+build-backend = "hatchling.build"
+
+[project]
+name = "kfc-recommendation-simulator"
+version = "0.1.0"
+description = "Reproducible synthetic-only causal world for automatic recommendations"
+readme = "README.md"
+requires-python = "==3.11.14"
+dependencies = [
+  "lightgbm==4.6.0",
+  "numpy==2.3.2",
+  "pyarrow==23.0.1",
+  "scikit-learn==1.7.1",
+  "xgboost==3.0.2",
+]
+
+[project.scripts]
+kfc-recommendation-simulator = "kfc_recommendation_simulator.cli:main"
+
+[dependency-groups]
+dev = ["ruff==0.16.1"]
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/kfc_recommendation_simulator"]
+
+[tool.ruff]
+line-length = 88
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "SIM", "RUF"]

@@ -1,0 +1,6 @@
+{
+  "schemaVersion": "kfc-automatic-recommendation-v1", "requestId": "request-local-001", "recommendationId": "recommendation-local-001", "recommendationType": "local_favorite", "status": "recommended", "emptyReason": null, "cartRevision": "cart-revision-local-001", "catalogRevision": "catalog-revision-001", "expiresAt": "2026-08-04T13:30:00Z",
+  "model": { "bundleId": "qualified-bundle-001", "bundleDigest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "modelRevision": "local-favorite-model-001", "calibratorRevision": "local-favorite-calibrator-001", "featureSchemaDigest": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb", "thresholdRevision": "local-favorite-threshold-001", "composerContractDigest": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc", "qualificationRunId": "qualification-run-001", "qualificationEvidenceDigest": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd" },
+  "proposals": [{ "actionId": "product:20732", "action": { "type": "add_product", "sellableItemId": "20732", "quantity": 1, "priceImpact": { "amount": 89000, "currency": "VND" } }, "display": { "name": "Combo Gà Rán", "imageUrl": null, "priceImpact": { "amount": 89000, "currency": "VND" } }, "reasonCodes": ["invented_reason"] }],
+  "counts": { "potential": 4, "eligible": 3, "scored": 3, "displayed": 1 }
+}
