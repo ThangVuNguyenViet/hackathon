@@ -36,7 +36,6 @@ import { DashboardEventBus } from "./dashboard/eventBus.js";
 import { dashboardSessionTarget } from "./dashboard/sessionVisibility.js";
 import type { AgentMode, DashboardEvent } from "./domain/types.js";
 import { D1Store, type D1DatabaseLike } from "./persistence/d1Store.js";
-import { D1CheckpointSaver } from "./persistence/d1CheckpointSaver.js";
 import type { ConversationStore } from "./persistence/memoryStore.js";
 import { sessionIdForConversationEvent } from "./session/sessionContext.js";
 import { fetchCatalogObservation } from "./catalog/catalogObservation.js";
@@ -195,11 +194,7 @@ export interface WorkerEnv {
   DB: D1DatabaseLike;
   KFC_AGENT_PROFILE_MODE?: "production" | "qualification";
   KFC_AGENT_PROVIDER?: "openai" | "google";
-  KFC_AGENT_RUNTIME?: "stategraph" | "openai-responses";
   KFC_AGENT_MODEL?: string;
-  KFC_AGENT_COMPACTION_ENABLED?: "true" | "false";
-  KFC_AGENT_COMPACTION_THRESHOLD_BYTES?: string;
-  KFC_AGENT_COMPACTION_MODEL?: string;
   KFC_MONITOR_PROVIDER?: "openai" | "google";
   KFC_MONITOR_MODEL?: string;
   KFC_CONFIRMATION_SIGNING_KEY_ID?: string;
@@ -273,7 +268,6 @@ function workerAgentReadiness(env: WorkerEnv): WorkerAgentReadiness {
   let agentReadiness: WorkerAgentReadiness;
   try {
     const identity = resolveRuntimeAgentIdentity({
-      runtime: env.KFC_AGENT_RUNTIME ?? "stategraph",
       provider: agentProvider,
       model: env.KFC_AGENT_MODEL,
       mode: env.KFC_AGENT_PROFILE_MODE,
@@ -395,52 +389,6 @@ export default {
           env,
           store,
           context,
-          env.KFC_AGENT_RUNTIME === 'openai-responses'
-            ? (job, typingReady) => {
-                const fastPath = (async () => {
-                  await typingReady;
-                  const dashboard = new DashboardEventBus({
-                    persistEvent: (event) =>
-                      scheduleDashboardEvent(env, store, event, context),
-                  });
-                  const { routeOptions: options, deferredAgentTasks } =
-                    buildWorkerRouteOptions({
-                      env,
-                      store,
-                      dashboard,
-                      surface: { kind: 'queue' },
-                    });
-                  const handlers = createRouteHandlers(options);
-                  await dispatchMessengerAgentRunWakeup({
-                    job,
-                    env,
-                    coordinator: new AgentRunCoordinator({
-                      store,
-                      dashboard,
-                    }),
-                    processMessengerAgentRun:
-                      handlers.processMessengerAgentRun,
-                    typingAlreadyStarted: true,
-                  });
-                  scheduleAgentBackground(
-                    context,
-                    deferredAgentTasks,
-                    options.agentTracer,
-                  );
-                })().catch((error) => {
-                  console.error('agent_run_fast_path_failed', {
-                    sessionId: job.sessionId,
-                    generation: job.generation,
-                    message:
-                      error instanceof Error
-                        ? error.message
-                        : String(error),
-                  });
-                });
-                if (context) context.waitUntil(fastPath);
-                else void fastPath;
-              }
-            : undefined,
         ),
       );
     }

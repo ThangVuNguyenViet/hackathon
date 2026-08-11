@@ -41,7 +41,6 @@ import {
   type CustomerRun,
   type CustomerRunEvent,
 } from '../customerRuns/contracts.js';
-import { PostgresCheckpointSaver } from './postgresCheckpointSaver.js';
 import { PostgresStoreAgentRunTextDeliveryOperations } from './postgresStoreAgentRunTextDeliveryOperations.js';
 
 export class PostgresStore
@@ -52,18 +51,14 @@ export class PostgresStore
 export async function createPostgresPersistence(input: { databaseUrl: string }): Promise<{
   pool: Pool;
   store: PostgresStore;
-  checkpointer: PostgresCheckpointSaver;
   dashboardEvents: DashboardEvent[];
 }> {
   const pool = new Pool({ connectionString: input.databaseUrl });
-  const checkpointer = new PostgresCheckpointSaver(pool);
-  const store = new PostgresStore(pool, (sessionId) => checkpointer.deleteThread(sessionId));
-  await checkpointer.initialize();
+  const store = new PostgresStore(pool);
   await store.initialize();
   return {
     pool,
     store,
-    checkpointer,
     dashboardEvents: await store.listDashboardEvents(),
   };
 }

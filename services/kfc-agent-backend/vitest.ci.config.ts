@@ -7,9 +7,8 @@ export default defineConfig({
     pool: 'threads',
     setupFiles: ['test/setup.ts'],
     exclude: [
-      // These files exercise the replaced StateGraph runtime. Keep them
-      // runnable with `npm test`, but do not block the maintained Responses
-      // runtime until the legacy suite is removed or repaired.
+      // These files exercise the removed legacy runtime. Keep them runnable
+      // with `npm test` until their replacement suite is authored.
       'test/agent/agent-checkpoint-privacy.test.ts',
       'test/agent/agent-state-graph-runner.test.ts',
       'test/agent/agent-state-graph.test.ts',

@@ -14,7 +14,6 @@ import {
   type CustomerRun,
   type CustomerRunEvent,
 } from '../customerRuns/contracts.js';
-import type { AgentInputItem } from '@kfc/openai-agents-runtime';
 import type {
   AuthenticatedCommerceApprovalPrincipal,
   CommerceApprovalBinding,
@@ -134,7 +133,6 @@ export interface CommitAssistantTurnInput {
     payload: Record<string, unknown>;
   };
   assistantTurn: AppendConversationTurnInput;
-  sdkSessionMutation?: AgentSessionItemsMutation;
   auditEvent?: {
     sessionId: string;
     sourceType: string;
@@ -146,11 +144,6 @@ export interface CommitAssistantTurnInput {
    * them.
    */
   verifiedRefs?: readonly VerifiedRefRecord[];
-}
-
-export interface AgentSessionItemsMutation {
-  mode: 'append' | 'replace';
-  items: readonly AgentInputItem[];
 }
 
 export interface CommitAssistantTurnIfRunCurrentInput
@@ -370,13 +363,6 @@ export interface WebhookDelivery {
   lastError: string | null;
   createdAt: string;
   updatedAt: string;
-}
-
-export interface CheckpointIdentifier {
-  checkpointThreadId: string;
-  checkpointNamespace: string;
-  checkpointId: string;
-  parentCheckpointId: string | null;
 }
 
 export interface SessionControl {
@@ -690,18 +676,6 @@ export type AppendConversationTurnInput = Omit<
 };
 
 export interface ConversationStore {
-  listAgentSessionItems(
-    sessionId: string,
-    limit?: number,
-  ): Promise<AgentInputItem[]>;
-  addAgentSessionItems(
-    sessionId: string,
-    items: AgentInputItem[],
-  ): Promise<void>;
-  popAgentSessionItem(
-    sessionId: string,
-  ): Promise<AgentInputItem | undefined>;
-  clearAgentSessionItems(sessionId: string): Promise<void>;
   resetSession(sessionId: string): Promise<SessionControl>;
   createCustomerRun(input: CreateCustomerRunInput): Promise<CustomerRun>;
   createCustomerRunWithEvent?(
@@ -825,7 +799,6 @@ export interface ConversationStore {
   listAgentRuns(sessionId: string): Promise<AgentRun[]>;
   linkAgentRunTurn(input: AgentRunTurn): Promise<AgentRunTurn>;
   listAgentRunTurns(runId: string): Promise<AgentRunTurn[]>;
-  listCheckpointIdentifiers(sessionId: string): Promise<CheckpointIdentifier[]>;
   getSessionAgentState(sessionId: string): Promise<SessionAgentState>;
   setSessionAgentState(
     input: SessionAgentStateInput,

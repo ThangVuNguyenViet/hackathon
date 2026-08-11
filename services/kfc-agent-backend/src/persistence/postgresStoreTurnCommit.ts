@@ -62,14 +62,6 @@ async function commitPostgresAssistantTurnOperation(input: {
         await client.query('ROLLBACK');
         return { status: 'stale' };
       }
-    } else if (
-      prepared.sdkSessionMutation.mode === 'replace' ||
-      prepared.sdkSessionMutation.items.length > 0
-    ) {
-      await lockPostgresSessionAuthority(
-        client,
-        prepared.turn.sessionId,
-      );
     }
     const sessionGeneration =
       prepared.verifiedRefs.length > 0
@@ -108,27 +100,6 @@ async function commitPostgresAssistantTurnOperation(input: {
     );
     await insertEvent(client, prepared.turnEvent);
     if (prepared.auditEvent) await insertEvent(client, prepared.auditEvent);
-    if (prepared.sdkSessionMutation.mode === 'replace') {
-      await client.query(
-        'DELETE FROM agent_session_items WHERE session_id = $1',
-        [prepared.turn.sessionId],
-      );
-    }
-    if (prepared.sdkSessionMutation.items.length > 0) {
-      await client.query(
-        `INSERT INTO agent_session_items (session_id, item_json)
-         SELECT $1, item::jsonb
-         FROM unnest($2::text[]) WITH ORDINALITY
-           AS values_to_insert(item, ordinal)
-         ORDER BY ordinal`,
-        [
-          prepared.turn.sessionId,
-          prepared.sdkSessionMutation.items.map((item) =>
-            JSON.stringify(item)
-          ),
-        ],
-      );
-    }
     await client.query('COMMIT');
     return { status: 'committed', ...structuredClone(prepared) };
   } catch (error) {

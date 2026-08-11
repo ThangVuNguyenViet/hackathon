@@ -1,16 +1,9 @@
 import type { BuildServerOptions } from './server.js';
 import { z } from 'zod';
 import type { AppEnv } from '../config/env.js';
-import OpenAI from 'openai';
-import { OpenAiKfcAgent } from '../agent/openAiKfcAgent.js';
-import { OpenAiResponsesExecutor } from '../agent/openAiResponsesExecutor.js';
 import { createConfiguredPvcfcPublicDataProvider } from '../businesses/pvcfc/public-data/configuredPvcfcPublicDataProvider.js';
 import { createConfirmationApprovalKeyRing } from './confirmationApprovalCapability.js';
-import {
-  createAgentChatModel,
-  resolveAgentModelProfile,
-  resolveRuntimeAgentIdentity,
-} from '../config/agentModelProfile.js';
+import { resolveRuntimeAgentIdentity } from '../config/agentModelProfile.js';
 import {
   createMonitorChatModel,
   resolveMonitorModelProfile,
@@ -100,36 +93,15 @@ export function buildServerOptionsFromEnv(
 ): BuildServerOptions {
   const openAiApiKey = optionalValue(env.OPENAI_API_KEY);
   const openAiBaseUrl = optionalValue(env.OPENAI_BASE_URL);
-  const directOpenAiClient =
-    env.KFC_AGENT_RUNTIME === 'openai-responses' && openAiApiKey
-      ? new OpenAI({ apiKey: openAiApiKey, baseURL: openAiBaseUrl })
-      : undefined;
   const pvcfcAstraFlowApiKey = optionalValue(env.PVCFC_ASTRAFLOW_API_KEY);
-  const pvcfcAstraFlowClient = pvcfcAstraFlowApiKey
-    ? new OpenAI({
-        apiKey: pvcfcAstraFlowApiKey,
-        baseURL:
-          optionalValue(env.PVCFC_ASTRAFLOW_BASE_URL) ??
-          'https://api-sg.umodelverse.ai/v1',
-      })
-    : undefined;
   const pvcfcPublicDataProvider = createConfiguredPvcfcPublicDataProvider({
-    enabled: pvcfcAstraFlowClient !== undefined,
+    enabled: pvcfcAstraFlowApiKey !== undefined,
     mode: env.PVCFC_PUBLIC_DATA_MODE,
   });
   const googleApiKey = optionalValue(env.GOOGLE_API_KEY);
   const agentIdentity = resolveRuntimeAgentIdentity({
-    runtime: env.KFC_AGENT_RUNTIME,
     provider: env.KFC_AGENT_PROVIDER,
     model: optionalValue(env.KFC_AGENT_MODEL),
-    mode: env.KFC_AGENT_PROFILE_MODE,
-  });
-  const stateGraphProfile = resolveAgentModelProfile({
-    provider: env.KFC_AGENT_PROVIDER,
-    model:
-      env.KFC_AGENT_RUNTIME === 'stategraph'
-        ? optionalValue(env.KFC_AGENT_MODEL)
-        : undefined,
     mode: env.KFC_AGENT_PROFILE_MODE,
   });
   const monitorIdentity = resolveMonitorModelProfile({
@@ -141,18 +113,6 @@ export function buildServerOptionsFromEnv(
     agentIdentity.provider === 'openai'
       ? Boolean(openAiApiKey)
       : Boolean(googleApiKey);
-  const agent =
-    agentConfigured && env.KFC_AGENT_RUNTIME === 'stategraph'
-      ? {
-          identity: agentIdentity,
-          model: createAgentChatModel({
-            profile: stateGraphProfile,
-            openAiApiKey,
-            openAiBaseUrl,
-            googleApiKey,
-          }),
-        }
-      : undefined;
   const monitorConfigured =
     monitorIdentity.provider === 'openai'
       ? Boolean(openAiApiKey)
@@ -230,39 +190,7 @@ export function buildServerOptionsFromEnv(
     zaloInboxUrlTemplate: optionalValue(env.ZALO_INBOX_URL_TEMPLATE),
     zaloApiBaseUrl: optionalValue(env.ZALO_API_BASE_URL),
     confirmationApprovalKeyRing: confirmationApprovalKeyRing(env),
-    openAiAgent: directOpenAiClient
-      ? new OpenAiKfcAgent({
-          // The direct runtime is isolated with Zod 4 because the surrounding
-          // backend still uses Zod 3. The OpenAI clients are API-compatible,
-          // but their private nominal fields require this narrow cast.
-          client:
-            directOpenAiClient as unknown as import('@kfc/openai-agents-runtime').OpenAIClient,
-          model:
-            agentIdentity.provider === 'openai'
-              ? agentIdentity.model
-              : 'gpt-4.1-mini',
-          compaction: {
-            enabled: env.KFC_AGENT_COMPACTION_ENABLED,
-            thresholdBytes: env.KFC_AGENT_COMPACTION_THRESHOLD_BYTES,
-            ...(optionalValue(env.KFC_AGENT_COMPACTION_MODEL)
-              ? { model: optionalValue(env.KFC_AGENT_COMPACTION_MODEL) }
-              : {}),
-          },
-        })
-      : undefined,
-    pvcfcAgent: pvcfcAstraFlowClient
-      ? new OpenAiResponsesExecutor({
-          client: pvcfcAstraFlowClient,
-          model: optionalValue(env.PVCFC_ASTRAFLOW_MODEL) ?? 'gpt-5.6-luna',
-          modelTemperature: null,
-          compaction: {
-            enabled: false,
-            thresholdBytes: 98_304,
-          },
-        })
-      : undefined,
     pvcfcPublicDataProvider,
-    agent,
     monitorJudge,
     agentTracer: langsmithApiKey
       ? new LangSmithAgentTracer({

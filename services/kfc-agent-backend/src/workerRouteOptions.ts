@@ -6,7 +6,6 @@ import {
   workerMessengerFetch,
 } from './workerMessaging.js';
 import { workerLifecycleOptions } from './workerLifecycle.js';
-import { workerCheckpointer } from './workerStore.js';
 import { loadBundledGeneratedFixtures } from './fixtures/bundledFixtures.js';
 import { createMockClients } from './mock/createMockClients.js';
 import { createMockAutomaticRecommendationHttpRuntime } from './recommendations/serving/mock-runtime.js';
@@ -41,13 +40,7 @@ function workerModelEnv(env: WorkerEnv) {
   return {
     KFC_AGENT_PROFILE_MODE: env.KFC_AGENT_PROFILE_MODE ?? 'production',
     KFC_AGENT_PROVIDER: env.KFC_AGENT_PROVIDER ?? 'google',
-    KFC_AGENT_RUNTIME: env.KFC_AGENT_RUNTIME ?? 'stategraph',
     KFC_AGENT_MODEL: env.KFC_AGENT_MODEL ?? '',
-    KFC_AGENT_COMPACTION_ENABLED:
-      (env.KFC_AGENT_COMPACTION_ENABLED ?? 'true') === 'true',
-    KFC_AGENT_COMPACTION_THRESHOLD_BYTES:
-      Number(env.KFC_AGENT_COMPACTION_THRESHOLD_BYTES ?? '98304'),
-    KFC_AGENT_COMPACTION_MODEL: env.KFC_AGENT_COMPACTION_MODEL ?? '',
     KFC_MONITOR_PROVIDER: env.KFC_MONITOR_PROVIDER,
     KFC_MONITOR_MODEL: env.KFC_MONITOR_MODEL ?? '',
     KFC_CONFIRMATION_SIGNING_KEY_ID:
@@ -156,7 +149,7 @@ function fetchReadiness(
         : undefined,
     openAiConfigured: Boolean(env.OPENAI_API_KEY),
     openAiRequired: false,
-    agentConfigured: options.agent !== undefined,
+    agentConfigured: options.readiness?.agentConfigured ?? false,
     monitorConfigured: options.monitorJudge !== undefined,
     zaloRequired: false,
   };
@@ -178,7 +171,6 @@ export function buildWorkerRouteOptions(
 
   const routeOptions: RouteOptions = {
     ...options,
-    checkpointer: workerCheckpointer(env.DB),
     fixtures,
     kfcCommerceProvider: options.kfcCommerceProvider ?? {
       cart: fixtureProvider.cart,

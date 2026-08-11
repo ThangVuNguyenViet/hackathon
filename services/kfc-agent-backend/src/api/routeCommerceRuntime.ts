@@ -2,7 +2,6 @@ import { existsSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { z } from "zod";
-import type { BaseCheckpointSaver } from "@langchain/langgraph";
 import type {
   ChannelMediaDeliveryResult,
   ExternalCallContext,

@@ -4,19 +4,16 @@ import {
 } from '../domain/verifiedRef.js';
 import type { ConversationTurn } from '../domain/types.js';
 import type {
-  AgentSessionItemsMutation,
   CommitAssistantTurnInput,
   CommitAssistantTurnIfRunCurrentInput,
   StoredEvent,
 } from './contracts.js';
-import type { AgentInputItem } from '@kfc/openai-agents-runtime';
 
 export interface PreparedAssistantTurnCommit {
   stateEvent: StoredEvent;
   turnEvent: StoredEvent;
   turn: ConversationTurn;
   verifiedRefs: VerifiedRefRecord[];
-  sdkSessionMutation: AgentSessionItemsMutation;
   auditEvent?: StoredEvent;
 }
 
@@ -84,12 +81,6 @@ export function prepareAssistantTurnCommit(
     turnEvent,
     turn,
     verifiedRefs,
-    sdkSessionMutation: {
-      mode: input.sdkSessionMutation?.mode ?? 'append',
-      items: [
-        ...structuredClone(input.sdkSessionMutation?.items ?? []),
-      ],
-    },
     ...(auditEvent ? { auditEvent } : {}),
   };
 }

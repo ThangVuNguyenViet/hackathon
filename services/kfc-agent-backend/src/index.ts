@@ -87,7 +87,6 @@ const serverOptions = {
     fulfillment: fixtureProvider.fulfillment,
   },
   store: persistence.store,
-  checkpointer: persistence.checkpointer,
   dashboard,
   messengerHistorySync,
   automaticRecommendationContext,
@@ -96,7 +95,7 @@ const serverOptions = {
     ...baseOptions.readiness,
     messengerRequired: false,
     zaloRequired: true,
-    agentConfigured: Boolean(baseOptions.pvcfcAgent),
+    agentConfigured: Boolean(env.PVCFC_ASTRAFLOW_API_KEY),
     runtime: {
       ...baseOptions.readiness?.runtime,
       agent: {

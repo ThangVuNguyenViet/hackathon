@@ -4,7 +4,6 @@ import type {
   SessionAgentState,
 } from '../domain/types.js';
 import type { CustomerRun } from '../customerRuns/contracts.js';
-import type { AgentInputItem } from '@kfc/openai-agents-runtime';
 import type {
   AppendEventIfRunCurrentInput,
   AppendEventIfRunCurrentResult,
@@ -90,7 +89,6 @@ export function commitMemoryAssistantTurnIfRunCurrent(input: {
   verifiedRefs: Map<string, MemoryVerifiedRefStorageSnapshot>;
   turns: ConversationTurn[];
   events: StoredEvent[];
-  agentSessionItems: Map<string, AgentInputItem[]>;
   now?: () => number;
 }): CommitAssistantTurnIfRunCurrentResult {
   const now = input.now?.() ?? Date.now();
@@ -138,13 +136,6 @@ export function commitMemoryAssistantTurnIfRunCurrent(input: {
   input.turns.push(prepared.turn);
   input.events.push(prepared.turnEvent);
   if (prepared.auditEvent) input.events.push(prepared.auditEvent);
-  const sessionItems = prepared.sdkSessionMutation.mode === 'replace'
-    ? []
-    : input.agentSessionItems.get(prepared.turn.sessionId) ?? [];
-  sessionItems.push(
-    ...structuredClone(prepared.sdkSessionMutation.items),
-  );
-  input.agentSessionItems.set(prepared.turn.sessionId, sessionItems);
   return {
     status: 'committed',
     ...structuredClone(prepared),
@@ -157,7 +148,6 @@ export function commitMemoryAssistantTurn(input: {
   verifiedRefs: Map<string, MemoryVerifiedRefStorageSnapshot>;
   turns: ConversationTurn[];
   events: StoredEvent[];
-  agentSessionItems: Map<string, AgentInputItem[]>;
   now?: () => number;
 }): CommitAssistantTurnResult {
   const prepared = prepareAssistantTurnCommit(
@@ -181,13 +171,6 @@ export function commitMemoryAssistantTurn(input: {
   input.turns.push(prepared.turn);
   input.events.push(prepared.turnEvent);
   if (prepared.auditEvent) input.events.push(prepared.auditEvent);
-  const sessionItems = prepared.sdkSessionMutation.mode === 'replace'
-    ? []
-    : input.agentSessionItems.get(prepared.turn.sessionId) ?? [];
-  sessionItems.push(
-    ...structuredClone(prepared.sdkSessionMutation.items),
-  );
-  input.agentSessionItems.set(prepared.turn.sessionId, sessionItems);
   return { status: 'committed', ...structuredClone(prepared) };
 }
 

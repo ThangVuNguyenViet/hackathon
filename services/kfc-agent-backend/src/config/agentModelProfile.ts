@@ -71,22 +71,10 @@ export function resolveAgentModelProfile(input: {
 }
 
 export function resolveRuntimeAgentIdentity(input: {
-  runtime: 'stategraph' | 'openai-responses';
   provider: AgentProvider;
   model?: string;
   mode?: AgentProfileMode;
 }): AgentModelIdentity {
-  if (input.runtime === 'openai-responses') {
-    if (input.provider !== 'openai') {
-      throw new Error('openai-responses requires the OpenAI provider');
-    }
-    const model = input.model?.trim() || 'gpt-4.1-mini';
-    return {
-      provider: 'openai',
-      model,
-      profile: `openai-responses-${model}`,
-    };
-  }
   return resolveAgentModelProfile(input);
 }
 

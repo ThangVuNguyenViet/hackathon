@@ -1,7 +1,6 @@
 import type { KfcGenUiAttachment } from '../genui/kfcGenUi.js';
 import type { CustomerCommand } from './customerCommand.js';
 import type { OrderStatusDeliveryEstimate } from './orderStatusEvidence.js';
-import type { StateGraphTurnProofBinding } from './stateGraphTurnProof.js';
 
 export type Channel =
   'messenger' | 'zalo' | 'kfc' | 'messenger_mock' | 'zalo_mock';
@@ -221,8 +220,6 @@ export interface ConversationTurnMetadata {
   attachments?: ConversationAttachment[];
   rawEvent?: Record<string, unknown>;
   genUi?: KfcGenUiAttachment;
-  /** Server-authored digest-only binding for StateGraph proof projection. */
-  stateGraphProof?: StateGraphTurnProofBinding;
   /** Legacy untrusted audit metadata. It is never structured-action authority. */
   customerCommand?: CustomerCommand;
   authorType?: 'ai_agent' | 'human_agent';

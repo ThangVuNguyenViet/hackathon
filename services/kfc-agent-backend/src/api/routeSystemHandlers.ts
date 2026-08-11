@@ -2,15 +2,6 @@ import { existsSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { z } from "zod";
-import type { BaseCheckpointSaver } from "@langchain/langgraph";
-import { KFC_AGENT_RUNTIME_ID } from "../agent/agentStateGraph.js";
-import {
-  buildKfcStateGraphProofEvidence,
-  createKfcStateGraphProofSource,
-} from "../proof/kfcStateGraphProofEvidence.js";
-import {
-  projectKfcLifecycleProofEvidence,
-} from "../proof/kfcLifecycleProofEvidence.js";
 import type {
   ChannelMediaDeliveryResult,
   ExternalCallContext,
@@ -109,25 +100,11 @@ import { isRecord, canonicalJson, sha256Fingerprint, kfcSessionIdSchema, kfcChat
 import { messengerDeliveryFailureForStorage, eventFromMessengerDelivery, sendMessengerSenderAction, dashboardEventId, checkCommerceGatewayReadiness, checkCatalogReadiness, runReadinessCheck, checkFixtures, checkMessengerConfig, checkZaloConfig, deeplinkForSession, renderInboxUrlTemplate, ChannelProfileTarget, channelTargetForSession, humanChannelTargetForSession } from './routeHandlerSupport.js';
 
 import type { RouteHandlerContext } from './routeHandlerContext.js';
-import {
-  createProductionConfirmationResumeHandler,
-} from './productionConfirmationResume.js';
 
 const proofProviderTimeoutMs = 3_000;
 
 export function createSystemRouteHandlers(context: RouteHandlerContext) {
   const { options, store, dashboard, showcase, streamingRunObservers, customerRuns, getFixtures, withConfiguredCommerce, createWebhookClients, createDeliveryClients, dashboardProfileForTarget, createFirstPartyKfcClients, kfcProofAccessContext, latestKfcProofPreconditions, kfcAgentResponse, deferAiMonitorRefinement, deliverAssistantReply, persistEventProfile, turnMetadataFor, emitConversationTurnCreatedEvent, emitSessionModeEvent, emitSessionControlIntelligence, resumedOwnershipSummary, clearPersistedHandoff, persistedHandoffStatus, shouldEvaluateDashboardMonitorContext, ensureDashboardMonitorContext, persistNonAgentInboundEvent, pauseIfHumanJoined, latestUnansweredCustomerTurn, replyToLatestUnansweredCustomerTurn, processMessengerEventInternal, recoverStaleMessengerDeliveriesInternal, processMessengerAgentRunInternal } = context;
-  const resumeConfirmation =
-    createProductionConfirmationResumeHandler({
-      store,
-      dashboard,
-      keyRing: options.confirmationApprovalKeyRing,
-      checkpointer: options.checkpointer,
-      agentModel: options.agent?.model,
-      tracer: options.agentTracer,
-      accessContext: kfcProofAccessContext,
-      createClients: createFirstPartyKfcClients,
-    });
   return {
     health() {
       return { status: 200, body: { ok: true, service: "kfc-agent-backend" } };
@@ -171,14 +148,12 @@ export function createSystemRouteHandlers(context: RouteHandlerContext) {
           : true,
         required: options.readiness?.openAiRequired ?? false,
         configured:
-          options.readiness?.openAiConfigured ??
-          options.agent?.identity.provider === "openai",
+          options.readiness?.openAiConfigured ?? false,
       };
       const runtimeAgent =
-        options.readiness?.runtime?.agent ?? options.agent?.identity;
+        options.readiness?.runtime?.agent;
       const agentConfigured =
-        options.readiness?.agentConfigured ??
-        Boolean(options.openAiAgent ?? options.pvcfcAgent ?? options.agent);
+        options.readiness?.agentConfigured ?? false;
       const agentGatesReadiness = options.readiness?.agentGatesReadiness ?? true;
       const agent = {
         ok: agentGatesReadiness ? agentConfigured : true,
@@ -342,17 +317,6 @@ export function createSystemRouteHandlers(context: RouteHandlerContext) {
                 modifierTreeCount: catalog.observation.modifierTreeCount,
               } : null,
               lifecycle: { provider: options.lifecycle?.environment === "sandbox" ? "d1" : null, controlsRegistered: options.lifecycle?.environment === "sandbox" },
-              graph: options.openAiAgent
-                ? {
-                    runtime: "openai-responses-v1",
-                    checkpoint: "conversation-history-v1",
-                  }
-                : {
-                    runtime: KFC_AGENT_RUNTIME_ID,
-                    checkpoint: options.checkpointer
-                      ? "configured-v1"
-                      : "memory-v1",
-                  },
               versions: {
                 agent: runtimeAgent ?? {
                   provider: "unconfigured",
@@ -413,13 +377,12 @@ export function createSystemRouteHandlers(context: RouteHandlerContext) {
       }
     },
     async messengerProofEnvelope(sessionId: string) {
-      const [turns, webhookDeliveries, pendingCustomerTurns, agentRuns, sessionAgentState, checkpoints, providerEvents, lifecycle] = await Promise.all([
+      const [turns, webhookDeliveries, pendingCustomerTurns, agentRuns, sessionAgentState, providerEvents, lifecycle] = await Promise.all([
         store.listTurns(sessionId),
         store.listWebhookDeliveries(sessionId),
         store.listPendingCustomerTurns(sessionId),
         store.listAgentRuns(sessionId),
         store.getSessionAgentState(sessionId),
-        store.listCheckpointIdentifiers(sessionId),
         store.listEvents(sessionId).then((events) => events.filter((event) => event.sourceType === "catalog_observation_pinned")),
         options.lifecycle?.proofForSession?.(sessionId) ?? Promise.resolve({ instance: null, audit: [] }),
       ]);
@@ -436,7 +399,6 @@ export function createSystemRouteHandlers(context: RouteHandlerContext) {
         ...(pendingCustomerTurns.length > 0 && pendingCustomerTurns.every(({ status, claimedRunId }) => status === "claimed" && claimedRunId && runIds.has(claimedRunId)) ? [] : ["pending_customer_turns"]),
         ...(agentRuns.length > 0 && agentRuns.every(({ id }) => linkedRunIds.has(id)) ? [] : ["agent_runs_and_links"]),
         ...(sessionAgentState.generation === Math.max(0, ...agentRuns.map(({ generation }) => generation)) ? [] : ["agent_generation"]),
-        ...(checkpoints.length > 0 ? [] : ["checkpoint_identifiers"]),
         ...(providerEvents.length > 0 ? [] : ["provider_audit"]),
         ...(lifecycle.instance && lifecycle.audit.length > 0 ? [] : ["lifecycle_audit"]),
         ...(agentRuns.filter(({ status }) => status === "completed").length > 0 && agentRuns.filter(({ status }) => status === "completed").every((run) => {
@@ -455,7 +417,6 @@ export function createSystemRouteHandlers(context: RouteHandlerContext) {
         agentRuns,
         agentRunTurns: links,
         sessionAgentState,
-        checkpoints,
         providerEvents,
         lifecycle,
         outbound: agentRuns.filter(({ status }) => status === "completed").map((run) => ({
@@ -466,39 +427,6 @@ export function createSystemRouteHandlers(context: RouteHandlerContext) {
         })),
       };
       return { status: missing.length === 0 ? 200 : 409, body };
-    },
-    async kfcProofEnvelope(sessionId: string) {
-      const [stateGraphProof, lifecycleSource] = await Promise.all([
-        buildKfcStateGraphProofEvidence({
-          sessionId,
-          source: createKfcStateGraphProofSource({
-            store,
-            checkpointer: options.checkpointer,
-          }),
-          configurationAtProofTime: {
-            ...(options.agent
-              ? { agent: options.agent.identity }
-              : {}),
-          },
-        }),
-        options.lifecycle?.proofForSession?.(sessionId) ?? Promise.resolve({ instance: null, audit: [] }),
-      ]);
-      const lifecycle =
-        projectKfcLifecycleProofEvidence(lifecycleSource);
-      const missing = [
-        ...stateGraphProof.missing,
-        ...lifecycle.missing,
-      ];
-      return {
-        status: missing.length === 0 ? 200 : 409,
-        body: {
-          ...stateGraphProof,
-          complete: missing.length === 0,
-          missing,
-          sessionId,
-          lifecycle,
-        },
-      };
     },
     async kfcProofPreconditions(sessionId: string, body: unknown) {
       if (options.lifecycle?.environment !== "sandbox") return { status: 404, body: { errorCode: "not_found" } };
@@ -565,11 +493,5 @@ export function createSystemRouteHandlers(context: RouteHandlerContext) {
       }
       return { status: 201, body: { ok: true, sessionId, authenticated: parsed.data.authenticated, orderId: parsed.data.orderId ?? null, providerProfileBound: parsed.data.providerProfile != null, expiresAt } };
     },
-    async confirmationResume(body: unknown) {
-      const parsed = confirmationResumePayloadSchema.safeParse(body);
-      if (!parsed.success) return { status: 400, body: { errorCode: "invalid_confirmation_resume", issues: parsed.error.issues } };
-      return resumeConfirmation(parsed.data);
-    },
-
   };
 }
