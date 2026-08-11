@@ -1,6 +1,14 @@
 import { describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
 import { OpenAiKfcAgent } from '../../src/agent/openAiKfcAgent.js';
+import {
+  adaptKfcAgentOutput,
+  kfcDeveloperMessages,
+} from '../../src/agent/kfcAgentResponseAdapter.js';
+import type {
+  OpenAiResponsesExecutionResult,
+  OpenAiResponsesTurnInput,
+} from '../../src/agent/openAiResponsesExecutor.js';
 import type { OpenAiCompactionEvent } from '../../src/agent/observedOpenAiResponsesCompactionSession.js';
 import { assistant, user, type OpenAIClient } from '@kfc/openai-agents-runtime';
 import {
@@ -15,6 +23,7 @@ import { PVCFC_AGENT_PROFILE } from '../../src/businesses/pvcfc/instructions.js'
 import { KFC_AGENT_PROFILE } from '../../src/agent/kfcAgentInstructions.js';
 import { MemoryStore } from '../../src/persistence/memoryStore.js';
 import type { ToolName } from '../../src/ordering/types.js';
+import type { KfcGenUiAttachment } from '../../src/genui/kfcGenUi.js';
 
 function assistantMessage(
   text: string,
@@ -104,11 +113,20 @@ function canonicalTool(input: {
   return createKfcOpenAiAgentsTools([canonical])[0]!;
 }
 
-function createTurn(
-  input: Partial<Parameters<OpenAiKfcAgent['respond']>[0]> = {},
-) {
+type CreateTurnInput = Partial<OpenAiResponsesTurnInput<KfcGenUiAttachment>> & {
+  verifiedBusinessContext?: Record<string, unknown>;
+  selectGenUi?: (
+    result: OpenAiResponsesExecutionResult,
+  ) => KfcGenUiAttachment | undefined;
+};
+
+function createTurn(input: CreateTurnInput = {}) {
+  const { verifiedBusinessContext, selectGenUi, ...neutralInput } = input;
+  const metadata = neutralInput.metadata ?? null;
+  const profile = neutralInput.profile ?? KFC_AGENT_PROFILE;
+  const useKfcAdapter = profile === KFC_AGENT_PROFILE;
   return {
-    profile: input.profile ?? KFC_AGENT_PROFILE,
+    profile,
     sessionId: 'kfc:runner_test',
     customerId: 'runner_test',
     channel: 'kfc' as const,
@@ -117,7 +135,26 @@ function createTurn(
     metadata: null,
     store: new MemoryStore(),
     tools: [],
-    ...input,
+    ...neutralInput,
+    ...(useKfcAdapter
+      ? {
+          developerMessages: [
+            ...(neutralInput.developerMessages ?? []),
+            ...kfcDeveloperMessages({
+              verifiedBusinessContext,
+              metadata,
+            }),
+          ],
+          adaptOutput: (execution: OpenAiResponsesExecutionResult) =>
+            adaptKfcAgentOutput({
+              execution,
+              verifiedBusinessContext,
+              metadata,
+              transport: 'web_chat',
+              ...(selectGenUi ? { selectGenUi } : {}),
+            }),
+        }
+      : {}),
   };
 }
 
@@ -526,9 +563,7 @@ describe('OpenAiKfcAgent SDK Runner', () => {
     ]);
     expect(result.toolCalls).toHaveLength(1);
     expect(requests[0]?.tools).toEqual([]);
-    expect(requests[0]?.instructions).toContain(
-      'Verified trusted action result',
-    );
+    expect(requests[0]?.instructions).toContain('Trusted required tool result');
     expect(result.sdkSessionMutation).toEqual({
       mode: 'append',
       items: [
@@ -688,13 +723,9 @@ describe('OpenAiKfcAgent SDK Runner', () => {
         profile: PVCFC_AGENT_PROFILE,
         sessionId: 'pvcfc:catalogue_test',
         customerId: 'catalogue_test',
-        verifiedBusinessContext: {
-          organization:
-            'Tổng Công ty Phân bón Dầu khí Cà Mau (PVCFC / Đạm Cà Mau)',
-          productCatalogue: {
-            sourceUrl: 'https://www.pvcfc.com.vn/san-pham',
-          },
-        },
+        developerMessages: [
+          'Verified current PVCFC public data: {"sourceUrl":"https://www.pvcfc.com.vn/san-pham"}',
+        ],
       }),
     );
 

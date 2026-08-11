@@ -3,6 +3,7 @@ import { z } from 'zod';
 import type { AppEnv } from '../config/env.js';
 import OpenAI from 'openai';
 import { OpenAiKfcAgent } from '../agent/openAiKfcAgent.js';
+import { OpenAiResponsesExecutor } from '../agent/openAiResponsesExecutor.js';
 import { createConfiguredPvcfcPublicDataProvider } from '../businesses/pvcfc/public-data/configuredPvcfcPublicDataProvider.js';
 import { createConfirmationApprovalKeyRing } from './confirmationApprovalCapability.js';
 import {
@@ -226,7 +227,7 @@ export function buildServerOptionsFromEnv(
         })
       : undefined,
     pvcfcAgent: pvcfcAstraFlowClient
-      ? new OpenAiKfcAgent({
+      ? new OpenAiResponsesExecutor({
           client: pvcfcAstraFlowClient,
           model: optionalValue(env.PVCFC_ASTRAFLOW_MODEL) ?? 'gpt-5.6-luna',
           modelTemperature: null,

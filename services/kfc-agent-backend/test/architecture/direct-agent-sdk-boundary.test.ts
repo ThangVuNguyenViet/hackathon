@@ -5,11 +5,14 @@ import { directAgentSdkBoundaryViolations } from '../../scripts/check-direct-age
 describe('direct Agents SDK architecture boundary', () => {
   it('accepts the production direct agent runtime', async () => {
     const source = await readFile(
-      new URL('../../src/agent/openAiKfcAgent.ts', import.meta.url),
+      new URL('../../src/agent/openAiResponsesExecutor.ts', import.meta.url),
       'utf8',
     );
 
     expect(directAgentSdkBoundaryViolations(source)).toEqual([]);
+    expect(source).not.toMatch(
+      /GenUI|customerCommand|customer action|order placement|identifier rewriting/iu,
+    );
   });
 
   it.each([

@@ -10,6 +10,11 @@ type ForbiddenSharedKfcFields = Extract<
   'channel' | 'clients' | 'prepareSession' | 'selectGenUi'
 >;
 
+type ForbiddenKfcPackSelector = Extract<
+  keyof KfcDirectAgentTurnInput,
+  'businessId'
+>;
+
 describe('neutral direct-agent turn contract', () => {
   it('keeps business transport and execution results free of KFC extensions', () => {
     expectTypeOf<ForbiddenSharedKfcFields>().toEqualTypeOf<never>();
@@ -26,6 +31,7 @@ describe('neutral direct-agent turn contract', () => {
   });
 
   it('keeps KFC clients, channel, session preparation, and GenUI on the KFC extension', () => {
+    expectTypeOf<ForbiddenKfcPackSelector>().toEqualTypeOf<never>();
     expectTypeOf<KfcDirectAgentTurnInput>().toMatchTypeOf<
       DirectAgentTurnInput<string>
     >();

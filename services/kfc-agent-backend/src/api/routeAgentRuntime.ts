@@ -308,8 +308,6 @@ export function createRouteAgentRuntime(
     shouldEvaluateDashboardMonitorContext,
   } = createRouteMonitorRuntime({ options, store, dashboard });
   async function kfcAgentResponse(input: {
-    /** Selected by the trusted server route, never inferred from customer text. */
-    businessId: 'kfc';
     sessionId: string;
     customerId: string;
     clientMessageId: string;
@@ -322,7 +320,6 @@ export function createRouteAgentRuntime(
       commitFence: RunCommitFence;
     };
   }): Promise<HandlerResponse> {
-    const businessId = input.businessId;
     const selectedDirectPackConfigured = options.openAiAgent !== undefined;
     const trustedMetadata: ConversationTurnMetadata = {
       ...input.metadata,
@@ -331,7 +328,9 @@ export function createRouteAgentRuntime(
         : {}),
     };
     const requestFingerprint = await sha256Fingerprint({
-      businessId,
+      // Preserve the deployed fingerprint schema across the pack extraction so
+      // durable retries replay instead of conflicting during a rollout.
+      businessId: 'kfc',
       customerId: input.customerId,
       text: input.text,
       metadata: trustedMetadata,

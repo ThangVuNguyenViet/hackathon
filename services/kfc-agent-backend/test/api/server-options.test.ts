@@ -4,6 +4,7 @@ import { loadEnv } from '../../src/config/env.js';
 import { buildServer } from '../../src/api/server.js';
 import { ModelMonitorJudge } from '../../src/llm/monitorJudge.js';
 import { OpenAiKfcAgent } from '../../src/agent/openAiKfcAgent.js';
+import { OpenAiResponsesExecutor } from '../../src/agent/openAiResponsesExecutor.js';
 
 describe('buildServerOptionsFromEnv', () => {
   it('isolates the PVCFC AstraFlow client from the KFC OpenAI client', () => {
@@ -24,7 +25,8 @@ describe('buildServerOptionsFromEnv', () => {
     );
 
     expect(options.openAiAgent).toBeInstanceOf(OpenAiKfcAgent);
-    expect(options.pvcfcAgent).toBeInstanceOf(OpenAiKfcAgent);
+    expect(options.pvcfcAgent).toBeInstanceOf(OpenAiResponsesExecutor);
+    expect(options.pvcfcAgent).not.toBeInstanceOf(OpenAiKfcAgent);
     expect(Reflect.get(options.openAiAgent!, 'model')).toBe('gpt-4.1-mini');
     expect(Reflect.get(options.pvcfcAgent!, 'model')).toBe('gpt-5.6-luna');
     expect(Reflect.get(options.pvcfcAgent!, 'compaction')).toEqual({

@@ -5,6 +5,7 @@ import type { OpenAIClient } from '@kfc/openai-agents-runtime';
 import { ChatOpenAI } from '@langchain/openai';
 import OpenAI from 'openai';
 import { OpenAiKfcAgent } from '../src/agent/openAiKfcAgent.js';
+import { OpenAiResponsesExecutor } from '../src/agent/openAiResponsesExecutor.js';
 import { buildServer } from '../src/api/server.js';
 import { createConfiguredPvcfcPublicDataProvider } from '../src/businesses/pvcfc/public-data/configuredPvcfcPublicDataProvider.js';
 import { loadBundledGeneratedFixtures } from '../src/fixtures/bundledFixtures.js';
@@ -68,7 +69,7 @@ const openAiAgent = directOpenAiClient
     })
   : undefined;
 const pvcfcAgent = pvcfcAstraFlowClient
-  ? new OpenAiKfcAgent({
+  ? new OpenAiResponsesExecutor({
       client: pvcfcAstraFlowClient as unknown as OpenAIClient,
       model: pvcfcAstraFlowModel,
       compaction: {

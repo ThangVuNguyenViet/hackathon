@@ -156,7 +156,6 @@ export function createRouteHandlers(options: RouteOptions = {}): RouteHandlers {
             ? "genui" as const
             : undefined;
         response = await kfcAgentResponse({
-            businessId: 'kfc',
             sessionId: request.sessionId,
             customerId: request.customerId,
             clientMessageId: request.clientMessageId,

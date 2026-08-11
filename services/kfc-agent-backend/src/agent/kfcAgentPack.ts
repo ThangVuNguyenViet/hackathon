@@ -12,6 +12,10 @@ import { createAgentTurnExternalCallScope } from './agentExternalCallScope.js';
 import type { ExecutableAgentPack } from './agentTurnRunner.js';
 import { KFC_AGENT_PROFILE } from './kfcAgentInstructions.js';
 import {
+  adaptKfcAgentOutput,
+  kfcDeveloperMessages,
+} from './kfcAgentResponseAdapter.js';
+import {
   createKfcOpenAiAgentsTools,
   createKfcOpenAiTools,
   createKfcToolSession,
@@ -24,10 +28,10 @@ import {
   prepareKfcOpenAiToolSessionPublication,
 } from './kfcOpenAiToolSessionLifecycle.js';
 import {
-  OpenAiKfcAgent,
-  type OpenAiKfcAgentExecutionResult,
-  type OpenAiKfcAgentTurnResult,
-} from './openAiKfcAgent.js';
+  OpenAiResponsesExecutor,
+  type OpenAiResponsesExecutionResult,
+  type OpenAiResponsesTurnResult,
+} from './openAiResponsesExecutor.js';
 import type { OpenAiCompactionEvent } from './observedOpenAiResponsesCompactionSession.js';
 import type { DirectAgentTurnInput } from './directAgentTurn.js';
 
@@ -43,27 +47,26 @@ export interface PreparedDirectKfcTurn {
 export interface KfcDirectAgentTurnInput extends DirectAgentTurnInput<
   'web_chat' | Channel
 > {
-  /** Compatibility only; the trusted KFC facade still rejects other IDs. */
-  businessId?: 'kfc' | 'pvcfc';
   channel: Channel;
   clients?: ExternalClients;
   prepareSession?(
     session: KfcToolSession,
   ): Promise<PreparedDirectKfcTurn> | PreparedDirectKfcTurn;
   selectGenUi?: (
-    result: OpenAiKfcAgentExecutionResult,
+    result: OpenAiResponsesExecutionResult,
     session: KfcToolSession,
   ) => KfcGenUiAttachment | undefined;
 }
 
-export interface KfcDirectAgentTurnResult extends OpenAiKfcAgentTurnResult {
+export interface KfcDirectAgentTurnResult extends OpenAiResponsesTurnResult {
+  genUi?: KfcGenUiAttachment;
   session?: KfcToolSession;
   stateCommit?: 'committed' | 'stale';
 }
 
 export interface KfcAgentPackOptions {
   store: ConversationStore;
-  openAiAgent: OpenAiKfcAgent;
+  openAiAgent: OpenAiResponsesExecutor;
   getFixtures(): Promise<GeneratedFixtures>;
   createClients(
     sessionId: string,
@@ -267,22 +270,41 @@ export class KfcAgentPack implements ExecutableAgentPack<
     prepared: PreparedTurnResources;
   }): Promise<KfcDirectAgentTurnResult> {
     const context = kfcContext(input.prepared);
-    return this.options.openAiAgent.respond({
+    const verifiedBusinessContext = verifiedKfcToolSessionContext(
+      context.sessionState.current,
+    );
+    const result = await this.options.openAiAgent.respond<KfcGenUiAttachment>({
       profile: input.profile,
       sessionId: input.turn.sessionId,
       customerId: input.turn.customerId,
       channel: input.turn.channel,
-      transport: input.turn.transport,
       text: input.turn.text,
       externalMessageId: input.turn.externalMessageId,
       metadata: input.turn.metadata,
       store: this.options.store,
-      verifiedBusinessContext: verifiedKfcToolSessionContext(
-        context.sessionState.current,
-      ),
+      developerMessages: kfcDeveloperMessages({
+        verifiedBusinessContext,
+        metadata: input.turn.metadata,
+      }),
       tools: [...input.prepared.tools],
       requiredToolCalls: context.preparedInput?.requiredToolCalls,
       allowModelToolCalls: context.preparedInput?.allowModelToolCalls,
+      adaptOutput: (execution) =>
+        adaptKfcAgentOutput({
+          execution,
+          verifiedBusinessContext,
+          metadata: input.turn.metadata,
+          transport: input.turn.transport,
+          ...(input.turn.selectGenUi
+            ? {
+                selectGenUi: (current) =>
+                  input.turn.selectGenUi?.(
+                    current,
+                    context.sessionState.current,
+                  ),
+              }
+            : {}),
+        }),
       lifecycle: {
         onRunStart: input.turn.lifecycle?.onRunStart,
         onToolEnd: input.turn.lifecycle?.onToolEnd,
@@ -295,12 +317,8 @@ export class KfcAgentPack implements ExecutableAgentPack<
           await input.turn.lifecycle?.onRunEnd?.(event);
         },
       },
-      ...(input.turn.selectGenUi
-        ? {
-            selectGenUi: (result) =>
-              input.turn.selectGenUi?.(result, context.sessionState.current),
-          }
-        : {}),
     });
+    const { output: genUi, ...turnResult } = result;
+    return { ...turnResult, ...(genUi ? { genUi } : {}) };
   }
 }

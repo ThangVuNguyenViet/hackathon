@@ -1,22 +1,14 @@
-import {
-  RunContext,
-  tool,
-  type FunctionTool,
-} from '@kfc/openai-agents-runtime';
+import { RunContext, tool } from '@kfc/openai-agents-runtime';
 import { classifyToolSideEffect } from '../ordering/toolExecutor.js';
 import type { ToolName } from '../ordering/types.js';
+import type { DirectAgentToolCallTrace } from './directAgentTurn.js';
 import type {
-  OpenAiKfcAgentLifecycleObserver,
-  OpenAiToolCallTrace,
-} from './openAiKfcAgent.js';
+  OpenAiAgentRunContext,
+  OpenAiFunctionTool,
+  OpenAiStrictJsonObjectSchema,
+} from './openAiSdkTool.js';
 
-export interface KfcStrictJsonObjectSchema {
-  type: 'object';
-  properties: Record<string, unknown>;
-  required: string[];
-  additionalProperties: false;
-  [key: string]: unknown;
-}
+export type KfcStrictJsonObjectSchema = OpenAiStrictJsonObjectSchema;
 
 export type KfcArgumentParseResult =
   { success: true; data: Record<string, unknown> } | { success: false };
@@ -38,18 +30,8 @@ export interface KfcCanonicalTool {
   ): Promise<unknown>;
 }
 
-export interface KfcOpenAiAgentRunContext {
-  toolCalls: OpenAiToolCallTrace[];
-  developerMessages: string[];
-  toolStartedAt?: Map<string, number>;
-  lifecycle?: OpenAiKfcAgentLifecycleObserver;
-}
-
-export type KfcOpenAiFunctionTool = FunctionTool<
-  KfcOpenAiAgentRunContext,
-  KfcStrictJsonObjectSchema,
-  unknown
->;
+export type KfcOpenAiAgentRunContext = OpenAiAgentRunContext;
+export type KfcOpenAiFunctionTool = OpenAiFunctionTool;
 
 function safeSdkToolFailure(
   errorCode: 'invalid_tool_input' | 'tool_execution_failed' | 'tool_timed_out',
@@ -125,7 +107,7 @@ export function createKfcOpenAiAgentsTools(
           });
           return result;
         }
-        const trace: OpenAiToolCallTrace = {
+        const trace: DirectAgentToolCallTrace = {
           name: canonicalTool.definition.name,
           arguments: parsed.data,
           result: undefined,

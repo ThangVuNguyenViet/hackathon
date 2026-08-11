@@ -1,9 +1,9 @@
 import { RunContext, tool } from '@kfc/openai-agents-runtime';
 import type {
-  KfcOpenAiAgentRunContext,
-  KfcOpenAiFunctionTool,
-  KfcStrictJsonObjectSchema,
-} from '../../agent/kfcOpenAiSdkToolAdapter.js';
+  OpenAiAgentRunContext,
+  OpenAiFunctionTool,
+  OpenAiStrictJsonObjectSchema,
+} from '../../agent/openAiSdkTool.js';
 import type { PvcfcPublicDataProvider } from './public-data/pvcfcPublicDataProvider.js';
 
 const nullableLimit = {
@@ -13,14 +13,14 @@ const nullableCursor = {
   anyOf: [{ type: 'string', minLength: 1 }, { type: 'null' }],
 } as const;
 
-const listCollectionsSchema: KfcStrictJsonObjectSchema = {
+const listCollectionsSchema: OpenAiStrictJsonObjectSchema = {
   type: 'object',
   properties: { limit: nullableLimit, cursor: nullableCursor },
   required: ['limit', 'cursor'],
   additionalProperties: false,
 };
 
-const listRecordsSchema: KfcStrictJsonObjectSchema = {
+const listRecordsSchema: OpenAiStrictJsonObjectSchema = {
   type: 'object',
   properties: {
     collection: { type: 'string', minLength: 1 },
@@ -31,7 +31,7 @@ const listRecordsSchema: KfcStrictJsonObjectSchema = {
   additionalProperties: false,
 };
 
-const searchRecordsSchema: KfcStrictJsonObjectSchema = {
+const searchRecordsSchema: OpenAiStrictJsonObjectSchema = {
   type: 'object',
   properties: {
     query: { type: 'string', minLength: 1, maxLength: 500 },
@@ -51,7 +51,7 @@ const searchRecordsSchema: KfcStrictJsonObjectSchema = {
   additionalProperties: false,
 };
 
-const getRecordSchema: KfcStrictJsonObjectSchema = {
+const getRecordSchema: OpenAiStrictJsonObjectSchema = {
   type: 'object',
   properties: {
     collection: { type: 'string', minLength: 1 },
@@ -87,7 +87,7 @@ function isNullableStringArray(value: unknown): value is string[] | null {
 }
 
 function traceResult(
-  runContext: RunContext<KfcOpenAiAgentRunContext>,
+  runContext: RunContext<OpenAiAgentRunContext>,
   name: string,
   arguments_: Record<string, unknown>,
   result: unknown,
@@ -97,7 +97,7 @@ function traceResult(
 }
 
 function invalidInput(
-  runContext: RunContext<KfcOpenAiAgentRunContext> | undefined,
+  runContext: RunContext<OpenAiAgentRunContext> | undefined,
   name: string,
 ): unknown {
   const result = {
@@ -110,10 +110,10 @@ function invalidInput(
 /** Bounded read-only evidence tools owned by the PVCFC pack. */
 export function createPvcfcOpenAiTools(
   provider: PvcfcPublicDataProvider,
-): KfcOpenAiFunctionTool[] {
+): OpenAiFunctionTool[] {
   const listCollections = tool<
     typeof listCollectionsSchema,
-    KfcOpenAiAgentRunContext,
+    OpenAiAgentRunContext,
     unknown
   >({
     name: 'listPvcfcCollections',
@@ -148,7 +148,7 @@ export function createPvcfcOpenAiTools(
 
   const listRecords = tool<
     typeof listRecordsSchema,
-    KfcOpenAiAgentRunContext,
+    OpenAiAgentRunContext,
     unknown
   >({
     name: 'listPvcfcRecords',
@@ -186,7 +186,7 @@ export function createPvcfcOpenAiTools(
 
   const searchRecords = tool<
     typeof searchRecordsSchema,
-    KfcOpenAiAgentRunContext,
+    OpenAiAgentRunContext,
     unknown
   >({
     name: 'searchPvcfcRecords',
@@ -229,7 +229,7 @@ export function createPvcfcOpenAiTools(
 
   const getRecord = tool<
     typeof getRecordSchema,
-    KfcOpenAiAgentRunContext,
+    OpenAiAgentRunContext,
     unknown
   >({
     name: 'getPvcfcRecord',

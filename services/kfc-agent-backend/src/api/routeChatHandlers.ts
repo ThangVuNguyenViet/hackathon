@@ -289,7 +289,6 @@ export function createChatRouteHandlers(context: RouteHandlerContext) {
       delete auditMetadata.trustedCustomerAction;
       delete auditMetadata.source;
       return kfcAgentResponse({
-        businessId: 'kfc',
         sessionId: parsed.data.sessionId,
         customerId: parsed.data.customerId,
         clientMessageId: parsed.data.clientMessageId,
@@ -804,7 +803,6 @@ export function createChatRouteHandlers(context: RouteHandlerContext) {
       }
       const invoke = () =>
         kfcAgentResponse({
-          businessId: 'kfc',
           sessionId: parsed.data.sessionId,
           customerId: parsed.data.customerId,
           clientMessageId: parsed.data.clientMessageId,

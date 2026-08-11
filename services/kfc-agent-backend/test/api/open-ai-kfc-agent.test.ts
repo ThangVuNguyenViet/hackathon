@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { OpenAiKfcAgent } from '../../src/agent/openAiKfcAgent.js';
 import type { OpenAIClient } from '@kfc/openai-agents-runtime';
 import { buildServer } from '../../src/api/server.js';
+import { sha256Fingerprint } from '../../src/api/routeHandlerContracts.js';
 import { MemoryStore } from '../../src/persistence/memoryStore.js';
 import { createTestFixtures } from '../fixtures/testFixtures.js';
 
@@ -71,6 +72,62 @@ function sdkTestClient(client: {
 }
 
 describe('OpenAI KFC chat API', () => {
+  it('replays a durable KFC request fingerprint created before pack extraction', async () => {
+    const store = new MemoryStore();
+    const sessionId = 'kfc:fingerprint-rollout';
+    const customerId = 'fingerprint-rollout';
+    const clientMessageId = 'fingerprint-rollout-message';
+    const text = 'Cho mình xem lại câu trả lời trước.';
+    const operation = {
+      requestId: `kfc-synchronous-request:${await sha256Fingerprint({
+        sessionId,
+        clientMessageId,
+      })}`,
+      sessionId,
+      operation: 'kfc_synchronous_request' as const,
+      bindingFingerprint: await sha256Fingerprint({
+        businessId: 'kfc',
+        customerId,
+        text,
+        metadata: { rawEvent: { source: 'kfc_chat' } },
+        trustedCustomerAction: null,
+      }),
+    };
+    const reservation = await store.reserveIrreversibleOperation(operation);
+    if (reservation.status !== 'reserved') {
+      throw new Error('expected a new durable KFC request reservation');
+    }
+    await store.completeIrreversibleOperation(
+      operation,
+      {
+        attempt: reservation.attempt,
+        leaseToken: reservation.leaseToken,
+        sessionAuthorityGeneration: reservation.sessionAuthorityGeneration,
+      },
+      {
+        status: 200,
+        body: {
+          sessionId,
+          responseText: 'Phản hồi KFC đã lưu trước khi triển khai.',
+        },
+      },
+    );
+    const server = buildServer({ store, fixtures: createTestFixtures() });
+
+    const response = await server.inject({
+      method: 'POST',
+      url: '/chat/kfc/message',
+      payload: { sessionId, customerId, clientMessageId, text },
+    });
+
+    expect(response.statusCode, response.body).toBe(200);
+    expect(response.json()).toMatchObject({
+      sessionId,
+      responseText: 'Phản hồi KFC đã lưu trước khi triển khai.',
+      replayed: true,
+    });
+  });
+
   it('persists an incomplete address draft and accepts one structured prefilled-form update after restart', async () => {
     const store = new MemoryStore();
     let responseIndex = 0;
@@ -1008,7 +1065,7 @@ describe('OpenAI KFC chat API', () => {
       ]),
     );
     expect(requests.at(-1)?.instructions).toContain(
-      'Verified current fixture business state',
+      'Verified current KFC business state',
     );
   });
 });

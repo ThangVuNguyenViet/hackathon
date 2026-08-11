@@ -33,9 +33,6 @@ export class KfcDirectTurnService {
   }
 
   async run(input: KfcDirectAgentTurnInput): Promise<KfcDirectTurnResult> {
-    if (input.businessId !== undefined && input.businessId !== 'kfc') {
-      throw new Error(`agent_pack_id_unknown:${input.businessId}`);
-    }
     const { result } = await this.#runner.run({ packId: 'kfc', turn: input });
     if (!result.session || !result.stateCommit) {
       throw new Error('kfc_agent_pack_result_incomplete');

@@ -2,9 +2,9 @@ import type { PreparedTurnResources } from '../../business/agentPack.js';
 import type { ExecutableAgentPack } from '../../agent/agentTurnRunner.js';
 import type { DirectAgentTurnInput } from '../../agent/directAgentTurn.js';
 import type {
-  OpenAiKfcAgent,
-  OpenAiKfcAgentTurnResult,
-} from '../../agent/openAiKfcAgent.js';
+  OpenAiResponsesExecutor,
+  OpenAiResponsesTurnResult,
+} from '../../agent/openAiResponsesExecutor.js';
 import type { OpenAiCompactionEvent } from '../../agent/observedOpenAiResponsesCompactionSession.js';
 import type { ConversationStore } from '../../persistence/contracts.js';
 import type { Channel } from '../../domain/types.js';
@@ -14,11 +14,11 @@ import { createPvcfcOpenAiTools } from './tools.js';
 
 export interface PvcfcAgentPackOptions {
   store: ConversationStore;
-  openAiAgent: OpenAiKfcAgent;
+  openAiAgent: OpenAiResponsesExecutor;
   provider: PvcfcPublicDataProvider;
 }
 
-export type PvcfcAgentTurnResult = Omit<OpenAiKfcAgentTurnResult, 'genUi'> & {
+export type PvcfcAgentTurnResult = OpenAiResponsesTurnResult & {
   stateCommit?: 'committed' | 'stale';
 };
 
@@ -181,21 +181,31 @@ export class PvcfcAgentPack implements ExecutableAgentPack<
       // business-channel domain at the shared route boundary.
       // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- adapter from the neutral web transport to the legacy persistence channel
       channel: input.turn.transport as Channel,
-      transport: input.turn.transport,
       text: input.turn.text,
       externalMessageId: input.turn.externalMessageId,
       metadata: input.turn.metadata,
       store: this.options.store,
-      verifiedBusinessContext: {
-        schemaVersion: 'pvcfc_public_data_v2',
-        revision: publicData.value.revision,
-        capturedAt: publicData.value.capturedAt,
-        organization: publicData.value.organization,
-        collections: publicData.value.collections,
-        searchableRecordCount,
-      },
+      developerMessages: [
+        `Verified current PVCFC public data: ${JSON.stringify({
+          schemaVersion: 'pvcfc_public_data_v2',
+          revision: publicData.value.revision,
+          capturedAt: publicData.value.capturedAt,
+          organization: publicData.value.organization,
+          collections: publicData.value.collections,
+          searchableRecordCount,
+        })}`,
+      ],
       tools: [...input.prepared.tools],
       requireEvidenceTool: PVCFC_EVIDENCE_POLICY.requireToolOnFirstModelTurn,
+      adaptOutput: (execution) => ({
+        responseText: execution.responseText,
+        assistantMetadata: {
+          transport: input.turn.transport,
+          ...(input.turn.metadata?.release
+            ? { release: input.turn.metadata.release }
+            : {}),
+        },
+      }),
       lifecycle: {
         onRunStart: input.turn.lifecycle?.onRunStart,
         onToolEnd: input.turn.lifecycle?.onToolEnd,
