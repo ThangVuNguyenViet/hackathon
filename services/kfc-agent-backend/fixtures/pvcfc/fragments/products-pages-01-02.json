@@ -1,0 +1,556 @@
+{
+  "schemaVersion": "pvcfc-public-fixture-fragment-v1",
+  "kind": "products",
+  "retrievedAt": "2026-08-11",
+  "sourcePages": [
+    "https://www.pvcfc.com.vn/san-pham",
+    "https://www.pvcfc.com.vn/san-pham?pagenumber=2"
+  ],
+  "records": [
+    {
+      "id": "ure-hat-duc",
+      "name": "URÊ HẠT ĐỤC",
+      "category": "Phân đơn",
+      "sourceUrl": "https://www.pvcfc.com.vn/ure-hat-duc",
+      "summary": "Urê hạt đục phân giải nitơ chậm, hạn chế thất thoát đạm; hạt to, tròn đều, ít mạt và phù hợp để rải hoặc phối trộn.",
+      "attributes": {
+        "benefits": [
+          "Cung cấp đạm cho cây trồng",
+          "Phân giải chậm để hạn chế thất thoát đạm và hỗ trợ cây hấp thu dinh dưỡng",
+          "Có thể phối trộn với các loại phân đơn khác",
+          "Thích hợp với mọi loại đất và cây trồng"
+        ],
+        "biuret": "0,99%",
+        "packaging": {
+          "construction": "Bao hai lớp: PP bên ngoài và PE bên trong",
+          "netWeightKg": [50]
+        },
+        "shelfLifeMonths": 36,
+        "storage": "Bảo quản nơi thông thoáng, khô ráo, có che mưa nắng và không đặt trực tiếp trên sàn ẩm."
+      },
+      "imageUrls": [
+        "https://www.pvcfc.com.vn/Data/Sites/1/Product/8593/21ure-ha-duc.png"
+      ],
+      "documentUrls": [
+        "https://www.pvcfc.com.vn/Data/Sites/1/media/fileattachment/[signed]3.-tccs-01-ure-tm-rev18.pdf"
+      ],
+      "relatedUrls": [
+        "https://www.pvcfc.com.vn/phan-don"
+      ],
+      "provenance": {
+        "sourceUrl": "https://www.pvcfc.com.vn/ure-hat-duc",
+        "retrievedAt": "2026-08-11",
+        "retrievalMethod": "tinyfish_fetch"
+      }
+    },
+    {
+      "id": "npk-ca-mau-gold-20-10-10-2",
+      "name": "Phân NPK Cà Mau Gold 20-10-10",
+      "category": "Phân bón hóa học phức hợp (NPK)",
+      "sourceUrl": "https://www.pvcfc.com.vn/npk-ca-mau-gold-20-10-10-2",
+      "summary": "Công thức NPK Gold hỗ trợ sinh trưởng, năng suất và chất lượng nông sản, đồng thời bổ sung dinh dưỡng cho đất và cây.",
+      "attributes": {
+        "formula": "20-10-10",
+        "benefits": [
+          "Giúp cây sinh trưởng và phát triển tốt",
+          "Tăng năng suất và chất lượng nông sản",
+          "Tăng cường dinh dưỡng cho đất",
+          "Bổ sung dinh dưỡng đa vi lượng cần thiết cho cây trồng"
+        ],
+        "packaging": {
+          "construction": "Bao hai lớp: PP bên ngoài và PE bên trong"
+        },
+        "shelfLifeMonths": 36,
+        "storage": "Bảo quản nơi thông thoáng, khô ráo, có che mưa nắng và không đặt trực tiếp trên sàn ẩm."
+      },
+      "imageUrls": [
+        "https://www.pvcfc.com.vn/Data/Sites/1/Product/8640/20-10-10-new-truoc.png"
+      ],
+      "documentUrls": [
+        "https://www.pvcfc.com.vn/Data/Sites/1/media/fileattachment/[signed]68-tccs-npk-gold-20-10-10-rev6.pdf"
+      ],
+      "relatedUrls": [
+        "https://www.pvcfc.com.vn/npk"
+      ],
+      "provenance": {
+        "sourceUrl": "https://www.pvcfc.com.vn/npk-ca-mau-gold-20-10-10-2",
+        "retrievedAt": "2026-08-11",
+        "retrievalMethod": "tinyfish_fetch"
+      }
+    },
+    {
+      "id": "urea-bio",
+      "name": "UREA BIO",
+      "category": "Phân khoáng sinh học và phân bón vi sinh",
+      "sourceUrl": "https://www.pvcfc.com.vn/urea-bio",
+      "summary": "Urea Bio kết hợp urê với vi sinh vật Bacillus có lợi để cung cấp đạm, hỗ trợ chống chịu phèn mặn, tăng hấp thu phân bón và chuyển hóa lân khó tiêu.",
+      "attributes": {
+        "composition": {
+          "base": "Urê và dung dịch bổ sung vi sinh vật có lợi Bacillus",
+          "bacillusSpp": "1,0 x 10^6 CFU/g"
+        },
+        "benefits": [
+          "Cung cấp đạm cho đất và cây trồng",
+          "Tăng khả năng chống chịu phèn và mặn",
+          "Tăng hấp thu phân bón",
+          "Chuyển hóa lân khó tiêu sang dễ tiêu",
+          "Tăng năng suất và chất lượng nông sản"
+        ],
+        "packaging": {
+          "netWeightKg": [50, 40, 25]
+        },
+        "shelfLifeMonths": 24
+      },
+      "imageUrls": [
+        "https://www.pvcfc.com.vn/Data/Sites/1/Product/8592/urea-bio.png"
+      ],
+      "documentUrls": [
+        "https://www.pvcfc.com.vn/Data/Sites/1/media/fileattachment/[signed]78.-tccs-ure-bio-rev9.pdf"
+      ],
+      "relatedUrls": [
+        "https://www.pvcfc.com.vn/phan-don"
+      ],
+      "provenance": {
+        "sourceUrl": "https://www.pvcfc.com.vn/urea-bio",
+        "retrievedAt": "2026-08-11",
+        "retrievalMethod": "tinyfish_fetch"
+      }
+    },
+    {
+      "id": "n46plus-ca-mau",
+      "name": "N46.PLUS CÀ MAU",
+      "category": "Phân đơn",
+      "sourceUrl": "https://www.pvcfc.com.vn/n46plus-ca-mau",
+      "summary": "Urê N46.Plus dùng lớp bảo vệ đạm kép với NBPT và DCD; trang sản phẩm nêu mức tiết kiệm phân bón 20–30% và tăng năng suất 7%.",
+      "attributes": {
+        "additives": ["NBPT", "DCD"],
+        "moisture": "1%",
+        "biuret": "nhỏ hơn 0,99% khối lượng",
+        "benefits": [
+          "Tiết kiệm 20-30% lượng phân bón",
+          "Giúp cây xanh tốt và tăng năng suất 7%",
+          "Dễ phối trộn với các loại phân bón khác",
+          "Thích hợp với mọi loại đất và cây trồng"
+        ],
+        "packaging": {
+          "netWeightKg": [50, 40, 25]
+        },
+        "shelfLifeMonths": 24
+      },
+      "imageUrls": [
+        "https://www.pvcfc.com.vn/Data/Sites/1/Product/8591/n46plus_xanh.png"
+      ],
+      "documentUrls": [
+        "https://www.pvcfc.com.vn/Data/Sites/1/media/fileattachment/[signed]05.-tccs-n46.plus-cà-mau--rev9.pdf"
+      ],
+      "relatedUrls": [
+        "https://www.pvcfc.com.vn/phan-don"
+      ],
+      "provenance": {
+        "sourceUrl": "https://www.pvcfc.com.vn/n46plus-ca-mau",
+        "retrievedAt": "2026-08-11",
+        "retrievalMethod": "tinyfish_fetch"
+      }
+    },
+    {
+      "id": "npk-ca-mau-gold-20-10-10-1",
+      "name": "NPK CÀ MAU GOLD 20-10-10",
+      "category": "Phân bón hóa học phức hợp (NPK)",
+      "sourceUrl": "https://www.pvcfc.com.vn/npk-ca-mau-gold-20-10-10-1",
+      "summary": "Công thức NPK Gold hỗ trợ cây sinh trưởng, cải thiện năng suất và chất lượng nông sản, đồng thời bổ sung dinh dưỡng cho đất và cây.",
+      "attributes": {
+        "formula": "20-10-10",
+        "benefits": [
+          "Giúp cây sinh trưởng và phát triển tốt",
+          "Tăng năng suất và chất lượng nông sản",
+          "Tăng cường dinh dưỡng cho đất",
+          "Bổ sung dinh dưỡng đa vi lượng cần thiết cho cây trồng"
+        ],
+        "packaging": {
+          "construction": "Bao hai lớp: PP bên ngoài và PE bên trong"
+        },
+        "shelfLifeMonths": 36,
+        "storage": "Bảo quản nơi thông thoáng, khô ráo, có che mưa nắng và không đặt trực tiếp trên sàn ẩm."
+      },
+      "imageUrls": [
+        "https://www.pvcfc.com.vn/Data/Sites/1/Product/8624/20-10-10-ph.png"
+      ],
+      "documentUrls": [
+        "https://www.pvcfc.com.vn/Data/Sites/1/media/fileattachment/[signed]68-tccs-npk-gold-20-10-10-rev6.pdf"
+      ],
+      "relatedUrls": [
+        "https://www.pvcfc.com.vn/npk"
+      ],
+      "provenance": {
+        "sourceUrl": "https://www.pvcfc.com.vn/npk-ca-mau-gold-20-10-10-1",
+        "retrievedAt": "2026-08-11",
+        "retrievalMethod": "tinyfish_fetch"
+      }
+    },
+    {
+      "id": "npk-ca-mau-goldbr15-6-20",
+      "name": "NPK CÀ MAU GOLD 15-6-20",
+      "category": "Phân bón hóa học phức hợp (NPK)",
+      "sourceUrl": "https://www.pvcfc.com.vn/npk-ca-mau-goldbr15-6-20",
+      "summary": "Công thức NPK Gold được giới thiệu để hỗ trợ cây sinh trưởng, tăng năng suất và chất lượng nông sản, đồng thời tăng dinh dưỡng cho đất.",
+      "attributes": {
+        "formula": "15-6-20",
+        "benefits": [
+          "Giúp cây sinh trưởng và phát triển tốt",
+          "Tăng năng suất và chất lượng nông sản",
+          "Tăng cường dinh dưỡng cho đất"
+        ],
+        "packaging": {
+          "construction": "Bao hai lớp: PP bên ngoài và PE bên trong"
+        },
+        "shelfLifeMonths": 36,
+        "storage": "Bảo quản nơi thông thoáng, khô ráo, có che mưa nắng và không đặt trực tiếp trên sàn ẩm."
+      },
+      "imageUrls": [
+        "https://www.pvcfc.com.vn/Data/Sites/1/Product/8608/15-6-30.png"
+      ],
+      "documentUrls": [],
+      "relatedUrls": [
+        "https://www.pvcfc.com.vn/npk"
+      ],
+      "provenance": {
+        "sourceUrl": "https://www.pvcfc.com.vn/npk-ca-mau-goldbr15-6-20",
+        "retrievedAt": "2026-08-11",
+        "retrievalMethod": "tinyfish_fetch"
+      }
+    },
+    {
+      "id": "npk-ca-mau-20-5-5",
+      "name": "NPK CÀ MAU 20-5-5",
+      "category": "Phân bón hóa học phức hợp (NPK)",
+      "sourceUrl": "https://www.pvcfc.com.vn/npk-ca-mau-20-5-5",
+      "summary": "Công thức NPK 20-5-5 hỗ trợ cây sinh trưởng, tăng năng suất và chất lượng nông sản, đồng thời tăng dinh dưỡng cho đất.",
+      "attributes": {
+        "formula": "20-5-5",
+        "benefits": [
+          "Giúp cây sinh trưởng và phát triển tốt",
+          "Tăng năng suất và chất lượng nông sản",
+          "Tăng cường dinh dưỡng cho đất"
+        ],
+        "packaging": {
+          "construction": "Bao hai lớp: PP bên ngoài và PE bên trong"
+        },
+        "shelfLifeMonths": 36,
+        "storage": "Bảo quản nơi thông thoáng, khô ráo, có che mưa nắng và không đặt trực tiếp trên sàn ẩm."
+      },
+      "imageUrls": [
+        "https://www.pvcfc.com.vn/Data/Sites/1/Product/8614/20-5-5-.png"
+      ],
+      "documentUrls": [
+        "https://www.pvcfc.com.vn/Data/Sites/1/media/fileattachment/[signed]34.-tccs-npk-20-5-5-rev6.pdf"
+      ],
+      "relatedUrls": [
+        "https://www.pvcfc.com.vn/npk"
+      ],
+      "provenance": {
+        "sourceUrl": "https://www.pvcfc.com.vn/npk-ca-mau-20-5-5",
+        "retrievedAt": "2026-08-11",
+        "retrievalMethod": "tinyfish_fetch"
+      }
+    },
+    {
+      "id": "npk-ca-mau-goldbr22-5-6",
+      "name": "NPK CÀ MAU GOLD 22-5-6",
+      "category": "Phân bón hóa học phức hợp (NPK)",
+      "sourceUrl": "https://www.pvcfc.com.vn/npk-ca-mau-goldbr22-5-6",
+      "summary": "Công thức NPK Gold hỗ trợ sinh trưởng, năng suất và chất lượng nông sản, tăng dinh dưỡng cho đất và bổ sung đa vi lượng cho cây.",
+      "attributes": {
+        "formula": "22-5-6",
+        "benefits": [
+          "Giúp cây sinh trưởng và phát triển tốt",
+          "Tăng năng suất và chất lượng nông sản",
+          "Tăng cường dinh dưỡng cho đất",
+          "Bổ sung dinh dưỡng đa vi lượng cần thiết cho cây trồng"
+        ],
+        "packaging": {
+          "construction": "Bao hai lớp: PP bên ngoài và PE bên trong"
+        },
+        "shelfLifeMonths": 36,
+        "storage": "Bảo quản nơi thông thoáng, khô ráo, có che mưa nắng và không đặt trực tiếp trên sàn ẩm."
+      },
+      "imageUrls": [
+        "https://www.pvcfc.com.vn/Data/Sites/1/Product/8618/22-5-6-gold.png"
+      ],
+      "documentUrls": [
+        "https://www.pvcfc.com.vn/Data/Sites/1/media/fileattachment/[signed]10.-tccs-npk-gold-22-5-6-rev6.pdf"
+      ],
+      "relatedUrls": [
+        "https://www.pvcfc.com.vn/npk"
+      ],
+      "provenance": {
+        "sourceUrl": "https://www.pvcfc.com.vn/npk-ca-mau-goldbr22-5-6",
+        "retrievedAt": "2026-08-11",
+        "retrievalMethod": "tinyfish_fetch"
+      }
+    },
+    {
+      "id": "npk-ca-mau-16-16-10",
+      "name": "NPK CÀ MAU 16-16-10",
+      "category": "Phân bón hóa học phức hợp (NPK)",
+      "sourceUrl": "https://www.pvcfc.com.vn/npk-ca-mau-16-16-10",
+      "summary": null,
+      "attributes": {
+        "formula": "16-16-10",
+        "detailPageStatus": "page_not_found"
+      },
+      "imageUrls": [
+        "https://www.pvcfc.com.vn/Data/Sites/1/Product/8605/16-16-10-cm.png"
+      ],
+      "documentUrls": [
+        "https://www.pvcfc.com.vn/Data/Sites/1/media/san-pham/chung-nhan/2026/chung-thu-chat-luong-0188-2026-sp.pdf"
+      ],
+      "relatedUrls": [
+        "https://www.pvcfc.com.vn/npk"
+      ],
+      "provenance": {
+        "sourceUrl": "https://www.pvcfc.com.vn/npk-ca-mau-16-16-10",
+        "retrievedAt": "2026-08-11",
+        "retrievalMethod": "tinyfish_fetch"
+      }
+    },
+    {
+      "id": "npk-ca-mau-gold-18-8-18-1",
+      "name": "NPK CÀ MAU GOLD 18-8-18",
+      "category": "Phân bón hóa học phức hợp (NPK)",
+      "sourceUrl": "https://www.pvcfc.com.vn/npk-ca-mau-gold-18-8-18-1",
+      "summary": "Công thức NPK Gold 18-8-18 hỗ trợ cây sinh trưởng, tăng năng suất và chất lượng nông sản, đồng thời tăng dinh dưỡng cho đất.",
+      "attributes": {
+        "formula": "18-8-18",
+        "benefits": [
+          "Giúp cây sinh trưởng và phát triển tốt",
+          "Tăng năng suất và chất lượng nông sản",
+          "Tăng cường dinh dưỡng cho đất"
+        ],
+        "packaging": {
+          "construction": "Bao hai lớp: PP bên ngoài và PE bên trong"
+        },
+        "shelfLifeMonths": 36,
+        "storage": "Bảo quản nơi thông thoáng, khô ráo, có che mưa nắng và không đặt trực tiếp trên sàn ẩm."
+      },
+      "imageUrls": [
+        "https://www.pvcfc.com.vn/Data/Sites/1/Product/8642/gold-18-8-18_truoc.png"
+      ],
+      "documentUrls": [
+        "https://www.pvcfc.com.vn/Data/Sites/1/media/fileattachment/[signed].67-tccs-npk-gold-18-8-18-rev7.pdf"
+      ],
+      "relatedUrls": [
+        "https://www.pvcfc.com.vn/npk"
+      ],
+      "provenance": {
+        "sourceUrl": "https://www.pvcfc.com.vn/npk-ca-mau-gold-18-8-18-1",
+        "retrievedAt": "2026-08-11",
+        "retrievalMethod": "tinyfish_fetch"
+      }
+    },
+    {
+      "id": "npk-ca-mau-gold-15-6-20",
+      "name": "NPK CÀ MAU GOLD 15-6-20",
+      "category": "Phân bón hóa học phức hợp (NPK)",
+      "sourceUrl": "https://www.pvcfc.com.vn/npk-ca-mau-gold-15-6-20",
+      "summary": "Công thức NPK Gold 15-6-20 hỗ trợ cây sinh trưởng, tăng năng suất và chất lượng nông sản, đồng thời tăng dinh dưỡng cho đất.",
+      "attributes": {
+        "formula": "15-6-20",
+        "benefits": [
+          "Giúp cây sinh trưởng và phát triển tốt",
+          "Tăng năng suất và chất lượng nông sản",
+          "Tăng cường dinh dưỡng cho đất"
+        ],
+        "packaging": {
+          "construction": "Bao hai lớp: PP bên ngoài và PE bên trong"
+        },
+        "shelfLifeMonths": 36,
+        "storage": "Bảo quản nơi thông thoáng, khô ráo, có che mưa nắng và không đặt trực tiếp trên sàn ẩm."
+      },
+      "imageUrls": [
+        "https://www.pvcfc.com.vn/Data/Sites/1/Product/8641/gold-15-6-20_truoc.png"
+      ],
+      "documentUrls": [],
+      "relatedUrls": [
+        "https://www.pvcfc.com.vn/npk"
+      ],
+      "provenance": {
+        "sourceUrl": "https://www.pvcfc.com.vn/npk-ca-mau-gold-15-6-20",
+        "retrievedAt": "2026-08-11",
+        "retrievalMethod": "tinyfish_fetch"
+      }
+    },
+    {
+      "id": "npk-ca-mau-gold-22-5-6",
+      "name": "NPK CÀ MAU GOLD 22-5-6",
+      "category": "Phân bón hóa học phức hợp (NPK)",
+      "sourceUrl": "https://www.pvcfc.com.vn/npk-ca-mau-gold-22-5-6",
+      "summary": "Công thức NPK Gold hỗ trợ sinh trưởng, năng suất và chất lượng nông sản, tăng dinh dưỡng cho đất và bổ sung đa vi lượng cho cây.",
+      "attributes": {
+        "formula": "22-5-6",
+        "benefits": [
+          "Giúp cây sinh trưởng và phát triển tốt",
+          "Tăng năng suất và chất lượng nông sản",
+          "Tăng cường dinh dưỡng cho đất",
+          "Bổ sung dinh dưỡng đa vi lượng cần thiết cho cây trồng"
+        ],
+        "packaging": {
+          "construction": "Bao hai lớp: PP bên ngoài và PE bên trong"
+        },
+        "shelfLifeMonths": 36,
+        "storage": "Bảo quản nơi thông thoáng, khô ráo, có che mưa nắng và không đặt trực tiếp trên sàn ẩm."
+      },
+      "imageUrls": [
+        "https://www.pvcfc.com.vn/Data/Sites/1/Product/8639/22-5-6-gold.png"
+      ],
+      "documentUrls": [
+        "https://www.pvcfc.com.vn/Data/Sites/1/media/fileattachment/[signed]10.-tccs-npk-gold-22-5-6-rev6.pdf"
+      ],
+      "relatedUrls": [
+        "https://www.pvcfc.com.vn/npk"
+      ],
+      "provenance": {
+        "sourceUrl": "https://www.pvcfc.com.vn/npk-ca-mau-gold-22-5-6",
+        "retrievedAt": "2026-08-11",
+        "retrievalMethod": "tinyfish_fetch"
+      }
+    },
+    {
+      "id": "npk-ca-mau-gold-20-20-15-1",
+      "name": "NPK Cà Mau Gold 20-20-15",
+      "category": "Phân bón hóa học phức hợp (NPK)",
+      "sourceUrl": "https://www.pvcfc.com.vn/npk-ca-mau-gold-20-20-15-1",
+      "summary": "Công thức NPK Gold 20-20-15 hỗ trợ sinh trưởng, năng suất và chất lượng nông sản, tăng dinh dưỡng cho đất và bổ sung đa vi lượng cho cây.",
+      "attributes": {
+        "formula": "20-20-15",
+        "benefits": [
+          "Giúp cây sinh trưởng và phát triển tốt",
+          "Tăng năng suất và chất lượng nông sản",
+          "Tăng cường dinh dưỡng cho đất",
+          "Bổ sung dinh dưỡng đa vi lượng cần thiết cho cây trồng"
+        ],
+        "packaging": {
+          "construction": "Bao hai lớp: PP bên ngoài và PE bên trong"
+        },
+        "shelfLifeMonths": 36,
+        "storage": "Bảo quản nơi thông thoáng, khô ráo, có che mưa nắng và không đặt trực tiếp trên sàn ẩm."
+      },
+      "imageUrls": [
+        "https://www.pvcfc.com.vn/Data/Sites/1/Product/8627/20-20-15-gold.png"
+      ],
+      "documentUrls": [
+        "https://www.pvcfc.com.vn/Data/Sites/1/media/fileattachment/[signed]18-70-tccs-npk-gold-20-20-15-rev3.pdf"
+      ],
+      "relatedUrls": [
+        "https://www.pvcfc.com.vn/npk"
+      ],
+      "provenance": {
+        "sourceUrl": "https://www.pvcfc.com.vn/npk-ca-mau-gold-20-20-15-1",
+        "retrievedAt": "2026-08-11",
+        "retrievalMethod": "tinyfish_fetch"
+      }
+    },
+    {
+      "id": "npk-ca-mau-15-15-1510ste-1",
+      "name": "NPK CÀ MAU 15-15-15+10S+TE",
+      "category": "Phân bón hóa học phức hợp (NPK)",
+      "sourceUrl": "https://www.pvcfc.com.vn/npk-ca-mau-15-15-1510ste-1",
+      "summary": "Công thức NPK có lưu huỳnh và vi lượng hỗ trợ sinh trưởng, năng suất và chất lượng nông sản, đồng thời tăng dinh dưỡng cho đất và cây.",
+      "attributes": {
+        "formula": "15-15-15+10S+TE",
+        "benefits": [
+          "Giúp cây sinh trưởng và phát triển tốt",
+          "Tăng năng suất và chất lượng nông sản",
+          "Tăng cường dinh dưỡng cho đất",
+          "Bổ sung dinh dưỡng đa trung vi lượng cần thiết cho cây trồng"
+        ],
+        "packaging": {
+          "construction": "Bao hai lớp: PP bên ngoài và PE bên trong"
+        },
+        "shelfLifeMonths": 36,
+        "storage": "Bảo quản nơi thông thoáng, khô ráo, có che mưa nắng và không đặt trực tiếp trên sàn ẩm."
+      },
+      "imageUrls": [
+        "https://www.pvcfc.com.vn/Data/Sites/1/Product/8626/15-15-ste.png"
+      ],
+      "documentUrls": [
+        "https://www.pvcfc.com.vn/Data/Sites/1/media/THONGTINSP/40/40.-tccs-npk-cà-mau-15-15-15+10s+te---rev5.pdf"
+      ],
+      "relatedUrls": [
+        "https://www.pvcfc.com.vn/npk"
+      ],
+      "provenance": {
+        "sourceUrl": "https://www.pvcfc.com.vn/npk-ca-mau-15-15-1510ste-1",
+        "retrievedAt": "2026-08-11",
+        "retrievalMethod": "tinyfish_fetch"
+      }
+    },
+    {
+      "id": "npk-ca-maubr20-10-15",
+      "name": "NPK CÀ MAU 20-10-15",
+      "category": "Phân bón hóa học phức hợp (NPK)",
+      "sourceUrl": "https://www.pvcfc.com.vn/npk-ca-maubr20-10-15",
+      "summary": "Công thức NPK 20-10-15 hỗ trợ cây sinh trưởng, tăng năng suất và chất lượng nông sản, đồng thời tăng dinh dưỡng cho đất.",
+      "attributes": {
+        "formula": "20-10-15",
+        "benefits": [
+          "Giúp cây sinh trưởng và phát triển tốt",
+          "Tăng năng suất và chất lượng nông sản",
+          "Tăng cường dinh dưỡng cho đất"
+        ],
+        "packaging": {
+          "construction": "Bao hai lớp: PP bên ngoài và PE bên trong"
+        },
+        "shelfLifeMonths": 36,
+        "storage": "Bảo quản nơi thông thoáng, khô ráo, có che mưa nắng và không đặt trực tiếp trên sàn ẩm."
+      },
+      "imageUrls": [
+        "https://www.pvcfc.com.vn/Data/Sites/1/Product/8616/20-10-15.png"
+      ],
+      "documentUrls": [
+        "https://www.pvcfc.com.vn/Data/Sites/1/media/fileattachment/[signed]47-tccs-npk-20-10-15-rev7.pdf"
+      ],
+      "relatedUrls": [
+        "https://www.pvcfc.com.vn/npk"
+      ],
+      "provenance": {
+        "sourceUrl": "https://www.pvcfc.com.vn/npk-ca-maubr20-10-15",
+        "retrievedAt": "2026-08-11",
+        "retrievalMethod": "tinyfish_fetch"
+      }
+    },
+    {
+      "id": "npk-ca-mau-22-5-6",
+      "name": "NPK CÀ MAU 22-5-6",
+      "category": "Phân bón hóa học phức hợp (NPK)",
+      "sourceUrl": "https://www.pvcfc.com.vn/npk-ca-mau-22-5-6",
+      "summary": "Công thức NPK 22-5-6 hỗ trợ cây sinh trưởng, tăng năng suất và chất lượng nông sản, đồng thời tăng dinh dưỡng cho đất.",
+      "attributes": {
+        "formula": "22-5-6",
+        "benefits": [
+          "Giúp cây sinh trưởng và phát triển tốt",
+          "Tăng năng suất và chất lượng nông sản",
+          "Tăng cường dinh dưỡng cho đất"
+        ],
+        "packaging": {
+          "construction": "Bao hai lớp: PP bên ngoài và PE bên trong"
+        },
+        "shelfLifeMonths": 36,
+        "storage": "Bảo quản nơi thông thoáng, khô ráo, có che mưa nắng và không đặt trực tiếp trên sàn ẩm."
+      },
+      "imageUrls": [
+        "https://www.pvcfc.com.vn/Data/Sites/1/Product/8613/22-5-6.png"
+      ],
+      "documentUrls": [
+        "https://www.pvcfc.com.vn/Data/Sites/1/media/fileattachment/[signed]37.-tccs-npk-22-5-6-rev8.pdf"
+      ],
+      "relatedUrls": [
+        "https://www.pvcfc.com.vn/npk"
+      ],
+      "provenance": {
+        "sourceUrl": "https://www.pvcfc.com.vn/npk-ca-mau-22-5-6",
+        "retrievedAt": "2026-08-11",
+        "retrievalMethod": "tinyfish_fetch"
+      }
+    }
+  ]
+}

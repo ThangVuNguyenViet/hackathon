@@ -1,0 +1,252 @@
+{
+  "schemaVersion": "pvcfc-public-fixture-fragment-v1",
+  "kind": "prices",
+  "retrievedAt": "2026-08-11",
+  "records": [
+    {
+      "id": "pvcfc-price-ure-ca-mau-reference-2025-12-24",
+      "name": "Urê Cà Mau — giá tham khảo công bố ngày 24/12/2025",
+      "sourceUrl": "https://www.pvcfc.com.vn/gia-phan-bon",
+      "summary": "Bài viết chính thức của PVCFC nêu mức tham khảo khoảng 11.000–12.000 đồng/kg. Đây không phải báo giá hiện hành: trang nói giá có thể thay đổi theo vùng miền, đại lý và thời điểm nhập hàng.",
+      "attributes": {
+        "price": "11.000–12.000",
+        "unit": "đồng/kg",
+        "currency": "VND",
+        "status": "reference_only_not_verified_current",
+        "priceQualifier": "Khoảng",
+        "contactPhone": "02903819000"
+      },
+      "imageUrls": [
+        "https://www.pvcfc.com.vn/Data/Sites/1/media/tin-tuc/cap-nhat-bang-gia-phan-bon-moi-tai-pvcfc.jpg"
+      ],
+      "documentUrls": [],
+      "relatedUrls": [
+        "https://www.pvcfc.com.vn/bang-gia-phan-bon"
+      ],
+      "provenance": {
+        "sourceUrl": "https://www.pvcfc.com.vn/gia-phan-bon",
+        "retrievedAt": "2026-08-11",
+        "publisher": "Công ty Cổ phần Phân bón Dầu khí Cà Mau (PVCFC)",
+        "sourceType": "official_price_article",
+        "sourcePublishedAt": "2025-12-24T03:09:00Z",
+        "retrievalMethod": "tinyfish_fetch",
+        "retrievalStatus": "success",
+        "freshnessNote": "The source is dated 2025-12-24 and was not treated as a current 2026 quote."
+      }
+    },
+    {
+      "id": "pvcfc-price-npk-20-20-15-reference-2025-12-24",
+      "name": "NPK 20-20-15 — giá tham khảo công bố ngày 24/12/2025",
+      "sourceUrl": "https://www.pvcfc.com.vn/gia-phan-bon",
+      "summary": "Bài viết chính thức của PVCFC nêu mức tham khảo khoảng 14.500–16.000 đồng/kg. Đây không phải báo giá hiện hành: trang nói giá có thể thay đổi theo vùng miền, đại lý và thời điểm nhập hàng.",
+      "attributes": {
+        "price": "14.500–16.000",
+        "unit": "đồng/kg",
+        "currency": "VND",
+        "status": "reference_only_not_verified_current",
+        "priceQualifier": "Khoảng",
+        "contactPhone": "02903819000"
+      },
+      "imageUrls": [
+        "https://www.pvcfc.com.vn/Data/Sites/1/media/tin-tuc/cap-nhat-bang-gia-phan-bon-moi-nhat-hien-nay.jpg"
+      ],
+      "documentUrls": [],
+      "relatedUrls": [
+        "https://www.pvcfc.com.vn/bang-gia-phan-bon",
+        "https://www.pvcfc.com.vn/npk"
+      ],
+      "provenance": {
+        "sourceUrl": "https://www.pvcfc.com.vn/gia-phan-bon",
+        "retrievedAt": "2026-08-11",
+        "publisher": "Công ty Cổ phần Phân bón Dầu khí Cà Mau (PVCFC)",
+        "sourceType": "official_price_article",
+        "sourcePublishedAt": "2025-12-24T03:09:00Z",
+        "retrievalMethod": "tinyfish_fetch",
+        "retrievalStatus": "success",
+        "freshnessNote": "The source is dated 2025-12-24 and was not treated as a current 2026 quote."
+      }
+    },
+    {
+      "id": "pvcfc-price-npk-16-16-8-reference-2025-12-24",
+      "name": "NPK 16-16-8 — giá tham khảo công bố ngày 24/12/2025",
+      "sourceUrl": "https://www.pvcfc.com.vn/gia-phan-bon",
+      "summary": "Bài viết chính thức của PVCFC nêu mức tham khảo 13.000–14.000 đồng/kg. Đây không phải báo giá hiện hành: trang nói giá có thể thay đổi theo vùng miền, đại lý và thời điểm nhập hàng.",
+      "attributes": {
+        "price": "13.000–14.000",
+        "unit": "đồng/kg",
+        "currency": "VND",
+        "status": "reference_only_not_verified_current",
+        "contactPhone": "02903819000"
+      },
+      "imageUrls": [
+        "https://www.pvcfc.com.vn/Data/Sites/1/media/tin-tuc/cap-nhat-bang-gia-phan-bon-moi-nhat-hien-nay.jpg"
+      ],
+      "documentUrls": [],
+      "relatedUrls": [
+        "https://www.pvcfc.com.vn/bang-gia-phan-bon",
+        "https://www.pvcfc.com.vn/npk"
+      ],
+      "provenance": {
+        "sourceUrl": "https://www.pvcfc.com.vn/gia-phan-bon",
+        "retrievedAt": "2026-08-11",
+        "publisher": "Công ty Cổ phần Phân bón Dầu khí Cà Mau (PVCFC)",
+        "sourceType": "official_price_article",
+        "sourcePublishedAt": "2025-12-24T03:09:00Z",
+        "retrievalMethod": "tinyfish_fetch",
+        "retrievalStatus": "success",
+        "freshnessNote": "The source is dated 2025-12-24 and was not treated as a current 2026 quote."
+      }
+    },
+    {
+      "id": "pvcfc-price-super-lan-reference-2025-12-24",
+      "name": "Phân Super lân — giá tham khảo công bố ngày 24/12/2025",
+      "sourceUrl": "https://www.pvcfc.com.vn/gia-phan-bon",
+      "summary": "Bài viết chính thức của PVCFC nêu mức dao động 520.000–600.000 đồng cho bao 50 kg. Đây không phải báo giá hiện hành và trang không nêu vùng áp dụng cụ thể.",
+      "attributes": {
+        "price": "520.000–600.000",
+        "unit": "đồng/bao 50 kg",
+        "currency": "VND",
+        "status": "reference_only_not_verified_current",
+        "priceQualifier": "Dao động từ",
+        "contactPhone": "02903819000"
+      },
+      "imageUrls": [
+        "https://www.pvcfc.com.vn/Data/Sites/1/media/tin-tuc/cap-nhat-bang-gia-phan-bon-moi-tai-pvcfc.jpg"
+      ],
+      "documentUrls": [],
+      "relatedUrls": [
+        "https://www.pvcfc.com.vn/bang-gia-phan-bon"
+      ],
+      "provenance": {
+        "sourceUrl": "https://www.pvcfc.com.vn/gia-phan-bon",
+        "retrievedAt": "2026-08-11",
+        "publisher": "Công ty Cổ phần Phân bón Dầu khí Cà Mau (PVCFC)",
+        "sourceType": "official_price_article",
+        "sourcePublishedAt": "2025-12-24T03:09:00Z",
+        "retrievalMethod": "tinyfish_fetch",
+        "retrievalStatus": "success",
+        "freshnessNote": "The source is dated 2025-12-24 and was not treated as a current 2026 quote."
+      }
+    },
+    {
+      "id": "pvcfc-price-dap-reference-2025-12-24",
+      "name": "Phân bón DAP — giá tham khảo công bố ngày 24/12/2025",
+      "sourceUrl": "https://www.pvcfc.com.vn/gia-phan-bon",
+      "summary": "Bài viết chính thức của PVCFC nêu mức 2.000.000–2.400.000 đồng cho bao 50 kg. Đây không phải báo giá hiện hành và trang không nêu vùng áp dụng cụ thể.",
+      "attributes": {
+        "price": "2.000.000–2.400.000",
+        "unit": "đồng/bao 50 kg",
+        "currency": "VND",
+        "status": "reference_only_not_verified_current",
+        "priceQualifier": "Từ",
+        "contactPhone": "02903819000"
+      },
+      "imageUrls": [
+        "https://www.pvcfc.com.vn/Data/Sites/1/media/tin-tuc/cap-nhat-bang-gia-phan-bon-moi-tai-pvcfc.jpg"
+      ],
+      "documentUrls": [],
+      "relatedUrls": [
+        "https://www.pvcfc.com.vn/bang-gia-phan-bon"
+      ],
+      "provenance": {
+        "sourceUrl": "https://www.pvcfc.com.vn/gia-phan-bon",
+        "retrievedAt": "2026-08-11",
+        "publisher": "Công ty Cổ phần Phân bón Dầu khí Cà Mau (PVCFC)",
+        "sourceType": "official_price_article",
+        "sourcePublishedAt": "2025-12-24T03:09:00Z",
+        "retrievalMethod": "tinyfish_fetch",
+        "retrievalStatus": "success",
+        "freshnessNote": "The source is dated 2025-12-24 and was not treated as a current 2026 quote."
+      }
+    },
+    {
+      "id": "pvcfc-fertilizer-price-listing-page-2026-08-11",
+      "name": "Trang tra cứu Bảng giá phân bón PVCFC",
+      "sourceUrl": "https://www.pvcfc.com.vn/bang-gia-phan-bon",
+      "summary": "Trang danh mục chính thức dành cho bảng giá phân bón. Lần truy xuất tĩnh ngày 11/08/2026 chỉ trả về phần thông tin liên hệ, không trả về bản ghi giá hay tài liệu tải xuống; vì vậy không có giá hiện hành nào được ghi nhận từ trang này.",
+      "attributes": {
+        "status": "no_price_entries_extracted",
+        "contactPhone": "02903819000",
+        "hotline": "1800888606"
+      },
+      "imageUrls": [],
+      "documentUrls": [],
+      "relatedUrls": [
+        "https://www.pvcfc.com.vn/en-US/fertilizer-price",
+        "https://www.pvcfc.com.vn/gia-phan-bon"
+      ],
+      "provenance": {
+        "sourceUrl": "https://www.pvcfc.com.vn/bang-gia-phan-bon",
+        "retrievedAt": "2026-08-11",
+        "publisher": "Công ty Cổ phần Phân bón Dầu khí Cà Mau (PVCFC)",
+        "sourceType": "official_price_listing_page",
+        "retrievalMethod": "tinyfish_fetch",
+        "retrievalStatus": "static_fetch_returned_footer_only",
+        "gapNote": "TinyFish interactive agent runs could not inspect dynamic content because the account reported zero agent credits."
+      }
+    },
+    {
+      "id": "pvcfc-hsc-q1-2026-estimated-ure-average-selling-price",
+      "name": "Giá bán bình quân urê ước tính Q1/2026 trong báo cáo HSC",
+      "sourceUrl": "https://www.pvcfc.com.vn/Data/Sites/1/media/quan-he-nha-dau-tu/Chuyen%20vien%20phan%20tich/2026/HSC-bao-cao-nhanh-DCM-04.2026.pdf",
+      "summary": "Báo cáo nhanh HSC ngày 15/04/2026, được PVCFC lưu trữ công khai, ước tính giá bán bình quân urê Q1/2026 ở mức 10.900 đồng/kg. Đây là số liệu phân tích về giá bán bình quân, không phải giá bán lẻ hiện hành.",
+      "attributes": {
+        "price": "10.900",
+        "unit": "đồng/kg",
+        "currency": "VND",
+        "effectiveDate": "2026-Q1",
+        "status": "analyst_estimate_not_retail_quote",
+        "priceBasis": "Giá bán bình quân ước tính"
+      },
+      "imageUrls": [],
+      "documentUrls": [
+        "https://www.pvcfc.com.vn/Data/Sites/1/media/quan-he-nha-dau-tu/Chuyen%20vien%20phan%20tich/2026/HSC-bao-cao-nhanh-DCM-04.2026.pdf"
+      ],
+      "relatedUrls": [
+        "https://www.pvcfc.com.vn/quan-he-dau-tu"
+      ],
+      "provenance": {
+        "sourceUrl": "https://www.pvcfc.com.vn/Data/Sites/1/media/quan-he-nha-dau-tu/Chuyen%20vien%20phan%20tich/2026/HSC-bao-cao-nhanh-DCM-04.2026.pdf",
+        "retrievedAt": "2026-08-11",
+        "host": "Công ty Cổ phần Phân bón Dầu khí Cà Mau (PVCFC)",
+        "documentPublisher": "Công ty Cổ phần Chứng khoán Thành phố Hồ Chí Minh (HSC)",
+        "sourceType": "official_hosted_analyst_pdf",
+        "sourceDate": "2026-04-15",
+        "retrievalMethod": "tinyfish_fetch",
+        "retrievalStatus": "success"
+      }
+    },
+    {
+      "id": "pvcfc-bvsc-h2-2026-world-ure-price-forecast",
+      "name": "Dự báo giá urê thế giới nửa cuối năm 2026 trong báo cáo BVSC",
+      "sourceUrl": "https://www.pvcfc.com.vn/Data/Sites/1/media/quan-he-nha-dau-tu/Chuyen%20vien%20phan%20tich/2026/DCM_Dinh-gia-hap-dan-sau-nhip-dieu-chinh-manh_BVSC.pdf",
+      "summary": "Báo cáo cập nhật BVSC tháng 07/2026, được PVCFC lưu trữ công khai, dự báo giá urê thế giới trong nửa cuối năm 2026 dao động 380–440 USD/tấn. Đây là dự báo thị trường thế giới, không phải giá bán hiện hành của PVCFC.",
+      "attributes": {
+        "price": "380–440",
+        "unit": "USD/tấn",
+        "currency": "USD",
+        "effectiveDate": "2026-H2",
+        "region": "Thế giới",
+        "status": "analyst_forecast_not_current_quote",
+        "priceBasis": "Dự báo giá urê thế giới"
+      },
+      "imageUrls": [],
+      "documentUrls": [
+        "https://www.pvcfc.com.vn/Data/Sites/1/media/quan-he-nha-dau-tu/Chuyen%20vien%20phan%20tich/2026/DCM_Dinh-gia-hap-dan-sau-nhip-dieu-chinh-manh_BVSC.pdf"
+      ],
+      "relatedUrls": [
+        "https://www.pvcfc.com.vn/quan-he-dau-tu"
+      ],
+      "provenance": {
+        "sourceUrl": "https://www.pvcfc.com.vn/Data/Sites/1/media/quan-he-nha-dau-tu/Chuyen%20vien%20phan%20tich/2026/DCM_Dinh-gia-hap-dan-sau-nhip-dieu-chinh-manh_BVSC.pdf",
+        "retrievedAt": "2026-08-11",
+        "host": "Công ty Cổ phần Phân bón Dầu khí Cà Mau (PVCFC)",
+        "documentPublisher": "Công ty Cổ phần Chứng khoán Bảo Việt (BVSC)",
+        "sourceType": "official_hosted_analyst_pdf",
+        "sourceDate": "2026-07",
+        "retrievalMethod": "tinyfish_fetch",
+        "retrievalStatus": "success"
+      }
+    }
+  ]
+}

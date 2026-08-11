@@ -1,0 +1,478 @@
+{
+  "schemaVersion": "pvcfc-public-fixture-fragment-v1",
+  "kind": "promotions",
+  "retrievedAt": "2026-08-11",
+  "records": [
+    {
+      "id": "pvcfc-promotion-mua-vang-thang-lon-2026",
+      "name": "Mùa Vàng Thắng Lớn 2026",
+      "sourceUrl": "https://www.pvcfc.com.vn/the-le-chuong-trinh-khuyen-mai-mua-vang-thang-lon-2026",
+      "summary": "Chương trình may rủi toàn quốc dành cho khách mua phân bón NPK do PVCFC phân phối, với vòng quay tức thời từ mã QR trong bao và ba đợt livestream cho giải Nhất, Nhì.",
+      "attributes": {
+        "startDate": "2026-03-09",
+        "endDate": "2027-02-28",
+        "status": "current",
+        "scope": "Toàn lãnh thổ Việt Nam",
+        "audience": "Khách hàng mua sản phẩm khuyến mại tại cửa hàng vật tư nông nghiệp",
+        "eligibleProducts": ["Sản phẩm phân bón NPK do PVCFC phân phối"],
+        "mechanics": [
+          "Tìm tem QR bên trong bao sản phẩm; mỗi tem có một mã dự thưởng 10 ký tự và cho một lượt tham gia",
+          "Quét QR bằng camera hoặc Zalo, nhập thông tin tại khuyenmai.pvcfc.com.vn và quay thưởng",
+          "Mã hợp lệ tiếp tục tham gia các đợt livestream ngày 30/05/2026, 30/09/2026 và 09/03/2027 cho giải Nhất và Nhì"
+        ],
+        "prizes": [
+          "45 xe Honda Wave RSX 2026",
+          "45 nhẫn vàng DOJI 1 chỉ",
+          "500 nhẫn vàng DOJI 0,5 chỉ",
+          "5.000 lượt nạp điện thoại 50.000 đồng",
+          "10.000 lượt nạp điện thoại 20.000 đồng",
+          "1.500.000 lượt nạp điện thoại 10.000 đồng"
+        ],
+        "contact": {
+          "hotline": "1800 888 606",
+          "entryWebsite": "https://khuyenmai.pvcfc.com.vn/",
+          "campaignWebsite": "https://muavangthanglon.pvcfc.com.vn/"
+        }
+      },
+      "imageUrls": [
+        "https://www.pvcfc.com.vn/Data/Sites/1/media/h%C3%ACnh-%E1%BA%A3nh-2026/th%C3%A1ng-3/the-le-mua-vang-thang-lon-2026-kv.jpg",
+        "https://www.pvcfc.com.vn/Data/Sites/1/media/h%C3%ACnh-%E1%BA%A3nh-2026/th%C3%A1ng-3/the-le-mua-vang-2026-05.png",
+        "https://www.pvcfc.com.vn/Data/Sites/1/media/h%C3%ACnh-%E1%BA%A3nh-2026/th%C3%A1ng-3/the-le-mua-vang-2026-2.png",
+        "https://www.pvcfc.com.vn/Data/Sites/1/media/h%C3%ACnh-%E1%BA%A3nh-2026/th%C3%A1ng-3/the-le-mua-vang-thang-lon-2026-3.png",
+        "https://www.pvcfc.com.vn/Data/Sites/1/media/h%C3%ACnh-%E1%BA%A3nh-2026/th%C3%A1ng-3/the-le-mua-vang-thang-lon-4.png",
+        "https://www.pvcfc.com.vn/Data/Sites/1/media/h%C3%ACnh-%E1%BA%A3nh-2026/th%C3%A1ng-3/the-le-mua-vang-20226-01.png"
+      ],
+      "documentUrls": [
+        "https://www.pvcfc.com.vn/Data/Sites/1/media/tai-lieu-2026/Filemuctintuc/1463cvxndieuchinhmvtl1.pdf"
+      ],
+      "relatedUrls": [
+        "https://www.pvcfc.com.vn/khuyen-mai",
+        "https://www.pvcfc.com.vn/mua-vang-thang-lon-2026-nang-cap-giai-nhat-tang-niem-vui-thang-lon-voi-honda-wave-rsx",
+        "https://muavangthanglon.pvcfc.com.vn/",
+        "https://khuyenmai.pvcfc.com.vn/"
+      ],
+      "provenance": {
+        "publisher": "Công ty Cổ phần - Tổng Công ty Phân bón Dầu khí Cà Mau (PVCFC)",
+        "sourceType": "official_promotion_terms",
+        "sourcePublishedAt": "2026-03-09T07:18:00Z",
+        "retrievedAt": "2026-08-11",
+        "retrievalMethod": "tinyfish_fetch",
+        "retrievalStatus": "success",
+        "statusBasis": "The explicit promotion interval contains the retrieval date."
+      }
+    },
+    {
+      "id": "pvcfc-promotion-thu-tai-hai-loc-2026",
+      "name": "Thử Tài Hái Lộc",
+      "sourceUrl": "https://muavangthanglon.pvcfc.com.vn/",
+      "summary": "Minigame trên microsite Mùa Vàng Thắng Lớn: người chơi trả lời câu hỏi ngẫu nhiên, rồi chọn một biểu tượng lộc vàng để có cơ hội nhận thẻ nạp điện thoại.",
+      "attributes": {
+        "endDate": "2027-02-28",
+        "status": "current",
+        "eligibleProducts": [],
+        "audience": "Người chơi truy cập microsite; mỗi số điện thoại chỉ đăng ký một lần",
+        "mechanics": [
+          "Điền thông tin theo hướng dẫn và trả lời câu hỏi ngẫu nhiên",
+          "Nếu trả lời đúng, chọn ngẫu nhiên một biểu tượng lộc vàng",
+          "Quà được gửi tới số điện thoại đã đăng ký trong vòng 15 ngày làm việc"
+        ],
+        "prize": "Thẻ nạp điện thoại 10.000 đồng, không quy đổi thành tiền mặt"
+      },
+      "imageUrls": [
+        "https://muavangthanglon.pvcfc.com.vn/wp-content/themes/jackpot/jackpot-assets/images/muavangthanglon.png",
+        "https://muavangthanglon.pvcfc.com.vn/wp-content/themes/jackpot/jackpot-assets/images/nhandoicohoitrungthuong.png"
+      ],
+      "documentUrls": [],
+      "relatedUrls": [
+        "https://muavangthanglon.pvcfc.com.vn/#minigame",
+        "https://muavangthanglon.pvcfc.com.vn/#rule",
+        "https://muavangthanglon.pvcfc.com.vn/#winners",
+        "https://www.pvcfc.com.vn/the-le-chuong-trinh-khuyen-mai-mua-vang-thang-lon-2026"
+      ],
+      "provenance": {
+        "publisher": "PVCFC",
+        "sourceType": "official_campaign_microsite",
+        "retrievedAt": "2026-08-11",
+        "retrievalMethod": "tinyfish_fetch",
+        "retrievalStatus": "success",
+        "statusBasis": "The page explicitly says participation runs through February 2027 or until gifts are exhausted; no exact start date is stated."
+      }
+    },
+    {
+      "id": "pvcfc-promotion-ho-tro-nha-nong-vuot-kho-2026",
+      "name": "Hỗ trợ nhà nông vượt khó",
+      "sourceUrl": "https://www.pvcfc.com.vn/phan-bon-ca-mau-trien-khai-chuong-trinh-ho-tro-nha-nong-vuot-kho-tren-toan-quoc",
+      "summary": "Chương trình quà tặng toàn quốc hỗ trợ nông dân giảm chi phí đầu vào: mua ba bao thuộc nhóm sản phẩm áp dụng được tặng một túi NPK Gold 20-10-10 loại 2 kg.",
+      "attributes": {
+        "startDate": "2026-04-30",
+        "endDate": "2026-06-30",
+        "status": "expired",
+        "dealerReceiptStartDate": "2026-04-23",
+        "scope": "Toàn quốc",
+        "audience": "Nông dân thuộc các đại lý cấp 2 trong hệ thống phân phối PVCFC",
+        "eligibleProducts": [
+          "Urê Cà Mau",
+          "NPK Cà Mau",
+          "Đạm Chức Năng",
+          "Hữu Cơ OM CAMAU"
+        ],
+        "mechanics": [
+          "Mua mỗi 03 bao, tổng 150 kg, thuộc nhóm sản phẩm áp dụng",
+          "Nhận 01 túi NPK Gold 20-10-10 loại 2 kg",
+          "Chương trình có thể kết thúc sớm khi hết quà"
+        ],
+        "plannedGiftQuantity": "Hơn 260.000 túi NPK Gold 20-10-10 loại 2 kg",
+        "statedProgramValue": "Trên 10 tỷ đồng"
+      },
+      "imageUrls": [],
+      "documentUrls": [],
+      "relatedUrls": ["https://www.pvcfc.com.vn/khuyen-mai"],
+      "provenance": {
+        "publisher": "PVCFC",
+        "sourceType": "official_promotion_article",
+        "retrievedAt": "2026-08-11",
+        "retrievalMethod": "tinyfish_fetch",
+        "retrievalStatus": "success",
+        "statusBasis": "The explicit end date precedes the retrieval date."
+      }
+    },
+    {
+      "id": "pvcfc-promotion-gieo-niem-tin-gat-loc-vang",
+      "name": "Gieo Niềm Tin - Gặt Lộc Vàng",
+      "sourceUrl": "https://www.pvcfc.com.vn/the-le-chi-tiet-chuong-trinh-gieo-niem-tin-gat-loc-vang",
+      "summary": "Trang thể lệ chính thức được PVCFC đưa vào danh mục khuyến mãi; nội dung chương trình được trình bày bằng ảnh và lần trích xuất văn bản không cung cấp ngày, sản phẩm hay cơ chế đủ rõ để chuẩn hóa.",
+      "attributes": {
+        "status": "unknown",
+        "eligibleProducts": [],
+        "mechanics": []
+      },
+      "imageUrls": [
+        "https://www.pvcfc.com.vn/Data/Sites/1/media/hinh-anh-2025/khuyen-mai-2025/gntglv/hinh-1-the-le-minigame.jpg",
+        "https://www.pvcfc.com.vn/Data/Sites/1/media/hinh-anh-2025/khuyen-mai-2025/gntglv/hinh-5-the-le-minigame.jpg",
+        "https://www.pvcfc.com.vn/Data/Sites/1/media/hinh-anh-2025/khuyen-mai-2025/gntglv/hinh-3-the-le-minigame.jpg"
+      ],
+      "documentUrls": [],
+      "relatedUrls": ["https://www.pvcfc.com.vn/khuyen-mai"],
+      "provenance": {
+        "publisher": "PVCFC",
+        "sourceType": "official_image_based_promotion_terms",
+        "retrievedAt": "2026-08-11",
+        "retrievalMethod": "tinyfish_fetch",
+        "retrievalStatus": "image_only_terms_not_text_extracted",
+        "statusBasis": "Unknown because no explicit promotion interval was available in extracted page text."
+      }
+    },
+    {
+      "id": "pvcfc-promotion-mua-vang-thang-lon-2025",
+      "name": "Mùa Vàng Thắng Lớn 2025",
+      "sourceUrl": "https://www.pvcfc.com.vn/the-le-chuong-trinh-khuyen-mai-mua-vang-thang-lon-2025",
+      "summary": "Chương trình quay số toàn quốc cho khách mua NPK Cà Mau, sử dụng mã dự thưởng 10 ký tự trên tem trong bao để nhận cơ hội trúng xe, vàng và tiền nạp điện thoại.",
+      "attributes": {
+        "startDate": "2025-04-15",
+        "endDate": "2026-02-28",
+        "status": "expired",
+        "scope": "Toàn lãnh thổ Việt Nam",
+        "audience": "Khách hàng mua sản phẩm khuyến mại",
+        "eligibleProducts": ["NPK Cà Mau do PVCFC phân phối"],
+        "mechanics": [
+          "Tìm tem gồm mã QR và mã dự thưởng 10 ký tự bên trong bao",
+          "Quét QR và nhập thông tin hoặc gửi mã dự thưởng theo cú pháp SMS được công bố",
+          "Quay số may mắn xác định trúng thưởng"
+        ],
+        "prizes": [
+          "60 xe Honda Blade 2024 phiên bản tiêu chuẩn",
+          "1.200 nhẫn vàng DOJI 0,5 chỉ",
+          "10.000 lượt nạp điện thoại 20.000 đồng",
+          "990.000 lượt nạp điện thoại 10.000 đồng"
+        ],
+        "contact": {
+          "hotline": "1800 888 606",
+          "entryWebsite": "https://khuyenmai.pvcfc.com.vn/"
+        }
+      },
+      "imageUrls": [
+        "https://www.pvcfc.com.vn/Data/Sites/1/media/hinh-anh-2025/khuyen-mai-2025/cover-website-1.958%C2%A0x%C2%A0733-01-01.jpg",
+        "https://www.pvcfc.com.vn/Data/Sites/1/media/hinh-anh-2025/khuyen-mai-2025/hinh-mã-qr.png"
+      ],
+      "documentUrls": [],
+      "relatedUrls": [
+        "https://www.pvcfc.com.vn/npk-ca-mau-20-10-10-chon-dung-trung-mua-vang",
+        "https://www.pvcfc.com.vn/mua-vang-thang-lon-2025-co-hoi-trung-lon-khi-mua-npk-ca-mau",
+        "https://www.pvcfc.com.vn/hang-trieu-giai-thuong-hap-dan-danh-cho-nong-dan-tu-mua-vang-thang-lon-2025",
+        "https://khuyenmai.pvcfc.com.vn/"
+      ],
+      "provenance": {
+        "publisher": "PVCFC",
+        "sourceType": "official_promotion_terms",
+        "sourcePublishedAt": "2025-04-23T01:17:00Z",
+        "retrievedAt": "2026-08-11",
+        "retrievalMethod": "tinyfish_fetch",
+        "retrievalStatus": "success",
+        "statusBasis": "The explicit end date precedes the retrieval date."
+      }
+    },
+    {
+      "id": "pvcfc-promotion-don-mua-vang-van-niem-may-2025",
+      "name": "Đón Mùa Vàng - Vạn Niềm May",
+      "sourceUrl": "https://www.pvcfc.com.vn/the-le-chuong-trinh-khuyen-mai-don-mua-vang-van-niem-may",
+      "summary": "Chương trình quay số cho đại lý cấp 2, cấp mã dự thưởng dựa trên sản lượng mua hàng được ghi nhận thành công trên hệ thống DMS.",
+      "attributes": {
+        "startDate": "2025-03-28",
+        "endDate": "2025-09-15",
+        "status": "expired",
+        "scope": "Toàn quốc",
+        "audience": "Đại lý cấp 2, gồm nhóm khách hàng chiến lược và phổ thông",
+        "eligibleProducts": [
+          "NPK Cà Mau",
+          "N46.Plus Cà Mau",
+          "Urea Bio Cà Mau",
+          "N.Humate + TE",
+          "Hữu Cơ OM CAMAU"
+        ],
+        "mechanics": [
+          "Đơn hàng thành công trên DMS được xét theo ngưỡng sản lượng",
+          "Khách hàng được cấp mã dự thưởng phổ thông và, khi đủ điều kiện, mã dự thưởng đặc biệt",
+          "Quay số ngày 10/10/2025"
+        ],
+        "prizes": "211 giải vàng DOJI, gồm 01 giải đặc biệt 10 lượng, 15 giải nhất 1 lượng, 75 giải nhì 2 chỉ và 120 giải ba 1 chỉ",
+        "contact": {
+          "hotline": "1800 888 606",
+          "website": "https://www.pvcfc.com.vn/"
+        }
+      },
+      "imageUrls": [
+        "https://www.pvcfc.com.vn/Data/Sites/1/media/hinh-anh-2025/khuyen-mai-2025/the-le-chuong-trinh-khuyen-mai-don-mua-vang-van-niem-vui-1.jpg"
+      ],
+      "documentUrls": [],
+      "relatedUrls": ["https://www.pvcfc.com.vn/khuyen-mai"],
+      "provenance": {
+        "publisher": "PVCFC",
+        "sourceType": "official_promotion_terms",
+        "sourcePublishedAt": "2025-04-23T01:17:00Z",
+        "retrievedAt": "2026-08-11",
+        "retrievalMethod": "tinyfish_fetch",
+        "retrievalStatus": "success",
+        "statusBasis": "The explicit end date precedes the retrieval date."
+      }
+    },
+    {
+      "id": "pvcfc-promotion-dua-dinh-phan-phoi-rinh-vang-lien-tay-2024",
+      "name": "Đua Đỉnh Phân Phối, Rinh Vàng Liền Tay",
+      "sourceUrl": "https://www.pvcfc.com.vn/the-le-chuong-trinh-khuyen-mai-dua-dinh-phan-phoi-rinh-vang-lien-tay",
+      "summary": "Chương trình quay số theo sản lượng cho khách hàng trong hệ thống phân phối PVCFC, cấp mã phổ thông và mã đặc biệt theo nhóm khách hàng và khu vực.",
+      "attributes": {
+        "startDate": "2024-09-20",
+        "endDate": "2025-01-31",
+        "status": "expired",
+        "eligibleProducts": [
+          "NPK Cà Mau",
+          "N46.Plus Cà Mau",
+          "Urea Bio Cà Mau",
+          "N.Humate + TE",
+          "Hữu Cơ OM CAMAU"
+        ],
+        "mechanics": [
+          "Cấp mã dự thưởng theo sản lượng và nhóm khách hàng",
+          "Mã phổ thông và mã đặc biệt dùng cho các nhóm giải tương ứng",
+          "Quay số sau khi kết thúc thời gian ghi nhận sản lượng"
+        ],
+        "prizes": "221 giải vàng; thể lệ cho phép đổi giải thưởng thành tiền mặt",
+        "contact": {
+          "hotline": "1800 888 606",
+          "website": "https://www.pvcfc.com.vn/"
+        }
+      },
+      "imageUrls": [
+        "https://www.pvcfc.com.vn/Data/Sites/1/media/khuyen-mai/2024/post-2-01.jpg"
+      ],
+      "documentUrls": [],
+      "relatedUrls": ["https://www.pvcfc.com.vn/khuyen-mai"],
+      "provenance": {
+        "publisher": "PVCFC",
+        "sourceType": "official_promotion_terms",
+        "sourcePublishedAt": "2024-10-15T06:43:00Z",
+        "retrievedAt": "2026-08-11",
+        "retrievalMethod": "tinyfish_fetch",
+        "retrievalStatus": "success",
+        "statusBasis": "The explicit end date precedes the retrieval date."
+      }
+    },
+    {
+      "id": "pvcfc-promotion-don-mua-vang-ket-loc-vang-phase-2-2024",
+      "name": "Đón Mùa Vàng - Kết Lộc Vàng (giai đoạn 20/09/2024–31/01/2025)",
+      "sourceUrl": "https://www.pvcfc.com.vn/the-le-chuong-trinh-khuyen-mai-don-mua-vang-ket-loc-vang",
+      "summary": "Chương trình quay số toàn quốc cho đại lý cấp 2, cấp mã dự thưởng theo sản lượng mua hàng ghi nhận trên DMS.",
+      "attributes": {
+        "startDate": "2024-09-20",
+        "endDate": "2025-01-31",
+        "status": "expired",
+        "scope": "Toàn quốc",
+        "audience": "Đại lý cấp 2 có đơn hàng thành công trên DMS",
+        "eligibleProducts": [
+          "NPK Cà Mau",
+          "N46.Plus Cà Mau",
+          "Urea Bio Cà Mau",
+          "N.Humate + TE",
+          "Hữu Cơ OM CAMAU"
+        ],
+        "mechanics": [
+          "Cấp mã dự thưởng phổ thông và đặc biệt theo sản lượng và nhóm khách hàng",
+          "Quay số may mắn xác định trúng thưởng"
+        ],
+        "prizes": "221 giải vàng DOJI, gồm 01 giải đặc biệt 10 lượng, 10 giải nhất 1 lượng, 50 giải nhì 5 chỉ, 60 giải ba 2 chỉ và 100 giải khuyến khích 1 chỉ",
+        "contact": {
+          "hotline": "1800 888 606",
+          "website": "https://www.pvcfc.com.vn/"
+        }
+      },
+      "imageUrls": [
+        "https://www.pvcfc.com.vn/Data/Sites/1/media/khuyen-mai/2024/qsmm-gd2-01a.jpg"
+      ],
+      "documentUrls": [],
+      "relatedUrls": ["https://www.pvcfc.com.vn/khuyen-mai"],
+      "provenance": {
+        "publisher": "PVCFC",
+        "sourceType": "official_promotion_terms",
+        "sourcePublishedAt": "2024-10-14T09:41:00Z",
+        "retrievedAt": "2026-08-11",
+        "retrievalMethod": "tinyfish_fetch",
+        "retrievalStatus": "success",
+        "statusBasis": "The explicit end date precedes the retrieval date."
+      }
+    },
+    {
+      "id": "pvcfc-promotion-don-mua-vang-ket-loc-vang-phase-1-2024",
+      "name": "Đón Mùa Vàng - Kết Lộc Vàng (giai đoạn 25/03/2024–15/09/2024)",
+      "sourceUrl": "https://www.pvcfc.com.vn/the-le-chuong-trinh-khuyen-mai-don-mua-vang-ket-loc-vang-1",
+      "summary": "Chương trình quay số toàn quốc cho đại lý cấp 2, cấp mã phổ thông và mã đặc biệt theo sản lượng mua hàng được ghi nhận trên DMS.",
+      "attributes": {
+        "startDate": "2024-03-25",
+        "endDate": "2024-09-15",
+        "status": "expired",
+        "scope": "Toàn quốc",
+        "audience": "Đại lý cấp 2 có đơn hàng thành công trên DMS",
+        "eligibleProducts": [
+          "NPK Cà Mau",
+          "N46.Plus Cà Mau",
+          "Urea Bio Cà Mau",
+          "N.Humate + TE",
+          "Hữu Cơ OM CAMAU"
+        ],
+        "mechanics": [
+          "Cấp mã dự thưởng phổ thông và đặc biệt theo sản lượng và nhóm khách hàng",
+          "Quay số may mắn xác định trúng thưởng"
+        ],
+        "prizes": "221 giải vàng, gồm 01 giải đặc biệt 10 lượng SJC, 10 giải nhất 1 lượng SJC, 50 giải nhì 5 chỉ DOJI, 60 giải ba 2 chỉ DOJI và 100 giải khuyến khích 1 chỉ DOJI; không quy đổi thành tiền mặt",
+        "contact": {
+          "hotline": "1800 888 606",
+          "website": "https://www.pvcfc.com.vn/"
+        }
+      },
+      "imageUrls": [
+        "https://www.pvcfc.com.vn/Data/Sites/1/media/khuyen-mai/2024/don-mua-vang-ket-loc-vang---25042024.png",
+        "https://www.pvcfc.com.vn/Data/Sites/1/media/khuyen-mai/2024/qsmm-01-01-01.png"
+      ],
+      "documentUrls": [],
+      "relatedUrls": ["https://www.pvcfc.com.vn/khuyen-mai"],
+      "provenance": {
+        "publisher": "PVCFC",
+        "sourceType": "official_promotion_terms",
+        "sourcePublishedAt": "2024-04-01T02:00:00Z",
+        "retrievedAt": "2026-08-11",
+        "retrievalMethod": "tinyfish_fetch",
+        "retrievalStatus": "success",
+        "statusBasis": "The explicit end date precedes the retrieval date."
+      }
+    },
+    {
+      "id": "pvcfc-promotion-mua-vang-thang-lon-2024",
+      "name": "Mùa Vàng Thắng Lớn 2024",
+      "sourceUrl": "https://www.pvcfc.com.vn/the-le-chuong-trinh-khuyen-mai-mua-vang-thang-lon-2024",
+      "summary": "Chương trình quay số toàn quốc dành cho khách mua NPK Cà Mau, sử dụng mã dự thưởng trong bao để nhận cơ hội trúng xe, vàng và tiền nạp điện thoại.",
+      "attributes": {
+        "startDate": "2024-03-10",
+        "endDate": "2025-02-28",
+        "status": "expired",
+        "scope": "Toàn quốc",
+        "audience": "Khách hàng mua sản phẩm khuyến mại",
+        "eligibleProducts": ["NPK Cà Mau"],
+        "mechanics": [
+          "Quét QR hoặc truy cập khuyenmai.pvcfc.com.vn và nhập mã dự thưởng",
+          "Hoặc gửi mã dự thưởng 10 ký tự bằng SMS theo cú pháp được công bố",
+          "Hệ thống xác định giải tiền nạp điện thoại; mã hợp lệ tiếp tục tham gia quay số xe và vàng"
+        ],
+        "prizes": [
+          "80 xe Honda Blade 2023 phiên bản tiêu chuẩn",
+          "800 nhẫn vàng DOJI 1 chỉ",
+          "12.500 lượt nạp điện thoại 50.000 đồng",
+          "387.700 lượt nạp điện thoại 20.000 đồng"
+        ],
+        "contact": {
+          "hotline": "1800 888 606",
+          "entryWebsite": "https://khuyenmai.pvcfc.com.vn/"
+        }
+      },
+      "imageUrls": [
+        "https://www.pvcfc.com.vn/Data/Sites/1/media/khuyen-mai/2024/thumbnail_kv_muavangthanglon-2024_final.jpg",
+        "https://www.pvcfc.com.vn/Data/Sites/1/media/khuyen-mai/2024/qr-code.png"
+      ],
+      "documentUrls": [],
+      "relatedUrls": [
+        "https://www.pvcfc.com.vn/mua-vang-thang-lon-2024-quet-ma-qrcode-de-trung-vang-trung-xe-trung-the-nap-tra-thuong-ngay",
+        "https://khuyenmai.pvcfc.com.vn/"
+      ],
+      "provenance": {
+        "publisher": "PVCFC",
+        "sourceType": "official_promotion_terms",
+        "sourcePublishedAt": "2024-03-10T03:00:00Z",
+        "retrievedAt": "2026-08-11",
+        "retrievalMethod": "tinyfish_fetch",
+        "retrievalStatus": "success",
+        "statusBasis": "The explicit end date precedes the retrieval date."
+      }
+    },
+    {
+      "id": "pvcfc-promotion-mua-vang-thang-lon-2023",
+      "name": "Mùa Vàng Thắng Lớn 2023",
+      "sourceUrl": "https://www.pvcfc.com.vn/the-le-chuong-trinh-khuyen-mai-mua-vang-thang-lon-2023",
+      "summary": "Chương trình quay số toàn quốc cho khách mua NPK Cà Mau, sử dụng phiếu may mắn trong bao để tham gia bằng SMS hoặc qua website.",
+      "attributes": {
+        "startDate": "2023-03-15",
+        "endDate": "2024-02-28",
+        "status": "expired",
+        "scope": "Toàn quốc",
+        "audience": "Khách hàng mua sản phẩm mang nhãn hiệu NPK Cà Mau",
+        "eligibleProducts": ["NPK Cà Mau"],
+        "mechanics": [
+          "Tìm phiếu may mắn có mã số trong bao sản phẩm",
+          "Gửi mã bằng SMS theo cú pháp được công bố hoặc quét QR và đăng ký tại khuyenmai.pvcfc.com.vn",
+          "Mỗi mã tương đương một mã dự thưởng; mã chưa trúng tiếp tục tham gia các đợt sau"
+        ],
+        "prizes": "81.344 giải gồm 1.344 nhẫn vàng DOJI 1 chỉ và 80.000 lượt nạp cước điện thoại từ 50.000 đến 500.000 đồng",
+        "contact": {
+          "hotline": "1800 888 606",
+          "entryWebsite": "https://khuyenmai.pvcfc.com.vn/",
+          "campaignWebsite": "https://muavangthanglon.pvcfc.com.vn/"
+        }
+      },
+      "imageUrls": [
+        "https://www.pvcfc.com.vn/Data/Sites/1/media/h%C3%ACnh-%E1%BA%A3nh-2023/kh%C3%A1c/t-03/banner_2mx1m_hiflex_muavangthanglon-2023---final_page-0001.jpg"
+      ],
+      "documentUrls": [],
+      "relatedUrls": [
+        "https://www.pvcfc.com.vn/thong-bao-chinh-thuc-khoi-dong-mua-vang-thang-lon-2023-chon-npk-ca-mau-trung-vang-bao-la",
+        "https://www.pvcfc.com.vn/thong-bao-chinh-thuc-khoi-dong-mua-vang-thang-lon-2023-chon-npk-ca-mau-trung-vang-bao-la-1",
+        "https://khuyenmai.pvcfc.com.vn/"
+      ],
+      "provenance": {
+        "publisher": "PVCFC",
+        "sourceType": "official_promotion_terms",
+        "sourcePublishedAt": "2023-04-06T04:00:00Z",
+        "retrievedAt": "2026-08-11",
+        "retrievalMethod": "tinyfish_fetch",
+        "retrievalStatus": "success",
+        "statusBasis": "The explicit end date precedes the retrieval date."
+      }
+    }
+  ]
+}

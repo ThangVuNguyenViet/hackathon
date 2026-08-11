@@ -1,0 +1,680 @@
+{
+  "schemaVersion": "pvcfc-public-fixture-fragment-v1",
+  "kind": "agronomy_guidance",
+  "retrievedAt": "2026-08-11",
+  "records": [
+    {
+      "id": "pvcfc-rice-npk-7-10-das",
+      "name": "Lúa 7-10 ngày sau sạ: NPK Cà Mau 20-10-10",
+      "sourceUrl": "https://www.pvcfc.com.vn/npk-ca-mau-phu-hop-ca-vu-lua-thu-hoach-mua-vang",
+      "summary": "PVCFC hướng dẫn lần bón đầu cho lúa khoảng 7-10 ngày sau sạ bằng NPK Cà Mau 20-10-10, nhằm hỗ trợ phát triển rễ, thân và lá.",
+      "attributes": {
+        "crop": "Lúa",
+        "stage": "Lần 1, khoảng 7-10 ngày sau sạ",
+        "soilOrRegion": "Không nêu cụ thể; bài viết nói công thức đã được áp dụng trên nhiều giống và địa phương",
+        "product": "NPK Cà Mau 20-10-10",
+        "dosage": "70-80 kg/ha/lần bón",
+        "method": "Bón lần 1",
+        "cautions": [
+          "Hướng dẫn trên trang là công thức tham khảo; điều kiện khí hậu, đất đai và nhu cầu thực tế của lúa vẫn cần được xem xét."
+        ]
+      },
+      "imageUrls": [
+        "https://www.pvcfc.com.vn/Data/Sites/1/media/content/npkcamau-phuhopcavu_frame1-min3213.jpg"
+      ],
+      "documentUrls": [
+        "https://bikipvang.pvcfc.com.vn/wp-content/uploads/2024/02/NPK-Ca-Mau-cho-cay-Lua-Khu-vuc-Dong-Bang-Song-Cuu-Long.pdf"
+      ],
+      "relatedUrls": [
+        "https://www.pvcfc.com.vn/ky-thuat-va-hieu-qua",
+        "https://www.pvcfc.com.vn/tu-van-ky-thuat"
+      ],
+      "provenance": {
+        "publisher": "Công ty Cổ phần Phân bón Dầu khí Cà Mau (PVCFC)",
+        "sourceDate": "2022-11-30",
+        "retrievedAt": "2026-08-11",
+        "retrievalMethod": "TinyFish fetch",
+        "sourceType": "official_web_article",
+        "language": "vi"
+      }
+    },
+    {
+      "id": "pvcfc-rice-npk-22-25-das",
+      "name": "Lúa 22-25 ngày sau sạ: NPK Cà Mau 20-15-8",
+      "sourceUrl": "https://www.pvcfc.com.vn/npk-ca-mau-phu-hop-ca-vu-lua-thu-hoach-mua-vang",
+      "summary": "Ở lần bón thứ hai, PVCFC gợi ý NPK Cà Mau 20-15-8 cho giai đoạn lúa phát triển chồi và tăng số bông.",
+      "attributes": {
+        "crop": "Lúa",
+        "stage": "Lần 2, khoảng 22-25 ngày sau sạ",
+        "soilOrRegion": "Không nêu cụ thể; bài viết nói công thức đã được áp dụng trên nhiều giống và địa phương",
+        "product": "NPK Cà Mau 20-15-8",
+        "dosage": "80-85 kg/ha/lần bón",
+        "method": "Bón lần 2",
+        "cautions": [
+          "Hướng dẫn trên trang là công thức tham khảo; điều kiện khí hậu, đất đai và nhu cầu thực tế của lúa vẫn cần được xem xét."
+        ]
+      },
+      "imageUrls": [
+        "https://www.pvcfc.com.vn/Data/Sites/1/media/content/npkcamau-phuhopcavu_frame2-min12312.jpg"
+      ],
+      "documentUrls": [
+        "https://bikipvang.pvcfc.com.vn/wp-content/uploads/2024/02/NPK-Ca-Mau-cho-cay-Lua-Khu-vuc-Dong-Bang-Song-Cuu-Long.pdf"
+      ],
+      "relatedUrls": [
+        "https://www.pvcfc.com.vn/ky-thuat-va-hieu-qua",
+        "https://www.pvcfc.com.vn/tu-van-ky-thuat"
+      ],
+      "provenance": {
+        "publisher": "Công ty Cổ phần Phân bón Dầu khí Cà Mau (PVCFC)",
+        "sourceDate": "2022-11-30",
+        "retrievedAt": "2026-08-11",
+        "retrievalMethod": "TinyFish fetch",
+        "sourceType": "official_web_article",
+        "language": "vi"
+      }
+    },
+    {
+      "id": "pvcfc-rice-npk-40-45-das",
+      "name": "Lúa 40-45 ngày sau sạ: NPK Cà Mau 18-6-18",
+      "sourceUrl": "https://www.pvcfc.com.vn/npk-ca-mau-phu-hop-ca-vu-lua-thu-hoach-mua-vang",
+      "summary": "PVCFC hướng dẫn bón thúc NPK Cà Mau 18-6-18 khi lúa bắt đầu tượng đòng, khoảng 40-45 ngày sau sạ.",
+      "attributes": {
+        "crop": "Lúa",
+        "stage": "Lần 3, khoảng 40-45 ngày sau sạ; bắt đầu tượng đòng (tim đèn)",
+        "soilOrRegion": "Không nêu cụ thể; bài viết nói công thức đã được áp dụng trên nhiều giống và địa phương",
+        "product": "NPK Cà Mau 18-6-18",
+        "dosage": "120-150 kg/ha/lần bón",
+        "method": "Bón thúc lần 3",
+        "cautions": [
+          "Trang nguồn nhấn mạnh đây là giai đoạn quan trọng và lượng bón cần phù hợp nhu cầu thực tế của lúa.",
+          "Điều kiện khí hậu và đất đai cần được xem xét."
+        ]
+      },
+      "imageUrls": [
+        "https://www.pvcfc.com.vn/Data/Sites/1/media/content/npkcamau-phuhopcavu_frame3-min213123.jpg"
+      ],
+      "documentUrls": [
+        "https://bikipvang.pvcfc.com.vn/wp-content/uploads/2024/02/NPK-Ca-Mau-cho-cay-Lua-Khu-vuc-Dong-Bang-Song-Cuu-Long.pdf"
+      ],
+      "relatedUrls": [
+        "https://www.pvcfc.com.vn/ky-thuat-va-hieu-qua",
+        "https://www.pvcfc.com.vn/tu-van-ky-thuat"
+      ],
+      "provenance": {
+        "publisher": "Công ty Cổ phần Phân bón Dầu khí Cà Mau (PVCFC)",
+        "sourceDate": "2022-11-30",
+        "retrievedAt": "2026-08-11",
+        "retrievalMethod": "TinyFish fetch",
+        "sourceType": "official_web_article",
+        "language": "vi"
+      }
+    },
+    {
+      "id": "pvcfc-rice-summer-autumn-soil-adjusted",
+      "name": "Lúa hè thu ĐBSCL: điều chỉnh phân theo nền đất và vụ",
+      "sourceUrl": "https://www.pvcfc.com.vn/phan-bon-vu-lua-he-thu",
+      "summary": "Bài đăng PVCFC dẫn khuyến nghị kỹ thuật cho đất canh tác 2-3 vụ lúa mỗi năm ở ĐBSCL, đồng thời yêu cầu điều chỉnh công thức theo nền đất, mùa vụ và lượng dinh dưỡng sẵn có.",
+      "attributes": {
+        "crop": "Lúa hè thu",
+        "stage": "Cả vụ; có thể bón lót lân đầu vụ",
+        "soilOrRegion": "Đất làm 2-3 vụ lúa/năm ở Đồng bằng sông Cửu Long",
+        "product": "Urê, DAP, kali và phân lân",
+        "dosage": "Mức trung bình được nêu: 150-180 kg urê, 50-100 kg DAP và 30 kg kali; nếu bón lót khoảng 300 kg lân/ha đầu vụ thì dùng 50 kg DAP",
+        "method": "Điều chỉnh theo nền đất và vụ; dùng bảng so màu lá lúa để cân đối urê; có thể dùng kỹ thuật ô khuyết để ước tính phần N-P-K đất cung cấp",
+        "cautions": [
+          "Trang nguồn không ghi rõ đơn vị diện tích cho ba mức 150-180 kg urê, 50-100 kg DAP và 30 kg kali; không tự suy diễn thành kg/ha.",
+          "Phân tự phối trộn dễ bị bón thừa, nhất là thừa đạm, làm phát sinh sâu bệnh.",
+          "Ruộng mới khai hoang và ruộng đã thuần được khuyến nghị xử lý khác nhau; phải điều chỉnh theo nền đất và mùa vụ.",
+          "Đây là bài đăng lại nội dung kỹ thuật từ Nongnghiep.vn năm 2013, không phải khuyến cáo mới."
+        ]
+      },
+      "imageUrls": [
+        "https://www.pvcfc.com.vn/Data/Sites/1/media/content/pbon.jpg"
+      ],
+      "documentUrls": [],
+      "relatedUrls": [
+        "https://www.pvcfc.com.vn/tu-van-ky-thuat"
+      ],
+      "provenance": {
+        "publisher": "PVCFC; nội dung ghi nguồn Nongnghiep.vn",
+        "sourceDate": "2013-04-08",
+        "retrievedAt": "2026-08-11",
+        "retrievalMethod": "TinyFish fetch",
+        "sourceType": "official_site_republication",
+        "language": "vi"
+      }
+    },
+    {
+      "id": "pvcfc-npk-20-20-15-rice",
+      "name": "NPK Cà Mau 20-20-15 cho lúa",
+      "sourceUrl": "https://www.pvcfc.com.vn/npk-ca-mau-20-20-15-npk-cua-su-thinh-vuong",
+      "summary": "Trang sản phẩm PVCFC công bố liều tham khảo NPK Cà Mau 20-20-15 cho lúa trong hai lần bón sau sạ.",
+      "attributes": {
+        "crop": "Lúa",
+        "stage": "7-10 ngày và 18-22 ngày sau sạ",
+        "soilOrRegion": "Trang nói sản phẩm phù hợp mọi loại đất nhưng không nêu vùng riêng cho liều này",
+        "product": "NPK Cà Mau 20-20-15",
+        "dosage": "120-160 kg/ha/lần; 2 lần/vụ",
+        "method": "Bón vào 7-10 ngày sau sạ và 18-22 ngày sau sạ",
+        "cautions": [
+          "PVCFC ghi đây là liều lượng tham khảo và cách bón phụ thuộc khí hậu, cây trồng và thổ nhưỡng."
+        ]
+      },
+      "imageUrls": [
+        "https://www.pvcfc.com.vn/Data/Sites/1/media/h%C3%ACnh-%E1%BA%A3nh-2020/11111.jpg"
+      ],
+      "documentUrls": [
+        "https://bikipvang.pvcfc.com.vn/wp-content/uploads/2024/02/NPK-Ca-Mau-cho-cay-Lua-Khu-vuc-Dong-Bang-Song-Cuu-Long.pdf"
+      ],
+      "relatedUrls": [
+        "https://www.pvcfc.com.vn/ky-thuat-va-hieu-qua"
+      ],
+      "provenance": {
+        "publisher": "Công ty Cổ phần Phân bón Dầu khí Cà Mau (PVCFC)",
+        "sourceDate": "2020-09-11",
+        "retrievedAt": "2026-08-11",
+        "retrievalMethod": "TinyFish fetch",
+        "sourceType": "official_product_guidance",
+        "language": "vi"
+      }
+    },
+    {
+      "id": "pvcfc-npk-20-20-15-sugarcane",
+      "name": "NPK Cà Mau 20-20-15 cho mía",
+      "sourceUrl": "https://www.pvcfc.com.vn/npk-ca-mau-20-20-15-npk-cua-su-thinh-vuong",
+      "summary": "PVCFC nêu hai lần bón NPK Cà Mau 20-20-15 cho mía: sau trồng và khi cây được 2-3 tháng.",
+      "attributes": {
+        "crop": "Mía",
+        "stage": "15-20 ngày sau trồng và 2-3 tháng sau trồng",
+        "soilOrRegion": "Không nêu cụ thể",
+        "product": "NPK Cà Mau 20-20-15",
+        "dosage": "250-350 kg/ha/lần; 2 lần/vụ",
+        "method": "Bón lần 1 ở 15-20 ngày sau trồng; lần 2 ở 2-3 tháng sau trồng",
+        "cautions": [
+          "PVCFC ghi đây là liều lượng tham khảo và cách bón phụ thuộc khí hậu, cây trồng và thổ nhưỡng."
+        ]
+      },
+      "imageUrls": [
+        "https://www.pvcfc.com.vn/Data/Sites/1/media/h%C3%ACnh-%E1%BA%A3nh-2020/222222.jpg"
+      ],
+      "documentUrls": [],
+      "relatedUrls": [
+        "https://www.pvcfc.com.vn/ky-thuat-va-hieu-qua"
+      ],
+      "provenance": {
+        "publisher": "Công ty Cổ phần Phân bón Dầu khí Cà Mau (PVCFC)",
+        "sourceDate": "2020-09-11",
+        "retrievedAt": "2026-08-11",
+        "retrievalMethod": "TinyFish fetch",
+        "sourceType": "official_product_guidance",
+        "language": "vi"
+      }
+    },
+    {
+      "id": "pvcfc-npk-20-20-15-coffee-establishment",
+      "name": "NPK Cà Mau 20-20-15 cho cà phê kiến thiết cơ bản",
+      "sourceUrl": "https://www.pvcfc.com.vn/npk-ca-mau-20-20-15-npk-cua-su-thinh-vuong",
+      "summary": "PVCFC đưa ra liều tham khảo theo hecta cho cà phê ở giai đoạn kiến thiết cơ bản.",
+      "attributes": {
+        "crop": "Cà phê",
+        "stage": "Kiến thiết cơ bản",
+        "soilOrRegion": "Không nêu cụ thể",
+        "product": "NPK Cà Mau 20-20-15",
+        "dosage": "150-200 kg/ha/lần",
+        "method": "4 lần/năm, cách nhau khoảng 3 tháng",
+        "cautions": [
+          "PVCFC ghi đây là liều lượng tham khảo và cách bón phụ thuộc khí hậu, cây trồng và thổ nhưỡng."
+        ]
+      },
+      "imageUrls": [
+        "https://www.pvcfc.com.vn/Data/Sites/1/News/6270/ca-phe-nang-suat-nho-bon-ca-mau.png"
+      ],
+      "documentUrls": [],
+      "relatedUrls": [
+        "https://www.pvcfc.com.vn/tu-van-ky-thuat"
+      ],
+      "provenance": {
+        "publisher": "Công ty Cổ phần Phân bón Dầu khí Cà Mau (PVCFC)",
+        "sourceDate": "2020-09-11",
+        "retrievedAt": "2026-08-11",
+        "retrievalMethod": "TinyFish fetch",
+        "sourceType": "official_product_guidance",
+        "language": "vi"
+      }
+    },
+    {
+      "id": "pvcfc-npk-20-20-15-coffee-bearing",
+      "name": "NPK Cà Mau 20-20-15 cho cà phê kinh doanh",
+      "sourceUrl": "https://www.pvcfc.com.vn/npk-ca-mau-20-20-15-npk-cua-su-thinh-vuong",
+      "summary": "Trang PVCFC phân biệt mức bón mùa khô và mùa mưa cho cà phê ở giai đoạn kinh doanh, nhưng đơn vị mùa khô trên nguồn không đầy đủ.",
+      "attributes": {
+        "crop": "Cà phê",
+        "stage": "Kinh doanh",
+        "soilOrRegion": "Không nêu vùng; phân biệt mùa khô và mùa mưa",
+        "product": "NPK Cà Mau 20-20-15",
+        "dosage": "Mùa khô: 150-250 kg/lần (nguồn không ghi theo ha); mùa mưa: 400-600 kg/ha/lần",
+        "method": "Nguồn ghi 3 lần/năm và liệt kê đầu mùa mưa, giữa mùa mưa, cuối mùa mưa",
+        "cautions": [
+          "Không tự bổ sung '/ha' cho liều mùa khô vì trang nguồn chỉ ghi 150-250 kg/lần.",
+          "Nguồn có điểm không nhất quán: ghi 3 lần/năm nhưng liệt kê mùa khô cùng ba mốc mùa mưa; cần xác nhận với kỹ sư PVCFC trước khi áp dụng.",
+          "PVCFC ghi đây là liều lượng tham khảo và cách bón phụ thuộc khí hậu, cây trồng và thổ nhưỡng."
+        ]
+      },
+      "imageUrls": [
+        "https://www.pvcfc.com.vn/Data/Sites/1/News/6285/ca-phe-nang-suat-nho-bon-ca-mau.png"
+      ],
+      "documentUrls": [],
+      "relatedUrls": [
+        "https://www.pvcfc.com.vn/tu-van-ky-thuat"
+      ],
+      "provenance": {
+        "publisher": "Công ty Cổ phần Phân bón Dầu khí Cà Mau (PVCFC)",
+        "sourceDate": "2020-09-11",
+        "retrievedAt": "2026-08-11",
+        "retrievalMethod": "TinyFish fetch",
+        "sourceType": "official_product_guidance",
+        "language": "vi"
+      }
+    },
+    {
+      "id": "pvcfc-npk-20-20-15-pepper-establishment",
+      "name": "NPK Cà Mau 20-20-15 cho hồ tiêu kiến thiết cơ bản",
+      "sourceUrl": "https://www.pvcfc.com.vn/npk-ca-mau-20-20-15-npk-cua-su-thinh-vuong",
+      "summary": "PVCFC nêu mức bón theo trụ cho hồ tiêu ở giai đoạn kiến thiết cơ bản.",
+      "attributes": {
+        "crop": "Hồ tiêu",
+        "stage": "Kiến thiết cơ bản",
+        "soilOrRegion": "Không nêu cụ thể",
+        "product": "NPK Cà Mau 20-20-15",
+        "dosage": "150-250 g/trụ/lần",
+        "method": "4 lần/năm, cách nhau khoảng 3 tháng",
+        "cautions": [
+          "PVCFC ghi đây là liều lượng tham khảo và cách bón phụ thuộc khí hậu, cây trồng và thổ nhưỡng."
+        ]
+      },
+      "imageUrls": [],
+      "documentUrls": [],
+      "relatedUrls": [
+        "https://www.pvcfc.com.vn/ky-thuat-va-hieu-qua"
+      ],
+      "provenance": {
+        "publisher": "Công ty Cổ phần Phân bón Dầu khí Cà Mau (PVCFC)",
+        "sourceDate": "2020-09-11",
+        "retrievedAt": "2026-08-11",
+        "retrievalMethod": "TinyFish fetch",
+        "sourceType": "official_product_guidance",
+        "language": "vi"
+      }
+    },
+    {
+      "id": "pvcfc-npk-20-20-15-pepper-bearing",
+      "name": "NPK Cà Mau 20-20-15 cho hồ tiêu kinh doanh",
+      "sourceUrl": "https://www.pvcfc.com.vn/npk-ca-mau-20-20-15-npk-cua-su-thinh-vuong",
+      "summary": "PVCFC công bố các khoảng liều theo trụ, tách mùa khô và mùa mưa, cho hồ tiêu kinh doanh.",
+      "attributes": {
+        "crop": "Hồ tiêu",
+        "stage": "Kinh doanh",
+        "soilOrRegion": "Không nêu vùng; phân biệt mùa khô và mùa mưa",
+        "product": "NPK Cà Mau 20-20-15",
+        "dosage": "Mùa khô: 150-250 g/trụ/lần; mùa mưa: 400-500 g/trụ/lần",
+        "method": "Nguồn ghi 3 lần/năm và liệt kê mùa khô, đầu mùa mưa, giữa mùa mưa, cuối mùa mưa",
+        "cautions": [
+          "Nguồn có điểm không nhất quán: ghi 3 lần/năm nhưng liệt kê bốn mốc; cần xác nhận với kỹ sư PVCFC trước khi áp dụng.",
+          "PVCFC ghi đây là liều lượng tham khảo và cách bón phụ thuộc khí hậu, cây trồng và thổ nhưỡng."
+        ]
+      },
+      "imageUrls": [],
+      "documentUrls": [],
+      "relatedUrls": [
+        "https://www.pvcfc.com.vn/ky-thuat-va-hieu-qua"
+      ],
+      "provenance": {
+        "publisher": "Công ty Cổ phần Phân bón Dầu khí Cà Mau (PVCFC)",
+        "sourceDate": "2020-09-11",
+        "retrievedAt": "2026-08-11",
+        "retrievalMethod": "TinyFish fetch",
+        "sourceType": "official_product_guidance",
+        "language": "vi"
+      }
+    },
+    {
+      "id": "pvcfc-npk-20-20-15-fruit-trees",
+      "name": "NPK Cà Mau 20-20-15 cho xoài, nhãn, bưởi và chôm chôm",
+      "sourceUrl": "https://www.pvcfc.com.vn/npk-ca-mau-20-20-15-npk-cua-su-thinh-vuong",
+      "summary": "PVCFC tách liều tham khảo cho cây ăn trái ở giai đoạn kiến thiết cơ bản và kinh doanh.",
+      "attributes": {
+        "crop": "Xoài, nhãn, bưởi, chôm chôm",
+        "stage": "Kiến thiết cơ bản hoặc kinh doanh",
+        "soilOrRegion": "Không nêu cụ thể",
+        "product": "NPK Cà Mau 20-20-15",
+        "dosage": "Kiến thiết cơ bản: 200-300 g/cây/lần; kinh doanh: 300-600 g/cây/lần",
+        "method": "Kiến thiết cơ bản: 4 lần/năm. Kinh doanh: 4-5 lần/năm, gồm sau thu hoạch 1-2 lần, trước ra hoa, sau đậu trái và khi trái phát triển",
+        "cautions": [
+          "PVCFC ghi đây là liều lượng tham khảo và cách bón phụ thuộc khí hậu, cây trồng và thổ nhưỡng."
+        ]
+      },
+      "imageUrls": [],
+      "documentUrls": [
+        "https://bikipvang.pvcfc.com.vn/wp-content/uploads/2024/02/Phan-Bon-Ca-Mau-cho-cay-Buoi-giai-doan-kinh-doanh.pdf"
+      ],
+      "relatedUrls": [
+        "https://www.pvcfc.com.vn/ky-thuat-va-hieu-qua"
+      ],
+      "provenance": {
+        "publisher": "Công ty Cổ phần Phân bón Dầu khí Cà Mau (PVCFC)",
+        "sourceDate": "2020-09-11",
+        "retrievedAt": "2026-08-11",
+        "retrievalMethod": "TinyFish fetch",
+        "sourceType": "official_product_guidance",
+        "language": "vi"
+      }
+    },
+    {
+      "id": "pvcfc-npk-20-20-15-fruiting-vegetables",
+      "name": "NPK Cà Mau 20-20-15 cho rau ăn trái",
+      "sourceUrl": "https://www.pvcfc.com.vn/npk-ca-mau-20-20-15-npk-cua-su-thinh-vuong",
+      "summary": "PVCFC đưa ra liều bón lót hoặc đầu vụ và liều bón thúc cho dưa hấu, ớt và cà chua.",
+      "attributes": {
+        "crop": "Dưa hấu, ớt, cà chua",
+        "stage": "Bón lót/7-10 ngày sau trồng; bón thúc từ 20-25 ngày sau trồng và khi trái phát triển",
+        "soilOrRegion": "Không nêu cụ thể",
+        "product": "NPK Cà Mau 20-20-15",
+        "dosage": "Bón lót hoặc đầu vụ: 100-150 kg/ha; bón thúc: 150-250 kg/ha/lần",
+        "method": "Bón lót hoặc bón ở 7-10 ngày sau trồng; bón thúc 1-3 lần/vụ, từ 20-25 ngày sau trồng và 1-2 lần khi trái phát triển",
+        "cautions": [
+          "PVCFC ghi đây là liều lượng tham khảo và cách bón phụ thuộc khí hậu, cây trồng và thổ nhưỡng."
+        ]
+      },
+      "imageUrls": [],
+      "documentUrls": [],
+      "relatedUrls": [
+        "https://www.pvcfc.com.vn/ky-thuat-va-hieu-qua"
+      ],
+      "provenance": {
+        "publisher": "Công ty Cổ phần Phân bón Dầu khí Cà Mau (PVCFC)",
+        "sourceDate": "2020-09-11",
+        "retrievedAt": "2026-08-11",
+        "retrievalMethod": "TinyFish fetch",
+        "sourceType": "official_product_guidance",
+        "language": "vi"
+      }
+    },
+    {
+      "id": "pvcfc-npk-20-20-15-leafy-vegetables",
+      "name": "NPK Cà Mau 20-20-15 cho rau ăn lá ngắn ngày",
+      "sourceUrl": "https://www.pvcfc.com.vn/npk-ca-mau-20-20-15-npk-cua-su-thinh-vuong",
+      "summary": "PVCFC nêu hai lần bón NPK Cà Mau 20-20-15 trong một vụ rau ăn lá ngắn ngày.",
+      "attributes": {
+        "crop": "Rau ăn lá ngắn ngày",
+        "stage": "7-10 ngày và 20-30 ngày sau trồng",
+        "soilOrRegion": "Không nêu cụ thể",
+        "product": "NPK Cà Mau 20-20-15",
+        "dosage": "150-200 kg/ha/lần; 2 lần/vụ",
+        "method": "Bón ở 7-10 ngày sau trồng và 20-30 ngày sau trồng",
+        "cautions": [
+          "PVCFC ghi đây là liều lượng tham khảo và cách bón phụ thuộc khí hậu, cây trồng và thổ nhưỡng."
+        ]
+      },
+      "imageUrls": [],
+      "documentUrls": [],
+      "relatedUrls": [
+        "https://www.pvcfc.com.vn/ky-thuat-va-hieu-qua"
+      ],
+      "provenance": {
+        "publisher": "Công ty Cổ phần Phân bón Dầu khí Cà Mau (PVCFC)",
+        "sourceDate": "2020-09-11",
+        "retrievedAt": "2026-08-11",
+        "retrievalMethod": "TinyFish fetch",
+        "sourceType": "official_product_guidance",
+        "language": "vi"
+      }
+    },
+    {
+      "id": "pvcfc-ure-rice",
+      "name": "Urê cho lúa ở giai đoạn sinh trưởng thân lá",
+      "sourceUrl": "https://www.pvcfc.com.vn/phan-ure-la-gi",
+      "summary": "PVCFC đưa ra liều Urê tham khảo cho lúa và nêu giai đoạn đẻ nhánh, đứng cái là các thời điểm cây phát triển mạnh thân lá.",
+      "attributes": {
+        "crop": "Lúa",
+        "stage": "Phát triển mạnh thân lá; ví dụ đẻ nhánh và đứng cái",
+        "soilOrRegion": "Đất cần có độ ẩm; liều thay đổi theo đất, giai đoạn và năng suất mong muốn",
+        "product": "Phân Urê",
+        "dosage": "100-150 kg Urê/ha/lần bón",
+        "method": "Bón khi đất đủ ẩm; rải, lấp đất hoặc tưới nhẹ sau bón",
+        "cautions": [
+          "Đây là mức tham khảo; trang khuyên hỏi kỹ sư nông nghiệp và điều chỉnh theo đất, giai đoạn, năng suất mong muốn.",
+          "Tránh bón lúc nắng gắt hoặc trước mưa to.",
+          "Không trộn Urê với vôi hoặc tro bếp.",
+          "Bón lâu dài mà không cải tạo đất có thể làm đất chua nhẹ; cần phối hợp dinh dưỡng cân đối."
+        ]
+      },
+      "imageUrls": [
+        "https://www.pvcfc.com.vn/Data/Sites/1/media/tin-tuc/nguyen-tac-bon-phan-ure.jpg"
+      ],
+      "documentUrls": [],
+      "relatedUrls": [
+        "https://www.pvcfc.com.vn/tu-van-ky-thuat"
+      ],
+      "provenance": {
+        "publisher": "Công ty Cổ phần Phân bón Dầu khí Cà Mau (PVCFC)",
+        "sourceDate": "2025-12-17",
+        "retrievedAt": "2026-08-11",
+        "retrievalMethod": "TinyFish fetch",
+        "sourceType": "official_technical_article",
+        "language": "vi"
+      }
+    },
+    {
+      "id": "pvcfc-ure-coffee",
+      "name": "Urê cho cà phê",
+      "sourceUrl": "https://www.pvcfc.com.vn/phan-ure-la-gi",
+      "summary": "PVCFC nêu liều Urê tham khảo theo cây và yêu cầu chia thành nhiều lần trong năm cho cà phê.",
+      "attributes": {
+        "crop": "Cà phê",
+        "stage": "Trang nêu sau thu hoạch là một ví dụ về thời điểm bón khi cây cần phát triển thân lá",
+        "soilOrRegion": "Đất cần có độ ẩm; liều thay đổi theo đất, giai đoạn và năng suất mong muốn",
+        "product": "Phân Urê",
+        "dosage": "0,4-0,6 kg/cây/năm",
+        "method": "Chia 3-4 lần; rải quanh gốc rồi lấp đất hoặc tưới nhẹ",
+        "cautions": [
+          "Đây là mức tham khảo; trang khuyên hỏi kỹ sư nông nghiệp và điều chỉnh theo đất, giai đoạn, năng suất mong muốn.",
+          "Tránh bón lúc nắng gắt hoặc trước mưa to.",
+          "Không trộn Urê với vôi hoặc tro bếp.",
+          "Không dồn lượng năm vào một lần bón."
+        ]
+      },
+      "imageUrls": [
+        "https://www.pvcfc.com.vn/Data/Sites/1/media/tin-tuc/mot-so-luu-y-can-nho-khi-su-dung-phan-ure.jpg"
+      ],
+      "documentUrls": [],
+      "relatedUrls": [
+        "https://www.pvcfc.com.vn/tu-van-ky-thuat"
+      ],
+      "provenance": {
+        "publisher": "Công ty Cổ phần Phân bón Dầu khí Cà Mau (PVCFC)",
+        "sourceDate": "2025-12-17",
+        "retrievedAt": "2026-08-11",
+        "retrievalMethod": "TinyFish fetch",
+        "sourceType": "official_technical_article",
+        "language": "vi"
+      }
+    },
+    {
+      "id": "pvcfc-ure-vegetables",
+      "name": "Urê cho rau màu",
+      "sourceUrl": "https://www.pvcfc.com.vn/phan-ure-la-gi",
+      "summary": "PVCFC nêu liều Urê tham khảo theo hecta cho một vụ rau màu và lưu ý bón khi cây bén rễ, trong điều kiện đất đủ ẩm.",
+      "attributes": {
+        "crop": "Rau màu",
+        "stage": "Khi cây bén rễ; mức liều tính cho cả vụ",
+        "soilOrRegion": "Đất cần có độ ẩm; liều thay đổi theo đất, giai đoạn và năng suất mong muốn",
+        "product": "Phân Urê",
+        "dosage": "50-70 kg/ha/vụ",
+        "method": "Chia nhỏ lần bón; rải, lấp đất hoặc tưới nhẹ sau bón",
+        "cautions": [
+          "Đây là mức tham khảo; trang khuyên hỏi kỹ sư nông nghiệp và điều chỉnh theo đất, giai đoạn, năng suất mong muốn.",
+          "Tránh bón lúc nắng gắt hoặc trước mưa to.",
+          "Không trộn Urê với vôi hoặc tro bếp."
+        ]
+      },
+      "imageUrls": [],
+      "documentUrls": [],
+      "relatedUrls": [
+        "https://www.pvcfc.com.vn/tu-van-ky-thuat"
+      ],
+      "provenance": {
+        "publisher": "Công ty Cổ phần Phân bón Dầu khí Cà Mau (PVCFC)",
+        "sourceDate": "2025-12-17",
+        "retrievedAt": "2026-08-11",
+        "retrievalMethod": "TinyFish fetch",
+        "sourceType": "official_technical_article",
+        "language": "vi"
+      }
+    },
+    {
+      "id": "pvcfc-ure-fruit-trees",
+      "name": "Urê cho cây ăn trái",
+      "sourceUrl": "https://www.pvcfc.com.vn/phan-ure-la-gi",
+      "summary": "PVCFC nêu khoảng liều Urê tham khảo theo cây cho cây ăn trái, phụ thuộc tuổi cây.",
+      "attributes": {
+        "crop": "Cây ăn trái",
+        "stage": "Không nêu cụ thể",
+        "soilOrRegion": "Đất cần có độ ẩm; liều thay đổi theo đất, giai đoạn và năng suất mong muốn",
+        "product": "Phân Urê",
+        "dosage": "0,2-0,5 kg/cây/lần, tùy tuổi cây",
+        "method": "Rải quanh gốc rồi lấp đất hoặc tưới nhẹ; chia nhỏ lần bón",
+        "cautions": [
+          "Đây là mức tham khảo; cần điều chỉnh theo tuổi cây, đất, giai đoạn và năng suất mong muốn.",
+          "Tránh bón lúc nắng gắt hoặc trước mưa to.",
+          "Không trộn Urê với vôi hoặc tro bếp.",
+          "Bón lâu dài mà không cải tạo đất có thể làm đất chua nhẹ."
+        ]
+      },
+      "imageUrls": [],
+      "documentUrls": [],
+      "relatedUrls": [
+        "https://www.pvcfc.com.vn/tu-van-ky-thuat"
+      ],
+      "provenance": {
+        "publisher": "Công ty Cổ phần Phân bón Dầu khí Cà Mau (PVCFC)",
+        "sourceDate": "2025-12-17",
+        "retrievedAt": "2026-08-11",
+        "retrievalMethod": "TinyFish fetch",
+        "sourceType": "official_technical_article",
+        "language": "vi"
+      }
+    },
+    {
+      "id": "pvcfc-red-potash-field-crops",
+      "name": "Kali đỏ cho lúa, bắp và mía",
+      "sourceUrl": "https://www.pvcfc.com.vn/phan-kali-do-la-gi",
+      "summary": "PVCFC nêu khoảng Kali quy đổi K₂O theo hecta cho lúa, bắp và mía, là các nhóm cây có khả năng chịu clo tốt hơn.",
+      "attributes": {
+        "crop": "Lúa, bắp, mía",
+        "stage": "Có thể bón lót khi làm đất; bón thúc phổ biến hơn; trang cũng nêu sau trồng/sau thu hoạch và trước hoặc trong ra hoa, nuôi trái là các mốc phù hợp tùy cây",
+        "soilOrRegion": "Điều chỉnh theo độ phì đất; tránh đất quá khô hoặc ngập úng",
+        "product": "Kali đỏ (KCl; trang giới thiệu Kali Cà Mau 61 bột đỏ)",
+        "dosage": "80-120 kg K₂O/ha/vụ",
+        "method": "Có thể bón lót hoặc bón thúc; không bón quá liều trong một lần",
+        "cautions": [
+          "Liều cần điều chỉnh theo loại cây và độ phì đất.",
+          "Không bón quá liều một lần để tránh sốc dinh dưỡng và mặn đất.",
+          "Tránh bón khi đất quá khô hoặc ngập úng.",
+          "Không nên dùng Kali đỏ đơn lẻ kéo dài; trang khuyên phối hợp đạm và lân cân đối."
+        ]
+      },
+      "imageUrls": [
+        "https://www.pvcfc.com.vn/Data/Sites/1/media/tin-tuc/cach-bon-phan-kali-do-dung-ky-thuat.jpg"
+      ],
+      "documentUrls": [],
+      "relatedUrls": [
+        "https://www.pvcfc.com.vn/tu-van-ky-thuat"
+      ],
+      "provenance": {
+        "publisher": "Công ty Cổ phần Phân bón Dầu khí Cà Mau (PVCFC)",
+        "sourceDate": "2026-02-25",
+        "retrievedAt": "2026-08-11",
+        "retrievalMethod": "TinyFish fetch",
+        "sourceType": "official_technical_article",
+        "language": "vi"
+      }
+    },
+    {
+      "id": "pvcfc-red-potash-fruit-trees",
+      "name": "Kali đỏ cho cây ăn trái chịu clo",
+      "sourceUrl": "https://www.pvcfc.com.vn/phan-kali-do-la-gi",
+      "summary": "PVCFC nêu liều Kali đỏ theo cây mỗi năm cho cây ăn trái, nhưng giới hạn đối tượng theo khả năng chịu clo và điều kiện thoát nước.",
+      "attributes": {
+        "crop": "Cây ăn trái; trang nêu ví dụ chuối, xoài, cam",
+        "stage": "Đặc biệt giai đoạn nuôi trái; chia lượng năm thành nhiều lần",
+        "soilOrRegion": "Đất thoát nước tốt, không có dấu hiệu mặn hoặc tích muối",
+        "product": "Kali đỏ (KCl; trang giới thiệu Kali Cà Mau 61 bột đỏ)",
+        "dosage": "0,3-1,0 kg/cây/năm, chia nhiều lần",
+        "method": "Bón lót hoặc bón thúc; bón thúc được mô tả là phổ biến hơn",
+        "cautions": [
+          "Chỉ dùng khi cây và đất phù hợp với clo; không dùng cho cây mẫn cảm clo.",
+          "Không bón thường xuyên với liều cao; có thể làm tích muối và mặn đất.",
+          "Cân nhắc nguồn Kali khác cho cây ăn trái giá trị cao hoặc khi đất có dấu hiệu mặn/tích muối.",
+          "Tránh bón khi đất quá khô hoặc ngập úng."
+        ]
+      },
+      "imageUrls": [
+        "https://www.pvcfc.com.vn/Data/Sites/1/media/tin-tuc/phan-kali-do-dung-cho-cay-nao.jpg"
+      ],
+      "documentUrls": [],
+      "relatedUrls": [
+        "https://www.pvcfc.com.vn/tu-van-ky-thuat"
+      ],
+      "provenance": {
+        "publisher": "Công ty Cổ phần Phân bón Dầu khí Cà Mau (PVCFC)",
+        "sourceDate": "2026-02-25",
+        "retrievedAt": "2026-08-11",
+        "retrievalMethod": "TinyFish fetch",
+        "sourceType": "official_technical_article",
+        "language": "vi"
+      }
+    },
+    {
+      "id": "pvcfc-red-potash-long-cycle-crops",
+      "name": "Kali đỏ cho cà phê, cao su và hồ tiêu",
+      "sourceUrl": "https://www.pvcfc.com.vn/phan-kali-do-la-gi",
+      "summary": "Đối với cây công nghiệp dài ngày, PVCFC không đưa ra một liều số chung mà yêu cầu bón theo chu kỳ sinh trưởng và không dồn liều.",
+      "attributes": {
+        "crop": "Cà phê, cao su, hồ tiêu",
+        "stage": "Theo chu kỳ sinh trưởng; có thể sau thu hoạch, trước/trong ra hoa và nuôi trái tùy cây",
+        "soilOrRegion": "Điều chỉnh theo độ phì và khả năng thoát nước của đất",
+        "product": "Kali đỏ (KCl; trang giới thiệu Kali Cà Mau 61 bột đỏ)",
+        "dosage": "Không có liều số chung trên nguồn; bón theo chu kỳ sinh trưởng, không dồn liều",
+        "method": "Chia lần bón theo chu kỳ sinh trưởng và phối hợp N-P-K cân đối",
+        "cautions": [
+          "Không suy diễn liều cho cây công nghiệp từ liều của nhóm cây khác.",
+          "Hồ tiêu phải dùng với liều hợp lý; nguồn không đưa ra con số cụ thể.",
+          "Dùng liều cao hoặc liên tục trên đất thoát nước kém có thể tích lũy muối, làm mặn và giảm độ phì đất.",
+          "Tránh bón khi đất quá khô hoặc ngập úng."
+        ]
+      },
+      "imageUrls": [
+        "https://www.pvcfc.com.vn/Data/Sites/1/media/tin-tuc/phan-kali-do-la-gi-cach-bon-dung-ky-thuat-de-tang-nang-suat.jpg"
+      ],
+      "documentUrls": [],
+      "relatedUrls": [
+        "https://www.pvcfc.com.vn/tu-van-ky-thuat"
+      ],
+      "provenance": {
+        "publisher": "Công ty Cổ phần Phân bón Dầu khí Cà Mau (PVCFC)",
+        "sourceDate": "2026-02-25",
+        "retrievedAt": "2026-08-11",
+        "retrievalMethod": "TinyFish fetch",
+        "sourceType": "official_technical_article",
+        "language": "vi"
+      }
+    }
+  ],
+  "gaps": [
+    "TinyFish static fetch exposed the article links on /tu-van-ky-thuat and /ky-thuat-va-hieu-qua but returned only footer or corporate boilerplate for several video-led detail pages; those pages were not converted into unsupported guidance records.",
+    "TinyFish agent extraction could not run because the account reported zero agent credits; all included facts therefore come from TinyFish search or static fetch output.",
+    "The two official bikipvang.pvcfc.com.vn PDF guides were discoverable and fetched, but TinyFish returned no extractable PDF text. They are retained only in documentUrls and are not used as the factual basis for dosage claims.",
+    "Several official pages omit a precise region, soil type, or method. Those fields say so explicitly instead of inferring conditions.",
+    "The 2020 NPK Cà Mau 20-20-15 page contains ambiguous or internally inconsistent units/frequencies for coffee and pepper; the records preserve and flag those ambiguities."
+  ]
+}
