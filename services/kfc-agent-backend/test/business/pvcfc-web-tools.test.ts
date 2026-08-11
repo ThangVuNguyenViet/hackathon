@@ -181,7 +181,7 @@ describe('PVCFC official-site web evidence tools', () => {
   });
 
   it('keeps citations in compact receipts without page content', async () => {
-    const longFinalUrl = `${INVENTORIED_URL}?detail=${'x'.repeat(3_000)}`;
+    const longFinalUrl = `${INVENTORIED_URL}?detail=${'x'.repeat(1_900)}`;
     const { tools, receipts } = toolsFor({
       fetchResult: {
         sourceUrl: INVENTORIED_URL,
@@ -206,6 +206,95 @@ describe('PVCFC official-site web evidence tools', () => {
     expect(JSON.stringify(receipts)).not.toContain(
       'secret-page-body-that-must-not-enter-audit',
     );
+  });
+
+  it('rejects an overlong fetched source URL from an injected client', async () => {
+    const overlongSourceUrl = `${INVENTORIED_URL}?detail=${'x'.repeat(2_048)}`;
+    const { tools, receipts } = toolsFor({
+      fetchResult: {
+        sourceUrl: overlongSourceUrl,
+        finalUrl: INVENTORIED_URL,
+        title: 'Nguồn PVCFC',
+        text: 'must-not-become-model-visible',
+        retrievedAt: RETRIEVED_AT,
+      },
+    });
+
+    const outcome = await tools[1].invoke({ url: INVENTORIED_URL }).then(
+      () => 'resolved',
+      (error: unknown) =>
+        error instanceof Error ? error.message : 'unknown-error',
+    );
+
+    expect(outcome).toBe('web_url_too_long');
+    expect(receipts).toEqual([
+      expect.objectContaining({
+        name: 'fetchPvcfcPage',
+        status: 'error',
+        evidenceMode: 'live_web',
+      }),
+    ]);
+    expect(receipts[0]?.sourceUrls).toBeUndefined();
+    expect(JSON.stringify(receipts)).not.toContain('must-not-become');
+  });
+
+  it('rejects an overlong fetched final URL from an injected client', async () => {
+    const overlongFinalUrl = `${INVENTORIED_URL}?detail=${'x'.repeat(2_048)}`;
+    const { tools, receipts } = toolsFor({
+      fetchResult: {
+        sourceUrl: INVENTORIED_URL,
+        finalUrl: overlongFinalUrl,
+        title: 'Nguồn PVCFC',
+        text: 'must-not-become-model-visible',
+        retrievedAt: RETRIEVED_AT,
+      },
+    });
+
+    const outcome = await tools[1].invoke({ url: INVENTORIED_URL }).then(
+      () => 'resolved',
+      (error: unknown) =>
+        error instanceof Error ? error.message : 'unknown-error',
+    );
+
+    expect(outcome).toBe('web_url_too_long');
+    expect(receipts).toEqual([
+      expect.objectContaining({
+        name: 'fetchPvcfcPage',
+        status: 'error',
+        evidenceMode: 'live_web',
+      }),
+    ]);
+    expect(receipts[0]?.sourceUrls).toBeUndefined();
+    expect(JSON.stringify(receipts)).not.toContain('must-not-become');
+  });
+
+  it('rejects a fetched source URL that does not match the admitted request', async () => {
+    const { tools, receipts } = toolsFor({
+      fetchResult: {
+        sourceUrl: SEARCHED_URL,
+        finalUrl: INVENTORIED_URL,
+        title: 'Wrong source binding',
+        text: 'must-not-become-model-visible',
+        retrievedAt: RETRIEVED_AT,
+      },
+    });
+
+    const outcome = await tools[1].invoke({ url: INVENTORIED_URL }).then(
+      () => 'resolved',
+      (error: unknown) =>
+        error instanceof Error ? error.message : 'unknown-error',
+    );
+
+    expect(outcome).toBe('pvcfc_web_source_url_mismatch');
+    expect(receipts).toEqual([
+      expect.objectContaining({
+        name: 'fetchPvcfcPage',
+        status: 'error',
+        evidenceMode: 'live_web',
+      }),
+    ]);
+    expect(receipts[0]?.sourceUrls).toBeUndefined();
+    expect(JSON.stringify(receipts)).not.toContain('must-not-become');
   });
 
   it('bounds fetched page content again at the PVCFC tool boundary', async () => {

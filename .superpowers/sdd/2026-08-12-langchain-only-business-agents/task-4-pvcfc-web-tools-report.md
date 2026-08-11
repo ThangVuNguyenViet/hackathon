@@ -83,10 +83,10 @@ Total Upload: 12080.00 KiB / gzip: 1236.01 KiB
 Task 4 after reachable Worker wiring:
 
 ```text
-Total Upload: 12709.09 KiB / gzip: 1333.75 KiB
+Total Upload: 12709.55 KiB / gzip: 1334.03 KiB
 ```
 
-Actual delta: **+629.09 KiB raw, +97.74 KiB gzip**. This is the reachable TinyFish SDK/client, PVCFC pack wiring, and review-hardening contribution. It is a release-size concern to monitor when KFC web tools are added, but the Worker build and dry run remain green.
+Actual delta: **+629.55 KiB raw, +98.02 KiB gzip**. This is the reachable TinyFish SDK/client, PVCFC pack wiring, and review-hardening contribution. It is a release-size concern to monitor when KFC web tools are added, but the Worker build and dry run remain green.
 
 ## Initial verification before independent review fixes
 
@@ -159,7 +159,7 @@ feat(pvcfc): add official-site TinyFish evidence tools
 
 1. The integration is credential-free in CI; Search/Fetch latency, provider quotas, and real result quality still require the later credentialed canary.
 2. With zero retries, a 4-second SDK timeout, 3-second Fetch timeout, and code-enforced 12-second shared live-web deadline, web operations cannot consume the full 30-second turn deadline. Deterministic clock coverage proves later operations fail before invoking the client when less than one 4-second window remains, reserving about 18 seconds for the provider lookup and model calls. The existing outer turn deadline remains the final guard.
-3. The +97.74 KiB gzip Worker increase should be compared again after KFC-owned web tools. No second SDK/client copy should be introduced.
+3. The +98.02 KiB gzip Worker increase should be compared again after KFC-owned web tools. No second SDK/client copy should be introduced.
 4. Fixture inventory derivation is intentionally temporary. When PVCFC switches to its official API provider, server composition must inject that provider's canonical source inventory rather than retain fixture-derived admission.
 
 ## Independent review fixes
@@ -202,4 +202,44 @@ Review-fix commit subject:
 
 ```text
 fix(pvcfc): enforce live evidence boundaries
+```
+
+## Second independent review fix
+
+The second review found that the PVCFC Fetch tool trusted the injected `TinyFishClient` result after validating only the request. This mattered because test doubles or a future adapter implementation could return a different, oversized, or no-longer-allowlisted source/final URL and bypass the generic adapter boundary.
+
+Three fake-client regressions were written and observed RED first. Overlong allowed-host `sourceUrl` and `finalUrl` values both resolved successfully, and a bounded allowlisted `sourceUrl` different from the admitted request also resolved. All three values could enter model-visible output and success receipts.
+
+`fetchPvcfcPage` now revalidates and normalizes both returned URLs immediately after the client resolves and before constructing its result or receipt. The normalized fetched `sourceUrl` must exactly equal the normalized admitted request URL or the tool throws `pvcfc_web_source_url_mismatch`; the normalized `finalUrl` must independently remain within the fixed PVCFC allowlist and shared 2,048-character cap. Rejected results record only the compact error receipt and never page content or returned URLs.
+
+Second-fix verification:
+
+```text
+npx vitest run test/business/pvcfc-web-tools.test.ts
+Test Files  1 passed (1)
+Tests       12 passed (12)
+
+npx vitest run [11 focused Task 3/4 and integration files]
+Test Files  11 passed (11)
+Tests       66 passed (66)
+
+npm run check
+Test Files  200 passed | 1 skipped (201)
+Tests       1963 passed | 1 skipped (1964)
+
+npm run check:architecture
+Architecture size check passed (463 files, 900-line ceiling with no baseline growth).
+
+npm run build
+exit 0
+
+npm run worker:deploy:dry-run
+exit 0
+Total Upload: 12709.55 KiB / gzip: 1334.03 KiB
+```
+
+Second-fix commit subject:
+
+```text
+fix(pvcfc): validate fetched evidence results
 ```

@@ -149,7 +149,23 @@ export function createPvcfcWebTools(input: {
           allowedHostnames: PVCFC_WEB_ALLOWED_HOSTNAMES,
           perUrlTimeoutMs: PVCFC_WEB_FETCH_TIMEOUT_MS,
         });
-        const result = { ...fetched, text: fetched.text.slice(0, 8_000) };
+        const fetchedSourceUrl = validateBusinessWebUrl(
+          fetched.sourceUrl,
+          PVCFC_WEB_ALLOWED_HOSTNAMES,
+        );
+        if (fetchedSourceUrl !== normalized) {
+          throw new Error('pvcfc_web_source_url_mismatch');
+        }
+        const finalUrl = validateBusinessWebUrl(
+          fetched.finalUrl,
+          PVCFC_WEB_ALLOWED_HOSTNAMES,
+        );
+        const result = {
+          ...fetched,
+          sourceUrl: fetchedSourceUrl,
+          finalUrl,
+          text: fetched.text.slice(0, 8_000),
+        };
         trace(input.receipts, {
           name: 'fetchPvcfcPage',
           status: 'success',
