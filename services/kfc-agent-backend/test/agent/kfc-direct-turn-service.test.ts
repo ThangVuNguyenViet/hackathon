@@ -47,6 +47,62 @@ function functionCall(name: string, arguments_: Record<string, unknown>) {
 }
 
 describe('KfcDirectTurnService', () => {
+  it('rejects a non-KFC pack before KFC clients or state are prepared', async () => {
+    const fixtures = createTestFixtures();
+    const clients = createMockClients(fixtures);
+    const requests: Array<Record<string, unknown>> = [];
+    let kfcClientCreations = 0;
+    let kfcFixtureReads = 0;
+    let kfcAccessReads = 0;
+    const store = new MemoryStore();
+    const service = new KfcDirectTurnService({
+      store,
+      openAiAgent: new OpenAiKfcAgent({
+        // Minimal provider double for inspecting the actual Responses request.
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion
+        client: {
+          responses: {
+            create: async (request: Record<string, unknown>) => {
+              requests.push(structuredClone(request));
+              return assistantMessage('Mình sẽ tra cứu dữ liệu PVCFC.');
+            },
+          },
+        } as unknown as OpenAIClient,
+        model: 'gpt-4.1-mini',
+      }),
+      getFixtures: async () => {
+        kfcFixtureReads += 1;
+        return fixtures;
+      },
+      createClients: async () => {
+        kfcClientCreations += 1;
+        return clients;
+      },
+      getAccessContext: async () => {
+        kfcAccessReads += 1;
+        return undefined;
+      },
+    });
+
+    await expect(
+      service.run({
+        businessId: 'pvcfc',
+        sessionId: 'pvcfc:trusted-route',
+        customerId: 'trusted-route',
+        channel: 'kfc',
+        text: 'Cho tôi thông tin sản phẩm Urê.',
+        externalMessageId: 'pvcfc-1',
+        metadata: null,
+      }),
+    ).rejects.toThrow('agent_pack_id_unknown:pvcfc');
+
+    expect(requests).toHaveLength(0);
+    expect(kfcClientCreations).toBe(0);
+    expect(kfcFixtureReads).toBe(0);
+    expect(kfcAccessReads).toBe(0);
+    await expect(store.listEvents('pvcfc:trusted-route')).resolves.toEqual([]);
+  });
+
   it('persists redacted SDK compaction metrics with the assistant turn', async () => {
     const fixtures = createTestFixtures();
     const clients = createMockClients(fixtures);

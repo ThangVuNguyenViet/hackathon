@@ -1,0 +1,509 @@
+{
+  "schemaVersion": "pvcfc-public-fixture-fragment-v1",
+  "kind": "dealers_contacts",
+  "retrievedAt": "2026-08-11",
+  "records": [
+    {
+      "id": "pvcfc-head-office-ca-mau",
+      "name": "Trụ sở chính PVCFC",
+      "sourceUrl": "https://www.pvcfc.com.vn/lien-he",
+      "summary": "Trụ sở chính và các kênh liên hệ doanh nghiệp được PVCFC công bố trên trang liên hệ chính thức.",
+      "attributes": {
+        "recordType": "office",
+        "officeType": "head_office",
+        "publiclyListed": true
+      },
+      "address": "Số 647 - 649, Đường Ngô Quyền, Phường An Xuyên, Tỉnh Cà Mau, Việt Nam",
+      "region": "Cà Mau, Việt Nam",
+      "contact": {
+        "phone": "02903819000",
+        "fax": "0290 3590501",
+        "email": "info@pvcfc.com.vn",
+        "hotline": "1800888606"
+      },
+      "imageUrls": [
+        "https://www.pvcfc.com.vn/Data/Sites/1/Banner/banner-contac.jpg"
+      ],
+      "documentUrls": [],
+      "relatedUrls": [
+        "https://www.pvcfc.com.vn/thong-tin-lien-he",
+        "https://www.pvcfc.com.vn/lien-he-tu-van"
+      ],
+      "provenance": {
+        "sourceUrl": "https://www.pvcfc.com.vn/lien-he",
+        "retrievalMethod": "tinyfish_fetch",
+        "publisher": "PVCFC",
+        "sourceType": "official_contact_page",
+        "retrievedAt": "2026-08-11",
+        "evidence": "The official contact page explicitly lists the head-office address, switchboard, fax and hotline; the official-site search result exposes info@pvcfc.com.vn."
+      }
+    },
+    {
+      "id": "pvcfc-ho-chi-minh-city-office",
+      "name": "Văn phòng TP.HCM của PVCFC",
+      "sourceUrl": "https://www.pvcfc.com.vn/lien-he",
+      "summary": "Văn phòng PVCFC tại Thành phố Hồ Chí Minh được công bố trên trang liên hệ chính thức.",
+      "attributes": {
+        "recordType": "office",
+        "officeType": "representative_office",
+        "publiclyListed": true
+      },
+      "address": "173 - 179 Đường Trương Văn Bang, Phường Cát Lái, Thành phố Hồ Chí Minh",
+      "region": "Thành phố Hồ Chí Minh, Việt Nam",
+      "contact": {
+        "phone": "028.2208.5555"
+      },
+      "imageUrls": [],
+      "documentUrls": [],
+      "relatedUrls": [
+        "https://www.pvcfc.com.vn/cbtt-thanh-lap-van-phong-dai-dien-cua-pvcfc-tai-tphcm"
+      ],
+      "provenance": {
+        "sourceUrl": "https://www.pvcfc.com.vn/lien-he",
+        "retrievalMethod": "tinyfish_fetch",
+        "publisher": "PVCFC",
+        "sourceType": "official_contact_page",
+        "retrievedAt": "2026-08-11",
+        "evidence": "The official contact page explicitly lists this office, address and organizational telephone number."
+      }
+    },
+    {
+      "id": "pvcfc-cambodia-representative-office",
+      "name": "PVCFC Representative Office in Cambodia",
+      "sourceUrl": "https://www.pvcfc.com.vn/cbtt-thanh-lap-van-phong-dai-dien-cua-pvcfc-tai-campuchia",
+      "summary": "Văn phòng đại diện tại Campuchia được thành lập để đại diện theo ủy quyền và bảo vệ lợi ích của PVCFC; văn phòng không thực hiện chức năng kinh doanh hoặc hoạt động tạo lợi nhuận trực tiếp.",
+      "attributes": {
+        "recordType": "office",
+        "officeType": "representative_office",
+        "publiclyListed": true,
+        "commercialSalesLocation": false
+      },
+      "address": "House Number 415, Street Claster in Borey Peng Huoth the star Plastinum Rosato, Phum Boeung Chhouk, Sangkat Nirouth, khan Chbar Ampov, Phnom Penh City, Cambodia",
+      "region": "Phnom Penh, Cambodia",
+      "contact": {},
+      "imageUrls": [],
+      "documentUrls": [
+        "https://www.pvcfc.com.vn/Data/Sites/1/media/quan-he-nha-dau-tu/cong-bo-khac/2024/20241231-DCM_%20CBTT%20Th%C3%A0nh%20l%E1%BA%ADp%20v%C4%83n%20ph%C3%B2ng%20%C4%91%E1%BA%A1i%20di%E1%BB%87n%20c%E1%BB%A7a%20PVCFC%20t%E1%BA%A1i%20Campuchia.pdf"
+      ],
+      "relatedUrls": [],
+      "provenance": {
+        "sourceUrl": "https://www.pvcfc.com.vn/cbtt-thanh-lap-van-phong-dai-dien-cua-pvcfc-tai-campuchia",
+        "retrievalMethod": "tinyfish_fetch",
+        "publisher": "PVCFC",
+        "sourceType": "official_corporate_disclosure",
+        "retrievedAt": "2026-08-11",
+        "evidence": "The attached official resolution explicitly states the office name, organizational address and non-commercial representative function. Personal details contained elsewhere in the document were intentionally excluded."
+      }
+    },
+    {
+      "id": "pvcfc-public-customer-hotline",
+      "name": "Hotline Phân Bón Cà Mau",
+      "sourceUrl": "https://www.pvcfc.com.vn/lien-he-tu-van",
+      "summary": "Kênh hotline công khai để liên hệ tư vấn với Phân Bón Cà Mau.",
+      "attributes": {
+        "recordType": "organizational_contact_channel",
+        "channelType": "customer_hotline",
+        "publiclyListed": true
+      },
+      "address": null,
+      "region": "Việt Nam",
+      "contact": {
+        "phone": "1800888606"
+      },
+      "imageUrls": [
+        "https://www.pvcfc.com.vn/Data/Sites/1/News/5944/hotline.png"
+      ],
+      "documentUrls": [],
+      "relatedUrls": [
+        "https://www.pvcfc.com.vn/goi-ngay-hotline",
+        "https://zalo.me/3848410411690577713",
+        "https://www.facebook.com/phanboncamau"
+      ],
+      "provenance": {
+        "sourceUrl": "https://www.pvcfc.com.vn/lien-he-tu-van",
+        "retrievalMethod": "tinyfish_fetch",
+        "publisher": "PVCFC",
+        "sourceType": "official_consultation_page",
+        "retrievedAt": "2026-08-11",
+        "evidence": "The official consultation page links the hotline action, PVCFC Zalo account and official Facebook page."
+      }
+    },
+    {
+      "id": "pvcfc-public-integrity-channel",
+      "name": "Kênh tiếp nhận sai phạm PVCFC",
+      "sourceUrl": "https://www.pvcfc.com.vn/lien-he",
+      "summary": "Kênh điện thoại tổ chức được PVCFC công khai để tiếp nhận thông tin sai phạm.",
+      "attributes": {
+        "recordType": "organizational_contact_channel",
+        "channelType": "integrity_reporting",
+        "publiclyListed": true
+      },
+      "address": null,
+      "region": "Việt Nam",
+      "contact": {
+        "phone": "0798 041 041"
+      },
+      "imageUrls": [],
+      "documentUrls": [],
+      "relatedUrls": [],
+      "provenance": {
+        "sourceUrl": "https://www.pvcfc.com.vn/lien-he",
+        "retrievalMethod": "tinyfish_fetch",
+        "publisher": "PVCFC",
+        "sourceType": "official_contact_page",
+        "retrievedAt": "2026-08-11",
+        "evidence": "The official contact page explicitly labels this number as the misconduct-reporting channel."
+      }
+    },
+    {
+      "id": "dealer-bui-thi-loan-nam-dinh",
+      "name": "Đại lý Bùi Thị Loan",
+      "sourceUrl": "https://www.pvcfc.com.vn/dai-ly-va-cua-hang-phan-bon-uy-tin",
+      "summary": "Cửa hàng phân bón tại Nam Định được bài tổng hợp chính thức của PVCFC giới thiệu là một địa điểm uy tín phục vụ lúa và rau màu.",
+      "attributes": {
+        "recordType": "public_recommended_dealer",
+        "authorizationStatus": "not_stated",
+        "personalContactExcluded": true
+      },
+      "address": "Xã Liên Bảo, Huyện Vụ Bản, Tỉnh Nam Định",
+      "region": "Miền Bắc, Việt Nam",
+      "contact": {},
+      "imageUrls": [],
+      "documentUrls": [],
+      "relatedUrls": [],
+      "provenance": {
+        "sourceUrl": "https://www.pvcfc.com.vn/dai-ly-va-cua-hang-phan-bon-uy-tin",
+        "retrievalMethod": "tinyfish_fetch",
+        "publisher": "PVCFC",
+        "sourceType": "official_editorial_dealer_list",
+        "retrievedAt": "2026-08-11",
+        "evidence": "Name and locality are explicitly published in PVCFC's dealer roundup; the page does not state that the store is an authorized PVCFC dealer."
+      }
+    },
+    {
+      "id": "dealer-song-phi-son-la",
+      "name": "Đại lý Song Phi",
+      "sourceUrl": "https://www.pvcfc.com.vn/dai-ly-va-cua-hang-phan-bon-uy-tin",
+      "summary": "Cửa hàng phân bón tại Sơn La được bài tổng hợp chính thức của PVCFC giới thiệu; bài viết nói sản phẩm tại đây được nhập từ Đạm Cà Mau.",
+      "attributes": {
+        "recordType": "public_recommended_dealer",
+        "authorizationStatus": "not_stated",
+        "personalContactExcluded": true
+      },
+      "address": "Xã Chiềng Ban, Huyện Mai Sơn, Tỉnh Sơn La",
+      "region": "Miền Bắc, Việt Nam",
+      "contact": {},
+      "imageUrls": [
+        "https://www.pvcfc.com.vn/Data/Sites/1/media/tin-tuc/dai-ly-song-phi-tai-xa-chieng-ban-huyen-mai-son-tinh-son-la.jpg"
+      ],
+      "documentUrls": [],
+      "relatedUrls": [],
+      "provenance": {
+        "sourceUrl": "https://www.pvcfc.com.vn/dai-ly-va-cua-hang-phan-bon-uy-tin",
+        "retrievalMethod": "tinyfish_fetch",
+        "publisher": "PVCFC",
+        "sourceType": "official_editorial_dealer_list",
+        "retrievedAt": "2026-08-11",
+        "evidence": "Name, locality and stated supply from Đạm Cà Mau are explicitly published; formal authorization status is not stated."
+      }
+    },
+    {
+      "id": "dealer-lien-tu-gia-lai",
+      "name": "Đại lý phân bón Liên Tứ",
+      "sourceUrl": "https://www.pvcfc.com.vn/dai-ly-va-cua-hang-phan-bon-uy-tin",
+      "summary": "Cửa hàng phân bón tại Gia Lai được bài tổng hợp chính thức của PVCFC giới thiệu cho cây công nghiệp.",
+      "attributes": {
+        "recordType": "public_recommended_dealer",
+        "authorizationStatus": "not_stated",
+        "personalContactExcluded": true
+      },
+      "address": "Gia Lai",
+      "region": "Miền Trung, Việt Nam",
+      "contact": {},
+      "imageUrls": [],
+      "documentUrls": [],
+      "relatedUrls": [],
+      "provenance": {
+        "sourceUrl": "https://www.pvcfc.com.vn/dai-ly-va-cua-hang-phan-bon-uy-tin",
+        "retrievalMethod": "tinyfish_fetch",
+        "publisher": "PVCFC",
+        "sourceType": "official_editorial_dealer_list",
+        "retrievedAt": "2026-08-11",
+        "evidence": "Name and province are explicitly published in PVCFC's dealer roundup; authorization status is not stated."
+      }
+    },
+    {
+      "id": "dealer-hai-linh-quang-ngai",
+      "name": "Cửa hàng phân bón Hải Lĩnh",
+      "sourceUrl": "https://www.pvcfc.com.vn/dai-ly-va-cua-hang-phan-bon-uy-tin",
+      "summary": "Cửa hàng phân bón tại Quảng Ngãi được bài tổng hợp chính thức của PVCFC giới thiệu cho các nhu cầu cải tạo đất, giữ ẩm và xử lý mặn phèn.",
+      "attributes": {
+        "recordType": "public_recommended_dealer",
+        "authorizationStatus": "not_stated",
+        "personalContactExcluded": true
+      },
+      "address": "Quảng Ngãi",
+      "region": "Miền Trung, Việt Nam",
+      "contact": {},
+      "imageUrls": [],
+      "documentUrls": [],
+      "relatedUrls": [],
+      "provenance": {
+        "sourceUrl": "https://www.pvcfc.com.vn/dai-ly-va-cua-hang-phan-bon-uy-tin",
+        "retrievalMethod": "tinyfish_fetch",
+        "publisher": "PVCFC",
+        "sourceType": "official_editorial_dealer_list",
+        "retrievedAt": "2026-08-11",
+        "evidence": "Name and province are explicitly published in PVCFC's dealer roundup; authorization status is not stated."
+      }
+    },
+    {
+      "id": "dealer-hung-lien-gia-lai",
+      "name": "Đại lý phân bón Hùng Liên",
+      "sourceUrl": "https://www.pvcfc.com.vn/dai-ly-va-cua-hang-phan-bon-uy-tin",
+      "summary": "Cửa hàng phân bón tại Gia Lai được bài tổng hợp chính thức của PVCFC giới thiệu cho cây ăn trái.",
+      "attributes": {
+        "recordType": "public_recommended_dealer",
+        "authorizationStatus": "not_stated",
+        "personalContactExcluded": true
+      },
+      "address": "Gia Lai",
+      "region": "Miền Trung, Việt Nam",
+      "contact": {},
+      "imageUrls": [
+        "https://www.pvcfc.com.vn/Data/Sites/1/media/tin-tuc/dai-ly-phan-bon-hung-lien-tai-gia-lai.jpg"
+      ],
+      "documentUrls": [],
+      "relatedUrls": [],
+      "provenance": {
+        "sourceUrl": "https://www.pvcfc.com.vn/dai-ly-va-cua-hang-phan-bon-uy-tin",
+        "retrievalMethod": "tinyfish_fetch",
+        "publisher": "PVCFC",
+        "sourceType": "official_editorial_dealer_list",
+        "retrievedAt": "2026-08-11",
+        "evidence": "Name and province are explicitly published in PVCFC's dealer roundup; authorization status is not stated."
+      }
+    },
+    {
+      "id": "dealer-hung-phat-lam-dong",
+      "name": "Đại lý phân Hùng Phát",
+      "sourceUrl": "https://www.pvcfc.com.vn/dai-ly-va-cua-hang-phan-bon-uy-tin",
+      "summary": "Cửa hàng phân bón tại Lâm Đồng được bài tổng hợp chính thức của PVCFC giới thiệu cho rau, hoa và chè.",
+      "attributes": {
+        "recordType": "public_recommended_dealer",
+        "authorizationStatus": "not_stated",
+        "personalContactExcluded": true
+      },
+      "address": "Khu phố 3, Xã Bảo Lâm 1, Tỉnh Lâm Đồng",
+      "region": "Tây Nguyên, Việt Nam",
+      "contact": {},
+      "imageUrls": [],
+      "documentUrls": [],
+      "relatedUrls": [],
+      "provenance": {
+        "sourceUrl": "https://www.pvcfc.com.vn/dai-ly-va-cua-hang-phan-bon-uy-tin",
+        "retrievalMethod": "tinyfish_fetch",
+        "publisher": "PVCFC",
+        "sourceType": "official_editorial_dealer_list",
+        "retrievedAt": "2026-08-11",
+        "evidence": "Name and locality are explicitly published in PVCFC's dealer roundup; authorization status is not stated."
+      }
+    },
+    {
+      "id": "dealer-duy-duyen-lam-dong",
+      "name": "Cửa hàng phân bón Duy Duyên",
+      "sourceUrl": "https://www.pvcfc.com.vn/dai-ly-va-cua-hang-phan-bon-uy-tin",
+      "summary": "Cửa hàng phân bón tại Lâm Đồng được bài tổng hợp chính thức của PVCFC giới thiệu cho rau củ.",
+      "attributes": {
+        "recordType": "public_recommended_dealer",
+        "authorizationStatus": "not_stated",
+        "personalContactExcluded": true
+      },
+      "address": "Xã Đinh Văn Lâm Hà, Tỉnh Lâm Đồng",
+      "region": "Tây Nguyên, Việt Nam",
+      "contact": {},
+      "imageUrls": [],
+      "documentUrls": [],
+      "relatedUrls": [],
+      "provenance": {
+        "sourceUrl": "https://www.pvcfc.com.vn/dai-ly-va-cua-hang-phan-bon-uy-tin",
+        "retrievalMethod": "tinyfish_fetch",
+        "publisher": "PVCFC",
+        "sourceType": "official_editorial_dealer_list",
+        "retrievedAt": "2026-08-11",
+        "evidence": "Name and locality are explicitly published in PVCFC's dealer roundup; authorization status is not stated."
+      }
+    },
+    {
+      "id": "dealer-binh-lai-lam-dong",
+      "name": "Đại lý phân bón Bình Lài",
+      "sourceUrl": "https://www.pvcfc.com.vn/dai-ly-va-cua-hang-phan-bon-uy-tin",
+      "summary": "Cửa hàng phân bón tại Lâm Đồng được bài tổng hợp chính thức của PVCFC giới thiệu cho cà phê và hồ tiêu.",
+      "attributes": {
+        "recordType": "public_recommended_dealer",
+        "authorizationStatus": "not_stated",
+        "personalContactExcluded": true
+      },
+      "address": "Xã Đăk Săk, Tỉnh Lâm Đồng",
+      "region": "Tây Nguyên, Việt Nam",
+      "contact": {},
+      "imageUrls": [
+        "https://www.pvcfc.com.vn/Data/Sites/1/media/tin-tuc/dai-ly-phan-bon-binh-lai-tai-xa-dak-sak-tinh-lam-dong.jpg"
+      ],
+      "documentUrls": [],
+      "relatedUrls": [],
+      "provenance": {
+        "sourceUrl": "https://www.pvcfc.com.vn/dai-ly-va-cua-hang-phan-bon-uy-tin",
+        "retrievalMethod": "tinyfish_fetch",
+        "publisher": "PVCFC",
+        "sourceType": "official_editorial_dealer_list",
+        "retrievedAt": "2026-08-11",
+        "evidence": "Name and locality are explicitly published in PVCFC's dealer roundup; authorization status is not stated."
+      }
+    },
+    {
+      "id": "dealer-tu-tam-dong-thap",
+      "name": "Đại lý phân bón Tú Tâm",
+      "sourceUrl": "https://www.pvcfc.com.vn/dai-ly-va-cua-hang-phan-bon-uy-tin",
+      "summary": "Cửa hàng phân bón tại Đồng Tháp được bài tổng hợp chính thức của PVCFC giới thiệu cho vùng sản xuất lúa.",
+      "attributes": {
+        "recordType": "public_recommended_dealer",
+        "authorizationStatus": "not_stated",
+        "personalContactExcluded": true
+      },
+      "address": "Xã Ba Sao, Tỉnh Đồng Tháp",
+      "region": "Miền Nam, Việt Nam",
+      "contact": {},
+      "imageUrls": [],
+      "documentUrls": [],
+      "relatedUrls": [],
+      "provenance": {
+        "sourceUrl": "https://www.pvcfc.com.vn/dai-ly-va-cua-hang-phan-bon-uy-tin",
+        "retrievalMethod": "tinyfish_fetch",
+        "publisher": "PVCFC",
+        "sourceType": "official_editorial_dealer_list",
+        "retrievedAt": "2026-08-11",
+        "evidence": "Name and locality are explicitly published in PVCFC's dealer roundup; authorization status is not stated."
+      }
+    },
+    {
+      "id": "dealer-khanh-my-ca-mau",
+      "name": "Cửa hàng phân bón Khánh My",
+      "sourceUrl": "https://www.pvcfc.com.vn/dai-ly-va-cua-hang-phan-bon-uy-tin",
+      "summary": "Cửa hàng phân bón tại Cà Mau được bài tổng hợp chính thức của PVCFC giới thiệu cho điều kiện đất phèn mặn.",
+      "attributes": {
+        "recordType": "public_recommended_dealer",
+        "authorizationStatus": "not_stated",
+        "personalContactExcluded": true
+      },
+      "address": "Xã Hòa Bình, Tỉnh Cà Mau",
+      "region": "Miền Nam, Việt Nam",
+      "contact": {},
+      "imageUrls": [],
+      "documentUrls": [],
+      "relatedUrls": [],
+      "provenance": {
+        "sourceUrl": "https://www.pvcfc.com.vn/dai-ly-va-cua-hang-phan-bon-uy-tin",
+        "retrievalMethod": "tinyfish_fetch",
+        "publisher": "PVCFC",
+        "sourceType": "official_editorial_dealer_list",
+        "retrievedAt": "2026-08-11",
+        "evidence": "Name and locality are explicitly published in PVCFC's dealer roundup; authorization status is not stated."
+      }
+    },
+    {
+      "id": "dealer-vinh-phat-ks-can-tho",
+      "name": "Đại lý Vinh Phát (KS)",
+      "sourceUrl": "https://www.pvcfc.com.vn/dai-ly-va-cua-hang-phan-bon-uy-tin",
+      "summary": "Cửa hàng phân bón tại Cần Thơ được bài tổng hợp chính thức của PVCFC giới thiệu với danh mục cho lúa, rau và cây ăn trái.",
+      "attributes": {
+        "recordType": "public_recommended_dealer",
+        "authorizationStatus": "not_stated",
+        "personalContactExcluded": true
+      },
+      "address": "Xã Nhơn Mỹ, Thành phố Cần Thơ",
+      "region": "Miền Nam, Việt Nam",
+      "contact": {},
+      "imageUrls": [
+        "https://www.pvcfc.com.vn/Data/Sites/1/media/tin-tuc/dai-ly-vinh-phat-ks-tai-xa-nhon-my-tp-can-tho.jpg"
+      ],
+      "documentUrls": [],
+      "relatedUrls": [],
+      "provenance": {
+        "sourceUrl": "https://www.pvcfc.com.vn/dai-ly-va-cua-hang-phan-bon-uy-tin",
+        "retrievalMethod": "tinyfish_fetch",
+        "publisher": "PVCFC",
+        "sourceType": "official_editorial_dealer_list",
+        "retrievedAt": "2026-08-11",
+        "evidence": "Name and locality are explicitly published in PVCFC's dealer roundup; authorization status is not stated."
+      }
+    },
+    {
+      "id": "pvcfc-official-storefront-location-surface",
+      "name": "Phân Bón Cà Mau official shop location surface",
+      "sourceUrl": "https://shop.pvcfc.com.vn/",
+      "summary": "Cửa hàng trực tuyến chính thức hiển thị bộ lọc địa điểm mua hàng với mặc định Việt Nam; lần thu thập này không quan sát được bản ghi địa điểm hay đại lý công khai nào từ bề mặt động.",
+      "attributes": {
+        "recordType": "lookup_surface",
+        "lookupOnly": true,
+        "capabilities": [
+          "browse_official_product_categories",
+          "select_purchase_location_country"
+        ],
+        "observedDefaultLocation": "Việt Nam",
+        "dealerRecordsExtracted": 0,
+        "limitation": "TinyFish search exposed the official surface and its location selector, but the fetch returned no extractable content and the interactive TinyFish agent was unavailable because the account had no agent credits. No dealer locations were inferred."
+      },
+      "address": null,
+      "region": "Việt Nam",
+      "contact": {},
+      "imageUrls": [],
+      "documentUrls": [],
+      "relatedUrls": [],
+      "provenance": {
+        "sourceUrl": "https://shop.pvcfc.com.vn/",
+        "retrievalMethod": "tinyfish_fetch",
+        "publisher": "PVCFC",
+        "sourceType": "official_dynamic_storefront",
+        "retrievedAt": "2026-08-11",
+        "evidence": "TinyFish official-domain search returned shop.pvcfc.com.vn with 'Địa điểm mua hàng: Việt Nam' and 'Không có kết quả'; no public dealer record was extracted."
+      }
+    },
+    {
+      "id": "pvcfc-dealer-c2-dms-information-surface",
+      "name": "Ứng dụng Phân Bón Cà Mau dành cho đại lý C2",
+      "sourceUrl": "https://www.pvcfc.com.vn/dms",
+      "summary": "Trang DMS chính thức liên kết hướng dẫn sử dụng ứng dụng cho đại lý C2, gồm đăng nhập, tra cứu sản phẩm, cập nhật giá bán và quản lý nghiệp vụ; đây không phải danh bạ đại lý công khai.",
+      "attributes": {
+        "recordType": "dealer_platform_information",
+        "lookupOnly": true,
+        "capabilities": [
+          "dealer_product_lookup",
+          "dealer_price_updates",
+          "dealer_operations_management"
+        ],
+        "publicDealerDirectory": false,
+        "dealerRecordsExtracted": 0,
+        "limitation": "The public DMS page yielded only navigation/footer text to TinyFish. Its linked official guide was discoverable, but no public dealer directory or organizational dealer records were exposed."
+      },
+      "address": null,
+      "region": "Việt Nam",
+      "contact": {},
+      "imageUrls": [
+        "https://www.pvcfc.com.vn/Data/Sites/1/News/6939/post-app-pbcm.jpg"
+      ],
+      "documentUrls": [],
+      "relatedUrls": [
+        "https://www.pvcfc.com.vn/ung-dung-phan-bon-ca-maucac-buoc-su-dung-toan-bo-tinh-nang-danh-cho-dai-ly-c2"
+      ],
+      "provenance": {
+        "sourceUrl": "https://www.pvcfc.com.vn/dms",
+        "retrievalMethod": "tinyfish_fetch",
+        "publisher": "PVCFC",
+        "sourceType": "official_dealer_platform_page",
+        "retrievedAt": "2026-08-11",
+        "evidence": "The official DMS page links PVCFC's guide for the dealer C2 application; no directory entries were published in the fetched content."
+      }
+    }
+  ]
+}

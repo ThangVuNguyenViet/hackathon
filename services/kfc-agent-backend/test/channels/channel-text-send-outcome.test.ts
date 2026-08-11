@@ -148,6 +148,28 @@ describe('Messenger text-send transport outcomes', () => {
 });
 
 describe('Zalo text-send transport outcomes', () => {
+  it('resolves the access token asynchronously for every outbound send', async () => {
+    const fetchImpl = responseFetch({ error: 0, message_id: 'zalo-provider-1' });
+    const accessTokenProvider = vi
+      .fn<() => Promise<string | undefined>>()
+      .mockResolvedValueOnce('rotated-token-1')
+      .mockResolvedValueOnce('rotated-token-2');
+    const client = createZaloClient({
+      accessTokenProvider,
+      apiBaseUrl: 'https://zalo.local',
+      fetchImpl: fetchImpl as typeof fetch,
+    });
+
+    await client.sendTextWithOutcome('recipient-1', 'Một');
+    await client.sendTextWithOutcome('recipient-1', 'Hai');
+
+    expect(accessTokenProvider).toHaveBeenCalledTimes(2);
+    expect(fetchImpl.mock.calls.map((call) => new Headers(call[1]?.headers).get('access_token'))).toEqual([
+      'rotated-token-1',
+      'rotated-token-2',
+    ]);
+  });
+
   it('confirms sent only with the real provider message ID', async () => {
     const fetchImpl = responseFetch({
       error: 0,

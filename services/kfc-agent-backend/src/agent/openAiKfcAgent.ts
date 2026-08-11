@@ -10,6 +10,7 @@ import {
   type AgentInputItem,
   type OpenAIClient,
 } from '@kfc/openai-agents-runtime';
+import type { AgentProfile } from '../business/agentPack.js';
 import type { Channel, ConversationTurnMetadata } from '../domain/types.js';
 import type { KfcGenUiAttachment } from '../genui/kfcGenUi.js';
 import type {
@@ -42,8 +43,9 @@ export interface OpenAiUsage {
 export interface OpenAiKfcAgentOptions {
   client: OpenAIClient;
   model: string;
-  instructions?: string;
   maxTurns?: number;
+  /** Null omits the parameter for OpenAI-compatible providers that reject it. */
+  modelTemperature?: number | null;
   compaction?: {
     enabled: boolean;
     thresholdBytes: number;
@@ -73,9 +75,12 @@ export interface OpenAiKfcAgentExecutionResult {
 }
 
 export interface OpenAiKfcAgentTurnInput {
+  /** Explicit pack-owned profile. Never inferred from session IDs or prose. */
+  profile: AgentProfile;
   sessionId: string;
   customerId: string;
   channel: Channel;
+  transport?: 'web_chat' | Channel;
   text: string;
   externalMessageId: string | null;
   metadata: ConversationTurnMetadata | null;
@@ -86,6 +91,7 @@ export interface OpenAiKfcAgentTurnInput {
     arguments: Record<string, unknown>;
   }>;
   allowModelToolCalls?: boolean;
+  requireEvidenceTool?: boolean;
   verifiedBusinessContext?: Record<string, unknown>;
   selectGenUi?: (
     result: OpenAiKfcAgentExecutionResult,
@@ -100,29 +106,6 @@ export interface OpenAiKfcAgentTurnResult extends OpenAiKfcAgentExecutionResult 
   assistantTurn: AppendConversationTurnInput;
   sdkSessionMutation: AgentSessionItemsMutation;
 }
-
-const defaultInstructions = [
-  '# Role',
-  'You are a friendly, natural ordering and advisory assistant. Understand the customer’s intent, use any of the available tools freely to assist them, and complete requests smoothly with minimal friction.',
-  '',
-  '# Capabilities & Tool Usage',
-  'Feel free to use any available tools whenever needed to look up information, perform calculations, verify details, check options, or execute customer requests.',
-  'When a customer asks a question or makes a request, freely invoke the relevant tools to gather current evidence and carry out their intent in the same turn.',
-  'Choose any tool that helps fulfill the customer’s request accurately and efficiently.',
-  '',
-  '# Grounding & Evidence',
-  'Base customer-facing information about products, options, prices, availability, promotions, policies, fulfillment, and support on current tool results or verified business state.',
-  'Translate tool results into clear, helpful, customer-friendly terms in natural prose.',
-  'When details are incomplete or ambiguous, ask a friendly clarification to ensure the customer receives exactly what they need.',
-  '',
-  '# Response & Style',
-  'Respond naturally in Vietnamese unless another language is requested.',
-  'Provide helpful, relevant answers with clear outcomes and actionable next steps.',
-  'Keep responses warm, polite, and direct, focusing on what is most useful to the customer.',
-  '',
-  '# Scope Boundary',
-  'You are exclusively a KFC Vietnam ordering assistant. Do NOT provide information, advice, or assistance about any other business, brand, product category, or industry (such as fertilizers, agriculture, banking, or any non-KFC topic). If a customer asks about something completely outside KFC ordering (e.g., other companies, unrelated products), politely decline and redirect: "Mình chỉ hỗ trợ đặt món và tư vấn thực đơn KFC thôi nhé. Bạn có muốn tiếp tục với đơn hàng đang chọn không?"',
-].join('\n');
 
 const customerIdentifierKeys = new Set(['code', 'itemCode', 'modifierId']);
 const customerAdministrativeIdentifierLabels = [
@@ -283,7 +266,6 @@ function presentCustomerResponse(input: {
 
 export class OpenAiKfcAgent {
   private readonly model: string;
-  private readonly instructions: string;
   private readonly maxTurns: number;
   private readonly client: OpenAIClient;
   private readonly compaction: OpenAiKfcAgentOptions['compaction'];
@@ -291,7 +273,6 @@ export class OpenAiKfcAgent {
 
   constructor(options: OpenAiKfcAgentOptions) {
     this.model = options.model || 'gpt-4.1-mini';
-    this.instructions = options.instructions ?? defaultInstructions;
     this.maxTurns = options.maxTurns ?? 12;
     this.client = options.client;
     this.compaction = options.compaction;
@@ -305,7 +286,9 @@ export class OpenAiKfcAgent {
       traceIncludeSensitiveData: false,
       toolExecution: { maxFunctionToolConcurrency: 1 },
       modelSettings: {
-        temperature: 0,
+        ...(options.modelTemperature === null
+          ? {}
+          : { temperature: options.modelTemperature ?? 0 }),
         parallelToolCalls: false,
         retry: {
           maxRetries: 2,
@@ -359,45 +342,20 @@ export class OpenAiKfcAgent {
   }
 
   private createSdkAgent(input: OpenAiKfcAgentTurnInput) {
-    const isPvcfc =
-      input.sessionId.startsWith('pvcfc:') ||
-      (typeof input.verifiedBusinessContext?.organization === 'string' &&
-        input.verifiedBusinessContext.organization.includes('Phân bón')) ||
-      (typeof input.verifiedBusinessContext?.role === 'string' &&
-        input.verifiedBusinessContext.role.includes('Phân Bón'));
-
-    const agentName = isPvcfc
-      ? 'PVCFC Agricultural Advisor'
-      : 'KFC Vietnam ordering assistant';
-
-    const systemInstructions = isPvcfc
-      ? [
-          '# Role',
-          'You are the official Agricultural Advisory Assistant for Tổng Công ty Phân bón Dầu khí Cà Mau (PVCFC / Đạm Cà Mau).',
-          'Your role is to help farmers and dealers with crop nutrition, fertilizer dosage calculation, soil acidity/phèn treatment, disease diagnosis, and PVCFC authorized dealer locations.',
-          '',
-          '1. Quy trình bón phân & dinh dưỡng cây trồng (Lúa, Sầu riêng, Cà phê, Cây ăn trái) theo thổ nhưỡng (đất phèn An Giang, đất phù sa ĐBSCL, đất đỏ Tây Nguyên).',
-          '2. Tính toán lượng phân bón (Đạm Cà Mau, NPK Cà Mau 20-20-15, Organic OM Cà Mau, N46.Plus, Kali Cà Mau 61) và số bao 50kg theo diện tích (Héc-ta hoặc Công). N46.Plus là sản phẩm Đạm Cà Mau có hàm lượng Nitơ 46%, đây là sản phẩm chính thức trong danh mục của PVCFC.',
-          '3. Chẩn đoán bệnh cây trồng (vàng lá thối rễ, ngộ độc hữu cơ) và phác đồ cấp bách ngưng đạm hóa học, rải vôi nâng pH & tưới Trichoderma.',
-          '4. Tra cứu đại lý ủy quyền PVCFC chính hãng và hẹn Kỹ sư Nông nghiệp đo pH đất tận vườn. Đường dây hỗ trợ: 1800 599 978 (miễn phí). Website: https://damcamau.com.',
-          '',
-          '# Scope Boundary',
-          'You are exclusively the PVCFC agricultural advisor. Do NOT provide information, directions, or assistance about any other business, brand, or industry (e.g., fast food, other fertilizer brands, banking). If a customer asks about something completely outside PVCFC agronomy (e.g., ordering food, unrelated companies), politely decline and redirect back: "Mình chỉ hỗ trợ về phân bón và kỹ thuật canh tác Đạm Cà Mau thôi nhé. Bạn còn câu hỏi nào về cây trồng hoặc phân bón không?"',
-          '',
-          '# Grounding & Response Style',
-          'Respond in warm, polite, clear, natural Vietnamese.',
-          'Provide direct, helpful agricultural advice with clear action steps.',
-          'Base every factual claim about products, dosages, and dealers on verified business context.',
-        ].join('\n')
-      : this.instructions;
-
     return new Agent<KfcOpenAiAgentRunContext>({
-      name: agentName,
+      name: input.profile.name,
       model: this.model,
       instructions: (runContext) =>
-        [systemInstructions, ...runContext.context.developerMessages].join(
-          '\n\n',
-        ),
+        [
+          input.profile.instructions,
+          ...runContext.context.developerMessages,
+        ].join('\n\n'),
+      modelSettings:
+        input.requireEvidenceTool === true &&
+        input.allowModelToolCalls !== false &&
+        input.tools.length > 0
+          ? { toolChoice: 'required' }
+          : {},
       tools: input.allowModelToolCalls === false ? [] : input.tools,
       toolUseBehavior: 'run_llm_again',
       resetToolChoice: true,
@@ -586,6 +544,7 @@ export class OpenAiKfcAgent {
         }
       }
       const assistantMetadata = {
+        ...(input.transport ? { transport: input.transport } : {}),
         ...(input.metadata?.release ? { release: input.metadata.release } : {}),
         ...(input.metadata?.responseProfile
           ? { responseProfile: input.metadata.responseProfile }

@@ -1,0 +1,278 @@
+{
+  "schemaVersion": "pvcfc-public-fixture-fragment-v1",
+  "kind": "corporate_facilities",
+  "retrievedAt": "2026-08-11",
+  "records": [
+    {
+      "id": "pvcfc-corporate-profile",
+      "name": "Petrovietnam Ca Mau Fertilizer Corporation (PVCFC)",
+      "sourceUrl": "https://www.pvcfc.com.vn/gioi-thieu",
+      "summary": "PVCFC describes its core business as producing, trading, importing, and exporting fertilizers and petrochemical products for agriculture. Its current introduction page presents the company as a provider of crop-nutrition solutions and identifies three owned fertilizer plants.",
+      "attributes": {
+        "establishedDate": "2011-03-09",
+        "coreBusiness": [
+          "Fertilizer production and trading",
+          "Fertilizer import and export",
+          "Petrochemical production and trading"
+        ],
+        "ownedFacilityNames": [
+          "Ca Mau Urea Plant",
+          "Ca Mau NPK Plant",
+          "Korea-Vietnam NPK Plant"
+        ],
+        "reportedCombinedCapacity": {
+          "value": "nearly 1.5 million tonnes of fertilizer per year",
+          "factAsOf": "current introduction page retrieved 2026-08-11"
+        }
+      },
+      "imageUrls": [
+        "https://www.pvcfc.com.vn/Data/Sites/1/Banner/banner-gioi-thieu.jpg"
+      ],
+      "documentUrls": [],
+      "relatedUrls": [
+        "https://www.pvcfc.com.vn/en-US/introduction",
+        "https://thamquannhamay.pvcfc.com.vn/",
+        "https://www.pvcfc.com.vn/Data/Sites/1/media/BCTN/2025/chuong-1/nganh-nghe-dia-ban-kinh-doanh.html"
+      ],
+      "provenance": {
+        "sourceUrl": "https://www.pvcfc.com.vn/gioi-thieu",
+        "publisher": "PVCFC",
+        "sourceTitle": "Giới thiệu",
+        "sourceLanguage": "vi",
+        "publishedDate": null,
+        "retrievedAt": "2026-08-11",
+        "retrievalMethod": "tinyfish_fetch",
+        "factDateNote": "The establishment date is explicit. The plant portfolio and combined capacity are current-page claims observed on the retrieval date."
+      }
+    },
+    {
+      "id": "pvcfc-manufacturing-footprint-2024",
+      "name": "PVCFC manufacturing footprint",
+      "sourceUrl": "https://www.pvcfc.com.vn/Data/Sites/1/media/BCTN/2025/chuong-1/nganh-nghe-dia-ban-kinh-doanh.html",
+      "summary": "PVCFC's 2024 annual-report site identifies three owned manufacturing plants. It reports modern production lines at the Ca Mau plants and records completion of the Korea-Vietnam NPK Plant transfer in 2024.",
+      "attributes": {
+        "reportingPeriod": "2024",
+        "facilityCount": 3,
+        "facilityNames": [
+          "Ca Mau Urea Plant",
+          "Ca Mau NPK Plant",
+          "Korea-Vietnam NPK Plant"
+        ],
+        "datedMilestones": [
+          "2024-12-25: Ca Mau Urea Plant reached cumulative production of 11 million tonnes of urea",
+          "2024: PVCFC completed the transfer of the Korea-Vietnam NPK Plant"
+        ]
+      },
+      "imageUrls": [
+        "https://www.pvcfc.com.vn/Data/Sites/1/media/BCTN/2025/img/chapter-1/icon-nganh-nghe-01.png",
+        "https://www.pvcfc.com.vn/Data/Sites/1/media/BCTN/2025/img/chapter-1/icon-nganh-nghe-02.png"
+      ],
+      "documentUrls": [],
+      "relatedUrls": [
+        "https://www.pvcfc.com.vn/gioi-thieu",
+        "https://thamquannhamay.pvcfc.com.vn/"
+      ],
+      "provenance": {
+        "sourceUrl": "https://www.pvcfc.com.vn/Data/Sites/1/media/BCTN/2025/chuong-1/nganh-nghe-dia-ban-kinh-doanh.html",
+        "publisher": "PVCFC",
+        "sourceTitle": "PVCFC Annual Report 2024: Business lines and operating areas",
+        "sourceLanguage": "vi",
+        "publishedDate": null,
+        "retrievedAt": "2026-08-11",
+        "retrievalMethod": "tinyfish_fetch",
+        "factDateNote": "Portfolio, production, and transfer statements are reported for fiscal year 2024."
+      }
+    },
+    {
+      "id": "facility-ca-mau-urea-plant",
+      "name": "Ca Mau Urea Plant",
+      "sourceUrl": "https://www.pvcfc.com.vn/Data/Sites/1/media/BCTN/2025/chuong-1/nganh-nghe-dia-ban-kinh-doanh.html",
+      "summary": "PVCFC's 2024 annual-report site describes the Ca Mau Urea Plant as a modern production facility capable of manufacturing opaque-granule urea. A separate official technical profile published in 2013 identifies the licensed ammonia, urea, and granulation technologies used by the plant.",
+      "attributes": {
+        "locationReportedIn2013": "Khanh An commune, U Minh district, Ca Mau province",
+        "designCapacityReportedIn2013": "800,000 tonnes of urea per year",
+        "siteAreaReportedIn2013": "52 hectares",
+        "commercialProductMilestone": "2012-01-30: first commercial fertilizer batch reported as dispatched",
+        "licensedTechnologiesReportedIn2013": [
+          "Haldor Topsoe ammonia-production technology",
+          "SAIPEM urea-production technology",
+          "Toyo Engineering Corporation granulation technology"
+        ],
+        "operatingMilestoneReportedFor2024": "2024-12-25: cumulative urea production reached 11 million tonnes"
+      },
+      "imageUrls": [],
+      "documentUrls": [],
+      "relatedUrls": [
+        "https://www.pvcfc.com.vn/nha-may-dam-ca-mau-cong-nghe-tien-tien-nhat-dong-nam-a",
+        "https://thamquannhamay.pvcfc.com.vn/"
+      ],
+      "provenance": {
+        "sourceUrl": "https://www.pvcfc.com.vn/Data/Sites/1/media/BCTN/2025/chuong-1/nganh-nghe-dia-ban-kinh-doanh.html",
+        "publisher": "PVCFC",
+        "sourceTitle": "PVCFC Annual Report 2024: Business lines and operating areas",
+        "sourceLanguage": "vi",
+        "publishedDate": null,
+        "retrievedAt": "2026-08-11",
+        "retrievalMethod": "tinyfish_fetch",
+        "supplementalSource": {
+          "url": "https://www.pvcfc.com.vn/nha-may-dam-ca-mau-cong-nghe-tien-tien-nhat-dong-nam-a",
+          "title": "Nhà máy Đạm Cà Mau: Công nghệ tiên tiến nhất Đông Nam Á",
+          "publishedDate": "2013-01-10"
+        },
+        "factDateNote": "Capacity, area, location, commissioning milestone, and technology details are historical statements published in 2013; the cumulative-production milestone is reported for 2024."
+      }
+    },
+    {
+      "id": "facility-ca-mau-npk-plant",
+      "name": "Ca Mau NPK Plant",
+      "sourceUrl": "https://www.pvcfc.com.vn/Data/Sites/1/media/BCTN/2025/chuong-1/nganh-nghe-dia-ban-kinh-doanh.html",
+      "summary": "PVCFC's 2024 annual-report site reports a 300,000-tonne annual capacity for the Ca Mau NPK Plant and says the production line uses urea-melt technology supplied by Spain's ESPINDESA with major equipment from EU and G7 countries.",
+      "attributes": {
+        "capacity": "300,000 tonnes per year",
+        "productionTechnology": "Urea-melt NPK production technology",
+        "technologySupplier": "ESPINDESA, Spain",
+        "majorEquipmentOrigin": "EU and G7 countries",
+        "commercialProductionPlanReportedIn2019": "Commercial products were planned for Q3 2019"
+      },
+      "imageUrls": [],
+      "documentUrls": [],
+      "relatedUrls": [
+        "https://www.pvcfc.com.vn/npk-ca-mau-gia-nhap-thi-truong-phan-bon-chat-luong-cao",
+        "https://www.pvcfc.com.vn/gioi-thieu"
+      ],
+      "provenance": {
+        "sourceUrl": "https://www.pvcfc.com.vn/Data/Sites/1/media/BCTN/2025/chuong-1/nganh-nghe-dia-ban-kinh-doanh.html",
+        "publisher": "PVCFC",
+        "sourceTitle": "PVCFC Annual Report 2024: Business lines and operating areas",
+        "sourceLanguage": "vi",
+        "publishedDate": null,
+        "retrievedAt": "2026-08-11",
+        "retrievalMethod": "tinyfish_fetch",
+        "supplementalSource": {
+          "url": "https://www.pvcfc.com.vn/npk-ca-mau-gia-nhap-thi-truong-phan-bon-chat-luong-cao",
+          "title": "NPK Cà Mau gia nhập thị trường phân bón chất lượng cao",
+          "publishedDate": "2019-07-02"
+        },
+        "factDateNote": "Capacity and technology are repeated on the 2024 annual-report site. The commercial-production timing is preserved only as a plan reported in 2019, not as a current operating claim."
+      }
+    },
+    {
+      "id": "facility-korea-vietnam-npk-plant",
+      "name": "Korea-Vietnam NPK Plant",
+      "sourceUrl": "https://www.pvcfc.com.vn/Data/Sites/1/media/BCTN/2025/chuong-1/nganh-nghe-dia-ban-kinh-doanh.html",
+      "summary": "PVCFC's 2024 annual-report site states that the Korea-Vietnam NPK Plant entered operation in December 2017, has a 360,000-tonne annual design capacity, and uses technology licensed by Spain's Incro. PVCFC reports completing the plant transfer in 2024.",
+      "attributes": {
+        "operationStart": "2017-12",
+        "designCapacity": "360,000 tonnes of NPK per year",
+        "technologyLicensor": "Incro, Spain",
+        "ownershipMilestone": "2024: PVCFC completed the plant transfer",
+        "constructionStartReportedIn2024Article": "2016-07",
+        "locationReportedIn2024Article": "Ho Chi Minh City"
+      },
+      "imageUrls": [],
+      "documentUrls": [],
+      "relatedUrls": [
+        "https://www.pvcfc.com.vn/ban-giao-phan-bon-han-viet-tu-tap-doan-taekwang-huchems-sang-phan-bon-ca-mau",
+        "https://www.pvcfc.com.vn/gioi-thieu"
+      ],
+      "provenance": {
+        "sourceUrl": "https://www.pvcfc.com.vn/Data/Sites/1/media/BCTN/2025/chuong-1/nganh-nghe-dia-ban-kinh-doanh.html",
+        "publisher": "PVCFC",
+        "sourceTitle": "PVCFC Annual Report 2024: Business lines and operating areas",
+        "sourceLanguage": "vi",
+        "publishedDate": null,
+        "retrievedAt": "2026-08-11",
+        "retrievalMethod": "tinyfish_fetch",
+        "supplementalSource": {
+          "url": "https://www.pvcfc.com.vn/ban-giao-phan-bon-han-viet-tu-tap-doan-taekwang-huchems-sang-phan-bon-ca-mau",
+          "title": "Bàn giao Phân bón Hàn-Việt từ Tập đoàn Taekwang-Huchems sang Phân bón Cà Mau",
+          "publishedDate": "2024-04-01"
+        },
+        "factDateNote": "Commissioning, capacity, technology, and transfer details are reported in the 2024 annual-report materials; location and construction start are from the dated 2024 handover article."
+      }
+    },
+    {
+      "id": "facility-ca-mau-rd-center",
+      "name": "Ca Mau Fertilizer Research and Development Center",
+      "sourceUrl": "https://www.pvcfc.com.vn/dam-ca-mau-khanh-thanh-trung-tam-nghien-cuu-phat-trien",
+      "summary": "PVCFC's dated R&D-center profile describes laboratory, production, and fertilizer-trial capabilities supporting product development and agronomic evaluation. A later official page reports that the Plant Protection Department licensed the center as eligible to conduct fertilizer trials.",
+      "attributes": {
+        "capabilitiesReportedIn2017": [
+          "Microbiology laboratory",
+          "Fertilizer production and experimental facility in Ca Mau",
+          "Fertilizer experimental facility in Can Tho",
+          "Cooperative vegetable and industrial-crop fertilizer trial site in Lam Dong"
+        ],
+        "staffingReportedIn2017": "Nearly 20 staff",
+        "fertilizerTrialAuthorizationReportedIn2019": "Licensed by the Plant Protection Department as eligible to conduct fertilizer trials",
+        "researchOutputReportedIn2019": "More than 20 research topics or assignments and three products brought to market"
+      },
+      "imageUrls": [],
+      "documentUrls": [],
+      "relatedUrls": [
+        "https://www.pvcfc.com.vn/nghien-cuu-va-phat-trien",
+        "https://www.pvcfc.com.vn/trung-tam-nghien-cuu-phat-trien-dam-ca-mau-duoc-cap-phep-khao-nghiem-phan-bon"
+      ],
+      "provenance": {
+        "sourceUrl": "https://www.pvcfc.com.vn/dam-ca-mau-khanh-thanh-trung-tam-nghien-cuu-phat-trien",
+        "publisher": "PVCFC",
+        "sourceTitle": "Đạm Cà Mau khánh thành Trung tâm Nghiên cứu Phát triển",
+        "sourceLanguage": "vi",
+        "publishedDate": "2017-07-14",
+        "retrievedAt": "2026-08-11",
+        "retrievalMethod": "tinyfish_fetch",
+        "supplementalSource": {
+          "url": "https://www.pvcfc.com.vn/trung-tam-nghien-cuu-phat-trien-dam-ca-mau-duoc-cap-phep-khao-nghiem-phan-bon",
+          "title": "Trung tâm nghiên cứu phát triển Đạm Cà Mau được cấp phép khảo nghiệm phân bón",
+          "publishedDate": "2019-03-22"
+        },
+        "factDateNote": "Facilities and staffing are historical facts reported in 2017. Authorization and research-output counts are historical facts reported in 2019 and are not asserted as current certifications or totals."
+      }
+    },
+    {
+      "id": "pvcfc-sustainability-program",
+      "name": "PVCFC sustainability program",
+      "sourceUrl": "https://www.pvcfc.com.vn/en-US/overviewmessage-of-sustainable-development",
+      "summary": "PVCFC frames sustainable development around economic, environmental, and social value. Its official sustainability materials identify resource efficiency, digital transformation, technological innovation, greenhouse-gas reduction, environmentally responsible products, and controlled environmental management as active priorities.",
+      "attributes": {
+        "statedPriorities": [
+          "Optimize resource efficiency",
+          "Accelerate digital transformation",
+          "Adopt technological innovation",
+          "Reduce greenhouse-gas emissions",
+          "Expand environmentally responsible product portfolios"
+        ],
+        "environmentalManagementStandard": "ISO 14001:2015",
+        "environmentalControlScope": "Waste sources are controlled and discharge quality is monitored against permitted standards"
+      },
+      "imageUrls": [
+        "https://www.pvcfc.com.vn/Data/Sites/1/News/2803/khung-phat-trien-ben-vung-en.png"
+      ],
+      "documentUrls": [
+        "https://www.pvcfc.com.vn/Data/Sites/1/media/BCPTBV/en/Sustainable-Development-Report-2025.pdf",
+        "https://www.pvcfc.com.vn/Data/Sites/1/media/ptbv/20250527---dcm---sr-2024---en.pdf"
+      ],
+      "relatedUrls": [
+        "https://www.pvcfc.com.vn/en-US/sustainability",
+        "https://www.pvcfc.com.vn/en-US/sustainable-development-framework",
+        "https://www.pvcfc.com.vn/en-US/sustainability-report",
+        "https://www.pvcfc.com.vn/en-US/targets-and-roadmap-for-emission-reduction"
+      ],
+      "provenance": {
+        "sourceUrl": "https://www.pvcfc.com.vn/en-US/overviewmessage-of-sustainable-development",
+        "publisher": "PVCFC",
+        "sourceTitle": "Overview/Message of Sustainable Development",
+        "sourceLanguage": "en",
+        "publishedDate": null,
+        "retrievedAt": "2026-08-11",
+        "retrievalMethod": "tinyfish_fetch",
+        "supplementalSource": {
+          "url": "https://www.pvcfc.com.vn/en-US/sustainable-development-framework",
+          "title": "Sustainable Development Framework",
+          "publishedDate": null
+        },
+        "factDateNote": "Priorities and management statements were shown on undated current official pages at retrieval. Linked reports are explicitly labeled 2025 and 2024 in their official filenames."
+      }
+    }
+  ]
+}

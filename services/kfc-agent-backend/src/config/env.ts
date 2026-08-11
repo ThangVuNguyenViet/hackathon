@@ -2,6 +2,7 @@ import { z } from "zod";
 
 const appEnvSchema = z.object({
   PORT: z.coerce.number().int().positive().default(18090),
+  HOST: z.string().default("127.0.0.1"),
   DATABASE_URL: z
     .string()
     .default("postgres://kfc_agent:kfc_agent@localhost:15432/kfc_agent"),
@@ -32,6 +33,12 @@ const appEnvSchema = z.object({
   OPENAI_API_KEY: z.string().optional().default(""),
   GOOGLE_API_KEY: z.string().optional().default(""),
   OPENAI_BASE_URL: z.string().optional().default("https://api.openai.com/v1"),
+  PVCFC_ASTRAFLOW_API_KEY: z.string().optional().default(""),
+  PVCFC_ASTRAFLOW_BASE_URL: z
+    .string()
+    .url()
+    .default("https://api-sg.umodelverse.ai/v1"),
+  PVCFC_ASTRAFLOW_MODEL: z.literal("gpt-5.6-luna").default("gpt-5.6-luna"),
   OPENAI_DIAGNOSTIC_WORKER_RELEASE: z.string().optional().default(""),
   OPENAI_DIAGNOSTIC_EXECUTION_COLO: z.string().optional().default(""),
   OPENAI_DIAGNOSTIC_EDGE_COLO: z.string().optional().default(""),
@@ -59,6 +66,11 @@ const appEnvSchema = z.object({
   ZALO_REFRESH_TOKEN: z.string().optional().default(""),
   ZALO_APP_ID: z.string().optional().default(""),
   ZALO_APP_SECRET: z.string().optional().default(""),
+  ZALO_OA_SECRET: z.string().optional().default(""),
+  ZALO_TOKEN_ENCRYPTION_KEY: z.string().optional().default(""),
+  ZALO_SETUP_TOKEN: z.string().optional().default(""),
+  ZALO_PUBLIC_BASE_URL: z.string().url().optional(),
+  ZALO_OAUTH_BASE_URL: z.string().url().optional(),
   ZALO_API_BASE_URL: z.string().optional().default(""),
   KFC_COMMERCE_MODE: z.enum(["fixture", "gateway"]).default("fixture"),
   KFC_COMMERCE_ENVIRONMENT: z.enum(["production", "sandbox"]).optional(),

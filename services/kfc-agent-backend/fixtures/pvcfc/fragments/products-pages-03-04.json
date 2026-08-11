@@ -1,0 +1,308 @@
+{
+  "schemaVersion": "pvcfc-public-fixture-fragment-v1",
+  "kind": "products",
+  "retrievedAt": "2026-08-11",
+  "sourcePages": [
+    "https://www.pvcfc.com.vn/san-pham?pagenumber=3",
+    "https://www.pvcfc.com.vn/san-pham?pagenumber=4"
+  ],
+  "records": [
+    {
+      "id": "npk-ca-mau-16-16-12",
+      "name": "NPK Cà Mau 16-16-12",
+      "category": "Phân bón NPK",
+      "sourceUrl": "https://www.pvcfc.com.vn/npk-ca-mau-br16-16-12",
+      "summary": "Phân NPK hỗ trợ cây sinh trưởng, nâng năng suất và chất lượng nông sản, đồng thời bổ sung dinh dưỡng cho đất.",
+      "attributes": {
+        "composition": {
+          "nitrogenTotalPercent": 16,
+          "phosphateAvailableP2O5Percent": 16,
+          "potassiumAvailableK2OPercent": 12
+        },
+        "benefits": ["Hỗ trợ cây sinh trưởng và phát triển", "Tăng năng suất và chất lượng nông sản", "Tăng dinh dưỡng cho đất"],
+        "packaging": "Bao hai lớp: lớp ngoài PP, lớp trong PE để hạn chế hút ẩm và rách vỡ khi vận chuyển.",
+        "storage": "Để nơi khô ráo, thông thoáng, có che mưa nắng và không đặt trực tiếp trên nền ẩm.",
+        "shelfLife": "36 tháng kể từ ngày sản xuất"
+      },
+      "imageUrls": [
+        "https://www.pvcfc.com.vn/Data/Sites/1/Product/8611/16-16-12-cm.png",
+        "https://www.pvcfc.com.vn/Data/Sites/1/Product/8611/m7_16-16-12_50kg.png",
+        "https://www.pvcfc.com.vn/Data/Sites/1/Product/8611/m7_16-16-12_50kg_matsau.png",
+        "https://www.pvcfc.com.vn/Data/Sites/1/Product/8611/m7-16-16-12.png",
+        "https://www.pvcfc.com.vn/Data/Sites/1/Product/8611/m7-16-16-12_matsau.png",
+        "https://www.pvcfc.com.vn/Data/Sites/1/Product/8611/2.png"
+      ],
+      "documentUrls": ["https://www.pvcfc.com.vn/Data/Sites/1/media/THONGTINSP/29/[signed]29.-tccs-npk-16-16-12-rev5.pdf", "https://www.pvcfc.com.vn/Data/Sites/1/media/THONGTINSP/29/gcn-+-dmsp-35-15-(dcm01-cnl-2023).pdf", "https://www.pvcfc.com.vn/Data/Sites/1/media/THONGTINSP/29/tbtn.77-tb-ttbvtv.pdf"],
+      "relatedUrls": ["https://www.pvcfc.com.vn/npk"],
+      "provenance": {"sourceUrl": "https://www.pvcfc.com.vn/npk-ca-mau-br16-16-12", "retrievedAt": "2026-08-11", "retrievalMethod": "tinyfish_fetch"}
+    },
+    {
+      "id": "npk-ca-mau-15-5-20-sop",
+      "name": "NPK Cà Mau 15-5-20 SOP",
+      "category": "Phân bón NPK",
+      "sourceUrl": "https://www.pvcfc.com.vn/npk-ca-mau-15-5-20-sop",
+      "summary": "Công thức NPK 15-5-20 SOP được giới thiệu cho mục tiêu sinh trưởng, năng suất, chất lượng nông sản và dinh dưỡng đất.",
+      "attributes": {
+        "composition": {"nitrogenTotalPercent": 15, "phosphateAvailableP2O5Percent": 5, "potassiumAvailableK2OPercent": 20},
+        "benefits": ["Hỗ trợ cây sinh trưởng và phát triển", "Tăng năng suất và chất lượng nông sản", "Tăng dinh dưỡng cho đất"],
+        "packaging": "Bao hai lớp PP và PE, giúp hạn chế hút ẩm và rách vỡ khi vận chuyển.",
+        "storage": "Để nơi khô ráo, thông thoáng, có che mưa nắng và không đặt trực tiếp trên nền ẩm.",
+        "shelfLife": "36 tháng kể từ ngày sản xuất"
+      },
+      "imageUrls": ["https://www.pvcfc.com.vn/Data/Sites/1/Product/8669/15-5-20-sop.png", "https://www.pvcfc.com.vn/Data/Sites/1/Product/8669/15-5-20-sop-2.png"],
+      "documentUrls": ["https://www.pvcfc.com.vn/Data/Sites/1/media/san-pham/tai-lieu-san-pham/15-5-20-sop/20.tccsnpkcamau15-5-20.docx", "https://www.pvcfc.com.vn/Data/Sites/1/media/THONGTINSP/74.3205/11.tbtn-02.02.2024.pdf", "https://www.pvcfc.com.vn/Data/Sites/1/media/san-pham/tai-lieu-san-pham/15-5-20-sop/1242-q%C4%91-tttv-pbthay-the-qd-86.pdf"],
+      "relatedUrls": ["https://www.pvcfc.com.vn/npk"],
+      "provenance": {"sourceUrl": "https://www.pvcfc.com.vn/npk-ca-mau-15-5-20-sop", "retrievedAt": "2026-08-11", "retrievalMethod": "tinyfish_fetch"}
+    },
+    {
+      "id": "om-camau-happy",
+      "name": "OM CAMAU-HAPPY",
+      "category": "Phân bón hữu cơ",
+      "sourceUrl": "https://www.pvcfc.com.vn/om-camau-happy",
+      "summary": "Phân hữu cơ hướng đến đất tơi, rễ phát triển, hệ vi sinh tốt và khả năng dùng trên nhiều loại đất, cây trồng.",
+      "attributes": {
+        "composition": {"nitrogenTotalPercent": 3.7, "moisturePercent": 20, "organicMatterPercent": 70, "pH": 5, "carbonNitrogenRatio": 12, "phosphateAvailableP2O5Percent": 1.7, "potassiumAvailableK2OPercent": 2.5},
+        "benefits": ["Hỗ trợ độ phì của đất", "Hỗ trợ rễ và vi sinh vật đất phát triển", "Thích hợp với nhiều loại đất và cây trồng"],
+        "packaging": "Trang chi tiết ghi bao hai lớp PP và PE, nhưng phần mô tả đóng gói gọi nhầm sản phẩm là OM CAMAU RICH.",
+        "storage": "Để nơi khô ráo, thông thoáng, có che mưa nắng và không đặt trực tiếp trên nền ẩm.",
+        "shelfLife": "36 tháng kể từ ngày sản xuất"
+      },
+      "imageUrls": ["https://www.pvcfc.com.vn/Data/Sites/1/Product/8668/om-ca-mau-happy.png"],
+      "documentUrls": [],
+      "relatedUrls": ["https://www.pvcfc.com.vn/phan-huu-co"],
+      "provenance": {"sourceUrl": "https://www.pvcfc.com.vn/om-camau-happy", "retrievedAt": "2026-08-11", "retrievalMethod": "tinyfish_fetch"}
+    },
+    {
+      "id": "om-camau-rich",
+      "name": "OM CAMAU-RICH",
+      "category": "Phân bón hữu cơ",
+      "sourceUrl": "https://www.pvcfc.com.vn/om-camau-rich-1",
+      "summary": "Phân hữu cơ dành cho việc cải thiện đất, hỗ trợ bộ rễ và hệ vi sinh trên nhiều nhóm cây trồng.",
+      "attributes": {
+        "composition": {"nitrogenTotalPercent": 3.8, "moisturePercent": 20, "organicMatterPercent": 70, "pH": 7, "carbonNitrogenRatio": 12, "phosphateAvailableP2O5Percent": 2.6},
+        "benefits": ["Hỗ trợ độ phì của đất", "Hỗ trợ rễ và vi sinh vật đất phát triển", "Thích hợp với nhiều loại đất và cây trồng"],
+        "packaging": "Bao hai lớp PP và PE, giúp hạn chế hút ẩm và rách vỡ khi vận chuyển.",
+        "storage": "Để nơi khô ráo, thông thoáng, có che mưa nắng và không đặt trực tiếp trên nền ẩm.",
+        "shelfLife": "36 tháng kể từ ngày sản xuất"
+      },
+      "imageUrls": ["https://www.pvcfc.com.vn/Data/Sites/1/Product/8667/om-ca-mau-rich.png"],
+      "documentUrls": [],
+      "relatedUrls": ["https://www.pvcfc.com.vn/phan-huu-co"],
+      "provenance": {"sourceUrl": "https://www.pvcfc.com.vn/om-camau-rich-1", "retrievedAt": "2026-08-11", "retrievalMethod": "tinyfish_fetch"}
+    },
+    {
+      "id": "om-camau-innova",
+      "name": "OM CAMAU-INNOVA",
+      "category": "Phân bón hữu cơ",
+      "sourceUrl": "https://www.pvcfc.com.vn/om-camau-innova",
+      "summary": "Phân hữu cơ hỗ trợ độ phì, bộ rễ và hoạt động vi sinh trong đất, dùng được cho nhiều loại đất và cây.",
+      "attributes": {
+        "composition": {"nitrogenTotalPercent": 4, "moisturePercent": 20, "organicMatterPercent": 70, "pH": 5, "carbonNitrogenRatio": 12, "phosphateAvailableP2O5Percent": 2.4},
+        "benefits": ["Hỗ trợ độ phì của đất", "Hỗ trợ rễ và vi sinh vật đất phát triển", "Thích hợp với nhiều loại đất và cây trồng"],
+        "packaging": "Bao hai lớp PP và PE, giúp hạn chế hút ẩm và rách vỡ khi vận chuyển.",
+        "storage": "Để nơi khô ráo, thông thoáng, có che mưa nắng và không đặt trực tiếp trên nền ẩm.",
+        "shelfLife": "36 tháng kể từ ngày sản xuất"
+      },
+      "imageUrls": ["https://www.pvcfc.com.vn/Data/Sites/1/Product/8666/om-ca-mau-innova-2.png"],
+      "documentUrls": [],
+      "relatedUrls": ["https://www.pvcfc.com.vn/phan-huu-co"],
+      "provenance": {"sourceUrl": "https://www.pvcfc.com.vn/om-camau-innova", "retrievedAt": "2026-08-11", "retrievalMethod": "tinyfish_fetch"}
+    },
+    {
+      "id": "om-ca-mau-eco",
+      "name": "OM CA MAU ECO",
+      "category": "Phân bón hữu cơ",
+      "sourceUrl": "https://www.pvcfc.com.vn/om-ca-mau-eco",
+      "summary": "Phân hữu cơ cho cây lương thực, rau hoa, cây ăn trái và cây công nghiệp với lịch bón lót, bón thúc theo từng nhóm.",
+      "attributes": {
+        "composition": {"nitrogenTotalPercent": 4, "potassiumAvailableK2OPercent": 3, "moisturePercent": 20, "organicMatterPercent": 65},
+        "benefits": ["Hỗ trợ độ phì của đất", "Hỗ trợ rễ và vi sinh vật đất phát triển", "Thích hợp với nhiều loại đất và cây trồng"],
+        "crops": ["Lúa", "Ngô", "Đậu", "Rau màu", "Cây hoa", "Cây ăn trái", "Cà phê", "Tiêu", "Cao su"],
+        "usage": ["Cây lương thực: bón lót 400-600 kg/ha trước gieo 5-7 ngày; bón thúc 500-600 kg/ha sau gieo 20-25 ngày", "Rau màu và cây hoa: bón lót 500-700 kg/ha trước gieo 3-5 ngày; bón thúc 500-700 kg/ha sau gieo 7-10 ngày", "Cây ăn trái kinh doanh: 0,3-0,6 kg/gốc/lần, 2-3 lần/năm sau thu hoạch và sau đậu trái; cây con: 0,2-0,3 kg/gốc/lần, 2-4 lần/năm", "Cây công nghiệp: cây con 400-800 kg/ha, 2-3 lần/năm; giai đoạn kinh doanh 1.000-1.500 kg/ha, 2-3 lần/năm vào đầu, giữa và cuối mùa mưa"]
+      },
+      "imageUrls": ["https://www.pvcfc.com.vn/Data/Sites/1/Product/8664/om-ca-mau-eco.png"],
+      "documentUrls": [],
+      "relatedUrls": ["https://www.pvcfc.com.vn/phan-huu-co"],
+      "provenance": {"sourceUrl": "https://www.pvcfc.com.vn/om-ca-mau-eco", "retrievedAt": "2026-08-11", "retrievalMethod": "tinyfish_fetch"}
+    },
+    {
+      "id": "dap-ca-mau-18-46-hat-vang",
+      "name": "DAP Cà Mau 18-46 (Hạt vàng)",
+      "category": "Phân DAP",
+      "sourceUrl": "https://www.pvcfc.com.vn/dap-ca-mau-18-46-hat-vang",
+      "summary": "DAP 18-46 hạt vàng cung cấp đạm và lân, hỗ trợ đẻ nhánh, ra chồi, phát triển hoa, trái và hạt.",
+      "attributes": {
+        "composition": {"nitrogenPercent": 18, "phosphateAvailableP2O5Percent": 46, "cadmiumPpm": 12},
+        "benefits": ["Hỗ trợ đẻ nhánh và ra chồi", "Hỗ trợ phát triển hoa, trái và hạt", "Cung cấp dinh dưỡng cân đối cho cây"],
+        "crops": ["Lúa", "Ngô", "Mía", "Xoài", "Nhãn", "Bưởi", "Chôm chôm", "Dưa hấu", "Ớt", "Cà chua", "Rau ăn lá", "Cà phê", "Hồ tiêu", "Chè", "Cao su"],
+        "usage": ["Lúa: 80-100 kg/ha/vụ, chia 2 lần lúc 7-10 và 18-22 ngày sau sạ", "Ngô: 80-110 kg/ha/lần, 2 lần/vụ", "Mía: 100-120 kg/ha/lần, 2 lần/vụ", "Cây ăn trái kiến thiết: 150-300 g/cây/lần, 4 lần/năm; kinh doanh: 300-500 g/cây/lần, 3-4 lần/năm", "Rau ăn trái: 80-120 kg/ha bón lót hoặc 7-10 ngày sau trồng; thúc 150-200 kg/ha/lần, 2-3 lần/vụ", "Rau ăn lá ngắn ngày: 80-100 kg/ha/lần, 2 lần/vụ", "Cà phê, hồ tiêu kinh doanh: mùa khô 100-150 kg/ha/lần; mùa mưa 150-180 kg/ha/lần", "Chè: 50-100 kg/ha/lần theo 6-7 chu kỳ thu hoạch/năm", "Cao su kinh doanh: 70-100 kg/ha/lần, 2 lần/năm"]
+      },
+      "imageUrls": ["https://www.pvcfc.com.vn/Data/Sites/1/Product/8663/dap-18-46-hat-vang.png"],
+      "documentUrls": ["https://www.pvcfc.com.vn/Data/Sites/1/media/THONGTINSP/7/[signed]07-tccs-dap-18-46-rev6.pdf", "https://www.pvcfc.com.vn/Data/Sites/1/media/THONGTINSP/7/10-thông-báo-tiếp-nhận-hq.pdf"],
+      "relatedUrls": ["https://www.pvcfc.com.vn/phan-don"],
+      "provenance": {"sourceUrl": "https://www.pvcfc.com.vn/dap-ca-mau-18-46-hat-vang", "retrievedAt": "2026-08-11", "retrievalMethod": "tinyfish_fetch"}
+    },
+    {
+      "id": "om-camau-innova-nhap-khau-tu-bi",
+      "name": "OM CAMAU-INNOVA nhập khẩu từ Bỉ",
+      "category": "Phân bón hữu cơ",
+      "sourceUrl": "https://www.pvcfc.com.vn/om-camau-innova-nhap-khau-tu-bi",
+      "summary": "Sản phẩm hữu cơ nhập khẩu từ Bỉ, hướng đến cải thiện đất, bộ rễ và hệ vi sinh cho nhiều loại cây trồng.",
+      "attributes": {
+        "origin": "Bỉ",
+        "composition": {"nitrogenTotalPercent": 4, "moisturePercent": 20, "organicMatterPercent": 70, "pH": 5, "carbonNitrogenRatio": 12},
+        "benefits": ["Hỗ trợ độ phì của đất", "Hỗ trợ rễ và vi sinh vật đất phát triển", "Thích hợp với nhiều loại đất và cây trồng"],
+        "packaging": "Bao hai lớp PP và PE, giúp hạn chế hút ẩm và rách vỡ khi vận chuyển.",
+        "storage": "Để nơi khô ráo, thông thoáng, có che mưa nắng và không đặt trực tiếp trên nền ẩm.",
+        "shelfLife": "36 tháng kể từ ngày sản xuất"
+      },
+      "imageUrls": ["https://www.pvcfc.com.vn/Data/Sites/1/Product/8654/om_om-bỉ-moi.png", "https://www.pvcfc.com.vn/Data/Sites/1/Product/8654/om_om-bỉ-copy.png", "https://www.pvcfc.com.vn/Data/Sites/1/Product/8654/innova-bi-mt.png", "https://www.pvcfc.com.vn/Data/Sites/1/Product/8654/innova-bi-ms.png"],
+      "documentUrls": [],
+      "relatedUrls": ["https://www.pvcfc.com.vn/phan-huu-co"],
+      "provenance": {"sourceUrl": "https://www.pvcfc.com.vn/om-camau-innova-nhap-khau-tu-bi", "retrievedAt": "2026-08-11", "retrievalMethod": "tinyfish_fetch"}
+    },
+    {
+      "id": "om-camau-happy-nhap-khau-tu-ha-lan",
+      "name": "OM CAMAU-HAPPY nhập khẩu từ Hà Lan",
+      "category": "Phân bón hữu cơ",
+      "sourceUrl": "https://www.pvcfc.com.vn/om-camau-happy-nhap-khau-tu-ha-lan",
+      "summary": "Phân hữu cơ nhập khẩu từ Hà Lan giúp giữ ẩm và dinh dưỡng đất, cải thiện chất lượng nông sản và phát triển sinh khối rễ.",
+      "attributes": {
+        "origin": "Hà Lan",
+        "composition": {"nitrogenTotalPercent": 3.7, "moisturePercent": 20, "organicMatterPercent": 70, "pH": 5, "carbonNitrogenRatio": 12, "phosphateAvailableP2O5Percent": 1.7, "potassiumAvailableK2OPercent": 2.5},
+        "benefits": ["Giữ ẩm và dinh dưỡng cho đất", "Cải thiện chất lượng nông sản", "Phát triển sinh khối rễ"],
+        "usageMethod": "Bón rễ",
+        "packaging": "Bao hai lớp PP và PE để bảo vệ chất lượng trong vận chuyển và lưu kho.",
+        "storage": "Để nơi khô ráo, thông thoáng, có che mưa nắng và không đặt trực tiếp trên nền ẩm.",
+        "shelfLife": "36 tháng kể từ ngày sản xuất"
+      },
+      "imageUrls": ["https://www.pvcfc.com.vn/Data/Sites/1/Product/8655/om_om-hà-lan.png", "https://www.pvcfc.com.vn/Data/Sites/1/Product/8655/om_om-hà-lan-copy.png", "https://www.pvcfc.com.vn/Data/Sites/1/Product/8655/happy-hl-mt.png", "https://www.pvcfc.com.vn/Data/Sites/1/Product/8655/happy-hl-ms.png"],
+      "documentUrls": ["https://www.pvcfc.com.vn/Data/Sites/1/media/fileattachment/mar-om-camau-nk-halan-happy.pdf", "https://www.pvcfc.com.vn/Data/Sites/1/media/THONGTINSP/87/3307-qđ-bvtv-pb-cong-nhan-phan-bon-luu-hanh-tai-viet-nam-20.10.2020-12-loai-pb-om.pdf"],
+      "relatedUrls": ["https://www.pvcfc.com.vn/phan-huu-co"],
+      "provenance": {"sourceUrl": "https://www.pvcfc.com.vn/om-camau-happy-nhap-khau-tu-ha-lan", "retrievedAt": "2026-08-11", "retrievalMethod": "tinyfish_fetch"}
+    },
+    {
+      "id": "npk-ca-mau-15-15-15-10s",
+      "name": "NPK Cà Mau 15-15-15+10S",
+      "category": "Phân bón NPK",
+      "sourceUrl": "https://www.pvcfc.com.vn/npk-ca-mau-br15-15-1510s",
+      "summary": "Công thức NPK cân đối có bổ sung lưu huỳnh, dùng cho nhiều cây lương thực, cây ăn trái, rau và cây công nghiệp.",
+      "attributes": {
+        "composition": {"nitrogenTotalPercent": 15, "phosphateAvailableP2O5Percent": 15, "potassiumAvailableK2OPercent": 15, "sulfurPercent": 10, "moisturePercent": 1.5},
+        "benefits": ["Tăng sinh trưởng và hạn chế sâu bệnh", "Tăng năng suất, chất lượng và lợi nhuận", "Cải thiện độ phì của đất"],
+        "crops": ["Lúa", "Ngô", "Mía", "Thanh long", "Xoài", "Nhãn", "Bưởi", "Chôm chôm", "Dưa hấu", "Ớt", "Cà chua", "Rau ăn lá", "Cà phê", "Hồ tiêu", "Chè", "Cao su"],
+        "usage": ["Lúa: 80-120 kg/lần, 2-3 lần/vụ vào 7-10, 18-22 và 38-42 ngày sau sạ", "Ngô: 100-150 kg/ha/lần, 3 lần/vụ", "Mía: 250-350 kg/ha/lần, 2-3 lần/vụ", "Thanh long kiến thiết: 100-200 kg/ha/lần, 3 lần/năm; kinh doanh chính vụ: 250-400 g/trụ/tháng; xử lý đèn: 300-500 g/trụ/lần", "Cây ăn trái khác kiến thiết: 150-350 g/cây/lần, 4 lần/năm; kinh doanh: 300-600 g/cây/lần, 4-5 lần/năm", "Rau ăn trái: 100-150 kg/ha bón lót; thúc 150-250 kg/ha/lần", "Rau ăn lá ngắn ngày: 150-200 kg/ha/lần, 2 lần/vụ", "Cà phê kiến thiết: 150-250 kg/ha/lần, 4 lần/năm; kinh doanh mùa khô 150-200 kg/ha, mùa mưa 400-500 kg/ha/lần", "Hồ tiêu kiến thiết: 150-250 g/trụ/lần; kinh doanh mùa khô 150-250 g/trụ/lần và mùa mưa 400-500 g/trụ/lần", "Chè: 200-300 kg/ha/lần theo 6-7 chu kỳ thu hoạch/năm", "Cao su kinh doanh: 150-200 kg/ha/lần, 2-3 lần/năm"]
+      },
+      "imageUrls": ["https://www.pvcfc.com.vn/Data/Sites/1/Product/8603/npk-15-15-15-10s.png", "https://www.pvcfc.com.vn/Data/Sites/1/Product/8603/npk1.png", "https://www.pvcfc.com.vn/Data/Sites/1/Product/8603/npk.png", "https://www.pvcfc.com.vn/Data/Sites/1/Product/8603/32.png", "https://www.pvcfc.com.vn/Data/Sites/1/Product/8603/6.png"],
+      "documentUrls": [],
+      "relatedUrls": ["https://www.pvcfc.com.vn/npk"],
+      "provenance": {"sourceUrl": "https://www.pvcfc.com.vn/npk-ca-mau-br15-15-1510s", "retrievedAt": "2026-08-11", "retrievalMethod": "tinyfish_fetch"}
+    },
+    {
+      "id": "npk-ca-mau-gold-18-18-6",
+      "name": "NPK Cà Mau Gold 18-18-6",
+      "category": "Phân bón NPK",
+      "sourceUrl": "https://www.pvcfc.com.vn/npk-ca-mau-gold-br18-18-6",
+      "summary": "Công thức NPK Gold hỗ trợ sinh trưởng, hạn chế sâu bệnh, tăng hiệu quả nông sản và cải thiện độ phì đất.",
+      "attributes": {
+        "composition": {"nitrogenTotalPercent": 18, "phosphateAvailableP2O5Percent": 18, "potassiumAvailableK2OPercent": 6},
+        "benefits": ["Tăng sinh trưởng và hạn chế sâu bệnh", "Tăng năng suất, chất lượng và lợi nhuận", "Cải thiện độ phì của đất"],
+        "packaging": "Bao hai lớp PP và PE, giúp hạn chế hút ẩm và rách vỡ khi vận chuyển.",
+        "storage": "Để nơi khô ráo, thông thoáng, có che mưa nắng và không đặt trực tiếp trên nền ẩm.",
+        "shelfLife": "36 tháng kể từ ngày sản xuất"
+      },
+      "imageUrls": ["https://www.pvcfc.com.vn/Data/Sites/1/Product/8610/gold-18-18-6-truoc.png", "https://www.pvcfc.com.vn/Data/Sites/1/Product/8610/gold-18-18-6-sau.png", "https://www.pvcfc.com.vn/Data/Sites/1/Product/8610/npk-cà-mau-gold_18-18-6.png", "https://www.pvcfc.com.vn/Data/Sites/1/Product/8610/npk-cà-mau-gold_18-18-6_50kg.png", "https://www.pvcfc.com.vn/Data/Sites/1/Product/8610/npk-18-18-6.png", "https://www.pvcfc.com.vn/Data/Sites/1/Product/8610/npk-18-18-6-mặt-sau.png", "https://www.pvcfc.com.vn/Data/Sites/1/Product/8610/2.png"],
+      "documentUrls": ["https://www.pvcfc.com.vn/Data/Sites/1/media/fileattachment/[signed]72.-tccs-npk-gold-18-18-6-rev3.pdf", "https://www.pvcfc.com.vn/Data/Sites/1/media/THONGTINSP/72/tbtn-bản-cbhq-số-93-tb-ttbvtv-16.08.2023-npk-cà-mau-gold-18-18-6.pdf"],
+      "relatedUrls": ["https://www.pvcfc.com.vn/npk"],
+      "provenance": {"sourceUrl": "https://www.pvcfc.com.vn/npk-ca-mau-gold-br18-18-6", "retrievedAt": "2026-08-11", "retrievalMethod": "tinyfish_fetch"}
+    },
+    {
+      "id": "om-camau-rich-nhap-khau-tu-han-quoc",
+      "name": "OM CAMAU-RICH nhập khẩu từ Hàn Quốc",
+      "category": "Phân bón hữu cơ",
+      "sourceUrl": "https://www.pvcfc.com.vn/om-camau-rich-nhap-khau-tu-han-quoc",
+      "summary": "Phân hữu cơ nhập khẩu từ Hàn Quốc giúp giữ ẩm, giữ dinh dưỡng đất, nâng chất lượng nông sản và phát triển sinh khối rễ.",
+      "attributes": {
+        "origin": "Hàn Quốc",
+        "composition": {"nitrogenTotalPercent": 3.8, "moisturePercent": 20, "organicMatterPercent": 70, "pH": 7, "carbonNitrogenRatio": 12, "phosphateAvailableP2O5Percent": 2.6},
+        "benefits": ["Giữ ẩm và dinh dưỡng cho đất", "Cải thiện chất lượng nông sản", "Phát triển sinh khối rễ"],
+        "usageMethod": "Bón rễ",
+        "packaging": "Bao hai lớp PP và PE để bảo vệ chất lượng trong vận chuyển và lưu kho.",
+        "storage": "Để nơi khô ráo, thông thoáng, có che mưa nắng và không đặt trực tiếp trên nền ẩm.",
+        "shelfLife": "36 tháng kể từ ngày sản xuất"
+      },
+      "imageUrls": ["https://www.pvcfc.com.vn/Data/Sites/1/Product/8650/om_om-hàn.png", "https://www.pvcfc.com.vn/Data/Sites/1/Product/8650/om_om-hàn-copy.png", "https://www.pvcfc.com.vn/Data/Sites/1/Product/8650/rich-korea-matsau.png", "https://www.pvcfc.com.vn/Data/Sites/1/Product/8650/rich-korea-mattruoc.png"],
+      "documentUrls": ["https://www.pvcfc.com.vn/Data/Sites/1/media/fileattachment/[signed].84-tccs-om-camau-rich-rev0.pdf", "https://www.pvcfc.com.vn/Data/Sites/1/media/THONGTINSP/84/3307-qđ-bvtv-pb-cong-nhan-phan-bon-luu-hanh-tai-viet-nam-20.10.2020-12-loai-pb-om.pdf"],
+      "relatedUrls": ["https://www.pvcfc.com.vn/phan-huu-co"],
+      "provenance": {"sourceUrl": "https://www.pvcfc.com.vn/om-camau-rich-nhap-khau-tu-han-quoc", "retrievedAt": "2026-08-11", "retrievalMethod": "tinyfish_fetch"}
+    },
+    {
+      "id": "om-camau-green",
+      "name": "OM CAMAU GREEN",
+      "category": "Phân bón hữu cơ",
+      "sourceUrl": "https://www.pvcfc.com.vn/om-camau-green",
+      "summary": "Phân hữu cơ dùng cho cây lương thực, rau hoa, cây ăn trái và cây công nghiệp theo các lịch bón cụ thể.",
+      "attributes": {
+        "composition": {"nitrogenTotalPercent": 3.8, "potassiumAvailableK2OPercent": 3.2, "moisturePercent": 20, "organicMatterPercent": 65, "pH": 5},
+        "benefits": ["Hỗ trợ độ phì của đất", "Hỗ trợ rễ và vi sinh vật đất phát triển", "Thích hợp với nhiều loại đất và cây trồng"],
+        "crops": ["Lúa", "Ngô", "Đậu", "Rau màu", "Cây hoa", "Cây ăn trái", "Cà phê", "Tiêu", "Cao su"],
+        "usage": ["Cây lương thực: bón lót 400-600 kg/ha trước gieo 5-7 ngày; bón thúc 500-600 kg/ha sau gieo 20-25 ngày", "Rau màu và cây hoa: bón lót 500-700 kg/ha trước gieo 3-5 ngày; bón thúc 500-700 kg/ha sau gieo 7-10 ngày", "Cây ăn trái kinh doanh: 0,3-0,6 kg/gốc/lần, 2-3 lần/năm; cây con: 0,2-0,3 kg/gốc/lần, 2-4 lần/năm", "Cây công nghiệp: cây con 400-800 kg/ha, 2-3 lần/năm; kinh doanh 1.000-1.500 kg/ha, 2-3 lần/năm"]
+      },
+      "imageUrls": ["https://www.pvcfc.com.vn/Data/Sites/1/Product/8648/4e1.png", "https://www.pvcfc.com.vn/Data/Sites/1/Product/8648/3.jpg", "https://www.pvcfc.com.vn/Data/Sites/1/Product/8648/2.jpg"],
+      "documentUrls": ["https://www.pvcfc.com.vn/Data/Sites/1/media/fileattachment/[signed]3.-tccs-03.2024-om-ca-mau-green---rv02.pdf", "https://www.pvcfc.com.vn/Data/Sites/1/media/THONGTINSP/3/cnhq-om-cà-mau--green.pdf", "https://www.pvcfc.com.vn/Data/Sites/1/media/THONGTINSP/3/tbtn-bản-cbhq-số-29-tb-ttbvtv-ngày-14.05.24-om-camau-green.pdf"],
+      "relatedUrls": ["https://www.pvcfc.com.vn/phan-huu-co"],
+      "provenance": {"sourceUrl": "https://www.pvcfc.com.vn/om-camau-green", "retrievedAt": "2026-08-11", "retrievalMethod": "tinyfish_fetch"}
+    },
+    {
+      "id": "n46-c-plus-ca-mau",
+      "name": "N46.C+ Cà Mau",
+      "category": "Phân đơn",
+      "sourceUrl": "https://www.pvcfc.com.vn/n46-c-ca-mau-1",
+      "summary": "Phân urê N46.C+ được giới thiệu với lợi ích xanh bền, tăng năng suất, hỗ trợ chống phèn mặn và cải tạo đất.",
+      "attributes": {
+        "composition": {"nitrogenTotalPercent": 46, "biuretPercent": 0.99, "moisturePercent": 1},
+        "benefits": ["Tăng năng suất và giúp cây xanh bền", "Hỗ trợ chống phèn, mặn và ngộ độc hữu cơ", "Hỗ trợ cải tạo đất và chống sâu bệnh"],
+        "packaging": "Bao hai lớp PP và PE, giúp hạn chế hút ẩm và rách vỡ khi vận chuyển.",
+        "storage": "Để nơi khô ráo, thông thoáng, có che mưa nắng và không đặt trực tiếp trên nền ẩm.",
+        "shelfLife": "36 tháng kể từ ngày sản xuất"
+      },
+      "imageUrls": ["https://www.pvcfc.com.vn/Data/Sites/1/Product/8596/n46-c.png", "https://www.pvcfc.com.vn/Data/Sites/1/Product/8596/untitled.png", "https://www.pvcfc.com.vn/Data/Sites/1/Product/8596/n46-c-cà-mau.png"],
+      "documentUrls": ["https://www.pvcfc.com.vn/Data/Sites/1/media/THONGTINSP/9/[signed]-09.-tccs-n46-c+-rev7.pdf", "https://www.pvcfc.com.vn/Data/Sites/1/media/THONGTINSP/9/cnhq.dcm02-cnl-2023.pdf", "https://www.pvcfc.com.vn/Data/Sites/1/media/THONGTINSP/9/tbtn.102-tb-ttbvtv.pdf"],
+      "relatedUrls": ["https://www.pvcfc.com.vn/phan-don"],
+      "provenance": {"sourceUrl": "https://www.pvcfc.com.vn/n46-c-ca-mau-1", "retrievedAt": "2026-08-11", "retrievalMethod": "tinyfish_fetch"}
+    },
+    {
+      "id": "n-humate-te-28-5",
+      "name": "N.Humate+TE 28-5",
+      "category": "Phân đơn",
+      "sourceUrl": "https://www.pvcfc.com.vn/nhumatete-28-5",
+      "summary": "Dòng đạm có axit humic, hữu cơ và kẽm, được giới thiệu để giảm thất thoát đạm, hỗ trợ rễ và cải thiện năng suất, chất lượng nông sản.",
+      "attributes": {
+        "composition": {"nitrogenPercent": 28, "humicAcidPercent": 5, "organicMatterPercent": 6, "moisturePercent": 4, "pH": 5, "zincPpm": 1000},
+        "benefits": ["Tiết kiệm 10-15% lượng đạm khi bón", "Giúp rễ phát triển và hấp thụ dinh dưỡng", "Hạn chế rụng trái và hỗ trợ năng suất", "Giảm thất thoát phân đạm và bổ sung dinh dưỡng cho cây"]
+      },
+      "imageUrls": ["https://www.pvcfc.com.vn/Data/Sites/1/Product/8595/nhumate50kg_mattruoc.png", "https://www.pvcfc.com.vn/Data/Sites/1/Product/8595/nhumate50kg_matsau.png", "https://www.pvcfc.com.vn/Data/Sites/1/Product/8595/nhumate25kg_mattruoc.png", "https://www.pvcfc.com.vn/Data/Sites/1/Product/8595/nhumate_matsau.png"],
+      "documentUrls": ["https://www.pvcfc.com.vn/Data/Sites/1/media/THONGTINSP/4/[signed]4.-tccs-n.humate-+-te-rev4.pdf", "https://www.pvcfc.com.vn/Data/Sites/1/media/THONGTINSP/4/cnhq.dcm9-mr3-2022.pdf", "https://www.pvcfc.com.vn/Data/Sites/1/media/THONGTINSP/4/tbtn.19-tb-ttbvtv.pdf"],
+      "relatedUrls": ["https://www.pvcfc.com.vn/phan-don"],
+      "provenance": {"sourceUrl": "https://www.pvcfc.com.vn/nhumatete-28-5", "retrievedAt": "2026-08-11", "retrievalMethod": "tinyfish_fetch"}
+    },
+    {
+      "id": "n46-true",
+      "name": "N46.TRUE",
+      "category": "Phân đơn",
+      "sourceUrl": "https://www.pvcfc.com.vn/n46true-1",
+      "summary": "Phân đạm N46.TRUE hỗ trợ cây cứng, giảm đổ ngã, duy trì lá xanh, tăng chồi và nâng năng suất thu hoạch.",
+      "attributes": {
+        "composition": {"nitrogenTotalPercent": 46.1, "biuretPercent": 1, "moisturePercent": 1},
+        "benefits": ["Giúp cây cứng và hạn chế đổ ngã, sâu bệnh", "Hỗ trợ đẻ nhiều chồi và giữ lá xanh", "Tăng năng suất thu hoạch"],
+        "crops": ["Mọi loại cây trồng"],
+        "usage": ["Có thể dùng trên mọi loại đất, mọi loại cây trồng và kết hợp với các loại phân bón khác", "Lúa: 50-60 kg/ha/lần"],
+        "physicalForm": "Dạng rắn (hạt/viên)"
+      },
+      "imageUrls": ["https://www.pvcfc.com.vn/Data/Sites/1/Product/8594/n46.-true.png", "https://www.pvcfc.com.vn/Data/Sites/1/Product/8594/n46.-true-(-mặt-).png", "https://www.pvcfc.com.vn/Data/Sites/1/Product/8594/2.png"],
+      "documentUrls": ["https://www.pvcfc.com.vn/Data/Sites/1/media/fileattachment/[signed]89.-tccs-n46.true-cà-mau---rev02.pdf", "https://www.pvcfc.com.vn/Data/Sites/1/media/THONGTINSP/89/cnhq.dcm01-cnl-2023.pdf", "https://www.pvcfc.com.vn/Data/Sites/1/media/THONGTINSP/89/tbtn-bản-cbhq-số-72-tb-ttbvtv-16.08.2023-n46.true.pdf"],
+      "relatedUrls": ["https://www.pvcfc.com.vn/phan-don"],
+      "provenance": {"sourceUrl": "https://www.pvcfc.com.vn/n46true-1", "retrievedAt": "2026-08-11", "retrievalMethod": "tinyfish_fetch"}
+    }
+  ]
+}

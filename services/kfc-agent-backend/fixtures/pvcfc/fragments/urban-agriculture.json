@@ -1,0 +1,493 @@
+{
+  "schemaVersion": "pvcfc-public-fixture-fragment-v1",
+  "kind": "urban_agriculture",
+  "retrievedAt": "2026-08-11",
+  "records": [
+    {
+      "id": "urban-agriculture-portfolio",
+      "name": "Bộ sản phẩm, dịch vụ và giải pháp Nông nghiệp đô thị",
+      "sourceUrl": "https://www.pvcfc.com.vn/phan-bon-ca-mau-khai-truong-cua-hang-nong-nghiep-do-thi-dau-tien-tai-tp-ho-chi-minh",
+      "summary": "PVCFC công bố một bộ sản phẩm, dịch vụ và giải pháp trồng trọt cho hộ gia đình tại nhà phố, chung cư và văn phòng, phục vụ trồng rau sạch, cây cảnh tại nhà và thiết kế không gian sống xanh.",
+      "attributes": {
+        "recordType": "offering_portfolio",
+        "audiences": [
+          "hộ gia đình tại nhà phố",
+          "hộ gia đình tại chung cư",
+          "văn phòng"
+        ],
+        "useCases": [
+          "trồng rau sạch tại nhà",
+          "trồng cây cảnh tại nhà",
+          "thiết kế không gian sống xanh"
+        ],
+        "launchEvidence": "PVCFC cho biết bộ giải pháp được ra mắt cùng cửa hàng Nông nghiệp đô thị đầu tiên ngày 11/01/2025.",
+        "scopeNote": "Các bài chính thức mô tả nhóm sản phẩm và giải pháp nhưng không công bố danh mục SKU, giá hoặc tồn kho hiện tại."
+      },
+      "imageUrls": [
+        "https://www.pvcfc.com.vn/Data/Sites/1/media/content/2010.02.jpg",
+        "https://www.pvcfc.com.vn/Data/Sites/1/media/content/2012.01.jpg",
+        "https://www.pvcfc.com.vn/Data/Sites/1/media/content/2012.03.jpg"
+      ],
+      "documentUrls": [
+        "https://www.pvcfc.com.vn/Data/Sites/1/media/BCTN/2025/pdf/PBCM-AR-2024-VN-Chuong-2-vn.pdf"
+      ],
+      "relatedUrls": [
+        "https://www.pvcfc.com.vn/nong-nghiep-do-thi",
+        "https://www.pvcfc.com.vn/phan-bon-ca-mau-bat-nhip-xu-huong-nong-nghiep-do-thi",
+        "https://www.pvcfc.com.vn/pvcfc-phat-trien-bo-san-pham-giai-phap-toan-dien-cho-nong-nghiep-do-thi-bien-nhung-uoc-mo-xanh-thanh-hien-thuc",
+        "https://www.pvcfc.com.vn/Data/Sites/1/media/BCTN/2025/chuong-2/dinh-huong-phat-trien.html"
+      ],
+      "provenance": {
+        "sourceUrl": "https://www.pvcfc.com.vn/phan-bon-ca-mau-khai-truong-cua-hang-nong-nghiep-do-thi-dau-tien-tai-tp-ho-chi-minh",
+        "retrievedAt": "2026-08-11",
+        "retrievalMethod": "tinyfish_fetch",
+        "publisher": "Công ty Cổ phần Phân bón Dầu khí Cà Mau (PVCFC)",
+        "sourceType": "official_company_article",
+        "classification": "offering",
+        "publishedAt": "2025-01-11"
+      }
+    },
+    {
+      "id": "urban-agriculture-store-go-vap",
+      "name": "Cửa hàng Nông nghiệp đô thị PVCFC tại Gò Vấp",
+      "sourceUrl": "https://www.pvcfc.com.vn/phan-bon-ca-mau-khai-truong-cua-hang-nong-nghiep-do-thi-dau-tien-tai-tp-ho-chi-minh",
+      "summary": "Cửa hàng Nông nghiệp đô thị đầu tiên của PVCFC được khai trương tại Gò Vấp, Thành phố Hồ Chí Minh ngày 11/01/2025, cung cấp sản phẩm, thiết bị, giải pháp và tư vấn kỹ thuật cho khách hàng đô thị.",
+      "attributes": {
+        "recordType": "store",
+        "addressAsPublished": "542-544 Nguyễn Văn Khối, phường 9, Gò Vấp, Tp.Hồ Chí Minh",
+        "openedOn": "2025-01-11",
+        "describedAs": "cửa hàng Nông nghiệp đô thị đầu tiên của PVCFC",
+        "customerSegments": [
+          "người tiêu dùng đô thị",
+          "tiểu thương",
+          "khách hàng doanh nghiệp trong lĩnh vực vật tư nông nghiệp"
+        ],
+        "currentHoursPublished": false,
+        "storeSpecificPhonePublished": false
+      },
+      "imageUrls": [
+        "https://www.pvcfc.com.vn/Data/Sites/1/media/content/1101.1.jpg",
+        "https://www.pvcfc.com.vn/Data/Sites/1/media/content/1101.2.jpg",
+        "https://www.pvcfc.com.vn/Data/Sites/1/media/content/1101.3.jpg"
+      ],
+      "documentUrls": [],
+      "relatedUrls": [
+        "https://www.pvcfc.com.vn/nong-nghiep-do-thi",
+        "https://www.pvcfc.com.vn/khai-truong-cua-hang-nong-nghiep-do-thi-nha-xanh-don-tet-uu-dai-ngap-tran-1",
+        "https://www.facebook.com/phanboncamau/posts/mang-thi%C3%AAn-nhi%C3%AAn-v%C3%A0o-nh%C3%A0-ph%E1%BB%91-c%C3%B3-ph%E1%BB%A9c-t%E1%BA%A1p-nh%C6%B0-b%E1%BA%A1n-v%E1%BA%ABn-ngh%C4%A9-n%E1%BA%BFu-b%E1%BA%A1n-l%C3%A0-ng%C6%B0%E1%BB%9Di-y%C3%AAu-t/933100505612007/"
+      ],
+      "provenance": {
+        "sourceUrl": "https://www.pvcfc.com.vn/phan-bon-ca-mau-khai-truong-cua-hang-nong-nghiep-do-thi-dau-tien-tai-tp-ho-chi-minh",
+        "retrievedAt": "2026-08-11",
+        "retrievalMethod": "tinyfish_fetch",
+        "publisher": "Công ty Cổ phần Phân bón Dầu khí Cà Mau (PVCFC)",
+        "sourceType": "official_company_article",
+        "classification": "store",
+        "publishedAt": "2025-01-11"
+      }
+    },
+    {
+      "id": "urban-sized-fertilizers",
+      "name": "Phân bón đóng gói phù hợp nhu cầu khách hàng đô thị",
+      "sourceUrl": "https://www.pvcfc.com.vn/pvcfc-phat-trien-bo-san-pham-giai-phap-toan-dien-cho-nong-nghiep-do-thi-bien-nhung-uoc-mo-xanh-thanh-hien-thuc",
+      "summary": "Nhóm phân bón chất lượng được PVCFC mô tả có thiết kế và dung tích phù hợp với nhu cầu của khách hàng đô thị.",
+      "attributes": {
+        "recordType": "offering_category",
+        "category": "phân bón",
+        "urbanAdaptation": [
+          "thiết kế phù hợp khách hàng đô thị",
+          "dung tích phù hợp khách hàng đô thị"
+        ],
+        "skuNamesPublishedOnSource": false
+      },
+      "imageUrls": [],
+      "documentUrls": [],
+      "relatedUrls": [
+        "https://www.pvcfc.com.vn/phan-bon-ca-mau-bat-nhip-xu-huong-nong-nghiep-do-thi"
+      ],
+      "provenance": {
+        "sourceUrl": "https://www.pvcfc.com.vn/pvcfc-phat-trien-bo-san-pham-giai-phap-toan-dien-cho-nong-nghiep-do-thi-bien-nhung-uoc-mo-xanh-thanh-hien-thuc",
+        "retrievedAt": "2026-08-11",
+        "retrievalMethod": "tinyfish_fetch",
+        "publisher": "PVCFC",
+        "sourceType": "official_company_article",
+        "classification": "offering_category",
+        "publishedAt": "2024-12-20"
+      }
+    },
+    {
+      "id": "urban-crop-protection",
+      "name": "Sản phẩm bảo vệ cây trồng thế hệ mới",
+      "sourceUrl": "https://www.pvcfc.com.vn/pvcfc-phat-trien-bo-san-pham-giai-phap-toan-dien-cho-nong-nghiep-do-thi-bien-nhung-uoc-mo-xanh-thanh-hien-thuc",
+      "summary": "PVCFC liệt kê nhóm sản phẩm bảo vệ cây trồng thế hệ mới, được mô tả là an toàn cho người sử dụng, trong bộ giải pháp Nông nghiệp đô thị.",
+      "attributes": {
+        "recordType": "offering_category",
+        "category": "bảo vệ cây trồng",
+        "generation": "thế hệ mới",
+        "safetyClaimAsPublished": "an toàn cho người sử dụng",
+        "skuNamesPublishedOnSource": false
+      },
+      "imageUrls": [],
+      "documentUrls": [],
+      "relatedUrls": [
+        "https://www.pvcfc.com.vn/Data/Sites/1/media/BCTN/2025/chuong-2/dinh-huong-phat-trien.html"
+      ],
+      "provenance": {
+        "sourceUrl": "https://www.pvcfc.com.vn/pvcfc-phat-trien-bo-san-pham-giai-phap-toan-dien-cho-nong-nghiep-do-thi-bien-nhung-uoc-mo-xanh-thanh-hien-thuc",
+        "retrievedAt": "2026-08-11",
+        "retrievalMethod": "tinyfish_fetch",
+        "publisher": "PVCFC",
+        "sourceType": "official_company_article",
+        "classification": "offering_category",
+        "publishedAt": "2024-12-20"
+      }
+    },
+    {
+      "id": "urban-inorganic-organic-microbial-fertilizers",
+      "name": "Phân bón vô cơ, hữu cơ và vi sinh",
+      "sourceUrl": "https://www.pvcfc.com.vn/phan-bon-ca-mau-bat-nhip-xu-huong-nong-nghiep-do-thi",
+      "summary": "Bộ giải pháp đô thị gồm các nhóm phân bón vô cơ, hữu cơ và vi sinh; PVCFC mô tả chúng cung cấp dưỡng chất để cây trồng phát triển khỏe mạnh và an toàn.",
+      "attributes": {
+        "recordType": "offering_category",
+        "category": "dinh dưỡng cây trồng",
+        "fertilizerTypes": [
+          "vô cơ",
+          "hữu cơ",
+          "vi sinh"
+        ],
+        "skuNamesPublishedOnSource": false
+      },
+      "imageUrls": [],
+      "documentUrls": [],
+      "relatedUrls": [
+        "https://www.pvcfc.com.vn/phan-bon-sinh-hoc-la-gi",
+        "https://www.pvcfc.com.vn/phan-bon-compost-la-gi"
+      ],
+      "provenance": {
+        "sourceUrl": "https://www.pvcfc.com.vn/phan-bon-ca-mau-bat-nhip-xu-huong-nong-nghiep-do-thi",
+        "retrievedAt": "2026-08-11",
+        "retrievalMethod": "tinyfish_fetch",
+        "publisher": "PVCFC",
+        "sourceType": "official_company_article",
+        "classification": "offering_category",
+        "publishedAt": "2024-12-16"
+      }
+    },
+    {
+      "id": "urban-substrates-and-seeds",
+      "name": "Giá thể và hạt giống",
+      "sourceUrl": "https://www.pvcfc.com.vn/phan-bon-ca-mau-khai-truong-cua-hang-nong-nghiep-do-thi-dau-tien-tai-tp-ho-chi-minh",
+      "summary": "PVCFC liệt kê các loại giá thể và hạt giống đa dạng, chất lượng cao trong bộ sản phẩm Nông nghiệp đô thị đã ra mắt.",
+      "attributes": {
+        "recordType": "offering_category",
+        "categories": [
+          "giá thể",
+          "hạt giống"
+        ],
+        "qualityClaimAsPublished": "chất lượng cao",
+        "skuNamesPublishedOnSource": false
+      },
+      "imageUrls": [],
+      "documentUrls": [],
+      "relatedUrls": [
+        "https://www.pvcfc.com.vn/Data/Sites/1/media/BCTN/2025/chuong-2/dinh-huong-phat-trien.html"
+      ],
+      "provenance": {
+        "sourceUrl": "https://www.pvcfc.com.vn/phan-bon-ca-mau-khai-truong-cua-hang-nong-nghiep-do-thi-dau-tien-tai-tp-ho-chi-minh",
+        "retrievedAt": "2026-08-11",
+        "retrievalMethod": "tinyfish_fetch",
+        "publisher": "PVCFC",
+        "sourceType": "official_company_article",
+        "classification": "offering_category",
+        "publishedAt": "2025-01-11"
+      }
+    },
+    {
+      "id": "urban-pots-and-gardening-tools",
+      "name": "Chậu và dụng cụ làm vườn",
+      "sourceUrl": "https://www.pvcfc.com.vn/khai-truong-cua-hang-nong-nghiep-do-thi-nha-xanh-don-tet-uu-dai-ngap-tran-1",
+      "summary": "Bài giới thiệu cửa hàng liệt kê các loại chậu và dụng cụ làm vườn đáp ứng nhu cầu trồng trọt và chăm sóc cây.",
+      "attributes": {
+        "recordType": "offering_category",
+        "categories": [
+          "chậu",
+          "dụng cụ làm vườn"
+        ],
+        "uses": [
+          "trồng trọt",
+          "chăm sóc cây"
+        ],
+        "skuNamesPublishedOnSource": false
+      },
+      "imageUrls": [
+        "https://www.pvcfc.com.vn/Data/Sites/1/media/content/3112.2.jpg",
+        "https://www.pvcfc.com.vn/Data/Sites/1/media/content/3112.4.jpg"
+      ],
+      "documentUrls": [],
+      "relatedUrls": [
+        "https://www.pvcfc.com.vn/pvcfc-phat-trien-bo-san-pham-giai-phap-toan-dien-cho-nong-nghiep-do-thi-bien-nhung-uoc-mo-xanh-thanh-hien-thuc"
+      ],
+      "provenance": {
+        "sourceUrl": "https://www.pvcfc.com.vn/khai-truong-cua-hang-nong-nghiep-do-thi-nha-xanh-don-tet-uu-dai-ngap-tran-1",
+        "retrievedAt": "2026-08-11",
+        "retrievalMethod": "tinyfish_fetch",
+        "publisher": "PVCFC",
+        "sourceType": "official_company_article",
+        "classification": "offering_category",
+        "publishedAt": "2024-12-31"
+      }
+    },
+    {
+      "id": "urban-high-tech-cultivation-solutions",
+      "name": "Giải pháp trồng trọt ứng dụng công nghệ cao",
+      "sourceUrl": "https://www.pvcfc.com.vn/phan-bon-ca-mau-khai-truong-cua-hang-nong-nghiep-do-thi-dau-tien-tai-tp-ho-chi-minh",
+      "summary": "PVCFC mô tả các giải pháp trồng trọt ứng dụng công nghệ cao phù hợp với nhiều điều kiện trồng trọt trong bộ giải pháp đô thị.",
+      "attributes": {
+        "recordType": "solution_category",
+        "technology": "ứng dụng công nghệ cao",
+        "fitClaimAsPublished": "phù hợp với nhiều điều kiện trồng trọt",
+        "roadmapExamplesNotConfirmedAsCurrentInventory": [
+          "hệ thống tưới mini",
+          "máy nông nghiệp tự động",
+          "hệ thống điều khiển",
+          "hệ thống giám sát quá trình canh tác"
+        ]
+      },
+      "imageUrls": [],
+      "documentUrls": [
+        "https://www.pvcfc.com.vn/Data/Sites/1/media/BCTN/2025/pdf/PBCM-AR-2024-VN-Chuong-2-vn.pdf"
+      ],
+      "relatedUrls": [
+        "https://www.pvcfc.com.vn/Data/Sites/1/media/BCTN/2025/chuong-2/dinh-huong-phat-trien.html"
+      ],
+      "provenance": {
+        "sourceUrl": "https://www.pvcfc.com.vn/phan-bon-ca-mau-khai-truong-cua-hang-nong-nghiep-do-thi-dau-tien-tai-tp-ho-chi-minh",
+        "retrievedAt": "2026-08-11",
+        "retrievalMethod": "tinyfish_fetch",
+        "publisher": "PVCFC",
+        "sourceType": "official_company_article_and_annual_report",
+        "classification": "solution_category",
+        "publishedAt": "2025-01-11"
+      }
+    },
+    {
+      "id": "urban-technical-consulting",
+      "name": "Tư vấn kỹ thuật Nông nghiệp đô thị",
+      "sourceUrl": "https://www.pvcfc.com.vn/phan-bon-ca-mau-khai-truong-cua-hang-nong-nghiep-do-thi-dau-tien-tai-tp-ho-chi-minh",
+      "summary": "Dịch vụ tư vấn kỹ thuật chuyên nghiệp được PVCFC liệt kê như một phần của bộ sản phẩm, dịch vụ và giải pháp Nông nghiệp đô thị.",
+      "attributes": {
+        "recordType": "service",
+        "serviceType": "tư vấn kỹ thuật",
+        "deliveryDetailsPublished": false,
+        "serviceSpecificPricePublished": false
+      },
+      "imageUrls": [],
+      "documentUrls": [],
+      "relatedUrls": [
+        "https://www.pvcfc.com.vn/tu-van-ky-thuat",
+        "https://www.pvcfc.com.vn/nong-nghiep-do-thi"
+      ],
+      "provenance": {
+        "sourceUrl": "https://www.pvcfc.com.vn/phan-bon-ca-mau-khai-truong-cua-hang-nong-nghiep-do-thi-dau-tien-tai-tp-ho-chi-minh",
+        "retrievedAt": "2026-08-11",
+        "retrievalMethod": "tinyfish_fetch",
+        "publisher": "PVCFC",
+        "sourceType": "official_company_article",
+        "classification": "service",
+        "publishedAt": "2025-01-11"
+      }
+    },
+    {
+      "id": "urban-demonstration-experience-area",
+      "name": "Khu trình diễn mô hình canh tác hiện đại, thông minh",
+      "sourceUrl": "https://www.pvcfc.com.vn/phan-bon-ca-mau-khai-truong-cua-hang-nong-nghiep-do-thi-dau-tien-tai-tp-ho-chi-minh",
+      "summary": "Tại cửa hàng, khách hàng có thể tham quan và trải nghiệm trực tiếp khu trình diễn các mô hình giải pháp canh tác hiện đại, thông minh để lựa chọn sản phẩm và thiết bị phù hợp.",
+      "attributes": {
+        "recordType": "in_store_service",
+        "location": "cửa hàng Nông nghiệp đô thị PVCFC tại Gò Vấp",
+        "activities": [
+          "tham quan mô hình",
+          "trải nghiệm trực tiếp",
+          "hỗ trợ lựa chọn sản phẩm và trang thiết bị"
+        ],
+        "bookingDetailsPublished": false
+      },
+      "imageUrls": [],
+      "documentUrls": [],
+      "relatedUrls": [
+        "https://www.pvcfc.com.vn/nong-nghiep-do-thi"
+      ],
+      "provenance": {
+        "sourceUrl": "https://www.pvcfc.com.vn/phan-bon-ca-mau-khai-truong-cua-hang-nong-nghiep-do-thi-dau-tien-tai-tp-ho-chi-minh",
+        "retrievedAt": "2026-08-11",
+        "retrievalMethod": "tinyfish_fetch",
+        "publisher": "PVCFC",
+        "sourceType": "official_company_article",
+        "classification": "in_store_service",
+        "publishedAt": "2025-01-11"
+      }
+    },
+    {
+      "id": "urban-online-purchase-and-membership",
+      "name": "Mua hàng trực tuyến và chương trình Khách hàng thành viên",
+      "sourceUrl": "https://www.pvcfc.com.vn/phan-bon-ca-mau-khai-truong-cua-hang-nong-nghiep-do-thi-dau-tien-tai-tp-ho-chi-minh",
+      "summary": "PVCFC cho biết khách mua lẻ tại cửa hàng hoặc qua các kênh online 2Nông, Facebook và Zalo có thể đăng ký chương trình Khách hàng thành viên để tích lũy điểm và nhận ưu đãi.",
+      "attributes": {
+        "recordType": "commerce_service",
+        "purchaseChannelsAsPublished": [
+          "cửa hàng",
+          "2Nông",
+          "Facebook",
+          "Zalo"
+        ],
+        "membershipBenefitsAsPublished": [
+          "tích lũy điểm",
+          "nhận ưu đãi"
+        ],
+        "currentPromotionDetailsIncluded": false
+      },
+      "imageUrls": [],
+      "documentUrls": [],
+      "relatedUrls": [
+        "https://www.pvcfc.com.vn/2-nong",
+        "https://hainong.vn/",
+        "https://www.facebook.com/phanboncamau/"
+      ],
+      "provenance": {
+        "sourceUrl": "https://www.pvcfc.com.vn/phan-bon-ca-mau-khai-truong-cua-hang-nong-nghiep-do-thi-dau-tien-tai-tp-ho-chi-minh",
+        "retrievedAt": "2026-08-11",
+        "retrievalMethod": "tinyfish_fetch",
+        "publisher": "PVCFC",
+        "sourceType": "official_company_article",
+        "classification": "commerce_service",
+        "publishedAt": "2025-01-11"
+      }
+    },
+    {
+      "id": "guide-compost",
+      "name": "Phân bón compost là gì? Hướng dẫn ủ và sử dụng phân compost hiệu quả",
+      "sourceUrl": "https://www.pvcfc.com.vn/phan-bon-compost-la-gi",
+      "summary": "Trang hướng dẫn chính thức giải thích compost, nguyên liệu hữu cơ, cách ủ và sử dụng; nội dung nêu compost có thể dùng trực tiếp để bón cây, cải tạo đất và làm giá thể trồng trọt khi đạt chuẩn.",
+      "attributes": {
+        "recordType": "education",
+        "topics": [
+          "ủ compost",
+          "sử dụng compost",
+          "cải tạo đất",
+          "giá thể trồng trọt"
+        ],
+        "publishedAt": "2026-07-18",
+        "inventoryEvidence": "Nội dung giáo dục; không phải bằng chứng rằng một SKU compost cụ thể đang có hàng tại cửa hàng đô thị."
+      },
+      "imageUrls": [],
+      "documentUrls": [],
+      "relatedUrls": [
+        "https://www.pvcfc.com.vn/nong-nghiep-do-thi"
+      ],
+      "provenance": {
+        "sourceUrl": "https://www.pvcfc.com.vn/phan-bon-compost-la-gi",
+        "retrievedAt": "2026-08-11",
+        "retrievalMethod": "tinyfish_fetch",
+        "publisher": "PVCFC",
+        "sourceType": "official_technical_guide",
+        "classification": "education",
+        "publishedAt": "2026-07-18"
+      }
+    },
+    {
+      "id": "guide-slow-release-fertilizer",
+      "name": "Phân bón tan chậm là gì? Cơ chế hoạt động và lợi ích thực tế",
+      "sourceUrl": "https://www.pvcfc.com.vn/phan-bon-tan-cham-la-gi",
+      "summary": "Hướng dẫn chính thức giải thích cơ chế giải phóng dinh dưỡng có kiểm soát, các nhóm phân tan chậm và cách lựa chọn; trang nêu nhóm cây phù hợp gồm cây cảnh, cây đô thị và cây trồng chậu.",
+      "attributes": {
+        "recordType": "education",
+        "urbanRelevantPlants": [
+          "cây cảnh",
+          "cây đô thị",
+          "cây trồng chậu"
+        ],
+        "publishedAt": "2026-02-25",
+        "namedProductMention": "N46.PLUS Cà Mau",
+        "inventoryEvidence": "Tên sản phẩm xuất hiện trong bài hướng dẫn; trang không xác nhận tồn kho tại cửa hàng Nông nghiệp đô thị."
+      },
+      "imageUrls": [],
+      "documentUrls": [],
+      "relatedUrls": [
+        "https://www.pvcfc.com.vn/nong-nghiep-do-thi"
+      ],
+      "provenance": {
+        "sourceUrl": "https://www.pvcfc.com.vn/phan-bon-tan-cham-la-gi",
+        "retrievedAt": "2026-08-11",
+        "retrievalMethod": "tinyfish_fetch",
+        "publisher": "PVCFC",
+        "sourceType": "official_technical_guide",
+        "classification": "education",
+        "publishedAt": "2026-02-25"
+      }
+    },
+    {
+      "id": "guide-foliar-fertilizer-roses",
+      "name": "Phân bón lá cho hoa hồng: Phân loại và cách sử dụng giúp hoa to đẹp",
+      "sourceUrl": "https://www.pvcfc.com.vn/phan-bon-la-cho-hoa-hong",
+      "summary": "Hướng dẫn chính thức trình bày cách chọn và phun phân bón lá cho hoa hồng theo từng giai đoạn, gồm cây mới trồng hoặc thay chậu, dưỡng lá, kích nụ, đang nở và phục hồi sau đợt hoa.",
+      "attributes": {
+        "recordType": "education",
+        "plant": "hoa hồng",
+        "topics": [
+          "chọn phân theo giai đoạn",
+          "liều lượng",
+          "thời điểm phun",
+          "chu kỳ phun",
+          "vị trí phun"
+        ],
+        "publishedAt": "2026-04-02",
+        "inventoryEvidence": "Nội dung giáo dục; các công thức và nhóm chất được nêu không phải xác nhận SKU hoặc tồn kho của cửa hàng đô thị."
+      },
+      "imageUrls": [],
+      "documentUrls": [],
+      "relatedUrls": [
+        "https://www.pvcfc.com.vn/nong-nghiep-do-thi"
+      ],
+      "provenance": {
+        "sourceUrl": "https://www.pvcfc.com.vn/phan-bon-la-cho-hoa-hong",
+        "retrievedAt": "2026-08-11",
+        "retrievalMethod": "tinyfish_fetch",
+        "publisher": "PVCFC",
+        "sourceType": "official_technical_guide",
+        "classification": "education",
+        "publishedAt": "2026-04-02"
+      }
+    },
+    {
+      "id": "guide-biological-fertilizer",
+      "name": "Phân bón sinh học là gì? Vai trò của phân bón sinh học trong trồng trọt",
+      "sourceUrl": "https://www.pvcfc.com.vn/phan-bon-sinh-hoc-la-gi",
+      "summary": "Hướng dẫn chính thức giải thích các nhóm phân sinh học, cách kết hợp và sử dụng; nội dung dành phần áp dụng cho rau màu và hướng dẫn trộn phân sinh học với phân hữu cơ hoặc giá thể cho cây ươm bầu, cây trồng chậu.",
+      "attributes": {
+        "recordType": "education",
+        "urbanRelevantUses": [
+          "rau ăn lá",
+          "rau ăn quả",
+          "cây ngắn ngày",
+          "cây ươm bầu",
+          "cây trồng chậu"
+        ],
+        "namedProductMention": "UREA BIO của Phân Bón Cà Mau",
+        "inventoryEvidence": "Tên sản phẩm xuất hiện trong bài hướng dẫn; trang không xác nhận tồn kho tại cửa hàng Nông nghiệp đô thị."
+      },
+      "imageUrls": [],
+      "documentUrls": [],
+      "relatedUrls": [
+        "https://www.pvcfc.com.vn/nong-nghiep-do-thi"
+      ],
+      "provenance": {
+        "sourceUrl": "https://www.pvcfc.com.vn/phan-bon-sinh-hoc-la-gi",
+        "retrievedAt": "2026-08-11",
+        "retrievalMethod": "tinyfish_fetch",
+        "publisher": "PVCFC",
+        "sourceType": "official_technical_guide",
+        "classification": "education"
+      }
+    }
+  ]
+}

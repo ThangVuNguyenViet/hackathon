@@ -329,6 +329,7 @@ export function createRouteCommerceRuntime(input: { options: RouteOptions; store
         }),
         zalo: createZaloClient({
           accessToken: options.zaloAccessToken,
+          accessTokenProvider: options.zaloAccessTokenProvider,
           apiBaseUrl: options.zaloApiBaseUrl,
           fetchImpl: options.zaloFetchImpl,
         }),
@@ -349,6 +350,7 @@ export function createRouteCommerceRuntime(input: { options: RouteOptions; store
       }),
       zalo: createZaloClient({
         accessToken: options.zaloAccessToken,
+        accessTokenProvider: options.zaloAccessTokenProvider,
         apiBaseUrl: options.zaloApiBaseUrl,
         fetchImpl: options.zaloFetchImpl,
       }),

@@ -21,6 +21,7 @@ const GENERATED_FIXTURE_FILES = [
   'membership-profile-snapshots.json',
   'membership-point-history-snapshots.json',
   'membership-tool-definitions.json',
+  'pvcfc-public-data.json',
 ] as const;
 
 export interface BuildFixturesOptions {

@@ -33,7 +33,11 @@ import {
   normalizeMessengerWebhook,
   verifyMessengerChallenge,
 } from "../channels/messenger.js";
-import { createZaloClient, normalizeZaloWebhook } from "../channels/zalo.js";
+import {
+  createZaloClient,
+  normalizeZaloWebhook,
+  PVCFC_ZALO_OA_ID,
+} from "../channels/zalo.js";
 import { DashboardEventBus } from "../dashboard/eventBus.js";
 import { dashboardSessionTarget } from "../dashboard/sessionVisibility.js";
 import type { GeneratedFixtures } from "../fixtures/schema.js";
@@ -372,10 +376,25 @@ export function checkMessengerConfig(options: RouteOptions): ReadinessCheckResul
 
 export function checkZaloConfig(options: RouteOptions): ReadinessCheckResult {
   const required = options.readiness?.zaloRequired ?? true;
+  const productionRefreshRequired = options.readiness?.zaloRequired === true;
   const missing = [
     !options.zaloOaId ? "ZALO_OA_ID" : undefined,
-    !options.zaloAccessToken ? "ZALO_ACCESS_TOKEN" : undefined,
+    productionRefreshRequired && options.zaloOaId !== PVCFC_ZALO_OA_ID
+      ? "ZALO_OA_ID_PVCFC_BINDING"
+      : undefined,
+    productionRefreshRequired && !options.zaloWebhookSecret
+      ? "ZALO_OA_SECRET"
+      : undefined,
+    !options.zaloAccessToken && !options.zaloAccessTokenProvider
+      ? "ZALO_ACCESS_TOKEN_OR_PROVIDER"
+      : undefined,
     !options.zaloInboxUrlTemplate ? "ZALO_INBOX_URL_TEMPLATE" : undefined,
+    productionRefreshRequired && !options.zaloPublicBaseUrl?.startsWith('https://')
+      ? "ZALO_PUBLIC_BASE_URL_HTTPS"
+      : undefined,
+    productionRefreshRequired && !options.zaloOAuth
+      ? "ZALO_OAUTH_REFRESH_CONFIG"
+      : undefined,
   ].filter((value): value is string => Boolean(value));
   const configured = missing.length === 0;
   return {

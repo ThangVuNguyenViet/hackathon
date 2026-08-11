@@ -1,0 +1,1155 @@
+{
+  "schemaVersion": "pvcfc-public-fixture-fragment-v1",
+  "kind": "source_inventory",
+  "retrievedAt": "2026-08-11",
+  "records": [
+    {
+      "id": "pvcfc-main-website",
+      "name": "PVCFC corporate website",
+      "sourceUrl": "https://www.pvcfc.com.vn/",
+      "sourceType": "official_website",
+      "scope": "Primary Vietnamese corporate website and canonical navigation source for company, products, services, news, investor relations, sustainability, contacts, recruitment, and policy pages.",
+      "relatedUrls": [
+        "https://www.pvcfc.com.vn/en-US/",
+        "https://www.pvcfc.com.vn/sitemap.aspx",
+        "https://www.pvcfc.com.vn/robots.txt"
+      ],
+      "provenance": {
+        "sourceUrl": "https://www.pvcfc.com.vn/",
+        "retrievedAt": "2026-08-11",
+        "retrievalMethod": "tinyfish_fetch"
+      }
+    },
+    {
+      "id": "pvcfc-english-website",
+      "name": "PVCFC corporate website - English",
+      "sourceUrl": "https://www.pvcfc.com.vn/en-US/",
+      "sourceType": "official_language_variant",
+      "scope": "Official English-language entry point linked by the corporate website.",
+      "relatedUrls": ["https://www.pvcfc.com.vn/"],
+      "provenance": {
+        "sourceUrl": "https://www.pvcfc.com.vn/",
+        "retrievedAt": "2026-08-11",
+        "retrievalMethod": "tinyfish_fetch"
+      }
+    },
+    {
+      "id": "pvcfc-robots",
+      "name": "PVCFC robots directives",
+      "sourceUrl": "https://www.pvcfc.com.vn/robots.txt",
+      "sourceType": "robots",
+      "scope": "Server crawling directives and authoritative declaration of the general, product, and news sitemap endpoints.",
+      "relatedUrls": [
+        "https://www.pvcfc.com.vn/sitemap.ashx",
+        "https://www.pvcfc.com.vn/product/productsitemap.ashx",
+        "https://www.pvcfc.com.vn/news/newssitemap.ashx"
+      ],
+      "provenance": {
+        "sourceUrl": "https://www.pvcfc.com.vn/robots.txt",
+        "retrievedAt": "2026-08-11",
+        "retrievalMethod": "tinyfish_fetch"
+      }
+    },
+    {
+      "id": "pvcfc-general-sitemap",
+      "name": "PVCFC general XML sitemap",
+      "sourceUrl": "https://www.pvcfc.com.vn/sitemap.ashx",
+      "sourceType": "sitemap",
+      "scope": "Server-declared general sitemap; TinyFish extraction contained 220 URL entries at retrieval, including site sections and linked branded properties.",
+      "relatedUrls": [
+        "https://www.pvcfc.com.vn/robots.txt",
+        "https://www.pvcfc.com.vn/sitemap.aspx"
+      ],
+      "provenance": {
+        "sourceUrl": "https://www.pvcfc.com.vn/sitemap.ashx",
+        "retrievedAt": "2026-08-11",
+        "retrievalMethod": "tinyfish_fetch"
+      }
+    },
+    {
+      "id": "pvcfc-product-sitemap",
+      "name": "PVCFC product XML sitemap",
+      "sourceUrl": "https://www.pvcfc.com.vn/product/productsitemap.ashx",
+      "sourceType": "sitemap",
+      "scope": "Server-declared product sitemap; TinyFish extraction contained 67 product URL entries at retrieval.",
+      "relatedUrls": [
+        "https://www.pvcfc.com.vn/robots.txt",
+        "https://www.pvcfc.com.vn/san-pham"
+      ],
+      "provenance": {
+        "sourceUrl": "https://www.pvcfc.com.vn/product/productsitemap.ashx",
+        "retrievedAt": "2026-08-11",
+        "retrievalMethod": "tinyfish_fetch"
+      }
+    },
+    {
+      "id": "pvcfc-news-sitemap",
+      "name": "PVCFC news XML sitemap",
+      "sourceUrl": "https://www.pvcfc.com.vn/news/newssitemap.ashx",
+      "sourceType": "sitemap",
+      "scope": "Server-declared news sitemap; TinyFish extraction contained 4,503 news URL entries at retrieval.",
+      "relatedUrls": [
+        "https://www.pvcfc.com.vn/robots.txt",
+        "https://www.pvcfc.com.vn/tin-tuc"
+      ],
+      "provenance": {
+        "sourceUrl": "https://www.pvcfc.com.vn/news/newssitemap.ashx",
+        "retrievedAt": "2026-08-11",
+        "retrievalMethod": "tinyfish_fetch"
+      }
+    },
+    {
+      "id": "pvcfc-human-sitemap",
+      "name": "PVCFC human-readable sitemap",
+      "sourceUrl": "https://www.pvcfc.com.vn/sitemap.aspx",
+      "sourceType": "sitemap_index",
+      "scope": "Human-readable navigation index; TinyFish returned 277 unique links, comprising 271 internal PVCFC links and 6 outbound links at retrieval.",
+      "relatedUrls": [
+        "https://www.pvcfc.com.vn/sitemap.ashx",
+        "https://hainong.vn/",
+        "https://www.anhhaicamau.com/",
+        "https://thamquannhamay.pvcfc.com.vn/"
+      ],
+      "provenance": {
+        "sourceUrl": "https://www.pvcfc.com.vn/sitemap.aspx",
+        "retrievedAt": "2026-08-11",
+        "retrievalMethod": "tinyfish_fetch"
+      }
+    },
+    {
+      "id": "pvcfc-company-overview",
+      "name": "Giới thiệu",
+      "sourceUrl": "https://www.pvcfc.com.vn/gioi-thieu",
+      "sourceType": "category_page",
+      "scope": "Company overview, history, mission, organization, leadership, facilities, achievements, and development milestones.",
+      "relatedUrls": ["https://www.pvcfc.com.vn/"],
+      "provenance": {
+        "sourceUrl": "https://www.pvcfc.com.vn/sitemap.aspx",
+        "retrievedAt": "2026-08-11",
+        "retrievalMethod": "tinyfish_fetch"
+      }
+    },
+    {
+      "id": "pvcfc-products-services",
+      "name": "Sản phẩm - Dịch vụ",
+      "sourceUrl": "https://www.pvcfc.com.vn/san-pham-dich-vu",
+      "sourceType": "category_page",
+      "scope": "Top-level catalog for fertilizers, agronomy guidance, digital services, urban agriculture, DMS, CRM, RFID, and quality resources.",
+      "relatedUrls": [
+        "https://www.pvcfc.com.vn/san-pham",
+        "https://www.pvcfc.com.vn/dich-vu-giai-phap"
+      ],
+      "provenance": {
+        "sourceUrl": "https://www.pvcfc.com.vn/",
+        "retrievedAt": "2026-08-11",
+        "retrievalMethod": "tinyfish_fetch"
+      }
+    },
+    {
+      "id": "pvcfc-product-catalog",
+      "name": "Bộ Sản Phẩm Phân Bón Cà Mau",
+      "sourceUrl": "https://www.pvcfc.com.vn/san-pham",
+      "sourceType": "category_page",
+      "scope": "Official product catalog, product group navigation, quality commitments, and product certifications.",
+      "relatedUrls": [
+        "https://www.pvcfc.com.vn/product/productsitemap.ashx",
+        "https://shop.pvcfc.com.vn/"
+      ],
+      "provenance": {
+        "sourceUrl": "https://www.pvcfc.com.vn/",
+        "retrievedAt": "2026-08-11",
+        "retrievalMethod": "tinyfish_fetch"
+      }
+    },
+    {
+      "id": "pvcfc-single-fertilizers",
+      "name": "Phân đơn",
+      "sourceUrl": "https://www.pvcfc.com.vn/phan-don",
+      "sourceType": "category_page",
+      "scope": "Official single-fertilizer product category.",
+      "relatedUrls": ["https://www.pvcfc.com.vn/san-pham"],
+      "provenance": {
+        "sourceUrl": "https://www.pvcfc.com.vn/",
+        "retrievedAt": "2026-08-11",
+        "retrievalMethod": "tinyfish_fetch"
+      }
+    },
+    {
+      "id": "pvcfc-npk-fertilizers",
+      "name": "NPK",
+      "sourceUrl": "https://www.pvcfc.com.vn/npk",
+      "sourceType": "category_page",
+      "scope": "Official NPK fertilizer product category.",
+      "relatedUrls": ["https://www.pvcfc.com.vn/san-pham"],
+      "provenance": {
+        "sourceUrl": "https://www.pvcfc.com.vn/",
+        "retrievedAt": "2026-08-11",
+        "retrievalMethod": "tinyfish_fetch"
+      }
+    },
+    {
+      "id": "pvcfc-organic-fertilizers",
+      "name": "Phân hữu cơ",
+      "sourceUrl": "https://www.pvcfc.com.vn/phan-huu-co",
+      "sourceType": "category_page",
+      "scope": "Official organic-fertilizer product category.",
+      "relatedUrls": ["https://www.pvcfc.com.vn/san-pham"],
+      "provenance": {
+        "sourceUrl": "https://www.pvcfc.com.vn/",
+        "retrievedAt": "2026-08-11",
+        "retrievalMethod": "tinyfish_fetch"
+      }
+    },
+    {
+      "id": "pvcfc-other-fertilizers",
+      "name": "Phân bón khác",
+      "sourceUrl": "https://www.pvcfc.com.vn/phan-bon-khac",
+      "sourceType": "category_page",
+      "scope": "Official additional-fertilizer product category and related solution articles.",
+      "relatedUrls": ["https://www.pvcfc.com.vn/san-pham"],
+      "provenance": {
+        "sourceUrl": "https://www.pvcfc.com.vn/",
+        "retrievedAt": "2026-08-11",
+        "retrievalMethod": "tinyfish_fetch"
+      }
+    },
+    {
+      "id": "pvcfc-product-use-guidance",
+      "name": "Kỹ thuật và hiệu quả",
+      "sourceUrl": "https://www.pvcfc.com.vn/ky-thuat-va-hieu-qua",
+      "sourceType": "category_page",
+      "scope": "Technical and efficacy guidance for using PVCFC products.",
+      "relatedUrls": [
+        "https://www.pvcfc.com.vn/tu-van-ky-thuat",
+        "https://bikipvang.pvcfc.com.vn/"
+      ],
+      "provenance": {
+        "sourceUrl": "https://www.pvcfc.com.vn/",
+        "retrievedAt": "2026-08-11",
+        "retrievalMethod": "tinyfish_fetch"
+      }
+    },
+    {
+      "id": "pvcfc-services-solutions",
+      "name": "Dịch vụ - Giải pháp",
+      "sourceUrl": "https://www.pvcfc.com.vn/dich-vu-giai-phap",
+      "sourceType": "category_page",
+      "scope": "Official hub for customer-facing digital and agricultural services and solutions.",
+      "relatedUrls": [
+        "https://www.pvcfc.com.vn/anh-hai-ca-mau",
+        "https://www.pvcfc.com.vn/2-nong",
+        "https://www.pvcfc.com.vn/nong-nghiep-do-thi",
+        "https://www.pvcfc.com.vn/dms",
+        "https://www.pvcfc.com.vn/crm",
+        "https://www.pvcfc.com.vn/rfid"
+      ],
+      "provenance": {
+        "sourceUrl": "https://www.pvcfc.com.vn/",
+        "retrievedAt": "2026-08-11",
+        "retrievalMethod": "tinyfish_fetch"
+      }
+    },
+    {
+      "id": "pvcfc-anh-hai-ca-mau-service",
+      "name": "Anh Hai Cà Mau",
+      "sourceUrl": "https://www.pvcfc.com.vn/anh-hai-ca-mau",
+      "sourceType": "service_page",
+      "scope": "Official PVCFC page for the Anh Hai Cà Mau AI agricultural question-and-answer service.",
+      "relatedUrls": [
+        "https://www.anhhaicamau.com/",
+        "https://apps.apple.com/vn/app/anh-hai-c%C3%A0-mau/id6744891740",
+        "https://play.google.com/store/apps/details?id=com.pvcfc.anhhaicamau&hl=vi"
+      ],
+      "provenance": {
+        "sourceUrl": "https://www.pvcfc.com.vn/sitemap.aspx",
+        "retrievedAt": "2026-08-11",
+        "retrievalMethod": "tinyfish_fetch"
+      }
+    },
+    {
+      "id": "pvcfc-2nong-service",
+      "name": "2Nông",
+      "sourceUrl": "https://www.pvcfc.com.vn/2-nong",
+      "sourceType": "service_page",
+      "scope": "Official PVCFC service page for the 2Nông agricultural application ecosystem, including AI pest and disease diagnosis articles.",
+      "relatedUrls": [
+        "https://onelink.to/troly2nong",
+        "https://apps.apple.com/vn/app/2n%C3%B4ng/id1450823993"
+      ],
+      "provenance": {
+        "sourceUrl": "https://www.pvcfc.com.vn/2-nong",
+        "retrievedAt": "2026-08-11",
+        "retrievalMethod": "tinyfish_fetch"
+      }
+    },
+    {
+      "id": "pvcfc-urban-agriculture",
+      "name": "Nông nghiệp đô thị",
+      "sourceUrl": "https://www.pvcfc.com.vn/nong-nghiep-do-thi",
+      "sourceType": "service_page",
+      "scope": "Official urban-agriculture products, stores, and solutions page.",
+      "relatedUrls": ["https://www.pvcfc.com.vn/dich-vu-giai-phap"],
+      "provenance": {
+        "sourceUrl": "https://www.pvcfc.com.vn/",
+        "retrievedAt": "2026-08-11",
+        "retrievalMethod": "tinyfish_fetch"
+      }
+    },
+    {
+      "id": "pvcfc-dms",
+      "name": "DMS",
+      "sourceUrl": "https://www.pvcfc.com.vn/dms",
+      "sourceType": "service_page",
+      "scope": "Official distributor-management-system service page and dealer application guidance surface.",
+      "relatedUrls": [
+        "https://www.pvcfc.com.vn/ung-dung-phan-bon-ca-maucac-buoc-su-dung-toan-bo-tinh-nang-danh-cho-dai-ly-c2",
+        "https://apps.apple.com/vn/app/pvcfc-sales/id1580032711"
+      ],
+      "provenance": {
+        "sourceUrl": "https://www.pvcfc.com.vn/",
+        "retrievedAt": "2026-08-11",
+        "retrievalMethod": "tinyfish_fetch"
+      }
+    },
+    {
+      "id": "pvcfc-crm",
+      "name": "CRM",
+      "sourceUrl": "https://www.pvcfc.com.vn/crm",
+      "sourceType": "service_page",
+      "scope": "Official customer-relationship-management service page.",
+      "relatedUrls": ["https://www.pvcfc.com.vn/dich-vu-giai-phap"],
+      "provenance": {
+        "sourceUrl": "https://www.pvcfc.com.vn/",
+        "retrievedAt": "2026-08-11",
+        "retrievalMethod": "tinyfish_fetch"
+      }
+    },
+    {
+      "id": "pvcfc-rfid",
+      "name": "RFID",
+      "sourceUrl": "https://www.pvcfc.com.vn/rfid",
+      "sourceType": "service_page",
+      "scope": "Official RFID technology and traceability service page.",
+      "relatedUrls": ["https://www.pvcfc.com.vn/dich-vu-giai-phap"],
+      "provenance": {
+        "sourceUrl": "https://www.pvcfc.com.vn/",
+        "retrievedAt": "2026-08-11",
+        "retrievalMethod": "tinyfish_fetch"
+      }
+    },
+    {
+      "id": "pvcfc-news",
+      "name": "Tin tức",
+      "sourceUrl": "https://www.pvcfc.com.vn/tin-tuc",
+      "sourceType": "category_page",
+      "scope": "Top-level official news index covered by the server-declared news sitemap.",
+      "relatedUrls": ["https://www.pvcfc.com.vn/news/newssitemap.ashx"],
+      "provenance": {
+        "sourceUrl": "https://www.pvcfc.com.vn/",
+        "retrievedAt": "2026-08-11",
+        "retrievalMethod": "tinyfish_fetch"
+      }
+    },
+    {
+      "id": "pvcfc-company-news",
+      "name": "Hoạt động công ty",
+      "sourceUrl": "https://www.pvcfc.com.vn/tin-hoat-dong-cong-ty",
+      "sourceType": "category_page",
+      "scope": "Official company activity news and announcements.",
+      "relatedUrls": ["https://www.pvcfc.com.vn/tin-tuc"],
+      "provenance": {
+        "sourceUrl": "https://www.pvcfc.com.vn/",
+        "retrievedAt": "2026-08-11",
+        "retrievalMethod": "tinyfish_fetch"
+      }
+    },
+    {
+      "id": "pvcfc-social-welfare-news",
+      "name": "An sinh xã hội",
+      "sourceUrl": "https://www.pvcfc.com.vn/An-sinh-xa-hoi",
+      "sourceType": "category_page",
+      "scope": "Official social-welfare and community activity news.",
+      "relatedUrls": ["https://www.pvcfc.com.vn/tin-tuc"],
+      "provenance": {
+        "sourceUrl": "https://www.pvcfc.com.vn/",
+        "retrievedAt": "2026-08-11",
+        "retrievalMethod": "tinyfish_fetch"
+      }
+    },
+    {
+      "id": "pvcfc-promotions",
+      "name": "Khuyến mãi",
+      "sourceUrl": "https://www.pvcfc.com.vn/khuyen-mai",
+      "sourceType": "category_page",
+      "scope": "Official promotions index and program announcements.",
+      "relatedUrls": [
+        "https://khuyenmai.pvcfc.com.vn/",
+        "https://muavangthanglon.pvcfc.com.vn/"
+      ],
+      "provenance": {
+        "sourceUrl": "https://www.pvcfc.com.vn/",
+        "retrievedAt": "2026-08-11",
+        "retrievalMethod": "tinyfish_fetch"
+      }
+    },
+    {
+      "id": "pvcfc-fertilizer-prices",
+      "name": "Bảng giá phân bón",
+      "sourceUrl": "https://www.pvcfc.com.vn/bang-gia-phan-bon",
+      "sourceType": "category_page",
+      "scope": "Official reference fertilizer-price page.",
+      "relatedUrls": ["https://shop.pvcfc.com.vn/"],
+      "provenance": {
+        "sourceUrl": "https://www.pvcfc.com.vn/",
+        "retrievedAt": "2026-08-11",
+        "retrievalMethod": "tinyfish_fetch"
+      }
+    },
+    {
+      "id": "pvcfc-research-development",
+      "name": "Nghiên cứu và phát triển",
+      "sourceUrl": "https://www.pvcfc.com.vn/nghien-cuu-va-phat-trien",
+      "sourceType": "category_page",
+      "scope": "Official research and development articles and information.",
+      "relatedUrls": ["https://www.pvcfc.com.vn/tin-tuc"],
+      "provenance": {
+        "sourceUrl": "https://www.pvcfc.com.vn/",
+        "retrievedAt": "2026-08-11",
+        "retrievalMethod": "tinyfish_fetch"
+      }
+    },
+    {
+      "id": "pvcfc-technical-advice",
+      "name": "Tư vấn kỹ thuật",
+      "sourceUrl": "https://www.pvcfc.com.vn/tu-van-ky-thuat",
+      "sourceType": "category_page",
+      "scope": "Official agronomy and cultivation guidance index.",
+      "relatedUrls": [
+        "https://www.pvcfc.com.vn/ky-thuat-va-hieu-qua",
+        "https://bikipvang.pvcfc.com.vn/"
+      ],
+      "provenance": {
+        "sourceUrl": "https://www.pvcfc.com.vn/",
+        "retrievedAt": "2026-08-11",
+        "retrievalMethod": "tinyfish_fetch"
+      }
+    },
+    {
+      "id": "pvcfc-press-coverage",
+      "name": "Báo chí nói về PVCFC",
+      "sourceUrl": "https://www.pvcfc.com.vn/bao-chi-noi-ve-pvcfc",
+      "sourceType": "category_page",
+      "scope": "PVCFC-owned index of media coverage; linked third-party articles are not treated as official PVCFC sources in this inventory.",
+      "relatedUrls": ["https://www.pvcfc.com.vn/tin-tuc"],
+      "provenance": {
+        "sourceUrl": "https://www.pvcfc.com.vn/",
+        "retrievedAt": "2026-08-11",
+        "retrievalMethod": "tinyfish_fetch"
+      }
+    },
+    {
+      "id": "pvcfc-investor-relations",
+      "name": "Quan hệ đầu tư",
+      "sourceUrl": "https://www.pvcfc.com.vn/quan-he-dau-tu",
+      "sourceType": "category_page",
+      "scope": "Top-level investor-relations hub for stock, financial, governance, shareholder, disclosure, and analyst information.",
+      "relatedUrls": [
+        "https://www.pvcfc.com.vn/thong-tin-co-phieu",
+        "https://www.pvcfc.com.vn/thong-tin-tai-chinh",
+        "https://www.pvcfc.com.vn/bao-cao-thuong-nien-va-bao-cao-tai-chinh"
+      ],
+      "provenance": {
+        "sourceUrl": "https://www.pvcfc.com.vn/",
+        "retrievedAt": "2026-08-11",
+        "retrievalMethod": "tinyfish_fetch"
+      }
+    },
+    {
+      "id": "pvcfc-stock-information",
+      "name": "Thông tin cổ phiếu",
+      "sourceUrl": "https://www.pvcfc.com.vn/thong-tin-co-phieu",
+      "sourceType": "category_page",
+      "scope": "Official stock and charter-capital information.",
+      "relatedUrls": ["https://www.pvcfc.com.vn/quan-he-dau-tu"],
+      "provenance": {
+        "sourceUrl": "https://www.pvcfc.com.vn/sitemap.ashx",
+        "retrievedAt": "2026-08-11",
+        "retrievalMethod": "tinyfish_fetch"
+      }
+    },
+    {
+      "id": "pvcfc-financial-information",
+      "name": "Thông tin tài chính",
+      "sourceUrl": "https://www.pvcfc.com.vn/thong-tin-tai-chinh",
+      "sourceType": "category_page",
+      "scope": "Official financial-information index.",
+      "relatedUrls": ["https://www.pvcfc.com.vn/quan-he-dau-tu"],
+      "provenance": {
+        "sourceUrl": "https://www.pvcfc.com.vn/sitemap.ashx",
+        "retrievedAt": "2026-08-11",
+        "retrievalMethod": "tinyfish_fetch"
+      }
+    },
+    {
+      "id": "pvcfc-investment-highlights",
+      "name": "Điểm nhấn đầu tư",
+      "sourceUrl": "https://www.pvcfc.com.vn/diem-nhan-dau-tu",
+      "sourceType": "category_page",
+      "scope": "Official investment highlights and investor-facing summaries.",
+      "relatedUrls": ["https://www.pvcfc.com.vn/quan-he-dau-tu"],
+      "provenance": {
+        "sourceUrl": "https://www.pvcfc.com.vn/sitemap.ashx",
+        "retrievedAt": "2026-08-11",
+        "retrievalMethod": "tinyfish_fetch"
+      }
+    },
+    {
+      "id": "pvcfc-investor-meetings",
+      "name": "Hoạt động gặp mặt nhà đầu tư",
+      "sourceUrl": "https://www.pvcfc.com.vn/hoat-dong-gap-mat-nha-dau-tu",
+      "sourceType": "category_page",
+      "scope": "Official shareholder and investor meeting materials.",
+      "relatedUrls": [
+        "https://www.pvcfc.com.vn/dai-hoi-dong-co-dong",
+        "https://www.pvcfc.com.vn/quan-he-dau-tu"
+      ],
+      "provenance": {
+        "sourceUrl": "https://www.pvcfc.com.vn/sitemap.ashx",
+        "retrievedAt": "2026-08-11",
+        "retrievalMethod": "tinyfish_fetch"
+      }
+    },
+    {
+      "id": "pvcfc-annual-financial-reports",
+      "name": "Báo cáo thường niên và báo cáo tài chính",
+      "sourceUrl": "https://www.pvcfc.com.vn/bao-cao-thuong-nien-va-bao-cao-tai-chinh",
+      "sourceType": "document_index",
+      "scope": "Official index for annual reports, financial reports, disclosures, event calendars, and analyst materials.",
+      "relatedUrls": [
+        "https://www.pvcfc.com.vn/bao-cao-thuong-nien",
+        "https://www.pvcfc.com.vn/bao-cao-tai-chinh"
+      ],
+      "provenance": {
+        "sourceUrl": "https://www.pvcfc.com.vn/sitemap.aspx",
+        "retrievedAt": "2026-08-11",
+        "retrievalMethod": "tinyfish_fetch"
+      }
+    },
+    {
+      "id": "pvcfc-governance-reports",
+      "name": "Báo cáo quản trị công ty",
+      "sourceUrl": "https://www.pvcfc.com.vn/bao-cao-quan-tri-cong-ty",
+      "sourceType": "document_index",
+      "scope": "Official corporate-governance report index.",
+      "relatedUrls": ["https://www.pvcfc.com.vn/quan-he-dau-tu"],
+      "provenance": {
+        "sourceUrl": "https://www.pvcfc.com.vn/sitemap.aspx",
+        "retrievedAt": "2026-08-11",
+        "retrievalMethod": "tinyfish_fetch"
+      }
+    },
+    {
+      "id": "pvcfc-sustainability",
+      "name": "Phát triển bền vững",
+      "sourceUrl": "https://www.pvcfc.com.vn/phat-trien-ben-vung",
+      "sourceType": "category_page",
+      "scope": "Top-level sustainability and ESG hub covering governance, emissions, environment, society, value chain, and reporting.",
+      "relatedUrls": [
+        "https://www.pvcfc.com.vn/bao-cao-phat-trien-ben-vung",
+        "https://www.pvcfc.com.vn/moi-truong",
+        "https://www.pvcfc.com.vn/xa-hoi"
+      ],
+      "provenance": {
+        "sourceUrl": "https://www.pvcfc.com.vn/",
+        "retrievedAt": "2026-08-11",
+        "retrievalMethod": "tinyfish_fetch"
+      }
+    },
+    {
+      "id": "pvcfc-sustainability-reports",
+      "name": "Báo cáo phát triển bền vững",
+      "sourceUrl": "https://www.pvcfc.com.vn/bao-cao-phat-trien-ben-vung",
+      "sourceType": "document_index",
+      "scope": "Official sustainability-report archive.",
+      "relatedUrls": ["https://www.pvcfc.com.vn/phat-trien-ben-vung"],
+      "provenance": {
+        "sourceUrl": "https://www.pvcfc.com.vn/sitemap.aspx",
+        "retrievedAt": "2026-08-11",
+        "retrievalMethod": "tinyfish_fetch"
+      }
+    },
+    {
+      "id": "pvcfc-environment",
+      "name": "Môi trường",
+      "sourceUrl": "https://www.pvcfc.com.vn/moi-truong",
+      "sourceType": "category_page",
+      "scope": "Official environmental compliance, licensing, monitoring, and emissions information.",
+      "relatedUrls": ["https://www.pvcfc.com.vn/phat-trien-ben-vung"],
+      "provenance": {
+        "sourceUrl": "https://www.pvcfc.com.vn/sitemap.aspx",
+        "retrievedAt": "2026-08-11",
+        "retrievalMethod": "tinyfish_fetch"
+      }
+    },
+    {
+      "id": "pvcfc-social-sustainability",
+      "name": "Xã hội",
+      "sourceUrl": "https://www.pvcfc.com.vn/xa-hoi",
+      "sourceType": "category_page",
+      "scope": "Official social pillar of PVCFC sustainability information.",
+      "relatedUrls": ["https://www.pvcfc.com.vn/phat-trien-ben-vung"],
+      "provenance": {
+        "sourceUrl": "https://www.pvcfc.com.vn/sitemap.aspx",
+        "retrievedAt": "2026-08-11",
+        "retrievalMethod": "tinyfish_fetch"
+      }
+    },
+    {
+      "id": "pvcfc-contact",
+      "name": "Liên hệ",
+      "sourceUrl": "https://www.pvcfc.com.vn/lien-he",
+      "sourceType": "contact_page",
+      "scope": "Official headquarters, office, telephone, email, hotline, and misconduct-reporting contact information.",
+      "relatedUrls": ["https://www.pvcfc.com.vn/"],
+      "provenance": {
+        "sourceUrl": "https://www.pvcfc.com.vn/sitemap.aspx",
+        "retrievedAt": "2026-08-11",
+        "retrievalMethod": "tinyfish_fetch"
+      }
+    },
+    {
+      "id": "pvcfc-tenders",
+      "name": "Mời thầu",
+      "sourceUrl": "https://www.pvcfc.com.vn/moi-thau",
+      "sourceType": "category_page",
+      "scope": "Official public tender and procurement notice index.",
+      "relatedUrls": ["https://www.pvcfc.com.vn/"],
+      "provenance": {
+        "sourceUrl": "https://www.pvcfc.com.vn/",
+        "retrievedAt": "2026-08-11",
+        "retrievalMethod": "tinyfish_fetch"
+      }
+    },
+    {
+      "id": "pvcfc-careers",
+      "name": "Tuyển dụng",
+      "sourceUrl": "https://www.pvcfc.com.vn/tuyen-dung",
+      "sourceType": "category_page",
+      "scope": "Official careers, workplace, and vacancy information.",
+      "relatedUrls": ["https://www.pvcfc.com.vn/"],
+      "provenance": {
+        "sourceUrl": "https://www.pvcfc.com.vn/",
+        "retrievedAt": "2026-08-11",
+        "retrievalMethod": "tinyfish_fetch"
+      }
+    },
+    {
+      "id": "pvcfc-video",
+      "name": "Video",
+      "sourceUrl": "https://www.pvcfc.com.vn/video",
+      "sourceType": "media_index",
+      "scope": "Official website video index.",
+      "relatedUrls": ["https://www.youtube.com/channel/UC8NCXHM6oO5PbEdl2B7Lydg"],
+      "provenance": {
+        "sourceUrl": "https://www.pvcfc.com.vn/sitemap.ashx",
+        "retrievedAt": "2026-08-11",
+        "retrievalMethod": "tinyfish_fetch"
+      }
+    },
+    {
+      "id": "pvcfc-farmer-partnership",
+      "name": "Đồng hành cùng nhà nông",
+      "sourceUrl": "https://www.pvcfc.com.vn/dong-hanh-cung-nha-nong",
+      "sourceType": "category_page",
+      "scope": "Official hub for technical advice, seasonal market information, partnership programs, and farmer stories.",
+      "relatedUrls": [
+        "https://www.pvcfc.com.vn/tu-van-ky-thuat--dong-hanh-cung-nha-nong",
+        "https://www.pvcfc.com.vn/thoi-vu-thi-truong",
+        "https://www.pvcfc.com.vn/chuong-trinh-dong-hanh",
+        "https://www.pvcfc.com.vn/nha-nong-chia-se"
+      ],
+      "provenance": {
+        "sourceUrl": "https://www.pvcfc.com.vn/sitemap.ashx",
+        "retrievedAt": "2026-08-11",
+        "retrievalMethod": "tinyfish_fetch"
+      }
+    },
+    {
+      "id": "pvcfc-quality-certificates",
+      "name": "Chứng thư chất lượng COA",
+      "sourceUrl": "https://www.pvcfc.com.vn/chung-thu-chat-luong-coa",
+      "sourceType": "document_index",
+      "scope": "Official certificate-of-analysis lookup and document index.",
+      "relatedUrls": ["https://www.pvcfc.com.vn/san-pham"],
+      "provenance": {
+        "sourceUrl": "https://www.pvcfc.com.vn/sitemap.aspx",
+        "retrievedAt": "2026-08-11",
+        "retrievalMethod": "tinyfish_fetch"
+      }
+    },
+    {
+      "id": "pvcfc-conformity-documents",
+      "name": "Hồ sơ hợp quy",
+      "sourceUrl": "https://www.pvcfc.com.vn/ho-so-hop-quy",
+      "sourceType": "document_index",
+      "scope": "Official product conformity document index.",
+      "relatedUrls": ["https://www.pvcfc.com.vn/san-pham"],
+      "provenance": {
+        "sourceUrl": "https://www.pvcfc.com.vn/sitemap.aspx",
+        "retrievedAt": "2026-08-11",
+        "retrievalMethod": "tinyfish_fetch"
+      }
+    },
+    {
+      "id": "pvcfc-circulation-decisions",
+      "name": "Quyết định lưu hành",
+      "sourceUrl": "https://www.pvcfc.com.vn/quyet-dinh-luu-hanh",
+      "sourceType": "document_index",
+      "scope": "Official product circulation decision document index.",
+      "relatedUrls": ["https://www.pvcfc.com.vn/san-pham"],
+      "provenance": {
+        "sourceUrl": "https://www.pvcfc.com.vn/sitemap.aspx",
+        "retrievedAt": "2026-08-11",
+        "retrievalMethod": "tinyfish_fetch"
+      }
+    },
+    {
+      "id": "pvcfc-factory-tour-landing",
+      "name": "Tham quan nhà máy",
+      "sourceUrl": "https://www.pvcfc.com.vn/thamquannhamay",
+      "sourceType": "service_page",
+      "scope": "Official corporate-site landing page for the virtual factory tour.",
+      "relatedUrls": ["https://thamquannhamay.pvcfc.com.vn/"],
+      "provenance": {
+        "sourceUrl": "https://www.pvcfc.com.vn/sitemap.ashx",
+        "retrievedAt": "2026-08-11",
+        "retrievalMethod": "tinyfish_fetch"
+      }
+    },
+    {
+      "id": "pvcfc-terms-of-use",
+      "name": "Điều khoản sử dụng",
+      "sourceUrl": "https://www.pvcfc.com.vn/dieu-khoan-su-dung",
+      "sourceType": "policy_page",
+      "scope": "Official website terms of use.",
+      "relatedUrls": ["https://www.pvcfc.com.vn/chinh-sach-bao-mat"],
+      "provenance": {
+        "sourceUrl": "https://www.pvcfc.com.vn/",
+        "retrievedAt": "2026-08-11",
+        "retrievalMethod": "tinyfish_fetch"
+      }
+    },
+    {
+      "id": "pvcfc-privacy-policy",
+      "name": "Chính sách bảo mật",
+      "sourceUrl": "https://www.pvcfc.com.vn/chinh-sach-bao-mat",
+      "sourceType": "policy_page",
+      "scope": "Official website privacy policy.",
+      "relatedUrls": ["https://www.pvcfc.com.vn/dieu-khoan-su-dung"],
+      "provenance": {
+        "sourceUrl": "https://www.pvcfc.com.vn/",
+        "retrievedAt": "2026-08-11",
+        "retrievalMethod": "tinyfish_fetch"
+      }
+    },
+    {
+      "id": "pvcfc-bikipvang",
+      "name": "Bí Kíp Vàng",
+      "sourceUrl": "https://bikipvang.pvcfc.com.vn/",
+      "sourceType": "official_microsite",
+      "scope": "PVCFC agricultural knowledge microsite with crop guidance, campaign archives, videos, articles, and downloadable cultivation documents.",
+      "relatedUrls": [
+        "https://www.pvcfc.com.vn/tu-van-ky-thuat",
+        "https://www.facebook.com/phanboncamau/"
+      ],
+      "provenance": {
+        "sourceUrl": "https://bikipvang.pvcfc.com.vn/",
+        "retrievedAt": "2026-08-11",
+        "retrievalMethod": "tinyfish_fetch"
+      }
+    },
+    {
+      "id": "pvcfc-shop",
+      "name": "Phân Bón Cà Mau shop",
+      "sourceUrl": "https://shop.pvcfc.com.vn/",
+      "sourceType": "official_subdomain",
+      "scope": "PVCFC product shopping and reference-price surface; TinyFish search indexed its fertilizer categories, while direct fetch returned a proxy error.",
+      "relatedUrls": [
+        "https://www.pvcfc.com.vn/san-pham",
+        "https://www.pvcfc.com.vn/bang-gia-phan-bon"
+      ],
+      "provenance": {
+        "sourceUrl": "https://shop.pvcfc.com.vn/",
+        "retrievedAt": "2026-08-11",
+        "retrievalMethod": "tinyfish_search"
+      }
+    },
+    {
+      "id": "pvcfc-mua-vang-thang-lon",
+      "name": "Mùa Vàng Thắng Lớn 2026",
+      "sourceUrl": "https://muavangthanglon.pvcfc.com.vn/",
+      "sourceType": "official_microsite",
+      "scope": "Official 2026 promotion microsite with rules, FAQs, products, news, winners, livestream results, and a promotional minigame.",
+      "relatedUrls": [
+        "https://khuyenmai.pvcfc.com.vn/",
+        "https://www.pvcfc.com.vn/khuyen-mai"
+      ],
+      "provenance": {
+        "sourceUrl": "https://muavangthanglon.pvcfc.com.vn/",
+        "retrievedAt": "2026-08-11",
+        "retrievalMethod": "tinyfish_fetch"
+      }
+    },
+    {
+      "id": "pvcfc-promotion-entry",
+      "name": "Mùa Vàng Thắng Lớn reward entry",
+      "sourceUrl": "https://khuyenmai.pvcfc.com.vn/",
+      "sourceType": "official_microsite",
+      "scope": "Official promotion registration and reward-code entry surface linked to the published PVCFC program rules.",
+      "relatedUrls": [
+        "https://muavangthanglon.pvcfc.com.vn/",
+        "https://www.pvcfc.com.vn/the-le-chuong-trinh-khuyen-mai-mua-vang-thang-lon-2026"
+      ],
+      "provenance": {
+        "sourceUrl": "https://khuyenmai.pvcfc.com.vn/",
+        "retrievedAt": "2026-08-11",
+        "retrievalMethod": "tinyfish_fetch"
+      }
+    },
+    {
+      "id": "pvcfc-elearning",
+      "name": "PVCFC eLearning",
+      "sourceUrl": "https://elearning.pvcfc.com.vn/",
+      "sourceType": "official_subdomain",
+      "scope": "PVCFC online training login system; TinyFish search exposed the public login surface and direct fetch reported login required.",
+      "relatedUrls": ["https://www.pvcfc.com.vn/"],
+      "provenance": {
+        "sourceUrl": "https://elearning.pvcfc.com.vn/",
+        "retrievedAt": "2026-08-11",
+        "retrievalMethod": "tinyfish_search"
+      }
+    },
+    {
+      "id": "pvcfc-factory-tour",
+      "name": "PVCFC virtual factory tour",
+      "sourceUrl": "https://thamquannhamay.pvcfc.com.vn/",
+      "sourceType": "official_subdomain",
+      "scope": "Official interactive virtual factory-tour property linked by the corporate homepage and sitemap; direct TinyFish fetch returned a proxy error.",
+      "relatedUrls": ["https://www.pvcfc.com.vn/thamquannhamay"],
+      "provenance": {
+        "sourceUrl": "https://www.pvcfc.com.vn/",
+        "retrievedAt": "2026-08-11",
+        "retrievalMethod": "tinyfish_fetch"
+      }
+    },
+    {
+      "id": "pvcfc-eoffice",
+      "name": "PVCFC eOffice",
+      "sourceUrl": "https://eoffice.pvcfc.com.vn/",
+      "sourceType": "official_subdomain",
+      "scope": "Publicly reachable PVCFC document-management login system discovered by official-domain TinyFish search.",
+      "relatedUrls": ["https://play.google.com/store/apps/details?id=com.pvcfc.sureportal"],
+      "provenance": {
+        "sourceUrl": "https://eoffice.pvcfc.com.vn/",
+        "retrievedAt": "2026-08-11",
+        "retrievalMethod": "tinyfish_search"
+      }
+    },
+    {
+      "id": "pvcfc-hai-nong",
+      "name": "Hai Nông",
+      "sourceUrl": "https://hainong.vn/",
+      "sourceType": "linked_official_service",
+      "scope": "Branded agricultural service linked directly by the PVCFC corporate homepage and human sitemap; direct TinyFish fetch timed out.",
+      "relatedUrls": ["https://www.pvcfc.com.vn/"],
+      "provenance": {
+        "sourceUrl": "https://www.pvcfc.com.vn/",
+        "retrievedAt": "2026-08-11",
+        "retrievalMethod": "tinyfish_fetch"
+      }
+    },
+    {
+      "id": "pvcfc-anh-hai-ca-mau-web-app",
+      "name": "Anh Hai Cà Mau web application",
+      "sourceUrl": "https://www.anhhaicamau.com/",
+      "sourceType": "linked_official_service",
+      "scope": "Branded Anh Hai Cà Mau web application linked directly by the PVCFC corporate homepage and human sitemap; direct TinyFish fetch reached a client-side application error.",
+      "relatedUrls": [
+        "https://www.pvcfc.com.vn/anh-hai-ca-mau",
+        "https://apps.apple.com/vn/app/anh-hai-c%C3%A0-mau/id6744891740"
+      ],
+      "provenance": {
+        "sourceUrl": "https://www.pvcfc.com.vn/",
+        "retrievedAt": "2026-08-11",
+        "retrievalMethod": "tinyfish_fetch"
+      }
+    },
+    {
+      "id": "pvcfc-apple-developer-catalog",
+      "name": "PVCFC App Store developer catalog",
+      "sourceUrl": "https://apps.apple.com/vn/developer/petrovietnam-ca-mau-fertilizer-corporation/id1466901222",
+      "sourceType": "official_app_catalog",
+      "scope": "Apple developer catalog identifying ten current PVCFC-published iOS applications at retrieval.",
+      "relatedUrls": [
+        "https://www.pvcfc.com.vn/2-nong",
+        "https://www.pvcfc.com.vn/anh-hai-ca-mau",
+        "https://www.pvcfc.com.vn/dms"
+      ],
+      "provenance": {
+        "sourceUrl": "https://apps.apple.com/vn/developer/petrovietnam-ca-mau-fertilizer-corporation/id1466901222",
+        "retrievedAt": "2026-08-11",
+        "retrievalMethod": "tinyfish_fetch"
+      }
+    },
+    {
+      "id": "pvcfc-app-2nong",
+      "name": "2Nông iOS application",
+      "sourceUrl": "https://apps.apple.com/vn/app/2n%C3%B4ng/id1450823993",
+      "sourceType": "official_app",
+      "scope": "Core 2Nông iOS application published in the PVCFC Apple developer catalog.",
+      "relatedUrls": [
+        "https://www.pvcfc.com.vn/2-nong",
+        "https://onelink.to/troly2nong"
+      ],
+      "provenance": {
+        "sourceUrl": "https://apps.apple.com/vn/developer/petrovietnam-ca-mau-fertilizer-corporation/id1466901222",
+        "retrievedAt": "2026-08-11",
+        "retrievalMethod": "tinyfish_fetch"
+      }
+    },
+    {
+      "id": "pvcfc-app-2nong-disease-diagnosis",
+      "name": "2Nông: Chẩn đoán sâu bệnh",
+      "sourceUrl": "https://apps.apple.com/vn/app/2n%C3%B4ng-ch%E1%BA%A9n-%C4%91o%C3%A1n-s%C3%A2u-b%E1%BB%87nh/id1605089318",
+      "sourceType": "official_app",
+      "scope": "2Nông pest and disease diagnosis iOS application published in the PVCFC Apple developer catalog.",
+      "relatedUrls": ["https://www.pvcfc.com.vn/2-nong"],
+      "provenance": {
+        "sourceUrl": "https://apps.apple.com/vn/developer/petrovietnam-ca-mau-fertilizer-corporation/id1466901222",
+        "retrievedAt": "2026-08-11",
+        "retrievalMethod": "tinyfish_fetch"
+      }
+    },
+    {
+      "id": "pvcfc-app-2nong-expert-call",
+      "name": "2Nông: Gọi điện chuyên gia",
+      "sourceUrl": "https://apps.apple.com/vn/app/2n%C3%B4ng-g%E1%BB%8Di-%C4%91i%E1%BB%87n-chuy%C3%AAn-gia/id6449249448",
+      "sourceType": "official_app",
+      "scope": "2Nông expert calling iOS application published in the PVCFC Apple developer catalog.",
+      "relatedUrls": ["https://www.pvcfc.com.vn/2-nong"],
+      "provenance": {
+        "sourceUrl": "https://apps.apple.com/vn/developer/petrovietnam-ca-mau-fertilizer-corporation/id1466901222",
+        "retrievedAt": "2026-08-11",
+        "retrievalMethod": "tinyfish_fetch"
+      }
+    },
+    {
+      "id": "pvcfc-app-2nong-crop-management",
+      "name": "2Nông: Quản lý canh tác",
+      "sourceUrl": "https://apps.apple.com/vn/app/2n%C3%B4ng-qu%E1%BA%A3n-l%C3%BD-canh-t%C3%A1c/id6449612803",
+      "sourceType": "official_app",
+      "scope": "2Nông cultivation-management iOS application published in the PVCFC Apple developer catalog.",
+      "relatedUrls": ["https://www.pvcfc.com.vn/2-nong"],
+      "provenance": {
+        "sourceUrl": "https://apps.apple.com/vn/developer/petrovietnam-ca-mau-fertilizer-corporation/id1466901222",
+        "retrievedAt": "2026-08-11",
+        "retrievalMethod": "tinyfish_fetch"
+      }
+    },
+    {
+      "id": "pvcfc-app-2nong-crop-assistant",
+      "name": "2Nông: Trợ lý canh tác",
+      "sourceUrl": "https://apps.apple.com/vn/app/2n%C3%B4ng-tr%E1%BB%A3-l%C3%BD-canh-t%C3%A1c/id1540198381",
+      "sourceType": "official_app",
+      "scope": "2Nông cultivation-assistant iOS application published in the PVCFC Apple developer catalog.",
+      "relatedUrls": [
+        "https://www.pvcfc.com.vn/2-nong",
+        "https://onelink.to/troly2nong"
+      ],
+      "provenance": {
+        "sourceUrl": "https://apps.apple.com/vn/developer/petrovietnam-ca-mau-fertilizer-corporation/id1466901222",
+        "retrievedAt": "2026-08-11",
+        "retrievalMethod": "tinyfish_fetch"
+      }
+    },
+    {
+      "id": "pvcfc-app-2nong-expert",
+      "name": "2Nong: Chuyên Gia",
+      "sourceUrl": "https://apps.apple.com/vn/app/2nong-chuy%C3%AAn-gia/id1660800172",
+      "sourceType": "official_app",
+      "scope": "2Nông expert iOS application published in the PVCFC Apple developer catalog.",
+      "relatedUrls": ["https://www.pvcfc.com.vn/2-nong"],
+      "provenance": {
+        "sourceUrl": "https://apps.apple.com/vn/developer/petrovietnam-ca-mau-fertilizer-corporation/id1466901222",
+        "retrievedAt": "2026-08-11",
+        "retrievalMethod": "tinyfish_fetch"
+      }
+    },
+    {
+      "id": "pvcfc-app-2nong-market-prices",
+      "name": "2Nong: Giá cả thị trường",
+      "sourceUrl": "https://apps.apple.com/vn/app/2nong-gi%C3%A1-c%E1%BA%A3-th%E1%BB%8B-tr%C6%B0%E1%BB%9Dng/id6446608399",
+      "sourceType": "official_app",
+      "scope": "2Nông market-price iOS application published in the PVCFC Apple developer catalog.",
+      "relatedUrls": ["https://www.pvcfc.com.vn/2-nong"],
+      "provenance": {
+        "sourceUrl": "https://apps.apple.com/vn/developer/petrovietnam-ca-mau-fertilizer-corporation/id1466901222",
+        "retrievedAt": "2026-08-11",
+        "retrievalMethod": "tinyfish_fetch"
+      }
+    },
+    {
+      "id": "pvcfc-app-agri-me",
+      "name": "Agri-Me",
+      "sourceUrl": "https://apps.apple.com/vn/app/agri-me/id6742766360",
+      "sourceType": "official_app",
+      "scope": "Agri-Me iOS application published in the PVCFC Apple developer catalog.",
+      "relatedUrls": ["https://www.pvcfc.com.vn/dich-vu-giai-phap"],
+      "provenance": {
+        "sourceUrl": "https://apps.apple.com/vn/developer/petrovietnam-ca-mau-fertilizer-corporation/id1466901222",
+        "retrievedAt": "2026-08-11",
+        "retrievalMethod": "tinyfish_fetch"
+      }
+    },
+    {
+      "id": "pvcfc-app-anh-hai-ca-mau-ios",
+      "name": "Anh Hai Cà Mau iOS application",
+      "sourceUrl": "https://apps.apple.com/vn/app/anh-hai-c%C3%A0-mau/id6744891740",
+      "sourceType": "official_app",
+      "scope": "Anh Hai Cà Mau AI agricultural Q&A iOS application published in the PVCFC Apple developer catalog.",
+      "relatedUrls": [
+        "https://www.pvcfc.com.vn/anh-hai-ca-mau",
+        "https://www.anhhaicamau.com/",
+        "https://play.google.com/store/apps/details?id=com.pvcfc.anhhaicamau&hl=vi"
+      ],
+      "provenance": {
+        "sourceUrl": "https://apps.apple.com/vn/developer/petrovietnam-ca-mau-fertilizer-corporation/id1466901222",
+        "retrievedAt": "2026-08-11",
+        "retrievalMethod": "tinyfish_fetch"
+      }
+    },
+    {
+      "id": "pvcfc-app-pvcfc-sales",
+      "name": "PVCFC Sales",
+      "sourceUrl": "https://apps.apple.com/vn/app/pvcfc-sales/id1580032711",
+      "sourceType": "official_app",
+      "scope": "PVCFC dealer sales and purchasing iOS application published in the PVCFC Apple developer catalog.",
+      "relatedUrls": [
+        "https://www.pvcfc.com.vn/dms",
+        "https://www.pvcfc.com.vn/ung-dung-phan-bon-ca-maucac-buoc-su-dung-toan-bo-tinh-nang-danh-cho-dai-ly-c2"
+      ],
+      "provenance": {
+        "sourceUrl": "https://apps.apple.com/vn/developer/petrovietnam-ca-mau-fertilizer-corporation/id1466901222",
+        "retrievedAt": "2026-08-11",
+        "retrievalMethod": "tinyfish_fetch"
+      }
+    },
+    {
+      "id": "pvcfc-app-anh-hai-ca-mau-android",
+      "name": "Anh Hai Cà Mau Android application",
+      "sourceUrl": "https://play.google.com/store/apps/details?id=com.pvcfc.anhhaicamau&hl=vi",
+      "sourceType": "official_app",
+      "scope": "Anh Hai Cà Mau Android application identified by TinyFish search and the PVCFC package identifier.",
+      "relatedUrls": [
+        "https://www.pvcfc.com.vn/anh-hai-ca-mau",
+        "https://apps.apple.com/vn/app/anh-hai-c%C3%A0-mau/id6744891740"
+      ],
+      "provenance": {
+        "sourceUrl": "https://play.google.com/store/apps/details?id=com.pvcfc.anhhaicamau&hl=vi",
+        "retrievedAt": "2026-08-11",
+        "retrievalMethod": "tinyfish_search"
+      }
+    },
+    {
+      "id": "pvcfc-app-eoffice-android",
+      "name": "PVCFC-eoffice Android application",
+      "sourceUrl": "https://play.google.com/store/apps/details?id=com.pvcfc.sureportal",
+      "sourceType": "official_app",
+      "scope": "PVCFC electronic-office Android application identified by TinyFish search and the PVCFC package identifier.",
+      "relatedUrls": ["https://eoffice.pvcfc.com.vn/"],
+      "provenance": {
+        "sourceUrl": "https://play.google.com/store/apps/details?id=com.pvcfc.sureportal",
+        "retrievedAt": "2026-08-11",
+        "retrievalMethod": "tinyfish_search"
+      }
+    },
+    {
+      "id": "pvcfc-2nong-smart-link",
+      "name": "2Nông application smart link",
+      "sourceUrl": "https://onelink.to/troly2nong",
+      "sourceType": "official_app_link",
+      "scope": "2Nông cross-platform application launcher published by the official Phân Bón Cà Mau social profile; direct TinyFish fetch returned a proxy error.",
+      "relatedUrls": [
+        "https://www.pvcfc.com.vn/2-nong",
+        "https://apps.apple.com/vn/app/2n%C3%B4ng-tr%E1%BB%A3-l%C3%BD-canh-t%C3%A1c/id1540198381"
+      ],
+      "provenance": {
+        "sourceUrl": "https://onelink.to/troly2nong",
+        "retrievedAt": "2026-08-11",
+        "retrievalMethod": "tinyfish_search"
+      }
+    },
+    {
+      "id": "pvcfc-facebook",
+      "name": "Phân Bón Cà Mau Facebook",
+      "sourceUrl": "https://www.facebook.com/phanboncamau/",
+      "sourceType": "official_social_profile",
+      "scope": "Official Facebook profile linked by the PVCFC corporate homepage and promotion microsite; direct TinyFish fetch required login.",
+      "relatedUrls": [
+        "https://www.pvcfc.com.vn/",
+        "https://muavangthanglon.pvcfc.com.vn/"
+      ],
+      "provenance": {
+        "sourceUrl": "https://www.pvcfc.com.vn/",
+        "retrievedAt": "2026-08-11",
+        "retrievalMethod": "tinyfish_fetch"
+      }
+    },
+    {
+      "id": "pvcfc-youtube",
+      "name": "Phân Bón Cà Mau YouTube",
+      "sourceUrl": "https://www.youtube.com/channel/UC8NCXHM6oO5PbEdl2B7Lydg",
+      "sourceType": "official_social_profile",
+      "scope": "Official YouTube channel linked by the PVCFC corporate homepage; the fetched channel description identifies PVCFC and links the corporate website, Facebook, and Zalo profiles.",
+      "relatedUrls": [
+        "https://www.pvcfc.com.vn/",
+        "https://www.facebook.com/phanboncamau/",
+        "https://zalo.me/3848410411690577713"
+      ],
+      "provenance": {
+        "sourceUrl": "https://www.youtube.com/channel/UC8NCXHM6oO5PbEdl2B7Lydg",
+        "retrievedAt": "2026-08-11",
+        "retrievalMethod": "tinyfish_fetch"
+      }
+    },
+    {
+      "id": "pvcfc-tiktok",
+      "name": "Phân Bón Cà Mau TikTok",
+      "sourceUrl": "https://www.tiktok.com/@phanboncamau",
+      "sourceType": "official_social_profile",
+      "scope": "Official TikTok profile linked by the PVCFC corporate homepage; fetched profile description explicitly identifies it as the official Phân Bón Cà Mau channel.",
+      "relatedUrls": ["https://www.pvcfc.com.vn/"],
+      "provenance": {
+        "sourceUrl": "https://www.tiktok.com/@phanboncamau",
+        "retrievedAt": "2026-08-11",
+        "retrievalMethod": "tinyfish_fetch"
+      }
+    },
+    {
+      "id": "pvcfc-zalo",
+      "name": "Phân Bón Cà Mau Zalo Official Account",
+      "sourceUrl": "https://zalo.me/3848410411690577713",
+      "sourceType": "official_social_profile",
+      "scope": "Official Zalo account identified in the PVCFC YouTube channel description and independently fetched with an explicit official-account description and corporate website link.",
+      "relatedUrls": [
+        "https://www.pvcfc.com.vn/",
+        "https://www.youtube.com/channel/UC8NCXHM6oO5PbEdl2B7Lydg"
+      ],
+      "provenance": {
+        "sourceUrl": "https://zalo.me/3848410411690577713",
+        "retrievedAt": "2026-08-11",
+        "retrievalMethod": "tinyfish_fetch"
+      }
+    }
+  ]
+}

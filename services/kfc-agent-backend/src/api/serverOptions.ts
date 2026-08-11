@@ -75,8 +75,22 @@ function confirmationApprovalKeyRing(env: ServerOptionsEnv) {
 
 // Older callers may omit the switch; an absent mode always takes the
 // resolver's production-only default.
-type ServerOptionsEnv = Omit<AppEnv, 'KFC_AGENT_PROFILE_MODE'> &
-  Partial<Pick<AppEnv, 'KFC_AGENT_PROFILE_MODE'>>;
+type NodeOptionalKey =
+  | 'HOST'
+  | 'ZALO_OA_SECRET'
+  | 'ZALO_TOKEN_ENCRYPTION_KEY'
+  | 'ZALO_SETUP_TOKEN'
+  | 'ZALO_PUBLIC_BASE_URL'
+  | 'ZALO_OAUTH_BASE_URL';
+type ServerOptionsEnv = Omit<
+  AppEnv,
+  'KFC_AGENT_PROFILE_MODE' | NodeOptionalKey
+> &
+  Partial<Pick<AppEnv, 'KFC_AGENT_PROFILE_MODE' | NodeOptionalKey>> & {
+    PVCFC_ASTRAFLOW_API_KEY?: string;
+    PVCFC_ASTRAFLOW_BASE_URL?: string;
+    PVCFC_ASTRAFLOW_MODEL?: string;
+  };
 
 export function buildServerOptionsFromEnv(
   env: ServerOptionsEnv,
@@ -87,6 +101,15 @@ export function buildServerOptionsFromEnv(
     env.KFC_AGENT_RUNTIME === 'openai-responses' && openAiApiKey
       ? new OpenAI({ apiKey: openAiApiKey, baseURL: openAiBaseUrl })
       : undefined;
+  const pvcfcAstraFlowApiKey = optionalValue(env.PVCFC_ASTRAFLOW_API_KEY);
+  const pvcfcAstraFlowClient = pvcfcAstraFlowApiKey
+    ? new OpenAI({
+        apiKey: pvcfcAstraFlowApiKey,
+        baseURL:
+          optionalValue(env.PVCFC_ASTRAFLOW_BASE_URL) ??
+          'https://api-sg.umodelverse.ai/v1',
+      })
+    : undefined;
   const googleApiKey = optionalValue(env.GOOGLE_API_KEY);
   const agentIdentity = resolveRuntimeAgentIdentity({
     runtime: env.KFC_AGENT_RUNTIME,
@@ -152,6 +175,7 @@ export function buildServerOptionsFromEnv(
   const menuApiUrl = optionalValue(env.KFC_MENU_API_URL);
   const posBaseUrl = optionalValue(env.KFC_POS_BASE_URL);
   const posToken = optionalValue(env.KFC_POS_TOKEN);
+  const zaloOaId = optionalValue(env.ZALO_OA_ID);
   if (
     env.KFC_COMMERCE_MODE === 'gateway' &&
     (!commerceBaseUrl ||
@@ -190,7 +214,11 @@ export function buildServerOptionsFromEnv(
     messengerPageAccessToken: optionalValue(env.META_PAGE_ACCESS_TOKEN),
     metaInboxUrlTemplate: optionalValue(env.META_INBOX_URL_TEMPLATE),
     messengerGraphApiBaseUrl: optionalValue(env.MESSENGER_GRAPH_API_BASE_URL),
-    zaloOaId: optionalValue(env.ZALO_OA_ID),
+    zaloOaId,
+    zaloAppId: optionalValue(env.ZALO_APP_ID),
+    zaloWebhookSecret: optionalValue(env.ZALO_OA_SECRET),
+    zaloSetupToken: optionalValue(env.ZALO_SETUP_TOKEN),
+    zaloPublicBaseUrl: optionalValue(env.ZALO_PUBLIC_BASE_URL),
     zaloAccessToken: optionalValue(env.ZALO_ACCESS_TOKEN),
     zaloInboxUrlTemplate: optionalValue(env.ZALO_INBOX_URL_TEMPLATE),
     zaloApiBaseUrl: optionalValue(env.ZALO_API_BASE_URL),
@@ -212,6 +240,17 @@ export function buildServerOptionsFromEnv(
             ...(optionalValue(env.KFC_AGENT_COMPACTION_MODEL)
               ? { model: optionalValue(env.KFC_AGENT_COMPACTION_MODEL) }
               : {}),
+          },
+        })
+      : undefined,
+    pvcfcAgent: pvcfcAstraFlowClient
+      ? new OpenAiKfcAgent({
+          client: pvcfcAstraFlowClient,
+          model: optionalValue(env.PVCFC_ASTRAFLOW_MODEL) ?? 'gpt-5.6-luna',
+          modelTemperature: null,
+          compaction: {
+            enabled: false,
+            thresholdBytes: 98_304,
           },
         })
       : undefined,

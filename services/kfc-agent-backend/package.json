@@ -41,6 +41,8 @@
     "proof:genui:consolidate": "tsx scripts/consolidate-genui-proof.ts",
     "test:watch": "vitest",
     "fixtures:build": "tsx scripts/build-fixtures.ts",
+    "fixtures:pvcfc:build": "tsx scripts/build-pvcfc-public-data.ts",
+    "fixtures:pvcfc:check": "tsx scripts/build-pvcfc-public-data.ts --check",
     "policies:build": "tsx scripts/build-policy-fixtures.ts",
     "policies:check": "tsx scripts/build-policy-fixtures.ts --check",
     "worker:dev": "wrangler dev",

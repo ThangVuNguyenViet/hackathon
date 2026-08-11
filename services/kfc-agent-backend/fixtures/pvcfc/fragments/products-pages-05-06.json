@@ -1,0 +1,306 @@
+{
+  "schemaVersion": "pvcfc-public-fixture-fragment-v1",
+  "kind": "products",
+  "retrievedAt": "2026-08-11",
+  "sourcePages": [
+    "https://www.pvcfc.com.vn/san-pham?pagenumber=5",
+    "https://www.pvcfc.com.vn/san-pham?pagenumber=6"
+  ],
+  "records": [
+    {
+      "id": "kali-ca-mau-61-mieng-do",
+      "name": "KALI CÀ MAU 61 (MIỂNG ĐỎ)",
+      "category": "Phân đơn",
+      "sourceUrl": "https://www.pvcfc.com.vn/kali-ca-mau-61br-mieng-do-",
+      "summary": "Phân kali dạng miểng đỏ, được giới thiệu để giúp cây chắc khỏe, chống đổ ngã, cải thiện năng suất và chất lượng nông sản; dùng được trên nhiều loại đất và cây trồng.",
+      "attributes": {
+        "declaredGrade": "Kali 61",
+        "benefits": [
+          "Giúp cây chắc khỏe và chống đổ ngã.",
+          "Hỗ trợ tăng năng suất và chất lượng nông sản.",
+          "Thích hợp với nhiều loại đất và cây trồng."
+        ],
+        "crops": ["lúa", "ngô", "mía", "xoài", "nhãn", "bưởi", "chôm chôm", "dưa hấu", "ớt", "cà chua", "rau ăn lá ngắn ngày", "cà phê", "hồ tiêu", "chè", "cao su"],
+        "usage": [
+          {"crop": "Lúa", "dosage": "30-50 kg/ha/lần", "timing": "2-3 lần/vụ: 18-22 ngày sau sạ, 38-42 ngày sau sạ và lúc trổ"},
+          {"crop": "Ngô", "dosage": "70-80 kg/ha/lần", "timing": "2 lần/vụ: 7-10 và 40-50 ngày sau trồng"},
+          {"crop": "Mía", "dosage": "150-200 kg/ha/lần", "timing": "2 lần/vụ: 2-3 và 4-5 tháng sau trồng"},
+          {"crop": "Cây ăn trái", "dosage": "100-300 g/cây/lần khi kiến thiết cơ bản; 300-400 g/cây/lần khi kinh doanh", "timing": "Kiến thiết cơ bản 3 lần/năm, cách 4 tháng; kinh doanh 3-4 lần/năm sau thu hoạch, trước ra hoa, sau đậu trái và khi trái phát triển"},
+          {"crop": "Rau ăn trái", "dosage": "100-150 kg/ha/lần", "timing": "Bón thúc 2-3 lần/vụ: 15-20 ngày sau trồng và 1-2 lần khi trái phát triển"},
+          {"crop": "Rau ăn lá ngắn ngày", "dosage": "70-120 kg/ha/lần", "timing": "1-2 lần: 7-10 và 20-30 ngày sau trồng"},
+          {"crop": "Cà phê, hồ tiêu", "dosage": "Kinh doanh: 120-170 kg/ha/lần mùa khô, 150-180 kg/ha/lần mùa mưa; kiến thiết cơ bản: 100-120 g/cây/lần", "timing": "Kinh doanh 1-2 lần mùa khô và 3-4 lần mùa mưa; kiến thiết cơ bản 3-4 lần/năm"},
+          {"crop": "Chè", "dosage": "50-100 kg/ha/lần", "timing": "6-7 lần/năm theo chu kỳ thu hoạch"},
+          {"crop": "Cao su giai đoạn kinh doanh", "dosage": "70-120 kg/ha/lần", "timing": "2 lần/năm"}
+        ],
+        "packaging": {"netWeights": ["50 kg", "40 kg", "25 kg"], "construction": "Bao hai lớp, PP bên ngoài và PE bên trong", "shelfLife": "36 tháng kể từ ngày sản xuất"},
+        "manufacturer": "DEAD SEA WORKS LTD., Potash House, P.O.B 75 Beer-Sheva 8410001, Israel"
+      },
+      "imageUrls": [
+        "https://www.pvcfc.com.vn/Data/Sites/1/Product/8590/kali-mie%CC%82%CC%89ng-%C4%91o%CC%89-uzb-(1).png",
+        "https://www.pvcfc.com.vn/Data/Sites/1/Product/8590/kalimiengdo_mattruoc.png",
+        "https://www.pvcfc.com.vn/Data/Sites/1/Product/8590/kalido_matsau.png",
+        "https://www.pvcfc.com.vn/Data/Sites/1/Product/8590/2.png"
+      ],
+      "documentUrls": [
+        "https://www.pvcfc.com.vn/Data/Sites/1/media/san-pham/TCCS/926_Q%C4%90_PVCFC.PDF",
+        "https://www.pvcfc.com.vn/Data/Sites/1/media/fileattachment/8.-tccs-phan-kali-clorua-rev2-20.12.2021.pdf"
+      ],
+      "relatedUrls": [],
+      "provenance": {"sourceUrl": "https://www.pvcfc.com.vn/kali-ca-mau-61br-mieng-do-", "retrievedAt": "2026-08-11", "retrievalMethod": "tinyfish_fetch"}
+    },
+    {
+      "id": "kali-ca-mau-61-bot-do",
+      "name": "KALI CÀ MAU 61 (BỘT ĐỎ)",
+      "category": "Phân đơn",
+      "sourceUrl": "https://www.pvcfc.com.vn/kali-ca-mau-61-br-bot-do-",
+      "summary": "Phân kali dạng bột đỏ, được giới thiệu để giúp cây chắc khỏe, chống đổ ngã, cải thiện năng suất và chất lượng nông sản; dùng được trên nhiều loại đất và cây trồng.",
+      "attributes": {
+        "declaredGrade": "Kali 61",
+        "benefits": ["Giúp cây chắc khỏe và chống đổ ngã.", "Hỗ trợ tăng năng suất và chất lượng nông sản.", "Thích hợp với nhiều loại đất và cây trồng."],
+        "crops": ["lúa", "ngô", "mía", "xoài", "nhãn", "bưởi", "chôm chôm", "dưa hấu", "ớt", "cà chua", "rau ăn lá ngắn ngày", "cà phê", "hồ tiêu", "chè", "cao su"],
+        "usage": [
+          {"crop": "Lúa", "dosage": "30-50 kg/ha/lần", "timing": "2-3 lần/vụ: 18-22 ngày sau sạ, 38-42 ngày sau sạ và lúc trổ"},
+          {"crop": "Ngô", "dosage": "70-80 kg/ha/lần", "timing": "2 lần/vụ: 7-10 và 40-50 ngày sau trồng"},
+          {"crop": "Mía", "dosage": "150-200 kg/ha/lần", "timing": "2 lần/vụ: 2-3 và 4-5 tháng sau trồng"},
+          {"crop": "Cây ăn trái", "dosage": "100-300 g/cây/lần khi kiến thiết cơ bản; 300-400 g/cây/lần khi kinh doanh", "timing": "Kiến thiết cơ bản 3 lần/năm, cách 4 tháng; kinh doanh 3-4 lần/năm sau thu hoạch, trước ra hoa, sau đậu trái và khi trái phát triển"},
+          {"crop": "Rau ăn trái", "dosage": "100-150 kg/ha/lần", "timing": "Bón thúc 2-3 lần/vụ: 15-20 ngày sau trồng và 1-2 lần khi trái phát triển"},
+          {"crop": "Rau ăn lá ngắn ngày", "dosage": "70-120 kg/ha/lần", "timing": "1-2 lần: 7-10 và 20-30 ngày sau trồng"},
+          {"crop": "Cà phê, hồ tiêu", "dosage": "Kinh doanh: 120-170 kg/ha/lần mùa khô, 150-180 kg/ha/lần mùa mưa; kiến thiết cơ bản: 100-120 g/cây/lần", "timing": "Kinh doanh 1-2 lần mùa khô và 3-4 lần mùa mưa; kiến thiết cơ bản 3-4 lần/năm"},
+          {"crop": "Chè", "dosage": "50-100 kg/ha/lần", "timing": "6-7 lần/năm theo chu kỳ thu hoạch"},
+          {"crop": "Cao su giai đoạn kinh doanh", "dosage": "70-120 kg/ha/lần", "timing": "2 lần/năm"}
+        ],
+        "packaging": {"netWeights": ["50 kg", "40 kg", "25 kg"], "construction": "Bao hai lớp, PP bên ngoài và PE bên trong", "shelfLife": "36 tháng kể từ ngày sản xuất"},
+        "manufacturer": "DEAD SEA WORKS LTD., Potash House, P.O.B 75 Beer-Sheva 8410001, Israel"
+      },
+      "imageUrls": [
+        "https://www.pvcfc.com.vn/Data/Sites/1/Product/8589/kali-ca%CC%80-mau-60.png",
+        "https://www.pvcfc.com.vn/Data/Sites/1/Product/8589/kalibotdo_mattruoc.png",
+        "https://www.pvcfc.com.vn/Data/Sites/1/Product/8589/kalido_matsau.png",
+        "https://www.pvcfc.com.vn/Data/Sites/1/Product/8589/2.png"
+      ],
+      "documentUrls": [],
+      "relatedUrls": [],
+      "provenance": {"sourceUrl": "https://www.pvcfc.com.vn/kali-ca-mau-61-br-bot-do-", "retrievedAt": "2026-08-11", "retrievalMethod": "tinyfish_fetch"}
+    },
+    {
+      "id": "dap-ca-mau-18-46-nau-den",
+      "name": "DAP CÀ MAU 18-46 (NÂU ĐEN)",
+      "category": "Phân đơn",
+      "sourceUrl": "https://www.pvcfc.com.vn/dap-ca-mau-br18-46-nau-den-",
+      "summary": "Phân DAP vô cơ 18-46 do PVCFC nhập khẩu và phân phối, phù hợp với nhiều loại đất và cây trồng, đặc biệt cho các giai đoạn đẻ nhánh, ra hoa, nuôi trái và phát triển hạt.",
+      "attributes": {
+        "declaredGrade": "DAP 18-46",
+        "productType": "Phân bón vô cơ hóa học",
+        "benefits": ["Thúc đẩy đẻ nhánh.", "Hỗ trợ phát triển hoa, trái và hạt.", "Có thể kết hợp với các loại phân bón khác."],
+        "crops": ["mọi loại cây trồng"],
+        "originCountries": ["Úc", "Nga", "Trung Quốc"],
+        "packaging": {"netWeights": ["50 kg"], "shelfLife": "36 tháng kể từ ngày sản xuất"}
+      },
+      "imageUrls": [
+        "https://www.pvcfc.com.vn/Data/Sites/1/Product/8646/dap-18-46-ssg-(1).png",
+        "https://www.pvcfc.com.vn/Data/Sites/1/Product/8646/17.png",
+        "https://www.pvcfc.com.vn/Data/Sites/1/Product/8646/15.png",
+        "https://www.pvcfc.com.vn/Data/Sites/1/Product/8646/16.png"
+      ],
+      "documentUrls": ["https://www.pvcfc.com.vn/Data/Sites/1/media/THONGTINSP/7-3145/[signed]07-tccs-dap-18-46-rev6.pdf"],
+      "relatedUrls": [],
+      "provenance": {"sourceUrl": "https://www.pvcfc.com.vn/dap-ca-mau-br18-46-nau-den-", "retrievedAt": "2026-08-11", "retrievalMethod": "tinyfish_fetch"}
+    },
+    {
+      "id": "dap-ca-mau-18-46-hat-xanh",
+      "name": "DAP CÀ MAU 18-46 (HẠT XANH)",
+      "category": "Phân đơn",
+      "sourceUrl": "https://www.pvcfc.com.vn/dap-ca-mau-br18-46-hat-xanh-",
+      "summary": "DAP hạt xanh 18-46 được giới thiệu để thúc đẩy đẻ nhánh, ra chồi, phát triển hoa, trái và hạt, đồng thời cung cấp dinh dưỡng cân đối cho cây trồng.",
+      "attributes": {
+        "declaredGrade": "DAP 18-46",
+        "benefits": ["Thúc đẩy đẻ nhánh và ra chồi.", "Hỗ trợ phát triển hoa, trái và hạt.", "Cung cấp dinh dưỡng cân đối cho cây trồng."],
+        "crops": ["lúa", "ngô", "mía", "xoài", "nhãn", "bưởi", "chôm chôm", "dưa hấu", "ớt", "cà chua", "rau ăn lá ngắn ngày", "cà phê", "hồ tiêu", "chè", "cao su"],
+        "usage": [
+          {"crop": "Lúa", "dosage": "80-100 kg/ha/vụ", "timing": "2 lần/vụ: 7-10 và 18-22 ngày sau sạ"},
+          {"crop": "Ngô", "dosage": "80-110 kg/ha/lần", "timing": "2 lần/vụ: bón lót hoặc 7-10 ngày sau trồng, rồi 40-50 ngày sau trồng"},
+          {"crop": "Mía", "dosage": "100-120 kg/ha/lần", "timing": "2 lần/vụ: bón lót hoặc 15-20 ngày sau trồng, rồi 4-5 tháng sau trồng"},
+          {"crop": "Cây ăn trái", "dosage": "150-300 g/cây/lần khi kiến thiết cơ bản; 300-500 g/cây/lần khi kinh doanh", "timing": "Kiến thiết cơ bản 4 lần/năm; kinh doanh 3-4 lần/năm sau thu hoạch, trước ra hoa, sau đậu trái và khi trái phát triển"},
+          {"crop": "Rau ăn trái", "dosage": "80-120 kg/ha bón lót; 150-200 kg/ha/lần bón thúc", "timing": "Bón lót hoặc 7-10 ngày sau trồng; thúc 2-3 lần/vụ từ 20-25 ngày sau trồng và khi trái phát triển"},
+          {"crop": "Rau ăn lá ngắn ngày", "dosage": "80-100 kg/ha/lần", "timing": "2 lần/vụ: bón lót hoặc 7-10 ngày sau trồng, rồi 20-25 ngày sau trồng"},
+          {"crop": "Cà phê, hồ tiêu", "dosage": "Kinh doanh: 100-150 kg/ha/lần mùa khô, 150-180 kg/ha/lần mùa mưa; kiến thiết cơ bản: 100-200 g/cây/lần", "timing": "Kinh doanh 1 lần mùa khô và 1-2 lần mùa mưa; kiến thiết cơ bản 3-4 lần/năm"},
+          {"crop": "Chè", "dosage": "50-100 kg/ha/lần", "timing": "6-7 lần/năm theo chu kỳ thu hoạch"},
+          {"crop": "Cao su giai đoạn kinh doanh", "dosage": "70-100 kg/ha/lần", "timing": "2 lần/năm vào đầu và cuối mùa mưa"}
+        ]
+      },
+      "imageUrls": [
+        "https://www.pvcfc.com.vn/Data/Sites/1/Product/8645/dap-xanh-01.png",
+        "https://www.pvcfc.com.vn/Data/Sites/1/Product/8645/dap.png",
+        "https://www.pvcfc.com.vn/Data/Sites/1/Product/8645/2.png"
+      ],
+      "documentUrls": [
+        "https://www.pvcfc.com.vn/Data/Sites/1/media/THONGTINSP/7/[signed]07-tccs-dap-18-46-rev6.pdf",
+        "https://www.pvcfc.com.vn/Data/Sites/1/media/THONGTINSP/7/10-th%C3%B4ng-b%C3%A1o-ti%E1%BA%BFp-nh%E1%BA%ADn-hq.pdf"
+      ],
+      "relatedUrls": [],
+      "provenance": {"sourceUrl": "https://www.pvcfc.com.vn/dap-ca-mau-br18-46-hat-xanh-", "retrievedAt": "2026-08-11", "retrievalMethod": "tinyfish_fetch"}
+    },
+    {
+      "id": "dap-ca-mau-18-46-hat-den",
+      "name": "DAP CÀ MAU 18-46 (HẠT ĐEN)",
+      "category": "Phân đơn",
+      "sourceUrl": "https://www.pvcfc.com.vn/dap-ca-mau-br18-46-hat-den-",
+      "summary": "DAP hạt đen 18-46 được giới thiệu để thúc đẩy đẻ nhánh, ra chồi, phát triển hoa, trái và hạt, đồng thời cung cấp dinh dưỡng cân đối cho cây trồng.",
+      "attributes": {
+        "declaredGrade": "DAP 18-46",
+        "benefits": ["Thúc đẩy đẻ nhánh và ra chồi.", "Hỗ trợ phát triển hoa, trái và hạt.", "Cung cấp dinh dưỡng cân đối cho cây trồng."],
+        "crops": ["lúa", "ngô", "mía", "xoài", "nhãn", "bưởi", "chôm chôm", "dưa hấu", "ớt", "cà chua", "rau ăn lá ngắn ngày", "cà phê", "hồ tiêu", "chè", "cao su"],
+        "usage": [
+          {"crop": "Lúa", "dosage": "80-100 kg/ha/vụ", "timing": "2 lần/vụ: 7-10 và 18-22 ngày sau sạ"},
+          {"crop": "Ngô", "dosage": "80-110 kg/ha/lần", "timing": "2 lần/vụ: bón lót hoặc 7-10 ngày sau trồng, rồi 40-50 ngày sau trồng"},
+          {"crop": "Mía", "dosage": "100-120 kg/ha/lần", "timing": "2 lần/vụ: bón lót hoặc 15-20 ngày sau trồng, rồi 4-5 tháng sau trồng"},
+          {"crop": "Cây ăn trái", "dosage": "150-300 g/cây/lần khi kiến thiết cơ bản; 300-500 g/cây/lần khi kinh doanh", "timing": "Kiến thiết cơ bản 4 lần/năm; kinh doanh 3-4 lần/năm sau thu hoạch, trước ra hoa, sau đậu trái và khi trái phát triển"},
+          {"crop": "Rau ăn trái", "dosage": "80-120 kg/ha bón lót; 150-200 kg/ha/lần bón thúc", "timing": "Bón lót hoặc 7-10 ngày sau trồng; thúc 2-3 lần/vụ từ 20-25 ngày sau trồng và khi trái phát triển"},
+          {"crop": "Rau ăn lá ngắn ngày", "dosage": "80-100 kg/ha/lần", "timing": "2 lần/vụ: bón lót hoặc 7-10 ngày sau trồng, rồi 20-25 ngày sau trồng"},
+          {"crop": "Cà phê, hồ tiêu", "dosage": "Kinh doanh: 100-150 kg/ha/lần mùa khô, 150-180 kg/ha/lần mùa mưa; kiến thiết cơ bản: 100-200 g/cây/lần", "timing": "Kinh doanh 1 lần mùa khô và 1-2 lần mùa mưa; kiến thiết cơ bản 3-4 lần/năm"},
+          {"crop": "Chè", "dosage": "50-100 kg/ha/lần", "timing": "6-7 lần/năm theo chu kỳ thu hoạch"}
+        ]
+      },
+      "imageUrls": [
+        "https://www.pvcfc.com.vn/Data/Sites/1/Product/8644/dapcamau_hatden_50kg_final-02.png",
+        "https://www.pvcfc.com.vn/Data/Sites/1/Product/8644/13.png",
+        "https://www.pvcfc.com.vn/Data/Sites/1/Product/8644/2.png"
+      ],
+      "documentUrls": ["https://www.pvcfc.com.vn/Data/Sites/1/media/THONGTINSP/7/[signed]07-tccs-dap-18-46-rev6.pdf"],
+      "relatedUrls": [],
+      "provenance": {"sourceUrl": "https://www.pvcfc.com.vn/dap-ca-mau-br18-46-hat-den-", "retrievedAt": "2026-08-11", "retrievalMethod": "tinyfish_fetch"}
+    },
+    {
+      "id": "npk-ca-mau-gold-18-6-18",
+      "name": "NPK CÀ MAU GOLD 18-6-18",
+      "category": "NPK",
+      "sourceUrl": "https://www.pvcfc.com.vn/npk-ca-mau-gold-br18-6-18",
+      "summary": "Phân NPK Gold cấp 18-6-18, được giới thiệu để hỗ trợ sinh trưởng, hạn chế sâu bệnh, nâng năng suất và chất lượng nông sản, đồng thời cải thiện độ phì của đất.",
+      "attributes": {"declaredGrade": "NPK 18-6-18", "benefits": ["Hỗ trợ sinh trưởng, phát triển và hạn chế sâu bệnh.", "Hỗ trợ tăng năng suất, chất lượng nông sản và lợi nhuận.", "Cải thiện độ phì nhiêu của đất.", "Bổ sung vi lượng."], "packaging": {"construction": "Bao hai lớp, PP bên ngoài và PE bên trong", "shelfLife": "36 tháng kể từ ngày sản xuất"}},
+      "imageUrls": ["https://www.pvcfc.com.vn/Data/Sites/1/Product/8617/npk-18-6-18-truoc.png", "https://www.pvcfc.com.vn/Data/Sites/1/Product/8617/npk-18-6-18-sau.png", "https://www.pvcfc.com.vn/Data/Sites/1/Product/8617/m2-gold_18-6-18.png", "https://www.pvcfc.com.vn/Data/Sites/1/Product/8617/m2-gold_18-6-18_50kg.png", "https://www.pvcfc.com.vn/Data/Sites/1/Product/8617/m2-gold_18-6-18-matsau_50kg_v1.png", "https://www.pvcfc.com.vn/Data/Sites/1/Product/8617/m2-gold_18-6-18_50kg_v1.png", "https://www.pvcfc.com.vn/Data/Sites/1/Product/8617/2.png"],
+      "documentUrls": ["https://www.pvcfc.com.vn/Data/Sites/1/media/fileattachment/[signed]17-65-tccs-npk-gold-18-6-18-rev7.pdf", "https://www.pvcfc.com.vn/Data/Sites/1/media/THONGTINSP/65/gcn-+-dmsp-35-15-(dcm01-cnl-2023).pdf", "https://www.pvcfc.com.vn/Data/Sites/1/media/THONGTINSP/65/tbtn.97-tb-ttbvtv.pdf"],
+      "relatedUrls": [],
+      "provenance": {"sourceUrl": "https://www.pvcfc.com.vn/npk-ca-mau-gold-br18-6-18", "retrievedAt": "2026-08-11", "retrievalMethod": "tinyfish_fetch"}
+    },
+    {
+      "id": "npk-ca-mau-17-7-17",
+      "name": "NPK CÀ MAU 17-7-17",
+      "category": "NPK",
+      "sourceUrl": "https://www.pvcfc.com.vn/npk-ca-mau-17-7-17",
+      "summary": "Phân NPK cấp 17-7-17, được giới thiệu để hỗ trợ sinh trưởng, hạn chế sâu bệnh, nâng năng suất và chất lượng nông sản, đồng thời cải thiện độ phì của đất.",
+      "attributes": {"declaredGrade": "NPK 17-7-17", "benefits": ["Hỗ trợ sinh trưởng, phát triển và hạn chế sâu bệnh.", "Hỗ trợ tăng năng suất, chất lượng nông sản và lợi nhuận.", "Cải thiện độ phì nhiêu của đất."], "packaging": {"construction": "Bao hai lớp, PP bên ngoài và PE bên trong", "shelfLife": "36 tháng kể từ ngày sản xuất"}},
+      "imageUrls": ["https://www.pvcfc.com.vn/Data/Sites/1/Product/8607/npk-17-7-17-truoc.png", "https://www.pvcfc.com.vn/Data/Sites/1/Product/8607/npk-17-7-17-sau.png", "https://www.pvcfc.com.vn/Data/Sites/1/Product/8607/npk-17-7-17.png", "https://www.pvcfc.com.vn/Data/Sites/1/Product/8607/npk-c%C3%A0-mau-17-7-17_50kg.png", "https://www.pvcfc.com.vn/Data/Sites/1/Product/8607/npk-c%C3%A0-mau-17-7-17.png", "https://www.pvcfc.com.vn/Data/Sites/1/Product/8607/npk_v_17-7-17_matsau.png"],
+      "documentUrls": [],
+      "relatedUrls": [],
+      "provenance": {"sourceUrl": "https://www.pvcfc.com.vn/npk-ca-mau-17-7-17", "retrievedAt": "2026-08-11", "retrievalMethod": "tinyfish_fetch"}
+    },
+    {
+      "id": "npk-ca-mau-gold-20-20-15-te",
+      "name": "NPK CÀ MAU GOLD 20-20-15+TE",
+      "category": "NPK",
+      "sourceUrl": "https://www.pvcfc.com.vn/npk-ca-mau-gold-20-20-15te-1",
+      "summary": "Phân NPK vi lượng cấp 20-20-15+TE, được giới thiệu để hỗ trợ sinh trưởng, hạn chế sâu bệnh, nâng năng suất và chất lượng nông sản, cải thiện đất và bổ sung vi lượng.",
+      "attributes": {"declaredGrade": "NPK 20-20-15+TE", "productType": "Phân bón NPK-vi lượng", "benefits": ["Hỗ trợ sinh trưởng, phát triển và hạn chế sâu bệnh.", "Hỗ trợ tăng năng suất, chất lượng nông sản và lợi nhuận.", "Cải thiện độ phì nhiêu của đất.", "Bổ sung vi lượng."], "packaging": {"construction": "Bao hai lớp, PP bên ngoài và PE bên trong", "shelfLife": "36 tháng kể từ ngày sản xuất"}},
+      "imageUrls": ["https://www.pvcfc.com.vn/Data/Sites/1/Product/8628/npk-gold-20-20-15-te-trc.png", "https://www.pvcfc.com.vn/Data/Sites/1/Product/8628/npk-gold-20-20-15-te-sau.png", "https://www.pvcfc.com.vn/Data/Sites/1/Product/8628/npk-cm.png", "https://www.pvcfc.com.vn/Data/Sites/1/Product/8628/npk-c%C3%A0-mau.png"],
+      "documentUrls": ["https://www.pvcfc.com.vn/Data/Sites/1/media/THONGTINSP/74.3205/[signed]74.-tccs-npk-gold-20-20-15+te-rev4.pdf", "https://www.pvcfc.com.vn/Data/Sites/1/media/THONGTINSP/74.3205/11.tbtn-02.02.2024.pdf", "https://www.pvcfc.com.vn/Data/Sites/1/media/THONGTINSP/74.3205/gcn-35-15-(dcm06-mr3-2023).pdf"],
+      "relatedUrls": [],
+      "provenance": {"sourceUrl": "https://www.pvcfc.com.vn/npk-ca-mau-gold-20-20-15te-1", "retrievedAt": "2026-08-11", "retrievalMethod": "tinyfish_fetch"}
+    },
+    {
+      "id": "npk-ca-mau-20-15-7-1mg-te",
+      "name": "NPK CÀ MAU 20-15-7+1Mg+TE",
+      "category": "NPK",
+      "sourceUrl": "https://www.pvcfc.com.vn/npk-ca-mau-20-15-71mgte-2",
+      "summary": "Phân NPK cấp 20-15-7 có bổ sung 1Mg và vi lượng, được giới thiệu để hỗ trợ sinh trưởng, hạn chế sâu bệnh, nâng năng suất và chất lượng nông sản, đồng thời cải thiện đất.",
+      "attributes": {"declaredGrade": "NPK 20-15-7+1Mg+TE", "benefits": ["Hỗ trợ sinh trưởng, phát triển và hạn chế sâu bệnh.", "Hỗ trợ tăng năng suất, chất lượng nông sản và lợi nhuận.", "Cải thiện độ phì nhiêu của đất.", "Bổ sung vi lượng."], "packaging": {"construction": "Bao hai lớp, PP bên ngoài và PE bên trong", "shelfLife": "36 tháng kể từ ngày sản xuất"}},
+      "imageUrls": ["https://www.pvcfc.com.vn/Data/Sites/1/Product/8625/npk-20-15-7-mg-te-truoc.png", "https://www.pvcfc.com.vn/Data/Sites/1/Product/8625/npk-20-15-7-mg-te-sau.png", "https://www.pvcfc.com.vn/Data/Sites/1/Product/8625/trc.png", "https://www.pvcfc.com.vn/Data/Sites/1/Product/8625/sau.png"],
+      "documentUrls": ["https://www.pvcfc.com.vn/Data/Sites/1/media/THONGTINSP/50/[signed].50-tccs-npk-20-15-7-1mg-te-rev6.pdf", "https://www.pvcfc.com.vn/Data/Sites/1/media/THONGTINSP/50/gcn-+-dmsp-35-15-(dcm01-cnl-2023).pdf", "https://www.pvcfc.com.vn/Data/Sites/1/media/THONGTINSP/50/tbtn-b%E1%BA%A3n-cbhq-s%E1%BB%91-89-tb-ttbvtv-16.08.2023-npk-c%C3%A0-mau-20-15-7-1mg-te.pdf", "https://www.pvcfc.com.vn/Data/Sites/1/media/THONGTINSP/50/86-q%C4%91--bvtv-pb-ng%C3%A0y-16-1-2023-q%C4%91lh-67-s%E1%BA%A3n-ph%E1%BA%A9m.pdf"],
+      "relatedUrls": [],
+      "provenance": {"sourceUrl": "https://www.pvcfc.com.vn/npk-ca-mau-20-15-71mgte-2", "retrievedAt": "2026-08-11", "retrievalMethod": "tinyfish_fetch"}
+    },
+    {
+      "id": "npk-ca-mau-18-6-18",
+      "name": "NPK CÀ MAU 18-6-18",
+      "category": "NPK",
+      "sourceUrl": "https://www.pvcfc.com.vn/npk-ca-mau-br18-6-18",
+      "summary": "Phân NPK cấp 18-6-18, được giới thiệu để hỗ trợ sinh trưởng, hạn chế sâu bệnh, nâng năng suất và chất lượng nông sản, đồng thời cải thiện độ phì của đất.",
+      "attributes": {"declaredGrade": "NPK 18-6-18", "benefits": ["Hỗ trợ sinh trưởng, phát triển và hạn chế sâu bệnh.", "Hỗ trợ tăng năng suất, chất lượng nông sản và lợi nhuận.", "Cải thiện độ phì nhiêu của đất."], "packaging": {"construction": "Bao hai lớp, PP bên ngoài và PE bên trong", "shelfLife": "36 tháng kể từ ngày sản xuất"}},
+      "imageUrls": ["https://www.pvcfc.com.vn/Data/Sites/1/Product/8609/npk-18-6-18-truoc.png", "https://www.pvcfc.com.vn/Data/Sites/1/Product/8609/npk-18-6-18-sau.png", "https://www.pvcfc.com.vn/Data/Sites/1/Product/8609/npk-c%C3%A0-mau-18-6-18.png", "https://www.pvcfc.com.vn/Data/Sites/1/Product/8609/npk-c%C3%A0-mau-18-6-18_50kg.png", "https://www.pvcfc.com.vn/Data/Sites/1/Product/8609/m12_npk-camau-18-6-18.png", "https://www.pvcfc.com.vn/Data/Sites/1/Product/8609/m12_npk-camau-18-6-18_matsau.png", "https://www.pvcfc.com.vn/Data/Sites/1/Product/8609/2.png"],
+      "documentUrls": ["https://www.pvcfc.com.vn/Data/Sites/1/media/fileattachment/[signed]26.-tccs-npk-18-6-18-rev6.pdf", "https://www.pvcfc.com.vn/Data/Sites/1/media/THONGTINSP/26/gcn-+-dmsp-35-15-(dcm01-cnl-2023).pdf", "https://www.pvcfc.com.vn/Data/Sites/1/media/THONGTINSP/26/tbtn-b%E1%BA%A3n-cbhq-s%E1%BB%91-82-tb-ttbvtv-16.08.2023-npk-c%C3%A0-mau-18-6-18.pdf"],
+      "relatedUrls": [],
+      "provenance": {"sourceUrl": "https://www.pvcfc.com.vn/npk-ca-mau-br18-6-18", "retrievedAt": "2026-08-11", "retrievalMethod": "tinyfish_fetch"}
+    },
+    {
+      "id": "npk-ca-mau-18-16-8",
+      "name": "NPK CÀ MAU 18-16-8",
+      "category": "NPK",
+      "sourceUrl": "https://www.pvcfc.com.vn/npk-ca-mau-br18-16-8",
+      "summary": "Phân NPK cấp 18-16-8, được giới thiệu để hỗ trợ sinh trưởng, hạn chế sâu bệnh, nâng năng suất và chất lượng nông sản, đồng thời cải thiện độ phì của đất.",
+      "attributes": {"declaredGrade": "NPK 18-16-8", "benefits": ["Hỗ trợ sinh trưởng, phát triển và hạn chế sâu bệnh.", "Hỗ trợ tăng năng suất, chất lượng nông sản và lợi nhuận.", "Cải thiện độ phì nhiêu của đất."], "packaging": {"construction": "Bao hai lớp, PP bên ngoài và PE bên trong", "shelfLife": "36 tháng kể từ ngày sản xuất"}},
+      "imageUrls": ["https://www.pvcfc.com.vn/Data/Sites/1/Product/8606/npk-18-16-18-truoc.png", "https://www.pvcfc.com.vn/Data/Sites/1/Product/8606/npk-18-16-18.png", "https://www.pvcfc.com.vn/Data/Sites/1/Product/8606/npk-c%C3%A0-mau-18-16-8.png", "https://www.pvcfc.com.vn/Data/Sites/1/Product/8606/npk-c%C3%A0-mau-18-16-8_50kg.png", "https://www.pvcfc.com.vn/Data/Sites/1/Product/8606/4a1.png", "https://www.pvcfc.com.vn/Data/Sites/1/Product/8606/npk_canhdong_18-16-8_matsau.png"],
+      "documentUrls": ["https://www.pvcfc.com.vn/Data/Sites/1/media/THONGTINSP/31/[signed]31.-tccs-npk-18-16-8-rev7.pdf", "https://www.pvcfc.com.vn/Data/Sites/1/media/THONGTINSP/31/gcn-+-dmsp-35-15-(dcm01-cnl-2023).pdf", "https://www.pvcfc.com.vn/Data/Sites/1/media/THONGTINSP/31/tbtn-b%E1%BA%A3n-cbhq-s%E1%BB%91-81-tb-ttbvtv-16.08.2023-npk-c%C3%A0-mau-18-16-8.pdf", "https://www.pvcfc.com.vn/Data/Sites/1/media/THONGTINSP/31/86-q%C4%91--bvtv-pb-ng%C3%A0y-16-1-2023-q%C4%91lh-67-s%E1%BA%A3n-ph%E1%BA%A9m.pdf"],
+      "relatedUrls": [],
+      "provenance": {"sourceUrl": "https://www.pvcfc.com.vn/npk-ca-mau-br18-16-8", "retrievedAt": "2026-08-11", "retrievalMethod": "tinyfish_fetch"}
+    },
+    {
+      "id": "npk-ca-mau-18-16-8-te",
+      "name": "NPK CÀ MAU 18-16-8+TE",
+      "category": "NPK",
+      "sourceUrl": "https://www.pvcfc.com.vn/npk-ca-mau-br18-16-8te",
+      "summary": "Phân NPK cấp 18-16-8 có bổ sung vi lượng, được giới thiệu để hỗ trợ sinh trưởng, tăng năng suất và chất lượng nông sản, đồng thời tăng cường dinh dưỡng cho đất.",
+      "attributes": {"declaredGrade": "NPK 18-16-8+TE", "benefits": ["Hỗ trợ cây sinh trưởng và phát triển.", "Hỗ trợ tăng năng suất và chất lượng nông sản.", "Tăng cường dinh dưỡng cho đất.", "Bổ sung dinh dưỡng đa, trung và vi lượng."], "packaging": {"construction": "Bao hai lớp, PP bên ngoài và PE bên trong", "shelfLife": "36 tháng kể từ ngày sản xuất"}},
+      "imageUrls": ["https://www.pvcfc.com.vn/Data/Sites/1/Product/8604/118-16-8-te.png", "https://www.pvcfc.com.vn/Data/Sites/1/Product/8604/18-16-8-te.png", "https://www.pvcfc.com.vn/Data/Sites/1/Product/8604/4f1.png"],
+      "documentUrls": ["https://www.pvcfc.com.vn/Data/Sites/1/media/THONGTINSP/46/[signed]46.-tccs-npk-18-16-8+te-rev2.pdf", "https://www.pvcfc.com.vn/Data/Sites/1/media/THONGTINSP/46/gcn-35-15-(dcm04-mr2-2023).pdf", "https://www.pvcfc.com.vn/Data/Sites/1/media/THONGTINSP/46/159_tb-tbbvtv-ng%C3%A0y-14_12_2023.pdf", "https://www.pvcfc.com.vn/Data/Sites/1/media/THONGTINSP/46/86-q%C4%91--bvtv-pb-ng%C3%A0y-16-1-2023-q%C4%91lh-67-s%E1%BA%A3n-ph%E1%BA%A9m.pdf"],
+      "relatedUrls": [],
+      "provenance": {"sourceUrl": "https://www.pvcfc.com.vn/npk-ca-mau-br18-16-8te", "retrievedAt": "2026-08-11", "retrievalMethod": "tinyfish_fetch"}
+    },
+    {
+      "id": "npk-ca-mau-16-7-17",
+      "name": "NPK CÀ MAU 16-7-17",
+      "category": "NPK",
+      "sourceUrl": "https://www.pvcfc.com.vn/npk-ca-mau-br16-7-17",
+      "summary": "Phân NPK cấp 16-7-17, được giới thiệu để hỗ trợ sinh trưởng, hạn chế sâu bệnh, nâng năng suất và chất lượng nông sản, đồng thời cải thiện độ phì của đất.",
+      "attributes": {"declaredGrade": "NPK 16-7-17", "benefits": ["Hỗ trợ sinh trưởng, phát triển và hạn chế sâu bệnh.", "Hỗ trợ tăng năng suất, chất lượng nông sản và lợi nhuận.", "Cải thiện độ phì nhiêu của đất."], "packaging": {"construction": "Bao hai lớp, PP bên ngoài và PE bên trong", "shelfLife": "36 tháng kể từ ngày sản xuất"}},
+      "imageUrls": ["https://www.pvcfc.com.vn/Data/Sites/1/Product/8602/npk-16-7-17-truoc.png", "https://www.pvcfc.com.vn/Data/Sites/1/Product/8602/npk-ca%CC%80-mau-16-7-17.png", "https://www.pvcfc.com.vn/Data/Sites/1/Product/8602/m3_v_npk-ca%CC%80-mau-16-7-17_matsau.png", "https://www.pvcfc.com.vn/Data/Sites/1/Product/8602/npk-16-7-17.png", "https://www.pvcfc.com.vn/Data/Sites/1/Product/8602/5.png", "https://www.pvcfc.com.vn/Data/Sites/1/Product/8602/32.png"],
+      "documentUrls": ["https://www.pvcfc.com.vn/Data/Sites/1/media/fileattachment/[signed]5-25-tccs-npk-16-7-17-rev5.pdf", "https://www.pvcfc.com.vn/Data/Sites/1/media/THONGTINSP/25/gcn-+-dmsp-35-15-(dcm01-cnl-2023).pdf", "https://www.pvcfc.com.vn/Data/Sites/1/media/THONGTINSP/25/tbtn-b%E1%BA%A3n-cbhq-s%E1%BB%91-78-tb-ttbvtv-16.08.2023-npk-c%C3%A0-mau-16-7-17.pdf"],
+      "relatedUrls": [],
+      "provenance": {"sourceUrl": "https://www.pvcfc.com.vn/npk-ca-mau-br16-7-17", "retrievedAt": "2026-08-11", "retrievalMethod": "tinyfish_fetch"}
+    },
+    {
+      "id": "npk-ca-mau-16-8-16",
+      "name": "NPK CÀ MAU 16-8-16",
+      "category": "NPK",
+      "sourceUrl": "https://www.pvcfc.com.vn/npk-ca-mau-16-8-16",
+      "summary": "Phân NPK cấp 16-8-16, được giới thiệu để hỗ trợ cây sinh trưởng, nâng năng suất và chất lượng nông sản, đồng thời tăng cường dinh dưỡng cho đất.",
+      "attributes": {"declaredGrade": "NPK 16-8-16", "benefits": ["Hỗ trợ cây sinh trưởng và phát triển.", "Hỗ trợ tăng năng suất và chất lượng nông sản.", "Tăng cường dinh dưỡng cho đất."], "packaging": {"construction": "Bao hai lớp, PP bên ngoài và PE bên trong", "shelfLife": "36 tháng kể từ ngày sản xuất"}},
+      "imageUrls": ["https://www.pvcfc.com.vn/Data/Sites/1/Product/8638/16-8-16_truoc.png", "https://www.pvcfc.com.vn/Data/Sites/1/Product/8638/16-8-16_sau.png"],
+      "documentUrls": [],
+      "relatedUrls": [],
+      "provenance": {"sourceUrl": "https://www.pvcfc.com.vn/npk-ca-mau-16-8-16", "retrievedAt": "2026-08-11", "retrievalMethod": "tinyfish_fetch"}
+    },
+    {
+      "id": "npk-ca-mau-gold-18-8-16",
+      "name": "NPK CÀ MAU GOLD 18-8-16",
+      "category": "NPK",
+      "sourceUrl": "https://www.pvcfc.com.vn/npk-ca-mau-gold-18-8-16",
+      "summary": "Phân NPK Gold cấp 18-8-16, được giới thiệu để hỗ trợ cây sinh trưởng, nâng năng suất và chất lượng nông sản, đồng thời tăng cường dinh dưỡng cho đất.",
+      "attributes": {"declaredGrade": "NPK 18-8-16", "benefits": ["Hỗ trợ cây sinh trưởng và phát triển.", "Hỗ trợ tăng năng suất và chất lượng nông sản.", "Tăng cường dinh dưỡng cho đất."], "packaging": {"construction": "Bao hai lớp, PP bên ngoài và PE bên trong", "shelfLife": "36 tháng kể từ ngày sản xuất"}},
+      "imageUrls": ["https://www.pvcfc.com.vn/Data/Sites/1/Product/8637/18-8-16-gold-truoc.png", "https://www.pvcfc.com.vn/Data/Sites/1/Product/8637/18-8-16-gold-sau.png"],
+      "documentUrls": [],
+      "relatedUrls": [],
+      "provenance": {"sourceUrl": "https://www.pvcfc.com.vn/npk-ca-mau-gold-18-8-16", "retrievedAt": "2026-08-11", "retrievalMethod": "tinyfish_fetch"}
+    },
+    {
+      "id": "npk-ca-mau-gold-17-6-17",
+      "name": "NPK CÀ MAU GOLD 17-6-17",
+      "category": "NPK",
+      "sourceUrl": "https://www.pvcfc.com.vn/npk-ca-mau-gold-17-6-17",
+      "summary": "Phân NPK Gold cấp 17-6-17, được giới thiệu để hỗ trợ cây sinh trưởng, nâng năng suất và chất lượng nông sản, đồng thời tăng cường dinh dưỡng cho đất.",
+      "attributes": {"declaredGrade": "NPK 17-6-17", "benefits": ["Hỗ trợ cây sinh trưởng và phát triển.", "Hỗ trợ tăng năng suất và chất lượng nông sản.", "Tăng cường dinh dưỡng cho đất."], "packaging": {"construction": "Bao hai lớp, PP bên ngoài và PE bên trong", "shelfLife": "36 tháng kể từ ngày sản xuất"}},
+      "imageUrls": ["https://www.pvcfc.com.vn/Data/Sites/1/Product/8636/gold-17-6-17_truoc.png", "https://www.pvcfc.com.vn/Data/Sites/1/Product/8636/gold-17-6-17_sau.png"],
+      "documentUrls": [],
+      "relatedUrls": [],
+      "provenance": {"sourceUrl": "https://www.pvcfc.com.vn/npk-ca-mau-gold-17-6-17", "retrievedAt": "2026-08-11", "retrievalMethod": "tinyfish_fetch"}
+    }
+  ]
+}

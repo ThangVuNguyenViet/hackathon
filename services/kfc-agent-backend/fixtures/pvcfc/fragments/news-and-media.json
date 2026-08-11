@@ -1,0 +1,415 @@
+{
+  "schemaVersion": "pvcfc-public-fixture-fragment-v1",
+  "kind": "news_media",
+  "retrievedAt": "2026-08-11",
+  "crawlScope": {
+    "completeness": "partial_curated_inventory",
+    "officialDomain": "https://www.pvcfc.com.vn",
+    "listingPagesVisited": [
+      "https://www.pvcfc.com.vn/tin-tuc?pagenumber=1",
+      "https://www.pvcfc.com.vn/tin-tuc?pagenumber=2",
+      "https://www.pvcfc.com.vn/tin-tuc?pagenumber=3",
+      "https://www.pvcfc.com.vn/khuyen-mai",
+      "https://www.pvcfc.com.vn/nghien-cuu-va-phat-trien",
+      "https://www.pvcfc.com.vn/tu-van-ky-thuat",
+      "https://www.pvcfc.com.vn/bao-chi-noi-ve-pvcfc"
+    ],
+    "reportedPagination": {
+      "generalNewsPages": 321,
+      "technicalAdvicePages": 14,
+      "researchAndDevelopmentPages": 2,
+      "pressCoveragePages": 3
+    },
+    "selectionRule": "Curated records relevant to products, services, agronomy, dealer programs, launches, and current operations; older launch and service pages were added through targeted official-domain searches.",
+    "limitations": "This is not an exhaustive archive crawl. General news was bounded to pages 1-3, category indexes to their first visible page, and targeted search results to the first 10 results per query. Dynamic listing extraction was unavailable after the TinyFish agent credit limit was reached, so article metadata and summaries were verified with TinyFish fetches of the official pages."
+  },
+  "records": [
+    {
+      "id": "news-2026-07-25-robusta-value-chain",
+      "name": "Phân Bón Cà Mau nâng tầm giá trị mới cho cà phê Robusta Việt",
+      "sourceUrl": "https://www.pvcfc.com.vn/phan-bon-ca-mau-nang-tam-gia-tri-moi-cho-ca-phe-robusta-viet",
+      "summary": "PVCFC joined the 24 July 2026 workshop in Lâm Đồng on improving Vietnamese Robusta quality from the farm level. The company framed crop nutrition, field technique, digital agriculture, traceability, lower emissions, and stronger links among growers, buyers, and processors as parts of a higher-value, more sustainable coffee chain.",
+      "attributes": {
+        "publishedDate": "2026-07-25",
+        "topics": ["agronomy", "coffee", "crop nutrition", "sustainable agriculture", "value chain"],
+        "mentionedProducts": ["crop nutrition solutions", "digital agriculture platforms"],
+        "status": "published_current"
+      },
+      "imageUrls": [
+        "https://www.pvcfc.com.vn/Data/Sites/1/media/h%C3%ACnh-%E1%BA%A3nh-2026/thang-7/ho%CC%A3%CC%82i-tha%CC%89o-%E2%80%9Cna%CC%82ng-cha%CC%82%CC%81t-robusta-vie%CC%A3%CC%82t-tu%CC%9B%CC%80-go%CC%82%CC%81c%E2%80%9D-ta%CC%A3i-la%CC%82m-%C4%91o%CC%82%CC%80ng.jpg"
+      ],
+      "documentUrls": [],
+      "relatedUrls": [
+        "https://www.pvcfc.com.vn/en-US/ca-mau-fertilizer-elevates-vietnamese-robusta-coffee-to-new-heights"
+      ],
+      "provenance": {
+        "publisher": "PVCFC",
+        "sourceUrl": "https://www.pvcfc.com.vn/phan-bon-ca-mau-nang-tam-gia-tri-moi-cho-ca-phe-robusta-viet",
+        "sourceType": "official_company_news",
+        "retrievalMethod": "tinyfish_fetch",
+        "retrievedAt": "2026-08-11",
+        "language": "vi",
+        "evidence": "Official page title, publication metadata, article body, and article image were fetched directly."
+      }
+    },
+    {
+      "id": "news-2026-07-18-compost-guide",
+      "name": "Phân bón compost là gì? Hướng dẫn ủ và sử dụng phân compost hiệu quả",
+      "sourceUrl": "https://www.pvcfc.com.vn/phan-bon-compost-la-gi",
+      "summary": "PVCFC's technical guide explains compost as aerobically decomposed organic material that improves soil structure, water retention, microbial activity, and long-term fertility. It outlines material selection, carbon-to-nitrogen balance, moisture, aeration, temperature, maturity checks, and crop-specific use, while noting that compost complements rather than fully replaces NPK nutrition.",
+      "attributes": {
+        "publishedDate": "2026-07-18",
+        "topics": ["agronomy", "composting", "soil health", "technical advice", "circular agriculture"],
+        "mentionedProducts": ["compost", "NPK Cà Mau"],
+        "status": "published_current"
+      },
+      "imageUrls": [
+        "https://www.pvcfc.com.vn/Data/Sites/1/media/tin-tuc/phan-bon-compost.png"
+      ],
+      "documentUrls": [],
+      "relatedUrls": [
+        "https://www.pvcfc.com.vn/tu-van-ky-thuat"
+      ],
+      "provenance": {
+        "publisher": "PVCFC",
+        "sourceUrl": "https://www.pvcfc.com.vn/phan-bon-compost-la-gi",
+        "sourceType": "official_technical_advice",
+        "retrievalMethod": "tinyfish_fetch",
+        "retrievedAt": "2026-08-11",
+        "language": "vi",
+        "evidence": "Official page title, publication metadata, technical sections, and article image were fetched directly."
+      }
+    },
+    {
+      "id": "news-2026-07-09-farmer-support",
+      "name": "Hỗ trợ nhà nông vượt khó: Điểm tựa cho một mùa vụ vững tin hơn",
+      "sourceUrl": "https://www.pvcfc.com.vn/ho-tro-nha-nong-vuot-kho-diem-tua-cho-mot-mua-vu-vung-tin-hon",
+      "summary": "PVCFC's media page describes its nationwide farmer-support program as practical assistance for growers facing difficult production conditions and as part of a farmer-centered sustainability approach. The official page also links to the originating Petrovietnam/PetroTimes coverage.",
+      "attributes": {
+        "publishedDate": "2026-07-09",
+        "topics": ["farmer support", "agricultural services", "rural livelihoods", "sustainability"],
+        "mentionedProducts": [],
+        "status": "published_current"
+      },
+      "imageUrls": [],
+      "documentUrls": [],
+      "relatedUrls": [
+        "https://petrovietnam.petrotimes.vn/ho-tro-nha-nong-vuot-kho-diem-tua-cho-mot-mua-vu-vung-tin-hon-743230.html",
+        "https://www.pvcfc.com.vn/phan-bon-ca-mau-trien-khai-chuong-trinh-ho-tro-nha-nong-vuot-kho-tren-toan-quoc"
+      ],
+      "provenance": {
+        "publisher": "PVCFC",
+        "sourceUrl": "https://www.pvcfc.com.vn/ho-tro-nha-nong-vuot-kho-diem-tua-cho-mot-mua-vu-vung-tin-hon",
+        "sourceType": "official_company_press_republication",
+        "retrievalMethod": "tinyfish_fetch",
+        "retrievedAt": "2026-08-11",
+        "language": "vi",
+        "evidence": "Publication date and description were fetched from the official PVCFC page; the originating media URL was extracted from that page."
+      }
+    },
+    {
+      "id": "news-2026-06-26-usda-irri-plant-visit",
+      "name": "Đoàn công tác USDA và IRRI thăm, làm việc tại Nhà máy Đạm Cà Mau",
+      "sourceUrl": "https://www.pvcfc.com.vn/doan-cong-tac-usda-va-irri-tham-lam-viec-tai-nha-may-dam-ca-mau",
+      "summary": "PVCFC hosted USDA and IRRI representatives at the Cà Mau fertilizer plant to discuss efficient fertilizer use, lower-emission agriculture, and possible cooperation. The visit covered the plant's production technology, safety management, principal fertilizer lines, and stated design capacities of 800,000 tonnes of urea and 300,000 tonnes of NPK per year.",
+      "attributes": {
+        "publishedDate": "2026-06-26",
+        "topics": ["current operations", "plant capacity", "fertilizer efficiency", "low-emission agriculture", "international cooperation"],
+        "mentionedProducts": ["urea", "NPK"],
+        "status": "published_current"
+      },
+      "imageUrls": [
+        "https://www.pvcfc.com.vn/Data/Sites/1/media/h%C3%ACnh-%E1%BA%A3nh-2026/thang-6/doan-cong-tac-usda-va-irri.jpg"
+      ],
+      "documentUrls": [],
+      "relatedUrls": [
+        "https://www.pvcfc.com.vn/en-US/usda-and-irri-delegation-visits-and-holds-working-session-at-ca-mau-fertilizer-plant"
+      ],
+      "provenance": {
+        "publisher": "PVCFC",
+        "sourceUrl": "https://www.pvcfc.com.vn/doan-cong-tac-usda-va-irri-tham-lam-viec-tai-nha-may-dam-ca-mau",
+        "sourceType": "official_company_news",
+        "retrievalMethod": "tinyfish_fetch",
+        "retrievedAt": "2026-08-11",
+        "language": "vi",
+        "evidence": "Official page title, publication metadata, operational details, capacity figures, and article image were fetched directly."
+      }
+    },
+    {
+      "id": "news-2026-06-26-half-year-operations",
+      "name": "Vượt kế hoạch 6 tháng, Phân Bón Cà Mau tiếp tục bứt phá",
+      "sourceUrl": "https://www.pvcfc.com.vn/vuot-ke-hoach-6-thang-phan-bon-ca-mau-tiep-tuc-but-pha",
+      "summary": "At its first-half 2026 business review, PVCFC reported more than VND 11.8 trillion in product revenue and over 900,000 tonnes sold, completing more than 59% of its annual volume plan. Management said the next phase would focus on operating efficiency, value-chain optimization, core-product competitiveness, market expansion, trade promotion, customer care, and dealer support.",
+      "attributes": {
+        "publishedDate": "2026-06-26",
+        "topics": ["current operations", "sales", "distribution", "market expansion", "dealer support"],
+        "mentionedProducts": ["PVCFC product portfolio"],
+        "status": "published_current"
+      },
+      "imageUrls": [
+        "https://www.pvcfc.com.vn/Data/Sites/1/media/h%C3%ACnh-%E1%BA%A3nh-2026/thang-6/pvcfc-to%CC%82%CC%89-chu%CC%9B%CC%81c-ho%CC%A3%CC%82i-nghi%CC%A3-so%CC%9B-ke%CC%82%CC%81t-hoa%CC%A3t-%C4%91o%CC%A3%CC%82ng-kinh-doan.jpg"
+      ],
+      "documentUrls": [],
+      "relatedUrls": [
+        "https://www.pvcfc.com.vn/en-US/ca-mau-fertilizer-surpasses-six-month-targets-and-continues-its-strong-growth-momentum"
+      ],
+      "provenance": {
+        "publisher": "PVCFC",
+        "sourceUrl": "https://www.pvcfc.com.vn/vuot-ke-hoach-6-thang-phan-bon-ca-mau-tiep-tuc-but-pha",
+        "sourceType": "official_company_news",
+        "retrievalMethod": "tinyfish_fetch",
+        "retrievedAt": "2026-08-11",
+        "language": "vi",
+        "evidence": "Official page title, publication metadata, reported results, stated priorities, and article image were fetched directly."
+      }
+    },
+    {
+      "id": "news-2026-06-26-dealer-sales-awards",
+      "name": "Chinh phục doanh số - rinh thưởng hơn 14 tỷ đồng",
+      "sourceUrl": "https://www.pvcfc.com.vn/chinh-phuc-doanh-so-rinh-thuong-hon-14-ty-dong",
+      "summary": "PVCFC recognized high-performing distributors from Vietnam and Cambodia under its 2025 sales-promotion program. The company reported more than VND 14 billion in awards, including gold and delivery trucks, and emphasized stable supply, market-development support, and continued engagement with its distribution network.",
+      "attributes": {
+        "publishedDate": "2026-06-26",
+        "topics": ["dealer program", "distribution", "sales promotion", "channel incentives", "Cambodia"],
+        "mentionedProducts": ["Phân bón Cà Mau product portfolio"],
+        "status": "completed_program_report"
+      },
+      "imageUrls": [
+        "https://www.pvcfc.com.vn/Data/Sites/1/media/h%C3%ACnh-%E1%BA%A3nh-2026/thang-6/o%CC%82ng-nguye%CC%82%CC%83n-thanh-tu%CC%80ng,-tg%C4%91-pvcfc-trao-gia%CC%89i-xe-ta%CC%89i-hyundai-3,5.jpg"
+      ],
+      "documentUrls": [],
+      "relatedUrls": [
+        "https://www.pvcfc.com.vn/en-US/conquer-sales-targets-win-over-14-billion-vnd-in-rewards"
+      ],
+      "provenance": {
+        "publisher": "PVCFC",
+        "sourceUrl": "https://www.pvcfc.com.vn/chinh-phuc-doanh-so-rinh-thuong-hon-14-ty-dong",
+        "sourceType": "official_company_news",
+        "retrievalMethod": "tinyfish_fetch",
+        "retrievedAt": "2026-08-11",
+        "language": "vi",
+        "evidence": "Official page title, publication metadata, award composition, program context, and article image were fetched directly."
+      }
+    },
+    {
+      "id": "news-2026-05-05-mua-vang-thang-lon",
+      "name": "Mùa Vàng Thắng Lớn 2026: nâng cấp giải nhất với Honda Wave RSX",
+      "sourceUrl": "https://www.pvcfc.com.vn/mua-vang-thang-lon-2026-nang-cap-giai-nhat-tang-niem-vui-thang-lon-voi-honda-wave-rsx",
+      "summary": "PVCFC announced an updated nationwide consumer promotion worth more than VND 24 billion for buyers of eligible NPK Cà Mau products. Customers use an in-bag QR code to enter; the revised top prize is a Honda Wave RSX, while other prizes include gold rings and phone credit. The published program period runs through 28 February 2027.",
+      "attributes": {
+        "publishedDate": "2026-05-05",
+        "topics": ["promotion", "farmer program", "QR participation", "customer engagement"],
+        "mentionedProducts": ["NPK Cà Mau"],
+        "status": "active_through_2027-02-28"
+      },
+      "imageUrls": [],
+      "documentUrls": [
+        "https://www.pvcfc.com.vn/Data/Sites/1/media/tai-lieu-2026/Filemuctintuc/1463cvxndieuchinhmvtl1.pdf"
+      ],
+      "relatedUrls": [
+        "https://muavangthanglon.pvcfc.com.vn/",
+        "https://www.pvcfc.com.vn/the-le-chuong-trinh-khuyen-mai-mua-vang-thang-lon-2026",
+        "https://www.pvcfc.com.vn/en-US/golden-harvestbig-win-2026-first-prize-upgraded-to-honda-wave-rsx"
+      ],
+      "provenance": {
+        "publisher": "PVCFC",
+        "sourceUrl": "https://www.pvcfc.com.vn/mua-vang-thang-lon-2026-nang-cap-giai-nhat-tang-niem-vui-thang-lon-voi-honda-wave-rsx",
+        "sourceType": "official_promotion_news",
+        "retrievalMethod": "tinyfish_fetch",
+        "retrievedAt": "2026-08-11",
+        "language": "vi",
+        "evidence": "Official page title, publication metadata, eligibility mechanism, prize update, end date, linked campaign site, and PDF were fetched directly."
+      }
+    },
+    {
+      "id": "news-2026-02-27-food-grade-co2-launch",
+      "name": "PVCFC mở rộng chuỗi giá trị bằng CO2 thực phẩm",
+      "sourceUrl": "https://www.pvcfc.com.vn/pvcfc-mo-rong-chuoi-gia-tri-bang-co2-thuc-pham-hoan-thien-cau-truc-san-pham-da-tru-cot",
+      "summary": "PVCFC reported that its food-grade liquid CO2 project entered operation in early February 2026 and delivered a first commercial lot of 75 tonnes. The VND 86 billion plant is designed for 50 tonnes per day, recovers CO2 from fertilizer-production gas streams, produces to the ISBT food standard, and has Messer Vietnam as the offtake partner.",
+      "attributes": {
+        "publishedDate": "2026-02-27",
+        "topics": ["product launch", "current operations", "industrial gas", "circular economy", "value-chain expansion"],
+        "mentionedProducts": ["food-grade liquid CO2"],
+        "status": "commercial_operation"
+      },
+      "imageUrls": [
+        "https://www.pvcfc.com.vn/Data/Sites/1/media/h%C3%ACnh-%E1%BA%A3nh-2026/th%C3%A1ng-2/du%CC%9B%CC%A3-a%CC%81n-co2-(1).jpg"
+      ],
+      "documentUrls": [
+        "https://www.pvcfc.com.vn/Data/Sites/1/media/tai-lieu-2026/1signedbantucongbosanphamco2.pdf"
+      ],
+      "relatedUrls": [
+        "https://www.pvcfc.com.vn/en-US/pvcfc-expands-value-chain-with-food-grade-co-completing-a-multi-pillar-product-structure"
+      ],
+      "provenance": {
+        "publisher": "PVCFC",
+        "sourceUrl": "https://www.pvcfc.com.vn/pvcfc-mo-rong-chuoi-gia-tri-bang-co2-thuc-pham-hoan-thien-cau-truc-san-pham-da-tru-cot",
+        "sourceType": "official_company_news",
+        "retrievalMethod": "tinyfish_fetch",
+        "retrievedAt": "2026-08-11",
+        "language": "vi",
+        "evidence": "Official page title, publication metadata, launch timing, first-lot volume, project cost, capacity, process, standard, partner, and article image were fetched directly; the linked product declaration was exposed by PVCFC's R&D index."
+      }
+    },
+    {
+      "id": "news-2025-09-17-cambodia-market-expansion",
+      "name": "PVCFC tăng tốc mở rộng thị phần tại Campuchia",
+      "sourceUrl": "https://www.pvcfc.com.vn/pvcfc-tang-toc-mo-rong-thi-phan-tai-campuchia",
+      "summary": "PVCFC reported a market-development trip to Cambodia led by a deputy general director, focused on expanding fertilizer presence and strengthening commercial relationships. The page positions Cambodia as an active export and distribution market for the company.",
+      "attributes": {
+        "publishedDate": "2025-09-17",
+        "topics": ["market expansion", "distribution", "export", "Cambodia", "dealer relations"],
+        "mentionedProducts": ["fertilizer portfolio"],
+        "status": "published_historical"
+      },
+      "imageUrls": [],
+      "documentUrls": [],
+      "relatedUrls": [],
+      "provenance": {
+        "publisher": "PVCFC",
+        "sourceUrl": "https://www.pvcfc.com.vn/pvcfc-tang-toc-mo-rong-thi-phan-tai-campuchia",
+        "sourceType": "official_company_news",
+        "retrievalMethod": "tinyfish_fetch",
+        "retrievedAt": "2026-08-11",
+        "language": "vi",
+        "evidence": "Official page title, publication metadata, and description were fetched directly; image extraction returned unrelated listing thumbnails, so none were retained."
+      }
+    },
+    {
+      "id": "news-2025-09-15-chavi-agriculture-value-chain",
+      "name": "PVCFC và CHAVI hợp tác phát triển chuỗi giá trị nông nghiệp",
+      "sourceUrl": "https://www.pvcfc.com.vn/pvcfc-va-chavi-ky-ket-thoa-thuan-hop-tac-phat-trien-chuoi-gia-tri-nong-nghiep",
+      "summary": "PVCFC and CHAVI announced a cooperation agreement aimed at developing an agricultural value chain. The official page places the partnership within PVCFC's role as a producer and supplier of fertilizer and agricultural inputs and its stated direction toward greener, more sustainable agriculture.",
+      "attributes": {
+        "publishedDate": "2025-09-15",
+        "topics": ["agricultural value chain", "partnership", "market development", "sustainable agriculture"],
+        "mentionedProducts": ["fertilizer and agricultural inputs"],
+        "status": "published_historical"
+      },
+      "imageUrls": [],
+      "documentUrls": [],
+      "relatedUrls": [
+        "https://www.pvcfc.com.vn/en-US/pvcfc-and-chavi-sign-cooperation-agreement-to-develop-an-agricultural-value-chain"
+      ],
+      "provenance": {
+        "publisher": "PVCFC",
+        "sourceUrl": "https://www.pvcfc.com.vn/pvcfc-va-chavi-ky-ket-thoa-thuan-hop-tac-phat-trien-chuoi-gia-tri-nong-nghiep",
+        "sourceType": "official_company_news",
+        "retrievalMethod": "tinyfish_fetch",
+        "retrievedAt": "2026-08-11",
+        "language": "vi",
+        "evidence": "Official page title, publication metadata, description, and English counterpart were fetched directly; image extraction returned unrelated listing thumbnails, so none were retained."
+      }
+    },
+    {
+      "id": "news-2025-01-11-urban-agriculture-store",
+      "name": "Phân Bón Cà Mau khai trương cửa hàng Nông nghiệp đô thị đầu tiên tại TP.HCM",
+      "sourceUrl": "https://www.pvcfc.com.vn/phan-bon-ca-mau-khai-truong-cua-hang-nong-nghiep-do-thi-dau-tien-tai-tp-ho-chi-minh",
+      "summary": "PVCFC opened its first urban-agriculture store in Gò Vấp, Ho Chi Minh City, as the starting point for a dedicated urban-agriculture business segment. The store supports a broader offer spanning crop-nutrition solutions, selected equipment, and convenient products intended for safe, technology-enabled urban growing.",
+      "attributes": {
+        "publishedDate": "2025-01-11",
+        "topics": ["service launch", "retail", "urban agriculture", "crop nutrition", "equipment"],
+        "mentionedProducts": ["urban agriculture products", "crop nutrition solutions", "agricultural equipment"],
+        "status": "launched"
+      },
+      "imageUrls": [
+        "https://www.pvcfc.com.vn/Data/Sites/1/media/content/1101.1.jpg"
+      ],
+      "documentUrls": [],
+      "relatedUrls": [
+        "https://www.pvcfc.com.vn/nong-nghiep-do-thi",
+        "https://www.pvcfc.com.vn/en-US/ca-mau-fertilizer-opens-the-first-urban-agriculture-store-in-ho-chi-minh-city"
+      ],
+      "provenance": {
+        "publisher": "PVCFC",
+        "sourceUrl": "https://www.pvcfc.com.vn/phan-bon-ca-mau-khai-truong-cua-hang-nong-nghiep-do-thi-dau-tien-tai-tp-ho-chi-minh",
+        "sourceType": "official_company_news",
+        "retrievalMethod": "tinyfish_fetch",
+        "retrievedAt": "2026-08-11",
+        "language": "vi",
+        "evidence": "Official page title, publication metadata, address, service positioning, offer description, and article image were fetched directly."
+      }
+    },
+    {
+      "id": "news-2024-12-17-2nong-ai-diagnosis",
+      "name": "Phân Bón Cà Mau ra mắt AI chẩn đoán sâu bệnh trên ứng dụng 2Nông",
+      "sourceUrl": "https://www.pvcfc.com.vn/phan-bon-ca-mau-ra-mat-ai-tinh-nang-chan-doan-sau-benh-tren-ung-dung-2nong",
+      "summary": "PVCFC launched a free AI-assisted pest and disease diagnosis feature for farmers through the 2Nông application and its digital channels. The company described the feature as helping growers identify plant problems earlier and use weather, soil, and irrigation information to improve cultivation decisions, time, cost, yield, and crop quality.",
+      "attributes": {
+        "publishedDate": "2024-12-17",
+        "topics": ["service launch", "digital agriculture", "AI diagnosis", "pest and disease", "farmer advisory"],
+        "mentionedProducts": ["2Nông"],
+        "status": "launched"
+      },
+      "imageUrls": [
+        "https://www.pvcfc.com.vn/Data/Sites/1/media/content/1712.1.jpg"
+      ],
+      "documentUrls": [],
+      "relatedUrls": [
+        "https://www.pvcfc.com.vn/2-nong",
+        "https://www.pvcfc.com.vn/en-US/ca-mau-fertilizer-launches-ai-pest-disease-diagnosis-feature-on-2nong-application"
+      ],
+      "provenance": {
+        "publisher": "PVCFC",
+        "sourceUrl": "https://www.pvcfc.com.vn/phan-bon-ca-mau-ra-mat-ai-tinh-nang-chan-doan-sau-benh-tren-ung-dung-2nong",
+        "sourceType": "official_company_news",
+        "retrievalMethod": "tinyfish_fetch",
+        "retrievedAt": "2026-08-11",
+        "language": "vi",
+        "evidence": "Official page title, publication metadata, feature description, farmer use cases, and article image were fetched directly."
+      }
+    },
+    {
+      "id": "news-2024-05-04-australia-bulk-export-certification",
+      "name": "PVCFC nhận chứng chỉ xuất khẩu phân bón hàng rời vào thị trường Úc",
+      "sourceUrl": "https://www.pvcfc.com.vn/doanh-nghiep-dau-tien-cua-viet-nam-duoc-cap-chung-chi-xuat-khau-phan-bon-vao-thi-truong-uc",
+      "summary": "PVCFC reported receiving certification to export bulk fertilizer to Australia after assessment of production and the ship-loading route. The company described itself as the first Vietnamese fertilizer producer to obtain the certification and linked the milestone to product quality plus storage, handling, and logistics controls.",
+      "attributes": {
+        "publishedDate": "2024-05-04",
+        "topics": ["certification", "export", "Australia", "quality assurance", "logistics"],
+        "mentionedProducts": ["bulk fertilizer", "Cà Mau granular urea"],
+        "status": "certified"
+      },
+      "imageUrls": [
+        "https://www.pvcfc.com.vn/Data/Sites/1/media/content/nh%C3%A0-m%C3%A1y-%C4%91%E1%BA%A1m-c%C3%A0-mau---nh%C3%A0-m%C3%A1y-s%E1%BA%A3n-xu%E1%BA%A5t-ph%C3%A2n-%C4%91%E1%BA%A1m-ur%C3%AA-h%E1%BA%A1t-%C4%91%E1%BB%A5c-hi%E1%BB%87n-%C4%91%E1%BA%A1i-nh%E1%BA%A5t-vi%E1%BB%87t-nam-hi%E1%BB%87n-nay---copy.jpg"
+      ],
+      "documentUrls": [],
+      "relatedUrls": [],
+      "provenance": {
+        "publisher": "PVCFC",
+        "sourceUrl": "https://www.pvcfc.com.vn/doanh-nghiep-dau-tien-cua-viet-nam-duoc-cap-chung-chi-xuat-khau-phan-bon-vao-thi-truong-uc",
+        "sourceType": "official_company_news",
+        "retrievalMethod": "tinyfish_fetch",
+        "retrievedAt": "2026-08-11",
+        "language": "vi",
+        "evidence": "Official page title, publication metadata, certification scope, assessment period, logistics context, and article image were fetched directly."
+      }
+    },
+    {
+      "id": "news-2015-11-26-nhumate-te-launch",
+      "name": "PVCFC ra mắt phân bón cao cấp N.Humate+TE",
+      "sourceUrl": "https://www.pvcfc.com.vn/pvcfc-ra-mat-phan-bon-cao-cap-nhumatete",
+      "summary": "PVCFC launched N.Humate+TE after research, field trials, and installation of a production line. The product combines urea, humic acid, zinc, and boron; PVCFC reported trials on coffee, pepper, vegetables, and rice and said the trials indicated fertilizer savings of 20–30% compared with conventional urea.",
+      "attributes": {
+        "publishedDate": "2015-11-26",
+        "topics": ["product launch", "research and development", "field trials", "soil health", "nutrient efficiency"],
+        "mentionedProducts": ["N.Humate+TE", "Cà Mau urea"],
+        "status": "historical_launch"
+      },
+      "imageUrls": [
+        "https://www.pvcfc.com.vn/Data/Sites/1/media/content/IMG_8809.jpg"
+      ],
+      "documentUrls": [],
+      "relatedUrls": [],
+      "provenance": {
+        "publisher": "PVCFC",
+        "sourceUrl": "https://www.pvcfc.com.vn/pvcfc-ra-mat-phan-bon-cao-cap-nhumatete",
+        "sourceType": "official_company_news",
+        "retrievalMethod": "tinyfish_fetch",
+        "retrievedAt": "2026-08-11",
+        "language": "vi",
+        "evidence": "Official page title, publication metadata, formulation, trial crops, reported comparison, and article image were fetched directly."
+      }
+    }
+  ]
+}

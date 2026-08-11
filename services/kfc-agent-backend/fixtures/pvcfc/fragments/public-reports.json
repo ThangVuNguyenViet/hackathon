@@ -1,0 +1,125 @@
+{
+  "schemaVersion": "pvcfc-public-fixture-fragment-v1",
+  "kind": "public_reports",
+  "retrievedAt": "2026-08-11",
+  "records": [
+    {
+      "id": "pvcfc-annual-report-2025",
+      "name": "PVCFC Annual Report 2025",
+      "sourceUrl": "https://www.pvcfc.com.vn/en-US/annual-report-2025",
+      "summary": "PVCFC's official 2025 annual report provides an interactive report and an English PDF. This fixture retains only durable organization, product-portfolio, and production-facility facts; financial results, forecasts, and investment commentary are intentionally excluded.",
+      "attributes": {
+        "reportType": "annual_report",
+        "period": "2025",
+        "publishedDate": "2026-03-19",
+        "stableFacts": [
+          "PVCFC was established on March 9, 2011 and its primary business covers the production, trading, import, and export of fertilizers and petroleum chemicals for agriculture.",
+          "The 2025 report identifies three PVCFC plants: Ca Mau Fertilizer Plant, Ca Mau NPK Plant, and Korea-Vietnam NPK Plant.",
+          "Ca Mau NPK Plant has a stated capacity of 300,000 tonnes per year and uses liquefied-urea technology from Spain's ESPINDESA with principal equipment from EU and G7 countries.",
+          "Korea-Vietnam NPK Plant entered operation in December 2017 with a stated design capacity of 360,000 tonnes of NPK per year and technology licensed by INCRO of Spain.",
+          "PVCFC's fertilizer portfolio includes inorganic and organic products, single fertilizers such as urea, potassium, DAP, and ammonium sulphate, and more than 90 NPK formulations.",
+          "PVCFC inaugurated the Ca Mau Fertilizer Production Plant - Binh Dinh Facility in 2025 to support production and distribution for Central Vietnam and the Central Highlands."
+        ]
+      },
+      "imageUrls": [
+        "https://www.pvcfc.com.vn/Data/Sites/1/News/8691/ar-25-en.jpg",
+        "https://www.pvcfc.com.vn/Data/Sites/1/media/BCTN/2026/img/homepage/ar25/chuong1.jpg"
+      ],
+      "documentUrls": [
+        "https://www.pvcfc.com.vn/Data/Sites/1/media/bao-cao-thuong-nien/2025/DCM_AR_2025_ENG.pdf"
+      ],
+      "relatedUrls": [
+        "https://www.pvcfc.com.vn/en-US/disclosure-of-the-annual-report-2025",
+        "https://www.pvcfc.com.vn/Data/Sites/1/media/BCTN/2026/index.html",
+        "https://www.pvcfc.com.vn/Data/Sites/1/media/BCTN/2026/chuong-1/thong-tin-chung-ve-cong-ty.html",
+        "https://www.pvcfc.com.vn/Data/Sites/1/media/BCTN/2026/chuong-1/lich-su-phat-trien.html",
+        "https://www.pvcfc.com.vn/Data/Sites/1/media/BCTN/2026/chuong-1/nganh-nghe-dia-ban-kinh-doanh.html"
+      ],
+      "provenance": {
+        "sourceUrl": "https://www.pvcfc.com.vn/en-US/annual-report-2025",
+        "publisher": "PetroVietnam Ca Mau Fertilizer Corporation (PVCFC)",
+        "sourceClass": "official_investor_report",
+        "retrievalMethod": "tinyfish_fetch",
+        "discoveryMethod": "TinyFish search and fetch",
+        "extractionStatus": "landing_page_and_interactive_html_extracted; linked_pdf_not_downloaded",
+        "retrievedAt": "2026-08-11",
+        "scopeNote": "Stable public facts only; no financial recommendation or securities analysis."
+      }
+    },
+    {
+      "id": "pvcfc-sustainability-report-2025",
+      "name": "PVCFC Sustainability Report 2025",
+      "sourceUrl": "https://www.pvcfc.com.vn/en-US/disclosure-of-the-sustainability-report-2025",
+      "summary": "Official disclosure page for PVCFC's 2025 Sustainability Report. The public page confirms PVCFC's long-term agricultural and fertilizer mandate, while the linked document itself was not exposed by the text extractor; no binary was downloaded.",
+      "attributes": {
+        "reportType": "sustainability_report",
+        "period": "2025",
+        "publishedDate": "2026-03-19",
+        "stableFacts": [
+          "PVCFC was established on March 9, 2011.",
+          "PVCFC describes its primary business as the production, trading, import, and export of fertilizers and petroleum chemicals, mainly serving agriculture.",
+          "PVCFC describes its fertilizer mission as supplying high-nutrient products suited to multiple crops and soil types."
+        ]
+      },
+      "imageUrls": [
+        "https://www.pvcfc.com.vn/Data/Sites/1/media/trang-chu/logo_en.png"
+      ],
+      "documentUrls": [],
+      "relatedUrls": [
+        "https://www.pvcfc.com.vn/cbtt-bao-cao-phat-trien-ben-vung-nam-2025",
+        "https://www.pvcfc.com.vn/en-US/sustainability",
+        "https://www.pvcfc.com.vn/Data/Sites/1/media/BCTN/2026/chuong-5/chapter5.html"
+      ],
+      "provenance": {
+        "sourceUrl": "https://www.pvcfc.com.vn/en-US/disclosure-of-the-sustainability-report-2025",
+        "publisher": "PetroVietnam Ca Mau Fertilizer Corporation (PVCFC)",
+        "sourceClass": "official_public_report_disclosure",
+        "retrievalMethod": "tinyfish_fetch",
+        "discoveryMethod": "TinyFish search and fetch",
+        "extractionStatus": "disclosure_landing_page_extracted; document_url_not_exposed; no_binary_downloaded",
+        "retrievedAt": "2026-08-11",
+        "scopeNote": "Stable public facts only; no financial recommendation or securities analysis."
+      }
+    },
+    {
+      "id": "pvcfc-annual-report-2024",
+      "name": "PVCFC Annual Report 2024",
+      "sourceUrl": "https://www.pvcfc.com.vn/en-US/annual-report-2024-1",
+      "summary": "PVCFC's official 2024 annual report is available as an English interactive report. It documents the corporation's identity, fertilizer portfolio, and three-plant production footprint without requiring a binary download.",
+      "attributes": {
+        "reportType": "annual_report",
+        "period": "2024",
+        "publishedDate": "2025-03-19",
+        "stableFacts": [
+          "The report identifies the company as PetroVietnam Ca Mau Fertilizer Joint Stock Company, abbreviated PVCFC, with listing code DCM.",
+          "PVCFC's main business lines include manufacturing, trading, importing, and exporting fertilizers and petroleum chemicals for agriculture.",
+          "The report identifies three owned plants: Ca Mau Fertilizer Plant, Ca Mau NPK Plant, and Korea-Vietnam NPK Plant.",
+          "Ca Mau Fertilizer Plant is described as the only domestic facility capable of producing opaque granular urea.",
+          "Ca Mau NPK Plant has a stated capacity of 300,000 tonnes per year, while Korea-Vietnam NPK Plant has a stated design capacity of 360,000 tonnes per year.",
+          "The Ca Mau Fertilizer product family includes single fertilizers, NPK fertilizers, and premium organic fertilizers."
+        ]
+      },
+      "imageUrls": [
+        "https://www.pvcfc.com.vn/Data/Sites/1/News/8228/ar-24-en.png",
+        "https://www.pvcfc.com.vn/Data/Sites/1/media/BCTN/2025/img/homepage/video-bia-en-mobile.gif"
+      ],
+      "documentUrls": [],
+      "relatedUrls": [
+        "https://www.pvcfc.com.vn/Data/Sites/1/media/BCTN/2025/index-en.html",
+        "https://www.pvcfc.com.vn/Data/Sites/1/media/BCTN/2025/chuong-1/thong-tin-chung-ve-cong-ty-en.html",
+        "https://www.pvcfc.com.vn/Data/Sites/1/media/BCTN/2025/chuong-1/nganh-nghe-dia-ban-kinh-doanh-en.html",
+        "https://www.pvcfc.com.vn/Data/Sites/1/media/BCTN/2025/chuong-5/tong-quan-bao-cao-phat-trien-bien-vung-en.html"
+      ],
+      "provenance": {
+        "sourceUrl": "https://www.pvcfc.com.vn/en-US/annual-report-2024-1",
+        "publisher": "PetroVietnam Ca Mau Fertilizer Corporation (PVCFC)",
+        "sourceClass": "official_investor_report",
+        "retrievalMethod": "tinyfish_fetch",
+        "discoveryMethod": "TinyFish search and fetch",
+        "extractionStatus": "landing_page_and_interactive_html_extracted; no_document_url_exposed; no_binary_downloaded",
+        "retrievedAt": "2026-08-11",
+        "scopeNote": "Stable public facts only; no financial recommendation or securities analysis."
+      }
+    }
+  ]
+}

@@ -1,0 +1,217 @@
+{
+  "schemaVersion": "pvcfc-public-fixture-fragment-v1",
+  "kind": "services",
+  "retrievedAt": "2026-08-11",
+  "records": [
+    {
+      "id": "anh-hai-ca-mau",
+      "name": "Anh Hai Cà Mau",
+      "sourceUrl": "https://www.pvcfc.com.vn/anh-hai-ca-mau",
+      "summary": "Nhân vật số ứng dụng trí tuệ nhân tạo của Phân Bón Cà Mau, hỗ trợ tương tác bằng ngôn ngữ tự nhiên và giọng nói về kỹ thuật cây trồng, sản phẩm, chương trình và thông tin của doanh nghiệp.",
+      "attributes": {
+        "serviceType": "digital-human application",
+        "accessChannels": [
+          "web",
+          "mobile application"
+        ],
+        "interactionModes": [
+          "text",
+          "voice-to-text",
+          "spoken content"
+        ],
+        "listedTopics": [
+          "crop and fertilizer techniques",
+          "PVCFC company information",
+          "promotions, communications and events",
+          "sales policies",
+          "news and guidance"
+        ],
+        "accessFee": "PVCFC states that chat access is free"
+      },
+      "imageUrls": [
+        "https://www.pvcfc.com.vn/Data/Sites/1/News/6964/app-icon-1024x1024-1.png",
+        "https://www.pvcfc.com.vn/Data/Sites/1/media/news/app-ico.png"
+      ],
+      "documentUrls": [],
+      "relatedUrls": [
+        "https://www.pvcfc.com.vn/huong-dan-su-dung-anh-hai-ca-mau",
+        "https://www.anhhaicamau.com/"
+      ],
+      "provenance": {
+        "sourceUrl": "https://www.pvcfc.com.vn/anh-hai-ca-mau",
+        "retrievedAt": "2026-08-11",
+        "retrievalMethod": "tinyfish_fetch"
+      }
+    },
+    {
+      "id": "2-nong",
+      "name": "2 Nông",
+      "sourceUrl": "https://www.pvcfc.com.vn/2-nong",
+      "summary": "Ứng dụng nông nghiệp số miễn phí của PVCFC, cung cấp kiến thức canh tác, thông tin dinh dưỡng cây trồng, dự báo thời tiết, giá thị trường, truy xuất nguồn gốc và hỗ trợ trực tuyến; ứng dụng còn có tính năng AI nhận diện sâu bệnh và dấu hiệu thiếu dinh dưỡng từ hình ảnh.",
+      "attributes": {
+        "serviceType": "smart agriculture application",
+        "launchedYear": 2018,
+        "accessFee": "free",
+        "platformsListed": [
+          "website",
+          "Apple App Store",
+          "Google Play"
+        ],
+        "features": [
+          "cultivation guidance",
+          "crop nutrition information",
+          "weather forecasts",
+          "market prices",
+          "agricultural-input traceability",
+          "online expert support",
+          "AI pest, disease and nutrient-deficiency diagnosis"
+        ],
+        "diagnosticCoverageAt2024Launch": {
+          "pestsAndDiseases": 22,
+          "crops": [
+            "coffee",
+            "pepper",
+            "durian",
+            "rice"
+          ],
+          "nutrientDeficiencySymptoms": 8,
+          "nutrientDeficiencyCrops": [
+            "pepper",
+            "coffee"
+          ],
+          "reportedAccuracy": "more than 96%, evaluated by WASI"
+        }
+      },
+      "imageUrls": [
+        "https://www.pvcfc.com.vn/Data/Sites/1/News/6936/banner-2-nong.jpg",
+        "https://www.pvcfc.com.vn/Data/Sites/1/News/5751/thumbnail-ai.jpg"
+      ],
+      "documentUrls": [],
+      "relatedUrls": [
+        "https://www.pvcfc.com.vn/ung-dung-2nong-nguoi-ban-dong-hanh-cua-nha-nong-hien-dai",
+        "https://www.pvcfc.com.vn/phan-bon-ca-mau-ra-mat-ai-tinh-nang-chan-doan-sau-benh-tren-ung-dung-2nong",
+        "https://hainong.vn/"
+      ],
+      "provenance": {
+        "sourceUrl": "https://www.pvcfc.com.vn/2-nong",
+        "retrievedAt": "2026-08-11",
+        "retrievalMethod": "tinyfish_fetch"
+      }
+    },
+    {
+      "id": "nong-nghiep-do-thi",
+      "name": "Nông nghiệp đô thị",
+      "sourceUrl": "https://www.pvcfc.com.vn/nong-nghiep-do-thi",
+      "summary": "Bộ sản phẩm, dịch vụ và giải pháp kỹ thuật của PVCFC cho trồng rau, cây cảnh và tạo không gian xanh tại nhà phố, chung cư và văn phòng.",
+      "attributes": {
+        "serviceType": "urban agriculture products and services",
+        "targetSettings": [
+          "townhouses",
+          "apartments",
+          "offices"
+        ],
+        "solutionComponents": [
+          "urban-sized fertilizers",
+          "plant-protection products",
+          "inorganic, organic and microbial fertilizers",
+          "growing media",
+          "seeds",
+          "gardening tools",
+          "technology-supported cultivation solutions",
+          "technical consulting"
+        ],
+        "firstStore": {
+          "opened": "2025-01-11",
+          "city": "Ho Chi Minh City"
+        }
+      },
+      "imageUrls": [
+        "https://www.pvcfc.com.vn/Data/Sites/1/News/5775/1101.1.jpg",
+        "https://www.pvcfc.com.vn/Data/Sites/1/News/5753/2010.02.jpg",
+        "https://www.pvcfc.com.vn/Data/Sites/1/media/content/1612.1.jpg"
+      ],
+      "documentUrls": [],
+      "relatedUrls": [
+        "https://www.pvcfc.com.vn/phan-bon-ca-mau-khai-truong-cua-hang-nong-nghiep-do-thi-dau-tien-tai-tp-ho-chi-minh",
+        "https://www.pvcfc.com.vn/pvcfc-phat-trien-bo-san-pham-giai-phap-toan-dien-cho-nong-nghiep-do-thi-bien-nhung-uoc-mo-xanh-thanh-hien-thuc",
+        "https://www.pvcfc.com.vn/phan-bon-ca-mau-bat-nhip-xu-huong-nong-nghiep-do-thi"
+      ],
+      "provenance": {
+        "sourceUrl": "https://www.pvcfc.com.vn/nong-nghiep-do-thi",
+        "retrievedAt": "2026-08-11",
+        "retrievalMethod": "tinyfish_fetch"
+      }
+    },
+    {
+      "id": "dms",
+      "name": "DMS",
+      "sourceUrl": "https://www.pvcfc.com.vn/dms",
+      "summary": "Hệ thống quản lý kinh doanh của PVCFC. Trang DMS liên kết đến ứng dụng Phân Bón Cà Mau dành cho đại lý, nơi hỗ trợ tra cứu sản phẩm và giá, theo dõi đơn hàng và công nợ, xem chính sách và khuyến mãi, và kết nối với PVCFC.",
+      "attributes": {
+        "serviceType": "distribution and dealer management system",
+        "audience": "PVCFC dealer network",
+        "applicationFeatures": [
+          "product lookup",
+          "price updates",
+          "order tracking",
+          "receivables tracking",
+          "policies and promotions",
+          "direct connection with PVCFC"
+        ]
+      },
+      "imageUrls": [
+        "https://www.pvcfc.com.vn/Data/Sites/1/News/6939/post-app-pbcm.jpg"
+      ],
+      "documentUrls": [],
+      "relatedUrls": [
+        "https://www.pvcfc.com.vn/ung-dung-phan-bon-ca-maucac-buoc-su-dung-toan-bo-tinh-nang-danh-cho-dai-ly-c2"
+      ],
+      "provenance": {
+        "sourceUrl": "https://www.pvcfc.com.vn/dms",
+        "retrievedAt": "2026-08-11",
+        "retrievalMethod": "tinyfish_fetch"
+      }
+    },
+    {
+      "id": "crm",
+      "name": "CRM",
+      "sourceUrl": "https://www.pvcfc.com.vn/crm",
+      "summary": "PVCFC lists CRM as a customer-care system in its official service and solution catalog.",
+      "attributes": {
+        "serviceType": "customer relationship management system",
+        "catalogEvidence": "The official CRM landing page is present, but its fetched public body contains no descriptive service content."
+      },
+      "imageUrls": [],
+      "documentUrls": [],
+      "relatedUrls": [
+        "https://www.pvcfc.com.vn/dich-vu-giai-phap",
+        "https://www.pvcfc.com.vn/phan-bon-ca-mau-ra-mat-ai-tinh-nang-chan-doan-sau-benh-tren-ung-dung-2nong"
+      ],
+      "provenance": {
+        "sourceUrl": "https://www.pvcfc.com.vn/crm",
+        "retrievedAt": "2026-08-11",
+        "retrievalMethod": "tinyfish_fetch"
+      }
+    },
+    {
+      "id": "rfid",
+      "name": "RFID",
+      "sourceUrl": "https://www.pvcfc.com.vn/rfid",
+      "summary": "PVCFC lists RFID as a distinct item in its official service and solution catalog.",
+      "attributes": {
+        "serviceType": "RFID",
+        "catalogEvidence": "The official RFID landing page is present, but its fetched public body contains no descriptive service content."
+      },
+      "imageUrls": [],
+      "documentUrls": [],
+      "relatedUrls": [
+        "https://www.pvcfc.com.vn/dich-vu-giai-phap"
+      ],
+      "provenance": {
+        "sourceUrl": "https://www.pvcfc.com.vn/rfid",
+        "retrievedAt": "2026-08-11",
+        "retrievalMethod": "tinyfish_fetch"
+      }
+    }
+  ]
+}

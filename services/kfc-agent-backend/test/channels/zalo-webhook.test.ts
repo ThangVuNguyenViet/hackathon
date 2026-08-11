@@ -1,12 +1,73 @@
-import { fakeModel } from '@langchain/core/testing';
+import type { OpenAIClient } from '@kfc/openai-agents-runtime';
 import { describe, expect, it, vi } from 'vitest';
+import { OpenAiKfcAgent } from '../../src/agent/openAiKfcAgent.js';
 import { buildDemoAdminServer as buildServer } from '../fixtures/demoAdminServer.js';
 import { createZaloClient, normalizeZaloWebhook } from '../../src/channels/zalo.js';
 import { MemoryStore } from '../../src/persistence/memoryStore.js';
-import {
-  groundedResponseModelReply,
-} from '../fixtures/groundedResponse.js';
-import { testAgent } from '../fixtures/testAgent.js';
+
+function sdkResponse(output: unknown[], outputText = '') {
+  return {
+    id: crypto.randomUUID(),
+    object: 'response',
+    created_at: 0,
+    model: 'gpt-5.6-luna',
+    output,
+    output_text: outputText,
+    usage: { input_tokens: 4, output_tokens: 4, total_tokens: 8 },
+  };
+}
+
+function pvcfcResponses(text: string) {
+  return [
+    sdkResponse([{
+      id: crypto.randomUUID(),
+      type: 'function_call',
+      call_id: crypto.randomUUID(),
+      name: 'searchPvcfcRecords',
+      arguments: JSON.stringify({
+        query: 'lúa',
+        collections: ['products'],
+        limit: 2,
+        cursor: null,
+      }),
+    }]),
+    sdkResponse([{
+      id: crypto.randomUUID(),
+      type: 'message',
+      role: 'assistant',
+      status: 'completed',
+      content: [{ type: 'output_text', text }],
+    }], text),
+  ];
+}
+
+function pvcfcAgent(text: string) {
+  const responses = pvcfcResponses(text);
+  return new OpenAiKfcAgent({
+    client: {
+      responses: {
+        create: async () => {
+          const response = responses.shift();
+          if (!response) throw new Error('unexpected model request');
+          return response;
+        },
+      },
+    } as unknown as OpenAIClient,
+    model: 'gpt-5.6-luna',
+    modelTemperature: null,
+    compaction: { enabled: false, thresholdBytes: 98_304 },
+  });
+}
+
+function deferredTasks() {
+  const tasks: Array<() => Promise<void>> = [];
+  return {
+    defer: (task: () => Promise<void>) => tasks.push(task),
+    flush: async () => {
+      for (const task of tasks.splice(0)) await task();
+    },
+  };
+}
 
 describe('Zalo webhook adapter', () => {
   it('reports partial optional media delivery per item without collapsing outcomes', async () => {
@@ -28,8 +89,9 @@ describe('Zalo webhook adapter', () => {
     });
   });
 
-  it('renders verified menu names and prices in outbound standalone text', async () => {
+  it('renders PVCFC agricultural guidance in outbound standalone text', async () => {
     const store = new MemoryStore();
+    const deferred = deferredTasks();
     const zaloFetchImpl = vi.fn(async (
       _url: Parameters<typeof fetch>[0],
       _init?: Parameters<typeof fetch>[1],
@@ -44,22 +106,9 @@ describe('Zalo webhook adapter', () => {
       zaloAccessToken: 'zalo_token_local',
       zaloApiBaseUrl: 'https://zalo.local',
       zaloFetchImpl,
-      ...testAgent(
-        fakeModel()
-          .respondWithTools([{
-            name: 'searchMenu',
-            args: { scope: 'all', query: null },
-          }])
-          .respond(groundedResponseModelReply({
-            customerText: 'Combo Hợp Gu 99K có giá 99.000đ.',
-            evidenceReferences: [{
-              evidenceId: 'menu_search_results',
-              claimKinds: ['product', 'price'],
-            }],
-          })),
-      ),
+      pvcfcAgent: pvcfcAgent('PVCFC khuyến nghị kiểm tra dinh dưỡng cho cây lúa.'),
+      defer: deferred.defer,
     });
-
     await server.inject({
       method: 'POST',
       url: '/webhooks/zalo',
@@ -71,21 +120,21 @@ describe('Zalo webhook adapter', () => {
         message: { msg_id: 'zalo_menu_1', text: 'cho tôi xem món ăn' },
       },
     });
+    await deferred.flush();
 
-    const outboundBody = JSON.parse(String(zaloFetchImpl.mock.calls[0]?.[1]?.body)) as {
-      message: { text: string };
-    };
-    expect(outboundBody.message.text).toContain('Combo Hợp Gu 99K');
-    expect(outboundBody.message.text).toContain('99.000đ');
-    expect(zaloFetchImpl.mock.calls.slice(1).map((call) => JSON.parse(String(call[1]?.body)))).toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({ message: expect.objectContaining({ attachment: expect.any(Object) }) }),
-      ]),
+    const outboundBody: unknown = JSON.parse(
+      String(zaloFetchImpl.mock.calls[0]?.[1]?.body),
     );
+    expect(outboundBody).toMatchObject({
+      message: { text: expect.stringContaining('PVCFC') },
+    });
+    expect(JSON.stringify(outboundBody)).toContain('cây lúa');
+    expect(zaloFetchImpl).toHaveBeenCalledTimes(1);
     expect((await store.listTurns('zalo:zalo_menu_user')).at(-1)?.metadata?.genUi).toBeUndefined();
   });
 
   it('normalizes a Zalo OA text event and runs the agent turn', async () => {
+    const deferred = deferredTasks();
     const zaloFetchImpl = vi.fn(async (_url: Parameters<typeof fetch>[0], _init?: Parameters<typeof fetch>[1]) =>
       new Response(JSON.stringify({ error: 0, message_id: 'zalo_reply_1' }), {
         status: 200,
@@ -97,34 +146,10 @@ describe('Zalo webhook adapter', () => {
       zaloAccessToken: 'zalo_token_local',
       zaloApiBaseUrl: 'https://zalo.local',
       zaloFetchImpl,
-      ...testAgent(
-        fakeModel()
-          .respondWithTools([{
-            name: 'searchMenu',
-            args: {
-              scope: 'filtered',
-              query: 'Combo Hợp Gu 99K',
-            },
-          }])
-          .respondWithTools([{
-            name: 'updateCart',
-            args: {
-              changes: [{
-                itemCode: '20751',
-                quantity: 1,
-                modifiers: [],
-              }],
-            },
-          }])
-          .respond(groundedResponseModelReply({
-            customerText:
-              'Dạ mình đã thêm 1 Combo Hợp Gu 99K giá 99.000đ vào giỏ.',
-            evidenceReferences: [{
-              evidenceId: 'cart',
-              claimKinds: ['product', 'price'],
-            }],
-          })),
+      pvcfcAgent: pvcfcAgent(
+        'PVCFC có thể hỗ trợ tư vấn dinh dưỡng cho cây lúa theo dữ liệu chính thức.',
       ),
+      defer: deferred.defer,
     });
     const response = await server.inject({
       method: 'POST',
@@ -140,8 +165,10 @@ describe('Zalo webhook adapter', () => {
     });
 
     expect(response.statusCode).toBe(200);
-    expect(response.json()).toMatchObject({ received: 1 });
-    expect(zaloFetchImpl).toHaveBeenCalledTimes(2);
+    expect(response.json()).toMatchObject({ received: 1, queued: 1 });
+    expect(zaloFetchImpl).not.toHaveBeenCalled();
+    await deferred.flush();
+    expect(zaloFetchImpl).toHaveBeenCalledTimes(1);
     const zaloRequestBodies = zaloFetchImpl.mock.calls.map((call) =>
       JSON.parse(String(call[1]?.body)),
     );
@@ -149,21 +176,13 @@ describe('Zalo webhook adapter', () => {
       (body) => typeof body.message?.text === 'string',
     );
     expect(zaloTextRequest).toMatchObject({
-      message: { text: expect.stringContaining('1 Combo Hợp Gu 99K') },
+      message: { text: expect.stringContaining('PVCFC') },
     });
-    expect(JSON.stringify(zaloTextRequest)).toContain('99.000đ');
-    expect(zaloRequestBodies).toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({
-          message: expect.objectContaining({ attachment: expect.any(Object) }),
-        }),
-      ]),
-    );
 
     const turns = await server.inject({ method: 'GET', url: '/dashboard/sessions/zalo:zalo_user_1/turns' });
     expect(turns.json().turns.at(-1)).toMatchObject({
       role: 'assistant',
-      text: expect.stringContaining('1 Combo Hợp Gu 99K'),
+      text: expect.stringContaining('PVCFC'),
       deliveryStatus: 'sent',
       externalMessageId: 'zalo_reply_1',
     });
@@ -178,18 +197,7 @@ describe('Zalo webhook adapter', () => {
       type: 'assistant_reply_sent',
       payload: { deliveryStatus: 'sent' },
     });
-    expect(
-      events
-        .json()
-        .events.find((event: { type: string }) => event.type === 'cart_changed'),
-    ).toMatchObject({
-      type: 'cart_changed',
-      payload: {
-        cart: {
-          items: [expect.objectContaining({ itemCode: '20751', name: 'Combo Hợp Gu 99K' })],
-        },
-      },
-    });
+    expect(JSON.stringify(events.json())).not.toContain('KFC');
   });
 
   it('records unsupported Zalo events without authoring a reply or running unsafe order actions', async () => {
@@ -218,7 +226,7 @@ describe('Zalo webhook adapter', () => {
     });
 
     expect(response.statusCode).toBe(200);
-    expect(response.json()).toEqual({ received: 1, processed: 1, skippedDuplicates: 0, failed: 0 });
+    expect(response.json()).toEqual({ received: 1, processed: 1, queued: 0, skippedDuplicates: 0, failed: 0 });
     expect(zaloFetchImpl).not.toHaveBeenCalled();
 
     const turns = await server.inject({ method: 'GET', url: '/dashboard/sessions/zalo:zalo_user_1/turns' });
@@ -293,14 +301,12 @@ describe('Zalo webhook adapter', () => {
 
   it('preserves inbound Zalo transcript when outbound token is missing', async () => {
     const store = new MemoryStore();
+    const deferred = deferredTasks();
     const server = buildServer({
       store,
       zaloOaId: 'oa_local',
-      ...testAgent(
-        fakeModel().respond(groundedResponseModelReply({
-          customerText: 'Mình có thể hỗ trợ bạn.',
-        })),
-      ),
+      pvcfcAgent: pvcfcAgent('PVCFC có thể hỗ trợ bạn.'),
+      defer: deferred.defer,
     });
 
     const response = await server.inject({
@@ -316,7 +322,8 @@ describe('Zalo webhook adapter', () => {
     });
 
     expect(response.statusCode).toBe(200);
-    expect(response.json()).toMatchObject({ received: 1, processed: 0, failed: 1 });
+    expect(response.json()).toMatchObject({ received: 1, queued: 1, failed: 0 });
+    await deferred.flush();
     expect(await store.getWebhookDelivery('zalo', 'zalo_missing_token_1')).toMatchObject({
       status: 'failed',
       lastError: 'missing_zalo_access_token',
@@ -328,17 +335,16 @@ describe('Zalo webhook adapter', () => {
   });
 
   it('uses Zalo webhook sender name in dashboard session summaries', async () => {
+    const deferred = deferredTasks();
     const server = buildServer({
       zaloOaId: 'oa_local',
       zaloAccessToken: 'token',
       zaloInboxUrlTemplate:
         'https://oa.zalo.me/chatv2?oaid={pageId}&uid={externalUserId}&session={sessionId}',
-      ...testAgent(
-        fakeModel().respond(groundedResponseModelReply({
-          customerText: 'Xin chào!',
-        })),
-      ),
+      pvcfcAgent: pvcfcAgent('Xin chào từ PVCFC!'),
+      defer: deferred.defer,
     });
+    await deferred.flush();
     await server.inject({
       method: 'POST',
       url: '/webhooks/zalo',

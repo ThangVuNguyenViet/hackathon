@@ -8,8 +8,8 @@ import { OpenAiKfcAgent } from '../src/agent/openAiKfcAgent.js';
 import { buildServer } from '../src/api/server.js';
 import { loadBundledGeneratedFixtures } from '../src/fixtures/bundledFixtures.js';
 
-// Auto-load root .env if process.env.OPENAI_API_KEY is unset
-if (!process.env.OPENAI_API_KEY) {
+// Auto-load root .env when neither provider credential was injected.
+if (!process.env.OPENAI_API_KEY && !process.env.PVCFC_ASTRAFLOW_API_KEY) {
   const rootEnvPath = resolve(process.cwd(), '../../.env');
   if (existsSync(rootEnvPath)) {
     const envContent = readFileSync(rootEnvPath, 'utf8');
@@ -33,8 +33,20 @@ const host = process.env.HOST?.trim() || '127.0.0.1';
 
 const apiKey = process.env.OPENAI_API_KEY?.trim();
 const modelName = process.env.KFC_AGENT_MODEL?.trim() || 'gpt-4.1-mini';
+const pvcfcAstraFlowApiKey = process.env.PVCFC_ASTRAFLOW_API_KEY?.trim();
+const pvcfcAstraFlowBaseUrl =
+  process.env.PVCFC_ASTRAFLOW_BASE_URL?.trim() ||
+  'https://api-sg.umodelverse.ai/v1';
+const pvcfcAstraFlowModel =
+  process.env.PVCFC_ASTRAFLOW_MODEL?.trim() || 'gpt-5.6-luna';
 
 const directOpenAiClient = apiKey ? new OpenAI({ apiKey }) : undefined;
+const pvcfcAstraFlowClient = pvcfcAstraFlowApiKey
+  ? new OpenAI({
+      apiKey: pvcfcAstraFlowApiKey,
+      baseURL: pvcfcAstraFlowBaseUrl,
+    })
+  : undefined;
 
 const openAiAgent = directOpenAiClient
   ? new OpenAiKfcAgent({
@@ -42,6 +54,16 @@ const openAiAgent = directOpenAiClient
       model: modelName,
       compaction: {
         enabled: true,
+        thresholdBytes: 98304,
+      },
+    })
+  : undefined;
+const pvcfcAgent = pvcfcAstraFlowClient
+  ? new OpenAiKfcAgent({
+      client: pvcfcAstraFlowClient as unknown as OpenAIClient,
+      model: pvcfcAstraFlowModel,
+      compaction: {
+        enabled: false,
         thresholdBytes: 98304,
       },
     })
@@ -65,6 +87,7 @@ const fixtures = loadBundledGeneratedFixtures();
 
 const server = buildServer({
   openAiAgent,
+  pvcfcAgent,
   agent: agentModel
     ? { model: agentModel, identity: agentIdentity }
     : undefined,
@@ -78,6 +101,9 @@ console.log(
     message: `KFC & PVCFC Business-Agnostic Live AI Backend Server running at http://${host}:${port}`,
     port,
     hasOpenAiKey: Boolean(apiKey),
-    model: modelName,
+    hasPvcfcAstraFlowKey: Boolean(pvcfcAstraFlowApiKey),
+    kfcModel: modelName,
+    pvcfcModel: pvcfcAstraFlowModel,
+    pvcfcProvider: 'astraflow-sg',
   }),
 );

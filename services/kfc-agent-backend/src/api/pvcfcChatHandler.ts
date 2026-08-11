@@ -5,19 +5,7 @@ import {
   type HandlerResponse,
 } from './routeHandlerContracts.js';
 
-type KfcAgentResponse = RouteAgentRuntime['kfcAgentResponse'];
-
-const PVCFC_BUSINESS_CONTEXT = {
-  organization: 'Tổng Công ty Phân bón Dầu khí Cà Mau (PVCFC / Đạm Cà Mau)',
-  role: 'Trợ lý AI Nông Nghiệp Phân Bón Cà Mau',
-  products: [
-    'Đạm Cà Mau (Urea)',
-    'NPK Cà Mau 20-20-15',
-    'Organic OM Cà Mau',
-    'N46.Plus',
-    'Kali Cà Mau 61',
-  ],
-} as const;
+type AgentResponse = RouteAgentRuntime['kfcAgentResponse'];
 
 function responseProfile(metadata: Record<string, unknown> | undefined) {
   const rawProfile =
@@ -30,7 +18,7 @@ function responseProfile(metadata: Record<string, unknown> | undefined) {
 }
 
 export function createPvcfcChatHandler(
-  kfcAgentResponse: KfcAgentResponse,
+  agentResponse: AgentResponse,
 ): (body: unknown) => Promise<HandlerResponse> {
   return async (body: unknown) => {
     const parsed = pvcfcChatPayloadSchema.safeParse(body);
@@ -52,9 +40,9 @@ export function createPvcfcChatHandler(
     const metadata: ConversationTurnMetadata = {
       rawEvent: { ...auditMetadata, source: 'pvcfc_chat' },
       ...(profile ? { responseProfile: profile } : {}),
-      verifiedBusinessContext: PVCFC_BUSINESS_CONTEXT,
     };
-    return kfcAgentResponse({
+    return agentResponse({
+      businessId: 'pvcfc',
       sessionId: parsed.data.sessionId,
       customerId: parsed.data.customerId,
       clientMessageId: parsed.data.clientMessageId,

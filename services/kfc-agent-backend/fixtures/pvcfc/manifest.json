@@ -1,0 +1,193 @@
+{
+  "schemaVersion": "pvcfc_fragment_manifest_v1",
+  "businessId": "pvcfc",
+  "capturedAt": "2026-08-11",
+  "organization": {
+    "collection": "corporate_facilities",
+    "recordId": "pvcfc-corporate-profile"
+  },
+  "collections": [
+    {
+      "name": "agronomy_guidance",
+      "access": "searchable",
+      "recordCount": 20
+    },
+    {
+      "name": "certificates_documents",
+      "access": "searchable",
+      "recordCount": 249
+    },
+    {
+      "name": "corporate_facilities",
+      "access": "searchable",
+      "recordCount": 7
+    },
+    {
+      "name": "dealers_contacts",
+      "access": "searchable",
+      "recordCount": 18
+    },
+    {
+      "name": "news_media",
+      "access": "searchable",
+      "recordCount": 14
+    },
+    {
+      "name": "prices",
+      "access": "searchable",
+      "recordCount": 8
+    },
+    {
+      "name": "products",
+      "access": "searchable",
+      "recordCount": 67
+    },
+    {
+      "name": "promotions",
+      "access": "searchable",
+      "recordCount": 11
+    },
+    {
+      "name": "public_reports",
+      "access": "searchable",
+      "recordCount": 3
+    },
+    {
+      "name": "services",
+      "access": "searchable",
+      "recordCount": 6
+    },
+    {
+      "name": "source_inventory",
+      "access": "discovery_only",
+      "recordCount": 79
+    },
+    {
+      "name": "urban_agriculture",
+      "access": "searchable",
+      "recordCount": 15
+    }
+  ],
+  "fragments": [
+    {
+      "path": "fixtures/pvcfc/fragments/agronomy-guidance.json",
+      "kind": "agronomy_guidance",
+      "schemaVersion": "pvcfc-public-fixture-fragment-v1",
+      "rawSha256": "cd7a632af34640aa0ccc1b0728e13816fa81a922888e83a2f4db52c58f6783ca",
+      "recordCount": 20,
+      "recordKeysSha256": "dd244a9c8545af5ee1af711e3e3f7e449344ea6c65b01a0d25f0cf5630144edc"
+    },
+    {
+      "path": "fixtures/pvcfc/fragments/certificates-and-documents.json",
+      "kind": "certificates_documents",
+      "schemaVersion": "pvcfc-public-fixture-fragment-v1",
+      "rawSha256": "02c65ed6e41070a85267892c1cbae2926c1184b29f954b012615e6b069a60432",
+      "recordCount": 249,
+      "recordKeysSha256": "84fe6b6d6543c5a45d7d66927d25f45323c64c64c07cca650e884a62378fbb1f"
+    },
+    {
+      "path": "fixtures/pvcfc/fragments/corporate-and-facilities.json",
+      "kind": "corporate_facilities",
+      "schemaVersion": "pvcfc-public-fixture-fragment-v1",
+      "rawSha256": "ad97898c7c087e69b0038094f856a3bacd4fce36d59c94a080099442d0d5f1dc",
+      "recordCount": 7,
+      "recordKeysSha256": "8cb4f5782f37d723e79f8f9e762010da869429929f637dd263c766f4e93c9735"
+    },
+    {
+      "path": "fixtures/pvcfc/fragments/dealers-and-contacts.json",
+      "kind": "dealers_contacts",
+      "schemaVersion": "pvcfc-public-fixture-fragment-v1",
+      "rawSha256": "3ac73cac2daf627780a24f21205b6514a8596d6e0c66511153a81726b442959c",
+      "recordCount": 18,
+      "recordKeysSha256": "15daec2b911fdaec399e31d5d0e0ada2cce373e3d66647ede6c0c262e46e9576"
+    },
+    {
+      "path": "fixtures/pvcfc/fragments/news-and-media.json",
+      "kind": "news_media",
+      "schemaVersion": "pvcfc-public-fixture-fragment-v1",
+      "rawSha256": "569d73f0666ae32a9c30b2013d5775aa949b7564b877bb25a35c8f5a08880e21",
+      "recordCount": 14,
+      "recordKeysSha256": "5f4a40671cc7b232e6c96c5a9abc8145d904412d7409b0146f9d24c4ec7acaa1"
+    },
+    {
+      "path": "fixtures/pvcfc/fragments/prices.json",
+      "kind": "prices",
+      "schemaVersion": "pvcfc-public-fixture-fragment-v1",
+      "rawSha256": "741a3611ef13eccb097258a4b116d25117a98c6292755c5f24720dc8bd4e34ff",
+      "recordCount": 8,
+      "recordKeysSha256": "90829984815844a6d33eed030209934111bcfed61da22df007d6def4c01f5204"
+    },
+    {
+      "path": "fixtures/pvcfc/fragments/products-pages-01-02.json",
+      "kind": "products",
+      "schemaVersion": "pvcfc-public-fixture-fragment-v1",
+      "rawSha256": "e551519fa4d9ebd7282dadd249c02a854a0ff0d01b0a627fc3a678b0587338ac",
+      "recordCount": 16,
+      "recordKeysSha256": "b88046dcb662df3f2baa7dfb9d95e4a6ccd46c6482884f17ddd91d4786c51912"
+    },
+    {
+      "path": "fixtures/pvcfc/fragments/products-pages-03-04.json",
+      "kind": "products",
+      "schemaVersion": "pvcfc-public-fixture-fragment-v1",
+      "rawSha256": "e672da56fd43cbe8ea97e6dd73183abeab8aec5b2da629aff5a6baa8c513c3d3",
+      "recordCount": 16,
+      "recordKeysSha256": "8d31e2abd4f17a456f24b0f40d0c41c7aa436cced9c9dbc5ff32e7a25bc7772a"
+    },
+    {
+      "path": "fixtures/pvcfc/fragments/products-pages-05-06.json",
+      "kind": "products",
+      "schemaVersion": "pvcfc-public-fixture-fragment-v1",
+      "rawSha256": "d94c6f6e9f66e91c7279b588671e520aa09e44489d45c686d219e0c0361533ac",
+      "recordCount": 16,
+      "recordKeysSha256": "81fe8587aae3b79642937786591926d9bfad8153a634f90f0d95face1736a4ae"
+    },
+    {
+      "path": "fixtures/pvcfc/fragments/products-pages-07-09.json",
+      "kind": "products",
+      "schemaVersion": "pvcfc-public-fixture-fragment-v1",
+      "rawSha256": "628e898e1246bbf6a0fb799f60581ba08bbba6e4a2e075ab4bca9e51d41c9189",
+      "recordCount": 19,
+      "recordKeysSha256": "6279d67dde61f0514d04f1706d2453b3cb03bea7db14efbfbef3005bd075d5c6"
+    },
+    {
+      "path": "fixtures/pvcfc/fragments/promotions.json",
+      "kind": "promotions",
+      "schemaVersion": "pvcfc-public-fixture-fragment-v1",
+      "rawSha256": "3aefe92a6b1e74db21458a32f69780e6e03535c9712629d860ca051a0a620fcf",
+      "recordCount": 11,
+      "recordKeysSha256": "3a40865786f8ed81a0c16c6e0723c8ab09d1ca776b231ff3e5da92e158a96f5d"
+    },
+    {
+      "path": "fixtures/pvcfc/fragments/public-reports.json",
+      "kind": "public_reports",
+      "schemaVersion": "pvcfc-public-fixture-fragment-v1",
+      "rawSha256": "481d59a2c48b786fcd3d26bc4d9169146a1e3e7376d843672fd9ccc8b546221a",
+      "recordCount": 3,
+      "recordKeysSha256": "96ed32059e3c4efaaf2ec353dcabc8902988517878ba59fdb6cec53cd881dc12"
+    },
+    {
+      "path": "fixtures/pvcfc/fragments/services-and-apps.json",
+      "kind": "services",
+      "schemaVersion": "pvcfc-public-fixture-fragment-v1",
+      "rawSha256": "6521fae8f091c358ca0324f3140ce4c97e8709da4cb96e43659b9b482b23d36b",
+      "recordCount": 6,
+      "recordKeysSha256": "3e3c24886dc913669977a1d2af72f6b2f865c8b642961937927dbdad82e8df44"
+    },
+    {
+      "path": "fixtures/pvcfc/fragments/source-inventory.json",
+      "kind": "source_inventory",
+      "schemaVersion": "pvcfc-public-fixture-fragment-v1",
+      "rawSha256": "0afa1bef7ed010dff7b8ed1b014f8b463cf23a248df7d6cf25f07245965df096",
+      "recordCount": 79,
+      "recordKeysSha256": "76916597dcb50095b51fcf81c0bf6cb2bcb28443dc0de8ec4384e6e216150626"
+    },
+    {
+      "path": "fixtures/pvcfc/fragments/urban-agriculture.json",
+      "kind": "urban_agriculture",
+      "schemaVersion": "pvcfc-public-fixture-fragment-v1",
+      "rawSha256": "90c126c5c21db6bd299dc917dc274fc525c5ff603fbd349074fbca86199a6432",
+      "recordCount": 15,
+      "recordKeysSha256": "88420c1916222be657f76011910fe80b1bcf2085d46be12a0e1e05ecf8347f51"
+    }
+  ]
+}
