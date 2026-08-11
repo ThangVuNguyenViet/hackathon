@@ -5,6 +5,7 @@ import { z } from 'zod';
 import type { ZaloOAuthRuntime } from '../channels/zaloOAuth.js';
 import type { PvcfcPublicDataProvider } from '../businesses/pvcfc/public-data/pvcfcPublicDataProvider.js';
 import type { BaseChatModel } from '@langchain/core/language_models/chat_models';
+import type { TinyFishClient } from '../web/tinyFishClient.js';
 import type { ConfirmationApprovalKeyRing } from './confirmationApprovalCapability.js';
 import type { VerifiedMessengerGuestCheckoutIngress } from '../security/guestCheckoutAuthority.js';
 import type {
@@ -431,6 +432,11 @@ export interface ReadinessOptions {
   agentConfigured?: boolean;
   agentGatesReadiness?: boolean;
   monitorConfigured?: boolean;
+  webSearch?: {
+    configured: boolean;
+    provider: 'tinyfish';
+    mode: 'search-fetch';
+  };
   zaloRequired?: boolean;
   langsmith?: {
     configured: boolean;
@@ -508,6 +514,7 @@ export interface RouteOptions {
   zaloFetchImpl?: typeof fetch;
   pvcfcPublicDataProvider?: PvcfcPublicDataProvider;
   pvcfcAgentModel?: BaseChatModel;
+  pvcfcWebEvidenceClient?: TinyFishClient;
   monitorJudge?: MonitorSessionIntelligenceJudge;
   agentTracer?: AgentTracer;
   confirmationApprovalKeyRing?: ConfirmationApprovalKeyRing;

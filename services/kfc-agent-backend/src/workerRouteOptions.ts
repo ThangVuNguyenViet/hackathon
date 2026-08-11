@@ -57,6 +57,7 @@ function workerModelEnv(env: WorkerEnv) {
       env.PVCFC_ASTRAFLOW_BASE_URL ?? 'https://api-sg.umodelverse.ai/v1',
     PVCFC_ASTRAFLOW_MODEL: env.PVCFC_ASTRAFLOW_MODEL ?? 'gpt-5.6-luna',
     PVCFC_PUBLIC_DATA_MODE: env.PVCFC_PUBLIC_DATA_MODE,
+    TINYFISH_API_KEY: env.TINYFISH_API_KEY ?? '',
   } as const;
 }
 

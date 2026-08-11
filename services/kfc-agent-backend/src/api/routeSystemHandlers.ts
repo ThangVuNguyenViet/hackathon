@@ -203,6 +203,13 @@ export function createSystemRouteHandlers(context: RouteHandlerContext) {
           samplingRate: 0,
         },
       };
+      const webSearch = {
+        ok: true,
+        required: false,
+        configured: options.readiness?.webSearch?.configured ?? false,
+        provider: 'tinyfish' as const,
+        mode: 'search-fetch' as const,
+      };
       const commerceEnvironment = options.readiness?.runtime?.commerceEnvironment;
       const commerceConfig = options.readiness?.commerce ?? (
         commerceEnvironment === "sandbox" || commerceEnvironment === "production"
@@ -285,6 +292,7 @@ export function createSystemRouteHandlers(context: RouteHandlerContext) {
             agent,
             monitor,
             observability,
+            webSearch,
             catalog,
             commerce,
             pos,
@@ -299,6 +307,7 @@ export function createSystemRouteHandlers(context: RouteHandlerContext) {
             agent,
             monitor,
             observability,
+            webSearch,
             catalog,
             commerce,
             pos,

@@ -4,6 +4,7 @@ import { PvcfcAgentPack } from '../../src/businesses/pvcfc/pack.js';
 import { loadBundledPvcfcPublicDataProvider } from '../../src/businesses/pvcfc/public-data/bundledPvcfcPublicDataProvider.js';
 import { MemoryStore } from '../../src/persistence/memoryStore.js';
 import { ScriptedPvcfcChatModel } from '../fixtures/scriptedPvcfcChatModel.js';
+import type { TinyFishClient } from '../../src/web/tinyFishClient.js';
 
 function evidenceCall() {
   return new AIMessage({
@@ -16,6 +17,32 @@ function evidenceCall() {
         type: 'tool_call',
       },
     ],
+  });
+}
+
+function webClient() {
+  const search = vi.fn(async () => [
+    {
+      sourceUrl: 'https://www.pvcfc.com.vn/tin-tuc/cap-nhat-moi',
+      title: 'Cập nhật mới',
+      snippet: 'Thông tin hiện tại từ PVCFC.',
+      retrievedAt: '2026-08-12T05:00:00.000Z',
+    },
+  ]);
+  const fetch = vi.fn(async ({ url }: { url: string }) => ({
+    sourceUrl: url,
+    finalUrl: url,
+    title: 'Cập nhật mới',
+    text: 'Nội dung mới từ PVCFC.',
+    retrievedAt: '2026-08-12T05:00:00.000Z',
+  }));
+  return { client: { search, fetch } as TinyFishClient, search, fetch };
+}
+
+function toolCall(name: string, args: Record<string, unknown>, id: string) {
+  return new AIMessage({
+    content: '',
+    tool_calls: [{ id, name, args, type: 'tool_call' }],
   });
 }
 
@@ -141,5 +168,107 @@ describe('PVCFC LangChain agent pack', () => {
     expect(
       JSON.stringify(await store.listEvents('pvcfc:persistence')),
     ).not.toContain('sdkSessionMutation');
+  });
+
+  it('keeps web tools hidden until a provider attempt and lets a provider hit answer without web', async () => {
+    const live = webClient();
+    const model = new ScriptedPvcfcChatModel({
+      outputs: [evidenceCall(), new AIMessage('Urê Cà Mau là sản phẩm PVCFC.')],
+    });
+    const pack = new PvcfcAgentPack({
+      store: new MemoryStore(),
+      model,
+      provider: loadBundledPvcfcPublicDataProvider(),
+      webEvidence: {
+        client: live.client,
+        inventoryUrls: [
+          'https://www.pvcfc.com.vn/npk-ca-mau-20-20-15-npk-cua-su-thinh-vuong',
+        ],
+      },
+    });
+
+    await pack.runTurn({
+      sessionId: 'pvcfc:provider-first',
+      customerId: 'provider-first',
+      transport: 'web_chat',
+      text: 'Cho tôi thông tin Urê.',
+      externalMessageId: 'provider-first-1',
+      metadata: null,
+    });
+
+    expect(model.calls[0]?.toolNames).toEqual([
+      'listPvcfcCollections',
+      'listPvcfcRecords',
+      'searchPvcfcRecords',
+      'getPvcfcRecord',
+    ]);
+    expect(model.calls[1]?.toolNames).toEqual([
+      'listPvcfcCollections',
+      'listPvcfcRecords',
+      'searchPvcfcRecords',
+      'getPvcfcRecord',
+      'searchPvcfcWeb',
+      'fetchPvcfcPage',
+    ]);
+    expect(live.search).not.toHaveBeenCalled();
+    expect(live.fetch).not.toHaveBeenCalled();
+  });
+
+  it('unlocks Search then Fetch after a canonical lookup and preserves cited live sources in audit', async () => {
+    const live = webClient();
+    const store = new MemoryStore();
+    const sourceUrl = 'https://www.pvcfc.com.vn/tin-tuc/cap-nhat-moi';
+    const model = new ScriptedPvcfcChatModel({
+      outputs: [
+        toolCall(
+          'searchPvcfcRecords',
+          { query: 'tin mới nhất 2026', limit: 2 },
+          'provider-1',
+        ),
+        toolCall('searchPvcfcWeb', { query: 'tin mới nhất PVCFC' }, 'web-1'),
+        toolCall('fetchPvcfcPage', { url: sourceUrl }, 'fetch-1'),
+        new AIMessage(`Thông tin trực tiếp hiện tại: ${sourceUrl}`),
+      ],
+    });
+    const pack = new PvcfcAgentPack({
+      store,
+      model,
+      provider: loadBundledPvcfcPublicDataProvider(),
+      webEvidence: { client: live.client, inventoryUrls: [] },
+    });
+
+    const result = await pack.runTurn({
+      sessionId: 'pvcfc:live-evidence',
+      customerId: 'live-evidence',
+      transport: 'web_chat',
+      text: 'Tin mới nhất của PVCFC hôm nay là gì?',
+      externalMessageId: 'live-evidence-1',
+      metadata: null,
+    });
+
+    expect(model.calls[0]?.toolNames).not.toContain('searchPvcfcWeb');
+    expect(model.calls[1]?.toolNames).toContain('searchPvcfcWeb');
+    expect(model.calls[1]?.toolNames).toContain('fetchPvcfcPage');
+    expect(live.search).toHaveBeenCalledOnce();
+    expect(live.fetch).toHaveBeenCalledOnce();
+    expect(result.responseText).toContain(sourceUrl);
+    const trace = (await store.listEvents('pvcfc:live-evidence')).find(
+      ({ sourceType }) => sourceType === 'agent:tool_trace',
+    );
+    expect(trace?.payload).toMatchObject({
+      calls: expect.arrayContaining([
+        expect.objectContaining({
+          name: 'searchPvcfcWeb',
+          evidenceMode: 'live_web',
+          sourceUrls: [sourceUrl],
+        }),
+        expect.objectContaining({
+          name: 'fetchPvcfcPage',
+          evidenceMode: 'live_web',
+          sourceUrls: [sourceUrl],
+        }),
+      ]),
+    });
+    expect(JSON.stringify(trace)).not.toContain('Nội dung mới từ PVCFC.');
   });
 });

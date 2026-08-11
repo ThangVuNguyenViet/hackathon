@@ -46,6 +46,7 @@ export async function checkWorkerReadiness(
       provider?: string;
       model?: string;
       profile?: string;
+      mode?: string;
       langsmith?: {
         configured: boolean;
         project: string;
@@ -79,6 +80,13 @@ export async function checkWorkerReadiness(
     ok: true,
     required: false,
     configured: Boolean(env.OPENAI_API_KEY?.trim()),
+  };
+  const webSearch = {
+    ok: true,
+    required: false,
+    configured: Boolean(env.TINYFISH_API_KEY?.trim()),
+    provider: 'tinyfish',
+    mode: 'search-fetch',
   };
   const agentCheck = agent.configurationError
     ? {
@@ -157,6 +165,7 @@ export async function checkWorkerReadiness(
       provider?: string;
       model?: string;
       profile?: string;
+      mode?: string;
       langsmith?: {
         configured: boolean;
         project: string;
@@ -173,6 +182,7 @@ export async function checkWorkerReadiness(
     agent: agentCheck,
     monitor: monitorCheck,
     observability,
+    webSearch,
   };
   if (deep) {
     checks.messengerToken = await checkMessengerToken(env);

@@ -38,6 +38,42 @@ describe('maintained Worker platform behavior', () => {
     expect(ready.status, JSON.stringify(await ready.clone().json())).toBe(200);
     expect(denied.status).toBe(401);
     expect(allowed.status).toBe(200);
+    expect(await ready.clone().json()).toMatchObject({
+      checks: {
+        webSearch: {
+          ok: true,
+          required: false,
+          configured: false,
+          provider: 'tinyfish',
+          mode: 'search-fetch',
+        },
+      },
+    });
+  });
+
+  it('reports configured TinyFish readiness without exposing the secret', async () => {
+    const workerEnv = env(new FakeD1Database());
+    workerEnv.TINYFISH_API_KEY = 'worker-readiness-secret';
+
+    const response = await worker.fetch(
+      new Request('https://worker.test/ready'),
+      workerEnv,
+    );
+    const payload = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(payload).toMatchObject({
+      checks: {
+        webSearch: {
+          ok: true,
+          required: false,
+          configured: true,
+          provider: 'tinyfish',
+          mode: 'search-fetch',
+        },
+      },
+    });
+    expect(JSON.stringify(payload)).not.toContain('worker-readiness-secret');
   });
 
   it('processes an inert Zalo queue event into D1 without invoking an agent', async () => {

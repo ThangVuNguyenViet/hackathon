@@ -1,5 +1,7 @@
 import { ChatOpenAI } from '@langchain/openai';
 import { describe, expect, it } from 'vitest';
+import { vi } from 'vitest';
+import type { TinyFishClient } from '../../src/web/tinyFishClient.js';
 import { buildServerOptionsFromEnv } from '../../src/api/serverOptions.js';
 import { loadEnv } from '../../src/config/env.js';
 
@@ -40,6 +42,70 @@ describe('PVCFC server composition', () => {
 
     expect(options.pvcfcPublicDataProvider).toBeDefined();
     expect(options.pvcfcAgentModel).toBeUndefined();
+    expect(options.pvcfcWebEvidenceClient).toBeUndefined();
+    expect(options.readiness?.webSearch).toEqual({
+      configured: false,
+      provider: 'tinyfish',
+      mode: 'search-fetch',
+    });
+  });
+
+  it('optionally composes a bounded TinyFish client without exposing its secret', () => {
+    const secret = 'tinyfish-secret-that-must-not-leak';
+    const options = buildServerOptionsFromEnv(
+      env({
+        PVCFC_PUBLIC_DATA_MODE: 'fixture',
+        TINYFISH_API_KEY: secret,
+      }),
+    );
+
+    expect(options.pvcfcWebEvidenceClient).toBeDefined();
+    expect(options.readiness?.webSearch).toEqual({
+      configured: true,
+      provider: 'tinyfish',
+      mode: 'search-fetch',
+    });
+    expect(JSON.stringify(options.readiness)).not.toContain(secret);
+    expect(JSON.stringify(options.pvcfcWebEvidenceClient)).not.toContain(
+      secret,
+    );
+  });
+
+  it('constructs TinyFish with a four-second zero-retry adapter envelope', () => {
+    const client: TinyFishClient = {
+      search: vi.fn(async () => []),
+      fetch: vi.fn(async ({ url }) => ({
+        sourceUrl: url,
+        finalUrl: url,
+        title: '',
+        text: '',
+        retrievedAt: '2026-08-12T00:00:00.000Z',
+      })),
+    };
+    const tinyFishClientFactory = vi.fn(() => client);
+
+    const options = buildServerOptionsFromEnv(
+      env({
+        PVCFC_PUBLIC_DATA_MODE: 'fixture',
+        TINYFISH_API_KEY: 'bounded-key',
+      }),
+      { tinyFishClientFactory },
+    );
+
+    expect(tinyFishClientFactory).toHaveBeenCalledWith({
+      apiKey: 'bounded-key',
+      timeoutMs: 4_000,
+    });
+    expect(options.pvcfcWebEvidenceClient).toBe(client);
+  });
+
+  it('treats a blank TinyFish key as unavailable rather than constructing a client', () => {
+    const options = buildServerOptionsFromEnv(
+      env({ PVCFC_PUBLIC_DATA_MODE: 'fixture', TINYFISH_API_KEY: '   ' }),
+    );
+
+    expect(options.pvcfcWebEvidenceClient).toBeUndefined();
+    expect(options.readiness?.webSearch?.configured).toBe(false);
   });
 
   it('fails closed for a model without provider mode and for unsupported API mode', () => {

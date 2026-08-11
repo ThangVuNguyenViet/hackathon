@@ -121,4 +121,44 @@ describe('Worker route option parity', () => {
     expect(harness.routeOptions.readiness?.database).toBeDefined();
     expect(harness.routeOptions.readiness?.messengerToken).toBeUndefined();
   });
+
+  it('projects optional TinyFish capability identically across Worker surfaces', () => {
+    const db = new FakeD1Database();
+    const workerEnv = env(db, {
+      PVCFC_PUBLIC_DATA_MODE: 'fixture',
+      TINYFISH_API_KEY: 'worker-tinyfish-secret',
+    });
+    const surfaces: WorkerRouteSurface[] = [
+      {
+        kind: 'fetch',
+        request: new Request('https://worker.test/chat/pvcfc/message'),
+        customerRunPaceMs: 0,
+        customerRunMaxTextEvents: 3,
+      },
+      { kind: 'queue' },
+      { kind: 'scheduled' },
+    ];
+
+    const options = surfaces.map(
+      (surface) =>
+        buildWorkerRouteOptions({
+          env: workerEnv,
+          store: new D1Store(db),
+          dashboard: new DashboardEventBus(),
+          surface,
+        }).routeOptions,
+    );
+
+    for (const routeOptions of options) {
+      expect(routeOptions.pvcfcWebEvidenceClient).toBeDefined();
+      expect(routeOptions.readiness?.webSearch).toEqual({
+        configured: true,
+        provider: 'tinyfish',
+        mode: 'search-fetch',
+      });
+      expect(JSON.stringify(routeOptions.readiness)).not.toContain(
+        'worker-tinyfish-secret',
+      );
+    }
+  });
 });

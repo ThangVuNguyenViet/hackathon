@@ -19,6 +19,8 @@ import { createOmsWithPos } from '../commerce/omsWithPos.js';
 import { LangSmithAgentTracer } from '../observability/langsmithAgentTracer.js';
 import { LangSmithShowcaseScenarioSource } from '../showcase/showcase.js';
 import { createOtelRuntimeProbe } from '../observability/runtimeProbe.js';
+import { createTinyFishClient } from '../web/tinyFishClient.js';
+import { PVCFC_WEB_OPERATION_TIMEOUT_MS } from '../businesses/pvcfc/webPolicy.js';
 
 function optionalValue(value: string | undefined): string | undefined {
   const normalized = value?.trim();
@@ -94,6 +96,9 @@ type ServerOptionsEnv = Omit<
 
 export function buildServerOptionsFromEnv(
   env: ServerOptionsEnv,
+  dependencies: {
+    tinyFishClientFactory?: typeof createTinyFishClient;
+  } = {},
 ): BuildServerOptions {
   const openAiApiKey = optionalValue(env.OPENAI_API_KEY);
   const openAiBaseUrl = optionalValue(env.OPENAI_BASE_URL);
@@ -113,6 +118,13 @@ export function buildServerOptionsFromEnv(
         configuration: {
           baseURL: env.PVCFC_ASTRAFLOW_BASE_URL,
         },
+      })
+    : undefined;
+  const tinyFishApiKey = optionalValue(env.TINYFISH_API_KEY);
+  const pvcfcWebEvidenceClient = tinyFishApiKey
+    ? (dependencies.tinyFishClientFactory ?? createTinyFishClient)({
+        apiKey: tinyFishApiKey,
+        timeoutMs: PVCFC_WEB_OPERATION_TIMEOUT_MS,
       })
     : undefined;
   const googleApiKey = optionalValue(env.GOOGLE_API_KEY);
@@ -222,6 +234,7 @@ export function buildServerOptionsFromEnv(
     confirmationApprovalKeyRing: confirmationApprovalKeyRing(env),
     pvcfcPublicDataProvider,
     pvcfcAgentModel,
+    pvcfcWebEvidenceClient,
     monitorJudge,
     agentTracer: langsmithApiKey
       ? new LangSmithAgentTracer({
@@ -264,6 +277,11 @@ export function buildServerOptionsFromEnv(
     readiness: {
       agentConfigured,
       monitorConfigured: monitorJudge !== undefined,
+      webSearch: {
+        configured: pvcfcWebEvidenceClient !== undefined,
+        provider: 'tinyfish',
+        mode: 'search-fetch',
+      },
       release: {
         gitSha: env.RELEASE_GIT_SHA.trim() || 'unknown',
         deploymentId: env.RELEASE_DEPLOYMENT_ID.trim() || 'unknown',

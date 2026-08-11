@@ -26,6 +26,7 @@ const appEnvSchema = z.object({
     .default("https://api-sg.umodelverse.ai/v1"),
   PVCFC_ASTRAFLOW_MODEL: z.literal("gpt-5.6-luna").default("gpt-5.6-luna"),
   PVCFC_PUBLIC_DATA_MODE: z.enum(["fixture", "api"]).optional(),
+  TINYFISH_API_KEY: z.string().optional().default(""),
   OPENAI_DIAGNOSTIC_WORKER_RELEASE: z.string().optional().default(""),
   OPENAI_DIAGNOSTIC_EXECUTION_COLO: z.string().optional().default(""),
   OPENAI_DIAGNOSTIC_EDGE_COLO: z.string().optional().default(""),

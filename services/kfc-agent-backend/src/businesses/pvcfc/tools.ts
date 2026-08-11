@@ -9,6 +9,8 @@ export interface PvcfcToolTrace {
   readonly name: string;
   readonly status: 'success' | 'error';
   readonly durationMs: number;
+  readonly sourceUrls?: readonly string[];
+  readonly evidenceMode?: 'canonical' | 'live_web';
 }
 
 export type PvcfcToolTraceSink = (trace: PvcfcToolTrace) => void;
@@ -25,6 +27,7 @@ async function traced<T>(
       name,
       status: 'success',
       durationMs: Math.max(0, Date.now() - startedAt),
+      evidenceMode: 'canonical',
     });
     return result;
   } catch (error) {
@@ -32,6 +35,7 @@ async function traced<T>(
       name,
       status: 'error',
       durationMs: Math.max(0, Date.now() - startedAt),
+      evidenceMode: 'canonical',
     });
     throw error;
   }

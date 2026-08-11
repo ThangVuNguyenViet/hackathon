@@ -19,6 +19,8 @@ import type {
 import { PVCFC_AGENT_PROFILE } from './instructions.js';
 import type { PvcfcPublicDataProvider } from './public-data/pvcfcPublicDataProvider.js';
 import { createPvcfcTools, type PvcfcToolTrace } from './tools.js';
+import type { TinyFishClient } from '../../web/tinyFishClient.js';
+import { createPvcfcWebTools, createPvcfcWebTurnBudget } from './webTools.js';
 
 const MAX_HISTORY_TURNS = 12;
 const MAX_HISTORY_TEXT_LENGTH = 4_000;
@@ -55,6 +57,10 @@ export interface PvcfcAgentPackOptions {
   readonly store: ConversationStore;
   readonly model: BaseChatModel;
   readonly provider: PvcfcPublicDataProvider;
+  readonly webEvidence?: {
+    readonly client: TinyFishClient;
+    readonly inventoryUrls: readonly string[];
+  };
 }
 
 function textContent(message: BaseMessage): string {
@@ -112,11 +118,21 @@ function auditPayload(input: {
       latencyMs: Math.max(0, Date.now() - input.startedAt),
       ...(input.usage ? { usage: input.usage } : {}),
     },
-    calls: input.calls.map(({ name, status, durationMs }) => ({
-      name,
-      status,
-      durationMs,
-    })),
+    calls: input.calls.map(
+      ({ name, status, durationMs, sourceUrls, evidenceMode }) => ({
+        name,
+        status,
+        durationMs,
+        ...(evidenceMode === undefined ? {} : { evidenceMode }),
+        ...(sourceUrls === undefined
+          ? {}
+          : {
+              sourceUrls: sourceUrls
+                .slice(0, 5)
+                .map((url) => url.slice(0, 2_048)),
+            }),
+      }),
+    ),
   };
 }
 
@@ -156,17 +172,37 @@ export class PvcfcAgentPack implements BusinessAgentPack<
       const tools = createPvcfcTools(this.options.provider, (trace) =>
         toolCalls.push(trace),
       );
+      const providerToolNames = new Set<string>(tools.map(({ name }) => name));
+      const webTools = this.options.webEvidence
+        ? createPvcfcWebTools({
+            client: this.options.webEvidence.client,
+            inventoryUrls: this.options.webEvidence.inventoryUrls,
+            receipts: toolCalls,
+            budget: createPvcfcWebTurnBudget(),
+          })
+        : [];
+      const allTools = [...tools, ...webTools];
       const requireEvidence = createMiddleware({
         name: 'pvcfcEvidenceRequirement',
-        wrapModelCall: (request, handler) =>
-          handler({
+        wrapModelCall: (request, handler) => {
+          const providerAttempted = toolCalls.some(({ name }) =>
+            providerToolNames.has(name),
+          );
+          return handler({
             ...request,
             toolChoice: toolCalls.length === 0 ? 'required' : 'auto',
-          }),
+            tools: providerAttempted
+              ? request.tools
+              : request.tools.filter(
+                  ({ name }) =>
+                    typeof name !== 'string' || providerToolNames.has(name),
+                ),
+          });
+        },
       });
       const agent = createAgent({
         model: this.options.model,
-        tools: [...tools],
+        tools: allTools,
         systemPrompt: [
           `# ${PVCFC_AGENT_PROFILE.name}`,
           PVCFC_AGENT_PROFILE.instructions,
@@ -205,6 +241,18 @@ export class PvcfcAgentPack implements BusinessAgentPack<
         throw new Error('pvcfc_evidence_tool_required');
       }
       const responseText = textContent(responseMessage).trim();
+      const liveSourceUrls = toolCalls
+        .filter(
+          ({ evidenceMode, status }) =>
+            evidenceMode === 'live_web' && status === 'success',
+        )
+        .flatMap(({ sourceUrls }) => sourceUrls ?? []);
+      if (
+        liveSourceUrls.length > 0 &&
+        !liveSourceUrls.some((sourceUrl) => responseText.includes(sourceUrl))
+      ) {
+        throw new Error('pvcfc_web_citation_required');
+      }
       const usage = usageFrom(execution.messages);
       const assistantTurnId = `turn_${crypto.randomUUID()}`;
       const commitInput = {

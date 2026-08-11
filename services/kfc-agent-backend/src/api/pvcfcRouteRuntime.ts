@@ -5,6 +5,7 @@ import type { ConversationTurnMetadata } from '../domain/types.js';
 import { MemoryStore } from '../persistence/memoryStore.js';
 import { createPvcfcChatHandler } from './pvcfcChatHandler.js';
 import type { RouteOptions } from './routeHandlerContracts.js';
+import { bundledPvcfcWebInventoryUrls } from '../businesses/pvcfc/webPolicy.js';
 
 export function registerPvcfcRoutes(
   server: FastifyInstance,
@@ -30,6 +31,14 @@ export function createPvcfcRouteResponder(options: RouteOptions) {
               store,
               model: options.pvcfcAgentModel,
               provider: options.pvcfcPublicDataProvider,
+              ...(options.pvcfcWebEvidenceClient
+                ? {
+                    webEvidence: {
+                      client: options.pvcfcWebEvidenceClient,
+                      inventoryUrls: bundledPvcfcWebInventoryUrls(),
+                    },
+                  }
+                : {}),
             }),
           ],
           expectedPackIds: ['pvcfc'],

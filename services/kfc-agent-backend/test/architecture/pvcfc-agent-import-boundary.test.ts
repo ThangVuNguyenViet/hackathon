@@ -4,7 +4,7 @@ import { describe, expect, it } from 'vitest';
 describe('PVCFC agent import boundary', () => {
   it('uses LangChain and PVCFC-owned modules without direct SDK, LangGraph, or KFC runtime imports', async () => {
     const sources = await Promise.all(
-      ['pack.ts', 'tools.ts'].map((file) =>
+      ['pack.ts', 'tools.ts', 'webPolicy.ts', 'webTools.ts'].map((file) =>
         readFile(
           new URL(`../../src/businesses/pvcfc/${file}`, import.meta.url),
           'utf8',
