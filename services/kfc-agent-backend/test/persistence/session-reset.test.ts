@@ -86,7 +86,7 @@ describe('complete session reset', () => {
     await expect(store.getSessionAgentState(sessionId)).resolves.toMatchObject({ currentRunId: null, generation: 0 });
   });
 
-  it('leaves zero D1 rows for the session, including checkpoint and child tables', async () => {
+  it('leaves zero D1 rows for the session and current child tables', async () => {
     const db = new FakeD1Database();
     const hook = vi.fn(async () => undefined);
     const store = new D1Store(db, hook);
@@ -118,16 +118,6 @@ describe('complete session reset', () => {
     );
     db.tables.customer_run_events.push({ run_id: 'customer_runs-owned' }, { run_id: 'customer_runs-other' });
     db.tables.agent_run_turns.push({ run_id: 'agent_runs-owned' }, { run_id: 'agent_runs-other' });
-    db.tables.langgraph_checkpoints.push({ thread_id: sessionId }, { thread_id: 'messenger:keep-me' });
-    db.tables.langgraph_checkpoint_writes.push({ thread_id: sessionId }, { thread_id: 'messenger:keep-me' });
-    const compositeThreadId =
-      `agent:${JSON.stringify([sessionId, 'run:confirmation:req-1'])}`;
-    db.tables.langgraph_checkpoints.push({
-      thread_id: compositeThreadId,
-    });
-    db.tables.langgraph_checkpoint_writes.push({
-      thread_id: compositeThreadId,
-    });
 
     await store.resetSession(sessionId);
 
@@ -153,8 +143,6 @@ describe('complete session reset', () => {
     );
     expect(db.tables.customer_run_events).toEqual([{ run_id: 'customer_runs-other' }]);
     expect(db.tables.agent_run_turns).toEqual([{ run_id: 'agent_runs-other' }]);
-    expect(db.tables.langgraph_checkpoints).toEqual([{ thread_id: 'messenger:keep-me' }]);
-    expect(db.tables.langgraph_checkpoint_writes).toEqual([{ thread_id: 'messenger:keep-me' }]);
   });
 
   it('abandons pending D1 non-agent delivery without redispatch and preserves its journal', async () => {

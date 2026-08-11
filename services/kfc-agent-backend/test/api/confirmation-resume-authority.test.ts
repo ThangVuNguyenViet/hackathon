@@ -63,7 +63,7 @@ function completedResult(
 }
 
 describe('durable confirmation resume authority', () => {
-  it('binds an authenticated approval to the exact pause and checkpoint', async () => {
+  it('binds an authenticated approval to the exact pause and action identity', async () => {
     const pause = await canonicalPause();
     const repository = new FakeConfirmationResumeRepository(pause);
     const execute = vi.fn(async (input) =>
@@ -93,16 +93,16 @@ describe('durable confirmation resume authority', () => {
     expect(execute).toHaveBeenCalledTimes(1);
     const execution = execute.mock.calls[0]![0];
     expect(execution.pause).toMatchObject({
-      checkpointThreadId: pause.checkpointThreadId,
-      checkpointNamespace: pause.checkpointNamespace,
-      checkpointId: pause.checkpointId,
+      sourceTurnId: pause.sourceTurnId,
+      actionScope: pause.actionScope,
+      actionId: pause.actionId,
       actionDigest: pause.actionDigest,
       approvalBindingDigest: pause.approvalBindingDigest,
     });
-    expect(execution.checkpoint).toEqual({
-      threadId: pause.checkpointThreadId,
-      namespace: pause.checkpointNamespace,
-      checkpointId: pause.checkpointId,
+    expect(execution.actionIdentity).toEqual({
+      sourceTurnId: pause.sourceTurnId,
+      scope: pause.actionScope,
+      actionId: pause.actionId,
     });
     expect(execution.signingSecret).toBe(signingSecret);
     expect(execution.executionFence).toMatchObject({
@@ -111,9 +111,9 @@ describe('durable confirmation resume authority', () => {
       requestId: pause.requestId,
       expectedSessionGeneration: 0,
       sessionAuthorityGeneration: 0,
-      checkpointThreadId: pause.checkpointThreadId,
-      checkpointNamespace: pause.checkpointNamespace,
-      checkpointId: pause.checkpointId,
+      sourceTurnId: pause.sourceTurnId,
+      actionScope: pause.actionScope,
+      actionId: pause.actionId,
       bindingFingerprint: expect.stringMatching(/^[a-f0-9]{64}$/u),
       approvalBindingDigest: pause.approvalBindingDigest,
       providerIdempotencyKey: execution.providerIdempotencyKey,
@@ -647,7 +647,7 @@ describe('durable confirmation resume authority', () => {
     expect(repository.claimedAttempts).toEqual([1, 2]);
   });
 
-  it('never returns checkpoint or authority internals from an execution result', async () => {
+  it('never returns action identity or authority internals from an execution result', async () => {
     const pause = await canonicalPause();
     const repository = new FakeConfirmationResumeRepository(pause);
     const coordinator = createConfirmationResumeCoordinator({
@@ -657,7 +657,7 @@ describe('durable confirmation resume authority', () => {
       revalidate: async () => ({ ok: true }),
       execute: async () => ({
         responseText: 'Unsafe result.',
-        checkpointId: pause.checkpointId,
+        actionId: pause.actionId,
       }),
       now: () => fixedNow,
     });
@@ -670,7 +670,7 @@ describe('durable confirmation resume authority', () => {
       status: 503,
       body: { errorCode: 'confirmation_outcome_unknown' },
     });
-    expect(JSON.stringify(response)).not.toContain(pause.checkpointId);
+    expect(JSON.stringify(response)).not.toContain(pause.actionId);
     expect(await repository.inspectOperation(
       repository.operationIdentity!,
     )).toEqual({
@@ -1114,10 +1114,10 @@ async function canonicalPause(
   const input: CreateConfirmationPauseInput = {
     schemaVersion: 'kfc-confirmation-pause-v1',
     requestId: '00000000-0000-4000-8000-000000000001',
-    checkpointThreadId:
+    sourceTurnId:
       'agent:["kfc:customer-1","run:confirmation:message-1"]',
-    checkpointNamespace: '',
-    checkpointId: 'checkpoint-paused-1',
+    actionScope: '',
+    actionId: 'checkpoint-paused-1',
     sessionId: principal.sessionId,
     customerId: principal.customerId,
     channel: principal.channel,
@@ -1187,10 +1187,10 @@ async function canonicalGuestPause(
     requestId: toolName === 'placeOrder'
       ? '00000000-0000-4000-8000-000000000002'
       : '00000000-0000-4000-8000-000000000003',
-    checkpointThreadId:
+    sourceTurnId:
       'agent:["messenger_mock:guest-1","run:guest:message-1"]',
-    checkpointNamespace: '',
-    checkpointId: 'checkpoint-guest-paused-1',
+    actionScope: '',
+    actionId: 'checkpoint-guest-paused-1',
     sessionId: principal.sessionId,
     customerId: principal.customerId,
     channel: principal.channel,

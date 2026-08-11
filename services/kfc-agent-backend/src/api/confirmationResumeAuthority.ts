@@ -119,10 +119,10 @@ export interface ConfirmationResumeRepository {
 export interface ConfirmationResumeExecutionInput {
   pause: CreateConfirmationPauseInput;
   receipt: CommerceApprovalReceipt;
-  checkpoint: {
-    threadId: string;
-    namespace: string;
-    checkpointId: string;
+  actionIdentity: {
+    sourceTurnId: string;
+    scope: string;
+    actionId: string;
   };
   executionFence: CommerceApprovalExecutionFence;
   signingSecret: ApprovalSecret;
@@ -539,9 +539,9 @@ export function createConfirmationResumeCoordinator(
               expectedSessionGeneration: stored.sessionGeneration,
               sessionAuthorityGeneration:
                 claim.sessionAuthorityGeneration,
-              checkpointThreadId: expectedPause.checkpointThreadId,
-              checkpointNamespace: expectedPause.checkpointNamespace,
-              checkpointId: expectedPause.checkpointId,
+              sourceTurnId: expectedPause.sourceTurnId,
+              actionScope: expectedPause.actionScope,
+              actionId: expectedPause.actionId,
               bindingFingerprint: identity.bindingFingerprint,
               approvalBindingDigest:
                 expectedPause.approvalBindingDigest,
@@ -553,10 +553,10 @@ export function createConfirmationResumeCoordinator(
         const result = await options.execute({
           pause: expectedPause,
           receipt,
-          checkpoint: {
-            threadId: expectedPause.checkpointThreadId,
-            namespace: expectedPause.checkpointNamespace,
-            checkpointId: expectedPause.checkpointId,
+          actionIdentity: {
+            sourceTurnId: expectedPause.sourceTurnId,
+            scope: expectedPause.actionScope,
+            actionId: expectedPause.actionId,
           },
           executionFence,
           signingSecret: options.signingSecret,

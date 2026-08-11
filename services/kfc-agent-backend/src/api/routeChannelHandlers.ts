@@ -122,18 +122,29 @@ export function createChannelRouteHandlers(context: RouteHandlerContext) {
     );
   };
 
-  const queueAgentEvent = async (event: ConversationEvent) => {
+  const queueAgentEvent = async (
+    event: ConversationEvent,
+  ): Promise<MessengerWebhookEventProcessingResult | undefined> => {
     const sessionId = sessionIdForConversationEvent(event);
     const coordinator = new AgentRunCoordinator({ store, dashboard });
     const wakeup = await coordinator.recordPendingTurn(event, sessionId);
     const task = async () => {
       const claim = await coordinator.claimWakeupRun(wakeup);
       if (claim.dispatch && claim.runId) {
-        await processMessengerAgentRunInternal(claim.runId);
+        return processMessengerAgentRunInternal(claim.runId);
       }
+      return {
+        status: "skipped" as const,
+        errorCode: claim.reason ?? "agent_run_not_dispatched",
+      };
     };
-    if (options.defer) options.defer(task);
-    else setImmediate(() => void task().catch(() => undefined));
+    if (options.defer) {
+      options.defer(async () => {
+        await task();
+      });
+      return undefined;
+    }
+    return task();
   };
 
   const shouldProcessWithAgentRun = async (
@@ -281,8 +292,11 @@ export function createChannelRouteHandlers(context: RouteHandlerContext) {
 
         if (await shouldProcessWithAgentRun(event)) {
           await persistEventProfile(event);
-          await queueAgentEvent(event);
-          stats.queued += 1;
+          const result = await queueAgentEvent(event);
+          if (!result) stats.queued += 1;
+          else if (result.status === "processed") stats.processed += 1;
+          else if (result.status === "skipped") stats.skippedDuplicates += 1;
+          else stats.failed += 1;
           continue;
         }
 

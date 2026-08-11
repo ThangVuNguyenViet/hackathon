@@ -29,7 +29,7 @@ function transportedAgentTurnMetadata(
       value === null ||
       Array.isArray(value) ||
       !('name' in value) ||
-      value.name !== 'agent_turn' ||
+      value.name !== 'kfc_langchain_turn' ||
       !('extra' in value) ||
       typeof value.extra !== 'object' ||
       value.extra === null ||
@@ -99,7 +99,9 @@ describe('public trace correlation authority', () => {
     });
 
     expect(response.statusCode, response.body).toBe(200);
-    const agentTurn = turns.find(({ name }) => name === 'agent_turn');
+    const agentTurn = turns.find(
+      ({ name }) => name === 'kfc_langchain_turn',
+    );
     expect(agentTurn?.metadata).toMatchObject({
       scenarioId: 'live-agent',
       probeRunId: null,

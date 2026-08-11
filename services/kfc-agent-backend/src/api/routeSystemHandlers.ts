@@ -100,11 +100,22 @@ import { isRecord, canonicalJson, sha256Fingerprint, kfcSessionIdSchema, kfcChat
 import { messengerDeliveryFailureForStorage, eventFromMessengerDelivery, sendMessengerSenderAction, dashboardEventId, checkCommerceGatewayReadiness, checkCatalogReadiness, runReadinessCheck, checkFixtures, checkMessengerConfig, checkZaloConfig, deeplinkForSession, renderInboxUrlTemplate, ChannelProfileTarget, channelTargetForSession, humanChannelTargetForSession } from './routeHandlerSupport.js';
 
 import type { RouteHandlerContext } from './routeHandlerContext.js';
+import {
+  createProductionConfirmationResumeHandler,
+} from './productionConfirmationResume.js';
 
 const proofProviderTimeoutMs = 3_000;
 
 export function createSystemRouteHandlers(context: RouteHandlerContext) {
   const { options, store, dashboard, showcase, streamingRunObservers, customerRuns, getFixtures, withConfiguredCommerce, createWebhookClients, createDeliveryClients, dashboardProfileForTarget, createFirstPartyKfcClients, kfcProofAccessContext, latestKfcProofPreconditions, kfcAgentResponse, deferAiMonitorRefinement, deliverAssistantReply, persistEventProfile, turnMetadataFor, emitConversationTurnCreatedEvent, emitSessionModeEvent, emitSessionControlIntelligence, resumedOwnershipSummary, clearPersistedHandoff, persistedHandoffStatus, shouldEvaluateDashboardMonitorContext, ensureDashboardMonitorContext, persistNonAgentInboundEvent, pauseIfHumanJoined, latestUnansweredCustomerTurn, replyToLatestUnansweredCustomerTurn, processMessengerEventInternal, recoverStaleMessengerDeliveriesInternal, processMessengerAgentRunInternal } = context;
+  const resumeConfirmation = createProductionConfirmationResumeHandler({
+    store,
+    dashboard,
+    keyRing: options.confirmationApprovalKeyRing,
+    tracer: options.agentTracer,
+    accessContext: kfcProofAccessContext,
+    createClients: createFirstPartyKfcClients,
+  });
   return {
     health() {
       return { status: 200, body: { ok: true, service: "kfc-agent-backend" } };
@@ -492,6 +503,19 @@ export function createSystemRouteHandlers(context: RouteHandlerContext) {
         await store.appendEvent(sessionId, "graph:verified_state", { verifiedState });
       }
       return { status: 201, body: { ok: true, sessionId, authenticated: parsed.data.authenticated, orderId: parsed.data.orderId ?? null, providerProfileBound: parsed.data.providerProfile != null, expiresAt } };
+    },
+    async confirmationResume(body: unknown) {
+      const parsed = confirmationResumePayloadSchema.safeParse(body);
+      if (!parsed.success) {
+        return {
+          status: 400,
+          body: {
+            errorCode: 'invalid_confirmation_resume',
+            issues: parsed.error.issues,
+          },
+        };
+      }
+      return resumeConfirmation(parsed.data);
     },
   };
 }

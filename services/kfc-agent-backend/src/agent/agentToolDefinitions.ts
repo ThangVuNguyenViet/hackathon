@@ -17,8 +17,9 @@ function toolDescription(name: ToolName): string {
 }
 
 /**
- * Provider-facing schemas only. LangGraph owns dispatch, validation, approval,
- * tracing, and execution; model adapters receive no executable callback.
+ * Provider-facing schemas only. The KFC application layer owns dispatch,
+ * validation, approval, tracing, and execution; model adapters receive no
+ * executable callback.
  */
 export function commerceToolDefinitions(
   advertisedToolNames: readonly ToolName[] = toolNames,

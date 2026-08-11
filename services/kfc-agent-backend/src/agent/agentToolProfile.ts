@@ -239,14 +239,16 @@ function hasGuestCheckoutAuthority(
   ) {
     return true;
   }
-  const publication = input.currentTurn?.authority;
-  if (!publication) return false;
+  const surfaceSubjectRef =
+    input.currentTurn?.authority.surfaceSubjectRef ??
+    input.guestCheckoutAuthority?.surfaceSubjectRef;
+  if (!surfaceSubjectRef) return false;
   return authorizeGuestCheckout(input.guestCheckoutAuthority, {
     channel: input.lifecycle.channel,
     sessionId: input.lifecycle.sessionId,
     customerId: input.lifecycle.customerId,
     externalMessageId: input.externalMessageId,
-    surfaceSubjectRef: publication.surfaceSubjectRef,
+    surfaceSubjectRef,
     runFence: input.runFence,
     confirmationResume: input.confirmationResume,
     now: input.now,

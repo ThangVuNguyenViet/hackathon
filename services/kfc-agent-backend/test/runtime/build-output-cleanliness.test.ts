@@ -70,7 +70,7 @@ describe('backend build output', () => {
 
     expect(existsSync(join(distRoot, 'src/index.js'))).toBe(true);
     expect(existsSync(join(distRoot, 'src/agent/agentStateGraph.js'))).toBe(
-      true,
+      false,
     );
 
     const executableOutputs = listFiles(distRoot).filter((path) =>

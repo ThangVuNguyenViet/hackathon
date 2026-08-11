@@ -263,6 +263,15 @@ export async function persistCompletedTurn(input: {
           }),
         }
       : {}),
+    ...(presentation.profile === 'social' && presentation.media?.length
+      ? {
+          attachments: presentation.media.map((item) => ({
+            type: 'image' as const,
+            url: item.imageUrl,
+            title: item.title,
+          })),
+        }
+      : {}),
   };
   const assistantTurn = {
     sessionId: input.turnInput.sessionId,

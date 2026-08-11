@@ -301,15 +301,6 @@ export function registerRoutes(
       );
     },
   );
-  server.get(
-    '/admin/proof/kfc/sessions/:sessionId/envelope',
-    async (request, reply) => {
-      const params = z
-        .object({ sessionId: z.string().startsWith('kfc:') })
-        .parse(request.params);
-      return send(reply, await handlers.kfcProofEnvelope(params.sessionId));
-    },
-  );
   server.post(
     '/admin/proof/kfc/sessions/:sessionId/preconditions',
     async (request, reply) => {
@@ -330,9 +321,6 @@ export function registerRoutes(
   );
   server.post('/chat/kfc/message', async (request, reply) => {
     return send(reply, await handlers.chatKfcMessage(request.body));
-  });
-  server.post('/chat/pvcfc/message', async (request, reply) => {
-    return send(reply, await handlers.chatPvcfcMessage(request.body));
   });
   server.post('/chat/kfc/genui-action', async (request, reply) =>
     send(reply, await handlers.chatKfcGenUiAction(request.body)),

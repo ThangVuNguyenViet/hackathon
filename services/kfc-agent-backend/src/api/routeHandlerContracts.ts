@@ -58,7 +58,6 @@ import type {
 } from '../domain/types.js';
 import { customerCommandFromVerifiedAction } from '../domain/customerCommand.js';
 import { isKfcGenUiAttachment } from '../genui/kfcGenUi.js';
-import { runAgentTurn } from '../graph/buildGraph.js';
 import type { AgentGraphState } from '../graph/state.js';
 import {
   calculateMonitorSessionIntelligence,
@@ -474,6 +473,10 @@ export interface ReadinessOptions {
 }
 
 export interface RouteOptions {
+  agent?: {
+    model: BaseChatModel;
+    identity: AgentModelIdentity;
+  };
   automaticRecommendations?: AutomaticRecommendationHttpRuntime;
   automaticRecommendationContext?: (
     sessionId: string,
@@ -583,14 +586,12 @@ export interface RouteHandlers {
   lifecycleGet(instanceId: string): Promise<HandlerResponse>;
   lifecycleEvent(instanceId: string, body: unknown): Promise<HandlerResponse>;
   messengerProofEnvelope(sessionId: string): Promise<HandlerResponse>;
-  kfcProofEnvelope(sessionId: string): Promise<HandlerResponse>;
   kfcProofPreconditions(
     sessionId: string,
     body: unknown,
   ): Promise<HandlerResponse>;
   confirmationResume(body: unknown): Promise<HandlerResponse>;
   chatKfcMessage(body: unknown): Promise<HandlerResponse>;
-  chatPvcfcMessage(body: unknown): Promise<HandlerResponse>;
   chatKfcGenUiAction(body: unknown): Promise<HandlerResponse>;
   chatKfcStartRun(body: unknown): Promise<HandlerResponse>;
   chatKfcCancelRun(runId: string): Promise<HandlerResponse>;

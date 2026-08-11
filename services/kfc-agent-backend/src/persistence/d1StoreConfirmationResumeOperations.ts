@@ -56,9 +56,9 @@ function currentPauseBindings(
   return [
     record.requestId,
     claimedAt,
-    record.checkpointThreadId,
-    record.checkpointNamespace,
-    record.checkpointId,
+    record.sourceTurnId,
+    record.actionScope,
+    record.actionId,
     record.createdAt,
     record.expiresAt,
     record.actionDigest,

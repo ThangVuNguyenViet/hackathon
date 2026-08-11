@@ -56,7 +56,7 @@ export interface AgentGraphState {
   address?: Address;
   /** Customer-provided partial fields plus canonical location fields verified by the fulfillment API. */
   addressDraft?: Partial<Address>;
-  /** Structured draft owned by the direct OpenAI Responses checkout flow. */
+  /** Structured draft owned by the KFC application checkout flow. */
   deliveryAddressDraft?: DeliveryAddressDraft;
   deliveryAddressStatus?: 'incomplete' | 'unsupported' | 'quoted';
   deliveryAddressMissingFields?: DeliveryAddressRequiredField[];

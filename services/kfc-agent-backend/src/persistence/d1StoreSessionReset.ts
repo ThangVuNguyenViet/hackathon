@@ -6,9 +6,6 @@ import type {
   D1DatabaseLike,
 } from './d1StoreSupport.js';
 import {
-  agentCheckpointThreadPrefix,
-} from '../session/sessionContext.js';
-import {
   nonAgentTextDeliverySessionBindingDigest,
 } from './nonAgentTextDelivery.js';
 
@@ -35,8 +32,6 @@ export async function resetD1Session(input: {
   const resetAt = new Date().toISOString();
   const sessionBindingDigest =
     await nonAgentTextDeliverySessionBindingDigest(input.sessionId);
-  const agentCheckpointPrefix =
-    agentCheckpointThreadPrefix(input.sessionId);
   const resetFenceSql = `EXISTS (
     SELECT 1 FROM confirmation_pause_sessions
     WHERE session_id = ? AND generation = ?
@@ -146,32 +141,6 @@ export async function resetD1Session(input: {
       `DELETE FROM webhook_deliveries
        WHERE session_id = ? AND ${resetFenceSql}`,
     ).bind(input.sessionId, input.sessionId, nextGeneration),
-    input.db.prepare(
-      `DELETE FROM langgraph_checkpoint_writes
-       WHERE (
-         thread_id = ?
-         OR substr(thread_id, 1, length(?)) = ?
-       ) AND ${resetFenceSql}`,
-    ).bind(
-      input.sessionId,
-      agentCheckpointPrefix,
-      agentCheckpointPrefix,
-      input.sessionId,
-      nextGeneration,
-    ),
-    input.db.prepare(
-      `DELETE FROM langgraph_checkpoints
-       WHERE (
-         thread_id = ?
-         OR substr(thread_id, 1, length(?)) = ?
-       ) AND ${resetFenceSql}`,
-    ).bind(
-      input.sessionId,
-      agentCheckpointPrefix,
-      agentCheckpointPrefix,
-      input.sessionId,
-      nextGeneration,
-    ),
     input.db.prepare(
       `DELETE FROM irreversible_operations
        WHERE session_id = ?

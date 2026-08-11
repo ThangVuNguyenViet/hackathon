@@ -61,9 +61,9 @@ const commonCapabilityPayloadFields = {
   toolName: z.string().min(1).max(128),
   actionDigest: z.string().regex(/^[a-f0-9]{64}$/u),
   approvalBindingDigest: z.string().regex(/^[a-f0-9]{64}$/u),
-  checkpointThreadId: z.string().min(1).max(1_024),
-  checkpointNamespace: z.string().max(512),
-  checkpointId: z.string().min(1).max(1_024),
+  sourceTurnId: z.string().min(1).max(1_024),
+  actionScope: z.string().max(512),
+  actionId: z.string().min(1).max(1_024),
   sessionGeneration: z.number().int().nonnegative(),
   sessionAuthorityGeneration: z.number().int().nonnegative(),
   pauseIdentityDigest: z.string().regex(/^[a-f0-9]{64}$/u),
@@ -326,12 +326,12 @@ export async function verifiedGuestApprovalAuthorityMatches(
       customerId: snapshot.record.customerId,
       channel: snapshot.record.channel,
       sessionGeneration: snapshot.sessionAuthorityGeneration,
-      checkpointThreadId: snapshot.record.checkpointThreadId,
-      checkpointNamespace: snapshot.record.checkpointNamespace,
+      sourceTurnId: snapshot.record.sourceTurnId,
+      actionScope: snapshot.record.actionScope,
       now,
     }) &&
     authority?.requestId === snapshot.record.requestId &&
-    authority.checkpointId === snapshot.record.checkpointId &&
+    authority.actionId === snapshot.record.actionId &&
     authority.toolName === snapshot.record.action.toolName &&
     authority.actionDigest === snapshot.record.actionDigest &&
     authority.approvalBindingDigest ===
@@ -348,8 +348,8 @@ export async function verifiedGuestApprovalAuthorityMatchesPrincipal(
     customerId: string;
     channel: ConfirmationApprovalCapabilityPayload['channel'];
     sessionGeneration: number;
-    checkpointThreadId: string;
-    checkpointNamespace: string;
+    sourceTurnId: string;
+    actionScope: string;
     now?: number;
   },
 ): Promise<boolean> {
@@ -365,10 +365,10 @@ export async function verifiedGuestApprovalAuthorityMatchesPrincipal(
     authority.customerId === input.customerId &&
     authority.channel === input.channel &&
     authority.sessionGeneration === input.sessionGeneration &&
-    authority.checkpointThreadId ===
-      input.checkpointThreadId &&
-    authority.checkpointNamespace ===
-      input.checkpointNamespace &&
+    authority.sourceTurnId ===
+      input.sourceTurnId &&
+    authority.actionScope ===
+      input.actionScope &&
     Date.parse(authority.expiresAt) > (input.now ?? Date.now()) &&
     authority.principalDigest ===
       await digestCommerceAction(input.principal)
@@ -383,9 +383,9 @@ export async function verifiedGuestApprovalAuthorityAllowsContinuation(
     customerId: string;
     channel: ConfirmationApprovalCapabilityPayload['channel'];
     sessionGeneration: number;
-    checkpointThreadId: string;
-    checkpointNamespace: string;
-    checkpointId: string;
+    sourceTurnId: string;
+    actionScope: string;
+    actionId: string;
     toolName: string;
     now?: number;
   },
@@ -397,7 +397,7 @@ export async function verifiedGuestApprovalAuthorityAllowsContinuation(
     ) &&
     authority?.toolName === 'placeOrder' &&
     input.toolName === 'createPaymentLink' &&
-    authority.checkpointId !== input.checkpointId
+    authority.actionId !== input.actionId
   );
 }
 
@@ -414,9 +414,9 @@ async function payloadMatchesSnapshot(
     payload.toolName === pause.action.toolName &&
     payload.actionDigest === pause.actionDigest &&
     payload.approvalBindingDigest === pause.approvalBindingDigest &&
-    payload.checkpointThreadId === pause.checkpointThreadId &&
-    payload.checkpointNamespace === pause.checkpointNamespace &&
-    payload.checkpointId === pause.checkpointId &&
+    payload.sourceTurnId === pause.sourceTurnId &&
+    payload.actionScope === pause.actionScope &&
+    payload.actionId === pause.actionId &&
     payload.sessionGeneration === snapshot.sessionGeneration &&
     payload.sessionAuthorityGeneration ===
       snapshot.sessionAuthorityGeneration &&
@@ -512,12 +512,12 @@ export async function issueConfirmationApprovalCapability(input: {
               channel: input.snapshot.record.channel,
               sessionGeneration:
                 input.snapshot.sessionAuthorityGeneration,
-              checkpointThreadId:
-                input.snapshot.record.checkpointThreadId,
-              checkpointNamespace:
-                input.snapshot.record.checkpointNamespace,
-              checkpointId:
-                input.snapshot.record.checkpointId,
+              sourceTurnId:
+                input.snapshot.record.sourceTurnId,
+              actionScope:
+                input.snapshot.record.actionScope,
+              actionId:
+                input.snapshot.record.actionId,
               toolName: input.snapshot.record.action.toolName,
               now: nowMs,
             },
@@ -562,9 +562,9 @@ export async function issueConfirmationApprovalCapability(input: {
     toolName: pause.action.toolName,
     actionDigest: pause.actionDigest,
     approvalBindingDigest: pause.approvalBindingDigest,
-    checkpointThreadId: pause.checkpointThreadId,
-    checkpointNamespace: pause.checkpointNamespace,
-    checkpointId: pause.checkpointId,
+    sourceTurnId: pause.sourceTurnId,
+    actionScope: pause.actionScope,
+    actionId: pause.actionId,
     sessionGeneration: input.snapshot.sessionGeneration,
     sessionAuthorityGeneration:
       input.snapshot.sessionAuthorityGeneration,
@@ -704,9 +704,9 @@ export async function verifyConfirmationApprovalCapability(input: {
           channel: parsed.data.channel,
           sessionGeneration:
             parsed.data.sessionAuthorityGeneration,
-          checkpointThreadId: parsed.data.checkpointThreadId,
-          checkpointNamespace: parsed.data.checkpointNamespace,
-          checkpointId: parsed.data.checkpointId,
+          sourceTurnId: parsed.data.sourceTurnId,
+          actionScope: parsed.data.actionScope,
+          actionId: parsed.data.actionId,
           toolName: parsed.data.toolName,
           actionDigest: parsed.data.actionDigest,
           approvalBindingDigest:

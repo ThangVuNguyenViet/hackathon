@@ -37,6 +37,7 @@ import type { GeneratedFixtures } from '../fixtures/schema.js';
 import { loadGeneratedFixtures } from '../fixtures/loadFixtures.js';
 import type {
   AgentMode,
+  Channel,
   ConversationProfile,
   ConversationTurn,
   ConversationTurnMetadata,
@@ -49,8 +50,8 @@ import {
   kfcGenUiAttachmentForPersistence,
   type KfcGenUiAttachment,
 } from '../genui/kfcGenUi.js';
-import { runAgentTurn } from '../graph/buildGraph.js';
-import type { AgentTurnOutput } from '../graph/agentTurnState.js';
+import { runKfcApplicationTurn } from '../businesses/kfc/applicationTurn.js';
+import type { AgentTurnOutput } from '../businesses/kfc/turnContracts.js';
 import type { AgentGraphState } from '../graph/state.js';
 import type { AgentTracer } from '../observability/agentTracing.js';
 import {
@@ -147,6 +148,7 @@ import {
   deliverChannelAssistantReply,
   type DeliverChannelAssistantReplyInput,
 } from './agentRunTextDeliveryRuntime.js';
+import type { GuestCheckoutAuthority } from '../security/guestCheckoutAuthority.js';
 
 export interface StreamingRunObserver {
   observe: (observation: CustomerRunObservation) => Promise<void>;
@@ -172,6 +174,7 @@ export function releaseStreamingRunObserver(
 }
 
 interface DurableKfcAgentResponseBody {
+  agentRuntime: 'langchain-create-agent';
   responseText: string;
   presentation: ChannelPresentationPlan;
   replyIntent: AgentTurnOutput['replyIntent'];
@@ -205,6 +208,7 @@ function durableKfcAgentResponseBody(input: {
   userTurnId: string | null;
 }): DurableKfcAgentResponseBody {
   return {
+    agentRuntime: 'langchain-create-agent',
     responseText: input.output.responseText,
     presentation: persistenceSafePresentation(input.output.presentation),
     replyIntent: input.output.replyIntent,
@@ -281,6 +285,9 @@ export function createRouteAgentRuntime(
     clientMessageId: string;
     text: string;
     metadata: ConversationTurnMetadata;
+    channel?: Channel;
+    clients?: ExternalClients;
+    guestCheckoutAuthority?: GuestCheckoutAuthority;
     trustedCustomerAction?: TrustedCustomerActionEnvelope;
     observeRun?: (observation: CustomerRunObservation) => Promise<void>;
     runGuard?: {
@@ -288,6 +295,7 @@ export function createRouteAgentRuntime(
       commitFence: RunCommitFence;
     };
   }): Promise<HandlerResponse> {
+    const channel = input.channel ?? 'kfc';
     const trustedMetadata: ConversationTurnMetadata = {
       ...input.metadata,
       ...(options.readiness?.release
@@ -352,6 +360,12 @@ export function createRouteAgentRuntime(
           },
         };
       }
+    }
+    if (!options.agent?.model) {
+      return {
+        status: 503,
+        body: { errorCode: 'kfc_agent_not_configured' },
+      };
     }
     const streamingObserver = streamingRunObservers.get(
       streamingRunObserverKey(input.sessionId, input.clientMessageId),
@@ -445,16 +459,16 @@ export function createRouteAgentRuntime(
           },
         };
       }
-      const output = await runAgentTurn({
+      const output = await runKfcApplicationTurn({
         sessionId: input.sessionId,
         customerId: input.customerId,
-        channel: 'kfc',
+        channel,
         responseProfile: trustedMetadata.responseProfile,
         text: input.text,
         externalMessageId: input.clientMessageId,
         metadata: trustedMetadata,
         trustedCustomerAction: input.trustedCustomerAction,
-        clients: await createFirstPartyKfcClients(
+        clients: input.clients ?? await createFirstPartyKfcClients(
           input.sessionId,
           trustedMetadata,
         ),
@@ -462,8 +476,10 @@ export function createRouteAgentRuntime(
         dashboard,
         tracer: options.agentTracer,
         accessContext,
+        guestCheckoutAuthority: input.guestCheckoutAuthority,
         observeRun: input.observeRun ?? streamingObserver?.observe,
         runGuard,
+        agentModel: options.agent.model,
       });
 
       if (output.suppressed || !(await runGuard.isCurrent())) {
@@ -497,7 +513,7 @@ export function createRouteAgentRuntime(
           store,
           sessionId: input.sessionId,
           customerId: input.customerId,
-          channel: 'kfc',
+          channel,
           pause: output.pause,
           accessContext,
           ...(runGuard
@@ -539,7 +555,7 @@ export function createRouteAgentRuntime(
         return completedResponse;
       }
 
-      if (output.assistantTurnId) {
+      if (output.assistantTurnId && channel === 'kfc') {
         await store.updateTurnDeliveryStatus(
           output.assistantTurnId,
           'sent',

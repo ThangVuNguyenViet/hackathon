@@ -11,6 +11,9 @@ declare module 'fastify' {
 export type BuildServerOptions = RouteOptions;
 
 export function buildServer(options: BuildServerOptions = {}): FastifyInstance {
+  if (options.pvcfcAgentModel && !options.pvcfcPublicDataProvider) {
+    throw new Error('pvcfc_public_data_provider_not_configured');
+  }
   const server = Fastify({ logger: false });
   const parseJson = server.getDefaultJsonParser('error', 'error');
 
@@ -46,14 +49,13 @@ export function buildServer(options: BuildServerOptions = {}): FastifyInstance {
     service: 'kfc-agent-backend',
   }));
 
-  if (options.pvcfcAgentModel || options.pvcfcPublicDataProvider) {
-    registerPvcfcRoutes(server, options);
-  } else {
-    server.register(async (scopedServer) => {
-      const { registerRoutes } = await import('./routes.js');
-      registerRoutes(scopedServer, options);
-    });
-  }
+  server.register(async (scopedServer) => {
+    const { registerRoutes } = await import('./routes.js');
+    registerRoutes(scopedServer, options);
+    if (options.pvcfcAgentModel || options.pvcfcPublicDataProvider) {
+      registerPvcfcRoutes(scopedServer, options);
+    }
+  });
 
   return server;
 }

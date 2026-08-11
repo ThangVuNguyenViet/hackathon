@@ -4,7 +4,10 @@ import { z } from 'zod';
 import type { AppEnv } from '../config/env.js';
 import { createConfiguredPvcfcPublicDataProvider } from '../businesses/pvcfc/public-data/configuredPvcfcPublicDataProvider.js';
 import { createConfirmationApprovalKeyRing } from './confirmationApprovalCapability.js';
-import { resolveRuntimeAgentIdentity } from '../config/agentModelProfile.js';
+import {
+  createAgentChatModel,
+  resolveAgentModelProfile,
+} from '../config/agentModelProfile.js';
 import {
   createMonitorChatModel,
   resolveMonitorModelProfile,
@@ -113,7 +116,7 @@ export function buildServerOptionsFromEnv(
       })
     : undefined;
   const googleApiKey = optionalValue(env.GOOGLE_API_KEY);
-  const agentIdentity = resolveRuntimeAgentIdentity({
+  const agentIdentity = resolveAgentModelProfile({
     provider: env.KFC_AGENT_PROVIDER,
     model: optionalValue(env.KFC_AGENT_MODEL),
     mode: env.KFC_AGENT_PROFILE_MODE,
@@ -180,6 +183,19 @@ export function buildServerOptionsFromEnv(
       ? createHttpPosClient({ baseUrl: posBaseUrl, token: posToken })
       : undefined;
   return {
+    ...(agentConfigured
+      ? {
+          agent: {
+            identity: agentIdentity,
+            model: createAgentChatModel({
+              profile: agentIdentity,
+              openAiApiKey,
+              openAiBaseUrl,
+              googleApiKey,
+            }),
+          },
+        }
+      : {}),
     ...(env.RELEASE_DIGEST && env.OTEL_EXPORTER_OTLP_ENDPOINT
       ? {
           runtimeProbe: createOtelRuntimeProbe({

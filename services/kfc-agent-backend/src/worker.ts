@@ -512,12 +512,6 @@ export default {
       if (!sessionId.startsWith("messenger:")) return json({ errorCode: "invalid_messenger_session" }, 400);
       return toResponse(await handlers.messengerProofEnvelope(sessionId));
     }
-    const kfcProofMatch = url.pathname.match(/^\/admin\/proof\/kfc\/sessions\/([^/]+)\/envelope$/);
-    if (request.method === "GET" && kfcProofMatch) {
-      const sessionId = decodeURIComponent(kfcProofMatch[1]!);
-      if (!sessionId.startsWith("kfc:")) return json({ errorCode: "invalid_kfc_session" }, 400);
-      return toResponse(await handlers.kfcProofEnvelope(sessionId));
-    }
     const kfcProofPreconditionsMatch = url.pathname.match(/^\/admin\/proof\/kfc\/sessions\/([^/]+)\/preconditions$/);
     if (request.method === "POST" && kfcProofPreconditionsMatch) {
       const sessionId = decodeURIComponent(kfcProofPreconditionsMatch[1]!);

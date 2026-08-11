@@ -189,15 +189,15 @@ export type CommitConfirmationPauseIfRunCurrentResult =
 export interface ConfirmationPauseRecord {
   schemaVersion: 'kfc-confirmation-pause-v1';
   requestId: string;
-  checkpointThreadId: string;
-  checkpointNamespace: string;
-  /** Exact immutable LangGraph checkpoint containing the interrupt. */
-  checkpointId: string;
+  sourceTurnId: string;
+  actionScope: string;
+  /** Exact immutable application action selected by the source turn. */
+  actionId: string;
   sessionId: string;
   customerId: string;
   channel: ConversationTurn['channel'];
   action: ToolCallRequest;
-  /** Digest of the exact model-authored tool call and arguments. */
+  /** Digest of the exact canonical tool call and arguments. */
   actionDigest: string;
   /**
    * Server-enriched approval authority. Its actionDigest may additionally
@@ -221,9 +221,9 @@ export type CreateConfirmationPauseInput = Pick<
   ConfirmationPauseRecord,
   | 'schemaVersion'
   | 'requestId'
-  | 'checkpointThreadId'
-  | 'checkpointNamespace'
-  | 'checkpointId'
+  | 'sourceTurnId'
+  | 'actionScope'
+  | 'actionId'
   | 'sessionId'
   | 'customerId'
   | 'channel'

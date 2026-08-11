@@ -35,6 +35,7 @@ export interface KfcCoreToolReceipt {
 export function createKfcLangChainTools(input: {
   readonly state: AgentGraphState;
   readonly activeToolNames?: readonly ToolName[];
+  readonly resolveActiveToolNames?: () => readonly ToolName[];
   readonly executeTool: KfcTrustedToolExecutor;
   readonly receipts: KfcCoreToolReceipt[];
   readonly setPendingConfirmation: (pending: KfcPendingConfirmation) => void;
@@ -54,6 +55,20 @@ export function createKfcLangChainTools(input: {
         rawArguments: Record<string, unknown>,
         runtime: ToolRuntime<unknown, Record<string, never>>,
       ) => {
+        const currentToolNames =
+          input.resolveActiveToolNames?.() ?? activeToolNames;
+        if (!currentToolNames.includes(name)) {
+          input.receipts.push({
+            id: runtime.toolCallId,
+            name,
+            effect: 'provider_read',
+            status: 'error',
+          });
+          return {
+            ok: false,
+            errorCode: 'kfc_tool_not_authorized',
+          };
+        }
         const disposition = agentToolCallDisposition(name, rawArguments);
         if (!disposition.success) {
           input.receipts.push({

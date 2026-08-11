@@ -63,7 +63,7 @@ export async function loadOrAppendAgentCurrentUserTurn(
     channel: input.channel,
     role: 'user',
     // A structured action is server-verified typed authority, not customer
-    // prose. Persist only an empty audit turn so checkpoint/publication
+    // prose. Persist only an empty audit turn so canonical publication
     // identity remains durable without leaking synthetic UI action text into
     // conversation or model context.
     text: input.trustedCustomerAction ? '' : input.text,

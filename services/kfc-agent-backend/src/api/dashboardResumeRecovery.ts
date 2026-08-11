@@ -36,7 +36,10 @@ export async function enqueueDashboardResumeRecovery(input: {
     dashboard: input.dashboard,
     options: { debounceWindowMs: 0 },
   });
-  const wakeup = await coordinator.recordPendingTurn(
+  const priorAgentState = await input.store.getSessionAgentState(
+    input.sessionId,
+  );
+  let wakeup = await coordinator.recordPendingTurn(
     recoveryConversationEvent({
       turn: pendingTurn,
       channel: target.channel,
@@ -45,6 +48,23 @@ export async function enqueueDashboardResumeRecovery(input: {
     }),
     input.sessionId,
   );
+  if (
+    priorAgentState.debounceDeadlineAt &&
+    wakeup.generation === priorAgentState.generation
+  ) {
+    const dueAt = new Date().toISOString();
+    const advanced = await input.store.advanceSessionAgentGeneration({
+      sessionId: input.sessionId,
+      debounceDeadlineAt: dueAt,
+      updatedAt: dueAt,
+    });
+    wakeup = {
+      ...wakeup,
+      generation: advanced.state.generation,
+      dueAt,
+      queuedAt: dueAt,
+    };
+  }
   scheduleRecovery(input, async () => {
     const control = await input.store.getSessionControl(input.sessionId);
     if (control.agentMode !== 'ai_active') return;

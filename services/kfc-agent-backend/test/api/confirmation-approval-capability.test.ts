@@ -83,11 +83,11 @@ describe('confirmation approval capability', () => {
         actionDigest: snapshot.record.actionDigest,
         approvalBindingDigest:
           snapshot.record.approvalBindingDigest,
-        checkpointThreadId:
-          snapshot.record.checkpointThreadId,
-        checkpointNamespace:
-          snapshot.record.checkpointNamespace,
-        checkpointId: snapshot.record.checkpointId,
+        sourceTurnId:
+          snapshot.record.sourceTurnId,
+        actionScope:
+          snapshot.record.actionScope,
+        actionId: snapshot.record.actionId,
         sessionGeneration: snapshot.sessionGeneration,
         sessionAuthorityGeneration:
           snapshot.sessionAuthorityGeneration,
@@ -327,9 +327,9 @@ describe('confirmation approval capability', () => {
           actionDigest: snapshot.record.actionDigest,
           approvalBindingDigest:
             snapshot.record.approvalBindingDigest,
-          checkpointThreadId:
-            snapshot.record.checkpointThreadId,
-          checkpointId: snapshot.record.checkpointId,
+          sourceTurnId:
+            snapshot.record.sourceTurnId,
+          actionId: snapshot.record.actionId,
           sessionGeneration: snapshot.sessionGeneration,
           pauseIdentityDigest: snapshot.identityDigest,
           guestAuthorityDigest: authority.authorityDigest,
@@ -459,9 +459,9 @@ describe('confirmation approval capability', () => {
     ).toBe(false);
     const payment =
       await continuationGuestSnapshot(original.snapshot, {
-        checkpointId: 'checkpoint-createPaymentLink',
-        checkpointThreadId:
-          original.snapshot.record.checkpointThreadId,
+        actionId: 'checkpoint-createPaymentLink',
+        sourceTurnId:
+          original.snapshot.record.sourceTurnId,
       });
     await expect(issueConfirmationApprovalCapability({
       snapshot: payment,
@@ -491,14 +491,14 @@ describe('confirmation approval capability', () => {
         principalKind: 'guest_checkout',
         toolName: 'createPaymentLink',
         actionDigest: payment.record.actionDigest,
-        checkpointId: 'checkpoint-createPaymentLink',
+        actionId: 'checkpoint-createPaymentLink',
       },
     });
 
     const crossedThread =
       await continuationGuestSnapshot(original.snapshot, {
-        checkpointId: 'checkpoint-crossed',
-        checkpointThreadId:
+        actionId: 'checkpoint-crossed',
+        sourceTurnId:
           'agent:["messenger_mock:guest-capability","run:crossed"]',
       });
     await expect(issueConfirmationApprovalCapability({
@@ -514,15 +514,15 @@ describe('confirmation approval capability', () => {
 
     const sameCheckpoint =
       await continuationGuestSnapshot(original.snapshot, {
-        checkpointId: original.snapshot.record.checkpointId,
-        checkpointThreadId:
-          original.snapshot.record.checkpointThreadId,
+        actionId: original.snapshot.record.actionId,
+        sourceTurnId:
+          original.snapshot.record.sourceTurnId,
       });
     const repeatedOrder =
       await continuationGuestSnapshot(original.snapshot, {
-        checkpointId: 'checkpoint-repeated-order',
-        checkpointThreadId:
-          original.snapshot.record.checkpointThreadId,
+        actionId: 'checkpoint-repeated-order',
+        sourceTurnId:
+          original.snapshot.record.sourceTurnId,
         toolName: 'placeOrder',
       });
     const changedAuthorityGeneration = {
@@ -540,9 +540,9 @@ describe('confirmation approval capability', () => {
       await continuationGuestSnapshot(
         changedPrincipalSource.snapshot,
         {
-          checkpointId: 'checkpoint-changed-principal',
-          checkpointThreadId:
-            original.snapshot.record.checkpointThreadId,
+          actionId: 'checkpoint-changed-principal',
+          sourceTurnId:
+            original.snapshot.record.sourceTurnId,
         },
       );
     for (const invalid of [
@@ -593,9 +593,9 @@ describe('confirmation approval capability', () => {
       await continuationGuestSnapshot(
         paymentSource.snapshot,
         {
-          checkpointId: 'checkpoint-repeated-payment',
-          checkpointThreadId:
-            paymentSource.snapshot.record.checkpointThreadId,
+          actionId: 'checkpoint-repeated-payment',
+          sourceTurnId:
+            paymentSource.snapshot.record.sourceTurnId,
         },
       );
     await expect(issueConfirmationApprovalCapability({
@@ -636,10 +636,10 @@ async function canonicalSnapshot(): Promise<ConfirmationPauseStorageSnapshot> {
   const input: CreateConfirmationPauseInput = {
     schemaVersion: 'kfc-confirmation-pause-v1',
     requestId: '00000000-0000-4000-8000-000000000001',
-    checkpointThreadId:
+    sourceTurnId:
       'agent:["kfc:customer-1","run:confirmation:message-1"]',
-    checkpointNamespace: '',
-    checkpointId: 'checkpoint-paused-1',
+    actionScope: '',
+    actionId: 'checkpoint-paused-1',
     sessionId: principal.sessionId,
     customerId: principal.customerId,
     channel: principal.channel,
@@ -718,10 +718,10 @@ async function canonicalGuestSnapshot(input: {
   const record = pendingConfirmationPause({
     schemaVersion: 'kfc-confirmation-pause-v1',
     requestId: crypto.randomUUID(),
-    checkpointThreadId:
+    sourceTurnId:
       `agent:[${JSON.stringify(sessionId)},"run:guest:capability"]`,
-    checkpointNamespace: '',
-    checkpointId: `checkpoint-${input.toolName}`,
+    actionScope: '',
+    actionId: `checkpoint-${input.toolName}`,
     sessionId,
     customerId,
     channel: 'messenger_mock',
@@ -749,8 +749,8 @@ async function canonicalGuestSnapshot(input: {
 async function continuationGuestSnapshot(
   source: ConfirmationPauseStorageSnapshot,
   input: {
-    checkpointId: string;
-    checkpointThreadId: string;
+    actionId: string;
+    sourceTurnId: string;
     toolName?: 'placeOrder' | 'createPaymentLink';
   },
 ): Promise<ConfirmationPauseStorageSnapshot> {
@@ -770,9 +770,9 @@ async function continuationGuestSnapshot(
   const record = pendingConfirmationPause({
     schemaVersion: 'kfc-confirmation-pause-v1',
     requestId: crypto.randomUUID(),
-    checkpointThreadId: input.checkpointThreadId,
-    checkpointNamespace: source.record.checkpointNamespace,
-    checkpointId: input.checkpointId,
+    sourceTurnId: input.sourceTurnId,
+    actionScope: source.record.actionScope,
+    actionId: input.actionId,
     sessionId: source.record.sessionId,
     customerId: source.record.customerId,
     channel: source.record.channel,

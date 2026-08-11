@@ -65,7 +65,7 @@ async function createPause(input: {
   sessionId: string;
   customerId: string;
   evidenceRef: string;
-  checkpointId: string;
+  actionId: string;
 }): Promise<void> {
   const approvalPrincipal = principal(input);
   const action = { toolName: 'placeOrder' as const, arguments: {} };
@@ -85,13 +85,13 @@ async function createPause(input: {
   const pause: CreateConfirmationPauseInput = {
     schemaVersion: 'kfc-confirmation-pause-v1',
     requestId: input.requestId,
-    checkpointThreadId:
+    sourceTurnId:
       `agent:${JSON.stringify([
         input.sessionId,
         `run:worker:${input.requestId}`,
       ])}`,
-    checkpointNamespace: '',
-    checkpointId: input.checkpointId,
+    actionScope: '',
+    actionId: input.actionId,
     sessionId: input.sessionId,
     customerId: input.customerId,
     channel: 'kfc',
@@ -172,14 +172,14 @@ describe('Worker confirmation approval capability boundary', () => {
       sessionId: 'kfc:worker_capability_first',
       customerId: 'worker_capability_first',
       evidenceRef: 'worker-evidence-first',
-      checkpointId: 'worker-checkpoint-first',
+      actionId: 'worker-checkpoint-first',
     };
     const second = {
       requestId: crypto.randomUUID(),
       sessionId: 'kfc:worker_capability_second',
       customerId: 'worker_capability_second',
       evidenceRef: 'worker-evidence-second',
-      checkpointId: 'worker-checkpoint-second',
+      actionId: 'worker-checkpoint-second',
     };
     await createPause({ store, ...first });
     await createPause({ store, ...second });

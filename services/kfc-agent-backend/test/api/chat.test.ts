@@ -328,7 +328,7 @@ describe('KFC chat API', () => {
     });
     expect(model.callCount).toBe(1);
     expect(judgeCalls).toBe(0);
-    expect(traceNames).toEqual(['agent_turn']);
+    expect(traceNames).toEqual(['kfc_langchain_turn']);
     expect(deferred).toHaveLength(1);
     const synchronousIntelligence = dashboard
       .getEvents(payload.sessionId)
@@ -339,7 +339,10 @@ describe('KFC chat API', () => {
     await deferred[0]!();
 
     expect(judgeCalls).toBe(1);
-    expect(traceNames).toEqual(['agent_turn', 'post_turn_monitor']);
+    expect(traceNames).toEqual([
+      'kfc_langchain_turn',
+      'post_turn_monitor',
+    ]);
     expect(
       dashboard
         .getEvents(payload.sessionId)
@@ -471,7 +474,7 @@ describe('KFC chat API', () => {
     )).toBe(false);
   });
 
-  it('keeps a private saved address only in the current top-level GenUI', async () => {
+  it('redacts a private saved address from current and durable GenUI', async () => {
     const store = new MemoryStore();
     const sessionId = 'kfc:private_saved_address_response';
     const customerId = 'private_saved_address_response';
@@ -548,7 +551,7 @@ describe('KFC chat API', () => {
     expect(firstBody.genUi).toMatchObject({
       widgetKind: 'addressFulfillmentCheck',
       data: {
-        address: privateAddress,
+        address: null,
         cart,
       },
     });
@@ -557,12 +560,8 @@ describe('KFC chat API', () => {
     const savedAddressRef = firstBody.genUi.actions.find(
       ({ id }: { id: string }) => id === 'accept_fulfillment',
     )?.value;
-    expect(savedAddressRef).toMatch(
-      /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/u,
-    );
-    expect(
-      JSON.stringify(firstBody).split(privateAddress.line1),
-    ).toHaveLength(2);
+    expect(savedAddressRef).toBeUndefined();
+    expect(JSON.stringify(firstBody)).not.toContain(privateAddress.line1);
 
     const durableCompletion = complete.mock.calls.find(
       ([operation]) =>
@@ -581,10 +580,7 @@ describe('KFC chat API', () => {
       genUi: {
         data: { cart },
         actions: expect.arrayContaining([
-          expect.objectContaining({
-            id: 'accept_fulfillment',
-            value: savedAddressRef,
-          }),
+          expect.objectContaining({ id: 'submit_address' }),
         ]),
       },
       presentation: {
@@ -621,10 +617,7 @@ describe('KFC chat API', () => {
       genUi: {
         data: { cart },
         actions: expect.arrayContaining([
-          expect.objectContaining({
-            id: 'accept_fulfillment',
-            value: savedAddressRef,
-          }),
+          expect.objectContaining({ id: 'submit_address' }),
         ]),
       },
       presentation: {
@@ -1134,6 +1127,9 @@ describe('KFC chat API', () => {
       action: {
         attachmentId: attachment.id,
         actionId: 'continue_to_fulfillment',
+        payload: {
+          items: [{ itemCode: '20751', quantity: 1 }],
+        },
       },
     };
 
@@ -1413,7 +1409,7 @@ describe('KFC chat API', () => {
           })),
       ),
     });
-    await server.inject({
+    const response = await server.inject({
       method: 'POST',
       url: '/chat/kfc/message',
       payload: {
@@ -1423,6 +1419,7 @@ describe('KFC chat API', () => {
         text: 'Xin chào KFC',
       },
     });
+    expect(response.statusCode, response.body).toBe(200);
 
     const events = await server.inject({ method: 'GET', url: '/dashboard/events/kfc%3Aplain_session' });
     expect(events.json().events).toEqual(
@@ -1595,6 +1592,50 @@ describe('KFC chat API', () => {
   });
 
   it('exposes tool-backed dashboard events for monitor proof', async () => {
+    const model = fakeModel()
+      .respondWithTools([
+        {
+          name: 'searchMenu',
+          args: { scope: 'filtered', query: 'Combo Hợp Gu 99K' },
+        },
+        {
+          name: 'searchPromotions',
+          args: { scope: 'filtered', query: 'KFC Voucher' },
+        },
+        {
+          name: 'answerAllergenQuestion',
+          args: { query: 'phô mai' },
+        },
+      ])
+      .respondWithTools([{
+        name: 'updateCart',
+        args: {
+          changes: [{
+            itemCode: '20751',
+            quantity: 3,
+            modifiers: [],
+          }],
+        },
+      }])
+      .respondWithTools([{
+        name: 'quoteFulfillment',
+        args: {
+          address: {
+            label: null,
+            line1: 'Big C Đồng Nai',
+            district: 'Biên Hòa',
+            city: 'ĐỒNG NAI',
+          },
+          method: 'delivery',
+        },
+      }])
+      .respondWithTools([{
+        name: 'validateVoucher',
+        args: { voucherText: 'KFC50' },
+      }])
+      .respond(groundedResponseModelReply({
+        customerText: 'Mình đã kiểm tra yêu cầu.',
+      }));
     const server = buildServer({
       fixturesRoot: process.cwd(),
       mockClientOptions: {
@@ -1604,55 +1645,10 @@ describe('KFC chat API', () => {
           message: 'quoted',
         }),
       },
-      ...testAgent(
-        fakeModel()
-          .respondWithTools([
-            {
-              name: 'searchMenu',
-              args: { scope: 'filtered', query: 'Combo Hợp Gu 99K' },
-            },
-            {
-              name: 'searchPromotions',
-              args: { scope: 'filtered', query: 'KFC Voucher' },
-            },
-            {
-              name: 'answerAllergenQuestion',
-              args: { query: 'phô mai' },
-            },
-          ])
-          .respondWithTools([{
-            name: 'updateCart',
-            args: {
-              changes: [{
-                itemCode: '20751',
-                quantity: 3,
-                modifiers: [],
-              }],
-            },
-          }])
-          .respondWithTools([{
-            name: 'quoteFulfillment',
-            args: {
-              address: {
-                label: null,
-                line1: 'Big C Đồng Nai',
-                district: 'Biên Hòa',
-                city: 'ĐỒNG NAI',
-              },
-              method: 'delivery',
-            },
-          }])
-          .respondWithTools([{
-            name: 'validateVoucher',
-            args: { voucherText: 'KFC50' },
-          }])
-          .respond(groundedResponseModelReply({
-            customerText: 'Mình đã kiểm tra yêu cầu.',
-          })),
-      ),
+      ...testAgent(model),
     });
 
-    await server.inject({
+    const response = await server.inject({
       method: 'POST',
       url: '/chat/kfc/message',
       payload: {
@@ -1662,6 +1658,10 @@ describe('KFC chat API', () => {
         text: 'Đặt 3 Combo Hợp Gu 99K giao tới Big C Đồng Nai, Biên Hòa, ĐỒNG NAI và áp mã KFC50',
       },
     });
+    expect(
+      response.statusCode,
+      `${response.body}; modelCalls=${model.callCount}`,
+    ).toBe(200);
 
     const events = await server.inject({ method: 'GET', url: '/dashboard/events/kfc%3Adash_tool_session' });
     const dashboardEvents = events.json().events;

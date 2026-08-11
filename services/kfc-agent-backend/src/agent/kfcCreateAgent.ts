@@ -2,6 +2,7 @@ import type { BaseChatModel } from '@langchain/core/language_models/chat_models'
 import type { StructuredTool } from '@langchain/core/tools';
 import {
   createAgent,
+  createMiddleware,
   modelCallLimitMiddleware,
   providerStrategy,
   toolCallLimitMiddleware,
@@ -19,7 +20,26 @@ export const KFC_CREATE_AGENT_SYSTEM_PROMPT = KFC_LANGCHAIN_SYSTEM_PROMPT;
 export function createKfcAgent(input: {
   model: BaseChatModel;
   tools: readonly StructuredTool[];
+  resolveActiveToolNames?: () => readonly string[];
 }) {
+  const applicationToolAuthorization = createMiddleware({
+    name: 'kfc-application-tool-authorization',
+    wrapModelCall(request, handler) {
+      const applicationTools = new Set(input.tools.map(({ name }) => name));
+      const allowed = new Set(
+        input.resolveActiveToolNames?.() ?? input.tools.map(({ name }) => name),
+      );
+      return handler({
+        ...request,
+        tools: request.tools.filter(
+          ({ name }) =>
+            typeof name !== 'string' ||
+            !applicationTools.has(name) ||
+            allowed.has(name),
+        ),
+      });
+    },
+  });
   return createAgent({
     model: input.model,
     tools: [...input.tools],
@@ -33,6 +53,7 @@ export function createKfcAgent(input: {
       strict: true,
     }),
     middleware: [
+      applicationToolAuthorization,
       modelCallLimitMiddleware({ runLimit: 6, exitBehavior: 'error' }),
       toolCallLimitMiddleware({ runLimit: 8, exitBehavior: 'error' }),
     ],

@@ -2,13 +2,17 @@ import type { BaseChatModel } from '@langchain/core/language_models/chat_models'
 import {
   AIMessage,
   HumanMessage,
+  SystemMessage,
   type BaseMessage,
 } from '@langchain/core/messages';
 import { createKfcAgent } from '../../agent/kfcCreateAgent.js';
+import type { SelectedActionResponseReference } from '../../agent/selectedActionResponseAuthority.js';
+import { STRUCTURED_RESPONSE_REFERENCE_MESSAGE_ID } from '../../agent/structuredCustomerAction.js';
 import type { Channel, ConversationTurn } from '../../domain/types.js';
 import type { KfcGenUiAttachment } from '../../genui/kfcGenUi.js';
 import { selectKfcGenUiAttachment } from '../../genui/kfcGenUiSelector.js';
 import type { AgentGraphState } from '../../graph/state.js';
+import { toolNames } from '../../ordering/toolCatalog.js';
 import type { ToolName } from '../../ordering/types.js';
 import type { ConversationStore } from '../../persistence/contracts.js';
 import {
@@ -56,6 +60,7 @@ export interface KfcLangChainTurnOptions {
     readonly turn: KfcAgentTurnInput;
   }) => readonly ToolName[];
   readonly validatePublication?: KfcPublicationValidator;
+  readonly selectedActionResponse?: SelectedActionResponseReference;
 }
 
 export interface KfcLangChainTurnResult {
@@ -129,14 +134,19 @@ function validateStateIdentity(
 function validatePublicationByDefault(input: {
   publication: KfcGroundedPublication;
   toolCalls: readonly KfcCoreToolReceipt[];
+  selectedActionResponse?: SelectedActionResponseReference;
 }): void {
+  const selectedActionMatches = input.selectedActionResponse
+    ? JSON.stringify(input.publication.selectedActionResponse) ===
+      JSON.stringify(input.selectedActionResponse)
+    : input.publication.selectedActionResponse === null;
   if (
     input.publication.publicationDeclaration.semanticRelevance !== 'aligned' ||
     input.publication.publicationDeclaration.privateDataDisclosure ===
       'unauthorized' ||
     input.publication.publicationDeclaration.disclosesInternalMetadata ||
     input.publication.factualClaims.hasUnsupportedFactualClaim ||
-    input.publication.selectedActionResponse !== null
+    !selectedActionMatches
   ) {
     throw new Error('kfc_publication_rejected');
   }
@@ -166,12 +176,13 @@ export async function runKfcLangChainTurn(
   validateStateIdentity(state, turn);
   const receipts: KfcCoreToolReceipt[] = [];
   let pendingConfirmation: KfcPendingConfirmation | undefined;
-  const activeToolNames = [
+  const resolveCurrentToolNames = () => [
     ...new Set(options.resolveActiveToolNames({ state, turn })),
   ];
   const tools = createKfcLangChainTools({
     state,
-    activeToolNames,
+    activeToolNames: toolNames,
+    resolveActiveToolNames: resolveCurrentToolNames,
     executeTool: options.executeTool,
     receipts,
     setPendingConfirmation(pending) {
@@ -181,14 +192,48 @@ export async function runKfcLangChainTurn(
       pendingConfirmation = pending;
     },
   });
-  const agent = createKfcAgent({ model: options.model, tools });
-  const execution = await agent.invoke({ messages });
+  const selectedActionMessage = options.selectedActionResponse
+    ? new SystemMessage({
+        id: STRUCTURED_RESPONSE_REFERENCE_MESSAGE_ID,
+        content: JSON.stringify({
+          instruction: [
+            'This is a presentation-only response for an already executed trusted typed action.',
+            'Do not initiate another commerce action.',
+            'Include selectedActionResponse exactly as supplied in the final structured response.',
+          ].join(' '),
+          selectedActionResponse: options.selectedActionResponse,
+        }),
+      })
+    : undefined;
+  const agent = createKfcAgent({
+    model: options.model,
+    tools,
+    resolveActiveToolNames: resolveCurrentToolNames,
+  });
+  const execution = await agent.invoke(
+    {
+      messages: selectedActionMessage
+        ? [...messages, selectedActionMessage]
+        : messages,
+    },
+    {
+      // LangChain middleware adds internal execution steps around every model
+      // and tool call. The explicit model/tool call limits remain the public
+      // safety authority; this budget only lets an allowed eight-tool turn
+      // reach its structured response.
+      recursionLimit: 64,
+    },
+  );
   const parsed = kfcGroundedPublicationSchema.safeParse(
     execution.structuredResponse,
   );
   if (!parsed.success) throw new Error('kfc_grounded_response_invalid');
   const publication = parsed.data;
-  validatePublicationByDefault({ publication, toolCalls: receipts });
+  validatePublicationByDefault({
+    publication,
+    toolCalls: receipts,
+    selectedActionResponse: options.selectedActionResponse,
+  });
   await options.validatePublication?.({
     publication,
     state,
