@@ -30,18 +30,55 @@
 
 ---
 
-### Task 1: Make the shared business-pack boundary framework-neutral
+### Task 1: Remove legacy agent runtimes and establish a LangChain-only executable baseline
 
 **Files:**
 - Modify: `services/kfc-agent-backend/src/business/agentPack.ts`
 - Modify: `services/kfc-agent-backend/src/agent/agentTurnRunner.ts`
+- Create: `services/kfc-agent-backend/src/businesses/pvcfc/langchainAgent.ts`
+- Modify: `services/kfc-agent-backend/src/businesses/pvcfc/tools.ts`
+- Modify: `services/kfc-agent-backend/src/businesses/pvcfc/pack.ts`
+- Create: `services/kfc-agent-backend/src/businesses/kfc/pack.ts`
+- Create: `services/kfc-agent-backend/src/businesses/kfc/langchainTurnService.ts`
+- Modify: `services/kfc-agent-backend/src/agent/kfcCreateAgent.ts`
+- Modify: `services/kfc-agent-backend/src/api/routeAgentRuntime.ts`
+- Modify: `services/kfc-agent-backend/src/api/routeMessengerRuntime.ts`
+- Modify: `services/kfc-agent-backend/src/api/routeDirectAgentPacks.ts`
+- Modify: `services/kfc-agent-backend/src/api/serverOptions.ts`
+- Modify: `services/kfc-agent-backend/src/config/env.ts`
+- Modify: `services/kfc-agent-backend/src/worker.ts`
+- Modify: `services/kfc-agent-backend/src/workerRouteOptions.ts`
+- Modify: `services/kfc-agent-backend/src/workerReadiness.ts`
+- Modify: `services/kfc-agent-backend/src/persistence/contracts.ts`
+- Delete: `services/kfc-agent-backend/packages/openai-agents-runtime/`
+- Delete: `services/kfc-agent-backend/src/agent/openAiResponsesExecutor.ts`
+- Delete: `services/kfc-agent-backend/src/agent/openAiKfcAgent.ts`
+- Delete: `services/kfc-agent-backend/src/agent/openAiSdkTool.ts`
+- Delete: `services/kfc-agent-backend/src/agent/kfcOpenAiSdkToolAdapter.ts`
+- Delete: `services/kfc-agent-backend/src/agent/kfcOpenAiTools.ts`
+- Delete: `services/kfc-agent-backend/src/agent/kfcDirectTurnService.ts`
+- Delete: `services/kfc-agent-backend/src/agent/observedOpenAiResponsesCompactionSession.ts`
+- Delete: `services/kfc-agent-backend/src/agent/bufferedConversationStoreAgentSession.ts`
+- Delete: `services/kfc-agent-backend/src/agent/agentStateGraph.ts`
+- Delete: `services/kfc-agent-backend/src/agent/agentStateGraphRunner.ts`
+- Delete: `services/kfc-agent-backend/src/agent/agentStateSchema.ts`
+- Delete: `services/kfc-agent-backend/src/graph/buildGraph.ts`
+- Delete: `services/kfc-agent-backend/src/graph/studioAgent.ts`
+- Delete: `services/kfc-agent-backend/src/persistence/d1CheckpointSaver.ts`
+- Delete: `services/kfc-agent-backend/src/persistence/postgresCheckpointSaver.ts`
+- Delete: `services/kfc-agent-backend/langgraph.json`
+- Modify: `services/kfc-agent-backend/package.json`
+- Modify: `services/kfc-agent-backend/package-lock.json`
 - Test: `services/kfc-agent-backend/test/business/agent-pack.test.ts`
 - Test: `services/kfc-agent-backend/test/agent/agent-turn-runner.test.ts`
 - Create: `services/kfc-agent-backend/test/architecture/langchain-only-business-boundary.test.ts`
+- Create: `services/kfc-agent-backend/test/architecture/langchain-only-production-runtime.test.ts`
+- Test: `services/kfc-agent-backend/test/business/pvcfc-langchain-agent.test.ts`
+- Test: `services/kfc-agent-backend/test/business/kfc-langchain-pack.test.ts`
 
 **Interfaces:**
-- Consumes: trusted `packId` and a business-specific turn value from route code.
-- Produces:
+- Consumes: trusted `packId`, application-owned conversation/business state, and business-specific turn values.
+- Produces a framework-neutral registry and two executable LangChain business packs:
 
 ```ts
 export interface BusinessAgentPack<TTurn, TResult> {
@@ -63,49 +100,68 @@ export class AgentTurnRunner<TTurn, TResult> {
 }
 ```
 
-- The shared boundary exports no `FunctionTool`, `StructuredTool`, model, prompt, context, lifecycle, or presentation type.
+- The shared boundary exports no tool, model, prompt, context, lifecycle, or presentation type.
+- Both `PvcfcAgentPack` and `KfcAgentPack` implement `runTurn` with LangChain `createAgent`.
+- Production routing has no runtime switch and reports `langchain-create-agent`.
+- Application-owned transcript, confirmation, authorization, idempotency, effect execution, verified state, delivery, and presentation remain intact without framework session/checkpoint persistence.
 
-- [ ] **Step 1: Write the failing neutral-boundary tests**
+- [ ] **Step 1: Expand the RED architecture fence before further production edits**
 
-Add tests that instantiate two fake `BusinessAgentPack`s, prove explicit trusted selection and fail-closed missing/unknown IDs, and read the two production modules to reject imports matching:
+Keep the neutral registry tests and add a repository-wide production guard that rejects:
 
 ```ts
-/(?:openai-agents|openAi|langgraph|StructuredTool|FunctionTool)/u
+/@kfc\/openai-agents-runtime|@openai\/agents|from\s+['"]openai['"]|@langchain\/langgraph|@langchain\/langgraph-checkpoint|OpenAiResponsesExecutor|StateGraph|KFC_AGENT_RUNTIME|openai-responses/u
 ```
 
-The test must also prove that changing a turn's text or session ID to contain `pvcfc` cannot change the selected fake pack.
+Exclude documentation, reports, fixtures, and historical SQL migrations from executable-source scanning. The test must also prove customer text/session metadata cannot change the trusted pack selection.
 
-- [ ] **Step 2: Run the focused tests and capture RED**
+- [ ] **Step 2: Run the architecture suite and capture RED**
 
 Run:
 
 ```bash
-npx vitest run test/business/agent-pack.test.ts test/agent/agent-turn-runner.test.ts test/architecture/langchain-only-business-boundary.test.ts
+npx vitest run test/business/agent-pack.test.ts test/agent/agent-turn-runner.test.ts test/architecture/langchain-only-business-boundary.test.ts test/architecture/langchain-only-production-runtime.test.ts
 ```
 
-Expected: FAIL because `AgentPack` and `PreparedTurnResources` still expose OpenAI SDK tool types and the runner calls `prepareTurn`/`execute`.
+Expected: FAIL on the direct OpenAI SDK, explicit LangGraph production imports, dual runtime configuration, and legacy executor names.
 
-- [ ] **Step 3: Implement the minimal neutral contract**
+- [ ] **Step 3: Remove the forbidden runtimes before authoring their replacements**
 
-Replace the generic SDK-shaped contract with `BusinessAgentPack<TTurn, TResult>`. Keep the existing ID validation and immutable registry behavior. Reduce `AgentTurnRunner.run` to trusted lookup followed by `pack.runTurn(input.turn)`.
+Delete the direct OpenAI Agents SDK package/executor/tools/session adapter and the application-authored LangGraph graph/runner/schema/checkpointers. Remove their package dependencies, scripts, runtime flags, server construction, readiness branches, route branches, and active persistence APIs. Keep historical SQL migrations inert; do not add a destructive database migration.
 
-- [ ] **Step 4: Run focused tests, typecheck, and architecture gate**
+- [ ] **Step 4: Record the expected demolition failure**
+
+Run the architecture suite again and run `npm run typecheck`. The architecture guard must pass; typecheck is expected to fail only at now-missing KFC/PVCFC execution seams. Save that output in the task report. Do not commit this broken intermediate tree.
+
+- [ ] **Step 5: Implement the minimum PVCFC LangChain pack**
+
+Convert the four provider operations to LangChain `tool()` with Zod, reconstruct bounded history from `ConversationStore`, require provider evidence before factual publication, invoke `createAgent`, and commit the assistant turn plus neutral redacted tool trace through the existing fence-aware application store. PVCFC must not create KFC clients/state/GenUI.
+
+- [ ] **Step 6: Implement the minimum KFC LangChain pack**
+
+Reuse the existing `createAgent` semantic loop and typed commerce tools, but replace the outer graph with an imperative application transaction. Application code owns load, authorization, pending confirmation, trusted effect execution, verified-state projection, GenUI, fence checks, atomic persistence, and channel delivery. Do not route customer prose through keyword/regex rules. Confirmation resume validates stored application authority and executes exactly once without a graph checkpoint.
+
+- [ ] **Step 7: Rewire all channels and remove residual compatibility names**
+
+Web chat, Messenger, and Zalo resolve the trusted KFC/PVCFC pack and call `runTurn`. Remove `KFC_AGENT_RUNTIME`, graph readiness, direct-agent options, SDK session mutations, and `openai:*` audit/runtime identifiers. Retain `@langchain/openai` only as a LangChain model integration.
+
+- [ ] **Step 8: Run focused parity, typecheck, and architecture gates**
 
 Run:
 
 ```bash
-npx vitest run test/business/agent-pack.test.ts test/agent/agent-turn-runner.test.ts test/architecture/langchain-only-business-boundary.test.ts
+npx vitest run test/business/agent-pack.test.ts test/agent/agent-turn-runner.test.ts test/architecture/langchain-only-business-boundary.test.ts test/architecture/langchain-only-production-runtime.test.ts test/business/pvcfc-langchain-agent.test.ts test/business/kfc-langchain-pack.test.ts test/api/pvcfc-agent-pack-route.test.ts test/api/chat.test.ts test/api/human-loop-channels.test.ts test/api/confirmation-resume.test.ts test/api/agent-run-text-delivery-runtime.test.ts test/agent/kfc-open-ai-genui.test.ts
 npm run typecheck
 npm run check:architecture
 ```
 
-Expected: focused tests pass; typecheck identifies only downstream pack adapters that still implement the old contract and are intentionally migrated in Tasks 2 and 5. Do not commit until typecheck is green; use temporary compatibility local types inside the business-owned packs if required, never in the shared boundary.
+Expected: all focused tests, typecheck, and architecture gates pass with zero forbidden production imports. The unchanged gateway idempotency baseline remains separately recorded and must not be modified.
 
-- [ ] **Step 5: Commit**
+- [ ] **Step 9: Commit the complete green cut**
 
 ```bash
-git add services/kfc-agent-backend/src/business/agentPack.ts services/kfc-agent-backend/src/agent/agentTurnRunner.ts services/kfc-agent-backend/test/business/agent-pack.test.ts services/kfc-agent-backend/test/agent/agent-turn-runner.test.ts services/kfc-agent-backend/test/architecture/langchain-only-business-boundary.test.ts
-git commit -m "refactor(agent): neutralize business pack dispatch"
+git add -A services/kfc-agent-backend
+git commit -m "refactor(agent): establish LangChain-only business runtimes"
 ```
 
 ---
