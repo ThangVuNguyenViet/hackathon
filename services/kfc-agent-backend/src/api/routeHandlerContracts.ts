@@ -4,6 +4,7 @@ import { fileURLToPath } from 'node:url';
 import { z } from 'zod';
 import type { BaseChatModel } from '@langchain/core/language_models/chat_models';
 import type { BaseCheckpointSaver } from '@langchain/langgraph';
+import type { ZaloOAuthRuntime } from '../channels/zaloOAuth.js';
 import type { OpenAiKfcAgent } from '../agent/openAiKfcAgent.js';
 import type { ConfirmationApprovalKeyRing } from './confirmationApprovalCapability.js';
 import type { VerifiedMessengerGuestCheckoutIngress } from '../security/guestCheckoutAuthority.js';
@@ -418,6 +419,7 @@ export interface ReadinessCheckResult {
 export interface ReadinessOptions {
   database?: () => Promise<ReadinessCheckResult>;
   messengerToken?: () => Promise<ReadinessCheckResult>;
+  messengerRequired?: boolean;
   fixturesRoot?: string;
   openAiConfigured?: boolean;
   openAiRequired?: boolean;
@@ -475,7 +477,13 @@ export interface RouteOptions {
   messengerGraphApiBaseUrl?: string;
   messengerFetchImpl?: typeof fetch;
   zaloOaId?: string;
+  zaloAppId?: string;
+  zaloWebhookSecret?: string;
+  zaloSetupToken?: string;
+  zaloPublicBaseUrl?: string;
+  zaloOAuth?: ZaloOAuthRuntime;
   zaloAccessToken?: string;
+  zaloAccessTokenProvider?: () => Promise<string | undefined>;
   zaloInboxUrlTemplate?: string;
   zaloApiBaseUrl?: string;
   zaloFetchImpl?: typeof fetch;

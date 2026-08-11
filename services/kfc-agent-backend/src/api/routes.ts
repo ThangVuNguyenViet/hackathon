@@ -6,7 +6,10 @@ import { authorizeDemoAdminHeaders } from '../security/demoAdminAuth.js';
 import {
   verifyMessengerGuestCheckoutIngress,
 } from '../security/guestCheckoutAuthority.js';
-import { verifyMetaWebhookSignature } from '../security/webhookAuthenticity.js';
+import {
+  verifyMetaWebhookSignature,
+  verifyZaloWebhookSignature,
+} from '../security/webhookAuthenticity.js';
 import { createRouteHandlers, type HandlerResponse, type RouteOptions } from './routeHandlers.js';
 
 export type {
@@ -51,6 +54,38 @@ export function registerRoutes(server: FastifyInstance, options: RouteOptions = 
   server.get('/', serveWebsite);
   server.get('/demo', serveWebsite);
   server.get('/pvcfc', serveWebsite);
+
+  server.get('/auth/zalo/start', async (request, reply) => {
+    if (!options.zaloOAuth || !options.zaloSetupToken) {
+      return reply.code(503).send({ errorCode: 'zalo_oauth_setup_not_configured' });
+    }
+    const authorization = request.headers.authorization;
+    if (authorization !== `Bearer ${options.zaloSetupToken}`) {
+      return reply.code(401).send({ errorCode: 'zalo_oauth_setup_unauthorized' });
+    }
+    try {
+      return reply.redirect(await options.zaloOAuth.authorizationUrl());
+    } catch (error) {
+      return reply.code(409).send({
+        errorCode: 'zalo_oauth_already_authorized',
+        message: error instanceof Error ? error.message : 'Zalo OA is already authorized',
+      });
+    }
+  });
+
+  server.get('/auth/zalo/callback', async (request, reply) => {
+    if (!options.zaloOAuth) {
+      return reply.code(503).send({ errorCode: 'zalo_oauth_setup_not_configured' });
+    }
+    try {
+      await options.zaloOAuth.completeAuthorization(request.query);
+      return reply
+        .type('text/html; charset=utf-8')
+        .send('<h1>PVCFC Zalo OA authorization complete</h1><p>You can close this tab.</p>');
+    } catch {
+      return reply.code(400).send({ errorCode: 'zalo_oauth_callback_invalid' });
+    }
+  });
 
   server.get('/assets/:file', async (request, reply) => {
     const params = z.object({ file: z.string().min(1) }).parse(request.params);
@@ -201,7 +236,33 @@ export function registerRoutes(server: FastifyInstance, options: RouteOptions = 
       await handlers.messengerWebhook(request.body, verifiedIngress),
     );
   });
-  server.post('/webhooks/zalo', async (request, reply) => send(reply, await handlers.zaloWebhook(request.body)));
+  server.post('/webhooks/zalo', async (request, reply) => {
+    if (!options.zaloWebhookSecret || !options.zaloOaId) {
+      return reply.code(503).send({ errorCode: 'zalo_webhook_authenticity_not_configured' });
+    }
+    const rawBody = request.rawBody;
+    if (rawBody && rawBody.byteLength > 1_000_000) {
+      return reply.code(413).send({ errorCode: 'zalo_webhook_payload_too_large' });
+    }
+    const signature = request.headers['x-zevent-signature'];
+    const valid = rawBody && (await verifyZaloWebhookSignature({
+      rawBody,
+      signatureHeader: Array.isArray(signature) ? (signature[0] ?? null) : (signature ?? null),
+      oaSecret: options.zaloWebhookSecret,
+      expectedAppId: options.zaloAppId,
+    }));
+    if (!valid) {
+      return reply.code(401).send({ errorCode: 'invalid_zalo_webhook_signature' });
+    }
+    const recipient = z
+      .object({ recipient: z.object({ id: z.string().min(1) }).passthrough() })
+      .passthrough()
+      .safeParse(request.body);
+    if (!recipient.success || recipient.data.recipient.id !== options.zaloOaId) {
+      return reply.code(403).send({ errorCode: 'wrong_zalo_oa_recipient' });
+    }
+    return send(reply, await handlers.zaloWebhook(request.body));
+  });
   server.post('/admin/messenger/sync-history', async (request, reply) =>
     send(reply, await handlers.messengerHistorySync(request.body)),
   );

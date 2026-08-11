@@ -12,6 +12,10 @@ function equalBytes(left: Uint8Array, right: Uint8Array): boolean {
   return difference === 0;
 }
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
+}
+
 export async function verifyMetaWebhookSignature(input: {
   rawBody: Uint8Array;
   signatureHeader: string | null;
@@ -29,5 +33,48 @@ export async function verifyMetaWebhookSignature(input: {
     ['sign'],
   );
   const expected = new Uint8Array(await crypto.subtle.sign('HMAC', key, Uint8Array.from(input.rawBody).buffer));
+  return equalBytes(expected, received);
+}
+
+export async function verifyZaloWebhookSignature(input: {
+  rawBody: Uint8Array;
+  signatureHeader: string | null;
+  oaSecret: string;
+  expectedAppId?: string;
+}): Promise<boolean> {
+  if (!input.oaSecret || !input.signatureHeader) return false;
+  const header = input.signatureHeader.startsWith('sha256=')
+    ? input.signatureHeader.slice('sha256='.length)
+    : input.signatureHeader.startsWith('mac=')
+      ? input.signatureHeader.slice('mac='.length)
+      : input.signatureHeader;
+  const received = decodeHex(header);
+  if (!received) return false;
+
+  const rawText = new TextDecoder().decode(input.rawBody);
+  let body: unknown;
+  try {
+    body = JSON.parse(rawText) as unknown;
+  } catch {
+    return false;
+  }
+  if (!isRecord(body)) return false;
+  const record = body;
+  if (typeof record.app_id !== 'string') return false;
+  if (input.expectedAppId && record.app_id !== input.expectedAppId) return false;
+  if (
+    typeof record.timestamp !== 'string' &&
+    typeof record.timestamp !== 'number'
+  ) {
+    return false;
+  }
+
+  const digestInput = `${record.app_id}${rawText}${String(record.timestamp)}${input.oaSecret}`;
+  const expected = new Uint8Array(
+    await crypto.subtle.digest(
+      'SHA-256',
+      new TextEncoder().encode(digestInput),
+    ),
+  );
   return equalBytes(expected, received);
 }

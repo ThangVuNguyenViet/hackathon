@@ -1007,6 +1007,7 @@ export function createRouteAgentRuntime(
   }
 
   return {
+    runDirectAgentTurn: directTurnRunner?.run.bind(directTurnRunner),
     runDirectKfcTurn: kfcDirectTurnService?.run.bind(kfcDirectTurnService),
     kfcAgentResponse,
     deferAiMonitorRefinement,

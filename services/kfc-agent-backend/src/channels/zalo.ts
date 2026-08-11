@@ -9,9 +9,17 @@ import {
 import type { ConversationAttachment, ToolResult } from '../domain/types.js';
 import type { ConversationEvent } from './conversationEvent.js';
 
+export const PVCFC_ZALO_OA_ID = '4225933857518051795';
+
 const zaloTextSendResponseSchema = z
   .object({
     message_id: z.string().trim().min(1).optional(),
+    data: z
+      .object({
+        message_id: z.string().trim().min(1).optional(),
+      })
+      .passthrough()
+      .optional(),
     error: z.number().optional(),
     message: z.string().optional(),
   })
@@ -30,7 +38,7 @@ const zaloWebhookSchema = z
       })
       .passthrough()
       .optional(),
-    timestamp: z.number().optional(),
+    timestamp: z.union([z.number(), z.string()]).optional(),
   })
   .passthrough();
 
@@ -64,10 +72,11 @@ function normalizeAttachment(value: unknown): ConversationAttachment {
 
 export function normalizeZaloWebhook(payload: unknown, expectedOaId?: string): ConversationEvent[] {
   const body = zaloWebhookSchema.parse(payload);
-  if (expectedOaId && body.recipient?.id && body.recipient.id !== expectedOaId) return [];
+  if (expectedOaId && body.recipient?.id !== expectedOaId) return [];
   if (!body.sender?.id) return [];
 
-  const timestamp = body.timestamp ?? Date.now();
+  const timestamp = Number(body.timestamp ?? Date.now());
+  if (!Number.isFinite(timestamp)) return [];
   const attachments = (body.message?.attachments ?? []).map(normalizeAttachment);
   const text = body.message?.text?.trim();
   const hasText = Boolean(text);
@@ -105,16 +114,19 @@ export function normalizeZaloWebhook(payload: unknown, expectedOaId?: string): C
 
 export function createZaloClient(input: {
   accessToken?: string;
+  accessTokenProvider?: () => Promise<string | undefined>;
   apiBaseUrl?: string;
   fetchImpl?: typeof fetch;
 }): ZaloClient & ChannelTextOutcomeClient {
   const fetchImpl = input.fetchImpl ?? fetch;
   const apiBaseUrl = input.apiBaseUrl ?? 'https://openapi.zalo.me';
-  const textAccessToken = input.accessToken?.trim();
+  const accessToken = async () =>
+    (await input.accessTokenProvider?.())?.trim() || input.accessToken?.trim();
   const sendTextWithOutcome = async (
     recipientId: string,
     text: string,
   ): Promise<ChannelTextSendOutcome> => {
+    const textAccessToken = await accessToken();
     if (!textAccessToken) {
       return {
         status: 'not_dispatched',
@@ -181,7 +193,8 @@ export function createZaloClient(input: {
         message: body.message ?? 'Zalo send was rejected',
       };
     }
-    if (!response.ok || !body.message_id) {
+    const messageId = body.data?.message_id ?? body.message_id;
+    if (!response.ok || !messageId) {
       return {
         status: 'delivery_outcome_unknown',
         errorCode: 'zalo_delivery_outcome_unknown',
@@ -190,7 +203,7 @@ export function createZaloClient(input: {
     }
     return {
       status: 'confirmed_sent',
-      messageId: body.message_id,
+      messageId,
     };
   };
 
@@ -202,12 +215,13 @@ export function createZaloClient(input: {
       );
     },
     async sendMedia(recipientId, media): Promise<ChannelMediaDeliveryResult> {
+      const mediaAccessToken = await accessToken();
       const items: ChannelMediaDeliveryResult['items'] = [];
       for (const item of media) {
         try {
           const response = await fetchImpl(`${apiBaseUrl}/v3.0/oa/message/cs`, {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json', access_token: input.accessToken ?? '' },
+            headers: { 'Content-Type': 'application/json', access_token: mediaAccessToken ?? '' },
             body: JSON.stringify({
               recipient: { user_id: recipientId },
               message: { text: item.title, attachment: { type: 'template', payload: { template_type: 'media', elements: [{ media_type: 'image', url: item.imageUrl }] } } },

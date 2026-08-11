@@ -173,10 +173,13 @@ export class PvcfcAgentPack implements ExecutableAgentPack<
       profile: input.profile,
       sessionId: input.turn.sessionId,
       customerId: input.turn.customerId,
-      // The persisted transport remains web_chat without widening KFC's
-      // business-channel domain at the shared route boundary.
-      // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- adapter from the neutral web transport to the legacy persistence channel
-      channel: 'web_chat' as Channel,
+      channel:
+        input.turn.transport === 'web_chat'
+          ? // Legacy persistence still names the first-party browser transport
+            // outside the narrower Channel union used by social ingress.
+            // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion
+            ('web_chat' as Channel)
+          : input.turn.channel,
       transport: input.turn.transport,
       text: input.turn.text,
       externalMessageId: input.turn.externalMessageId,

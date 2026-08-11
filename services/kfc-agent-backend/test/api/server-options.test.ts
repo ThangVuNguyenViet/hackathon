@@ -182,7 +182,7 @@ describe('buildServerOptionsFromEnv', () => {
       META_INBOX_URL_TEMPLATE:
         'https://business.facebook.com/latest/inbox/all?asset_id={pageId}&selected_item_id={externalUserId}',
       MESSENGER_GRAPH_API_BASE_URL: 'https://graph.local',
-      ZALO_OA_ID: 'oa_local',
+      ZALO_OA_ID: '4225933857518051795',
       ZALO_ACCESS_TOKEN: 'zalo_token_local',
       ZALO_INBOX_URL_TEMPLATE:
         'https://oa.zalo.me/chatv2?oaid={pageId}&uid={externalUserId}',
@@ -201,7 +201,7 @@ describe('buildServerOptionsFromEnv', () => {
       metaInboxUrlTemplate:
         'https://business.facebook.com/latest/inbox/all?asset_id={pageId}&selected_item_id={externalUserId}',
       messengerGraphApiBaseUrl: 'https://graph.local',
-      zaloOaId: 'oa_local',
+      zaloOaId: '4225933857518051795',
       zaloAccessToken: 'zalo_token_local',
       zaloInboxUrlTemplate:
         'https://oa.zalo.me/chatv2?oaid={pageId}&uid={externalUserId}',
