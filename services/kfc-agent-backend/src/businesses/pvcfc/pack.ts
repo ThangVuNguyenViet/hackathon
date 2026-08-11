@@ -60,6 +60,7 @@ export interface PvcfcAgentPackOptions {
   readonly webEvidence?: {
     readonly client: TinyFishClient;
     readonly inventoryUrls: readonly string[];
+    readonly now?: () => number;
   };
 }
 
@@ -147,6 +148,9 @@ export class PvcfcAgentPack implements BusinessAgentPack<
   async runTurn(turn: PvcfcAgentTurnInput): Promise<PvcfcAgentTurnResult> {
     const startedAt = Date.now();
     const toolCalls: PvcfcToolTrace[] = [];
+    const webBudget = this.options.webEvidence
+      ? createPvcfcWebTurnBudget({ now: this.options.webEvidence.now })
+      : undefined;
     const userTurn = await this.options.store.appendTurn({
       sessionId: turn.sessionId,
       // The neutral application transport is intentionally not added to the
@@ -178,12 +182,26 @@ export class PvcfcAgentPack implements BusinessAgentPack<
             client: this.options.webEvidence.client,
             inventoryUrls: this.options.webEvidence.inventoryUrls,
             receipts: toolCalls,
-            budget: createPvcfcWebTurnBudget(),
+            budget: webBudget!,
           })
         : [];
+      const webToolNames = new Set<string>(webTools.map(({ name }) => name));
       const allTools = [...tools, ...webTools];
       const requireEvidence = createMiddleware({
         name: 'pvcfcEvidenceRequirement',
+        wrapToolCall: (request, handler) => {
+          const toolName =
+            typeof request.tool?.name === 'string'
+              ? request.tool.name
+              : request.toolCall.name;
+          if (
+            webToolNames.has(toolName) &&
+            !toolCalls.some(({ name }) => providerToolNames.has(name))
+          ) {
+            throw new Error('pvcfc_web_provider_evidence_required');
+          }
+          return handler(request);
+        },
         wrapModelCall: (request, handler) => {
           const providerAttempted = toolCalls.some(({ name }) =>
             providerToolNames.has(name),

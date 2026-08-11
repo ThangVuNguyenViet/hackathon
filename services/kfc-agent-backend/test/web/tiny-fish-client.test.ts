@@ -96,6 +96,13 @@ describe('bounded TinyFish evidence client', () => {
         allowedResults[0]!,
         {
           position: 2,
+          site_name: 'Oversized official URL',
+          title: 'Should be removed',
+          snippet: 'Allowed host but unsafe evidence size',
+          url: `https://official.example/news?detail=${'x'.repeat(2_048)}`,
+        },
+        {
+          position: 3,
           site_name: 'Impostor',
           title: 'Should be removed',
           snippet: 'Outside caller allowlist',
@@ -130,6 +137,9 @@ describe('bounded TinyFish evidence client', () => {
     );
     expect(results.map(({ sourceUrl }) => sourceUrl)).not.toContain(
       'https://official.example.attacker.test/news',
+    );
+    expect(results.every(({ sourceUrl }) => sourceUrl.length <= 2_048)).toBe(
+      true,
     );
     expect(results[0]).toMatchObject({
       sourceUrl: 'https://official.example/news/0',
@@ -188,6 +198,44 @@ describe('bounded TinyFish evidence client', () => {
         perUrlTimeoutMs: 2_000,
       }),
     ).rejects.toThrow('web_url_port_not_allowed');
+  });
+
+  it('rejects an overlong allowed-host fetch input before calling the SDK', async () => {
+    const { factory, fetchGetContents } = sdkHarness();
+    const overlongUrl = `https://official.example/news?detail=${'x'.repeat(2_048)}`;
+
+    await expect(
+      makeClient(factory).fetch({
+        url: overlongUrl,
+        allowedHostnames: ['official.example'],
+        perUrlTimeoutMs: 2_000,
+      }),
+    ).rejects.toThrow('web_url_too_long');
+    expect(fetchGetContents).not.toHaveBeenCalled();
+  });
+
+  it('rejects an overlong allowed-host final URL before returning evidence', async () => {
+    const { factory } = sdkHarness({
+      fetchResult: {
+        url: 'https://official.example/news/1',
+        final_url: `https://official.example/news?detail=${'x'.repeat(2_048)}`,
+        title: 'Oversized redirect target',
+        description: null,
+        language: 'vi',
+        author: null,
+        published_date: null,
+        format: 'markdown',
+        text: 'Must not become model-visible evidence',
+      },
+    });
+
+    await expect(
+      makeClient(factory).fetch({
+        url: 'https://official.example/news/1',
+        allowedHostnames: ['official.example'],
+        perUrlTimeoutMs: 2_000,
+      }),
+    ).rejects.toThrow('web_url_too_long');
   });
 
   it('fetches exactly one URL and returns bounded compact evidence', async () => {

@@ -77,6 +77,19 @@ describe('generic business web URL safety', () => {
     ).toBe('https://official.example/news');
   });
 
+  it('rejects raw and normalized official-host URLs above the shared length cap', () => {
+    const rawOverLimit = `https://official.example/news?detail=${'x'.repeat(2_048)}`;
+    const normalizedOverLimit = `https://official.example/${'é'.repeat(680)}`;
+
+    expect(() =>
+      validateBusinessWebUrl(rawOverLimit, ['official.example']),
+    ).toThrow('web_url_too_long');
+    expect(normalizedOverLimit.length).toBeLessThanOrEqual(2_048);
+    expect(() =>
+      validateBusinessWebUrl(normalizedOverLimit, ['official.example']),
+    ).toThrow('web_url_too_long');
+  });
+
   it('rejects invalid or IP-literal entries in the caller allowlist', () => {
     expect(() => normalizeAllowedHostnames([])).toThrow(
       'web_allowlist_required',

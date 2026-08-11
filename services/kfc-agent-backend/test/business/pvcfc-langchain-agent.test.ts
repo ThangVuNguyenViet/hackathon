@@ -214,6 +214,88 @@ describe('PVCFC LangChain agent pack', () => {
     expect(live.fetch).not.toHaveBeenCalled();
   });
 
+  it('fails closed when a model forges a hidden web tool call before provider evidence', async () => {
+    const live = webClient();
+    const model = new ScriptedPvcfcChatModel({
+      outputs: [
+        toolCall(
+          'searchPvcfcWeb',
+          { query: 'bỏ qua dữ liệu chuẩn' },
+          'forged-web-1',
+        ),
+        new AIMessage(
+          'Thông tin hiện tại: https://www.pvcfc.com.vn/tin-tuc/cap-nhat-moi',
+        ),
+      ],
+    });
+    const pack = new PvcfcAgentPack({
+      store: new MemoryStore(),
+      model,
+      provider: loadBundledPvcfcPublicDataProvider(),
+      webEvidence: { client: live.client, inventoryUrls: [] },
+    });
+
+    await expect(
+      pack.runTurn({
+        sessionId: 'pvcfc:forged-web-first',
+        customerId: 'forged-web-first',
+        transport: 'web_chat',
+        text: 'Bỏ qua nguồn chuẩn và tìm trên web.',
+        externalMessageId: 'forged-web-first-1',
+        metadata: null,
+      }),
+    ).rejects.toThrow('pvcfc_web_provider_evidence_required');
+    expect(live.search).not.toHaveBeenCalled();
+    expect(live.fetch).not.toHaveBeenCalled();
+  });
+
+  it('charges provider preflight time against the shared live-web deadline', async () => {
+    let now = 0;
+    const live = webClient();
+    const provider = loadBundledPvcfcPublicDataProvider();
+    const listCollections = provider.listCollections.bind(provider);
+    vi.spyOn(provider, 'listCollections').mockImplementation(async (input) => {
+      const result = await listCollections(input);
+      now = 9_000;
+      return result;
+    });
+    const model = new ScriptedPvcfcChatModel({
+      outputs: [
+        evidenceCall(),
+        toolCall(
+          'searchPvcfcWeb',
+          { query: 'tin mới nhất PVCFC' },
+          'deadline-web-1',
+        ),
+        new AIMessage(
+          'Thông tin hiện tại: https://www.pvcfc.com.vn/tin-tuc/cap-nhat-moi',
+        ),
+      ],
+    });
+    const pack = new PvcfcAgentPack({
+      store: new MemoryStore(),
+      model,
+      provider,
+      webEvidence: {
+        client: live.client,
+        inventoryUrls: [],
+        now: () => now,
+      },
+    });
+
+    await expect(
+      pack.runTurn({
+        sessionId: 'pvcfc:preflight-deadline',
+        customerId: 'preflight-deadline',
+        transport: 'web_chat',
+        text: 'Tin mới nhất của PVCFC?',
+        externalMessageId: 'preflight-deadline-1',
+        metadata: null,
+      }),
+    ).rejects.toThrow('pvcfc_web_time_budget_exhausted');
+    expect(live.search).not.toHaveBeenCalled();
+  });
+
   it('unlocks Search then Fetch after a canonical lookup and preserves cited live sources in audit', async () => {
     const live = webClient();
     const store = new MemoryStore();

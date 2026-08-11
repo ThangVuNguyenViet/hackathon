@@ -1,4 +1,5 @@
 const IPV4_LITERAL = /^(?:\d{1,3}\.){3}\d{1,3}$/u;
+const MAX_BUSINESS_WEB_URL_LENGTH = 2_048;
 
 export class BusinessWebEvidenceError extends Error {
   readonly code: string;
@@ -72,6 +73,9 @@ export function validateBusinessWebUrl(
   allowedHostnames: readonly string[],
 ): string {
   const normalizedAllowlist = normalizeAllowedHostnames(allowedHostnames);
+  if (candidate.length > MAX_BUSINESS_WEB_URL_LENGTH) {
+    throw new BusinessWebEvidenceError('web_url_too_long');
+  }
   let url: URL;
   try {
     url = new URL(candidate);
@@ -103,7 +107,11 @@ export function validateBusinessWebUrl(
   }
 
   url.hostname = hostname;
-  return url.toString();
+  const normalized = url.toString();
+  if (normalized.length > MAX_BUSINESS_WEB_URL_LENGTH) {
+    throw new BusinessWebEvidenceError('web_url_too_long');
+  }
+  return normalized;
 }
 
 export function boundEvidenceText(

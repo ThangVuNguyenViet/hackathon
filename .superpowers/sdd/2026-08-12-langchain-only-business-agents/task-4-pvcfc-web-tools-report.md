@@ -83,12 +83,12 @@ Total Upload: 12080.00 KiB / gzip: 1236.01 KiB
 Task 4 after reachable Worker wiring:
 
 ```text
-Total Upload: 12708.20 KiB / gzip: 1333.64 KiB
+Total Upload: 12709.09 KiB / gzip: 1333.75 KiB
 ```
 
-Actual delta: **+628.20 KiB raw, +97.63 KiB gzip**. This is the reachable TinyFish SDK/client and PVCFC pack wiring contribution. It is a release-size concern to monitor when KFC web tools are added, but the Worker build and dry run remain green.
+Actual delta: **+629.09 KiB raw, +97.74 KiB gzip**. This is the reachable TinyFish SDK/client, PVCFC pack wiring, and review-hardening contribution. It is a release-size concern to monitor when KFC web tools are added, but the Worker build and dry run remain green.
 
-## Verification
+## Initial verification before independent review fixes
 
 All commands used bundled Node 24. No live TinyFish request or live CI was run.
 
@@ -159,5 +159,47 @@ feat(pvcfc): add official-site TinyFish evidence tools
 
 1. The integration is credential-free in CI; Search/Fetch latency, provider quotas, and real result quality still require the later credentialed canary.
 2. With zero retries, a 4-second SDK timeout, 3-second Fetch timeout, and code-enforced 12-second shared live-web deadline, web operations cannot consume the full 30-second turn deadline. Deterministic clock coverage proves later operations fail before invoking the client when less than one 4-second window remains, reserving about 18 seconds for the provider lookup and model calls. The existing outer turn deadline remains the final guard.
-3. The +97.63 KiB gzip Worker increase should be compared again after KFC-owned web tools. No second SDK/client copy should be introduced.
+3. The +97.74 KiB gzip Worker increase should be compared again after KFC-owned web tools. No second SDK/client copy should be introduced.
 4. Fixture inventory derivation is intentionally temporary. When PVCFC switches to its official API provider, server composition must inject that provider's canonical source inventory rather than retain fixture-derived admission.
+
+## Independent review fixes
+
+The first review identified three missing enforcement boundaries. Each regression was added and observed RED before production changes:
+
+- A scripted model forged a first-call `searchPvcfcWeb` invocation even though the tool was absent from its advertised tool list. LangChain's executor still ran the registered tool, touched the TinyFish fake, and committed the response.
+- A deterministic clock advanced from 0 to 9,000 ms during the canonical provider preflight, but the live-web budget was created afterward, so Search still ran with a fresh 12-second allowance.
+- The generic URL validator accepted oversized allowed-host URLs. Search returned one to the model, overlong Fetch input reached the SDK, and an overlong `final_url` became model-visible.
+
+The PVCFC evidence middleware now uses `wrapToolCall` as an execution authorization boundary in addition to model-visible tool filtering. `searchPvcfcWeb` and `fetchPvcfcPage` throw `pvcfc_web_provider_evidence_required` before their handlers can execute unless the current turn's neutral trace contains a canonical provider-tool attempt. The scripted regression proves the forged hidden call fails closed and neither TinyFish method is invoked.
+
+The single live-web budget is now created at `runTurn` entry, before the user-turn append, history load, and provider preflight, then passed unchanged into the per-turn web tools. The injected-clock regression advances preflight to 9,000 ms and proves Search is rejected before TinyFish because fewer than 4,000 ms remain.
+
+Generic URL validation now applies the same 2,048-character maximum both to the raw candidate and the normalized WHATWG URL. Because all TinyFish input URLs, Search result URLs, and Fetch `final_url` values cross this validator, oversized allowed-host values are rejected or omitted before SDK invocation/model visibility as appropriate.
+
+Review-fix verification:
+
+```text
+npx vitest run [11 focused Task 3/4 and integration files]
+Test Files  11 passed (11)
+Tests       63 passed (63)
+
+npm run check
+Test Files  200 passed | 1 skipped (201)
+Tests       1960 passed | 1 skipped (1961)
+
+npm run check:architecture
+Architecture size check passed (463 files, 900-line ceiling with no baseline growth).
+
+npm run build
+exit 0
+
+npm run worker:deploy:dry-run
+exit 0
+Total Upload: 12709.09 KiB / gzip: 1333.75 KiB
+```
+
+Review-fix commit subject:
+
+```text
+fix(pvcfc): enforce live evidence boundaries
+```
