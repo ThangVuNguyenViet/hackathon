@@ -224,7 +224,7 @@ describe('PVCFC trusted route pack integration', () => {
       expectedPackIds: ['pvcfc'],
     });
 
-    const { result } = await runner.run({
+    const result = await runner.run({
       packId: 'pvcfc',
       turn: {
         sessionId: 'pvcfc:command-shaped-metadata',

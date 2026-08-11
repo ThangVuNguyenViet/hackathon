@@ -1,5 +1,4 @@
-import type { PreparedTurnResources } from '../../business/agentPack.js';
-import type { ExecutableAgentPack } from '../../agent/agentTurnRunner.js';
+import type { BusinessAgentPack } from '../../business/agentPack.js';
 import type { DirectAgentTurnInput } from '../../agent/directAgentTurn.js';
 import type {
   OpenAiResponsesExecutor,
@@ -39,6 +38,11 @@ interface PvcfcPreparedContext {
   serviceStartedAt: number;
 }
 
+interface PvcfcPreparedTurn {
+  readonly tools: ReturnType<typeof createPvcfcOpenAiTools>;
+  readonly context: PvcfcPreparedContext;
+}
+
 function isPvcfcPreparedContext(value: unknown): value is PvcfcPreparedContext {
   return (
     typeof value === 'object' &&
@@ -49,7 +53,7 @@ function isPvcfcPreparedContext(value: unknown): value is PvcfcPreparedContext {
   );
 }
 
-function contextFrom(prepared: PreparedTurnResources): PvcfcPreparedContext {
+function contextFrom(prepared: PvcfcPreparedTurn): PvcfcPreparedContext {
   if (!isPvcfcPreparedContext(prepared.context)) {
     throw new Error('pvcfc_agent_pack_context_invalid');
   }
@@ -79,7 +83,7 @@ function auditPayload(input: {
   };
 }
 
-export class PvcfcAgentPack implements ExecutableAgentPack<
+export class PvcfcAgentPack implements BusinessAgentPack<
   PvcfcAgentTurnInput,
   PvcfcAgentTurnResult
 > {
@@ -87,7 +91,7 @@ export class PvcfcAgentPack implements ExecutableAgentPack<
   readonly profile = PVCFC_AGENT_PROFILE;
   readonly lifecycle = {
     onRunSucceeded: async (input: {
-      prepared: PreparedTurnResources;
+      prepared: PvcfcPreparedTurn;
       result: PvcfcAgentTurnResult;
     }) => {
       const context = contextFrom(input.prepared);
@@ -115,7 +119,7 @@ export class PvcfcAgentPack implements ExecutableAgentPack<
         commit.status === 'stale' ? 'stale' : 'committed';
     },
     onRunFailed: async (input: {
-      prepared: PreparedTurnResources;
+      prepared: PvcfcPreparedTurn;
       error: unknown;
     }) => {
       const context = contextFrom(input.prepared);
@@ -150,7 +154,23 @@ export class PvcfcAgentPack implements ExecutableAgentPack<
 
   constructor(private readonly options: PvcfcAgentPackOptions) {}
 
-  prepareTurn(input: PvcfcAgentTurnInput): PreparedTurnResources {
+  async runTurn(
+    turn: PvcfcAgentTurnInput,
+  ): Promise<PvcfcAgentTurnResult> {
+    const prepared = this.prepareTurn(turn);
+    let result: PvcfcAgentTurnResult;
+    try {
+      result = await this.execute({ turn, profile: this.profile, prepared });
+    } catch (error) {
+      await this.lifecycle.onRunFailed({ prepared, error });
+      throw error;
+    }
+
+    await this.lifecycle.onRunSucceeded({ prepared, result });
+    return result;
+  }
+
+  prepareTurn(input: PvcfcAgentTurnInput): PvcfcPreparedTurn {
     return {
       tools: createPvcfcOpenAiTools(this.options.provider),
       context: {
@@ -163,7 +183,7 @@ export class PvcfcAgentPack implements ExecutableAgentPack<
   async execute(input: {
     turn: PvcfcAgentTurnInput;
     profile: typeof PVCFC_AGENT_PROFILE;
-    prepared: PreparedTurnResources;
+    prepared: PvcfcPreparedTurn;
   }): Promise<PvcfcAgentTurnResult> {
     const context = contextFrom(input.prepared);
     const publicData = await this.options.provider.listCollections({

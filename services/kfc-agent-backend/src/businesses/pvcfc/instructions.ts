@@ -1,6 +1,6 @@
-import type { AgentProfile } from '../../business/agentPack.js';
+import type { OpenAiAgentProfile } from '../../agent/openAiResponsesExecutor.js';
 
-export const PVCFC_AGENT_PROFILE: AgentProfile = Object.freeze({
+export const PVCFC_AGENT_PROFILE: OpenAiAgentProfile = Object.freeze({
   name: 'PVCFC Agricultural Information Assistant',
   instructions: [
     '# Role',

@@ -7,9 +7,8 @@ import type {
 import type { GeneratedFixtures } from '../fixtures/schema.js';
 import type { KfcGenUiAttachment } from '../genui/kfcGenUi.js';
 import type { ConversationStore } from '../persistence/contracts.js';
-import type { PreparedTurnResources } from '../business/agentPack.js';
+import type { BusinessAgentPack } from '../business/agentPack.js';
 import { createAgentTurnExternalCallScope } from './agentExternalCallScope.js';
-import type { ExecutableAgentPack } from './agentTurnRunner.js';
 import { KFC_AGENT_PROFILE } from './kfcAgentInstructions.js';
 import {
   adaptKfcAgentOutput,
@@ -98,6 +97,11 @@ interface KfcPreparedContext {
   compactionMetrics?: OpenAiCompactionEvent;
 }
 
+interface KfcPreparedTurn {
+  readonly tools: ReturnType<typeof createKfcOpenAiAgentsTools>;
+  readonly context: KfcPreparedContext;
+}
+
 function isKfcPreparedContext(value: unknown): value is KfcPreparedContext {
   return (
     typeof value === 'object' &&
@@ -109,14 +113,14 @@ function isKfcPreparedContext(value: unknown): value is KfcPreparedContext {
   );
 }
 
-function kfcContext(prepared: PreparedTurnResources): KfcPreparedContext {
+function kfcContext(prepared: KfcPreparedTurn): KfcPreparedContext {
   if (!isKfcPreparedContext(prepared.context)) {
     throw new Error('kfc_agent_pack_context_invalid');
   }
   return prepared.context;
 }
 
-export class KfcAgentPack implements ExecutableAgentPack<
+export class KfcAgentPack implements BusinessAgentPack<
   KfcDirectAgentTurnInput,
   KfcDirectAgentTurnResult
 > {
@@ -124,7 +128,7 @@ export class KfcAgentPack implements ExecutableAgentPack<
   readonly profile = KFC_AGENT_PROFILE;
   readonly lifecycle = {
     onRunSucceeded: async (input: {
-      prepared: PreparedTurnResources;
+      prepared: KfcPreparedTurn;
       result: KfcDirectAgentTurnResult;
     }) => {
       const context = kfcContext(input.prepared);
@@ -171,7 +175,7 @@ export class KfcAgentPack implements ExecutableAgentPack<
       }
     },
     onRunFailed: async (input: {
-      prepared: PreparedTurnResources;
+      prepared: KfcPreparedTurn;
       error: unknown;
     }) => {
       const context = kfcContext(input.prepared);
@@ -210,9 +214,25 @@ export class KfcAgentPack implements ExecutableAgentPack<
 
   constructor(private readonly options: KfcAgentPackOptions) {}
 
+  async runTurn(
+    turn: KfcDirectAgentTurnInput,
+  ): Promise<KfcDirectAgentTurnResult> {
+    const prepared = await this.prepareTurn(turn);
+    let result: KfcDirectAgentTurnResult;
+    try {
+      result = await this.execute({ turn, profile: this.profile, prepared });
+    } catch (error) {
+      await this.lifecycle.onRunFailed({ prepared, error });
+      throw error;
+    }
+
+    await this.lifecycle.onRunSucceeded({ prepared, result });
+    return result;
+  }
+
   async prepareTurn(
     input: KfcDirectAgentTurnInput,
-  ): Promise<PreparedTurnResources> {
+  ): Promise<KfcPreparedTurn> {
     const externalCalls = createAgentTurnExternalCallScope(120_000);
     const serviceStartedAt = Date.now();
     try {
@@ -267,7 +287,7 @@ export class KfcAgentPack implements ExecutableAgentPack<
   async execute(input: {
     turn: KfcDirectAgentTurnInput;
     profile: typeof KFC_AGENT_PROFILE;
-    prepared: PreparedTurnResources;
+    prepared: KfcPreparedTurn;
   }): Promise<KfcDirectAgentTurnResult> {
     const context = kfcContext(input.prepared);
     const verifiedBusinessContext = verifiedKfcToolSessionContext(

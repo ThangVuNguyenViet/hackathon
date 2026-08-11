@@ -10,7 +10,6 @@ import {
   type AgentInputItem,
   type OpenAIClient,
 } from '@kfc/openai-agents-runtime';
-import type { AgentProfile } from '../business/agentPack.js';
 import type {
   AgentSessionItemsMutation,
   AppendConversationTurnInput,
@@ -42,6 +41,11 @@ export type {
   DirectAgentUsage as OpenAiResponsesUsage,
 };
 
+export interface OpenAiAgentProfile {
+  readonly name: string;
+  readonly instructions: string;
+}
+
 export interface OpenAiResponsesExecutorOptions {
   client: OpenAIClient;
   model: string;
@@ -63,7 +67,7 @@ export interface OpenAiResponsesAdaptedOutput<TOutput> {
 
 export interface OpenAiResponsesTurnInput<TOutput = undefined> {
   /** Explicit pack-owned profile. Never inferred from session IDs or prose. */
-  profile: AgentProfile;
+  profile: OpenAiAgentProfile;
   sessionId: string;
   customerId: string;
   channel: AppendConversationTurnInput['channel'];

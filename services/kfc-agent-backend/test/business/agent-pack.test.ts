@@ -1,67 +1,43 @@
-import { tool } from '@kfc/openai-agents-runtime';
 import { describe, expect, it, vi } from 'vitest';
 import {
   AgentPackRegistry,
-  type AgentPack,
+  type BusinessAgentPack,
 } from '../../src/business/agentPack.js';
 
-const inspectTool = tool({
-  name: 'inspect',
-  description: 'Inspect an opaque resource.',
-  parameters: {
-    type: 'object',
-    properties: {},
-    required: [],
-    additionalProperties: false,
-  },
-  strict: true,
-  execute: () => 'inspected',
-});
+interface FakeTurn {
+  readonly requestId: string;
+}
 
-function pack(
-  id: string,
-): AgentPack<{ requestId: string }, { traceId: string }> {
+interface FakeResult {
+  readonly selectedPack: string;
+}
+
+function pack(id: string): BusinessAgentPack<FakeTurn, FakeResult> {
   return {
     id,
-    profile: {
-      name: `${id} agent`,
-      instructions: `Serve the ${id} pack.`,
-    },
-    prepareTurn: ({ requestId }) => ({
-      tools: [inspectTool],
-      context: { traceId: `trace:${requestId}` },
-    }),
+    runTurn: async () => ({ selectedPack: id }),
   };
 }
 
 describe('AgentPackRegistry', () => {
-  it('resolves only explicitly registered packs and preserves opaque prepared resources', async () => {
+  it('resolves only explicitly registered business packs', async () => {
     const alpha = pack('alpha');
     const registry = new AgentPackRegistry([alpha]);
 
-    const resolved = registry.require('alpha');
-    const prepared = await resolved.prepareTurn({ requestId: 'request-1' });
-
-    expect(resolved.profile).toEqual({
-      name: 'alpha agent',
-      instructions: 'Serve the alpha pack.',
-    });
-    expect(prepared).toEqual({
-      tools: [inspectTool],
-      context: { traceId: 'trace:request-1' },
-    });
+    await expect(registry.require('alpha').runTurn({ requestId: 'request-1' }))
+      .resolves.toEqual({ selectedPack: 'alpha' });
   });
 
-  it('rejects missing and unknown selections before a pack can prepare a turn', () => {
+  it('rejects missing and unknown selections before a pack can run a turn', () => {
     const alpha = pack('alpha');
-    const prepareTurn = vi.spyOn(alpha, 'prepareTurn');
+    const runTurn = vi.spyOn(alpha, 'runTurn');
     const registry = new AgentPackRegistry([alpha]);
 
     expect(() => registry.require(undefined)).toThrow('agent_pack_id_missing');
     expect(() => registry.require('beta')).toThrow(
       'agent_pack_id_unknown:beta',
     );
-    expect(prepareTurn).not.toHaveBeenCalled();
+    expect(runTurn).not.toHaveBeenCalled();
   });
 
   it.each(['', '   '])('rejects a missing registration ID %#', (id) => {

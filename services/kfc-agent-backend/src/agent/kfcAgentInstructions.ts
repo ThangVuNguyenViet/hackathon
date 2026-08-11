@@ -1,6 +1,6 @@
-import type { AgentProfile } from '../business/agentPack.js';
+import type { OpenAiAgentProfile } from './openAiResponsesExecutor.js';
 
-export const KFC_AGENT_PROFILE: AgentProfile = Object.freeze({
+export const KFC_AGENT_PROFILE: OpenAiAgentProfile = Object.freeze({
   name: 'KFC Vietnam ordering assistant',
   instructions: [
     '# Role',

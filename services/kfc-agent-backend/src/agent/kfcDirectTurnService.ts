@@ -33,7 +33,7 @@ export class KfcDirectTurnService {
   }
 
   async run(input: KfcDirectAgentTurnInput): Promise<KfcDirectTurnResult> {
-    const { result } = await this.#runner.run({ packId: 'kfc', turn: input });
+    const result = await this.#runner.run({ packId: 'kfc', turn: input });
     if (!result.session || !result.stateCommit) {
       throw new Error('kfc_agent_pack_result_incomplete');
     }

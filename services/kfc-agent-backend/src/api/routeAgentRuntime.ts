@@ -564,7 +564,7 @@ export function createRouteAgentRuntime(
             }
           }
         }
-        const { result: directOutput } = await directTurnRunners.kfc.run({
+        const directOutput = await directTurnRunners.kfc.run({
           packId: 'kfc',
           turn: {
             sessionId: input.sessionId,

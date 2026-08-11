@@ -30,7 +30,7 @@ export function createDirectWebChatResponse<
         body: { errorCode: input.unconfiguredErrorCode },
       };
     }
-    const { result } = await input.runner.run({
+    const result = await input.runner.run({
       packId: input.packId,
       turn: {
         sessionId: turn.sessionId,

@@ -697,7 +697,7 @@ export function createRouteMessengerRuntime(
                   transport: 'zalo',
                 },
               })
-            ).result
+            )
           : await runDirectKfcTurn!(directTurn);
         if (!(await isCurrentRun())) {
           await suppressRun('run_not_current_before_delivery');

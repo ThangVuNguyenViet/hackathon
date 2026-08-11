@@ -1,9 +1,9 @@
-import { tool, type OpenAIClient } from '@kfc/openai-agents-runtime';
+import type { OpenAIClient } from '@kfc/openai-agents-runtime';
 import { describe, expect, it, vi } from 'vitest';
 import {
   AgentTurnRunner,
-  type ExecutableAgentPack,
 } from '../../src/agent/agentTurnRunner.js';
+import type { BusinessAgentPack } from '../../src/business/agentPack.js';
 import type {
   DirectAgentTurnInput,
   DirectAgentTurnResult,
@@ -99,34 +99,13 @@ function kfcTurn(input: { sessionId: string; text: string }) {
   return { ...directTurn(input), channel: 'kfc' as const };
 }
 
-const readPvcfcKnowledge = tool({
-  name: 'readPvcfcKnowledge',
-  description: 'Read trusted PVCFC knowledge.',
-  parameters: {
-    type: 'object',
-    properties: {},
-    required: [],
-    additionalProperties: false,
-  },
-  strict: true,
-  execute: () => ({ ok: true }),
-});
-
-function pvcfcPack(): ExecutableAgentPack<
+function pvcfcPack(): BusinessAgentPack<
   DirectAgentTurnInput,
   DirectAgentTurnResult
 > {
   return {
     id: 'pvcfc',
-    profile: {
-      name: 'PVCFC Agricultural Advisor',
-      instructions: 'Serve the trusted PVCFC read-only evidence pack.',
-    },
-    prepareTurn: () => ({
-      tools: [readPvcfcKnowledge],
-      context: undefined,
-    }),
-    execute: async () => ({
+    runTurn: async () => ({
       responseText: 'Mình sẽ tra cứu dữ liệu PVCFC.',
       toolCalls: [],
       usage: { inputTokens: 4, outputTokens: 4, totalTokens: 8 },
@@ -137,7 +116,54 @@ function pvcfcPack(): ExecutableAgentPack<
   };
 }
 
+interface SelectionTurn {
+  readonly sessionId: string;
+  readonly text: string;
+}
+
+interface SelectionResult {
+  readonly selectedPack: string;
+}
+
+function selectionPack(
+  id: string,
+): BusinessAgentPack<SelectionTurn, SelectionResult> {
+  return {
+    id,
+    runTurn: async () => ({ selectedPack: id }),
+  };
+}
+
 describe('AgentTurnRunner pack isolation', () => {
+  it('uses only the trusted pack ID when turn text or session IDs name another business', async () => {
+    const runner = new AgentTurnRunner({
+      packs: [selectionPack('kfc'), selectionPack('pvcfc')],
+      expectedPackIds: ['kfc', 'pvcfc'],
+    });
+
+    await expect(
+      runner.run({
+        packId: 'kfc',
+        turn: {
+          sessionId: 'pvcfc:customer-42',
+          text: 'Please route this pvcfc request.',
+        },
+      }),
+    ).resolves.toEqual({ selectedPack: 'kfc' });
+    await expect(
+      runner.run({
+        packId: 'pvcfc',
+        turn: { sessionId: 'kfc:customer-42', text: 'KFC appears in this text.' },
+      }),
+    ).resolves.toEqual({ selectedPack: 'pvcfc' });
+    await expect(
+      runner.run({
+        packId: 'unknown',
+        turn: { sessionId: 'kfc:customer-42', text: 'No implicit fallback.' },
+      }),
+    ).rejects.toThrow('agent_pack_id_unknown:unknown');
+  });
+
   it('runs a trusted PVCFC pack without entering KFC session, state, or GenUI lifecycle', async () => {
     const store = new TrackingMemoryStore();
     const fixtures = createTestFixtures();
@@ -158,13 +184,13 @@ describe('AgentTurnRunner pack isolation', () => {
 
     expect(createKfcClients).not.toHaveBeenCalled();
     expect(store.listEventCalls).toBe(0);
-    expect(output.result).not.toHaveProperty('session');
-    expect(output.result).not.toHaveProperty('genUi');
+    expect(output).not.toHaveProperty('session');
+    expect(output).not.toHaveProperty('genUi');
     const events = await store.listEvents('pvcfc:isolated-pack');
     expect(
       events.some((event) => event.sourceType === 'graph:verified_state'),
     ).toBe(false);
-    expect(output.result.responseText).toBe('Mình sẽ tra cứu dữ liệu PVCFC.');
+    expect(output.responseText).toBe('Mình sẽ tra cứu dữ liệu PVCFC.');
   });
 
   it('preserves KFC cart hydration, verified-state publication, and GenUI selection', async () => {
@@ -221,8 +247,8 @@ describe('AgentTurnRunner pack isolation', () => {
     expect(createKfcClients).toHaveBeenCalledOnce();
     expect(store.listEventCalls).toBeGreaterThan(0);
     expect(selectKfcGenUi).toHaveBeenCalledOnce();
-    expect(output.result.genUi).toEqual(expectedGenUi);
-    expect(output.result.session?.cart.items).toEqual([
+    expect(output.genUi).toEqual(expectedGenUi);
+    expect(output.session?.cart.items).toEqual([
       expect.objectContaining({ itemCode: '20751', quantity: 1 }),
     ]);
     const events = await store.listEvents('kfc:preserved-pack');
