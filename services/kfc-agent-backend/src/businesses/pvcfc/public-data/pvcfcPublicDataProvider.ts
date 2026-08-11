@@ -26,7 +26,20 @@ export interface PvcfcSearchHit {
   readonly sourceUrl: string;
 }
 
+export interface PvcfcRecordLocator {
+  readonly collection: string;
+  readonly id: string;
+  readonly title: string;
+  readonly sourceUrl: string;
+}
+
 export interface PvcfcListCollectionsRequest {
+  readonly limit?: number;
+  readonly cursor?: string;
+}
+
+export interface PvcfcListRecordsRequest {
+  readonly collection: string;
   readonly limit?: number;
   readonly cursor?: string;
 }
@@ -57,6 +70,13 @@ export interface PvcfcSearchPage {
   readonly nextCursor?: string;
 }
 
+export interface PvcfcRecordLocatorPage {
+  readonly revision: string;
+  readonly collection: string;
+  readonly records: readonly PvcfcRecordLocator[];
+  readonly nextCursor?: string;
+}
+
 export interface PvcfcRecordResult {
   readonly revision: string;
   readonly collection: string;
@@ -83,6 +103,9 @@ export interface PvcfcPublicDataProvider {
   listCollections(
     request?: PvcfcListCollectionsRequest,
   ): Promise<PvcfcPublicDataResult<PvcfcCollectionPage>>;
+  listRecords(
+    request: PvcfcListRecordsRequest,
+  ): Promise<PvcfcPublicDataResult<PvcfcRecordLocatorPage>>;
   searchRecords(
     request: PvcfcSearchRecordsRequest,
   ): Promise<PvcfcPublicDataResult<PvcfcSearchPage>>;

@@ -54,6 +54,86 @@ describe('PVCFC public-data provider contract', () => {
     });
   });
 
+  it('enumerates every record locator, including discovery-only records, through bounded pages', async () => {
+    const provider = loadBundledPvcfcPublicDataProvider();
+    const listedCollections = await provider.listCollections({ limit: 20 });
+    expect(listedCollections.ok).toBe(true);
+    if (!listedCollections.ok) return;
+
+    const locators = new Set<string>();
+    const counts = new Map<string, number>();
+    for (const collection of listedCollections.value.collections) {
+      let cursor: string | undefined;
+      do {
+        const page = await provider.listRecords({
+          collection: collection.name,
+          limit: 7,
+          cursor,
+        });
+        expect(page.ok, collection.name).toBe(true);
+        if (!page.ok) break;
+        expect(page.value.records.length).toBeGreaterThan(0);
+        expect(page.value.records.length).toBeLessThanOrEqual(7);
+        for (const locator of page.value.records) {
+          expect(locator.collection).toBe(collection.name);
+          expect(locator.id.length).toBeGreaterThan(0);
+          expect(locator.title.length).toBeGreaterThan(0);
+          locators.add(`${locator.collection}\0${locator.id}`);
+          counts.set(
+            locator.collection,
+            (counts.get(locator.collection) ?? 0) + 1,
+          );
+        }
+        cursor = page.value.nextCursor;
+      } while (cursor !== undefined);
+
+      expect(counts.get(collection.name)).toBe(collection.count);
+    }
+
+    expect(locators).toHaveLength(497);
+    expect(counts.get('source_inventory')).toBe(79);
+  });
+
+  it('binds record-listing cursors to collection requests and data revisions', async () => {
+    const data = await readBundledData();
+    const provider = createPvcfcPublicDataProvider(() => data);
+    const request = {
+      collection: 'source_inventory',
+      limit: 2,
+    } as const;
+    const [first, repeated] = await Promise.all([
+      provider.listRecords(request),
+      provider.listRecords(request),
+    ]);
+    expect(first).toEqual(repeated);
+    expect(first.ok).toBe(true);
+    if (!first.ok || first.value.nextCursor === undefined) return;
+
+    await expect(
+      provider.listRecords({
+        collection: 'products',
+        limit: 2,
+        cursor: first.value.nextCursor,
+      }),
+    ).resolves.toMatchObject({
+      ok: false,
+      error: { code: 'invalid_request' },
+    });
+
+    const evolvedData = structuredClone(data);
+    evolvedData.revision = 'e'.repeat(64);
+    const evolved = createPvcfcPublicDataProvider(() => evolvedData);
+    await expect(
+      evolved.listRecords({
+        ...request,
+        cursor: first.value.nextCursor,
+      }),
+    ).resolves.toMatchObject({
+      ok: false,
+      error: { code: 'cursor_stale' },
+    });
+  });
+
   it('returns compact bounded search pages with deterministic opaque cursors', async () => {
     const provider = loadBundledPvcfcPublicDataProvider();
     const request = { query: 'cà mau', limit: 2 } as const;

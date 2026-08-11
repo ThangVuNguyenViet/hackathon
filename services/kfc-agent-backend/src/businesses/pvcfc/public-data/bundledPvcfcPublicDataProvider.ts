@@ -9,11 +9,14 @@ import type {
   PvcfcCollectionPage,
   PvcfcGetRecordRequest,
   PvcfcListCollectionsRequest,
+  PvcfcListRecordsRequest,
   PvcfcPublicDataError,
   PvcfcPublicDataProvider,
   PvcfcPublicDataResult,
   PvcfcPublicRecord,
   PvcfcRecordResult,
+  PvcfcRecordLocator,
+  PvcfcRecordLocatorPage,
   PvcfcSearchHit,
   PvcfcSearchPage,
   PvcfcSearchRecordsRequest,
@@ -29,7 +32,7 @@ const MAX_SUMMARY_LENGTH = 240;
 interface CursorPayload {
   readonly version: 1;
   readonly revision: string;
-  readonly operation: 'collections' | 'search';
+  readonly operation: 'collections' | 'records' | 'search';
   readonly signature: string;
   readonly offset: number;
 }
@@ -147,7 +150,9 @@ function decodeCursor(value: string): CursorPayload | undefined {
     if (!isUnknownRecord(parsed)) return undefined;
     if (
       parsed.version !== 1 ||
-      (parsed.operation !== 'collections' && parsed.operation !== 'search') ||
+      (parsed.operation !== 'collections' &&
+        parsed.operation !== 'records' &&
+        parsed.operation !== 'search') ||
       typeof parsed.revision !== 'string' ||
       typeof parsed.signature !== 'string' ||
       typeof parsed.offset !== 'number' ||
@@ -264,6 +269,64 @@ class BundledPvcfcPublicDataProvider implements PvcfcPublicDataProvider {
                 version: 1,
                 revision: initialized.bundle.revision,
                 operation: 'collections',
+                signature,
+                offset: nextOffset,
+              }),
+            }
+          : {}),
+      }),
+    };
+  }
+
+  async listRecords(
+    request: PvcfcListRecordsRequest,
+  ): Promise<PvcfcPublicDataResult<PvcfcRecordLocatorPage>> {
+    const initialized = this.#initialize();
+    if (!initialized.ok) return initialized;
+    const collection = initialized.collections.get(request.collection);
+    if (collection === undefined) {
+      return error(
+        'invalid_request',
+        'The requested collection does not exist.',
+      );
+    }
+    const limit = boundedLimit(request.limit);
+    const signature = requestSignature({
+      operation: 'records',
+      collection: request.collection,
+      limit,
+    });
+    const offset = cursorOffset(
+      request.cursor,
+      initialized.bundle,
+      'records',
+      signature,
+    );
+    if (!offset.ok) return offset;
+    if (offset.value >= collection.records.length) {
+      return error('no_match', 'No public-data records matched the request.');
+    }
+
+    const page = collection.records.slice(offset.value, offset.value + limit);
+    const records: PvcfcRecordLocator[] = page.map((record) => ({
+      collection: collection.name,
+      id: record.id,
+      title: titleFor(record),
+      sourceUrl: sourceUrlFor(record),
+    }));
+    const nextOffset = offset.value + records.length;
+    return {
+      ok: true,
+      value: deepFreeze({
+        revision: initialized.bundle.revision,
+        collection: collection.name,
+        records,
+        ...(nextOffset < collection.records.length
+          ? {
+              nextCursor: encodeCursor({
+                version: 1,
+                revision: initialized.bundle.revision,
+                operation: 'records',
                 signature,
                 offset: nextOffset,
               }),
