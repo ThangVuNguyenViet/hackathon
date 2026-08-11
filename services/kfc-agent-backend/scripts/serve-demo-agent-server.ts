@@ -5,7 +5,9 @@ import type { OpenAIClient } from '@kfc/openai-agents-runtime';
 import { ChatOpenAI } from '@langchain/openai';
 import OpenAI from 'openai';
 import { OpenAiKfcAgent } from '../src/agent/openAiKfcAgent.js';
+import { OpenAiResponsesExecutor } from '../src/agent/openAiResponsesExecutor.js';
 import { buildServer } from '../src/api/server.js';
+import { createConfiguredPvcfcPublicDataProvider } from '../src/businesses/pvcfc/public-data/configuredPvcfcPublicDataProvider.js';
 import { loadBundledGeneratedFixtures } from '../src/fixtures/bundledFixtures.js';
 
 // Auto-load root .env when neither provider credential was injected.
@@ -39,6 +41,14 @@ const pvcfcAstraFlowBaseUrl =
   'https://api-sg.umodelverse.ai/v1';
 const pvcfcAstraFlowModel =
   process.env.PVCFC_ASTRAFLOW_MODEL?.trim() || 'gpt-5.6-luna';
+const rawPvcfcPublicDataMode = process.env.PVCFC_PUBLIC_DATA_MODE?.trim();
+if (
+  rawPvcfcPublicDataMode !== undefined &&
+  rawPvcfcPublicDataMode !== 'fixture' &&
+  rawPvcfcPublicDataMode !== 'api'
+) {
+  throw new Error('PVCFC_PUBLIC_DATA_MODE must be fixture or api');
+}
 
 const directOpenAiClient = apiKey ? new OpenAI({ apiKey }) : undefined;
 const pvcfcAstraFlowClient = pvcfcAstraFlowApiKey
@@ -59,7 +69,7 @@ const openAiAgent = directOpenAiClient
     })
   : undefined;
 const pvcfcAgent = pvcfcAstraFlowClient
-  ? new OpenAiKfcAgent({
+  ? new OpenAiResponsesExecutor({
       client: pvcfcAstraFlowClient as unknown as OpenAIClient,
       model: pvcfcAstraFlowModel,
       compaction: {
@@ -68,6 +78,10 @@ const pvcfcAgent = pvcfcAstraFlowClient
       },
     })
   : undefined;
+const pvcfcPublicDataProvider = createConfiguredPvcfcPublicDataProvider({
+  enabled: pvcfcAgent !== undefined,
+  mode: rawPvcfcPublicDataMode,
+});
 
 const agentModel = apiKey
   ? new ChatOpenAI({
@@ -88,6 +102,7 @@ const fixtures = loadBundledGeneratedFixtures();
 const server = buildServer({
   openAiAgent,
   pvcfcAgent,
+  pvcfcPublicDataProvider,
   agent: agentModel
     ? { model: agentModel, identity: agentIdentity }
     : undefined,

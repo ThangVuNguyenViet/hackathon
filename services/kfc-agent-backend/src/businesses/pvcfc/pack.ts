@@ -1,10 +1,10 @@
 import type { PreparedTurnResources } from '../../business/agentPack.js';
 import type { ExecutableAgentPack } from '../../agent/agentTurnRunner.js';
+import type { DirectAgentTurnInput } from '../../agent/directAgentTurn.js';
 import type {
-  DirectAgentTurnInput,
-  DirectAgentTurnResult,
-} from '../../agent/kfcAgentPack.js';
-import type { OpenAiKfcAgent } from '../../agent/openAiKfcAgent.js';
+  OpenAiResponsesExecutor,
+  OpenAiResponsesTurnResult,
+} from '../../agent/openAiResponsesExecutor.js';
 import type { OpenAiCompactionEvent } from '../../agent/observedOpenAiResponsesCompactionSession.js';
 import type { ConversationStore } from '../../persistence/contracts.js';
 import type { Channel } from '../../domain/types.js';
@@ -14,12 +14,18 @@ import { createPvcfcOpenAiTools } from './tools.js';
 
 export interface PvcfcAgentPackOptions {
   store: ConversationStore;
-  openAiAgent: OpenAiKfcAgent;
+  openAiAgent: OpenAiResponsesExecutor;
   provider: PvcfcPublicDataProvider;
 }
 
+export type PvcfcAgentTurnInput = DirectAgentTurnInput<'web_chat' | 'zalo'>;
+
+export type PvcfcAgentTurnResult = OpenAiResponsesTurnResult & {
+  stateCommit?: 'committed' | 'stale';
+};
+
 interface PvcfcPreparedContext {
-  input: DirectAgentTurnInput;
+  input: PvcfcAgentTurnInput;
   runMetrics?: {
     status: 'success' | 'error';
     latencyMs: number;
@@ -51,7 +57,7 @@ function contextFrom(prepared: PreparedTurnResources): PvcfcPreparedContext {
 }
 
 function auditPayload(input: {
-  result: DirectAgentTurnResult;
+  result: PvcfcAgentTurnResult;
   context: PvcfcPreparedContext;
 }) {
   return {
@@ -74,15 +80,15 @@ function auditPayload(input: {
 }
 
 export class PvcfcAgentPack implements ExecutableAgentPack<
-  DirectAgentTurnInput,
-  DirectAgentTurnResult
+  PvcfcAgentTurnInput,
+  PvcfcAgentTurnResult
 > {
   readonly id = 'pvcfc';
   readonly profile = PVCFC_AGENT_PROFILE;
   readonly lifecycle = {
     onRunSucceeded: async (input: {
       prepared: PreparedTurnResources;
-      result: DirectAgentTurnResult;
+      result: PvcfcAgentTurnResult;
     }) => {
       const context = contextFrom(input.prepared);
       const commitInput = {
@@ -144,7 +150,7 @@ export class PvcfcAgentPack implements ExecutableAgentPack<
 
   constructor(private readonly options: PvcfcAgentPackOptions) {}
 
-  prepareTurn(input: DirectAgentTurnInput): PreparedTurnResources {
+  prepareTurn(input: PvcfcAgentTurnInput): PreparedTurnResources {
     return {
       tools: createPvcfcOpenAiTools(this.options.provider),
       context: {
@@ -155,10 +161,10 @@ export class PvcfcAgentPack implements ExecutableAgentPack<
   }
 
   async execute(input: {
-    turn: DirectAgentTurnInput;
+    turn: PvcfcAgentTurnInput;
     profile: typeof PVCFC_AGENT_PROFILE;
     prepared: PreparedTurnResources;
-  }): Promise<DirectAgentTurnResult> {
+  }): Promise<PvcfcAgentTurnResult> {
     const context = contextFrom(input.prepared);
     const publicData = await this.options.provider.listCollections({
       limit: 20,
@@ -173,28 +179,35 @@ export class PvcfcAgentPack implements ExecutableAgentPack<
       profile: input.profile,
       sessionId: input.turn.sessionId,
       customerId: input.turn.customerId,
-      channel:
-        input.turn.transport === 'web_chat'
-          ? // Legacy persistence still names the first-party browser transport
-            // outside the narrower Channel union used by social ingress.
-            // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion
-            ('web_chat' as Channel)
-          : input.turn.channel,
-      transport: input.turn.transport,
+      // The persisted transport remains web_chat without widening KFC's
+      // business-channel domain at the shared route boundary.
+      // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- adapter from the neutral web transport to the legacy persistence channel
+      channel: input.turn.transport as Channel,
       text: input.turn.text,
       externalMessageId: input.turn.externalMessageId,
       metadata: input.turn.metadata,
       store: this.options.store,
-      verifiedBusinessContext: {
-        schemaVersion: 'pvcfc_public_data_v2',
-        revision: publicData.value.revision,
-        capturedAt: publicData.value.capturedAt,
-        organization: publicData.value.organization,
-        collections: publicData.value.collections,
-        searchableRecordCount,
-      },
+      developerMessages: [
+        `Verified current PVCFC public data: ${JSON.stringify({
+          schemaVersion: 'pvcfc_public_data_v2',
+          revision: publicData.value.revision,
+          capturedAt: publicData.value.capturedAt,
+          organization: publicData.value.organization,
+          collections: publicData.value.collections,
+          searchableRecordCount,
+        })}`,
+      ],
       tools: [...input.prepared.tools],
       requireEvidenceTool: PVCFC_EVIDENCE_POLICY.requireToolOnFirstModelTurn,
+      adaptOutput: (execution) => ({
+        responseText: execution.responseText,
+        assistantMetadata: {
+          transport: input.turn.transport,
+          ...(input.turn.metadata?.release
+            ? { release: input.turn.metadata.release }
+            : {}),
+        },
+      }),
       lifecycle: {
         onRunStart: input.turn.lifecycle?.onRunStart,
         onToolEnd: input.turn.lifecycle?.onToolEnd,

@@ -150,7 +150,8 @@ import {
   type ConfirmationApprovalPausePointer,
 } from './confirmationPausePersistence.js';
 import { createRouteMonitorRuntime } from './routeMonitorRuntime.js';
-import { createRouteDirectAgentTurnRunner } from './routeDirectAgentPacks.js';
+import { createRouteDirectAgentTurnRunners } from './routeDirectAgentPacks.js';
+import { createDirectWebChatResponse } from './routeDirectWebChatResponse.js';
 import { reserveKfcSynchronousRequest } from './synchronousRequestReservation.js';
 import {
   deliverChannelAssistantReply,
@@ -286,12 +287,18 @@ export function createRouteAgentRuntime(
         getAccessContext: kfcProofAccessContext,
       })
     : undefined;
-  const directTurnRunner = createRouteDirectAgentTurnRunner({
+  const directTurnRunners = createRouteDirectAgentTurnRunners({
     options,
     store,
     getFixtures,
     createKfcClients: createFirstPartyKfcClients,
     getKfcAccessContext: kfcProofAccessContext,
+  });
+  const pvcfcAgentResponse = createDirectWebChatResponse({
+    runner: directTurnRunners.pvcfc,
+    packId: 'pvcfc',
+    unconfiguredErrorCode: 'pvcfc_agent_not_configured',
+    store,
   });
   const {
     deferAiMonitorRefinement,
@@ -301,7 +308,6 @@ export function createRouteAgentRuntime(
     shouldEvaluateDashboardMonitorContext,
   } = createRouteMonitorRuntime({ options, store, dashboard });
   async function kfcAgentResponse(input: {
-    businessId: 'kfc' | 'pvcfc';
     sessionId: string;
     customerId: string;
     clientMessageId: string;
@@ -314,11 +320,7 @@ export function createRouteAgentRuntime(
       commitFence: RunCommitFence;
     };
   }): Promise<HandlerResponse> {
-    const businessId = input.businessId;
-    const selectedDirectPackConfigured =
-      businessId === 'pvcfc'
-        ? options.pvcfcAgent !== undefined
-        : options.openAiAgent !== undefined;
+    const selectedDirectPackConfigured = options.openAiAgent !== undefined;
     const trustedMetadata: ConversationTurnMetadata = {
       ...input.metadata,
       ...(options.readiness?.release
@@ -326,18 +328,14 @@ export function createRouteAgentRuntime(
         : {}),
     };
     const requestFingerprint = await sha256Fingerprint({
-      businessId,
+      // Preserve the deployed fingerprint schema across the pack extraction so
+      // durable retries replay instead of conflicting during a rollout.
+      businessId: 'kfc',
       customerId: input.customerId,
       text: input.text,
       metadata: trustedMetadata,
       trustedCustomerAction: input.trustedCustomerAction ?? null,
     });
-    if (businessId === 'pvcfc' && !selectedDirectPackConfigured) {
-      return {
-        status: 503,
-        body: { errorCode: 'pvcfc_agent_not_configured' },
-      };
-    }
     if (
       !options.openAiAgent &&
       !options.agent &&
@@ -490,7 +488,7 @@ export function createRouteAgentRuntime(
           },
         };
       }
-      if (directTurnRunner && selectedDirectPackConfigured) {
+      if (directTurnRunners.kfc && selectedDirectPackConfigured) {
         const directMetadata = input.trustedCustomerAction
           ? {
               ...trustedMetadata,
@@ -566,8 +564,8 @@ export function createRouteAgentRuntime(
             }
           }
         }
-        const { result: directOutput } = await directTurnRunner.run({
-          packId: businessId,
+        const { result: directOutput } = await directTurnRunners.kfc.run({
+          packId: 'kfc',
           turn: {
             sessionId: input.sessionId,
             customerId: input.customerId,
@@ -577,19 +575,14 @@ export function createRouteAgentRuntime(
             externalMessageId: input.clientMessageId,
             metadata: directMetadata,
             fence: runGuard.commitFence,
-            ...(businessId === 'kfc'
-              ? {
-                  prepareSession: (session: KfcToolSession) => ({
-                    session: selectedPaymentMethod
-                      ? { ...session, selectedPaymentMethod }
-                      : session,
-                    requiredToolCalls,
-                    allowModelToolCalls: !input.trustedCustomerAction,
-                  }),
-                }
-              : {}),
-            ...(businessId === 'pvcfc' ||
-            directMetadata.responseProfile === 'social'
+            prepareSession: (session: KfcToolSession) => ({
+              session: selectedPaymentMethod
+                ? { ...session, selectedPaymentMethod }
+                : session,
+              requiredToolCalls,
+              allowModelToolCalls: !input.trustedCustomerAction,
+            }),
+            ...(directMetadata.responseProfile === 'social'
               ? {}
               : {
                   selectGenUi: (result, session) =>
@@ -1006,9 +999,12 @@ export function createRouteAgentRuntime(
   }
 
   return {
-    runDirectAgentTurn: directTurnRunner?.run.bind(directTurnRunner),
+    runDirectAgentTurn: directTurnRunners.pvcfc?.run.bind(
+      directTurnRunners.pvcfc,
+    ),
     runDirectKfcTurn: kfcDirectTurnService?.run.bind(kfcDirectTurnService),
     kfcAgentResponse,
+    pvcfcAgentResponse,
     deferAiMonitorRefinement,
     deliverAssistantReply,
     persistEventProfile,

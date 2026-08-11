@@ -1,9 +1,10 @@
 import { AgentTurnRunner } from '../agent/agentTurnRunner.js';
 import {
   KfcAgentPack,
-  type DirectAgentTurnInput,
-  type DirectAgentTurnResult,
+  type KfcDirectAgentTurnInput,
+  type KfcDirectAgentTurnResult,
 } from '../agent/kfcAgentPack.js';
+import type { DirectAgentTurnInput } from '../agent/directAgentTurn.js';
 import type { ExternalClients } from '../clients/interfaces.js';
 import type {
   ConversationTurnMetadata,
@@ -11,11 +12,19 @@ import type {
 } from '../domain/types.js';
 import type { GeneratedFixtures } from '../fixtures/schema.js';
 import type { ConversationStore } from '../persistence/contracts.js';
-import { PvcfcAgentPack } from '../businesses/pvcfc/pack.js';
-import { loadBundledPvcfcPublicDataProvider } from '../businesses/pvcfc/public-data/bundledPvcfcPublicDataProvider.js';
+import {
+  PvcfcAgentPack,
+  type PvcfcAgentTurnInput,
+  type PvcfcAgentTurnResult,
+} from '../businesses/pvcfc/pack.js';
 import type { RouteOptions } from './routeHandlerContracts.js';
 
-export function createRouteDirectAgentTurnRunner(input: {
+export interface RouteDirectAgentTurnRunners {
+  kfc?: AgentTurnRunner<KfcDirectAgentTurnInput, KfcDirectAgentTurnResult>;
+  pvcfc?: AgentTurnRunner<PvcfcAgentTurnInput, PvcfcAgentTurnResult>;
+}
+
+export function createRouteDirectAgentTurnRunners(input: {
   options: RouteOptions;
   store: ConversationStore;
   getFixtures(): Promise<GeneratedFixtures>;
@@ -27,33 +36,43 @@ export function createRouteDirectAgentTurnRunner(input: {
     sessionId: string,
     customerId: string,
   ): Promise<CustomerAccessContext | undefined>;
-}): AgentTurnRunner<DirectAgentTurnInput, DirectAgentTurnResult> | undefined {
-  const packs = [
-    ...(input.options.openAiAgent
-      ? [
-          new KfcAgentPack({
-            store: input.store,
-            openAiAgent: input.options.openAiAgent,
-            getFixtures: input.getFixtures,
-            createClients: input.createKfcClients,
-            getAccessContext: input.getKfcAccessContext,
+}): RouteDirectAgentTurnRunners {
+  if (input.options.pvcfcAgent && !input.options.pvcfcPublicDataProvider) {
+    throw new Error('pvcfc_public_data_provider_not_configured');
+  }
+  const kfcPack = input.options.openAiAgent
+    ? new KfcAgentPack({
+        store: input.store,
+        openAiAgent: input.options.openAiAgent,
+        getFixtures: input.getFixtures,
+        createClients: input.createKfcClients,
+        getAccessContext: input.getKfcAccessContext,
+      })
+    : undefined;
+  const pvcfcPack =
+    input.options.pvcfcAgent && input.options.pvcfcPublicDataProvider
+      ? new PvcfcAgentPack({
+          store: input.store,
+          openAiAgent: input.options.pvcfcAgent,
+          provider: input.options.pvcfcPublicDataProvider,
+        })
+      : undefined;
+  return {
+    ...(kfcPack
+      ? {
+          kfc: new AgentTurnRunner({
+            packs: [kfcPack],
+            expectedPackIds: ['kfc'],
           }),
-        ]
-      : []),
-    ...(input.options.pvcfcAgent
-      ? [
-          new PvcfcAgentPack({
-            store: input.store,
-            openAiAgent: input.options.pvcfcAgent,
-            provider: loadBundledPvcfcPublicDataProvider(),
+        }
+      : {}),
+    ...(pvcfcPack
+      ? {
+          pvcfc: new AgentTurnRunner({
+            packs: [pvcfcPack],
+            expectedPackIds: ['pvcfc'],
           }),
-        ]
-      : []),
-  ];
-  return packs.length === 0
-    ? undefined
-    : new AgentTurnRunner({
-        packs,
-        expectedPackIds: packs.map(({ id }) => id),
-      });
+        }
+      : {}),
+  };
 }

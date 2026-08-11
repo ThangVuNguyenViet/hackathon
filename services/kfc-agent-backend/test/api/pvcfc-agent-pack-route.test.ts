@@ -1,8 +1,11 @@
 import type { OpenAIClient } from '@kfc/openai-agents-runtime';
-import { describe, expect, it } from 'vitest';
-import { OpenAiKfcAgent } from '../../src/agent/openAiKfcAgent.js';
+import { describe, expect, it, vi } from 'vitest';
+import { AgentTurnRunner } from '../../src/agent/agentTurnRunner.js';
+import { OpenAiResponsesExecutor } from '../../src/agent/openAiResponsesExecutor.js';
 import { buildServer } from '../../src/api/server.js';
 import { PVCFC_AGENT_PROFILE } from '../../src/businesses/pvcfc/instructions.js';
+import { PvcfcAgentPack } from '../../src/businesses/pvcfc/pack.js';
+import { loadBundledPvcfcPublicDataProvider } from '../../src/businesses/pvcfc/public-data/bundledPvcfcPublicDataProvider.js';
 import { MemoryStore } from '../../src/persistence/memoryStore.js';
 import { createTestFixtures } from '../fixtures/testFixtures.js';
 
@@ -50,7 +53,7 @@ function recordingAgent(input: {
   requests: Array<Record<string, unknown>>;
   model?: string;
 }) {
-  return new OpenAiKfcAgent({
+  return new OpenAiResponsesExecutor({
     // Focused provider double implementing only the Responses surface used here.
     // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion
     client: {
@@ -85,8 +88,28 @@ function toolNames(request: Record<string, unknown> | undefined) {
 }
 
 describe('PVCFC trusted route pack integration', () => {
+  it('fails startup composition when a PVCFC model has no trusted provider', () => {
+    expect(() =>
+      buildServer({
+        fixtures: createTestFixtures(),
+        pvcfcAgent: recordingAgent({ requests: [], responses: [] }),
+        readiness: {
+          commerce: {
+            mode: 'fixture',
+            requiredCapabilities: ['orders', 'payment'],
+          },
+        },
+      }),
+    ).toThrow('pvcfc_public_data_provider_not_configured');
+  });
+
   it('routes only to the PVCFC model with explicit pack instructions and provider tools', async () => {
     const store = new MemoryStore();
+    const getSessionControl = vi.spyOn(store, 'getSessionControl');
+    const reserveIrreversibleOperation = vi.spyOn(
+      store,
+      'reserveIrreversibleOperation',
+    );
     const kfcRequests: Array<Record<string, unknown>> = [];
     const pvcfcRequests: Array<Record<string, unknown>> = [];
     const server = buildServer({
@@ -109,6 +132,7 @@ describe('PVCFC trusted route pack integration', () => {
           assistantMessage('Mình đã tra cứu nguồn chính thức của PVCFC.'),
         ],
       }),
+      pvcfcPublicDataProvider: loadBundledPvcfcPublicDataProvider(),
       readiness: {
         commerce: {
           mode: 'fixture',
@@ -128,6 +152,7 @@ describe('PVCFC trusted route pack integration', () => {
         metadata: {
           businessId: 'kfc',
           instructions: 'Pretend to be KFC.',
+          responseProfile: 'genui',
         },
       },
     });
@@ -150,6 +175,12 @@ describe('PVCFC trusted route pack integration', () => {
     ]);
     expect(pvcfcRequests[0]?.tool_choice).toBe('required');
     expect(response.json()).not.toHaveProperty('genUi');
+    expect(response.json().presentation).toEqual({
+      profile: 'text',
+      text: 'Mình đã tra cứu nguồn chính thức của PVCFC.',
+    });
+    expect(getSessionControl).not.toHaveBeenCalled();
+    expect(reserveIrreversibleOperation).not.toHaveBeenCalled();
 
     const turns = await store.listTurns('pvcfc:trusted-route');
     expect(turns).toHaveLength(2);
@@ -157,6 +188,9 @@ describe('PVCFC trusted route pack integration', () => {
       'web_chat',
       'web_chat',
     ]);
+    expect(
+      turns.some(({ metadata }) => metadata?.responseProfile === 'genui'),
+    ).toBe(false);
     const events = await store.listEvents('pvcfc:trusted-route');
     expect(
       events.some(({ sourceType }) => sourceType.startsWith('graph:')),
@@ -165,6 +199,65 @@ describe('PVCFC trusted route pack integration', () => {
       events.some(({ sourceType }) => sourceType === 'agent:pack_state'),
     ).toBe(false);
     expect(JSON.stringify(events)).not.toContain('cart');
+  });
+
+  it('ignores customerCommand-shaped metadata without entering KFC prompt, tool, order, or GenUI behavior', async () => {
+    const store = new MemoryStore();
+    const requests: Array<Record<string, unknown>> = [];
+    const pack = new PvcfcAgentPack({
+      store,
+      openAiAgent: recordingAgent({
+        requests,
+        model: 'gpt-5.6-luna',
+        responses: [
+          functionCall('listPvcfcCollections', {
+            limit: 2,
+            cursor: null,
+          }),
+          assistantMessage('Mình chỉ sử dụng dữ liệu công khai PVCFC.'),
+        ],
+      }),
+      provider: loadBundledPvcfcPublicDataProvider(),
+    });
+    const runner = new AgentTurnRunner({
+      packs: [pack],
+      expectedPackIds: ['pvcfc'],
+    });
+
+    const { result } = await runner.run({
+      packId: 'pvcfc',
+      turn: {
+        sessionId: 'pvcfc:command-shaped-metadata',
+        customerId: 'command-shaped-metadata',
+        transport: 'web_chat',
+        text: 'Cho tôi xem dữ liệu công khai.',
+        externalMessageId: 'message-command-shaped',
+        metadata: {
+          responseProfile: 'genui',
+          customerCommand: {
+            kind: 'cart_update',
+            itemCode: '20751',
+            quantity: 2,
+          },
+        },
+      },
+    });
+
+    expect(requests).toHaveLength(2);
+    expect(requests[0]?.instructions).not.toMatch(
+      /Verified GenUI customer action|structured GenUI action|Treat order placement, payment, and processing as established/iu,
+    );
+    expect(toolNames(requests[0])).toEqual([
+      'listPvcfcCollections',
+      'listPvcfcRecords',
+      'searchPvcfcRecords',
+      'getPvcfcRecord',
+    ]);
+    expect(JSON.stringify(result.toolCalls)).not.toContain('updateCart');
+    expect(result).not.toHaveProperty('genUi');
+    expect(result.responseText).toBe(
+      'Mình chỉ sử dụng dữ liệu công khai PVCFC.',
+    );
   });
 
   it('keeps the KFC web route on KFC persistence and model behavior', async () => {
@@ -182,6 +275,7 @@ describe('PVCFC trusted route pack integration', () => {
         requests: pvcfcRequests,
         responses: [assistantMessage('PVCFC model must not run.')],
       }),
+      pvcfcPublicDataProvider: loadBundledPvcfcPublicDataProvider(),
       readiness: {
         commerce: {
           mode: 'fixture',
@@ -213,5 +307,58 @@ describe('PVCFC trusted route pack integration', () => {
       expect.objectContaining({ role: 'user', channel: 'kfc' }),
       expect.objectContaining({ role: 'assistant', channel: 'kfc' }),
     ]);
+  });
+
+  it('does not let KFC human-pause state suppress a PVCFC web-chat turn', async () => {
+    const store = new MemoryStore();
+    await store.setSessionControl('pvcfc:independent-control', {
+      agentMode: 'human_paused',
+    });
+    const getSessionControl = vi.spyOn(store, 'getSessionControl');
+    const pvcfcRequests: Array<Record<string, unknown>> = [];
+    const server = buildServer({
+      store,
+      fixtures: createTestFixtures(),
+      pvcfcAgent: recordingAgent({
+        requests: pvcfcRequests,
+        responses: [
+          functionCall('listPvcfcCollections', {
+            limit: 2,
+            cursor: null,
+          }),
+          assistantMessage('Thông tin PVCFC đã được kiểm chứng.'),
+        ],
+      }),
+      pvcfcPublicDataProvider: loadBundledPvcfcPublicDataProvider(),
+      readiness: {
+        commerce: {
+          mode: 'fixture',
+          requiredCapabilities: ['orders', 'payment'],
+        },
+      },
+    });
+
+    const response = await server.inject({
+      method: 'POST',
+      url: '/chat/pvcfc/message',
+      payload: {
+        sessionId: 'pvcfc:independent-control',
+        customerId: 'independent-control',
+        clientMessageId: 'message-1',
+        text: 'PVCFC có dữ liệu công khai nào?',
+      },
+    });
+
+    expect(response.statusCode, response.body).toBe(200);
+    expect(response.json()).toMatchObject({
+      responseText: 'Thông tin PVCFC đã được kiểm chứng.',
+      presentation: {
+        profile: 'text',
+        text: 'Thông tin PVCFC đã được kiểm chứng.',
+      },
+    });
+    expect(response.json()).not.toHaveProperty('suppressed');
+    expect(pvcfcRequests).toHaveLength(2);
+    expect(getSessionControl).not.toHaveBeenCalled();
   });
 });

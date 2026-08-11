@@ -692,7 +692,10 @@ export function createRouteMessengerRuntime(
           ? (
               await runDirectAgentTurn!({
                 packId: 'pvcfc',
-                turn: directTurn,
+                turn: {
+                  ...directTurn,
+                  transport: 'zalo',
+                },
               })
             ).result
           : await runDirectKfcTurn!(directTurn);

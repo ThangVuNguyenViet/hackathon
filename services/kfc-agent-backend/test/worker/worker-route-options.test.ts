@@ -152,6 +152,23 @@ function expectCommonWorkerCapabilities(
 }
 
 describe('Worker route option parity', () => {
+  it('fails closed for a misspelled raw PVCFC public-data binding', () => {
+    const db = new FakeD1Database();
+    const env = workerEnv(db, {
+      PVCFC_ASTRAFLOW_API_KEY: 'pvcfc-astraflow-key',
+    });
+    Reflect.set(env, 'PVCFC_PUBLIC_DATA_MODE', 'fixtuer');
+
+    expect(() =>
+      buildWorkerRouteOptions({
+        env,
+        store: new D1Store(db),
+        dashboard: new DashboardEventBus(),
+        surface: { kind: 'queue' },
+      }),
+    ).toThrow('PVCFC_PUBLIC_DATA_MODE must be fixture or api');
+  });
+
   it('provides the same durable commerce/runtime capabilities to fetch, queue, and scheduled surfaces', () => {
     const fetchHarness = buildHarness({
       kind: 'fetch',

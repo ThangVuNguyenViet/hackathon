@@ -653,7 +653,6 @@ export function resolveDirectAgentTrustedCartAction(input: {
     ],
   };
 }
-
 export async function runDirectAgentScenario(input: {
   service: DirectAgentTurnService;
   scenario: DirectAgentScenario;
@@ -683,6 +682,7 @@ export async function runDirectAgentScenario(input: {
     const result = await input.service.run({
       sessionId,
       customerId,
+      transport: 'web_chat',
       channel: 'kfc',
       text: turn.text,
       externalMessageId: `direct-live:${input.scenario.id}:${offset + 1}`,

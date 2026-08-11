@@ -27,7 +27,10 @@ export function directAgentSdkBoundaryViolations(source) {
 }
 
 async function main() {
-  const runtimeUrl = new URL('../src/agent/openAiKfcAgent.ts', import.meta.url);
+  const runtimeUrl = new URL(
+    '../src/agent/openAiResponsesExecutor.ts',
+    import.meta.url,
+  );
   const violations = directAgentSdkBoundaryViolations(
     await readFile(runtimeUrl, 'utf8'),
   );

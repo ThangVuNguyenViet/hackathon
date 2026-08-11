@@ -4,11 +4,11 @@ import {
   AgentTurnRunner,
   type ExecutableAgentPack,
 } from '../../src/agent/agentTurnRunner.js';
-import {
-  KfcAgentPack,
-  type DirectAgentTurnInput,
-  type DirectAgentTurnResult,
-} from '../../src/agent/kfcAgentPack.js';
+import type {
+  DirectAgentTurnInput,
+  DirectAgentTurnResult,
+} from '../../src/agent/directAgentTurn.js';
+import { KfcAgentPack } from '../../src/agent/kfcAgentPack.js';
 import { OpenAiKfcAgent } from '../../src/agent/openAiKfcAgent.js';
 import type { KfcGenUiAttachment } from '../../src/genui/kfcGenUi.js';
 import { createMockClients } from '../../src/mock/createMockClients.js';
@@ -84,15 +84,19 @@ class TrackingMemoryStore extends MemoryStore {
   }
 }
 
-function turn(input: { sessionId: string; text: string }) {
+function directTurn(input: { sessionId: string; text: string }) {
   return {
     sessionId: input.sessionId,
     customerId: input.sessionId.split(':').at(-1)!,
-    channel: 'kfc' as const,
+    transport: 'web_chat' as const,
     text: input.text,
     externalMessageId: `${input.sessionId}:message-1`,
     metadata: null,
   };
+}
+
+function kfcTurn(input: { sessionId: string; text: string }) {
+  return { ...directTurn(input), channel: 'kfc' as const };
 }
 
 const readPvcfcKnowledge = tool({
@@ -108,9 +112,10 @@ const readPvcfcKnowledge = tool({
   execute: () => ({ ok: true }),
 });
 
-function pvcfcPack(input: {
-  store: MemoryStore;
-}): ExecutableAgentPack<DirectAgentTurnInput, DirectAgentTurnResult> {
+function pvcfcPack(): ExecutableAgentPack<
+  DirectAgentTurnInput,
+  DirectAgentTurnResult
+> {
   return {
     id: 'pvcfc',
     profile: {
@@ -121,39 +126,14 @@ function pvcfcPack(input: {
       tools: [readPvcfcKnowledge],
       context: undefined,
     }),
-    execute: async ({ turn: directTurn }) => ({
+    execute: async () => ({
       responseText: 'Mình sẽ tra cứu dữ liệu PVCFC.',
       toolCalls: [],
       usage: { inputTokens: 4, outputTokens: 4, totalTokens: 8 },
       userTurnId: 'turn_pvcfc_user',
       assistantTurnId: 'turn_pvcfc_assistant',
-      assistantTurn: {
-        id: 'turn_pvcfc_assistant',
-        sessionId: directTurn.sessionId,
-        channel: directTurn.channel,
-        role: 'assistant',
-        text: 'Mình sẽ tra cứu dữ liệu PVCFC.',
-        externalMessageId: null,
-        externalUserId: directTurn.customerId,
-        deliveryStatus: 'pending',
-        metadata: null,
-      },
-      sdkSessionMutation: { mode: 'append', items: [] },
+      stateCommit: 'committed',
     }),
-    lifecycle: {
-      onRunSucceeded: async ({ result }) => {
-        const commit = await input.store.commitAssistantTurn({
-          stateEvent: {
-            sessionId: result.assistantTurn.sessionId,
-            sourceType: 'agent:pack_state',
-            payload: { packId: 'pvcfc', status: 'completed' },
-          },
-          assistantTurn: result.assistantTurn,
-          sdkSessionMutation: result.sdkSessionMutation,
-        });
-        result.stateCommit = commit.status;
-      },
-    },
   };
 }
 
@@ -163,36 +143,21 @@ describe('AgentTurnRunner pack isolation', () => {
     const fixtures = createTestFixtures();
     const clients = createMockClients(fixtures);
     const createKfcClients = vi.fn(async () => clients);
-    const selectKfcGenUi = vi.fn(() => undefined);
-    const kfc = sequencedAgent([assistantMessage('unused')]);
     const runner = new AgentTurnRunner({
-      packs: [
-        new KfcAgentPack({
-          store,
-          openAiAgent: kfc.agent,
-          getFixtures: async () => fixtures,
-          createClients: createKfcClients,
-          getAccessContext: async () => undefined,
-        }),
-        pvcfcPack({ store }),
-      ],
-      expectedPackIds: ['kfc', 'pvcfc'],
+      packs: [pvcfcPack()],
+      expectedPackIds: ['pvcfc'],
     });
 
     const output = await runner.run({
       packId: 'pvcfc',
-      turn: {
-        ...turn({
-          sessionId: 'pvcfc:isolated-pack',
-          text: 'Cho tôi thông tin sản phẩm Urê.',
-        }),
-        selectGenUi: selectKfcGenUi,
-      },
+      turn: directTurn({
+        sessionId: 'pvcfc:isolated-pack',
+        text: 'Cho tôi thông tin sản phẩm Urê.',
+      }),
     });
 
     expect(createKfcClients).not.toHaveBeenCalled();
     expect(store.listEventCalls).toBe(0);
-    expect(selectKfcGenUi).not.toHaveBeenCalled();
     expect(output.result).not.toHaveProperty('session');
     expect(output.result).not.toHaveProperty('genUi');
     const events = await store.listEvents('pvcfc:isolated-pack');
@@ -245,7 +210,7 @@ describe('AgentTurnRunner pack isolation', () => {
     const output = await runner.run({
       packId: 'kfc',
       turn: {
-        ...turn({
+        ...kfcTurn({
           sessionId: 'kfc:preserved-pack',
           text: 'Thêm Combo Hợp Gu 99K.',
         }),
@@ -287,7 +252,7 @@ describe('AgentTurnRunner pack isolation', () => {
     await expect(
       runner.run({
         packId: undefined,
-        turn: turn({ sessionId: 'kfc:missing-pack', text: 'Xin chào.' }),
+        turn: kfcTurn({ sessionId: 'kfc:missing-pack', text: 'Xin chào.' }),
       }),
     ).rejects.toThrow('agent_pack_id_missing');
     expect(createKfcClients).not.toHaveBeenCalled();

@@ -3,6 +3,8 @@ import { z } from 'zod';
 import type { AppEnv } from '../config/env.js';
 import OpenAI from 'openai';
 import { OpenAiKfcAgent } from '../agent/openAiKfcAgent.js';
+import { OpenAiResponsesExecutor } from '../agent/openAiResponsesExecutor.js';
+import { createConfiguredPvcfcPublicDataProvider } from '../businesses/pvcfc/public-data/configuredPvcfcPublicDataProvider.js';
 import { createConfirmationApprovalKeyRing } from './confirmationApprovalCapability.js';
 import {
   createAgentChatModel,
@@ -90,6 +92,7 @@ type ServerOptionsEnv = Omit<
     PVCFC_ASTRAFLOW_API_KEY?: string;
     PVCFC_ASTRAFLOW_BASE_URL?: string;
     PVCFC_ASTRAFLOW_MODEL?: string;
+    PVCFC_PUBLIC_DATA_MODE?: 'fixture' | 'api';
   };
 
 export function buildServerOptionsFromEnv(
@@ -110,6 +113,10 @@ export function buildServerOptionsFromEnv(
           'https://api-sg.umodelverse.ai/v1',
       })
     : undefined;
+  const pvcfcPublicDataProvider = createConfiguredPvcfcPublicDataProvider({
+    enabled: pvcfcAstraFlowClient !== undefined,
+    mode: env.PVCFC_PUBLIC_DATA_MODE,
+  });
   const googleApiKey = optionalValue(env.GOOGLE_API_KEY);
   const agentIdentity = resolveRuntimeAgentIdentity({
     runtime: env.KFC_AGENT_RUNTIME,
@@ -244,7 +251,7 @@ export function buildServerOptionsFromEnv(
         })
       : undefined,
     pvcfcAgent: pvcfcAstraFlowClient
-      ? new OpenAiKfcAgent({
+      ? new OpenAiResponsesExecutor({
           client: pvcfcAstraFlowClient,
           model: optionalValue(env.PVCFC_ASTRAFLOW_MODEL) ?? 'gpt-5.6-luna',
           modelTemperature: null,
@@ -254,6 +261,7 @@ export function buildServerOptionsFromEnv(
           },
         })
       : undefined,
+    pvcfcPublicDataProvider,
     agent,
     monitorJudge,
     agentTracer: langsmithApiKey

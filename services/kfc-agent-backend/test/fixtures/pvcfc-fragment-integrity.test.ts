@@ -14,6 +14,7 @@ import { describe, expect, it } from 'vitest';
 import { z } from 'zod';
 import { buildFixtures } from '../../scripts/build-fixtures.js';
 import { buildPvcfcPublicData } from '../../scripts/build-pvcfc-public-data.js';
+import { createPvcfcPublicDataProvider } from '../../src/businesses/pvcfc/public-data/bundledPvcfcPublicDataProvider.js';
 
 const manifestSchema = z.object({
   schemaVersion: z.string(),
@@ -252,6 +253,12 @@ describe('PVCFC fragment manifest integrity', () => {
       );
 
       await buildPvcfcPublicData({ backendRoot: outputRoot });
+      const evolvedInput = JSON.parse(
+        await readFile(
+          join(outputRoot, 'fixtures/generated/pvcfc-public-data.json'),
+          'utf8',
+        ),
+      ) as unknown;
       const evolved = z
         .object({
           collections: z.array(
@@ -262,14 +269,7 @@ describe('PVCFC fragment manifest integrity', () => {
             }),
           ),
         })
-        .parse(
-          JSON.parse(
-            await readFile(
-              join(outputRoot, 'fixtures/generated/pvcfc-public-data.json'),
-              'utf8',
-            ),
-          ),
-        );
+        .parse(evolvedInput);
 
       expect(
         evolved.collections.find(
@@ -291,6 +291,79 @@ describe('PVCFC fragment manifest integrity', () => {
           0,
         ),
       ).toBe(499);
+
+      const provider = createPvcfcPublicDataProvider(() => evolvedInput);
+      const collections = await provider.listCollections({ limit: 20 });
+      expect(collections.ok).toBe(true);
+      if (!collections.ok) return;
+      expect(
+        collections.value.collections.find(
+          (collection) => collection.name === 'products',
+        ),
+      ).toEqual({ name: 'products', access: 'searchable', count: 68 });
+      expect(
+        collections.value.collections.find(
+          (collection) => collection.name === 'research_trials',
+        ),
+      ).toEqual({
+        name: 'research_trials',
+        access: 'searchable',
+        count: 1,
+      });
+
+      const productSearch = await provider.searchRecords({
+        query: 'Synthetic future product',
+        collections: ['products'],
+      });
+      expect(productSearch.ok).toBe(true);
+      if (!productSearch.ok) return;
+      expect(productSearch.value.hits[0]).toMatchObject({
+        collection: 'products',
+        id: 'synthetic-future-product',
+      });
+      const product = await provider.getRecord({
+        collection: 'products',
+        id: 'synthetic-future-product',
+      });
+      expect(product.ok).toBe(true);
+      if (!product.ok) return;
+      expect(product.value.record).toMatchObject({
+        futurePayload: { dosageModel: 'vNext', confidence: 0.9 },
+      });
+
+      const trialList = await provider.listRecords({
+        collection: 'research_trials',
+        limit: 20,
+      });
+      expect(trialList.ok).toBe(true);
+      if (!trialList.ok) return;
+      expect(trialList.value.records).toEqual([
+        expect.objectContaining({
+          collection: 'research_trials',
+          id: 'trial-2027-alpha',
+        }),
+      ]);
+      const trialSearch = await provider.searchRecords({
+        query: 'telemetry',
+        collections: ['research_trials'],
+      });
+      expect(trialSearch.ok).toBe(true);
+      if (!trialSearch.ok) return;
+      expect(trialSearch.value.hits).toEqual([
+        expect.objectContaining({
+          collection: 'research_trials',
+          id: 'trial-2027-alpha',
+        }),
+      ]);
+      const trial = await provider.getRecord({
+        collection: 'research_trials',
+        id: 'trial-2027-alpha',
+      });
+      expect(trial.ok).toBe(true);
+      if (!trial.ok) return;
+      expect(trial.value.record).toMatchObject({
+        futurePayload: { plots: 12, telemetry: ['soil', 'rain'] },
+      });
     } finally {
       await rm(outputRoot, { recursive: true, force: true });
     }

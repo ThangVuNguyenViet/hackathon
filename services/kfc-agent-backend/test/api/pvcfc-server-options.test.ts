@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { OpenAiKfcAgent } from '../../src/agent/openAiKfcAgent.js';
+import { OpenAiResponsesExecutor } from '../../src/agent/openAiResponsesExecutor.js';
 import { buildServerOptionsFromEnv } from '../../src/api/serverOptions.js';
 import { loadEnv } from '../../src/config/env.js';
 
@@ -17,15 +18,26 @@ function baseEnv() {
 
 describe('PVCFC server model isolation', () => {
   it('creates a dedicated AstraFlow-backed agent without reusing the KFC client', () => {
-    const options = buildServerOptionsFromEnv({
-      ...baseEnv(),
-      PVCFC_ASTRAFLOW_API_KEY: 'pvcfc-astraflow-key',
-      PVCFC_ASTRAFLOW_BASE_URL: 'https://api-sg.umodelverse.ai/v1',
-      PVCFC_ASTRAFLOW_MODEL: 'gpt-5.6-luna',
-    });
+    const options = buildServerOptionsFromEnv(
+      loadEnv({
+        PORT: '18090',
+        KFC_COMMERCE_MODE: 'fixture',
+        KFC_AGENT_RUNTIME: 'openai-responses',
+        KFC_AGENT_PROVIDER: 'openai',
+        KFC_AGENT_MODEL: 'gpt-4.1-mini',
+        OPENAI_API_KEY: 'kfc-openai-key',
+        OPENAI_BASE_URL: 'https://api.openai.test/v1',
+        PVCFC_ASTRAFLOW_API_KEY: 'pvcfc-astraflow-key',
+        PVCFC_ASTRAFLOW_BASE_URL: 'https://api-sg.umodelverse.ai/v1',
+        PVCFC_ASTRAFLOW_MODEL: 'gpt-5.6-luna',
+        PVCFC_PUBLIC_DATA_MODE: 'fixture',
+      } as NodeJS.ProcessEnv),
+    );
 
     expect(options.openAiAgent).toBeInstanceOf(OpenAiKfcAgent);
-    expect(options.pvcfcAgent).toBeInstanceOf(OpenAiKfcAgent);
+    expect(options.pvcfcAgent).toBeInstanceOf(OpenAiResponsesExecutor);
+    expect(options.pvcfcAgent).not.toBeInstanceOf(OpenAiKfcAgent);
+    expect(options.pvcfcPublicDataProvider).toBeDefined();
     expect(Reflect.get(options.openAiAgent!, 'model')).toBe('gpt-4.1-mini');
     expect(Reflect.get(options.pvcfcAgent!, 'model')).toBe('gpt-5.6-luna');
     expect(Reflect.get(options.pvcfcAgent!, 'compaction')).toEqual({
@@ -51,5 +63,31 @@ describe('PVCFC server model isolation', () => {
 
     expect(options.openAiAgent).toBeInstanceOf(OpenAiKfcAgent);
     expect(options.pvcfcAgent).toBeUndefined();
+    expect(options.pvcfcPublicDataProvider).toBeUndefined();
+  });
+
+  it('fails closed when the PVCFC model has no explicit public-data mode', () => {
+    expect(() =>
+      buildServerOptionsFromEnv(
+        loadEnv({
+          PORT: '18090',
+          KFC_COMMERCE_MODE: 'fixture',
+          PVCFC_ASTRAFLOW_API_KEY: 'pvcfc-astraflow-key',
+        } as NodeJS.ProcessEnv),
+      ),
+    ).toThrow('PVCFC_PUBLIC_DATA_MODE is required');
+  });
+
+  it('fails closed when API mode has no configured provider adapter', () => {
+    expect(() =>
+      buildServerOptionsFromEnv(
+        loadEnv({
+          PORT: '18090',
+          KFC_COMMERCE_MODE: 'fixture',
+          PVCFC_ASTRAFLOW_API_KEY: 'pvcfc-astraflow-key',
+          PVCFC_PUBLIC_DATA_MODE: 'api',
+        } as NodeJS.ProcessEnv),
+      ),
+    ).toThrow('PVCFC public data API provider is not configured');
   });
 });

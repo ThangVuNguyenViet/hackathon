@@ -95,6 +95,7 @@ function collectSearchableStrings(value: unknown, output: string[]): void {
   if (typeof value !== 'object' || value === null) return;
   for (const [key, child] of Object.entries(value)) {
     if (key === 'provenance' || key === 'originRefs') continue;
+    output.push(key);
     collectSearchableStrings(child, output);
   }
 }

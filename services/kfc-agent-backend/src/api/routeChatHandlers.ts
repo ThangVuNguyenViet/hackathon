@@ -240,6 +240,7 @@ export function createChatRouteHandlers(context: RouteHandlerContext) {
     kfcProofAccessContext,
     latestKfcProofPreconditions,
     kfcAgentResponse,
+    pvcfcAgentResponse,
     deferAiMonitorRefinement,
     deliverAssistantReply,
     persistEventProfile,
@@ -260,7 +261,7 @@ export function createChatRouteHandlers(context: RouteHandlerContext) {
     recoverStaleMessengerDeliveriesInternal,
     processMessengerAgentRunInternal,
   } = context;
-  const chatPvcfcMessage = createPvcfcChatHandler(kfcAgentResponse);
+  const chatPvcfcMessage = createPvcfcChatHandler(pvcfcAgentResponse);
   return {
     async chatKfcMessage(body: unknown) {
       const parsed = kfcChatPayloadSchema.safeParse(body);
@@ -288,7 +289,6 @@ export function createChatRouteHandlers(context: RouteHandlerContext) {
       delete auditMetadata.trustedCustomerAction;
       delete auditMetadata.source;
       return kfcAgentResponse({
-        businessId: 'kfc',
         sessionId: parsed.data.sessionId,
         customerId: parsed.data.customerId,
         clientMessageId: parsed.data.clientMessageId,
@@ -803,7 +803,6 @@ export function createChatRouteHandlers(context: RouteHandlerContext) {
       }
       const invoke = () =>
         kfcAgentResponse({
-          businessId: 'kfc',
           sessionId: parsed.data.sessionId,
           customerId: parsed.data.customerId,
           clientMessageId: parsed.data.clientMessageId,
