@@ -1,8 +1,6 @@
 import type { OpenAIClient } from '@kfc/openai-agents-runtime';
 import { describe, expect, it, vi } from 'vitest';
-import {
-  AgentTurnRunner,
-} from '../../src/agent/agentTurnRunner.js';
+import { AgentTurnRunner } from '../../src/agent/agentTurnRunner.js';
 import type { BusinessAgentPack } from '../../src/business/agentPack.js';
 import type {
   DirectAgentTurnInput,
@@ -153,7 +151,10 @@ describe('AgentTurnRunner pack isolation', () => {
     await expect(
       runner.run({
         packId: 'pvcfc',
-        turn: { sessionId: 'kfc:customer-42', text: 'KFC appears in this text.' },
+        turn: {
+          sessionId: 'kfc:customer-42',
+          text: 'KFC appears in this text.',
+        },
       }),
     ).resolves.toEqual({ selectedPack: 'pvcfc' });
     await expect(

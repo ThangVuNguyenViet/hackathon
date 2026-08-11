@@ -21,7 +21,6 @@ const candidates = new Set([
   '.prettierrc.json',
   'eslint-warning-baseline.json',
   'eslint.config.mjs',
-  'langgraph.json',
   'package-lock.json',
   'package.json',
   'tsconfig.json',

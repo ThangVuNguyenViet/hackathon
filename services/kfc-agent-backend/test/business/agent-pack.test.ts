@@ -24,8 +24,9 @@ describe('AgentPackRegistry', () => {
     const alpha = pack('alpha');
     const registry = new AgentPackRegistry([alpha]);
 
-    await expect(registry.require('alpha').runTurn({ requestId: 'request-1' }))
-      .resolves.toEqual({ selectedPack: 'alpha' });
+    await expect(
+      registry.require('alpha').runTurn({ requestId: 'request-1' }),
+    ).resolves.toEqual({ selectedPack: 'alpha' });
   });
 
   it('rejects missing and unknown selections before a pack can run a turn', () => {

@@ -9,7 +9,7 @@ import type {
   AgentTurnInput,
   AgentTurnOutput,
   ReplyIntent,
-} from '../graph/agentTurnState.js';
+} from '../businesses/kfc/turnContracts.js';
 import type { ConversationTurn } from '../domain/types.js';
 import type { AgentGraphState } from '../graph/state.js';
 import {
@@ -65,9 +65,6 @@ import type {
 import {
   assertPublicationCommitAuthority,
 } from './agentPublicationCommitAuthority.js';
-import {
-  createStateGraphTurnProofBinding,
-} from './stateGraphTurnProofBinding.js';
 import { paymentAttemptMatchesOrder } from '../ordering/paymentOrderAuthority.js';
 
 function replyIntentFor(
@@ -251,15 +248,6 @@ export async function persistCompletedTurn(input: {
     presentation,
     responseProfile,
   );
-  const stateGraphProof = input.modelPublicationAuthority
-    ? await createStateGraphTurnProofBinding({
-        turnInput: input.turnInput,
-        currentTurnId: input.modelPublicationAuthority.currentTurnId,
-        modelResponseText: input.responseText,
-        presentationText: presentation.text,
-      })
-    : undefined;
-
   const metadata = {
     ...(input.turnInput.metadata?.release
       ? { release: input.turnInput.metadata.release }
@@ -267,7 +255,6 @@ export async function persistCompletedTurn(input: {
     ...(input.turnInput.responseProfile
       ? { responseProfile: input.turnInput.responseProfile }
       : {}),
-    ...(stateGraphProof ? { stateGraphProof } : {}),
     ...(presentation.profile === 'genui' && genUi
       ? {
           genUi: kfcGenUiAttachmentForPersistence(genUi, {

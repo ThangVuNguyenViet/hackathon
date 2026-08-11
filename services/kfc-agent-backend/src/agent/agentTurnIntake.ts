@@ -1,6 +1,6 @@
 import type { ConversationTurn } from '../domain/types.js';
 import { KFC_GENUI_SCHEMA_VERSION } from '../genui/kfcGenUi.js';
-import type { AgentTurnInput } from '../graph/agentTurnState.js';
+import type { AgentTurnInput } from '../businesses/kfc/turnContracts.js';
 import { emitDashboardEvent } from '../graph/turnSupport.js';
 import {
   responseProfileForChannel,

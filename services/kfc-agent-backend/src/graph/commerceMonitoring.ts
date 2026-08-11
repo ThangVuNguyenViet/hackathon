@@ -1,6 +1,6 @@
 import { resolveMonitorSessionIntelligence } from '../monitor/sessionIntelligence.js';
 import type { ToolTraceEntry } from '../ordering/types.js';
-import type { AgentTurnInput } from './agentTurnState.js';
+import type { AgentTurnInput } from '../businesses/kfc/turnContracts.js';
 import type { AgentGraphState } from './state.js';
 import { emitDashboardEvent } from './turnSupport.js';
 import { hasSuccessfulToolResult } from './commerceExecution.js';

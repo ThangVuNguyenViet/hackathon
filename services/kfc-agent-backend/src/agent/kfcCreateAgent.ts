@@ -1,41 +1,40 @@
 import type { BaseChatModel } from '@langchain/core/language_models/chat_models';
-import { createAgent, providerStrategy } from 'langchain';
-import { AGENT_SYSTEM_PROMPT } from './agentModelInvocation.js';
-import { createKfcCreateAgentMiddleware } from './kfcCreateAgentMiddleware.js';
-import { kfcCreateAgentContextSchema } from './kfcCreateAgentRuntime.js';
+import type { StructuredTool } from '@langchain/core/tools';
 import {
-  createKfcCreateAgentTools,
-  type KfcCreateAgentToolDependencies,
-} from './kfcCreateAgentTools.js';
+  createAgent,
+  modelCallLimitMiddleware,
+  providerStrategy,
+  toolCallLimitMiddleware,
+} from 'langchain';
+import { KFC_LANGCHAIN_SYSTEM_PROMPT } from '../businesses/kfc/instructions.js';
+import { kfcGroundedPublicationSchema } from '../businesses/kfc/publication.js';
 import { providerPortableToolSchema } from './providerPortableToolSchema.js';
-import { groundedResponseSchema } from './responseGrounding.js';
 
 export const KFC_CREATE_AGENT_RESPONSE_SCHEMA = providerPortableToolSchema(
-  groundedResponseSchema,
+  kfcGroundedPublicationSchema,
 );
 
-export const KFC_CREATE_AGENT_SYSTEM_PROMPT = AGENT_SYSTEM_PROMPT.replace(
-  /When ready to answer, call submitGroundedResponse exactly once instead of returning plain text\./u,
-  'When ready to answer, return the final response through the provider-native structured output schema.',
-);
+export const KFC_CREATE_AGENT_SYSTEM_PROMPT = KFC_LANGCHAIN_SYSTEM_PROMPT;
 
 export function createKfcAgent(input: {
   model: BaseChatModel;
-  toolDependencies?: KfcCreateAgentToolDependencies;
+  tools: readonly StructuredTool[];
 }) {
   return createAgent({
     model: input.model,
-    tools: createKfcCreateAgentTools(input.toolDependencies),
+    tools: [...input.tools],
     systemPrompt: KFC_CREATE_AGENT_SYSTEM_PROMPT,
-    contextSchema: kfcCreateAgentContextSchema,
     responseFormat: providerStrategy({
       // The portable JSON Schema is runtime-equivalent to this Zod schema,
       // but LangChain's overload does not preserve that relationship.
       schema:
-        KFC_CREATE_AGENT_RESPONSE_SCHEMA as unknown as typeof groundedResponseSchema,
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion
+        KFC_CREATE_AGENT_RESPONSE_SCHEMA as unknown as typeof kfcGroundedPublicationSchema,
       strict: true,
     }),
-    middleware: createKfcCreateAgentMiddleware(),
-    version: 'v1',
+    middleware: [
+      modelCallLimitMiddleware({ runLimit: 6, exitBehavior: 'error' }),
+      toolCallLimitMiddleware({ runLimit: 8, exitBehavior: 'error' }),
+    ],
   });
 }

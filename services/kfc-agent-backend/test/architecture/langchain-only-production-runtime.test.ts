@@ -34,7 +34,14 @@ const skippedDirectories = new Set([
   'test',
 ]);
 
-const executableExtensions = new Set(['.cjs', '.js', '.json', '.mjs', '.toml', '.ts']);
+const executableExtensions = new Set([
+  '.cjs',
+  '.js',
+  '.json',
+  '.mjs',
+  '.toml',
+  '.ts',
+]);
 
 async function executableSourceFiles(root: string): Promise<string[]> {
   const files: string[] = [];
@@ -69,9 +76,7 @@ describe('LangChain-only production runtime', () => {
 
     const violations = sources.flatMap(({ path, source }) =>
       forbiddenProductionRuntime.flatMap(([artifact, pattern]) =>
-        pattern.test(source)
-          ? [`${relative(root, path)}: ${artifact}`]
-          : [],
+        pattern.test(source) ? [`${relative(root, path)}: ${artifact}`] : [],
       ),
     );
 

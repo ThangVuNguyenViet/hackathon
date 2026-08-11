@@ -1,4 +1,4 @@
-import type { IrreversibleConfirmationResume } from '../graph/agentTurnState.js';
+import type { IrreversibleConfirmationResume } from '../businesses/kfc/turnContracts.js';
 import type {
   CommerceApprovalCapability,
 } from '../ordering/types.js';
