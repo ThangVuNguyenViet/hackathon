@@ -71,13 +71,13 @@ async function commitPostgresAssistantTurnOperation(input: {
           )
         : undefined;
     for (const record of prepared.verifiedRefs) {
-      await insertVerifiedRef(
+      await insertPostgresVerifiedRef(
         client,
         record,
         sessionGeneration!,
       );
     }
-    await insertEvent(client, prepared.stateEvent);
+    await insertPostgresEvent(client, prepared.stateEvent);
     await client.query(
       `INSERT INTO conversation_turns (
          id, session_id, channel, role, text, external_message_id,
@@ -98,8 +98,8 @@ async function commitPostgresAssistantTurnOperation(input: {
         prepared.turn.createdAt,
       ],
     );
-    await insertEvent(client, prepared.turnEvent);
-    if (prepared.auditEvent) await insertEvent(client, prepared.auditEvent);
+    await insertPostgresEvent(client, prepared.turnEvent);
+    if (prepared.auditEvent) await insertPostgresEvent(client, prepared.auditEvent);
     await client.query('COMMIT');
     return { status: 'committed', ...structuredClone(prepared) };
   } catch (error) {
@@ -133,7 +133,7 @@ async function lockVerifiedRefGeneration(
   return generation;
 }
 
-async function insertVerifiedRef(
+export async function insertPostgresVerifiedRef(
   client: PoolClient,
   record: VerifiedRefRecord,
   sessionGeneration: number,
@@ -152,7 +152,7 @@ async function insertVerifiedRef(
   );
 }
 
-async function insertEvent(
+export async function insertPostgresEvent(
   client: PoolClient,
   event: {
     id: string;

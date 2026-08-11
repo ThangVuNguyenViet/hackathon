@@ -24,6 +24,8 @@ import type {
   CommitAssistantTurnResult,
   CommitConfirmationPauseIfRunCurrentInput,
   CommitConfirmationPauseIfRunCurrentResult,
+  CommitConfirmationTurnIfRunCurrentInput,
+  CommitConfirmationTurnIfRunCurrentResult,
   ConversationStore,
   CreateAgentRunInput,
   HistorySearchResult,
@@ -112,6 +114,7 @@ import {
   commitD1AssistantTurnIfRunCurrent,
 } from './d1StoreTurnCommit.js';
 import { commitD1ConfirmationPauseIfRunCurrent } from './d1StorePauseCommit.js';
+import { commitD1ConfirmationTurnIfRunCurrent } from './d1StoreConfirmationTurnCommit.js';
 import {
   beginD1NonAgentTextDeliveryAttempt,
   completeD1NonAgentTextDeliveryAttempt,
@@ -145,6 +148,14 @@ export abstract class D1StoreConversationOperations extends D1StoreCore {
     input: CommitConfirmationPauseIfRunCurrentInput,
   ): Promise<CommitConfirmationPauseIfRunCurrentResult> {
     return commitD1ConfirmationPauseIfRunCurrent({
+      db: this.db,
+      operation: input,
+    });
+  }
+  async commitConfirmationTurnIfRunCurrent(
+    input: CommitConfirmationTurnIfRunCurrentInput,
+  ): Promise<CommitConfirmationTurnIfRunCurrentResult> {
+    return commitD1ConfirmationTurnIfRunCurrent({
       db: this.db,
       operation: input,
     });

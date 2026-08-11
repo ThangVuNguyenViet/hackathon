@@ -1,6 +1,8 @@
 # KFC Agent Backend
 
-Fastify + LangGraph.js backend for the KFC Vietnam conversational ordering assistant. The hackathon demo runtime is Cloudflare Workers + D1; the Node/Fastify server remains available for local development and tests.
+LangChain backend for the KFC and PVCFC business agents. Cloudflare Workers +
+D1 is the primary demo runtime; Node/Fastify + PostgreSQL remains available for
+local development and tests.
 
 ## Local Setup
 
@@ -56,66 +58,23 @@ customer prose with keyword matching. The asynchronous monitor remains
 non-authoritative and does not block publication.
 `OPENAI_BASE_URL` is optional for the OpenAI adapter.
 
-### Agents SDK conversation context
+## Runtime architecture
 
-The direct OpenAI runtime keeps three different durable records:
+KFC and PVCFC are separate business packs selected only by trusted route
+configuration. Each pack owns its prompt, LangChain `createAgent` loop, tools,
+evidence rules, and presentation. The shared registry knows only the pack ID
+and `runTurn` contract; it does not contain a universal business model.
 
-- `agent_session_items` is model context managed through the Agents SDK
-  `Session` contract. The SDK compaction session may atomically replace this
-  history after it reaches `KFC_AGENT_COMPACTION_THRESHOLD_BYTES`.
-- `conversation_turns` is the complete customer-visible transcript. Compaction
-  does not summarize or delete it.
-- Verified cart, address, reward, voucher, fulfillment, and order state remains
-  structured application state and is never sourced from a compacted summary.
+Application stores remain authoritative for the canonical transcript,
+verified business state, authorization, confirmation pauses, irreversible
+effects, idempotency, delivery, and run fences. LangChain supplies the
+model/tool loop only. There is no direct OpenAI Agents SDK runtime, authored
+LangGraph runtime, framework checkpoint transcript, or runtime selector.
 
-`KFC_AGENT_COMPACTION_ENABLED` defaults to `true`. Compaction failures are
-best-effort: they are recorded as redacted metrics while the completed turn is
-published with its uncompacted session items. A session reset removes both SDK
-history and customer-visible turns. No time-based transcript deletion is
-performed; adding one requires a separately approved customer-data retention
-period rather than reusing the compaction threshold.
-
-## LangSmith Studio
-
-PR #52 targets one explicitly authored LangGraph `StateGraph` (using the graph
-API, not a prebuilt agent loop): `load_context -> call_model`. Commerce tool
-calls continue through `validate_tool_calls -> request_approval` when required
-`-> revalidate_approval -> execute_tools -> call_model`. A typed terminal
-response is structurally checked against typed evidence before
-`finalize_response -> persist_and_project`. A no-tool response uses one model
-call; a normal read-tool response uses one call to choose tools and one call to
-author the grounded response.
-Invalid model tool calls get one explicit semantic-correction edge. Retryable provider failures get an
-explicit budgeted retry edge; all other failures go to `fail_closed`. Provider
-adapters use `maxRetries: 0` and no hedging so each outbound attempt is
-graph-counted and trace-visible. Authenticated structured actions are carried
-separately from customer text and the migration draft contains their explicit
-`prepare_structured_action` branch. That branch is still integration-pending
-and fails the acceptance boundary closed until its focused and full offline
-gates pass. The top-level `langchain` agent package, prebuilt agent loops, and
-a parallel legacy runtime are outside the accepted architecture.
-
-Start the local Agent Server from this directory:
-
-```bash
-KFC_COMMERCE_MODE=fixture npm run dev:studio -- --no-browser
-```
-
-Open the Studio URL printed by the command. The default local API is `http://localhost:2024`, and the graph ID is `kfc-agent`. Production and Studio now use the same explicit `StateGraph`; remaining legacy router/planner/composer modules are migration cleanup and are not qualification evidence.
-
-Use this Studio input for a first run:
-
-```json
-{
-  "sessionId": "studio:demo-customer",
-  "customerId": "demo-customer",
-  "channel": "kfc",
-  "text": "Cho mình 1 Combo 99K",
-  "externalMessageId": "studio-demo-message-1"
-}
-```
-
-Studio state is development-only and in memory. Production session identity and conversation persistence remain app-owned; the StateGraph does not replace D1/Postgres or channel webhook idempotency.
+KFC web chat, Messenger, and Zalo use the KFC pack. The PVCFC web route uses
+the PVCFC pack and its public-data provider without constructing KFC cart,
+confirmation, human-pause, or GenUI state. Both HTTP deployments report
+`langchain-create-agent` as the agent runtime.
 
 ## Worker Runtime
 
@@ -140,9 +99,10 @@ The Messenger callback submitted to Meta should be:
 https://<worker-name>.<account-subdomain>.workers.dev/webhooks/messenger
 ```
 
-The Worker stores runtime conversation turns, dashboard events, webhook idempotency records, and
-LangGraph checkpoints in its environment-owned D1 database. The Node entrypoint stores the same
-runtime state and checkpoints durably in PostgreSQL. Generated KFC fixtures are local deterministic
+The Worker stores application conversation turns, verified business state,
+confirmation authority, delivery journals, dashboard events, and webhook
+idempotency records in its environment-owned D1 database. The Node entrypoint
+stores the same application-owned state durably in PostgreSQL. Generated KFC fixtures are local deterministic
 provider responses for tests; they are not database seed content.
 
 Messenger POST webhooks are acknowledged by the Worker after D1 idempotency
@@ -314,7 +274,9 @@ npm run test:live:interruption
 
 ## Messenger And Zalo
 
-Messenger and Zalo adapters are transport boundaries. They normalize inbound channel payloads into the same graph input used by scenario replay and persist profile/display metadata for the live monitor.
+Messenger and Zalo adapters are transport boundaries. They normalize inbound
+channel payloads into the same KFC application-turn input used by scenario
+replay and persist profile/display metadata for the live monitor.
 
 - Messenger setup uses Page ID `118976205445198`.
 - Zalo setup uses OA ID `4225933857518051795`.
@@ -341,7 +303,7 @@ writes exclusive per-turn and duplicate/coalescing evidence files. It never send
 on the tester's behalf or substitutes local credentials or fixtures.
 
 The root `scripts/run-kfc-deployed-acceptance.sh` composes the deployed GenUI and Messenger child
-manifests, current readiness/catalog/graph/checkpoint bindings, production latency JSON, and
+manifests, current readiness/catalog/application-state bindings, production latency JSON, and
 independent five-golden/three-matrix streaks into one release-candidate manifest. Full GenUI
 qualification currently also requires `KFC_GENUI_BRANCH_SESSIONS_FILE`, a reviewed plan that binds
 the eight legacy persisted proof scenarios to clean durable deployed sessions. No maintained

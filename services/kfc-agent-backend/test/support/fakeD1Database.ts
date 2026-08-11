@@ -65,6 +65,7 @@ export class FakeD1Database {
   afterConfirmationPauseUpdate?: (
     kind: 'expire' | 'reject' | 'complete',
   ) => void | Promise<void>;
+  failNextBatchAtStatement?: number;
 
   prepare(query: string): FakeD1PreparedStatement {
     return new FakeD1PreparedStatement(this, query);
@@ -86,7 +87,11 @@ export class FakeD1Database {
     ) as Record<TableName, Row[]>;
     try {
       const results: QueryResult[] = [];
-      for (const statement of statements) {
+      for (const [index, statement] of statements.entries()) {
+        if (this.failNextBatchAtStatement === index) {
+          this.failNextBatchAtStatement = undefined;
+          throw new Error('fake_d1_batch_storage_failure');
+        }
         results.push(await statement.run());
       }
       return results;
@@ -306,6 +311,36 @@ class FakeD1PreparedStatement {
       };
       this.db.tables.conversation_turns.push(row);
       return { ...ok(1), results: [{ ...row }] };
+    }
+    if (normalized.startsWith('INSERT OR IGNORE INTO conversation_turns')) {
+      const pause = this.db.tables.confirmation_pauses.find(
+        (row) =>
+          row.request_id === this.values.at(-2) &&
+          row.pause_identity_digest === this.values.at(-1),
+      );
+      const existing = this.db.tables.conversation_turns.some(
+        (row) => row.id === this.values[0],
+      );
+      if (
+        existing ||
+        !pause ||
+        !this.runCommitEligibilityIsCurrent(normalized, 10)
+      ) {
+        return ok(0);
+      }
+      this.db.tables.conversation_turns.push({
+        id: this.values[0],
+        session_id: this.values[1],
+        channel: this.values[2],
+        role: this.values[3],
+        text: this.values[4],
+        external_message_id: this.values[5],
+        external_user_id: this.values[6],
+        delivery_status: this.values[7],
+        metadata: this.values[8],
+        created_at: this.values[9],
+      });
+      return ok(1);
     }
     if (normalized.startsWith('INSERT INTO conversation_turns')) {
       this.db.assertColumns('conversation_turns', [
@@ -537,6 +572,56 @@ class FakeD1PreparedStatement {
       return ok(
         exists || !session || !eligible || !authorityEligible ? 0 : 1,
       );
+    }
+    if (normalized.startsWith('INSERT OR IGNORE INTO verified_refs')) {
+      const session = this.db.tables.confirmation_pause_sessions.find(
+        (row) => row.session_id === this.values[15],
+      );
+      const pause = this.db.tables.confirmation_pauses.find(
+        (row) =>
+          row.request_id === this.values.at(-2) &&
+          row.pause_identity_digest === this.values.at(-1),
+      );
+      const existing = this.db.tables.verified_refs.some(
+        (row) => row.ref_id === this.values[1],
+      );
+      if (
+        !session ||
+        !pause ||
+        existing ||
+        !this.runCommitEligibilityIsCurrent(normalized, 16)
+      ) {
+        return ok(0);
+      }
+      const columns = [
+        'schema_version',
+        'ref_id',
+        'kind',
+        'session_id',
+        'session_generation',
+        'customer_id',
+        'channel',
+        'authenticated_subject',
+        'authentication_evidence_ref',
+        'verified_revision',
+        'lifecycle',
+        'payload_json',
+        'created_at',
+        'expires_at',
+        'claimed_use_id',
+        'claimed_at',
+      ];
+      const values = [
+        ...this.values.slice(0, 4),
+        session.generation,
+        ...this.values.slice(4, 15),
+      ];
+      this.db.tables.verified_refs.push(
+        Object.fromEntries(
+          columns.map((column, index) => [column, values[index]]),
+        ),
+      );
+      return ok(1);
     }
     if (normalized.startsWith('INSERT INTO conversation_profiles')) {
       this.db.assertColumns('conversation_profiles', [
@@ -2353,6 +2438,14 @@ class FakeD1PreparedStatement {
     }
     if (normalized.includes('FROM conversation_events')) {
       this.db.assertColumns('conversation_events', ['session_id']);
+      if (normalized.includes('WHERE id IN (')) {
+        const ids = new Set(this.values);
+        // Fake query rows are projected to the caller-requested D1 result type.
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion
+        return this.db.tables.conversation_events.filter(
+          (row) => ids.has(row.id),
+        ) as T[];
+      }
       return this.db.tables.conversation_events.filter((row) => row.session_id === this.values[0]) as T[];
     }
     if (normalized.includes('FROM dashboard_events')) {

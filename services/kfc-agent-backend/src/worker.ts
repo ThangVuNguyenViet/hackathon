@@ -48,6 +48,7 @@ import {
   lifecycleBinding,
 } from "./commerce/lifecycleProvider.js";
 import { buildWorkerRouteOptions } from './workerRouteOptions.js';
+import { createPvcfcRouteResponder } from './api/pvcfcRouteRuntime.js';
 import {
   WORKER_CUSTOMER_RUN_MAX_TEXT_EVENTS,
   WORKER_CUSTOMER_RUN_PACE_MS,
@@ -483,6 +484,7 @@ export default {
         },
       });
     const handlers = createRouteHandlers(options);
+    const respondToPvcfc = createPvcfcRouteResponder(options);
     const respondWithAgentBackground = (
       result: HandlerResponse,
     ): Response => {
@@ -534,6 +536,9 @@ export default {
       return respondWithAgentBackground(
         await handlers.chatKfcMessage(body),
       );
+    }
+    if (request.method === 'POST' && url.pathname === '/chat/pvcfc/message') {
+      return toResponse(await respondToPvcfc(await readJson(request)));
     }
     if (
       request.method === "POST" &&

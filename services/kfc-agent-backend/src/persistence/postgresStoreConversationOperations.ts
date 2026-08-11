@@ -19,6 +19,8 @@ import type {
   CommitAssistantTurnResult,
   CommitConfirmationPauseIfRunCurrentInput,
   CommitConfirmationPauseIfRunCurrentResult,
+  CommitConfirmationTurnIfRunCurrentInput,
+  CommitConfirmationTurnIfRunCurrentResult,
   ConversationStore,
   CreateAgentRunInput,
   HistorySearchResult,
@@ -105,6 +107,7 @@ import {
   commitPostgresAssistantTurnIfRunCurrent,
 } from './postgresStoreTurnCommit.js';
 import { commitPostgresConfirmationPauseIfRunCurrent } from './postgresStorePauseCommit.js';
+import { commitPostgresConfirmationTurnIfRunCurrent } from './postgresStoreConfirmationTurnCommit.js';
 import {
   beginPostgresNonAgentTextDeliveryAttempt,
   completePostgresNonAgentTextDeliveryAttempt,
@@ -137,6 +140,14 @@ export abstract class PostgresStoreConversationOperations extends PostgresStoreC
     input: CommitConfirmationPauseIfRunCurrentInput,
   ): Promise<CommitConfirmationPauseIfRunCurrentResult> {
     return commitPostgresConfirmationPauseIfRunCurrent({
+      db: this.db,
+      operation: input,
+    });
+  }
+  async commitConfirmationTurnIfRunCurrent(
+    input: CommitConfirmationTurnIfRunCurrentInput,
+  ): Promise<CommitConfirmationTurnIfRunCurrentResult> {
+    return commitPostgresConfirmationTurnIfRunCurrent({
       db: this.db,
       operation: input,
     });

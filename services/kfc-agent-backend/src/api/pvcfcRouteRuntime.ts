@@ -10,6 +10,14 @@ export function registerPvcfcRoutes(
   server: FastifyInstance,
   options: RouteOptions,
 ): void {
+  const respond = createPvcfcRouteResponder(options);
+  server.post('/chat/pvcfc/message', async (request, reply) => {
+    const response = await respond(request.body);
+    return reply.code(response.status).send(response.body);
+  });
+}
+
+export function createPvcfcRouteResponder(options: RouteOptions) {
   const store = options.store ?? new MemoryStore();
   if (options.pvcfcAgentModel && !options.pvcfcPublicDataProvider) {
     throw new Error('pvcfc_public_data_provider_not_configured');
@@ -27,7 +35,7 @@ export function registerPvcfcRoutes(
           expectedPackIds: ['pvcfc'],
         })
       : undefined;
-  const respond = createPvcfcChatHandler(async (input) => {
+  return createPvcfcChatHandler(async (input) => {
     if (!runner) {
       return {
         status: 503,
@@ -64,10 +72,5 @@ export function registerPvcfcRoutes(
         replayed: false,
       },
     };
-  });
-
-  server.post('/chat/pvcfc/message', async (request, reply) => {
-    const response = await respond(request.body);
-    return reply.code(response.status).send(response.body);
   });
 }

@@ -129,47 +129,6 @@ async function canonicalConfirmationPause(input: {
   };
 }
 
-async function persistConfirmationPause(input: {
-  turnInput: AgentTurnInput;
-  state: NonNullable<SingleAgentRuntimeContext['state']>;
-  pause: CreateConfirmationPauseInput;
-}): Promise<void> {
-  const fence = input.turnInput.runGuard?.commitFence;
-  if (fence) {
-    const committed =
-      await input.turnInput.store.commitConfirmationPauseIfRunCurrent({
-        fence,
-        notAfter: input.pause.expiresAt,
-        stateEvent: {
-          sessionId: input.turnInput.sessionId,
-          sourceType: verifiedStateSnapshotSourceType,
-          payload: {
-            verifiedState: buildVerifiedStateSnapshot(input.state),
-          },
-        },
-        pause: input.pause,
-      });
-    if (committed.status === 'stale') {
-      throw new Error('customer_run_cancelled');
-    }
-    if (committed.status === 'conflict') {
-      throw new Error('confirmation_pause_conflict');
-    }
-    return;
-  }
-  const created = await input.turnInput.store.createConfirmationPause(
-    input.pause,
-  );
-  if (created.status === 'conflict') {
-    throw new Error('confirmation_pause_conflict');
-  }
-  await input.turnInput.store.appendEvent(
-    input.turnInput.sessionId,
-    verifiedStateSnapshotSourceType,
-    { verifiedState: buildVerifiedStateSnapshot(input.state) },
-  );
-}
-
 /**
  * Application-owned transaction around one LangChain KFC tool loop.
  * Transcript, authorization, state, effects, fencing and persistence remain
@@ -306,13 +265,6 @@ export async function runKfcApplicationTurn(
           pendingAction: result.pendingConfirmation.action,
         })
       : undefined;
-    if (confirmationPause) {
-      await persistConfirmationPause({
-        turnInput,
-        state: result.state,
-        pause: confirmationPause,
-      });
-    }
     const output = await persistCompletedTurn({
       turnInput,
       turnTrace,
@@ -320,6 +272,7 @@ export async function runKfcApplicationTurn(
       currentTurnToolTrace,
       responseText: result.responseText,
       responseFactualClaims: result.publication.factualClaims,
+      ...(confirmationPause ? { confirmationPause } : {}),
     });
     await turnTrace.end({
       status: confirmationPause ? 'paused' : output.status,

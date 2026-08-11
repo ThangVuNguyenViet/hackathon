@@ -11,6 +11,7 @@ import type {
   ReplyIntent,
 } from '../businesses/kfc/turnContracts.js';
 import type { ConversationTurn } from '../domain/types.js';
+import type { CreateConfirmationPauseInput } from '../persistence/contracts.js';
 import type { AgentGraphState } from '../graph/state.js';
 import {
   emitDashboardEvent,
@@ -95,6 +96,7 @@ export async function persistCompletedTurn(input: {
   modelPublicationAuthority?: ModelPublicationAuthority;
   currentTurnResponseEvidence?: readonly CurrentTurnResponseEvidence[];
   graphExecutedToolResults?: readonly GraphExecutedToolResult[];
+  confirmationPause?: CreateConfirmationPauseInput;
 }): Promise<AgentTurnOutput> {
   const runGuard = input.turnInput.runGuard;
   if (runGuard && !runGuard.commitFence) {
@@ -318,10 +320,18 @@ export async function persistCompletedTurn(input: {
         : publicationAuthority?.privateAccess.state === 'guest_checkout'
           ? publicationAuthority.privateAccess.authorityExpiresAt
           : undefined;
-    const committed =
-      await input.turnInput.store.commitAssistantTurnIfRunCurrent({
+    const commitInput = {
         fence: runGuard.commitFence,
-        ...(publicationNotAfter ? { notAfter: publicationNotAfter } : {}),
+        ...((input.confirmationPause?.expiresAt ?? publicationNotAfter)
+          ? {
+              notAfter:
+                input.confirmationPause?.expiresAt && publicationNotAfter
+                  ? input.confirmationPause.expiresAt < publicationNotAfter
+                    ? input.confirmationPause.expiresAt
+                    : publicationNotAfter
+                  : input.confirmationPause?.expiresAt ?? publicationNotAfter,
+            }
+          : {}),
         stateEvent: {
           sessionId: input.turnInput.sessionId,
           sourceType: verifiedStateSnapshotSourceType,
@@ -337,12 +347,24 @@ export async function persistCompletedTurn(input: {
               ],
             }
           : {}),
-      });
+      };
+    const committed = input.confirmationPause
+      ? await input.turnInput.store.commitConfirmationTurnIfRunCurrent({
+          ...commitInput,
+          pause: input.confirmationPause,
+        })
+      : await input.turnInput.store.commitAssistantTurnIfRunCurrent(commitInput);
     if (committed.status === 'stale') {
       throw new Error('customer_run_cancelled');
     }
+    if (committed.status === 'conflict') {
+      throw new Error('confirmation_pause_conflict');
+    }
     turn = committed.turn;
   } else {
+    if (input.confirmationPause) {
+      throw new Error('confirmation_pause_commit_fence_missing');
+    }
     if (
       input.modelPublicationAuthority &&
       input.responsePublicationAttestation

@@ -184,7 +184,27 @@ export type CommitConfirmationPauseIfRunCurrentResult =
       pauseEvent: StoredEvent;
       record: ConfirmationPauseRecord;
     }
-  | { status: 'stale' | 'conflict' };
+  | { status: 'stale' }
+  | { status: 'conflict' };
+
+export interface CommitConfirmationTurnIfRunCurrentInput
+  extends CommitAssistantTurnInput {
+  fence: RunCommitFence;
+  pause: CreateConfirmationPauseInput;
+}
+
+export type CommitConfirmationTurnIfRunCurrentResult =
+  | {
+      status: 'created' | 'replay';
+      stateEvent: StoredEvent;
+      pauseEvent: StoredEvent;
+      turnEvent: StoredEvent;
+      turn: ConversationTurn;
+      record: ConfirmationPauseRecord;
+      verifiedRefs: VerifiedRefRecord[];
+    }
+  | { status: 'stale' }
+  | { status: 'conflict' };
 
 export interface ConfirmationPauseRecord {
   schemaVersion: 'kfc-confirmation-pause-v1';
@@ -873,6 +893,13 @@ export interface ConversationStore {
   commitConfirmationPauseIfRunCurrent(
     input: CommitConfirmationPauseIfRunCurrentInput,
   ): Promise<CommitConfirmationPauseIfRunCurrentResult>;
+  /**
+   * Atomically publishes one confirmation pause and the assistant turn that
+   * asks for it. Implementations must never expose only one side.
+   */
+  commitConfirmationTurnIfRunCurrent(
+    input: CommitConfirmationTurnIfRunCurrentInput,
+  ): Promise<CommitConfirmationTurnIfRunCurrentResult>;
   listEvents(sessionId: string): Promise<StoredEvent[]>;
   issueVerifiedRef(
     input: IssueVerifiedRefInput,

@@ -67,6 +67,8 @@ import {
   type CommitAssistantTurnIfRunCurrentResult,
   type CommitConfirmationPauseIfRunCurrentInput,
   type CommitConfirmationPauseIfRunCurrentResult,
+  type CommitConfirmationTurnIfRunCurrentInput,
+  type CommitConfirmationTurnIfRunCurrentResult,
   type CommitPausedCustomerRunIntakeInput,
   type CommitPausedCustomerRunIntakeResult,
   type ConversationStore,
@@ -112,6 +114,7 @@ import {
   appendMemoryEventIfRunCurrent,
   commitMemoryAssistantTurn,
   commitMemoryAssistantTurnIfRunCurrent,
+  commitMemoryConfirmationTurnIfRunCurrent,
   memoryRunCommitFenceIsCurrent,
   memoryVerifiedRefFenceIsCurrent,
 } from './memoryStoreRunCommit.js';
@@ -852,6 +855,32 @@ export class MemoryStore
       events: this.events,
       withLock: (operation) => this.withConfirmationPauseLock(operation),
     });
+  }
+  async commitConfirmationTurnIfRunCurrent(
+    input: CommitConfirmationTurnIfRunCurrentInput,
+  ): Promise<CommitConfirmationTurnIfRunCurrentResult> {
+    return this.withConfirmationPauseLock(async () =>
+      commitMemoryConfirmationTurnIfRunCurrent({
+        operation: input,
+        state: {
+          customerRuns: this.customerRuns,
+          agentRuns: this.agentRuns,
+          sessionAgentStates: this.sessionAgentStates,
+          irreversibleOperations: this.irreversibleOperations,
+          sessionControls: this.sessionControls,
+        },
+        confirmationPauseGenerations: this.confirmationPauseGenerations,
+        confirmationPauses: this.confirmationPauses,
+        confirmationPauseSessions: this.confirmationPauseSessions,
+        confirmationPauseStoredGenerations: this.confirmationPauseStoredGenerations,
+        confirmationPauseStoredAuthorityGenerations:
+          this.confirmationPauseStoredAuthorityGenerations,
+        confirmationPauseIdentityDigests: this.confirmationPauseIdentityDigests,
+        verifiedRefs: this.verifiedRefs,
+        turns: this.turns,
+        events: this.events,
+      }),
+    );
   }
   async listEvents(sessionId: string): Promise<StoredEvent[]> {
     return this.events.filter((event) => event.sessionId === sessionId);
