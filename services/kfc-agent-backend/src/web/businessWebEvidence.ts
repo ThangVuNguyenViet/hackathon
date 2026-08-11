@@ -82,6 +82,11 @@ export function validateBusinessWebUrl(
   if (url.protocol !== 'https:') {
     throw new BusinessWebEvidenceError('web_url_https_required');
   }
+  // WHATWG URL canonicalization removes an explicit default `:443`, while
+  // preserving every non-default port here.
+  if (url.port.length > 0) {
+    throw new BusinessWebEvidenceError('web_url_port_not_allowed');
+  }
   if (url.username.length > 0 || url.password.length > 0) {
     throw new BusinessWebEvidenceError('web_url_credentials_not_allowed');
   }

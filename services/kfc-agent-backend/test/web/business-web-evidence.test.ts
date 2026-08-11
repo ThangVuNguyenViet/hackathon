@@ -58,10 +58,23 @@ describe('generic business web URL safety', () => {
       'https://official.example/news#untrusted-section',
       'web_url_fragment_not_allowed',
     ],
+    [
+      'non-default HTTPS ports',
+      'https://official.example:444/news',
+      'web_url_port_not_allowed',
+    ],
   ])('rejects %s', (_case, url, expectedCode) => {
     expect(() => validateBusinessWebUrl(url, ['official.example'])).toThrow(
       expectedCode,
     );
+  });
+
+  it('preserves canonical HTTPS default-port normalization', () => {
+    expect(
+      validateBusinessWebUrl('https://official.example:443/news', [
+        'official.example',
+      ]),
+    ).toBe('https://official.example/news');
   });
 
   it('rejects invalid or IP-literal entries in the caller allowlist', () => {

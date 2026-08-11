@@ -166,6 +166,30 @@ describe('bounded TinyFish evidence client', () => {
     ).rejects.toThrow('web_url_host_not_allowed');
   });
 
+  it('rejects a returned final URL on a non-default HTTPS port', async () => {
+    const { factory } = sdkHarness({
+      fetchResult: {
+        url: 'https://official.example/news/1',
+        final_url: 'https://official.example:444/copied-news',
+        title: 'Redirected to an arbitrary service port',
+        description: null,
+        language: 'vi',
+        author: null,
+        published_date: null,
+        format: 'markdown',
+        text: 'Must not cross the admitted origin port boundary',
+      },
+    });
+
+    await expect(
+      makeClient(factory).fetch({
+        url: 'https://official.example/news/1',
+        allowedHostnames: ['official.example'],
+        perUrlTimeoutMs: 2_000,
+      }),
+    ).rejects.toThrow('web_url_port_not_allowed');
+  });
+
   it('fetches exactly one URL and returns bounded compact evidence', async () => {
     const { factory, fetchGetContents } = sdkHarness({
       fetchResult: {

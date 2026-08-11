@@ -133,3 +133,36 @@ The final commit SHA is supplied in the handoff.
 4. The 15-second adapter timeout leaves room under the 30-second turn budget, but two sequential Fetch calls cannot both consume the full timeout. Pack middleware must enforce a smaller effective budget from the remaining turn time.
 5. Live Search/Fetch behavior and provider quotas require a separate credentialed canary; they are intentionally not part of CI or this task.
 6. The current dry-run reports a 12,080 KiB upload (1,236.01 KiB gzip), but that is the full existing Worker bundle and cannot be attributed to TinyFish while the adapter is unreachable from the Worker entry. Task 4 must compare bundle output after real wiring and treat any material size or startup regression as a release concern.
+
+## Independent review fix — non-default HTTPS ports
+
+The independent review identified that exact hostname matching alone still admitted arbitrary services exposed on non-default HTTPS ports. Two tests were added before the production fix: a direct `https://official.example:444/...` input and an allowlisted Fetch whose provider-returned `final_url` redirected to port `444` on the same hostname.
+
+RED evidence:
+
+```text
+npx vitest run test/web/tiny-fish-client.test.ts test/web/business-web-evidence.test.ts
+
+business-web-evidence.test.ts: expected direct :444 URL to throw, but it returned
+tiny-fish-client.test.ts: expected returned final_url :444 to reject, but Fetch resolved
+
+Test Files  2 failed (2)
+Tests       2 failed | 16 passed (18)
+exit 1
+```
+
+The generic validator now rejects any non-empty WHATWG `URL.port` as `web_url_port_not_allowed`. WHATWG URL parsing canonicalizes an explicit HTTPS default `:443` to an empty port, so `https://official.example:443/news` remains admitted and normalizes to `https://official.example/news`. The same validator protects both direct Fetch admission and redirect `final_url` revalidation.
+
+Focused GREEN evidence:
+
+```text
+npx vitest run test/web/tiny-fish-client.test.ts test/web/business-web-evidence.test.ts
+Test Files  2 passed (2)
+Tests       18 passed (18)
+```
+
+Review-fix commit subject:
+
+```text
+fix(web): reject non-default evidence ports
+```
