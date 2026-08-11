@@ -14,13 +14,14 @@ import type { GeneratedFixtures } from '../fixtures/schema.js';
 import type { ConversationStore } from '../persistence/contracts.js';
 import {
   PvcfcAgentPack,
+  type PvcfcAgentTurnInput,
   type PvcfcAgentTurnResult,
 } from '../businesses/pvcfc/pack.js';
 import type { RouteOptions } from './routeHandlerContracts.js';
 
 export interface RouteDirectAgentTurnRunners {
   kfc?: AgentTurnRunner<KfcDirectAgentTurnInput, KfcDirectAgentTurnResult>;
-  pvcfc?: AgentTurnRunner<DirectAgentTurnInput, PvcfcAgentTurnResult>;
+  pvcfc?: AgentTurnRunner<PvcfcAgentTurnInput, PvcfcAgentTurnResult>;
 }
 
 export function createRouteDirectAgentTurnRunners(input: {

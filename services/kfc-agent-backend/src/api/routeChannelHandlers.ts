@@ -123,6 +123,20 @@ export function createChannelRouteHandlers(context: RouteHandlerContext) {
     );
   };
 
+  const queueAgentEvent = async (event: ConversationEvent) => {
+    const sessionId = sessionIdForConversationEvent(event);
+    const coordinator = new AgentRunCoordinator({ store, dashboard });
+    const wakeup = await coordinator.recordPendingTurn(event, sessionId);
+    const task = async () => {
+      const claim = await coordinator.claimWakeupRun(wakeup);
+      if (claim.dispatch && claim.runId) {
+        await processMessengerAgentRunInternal(claim.runId);
+      }
+    };
+    if (options.defer) options.defer(task);
+    else setImmediate(() => void task().catch(() => undefined));
+  };
+
   const shouldProcessWithAgentRun = async (
     event: ConversationEvent,
   ): Promise<boolean> =>
@@ -234,6 +248,7 @@ export function createChannelRouteHandlers(context: RouteHandlerContext) {
       const stats = {
         received: events.length,
         processed: 0,
+        queued: 0,
         skippedDuplicates: 0,
         failed: 0,
       };
@@ -267,10 +282,8 @@ export function createChannelRouteHandlers(context: RouteHandlerContext) {
 
         if (await shouldProcessWithAgentRun(event)) {
           await persistEventProfile(event);
-          const result = await processAgentEvent(event);
-          if (result.status === "processed") stats.processed += 1;
-          else if (result.status === "skipped") stats.skippedDuplicates += 1;
-          else stats.failed += 1;
+          await queueAgentEvent(event);
+          stats.queued += 1;
           continue;
         }
 

@@ -1,5 +1,6 @@
 import { DashboardEventBus } from "./dashboard/eventBus.js";
 import { buildServer } from "./api/server.js";
+import { createRouteHandlers } from "./api/routeHandlers.js";
 import { buildServerOptionsFromEnv } from "./api/serverOptions.js";
 import {
   createMessengerHistoryClient,
@@ -8,12 +9,38 @@ import {
 } from "./channels/messengerHistory.js";
 import { loadEnv } from "./config/env.js";
 import { createPostgresPersistence } from "./persistence/postgresStore.js";
-
+import { createZaloOAuthRuntime } from "./channels/zaloOAuth.js";
+import { AgentRunCoordinator } from "./agentRuns/coordinator.js";
+import { loadBundledGeneratedFixtures } from "./fixtures/bundledFixtures.js";
+import { createMockClients } from "./mock/createMockClients.js";
+import {
+  createMockAutomaticRecommendationHttpRuntime,
+} from "./recommendations/serving/index.js";
 const env = loadEnv();
 const baseOptions = buildServerOptionsFromEnv(env);
 const persistence = await createPostgresPersistence({
   databaseUrl: env.DATABASE_URL,
 });
+const zaloOAuthConfigured = Boolean(
+  env.ZALO_APP_ID &&
+    env.ZALO_APP_SECRET &&
+    env.ZALO_OA_ID &&
+    env.ZALO_TOKEN_ENCRYPTION_KEY &&
+    env.ZALO_PUBLIC_BASE_URL,
+);
+const zaloOAuth = zaloOAuthConfigured
+  ? await createZaloOAuthRuntime({
+      pool: persistence.pool,
+      appId: env.ZALO_APP_ID,
+      appSecret: env.ZALO_APP_SECRET,
+      oaId: env.ZALO_OA_ID,
+      callbackUrl: `${env.ZALO_PUBLIC_BASE_URL}/auth/zalo/callback`,
+      encryptionKey: env.ZALO_TOKEN_ENCRYPTION_KEY,
+      oauthBaseUrl: env.ZALO_OAUTH_BASE_URL,
+      initialAccessToken: env.ZALO_ACCESS_TOKEN || undefined,
+      initialRefreshToken: env.ZALO_REFRESH_TOKEN || undefined,
+    })
+  : undefined;
 const dashboard = new DashboardEventBus({
   initialEvents: persistence.dashboardEvents,
   persistEvent: (event) => persistence.store.appendDashboardEvent(event),
@@ -33,14 +60,51 @@ const messengerHistorySync =
         }),
       )
     : undefined;
-const server = buildServer({
+const fixtures = loadBundledGeneratedFixtures();
+const fixtureProvider = createMockClients(fixtures);
+const automaticRecommendations =
+  createMockAutomaticRecommendationHttpRuntime(fixtures);
+const automaticRecommendationStoreId =
+  fixtures.stores[0]?.storeId ?? "fixture-store";
+const automaticRecommendationContext = (sessionId: string) => ({
+  storeId: automaticRecommendationStoreId,
+  fulfilmentMode: "pickup" as const,
+  locale: "vi-VN",
+  orderingJourneyRef: `chat:${sessionId}:ordering-journey`,
+  opportunityRef: `chat:${sessionId}:automatic-recommendation`,
+});
+const serverOptions = {
   ...baseOptions,
+  zaloOAuth,
+  zaloAccessTokenProvider: zaloOAuth
+    ? () => zaloOAuth.accessToken()
+    : undefined,
+  fixtures,
+  kfcCommerceProvider: {
+    cart: fixtureProvider.cart,
+    inventory: fixtureProvider.inventory,
+    storeLocator: fixtureProvider.storeLocator,
+    fulfillment: fixtureProvider.fulfillment,
+  },
   store: persistence.store,
   checkpointer: persistence.checkpointer,
   dashboard,
   messengerHistorySync,
+  automaticRecommendationContext,
+  automaticRecommendations,
   readiness: {
     ...baseOptions.readiness,
+    messengerRequired: false,
+    zaloRequired: true,
+    agentConfigured: Boolean(baseOptions.pvcfcAgent),
+    runtime: {
+      ...baseOptions.readiness?.runtime,
+      agent: {
+        provider: 'openai' as const,
+        model: env.PVCFC_ASTRAFLOW_MODEL,
+        profile: `pvcfc-astraflow-${env.PVCFC_ASTRAFLOW_MODEL}`,
+      },
+    },
     database: async () => {
       await persistence.pool.query("SELECT 1");
       return { ok: true };
@@ -48,11 +112,38 @@ const server = buildServer({
     openAiConfigured: Boolean(env.OPENAI_API_KEY),
     openAiRequired: false,
   },
+};
+const server = buildServer(serverOptions);
+const backgroundHandlers = createRouteHandlers(serverOptions);
+const agentRunCoordinator = new AgentRunCoordinator({
+  store: persistence.store,
+  dashboard,
 });
+let recoveryRunning = false;
+const recoverDueAgentRuns = async () => {
+  if (recoveryRunning) return;
+  recoveryRunning = true;
+  try {
+    const results = await agentRunCoordinator.claimDueRuns(new Date().toISOString());
+    for (const result of results) {
+      if (result.dispatch && result.runId) {
+        await backgroundHandlers.processMessengerAgentRun(result.runId);
+      }
+    }
+  } catch {
+    console.error('agent_run_recovery_failed');
+  } finally {
+    recoveryRunning = false;
+  }
+};
+const recoveryTimer = setInterval(() => void recoverDueAgentRuns(), 1_000);
+recoveryTimer.unref();
+setImmediate(() => void recoverDueAgentRuns());
 
 server.addHook("onClose", async () => {
+  clearInterval(recoveryTimer);
   await persistence.pool.end();
 });
 
-await server.listen({ host: "0.0.0.0", port: env.PORT });
+await server.listen({ host: env.HOST, port: env.PORT });
 messengerHistorySync?.syncInBackground();

@@ -47,12 +47,11 @@ function workerEnv(
     ZALO_OA_ID: 'zalo_oa_1',
     ZALO_ACCESS_TOKEN: 'zalo_access_token',
     ZALO_API_BASE_URL: 'https://zalo.example.test',
-    KFC_COMMERCE_MODE: 'gateway',
+    KFC_COMMERCE_MODE: 'fixture',
     KFC_COMMERCE_ENVIRONMENT: 'sandbox',
     KFC_MENU_API_URL: 'https://menu.example.test/catalog',
     CATALOG_TTL_SECONDS: '600',
-    KFC_COMMERCE_GATEWAY_BASE_URL:
-      'https://commerce.example.test',
+    KFC_COMMERCE_GATEWAY_BASE_URL: 'https://commerce.example.test',
     KFC_COMMERCE_GATEWAY_TOKEN: 'commerce_gateway_token',
     KFC_POS_MODE: 'disabled',
     RELEASE_GIT_SHA: 'worker-route-options-sha',
@@ -100,6 +99,8 @@ function expectCommonWorkerCapabilities(
   expect(routeOptions.dashboard).toBe(harness.dashboard);
   expect(routeOptions.checkpointer).toBeDefined();
   expect(routeOptions.fixtures?.menuItems.length).toBeGreaterThan(0);
+  expect(routeOptions.automaticRecommendations).toBeDefined();
+  expect(routeOptions.automaticRecommendationContext).toBeDefined();
   expect(routeOptions.messengerFetchImpl).toBe(harness.messengerFetch);
   expect(routeOptions.messengerPageAccessToken).toBe('page_access_token');
   expect(routeOptions.zaloFetchImpl).toBe(harness.zaloFetch);
@@ -111,7 +112,6 @@ function expectCommonWorkerCapabilities(
   expect(routeOptions.monitorJudge).toBeDefined();
   expect(routeOptions.agentTracer).toBeDefined();
 
-  expect(routeOptions.kfcCommerceGateway).toBeDefined();
   expect(routeOptions.kfcCommerceProvider).toBeDefined();
   expect(typeof routeOptions.kfcCommerceProvider?.cart.createCart)
     .toBe('function');
@@ -126,15 +126,9 @@ function expectCommonWorkerCapabilities(
   expect(routeOptions.lifecycle?.environment).toBe('sandbox');
   expect(typeof routeOptions.lifecycle?.controls.create).toBe('function');
   expect(typeof routeOptions.lifecycle?.activeForSession).toBe('function');
-  expect(routeOptions.catalog).toEqual({
-    environment: 'sandbox',
-    sourceUrl: 'https://menu.example.test/catalog',
-    fallbackTtlSeconds: 600,
-  });
+  expect(routeOptions.catalog).toBeUndefined();
   expect(routeOptions.readiness?.commerce).toMatchObject({
-    mode: 'gateway',
-    baseUrl: 'https://commerce.example.test',
-    token: 'commerce_gateway_token',
+    mode: 'fixture',
   });
   expect(routeOptions.readiness?.runtime).toMatchObject({
     agentProfileMode: 'production',
@@ -251,7 +245,7 @@ describe('Worker route option parity', () => {
       expect(harness.built.routeOptions.readiness?.messengerToken)
         .toBeUndefined();
       expect(harness.built.routeOptions.readiness?.commerce?.mode)
-        .toBe('gateway');
+        .toBe('fixture');
     }
   });
 

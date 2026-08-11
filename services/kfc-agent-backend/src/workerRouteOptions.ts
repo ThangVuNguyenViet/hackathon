@@ -9,6 +9,7 @@ import { workerLifecycleOptions } from './workerLifecycle.js';
 import { workerCheckpointer } from './workerStore.js';
 import { loadBundledGeneratedFixtures } from './fixtures/bundledFixtures.js';
 import { createMockClients } from './mock/createMockClients.js';
+import { createMockAutomaticRecommendationHttpRuntime } from './recommendations/serving/mock-runtime.js';
 import type { DashboardEventBus } from './dashboard/eventBus.js';
 import type { D1Store } from './persistence/d1Store.js';
 import type { WorkerEnv } from './worker.js';
@@ -119,16 +120,14 @@ function buildBaseWorkerRouteOptions(
     ZALO_APP_ID: env.ZALO_APP_ID ?? '',
     ZALO_APP_SECRET: env.ZALO_APP_SECRET ?? '',
     ZALO_API_BASE_URL: env.ZALO_API_BASE_URL ?? '',
-    KFC_COMMERCE_MODE: env.KFC_COMMERCE_MODE ?? 'gateway',
+    KFC_COMMERCE_MODE: 'fixture',
     KFC_COMMERCE_ENVIRONMENT: env.KFC_COMMERCE_ENVIRONMENT,
     KFC_MENU_API_URL: env.KFC_MENU_API_URL,
     CATALOG_TTL_SECONDS: env.CATALOG_TTL_SECONDS
       ? Number(env.CATALOG_TTL_SECONDS)
       : undefined,
-    KFC_COMMERCE_GATEWAY_BASE_URL:
-      env.KFC_COMMERCE_GATEWAY_BASE_URL ?? '',
-    KFC_COMMERCE_GATEWAY_TOKEN:
-      env.KFC_COMMERCE_GATEWAY_TOKEN ?? '',
+    KFC_COMMERCE_GATEWAY_BASE_URL: '',
+    KFC_COMMERCE_GATEWAY_TOKEN: '',
     KFC_POS_MODE: env.KFC_POS_MODE ?? 'disabled',
     KFC_POS_BASE_URL: env.KFC_POS_BASE_URL ?? '',
     KFC_POS_TOKEN: env.KFC_POS_TOKEN ?? '',
@@ -172,6 +171,10 @@ export function buildWorkerRouteOptions(
   const deferredAgentTasks: Array<() => Promise<void>> = [];
   const fixtures = loadBundledGeneratedFixtures();
   const fixtureProvider = createMockClients(fixtures);
+  const automaticRecommendations =
+    createMockAutomaticRecommendationHttpRuntime(fixtures);
+  const automaticRecommendationStoreId =
+    fixtures.stores[0]?.storeId ?? 'fixture-store';
 
   const routeOptions: RouteOptions = {
     ...options,
@@ -183,6 +186,14 @@ export function buildWorkerRouteOptions(
       storeLocator: fixtureProvider.storeLocator,
       fulfillment: fixtureProvider.fulfillment,
     },
+    automaticRecommendations,
+    automaticRecommendationContext: (sessionId) => ({
+      storeId: automaticRecommendationStoreId,
+      fulfilmentMode: 'pickup',
+      locale: 'vi-VN',
+      orderingJourneyRef: `chat:${sessionId}:ordering-journey`,
+      opportunityRef: `chat:${sessionId}:automatic-recommendation`,
+    }),
     store,
     dashboard,
     lifecycle: workerLifecycleOptions(env, store),

@@ -1,0 +1,8 @@
+{
+  "type": "https://contracts.kfc.invalid/problems/infrastructure-unavailable",
+  "title": "Recommendation infrastructure unavailable",
+  "status": 503,
+  "code": "recommendation_infrastructure_unavailable",
+  "retryable": true,
+  "requestId": "request-local-001"
+}

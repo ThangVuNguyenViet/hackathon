@@ -151,7 +151,20 @@ export function createSystemRouteHandlers(context: RouteHandlerContext) {
       const messengerToken = options.readiness?.messengerToken
         ? await runReadinessCheck(options.readiness.messengerToken)
         : undefined;
-      const zalo = checkZaloConfig(options);
+      const zaloConfig = checkZaloConfig(options);
+      const zaloCredential = options.zaloOAuth
+        ? await runReadinessCheck(() => options.zaloOAuth!.readiness())
+        : undefined;
+      const zalo = zaloCredential
+        ? {
+            ...zaloConfig,
+            ok: zaloConfig.ok && zaloCredential.ok,
+            token: zaloCredential,
+            message:
+              zaloConfig.message ??
+              (zaloCredential.ok ? undefined : zaloCredential.message),
+          }
+        : zaloConfig;
       const openai = {
         ok: options.readiness?.openAiRequired
           ? Boolean(options.readiness.openAiConfigured)
@@ -165,9 +178,10 @@ export function createSystemRouteHandlers(context: RouteHandlerContext) {
         options.readiness?.runtime?.agent ?? options.agent?.identity;
       const agentConfigured =
         options.readiness?.agentConfigured ??
-        Boolean(options.openAiAgent ?? options.agent);
+        Boolean(options.openAiAgent ?? options.pvcfcAgent ?? options.agent);
+      const agentGatesReadiness = options.readiness?.agentGatesReadiness ?? true;
       const agent = {
-        ok: agentConfigured,
+        ok: agentGatesReadiness ? agentConfigured : true,
         required: false,
         configured: agentConfigured,
         provider: runtimeAgent?.provider ?? "unconfigured",
@@ -271,6 +285,9 @@ export function createSystemRouteHandlers(context: RouteHandlerContext) {
                   configured: true,
                   simulated: posConfig.simulated ?? false,
                 };
+      const automaticRecommendations = options.automaticRecommendations
+        ? await runReadinessCheck(options.automaticRecommendations.readiness)
+        : undefined;
       const checks = messengerToken
         ? {
             database,
@@ -285,8 +302,22 @@ export function createSystemRouteHandlers(context: RouteHandlerContext) {
             catalog,
             commerce,
             pos,
+            ...(automaticRecommendations ? { automaticRecommendations } : {}),
           }
-        : { database, fixtures, messenger, zalo, openai, agent, monitor, observability, catalog, commerce, pos };
+        : {
+            database,
+            fixtures,
+            messenger,
+            zalo,
+            openai,
+            agent,
+            monitor,
+            observability,
+            catalog,
+            commerce,
+            pos,
+            ...(automaticRecommendations ? { automaticRecommendations } : {}),
+          };
       const ok = Object.values(checks).every((check) => check.ok);
 
       return {

@@ -21,6 +21,7 @@ import { createHttpPosClient } from '../commerce/httpPosClient.js';
 import { createOmsWithPos } from '../commerce/omsWithPos.js';
 import { LangSmithAgentTracer } from '../observability/langsmithAgentTracer.js';
 import { LangSmithShowcaseScenarioSource } from '../showcase/showcase.js';
+import { createOtelRuntimeProbe } from '../observability/runtimeProbe.js';
 
 function optionalValue(value: string | undefined): string | undefined {
   const normalized = value?.trim();
@@ -76,8 +77,18 @@ function confirmationApprovalKeyRing(env: ServerOptionsEnv) {
 
 // Older callers may omit the switch; an absent mode always takes the
 // resolver's production-only default.
-type ServerOptionsEnv = Omit<AppEnv, 'KFC_AGENT_PROFILE_MODE'> &
-  Partial<Pick<AppEnv, 'KFC_AGENT_PROFILE_MODE'>> & {
+type NodeOptionalKey =
+  | 'HOST'
+  | 'ZALO_OA_SECRET'
+  | 'ZALO_TOKEN_ENCRYPTION_KEY'
+  | 'ZALO_SETUP_TOKEN'
+  | 'ZALO_PUBLIC_BASE_URL'
+  | 'ZALO_OAUTH_BASE_URL';
+type ServerOptionsEnv = Omit<
+  AppEnv,
+  'KFC_AGENT_PROFILE_MODE' | NodeOptionalKey
+> &
+  Partial<Pick<AppEnv, 'KFC_AGENT_PROFILE_MODE' | NodeOptionalKey>> & {
     PVCFC_ASTRAFLOW_API_KEY?: string;
     PVCFC_ASTRAFLOW_BASE_URL?: string;
     PVCFC_ASTRAFLOW_MODEL?: string;
@@ -171,6 +182,7 @@ export function buildServerOptionsFromEnv(
   const menuApiUrl = optionalValue(env.KFC_MENU_API_URL);
   const posBaseUrl = optionalValue(env.KFC_POS_BASE_URL);
   const posToken = optionalValue(env.KFC_POS_TOKEN);
+  const zaloOaId = optionalValue(env.ZALO_OA_ID);
   if (
     env.KFC_COMMERCE_MODE === 'gateway' &&
     (!commerceBaseUrl ||
@@ -194,6 +206,14 @@ export function buildServerOptionsFromEnv(
       ? createHttpPosClient({ baseUrl: posBaseUrl, token: posToken })
       : undefined;
   return {
+    ...(env.RELEASE_DIGEST && env.OTEL_EXPORTER_OTLP_ENDPOINT
+      ? {
+          runtimeProbe: createOtelRuntimeProbe({
+            endpoint: env.OTEL_EXPORTER_OTLP_ENDPOINT,
+            releaseDigest: env.RELEASE_DIGEST,
+          }),
+        }
+      : {}),
     demoAdminToken: optionalValue(env.KFC_DEMO_ADMIN_TOKEN),
     messengerVerifyToken: optionalValue(env.MESSENGER_VERIFY_TOKEN),
     metaAppSecret: optionalValue(env.META_APP_SECRET),
@@ -201,7 +221,11 @@ export function buildServerOptionsFromEnv(
     messengerPageAccessToken: optionalValue(env.META_PAGE_ACCESS_TOKEN),
     metaInboxUrlTemplate: optionalValue(env.META_INBOX_URL_TEMPLATE),
     messengerGraphApiBaseUrl: optionalValue(env.MESSENGER_GRAPH_API_BASE_URL),
-    zaloOaId: optionalValue(env.ZALO_OA_ID),
+    zaloOaId,
+    zaloAppId: optionalValue(env.ZALO_APP_ID),
+    zaloWebhookSecret: optionalValue(env.ZALO_OA_SECRET),
+    zaloSetupToken: optionalValue(env.ZALO_SETUP_TOKEN),
+    zaloPublicBaseUrl: optionalValue(env.ZALO_PUBLIC_BASE_URL),
     zaloAccessToken: optionalValue(env.ZALO_ACCESS_TOKEN),
     zaloInboxUrlTemplate: optionalValue(env.ZALO_INBOX_URL_TEMPLATE),
     zaloApiBaseUrl: optionalValue(env.ZALO_API_BASE_URL),

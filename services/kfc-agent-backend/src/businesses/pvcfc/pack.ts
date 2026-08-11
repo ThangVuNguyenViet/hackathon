@@ -18,12 +18,14 @@ export interface PvcfcAgentPackOptions {
   provider: PvcfcPublicDataProvider;
 }
 
+export type PvcfcAgentTurnInput = DirectAgentTurnInput<'web_chat' | 'zalo'>;
+
 export type PvcfcAgentTurnResult = OpenAiResponsesTurnResult & {
   stateCommit?: 'committed' | 'stale';
 };
 
 interface PvcfcPreparedContext {
-  input: DirectAgentTurnInput;
+  input: PvcfcAgentTurnInput;
   runMetrics?: {
     status: 'success' | 'error';
     latencyMs: number;
@@ -78,7 +80,7 @@ function auditPayload(input: {
 }
 
 export class PvcfcAgentPack implements ExecutableAgentPack<
-  DirectAgentTurnInput,
+  PvcfcAgentTurnInput,
   PvcfcAgentTurnResult
 > {
   readonly id = 'pvcfc';
@@ -148,7 +150,7 @@ export class PvcfcAgentPack implements ExecutableAgentPack<
 
   constructor(private readonly options: PvcfcAgentPackOptions) {}
 
-  prepareTurn(input: DirectAgentTurnInput): PreparedTurnResources {
+  prepareTurn(input: PvcfcAgentTurnInput): PreparedTurnResources {
     return {
       tools: createPvcfcOpenAiTools(this.options.provider),
       context: {
@@ -159,7 +161,7 @@ export class PvcfcAgentPack implements ExecutableAgentPack<
   }
 
   async execute(input: {
-    turn: DirectAgentTurnInput;
+    turn: PvcfcAgentTurnInput;
     profile: typeof PVCFC_AGENT_PROFILE;
     prepared: PreparedTurnResources;
   }): Promise<PvcfcAgentTurnResult> {

@@ -1,0 +1,14 @@
+{
+  "schemaVersion": "kfc-automatic-recommendation-v1",
+  "requestId": "request-negative-journey-001",
+  "storeId": "KFCVN0002",
+  "fulfilmentMode": "pickup",
+  "locale": "vi-VN",
+  "opportunityRef": "opportunity-negative-001",
+  "cart": {
+    "cartId": "cart-negative-001",
+    "revision": "cart-revision-negative-001",
+    "subtotal": { "amount": 0, "currency": "VND" },
+    "lines": []
+  }
+}

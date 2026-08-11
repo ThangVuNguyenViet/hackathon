@@ -1,0 +1,10 @@
+{
+  "schemaVersion": "kfc-automatic-recommendation-event-v1",
+  "eventId": "event-impression-001",
+  "channel": "kiosk",
+  "occurredAt": "2026-08-04T13:00:00Z",
+  "orderingJourneyRef": "journey-local-001",
+  "opportunityRef": "opportunity-local-001",
+  "cartRevision": "cart-revision-local-001",
+  "renderedActions": [{ "actionId": "product:20732", "renderedPosition": 1 }]
+}

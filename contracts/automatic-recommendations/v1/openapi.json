@@ -1,0 +1,273 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "KFC Automatic Recommendation API",
+    "version": "1.0.0",
+    "description": "Provider-neutral automatic recommendation decision and evidence API. Runtime fallback is forbidden."
+  },
+  "servers": [{ "url": "https://recommendations.invalid" }],
+  "paths": {
+    "/v1/recommendations/local-favorites": {
+      "post": {
+        "operationId": "createLocalFavoriteRecommendation",
+        "security": [{ "serviceJwt": ["recommendations.decision:write"] }],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "./schemas/automatic-recommendation.schema.json#/$defs/LocalFavoriteRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": { "$ref": "#/components/responses/Decision" },
+          "400": { "$ref": "#/components/responses/BadRequest" },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "403": { "$ref": "#/components/responses/Forbidden" },
+          "409": { "$ref": "#/components/responses/Conflict" },
+          "503": { "$ref": "#/components/responses/Unavailable" }
+        }
+      }
+    },
+    "/v1/recommendations/for-you": {
+      "post": {
+        "operationId": "createForYouRecommendation",
+        "security": [{ "serviceJwt": ["recommendations.decision:write"] }],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "./schemas/automatic-recommendation.schema.json#/$defs/ForYouRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": { "$ref": "#/components/responses/Decision" },
+          "400": { "$ref": "#/components/responses/BadRequest" },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "403": { "$ref": "#/components/responses/Forbidden" },
+          "409": { "$ref": "#/components/responses/Conflict" },
+          "503": { "$ref": "#/components/responses/Unavailable" }
+        }
+      }
+    },
+    "/v1/recommendations/modifier-upsells": {
+      "post": {
+        "operationId": "createModifierUpsellRecommendation",
+        "security": [{ "serviceJwt": ["recommendations.decision:write"] }],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "./schemas/automatic-recommendation.schema.json#/$defs/ModifierUpsellRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": { "$ref": "#/components/responses/Decision" },
+          "400": { "$ref": "#/components/responses/BadRequest" },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "403": { "$ref": "#/components/responses/Forbidden" },
+          "409": { "$ref": "#/components/responses/Conflict" },
+          "503": { "$ref": "#/components/responses/Unavailable" }
+        }
+      }
+    },
+    "/v1/recommendations/smart-cross-sells": {
+      "post": {
+        "operationId": "createSmartCrossSellRecommendation",
+        "security": [{ "serviceJwt": ["recommendations.decision:write"] }],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "./schemas/automatic-recommendation.schema.json#/$defs/SmartCrossSellRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": { "$ref": "#/components/responses/Decision" },
+          "400": { "$ref": "#/components/responses/BadRequest" },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "403": { "$ref": "#/components/responses/Forbidden" },
+          "409": { "$ref": "#/components/responses/Conflict" },
+          "503": { "$ref": "#/components/responses/Unavailable" }
+        }
+      }
+    },
+    "/v1/recommendations/{recommendationId}/impressions": {
+      "post": {
+        "operationId": "recordAutomaticRecommendationImpression",
+        "security": [{ "serviceJwt": ["recommendations.event:write"] }],
+        "parameters": [{ "$ref": "#/components/parameters/RecommendationId" }],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "./schemas/automatic-recommendation.schema.json#/$defs/ImpressionRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "204": { "$ref": "#/components/responses/EventAccepted" },
+          "400": { "$ref": "#/components/responses/BadRequest" },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "403": { "$ref": "#/components/responses/Forbidden" },
+          "404": { "$ref": "#/components/responses/NotFound" },
+          "409": { "$ref": "#/components/responses/Conflict" },
+          "503": { "$ref": "#/components/responses/Unavailable" }
+        }
+      }
+    },
+    "/v1/recommendations/{recommendationId}/outcomes": {
+      "post": {
+        "operationId": "recordAutomaticRecommendationOutcome",
+        "security": [{ "serviceJwt": ["recommendations.event:write"] }],
+        "parameters": [{ "$ref": "#/components/parameters/RecommendationId" }],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "./schemas/automatic-recommendation.schema.json#/$defs/OutcomeRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "204": { "$ref": "#/components/responses/EventAccepted" },
+          "400": { "$ref": "#/components/responses/BadRequest" },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "403": { "$ref": "#/components/responses/Forbidden" },
+          "404": { "$ref": "#/components/responses/NotFound" },
+          "409": { "$ref": "#/components/responses/Conflict" },
+          "503": { "$ref": "#/components/responses/Unavailable" }
+        }
+      }
+    },
+    "/v1/admin/recommendations/{recommendationId}/inspection": {
+      "get": {
+        "operationId": "inspectAutomaticRecommendation",
+        "security": [{ "serviceJwt": ["recommendations.inspection:read"] }],
+        "parameters": [{ "$ref": "#/components/parameters/RecommendationId" }],
+        "responses": {
+          "200": {
+            "description": "Protected technical evidence",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "./schemas/automatic-recommendation.schema.json#/$defs/InspectionResponse"
+                }
+              }
+            }
+          },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "403": { "$ref": "#/components/responses/Forbidden" },
+          "404": { "$ref": "#/components/responses/NotFound" }
+        }
+      }
+    }
+  },
+  "components": {
+    "securitySchemes": {
+      "serviceJwt": {
+        "type": "oauth2",
+        "description": "Replaceable trusted service-to-service JWT authority. Browser clients never hold this credential.",
+        "flows": {
+          "clientCredentials": {
+            "tokenUrl": "https://identity.invalid/oauth/token",
+            "scopes": {
+              "recommendations.decision:write": "Create automatic recommendation decisions",
+              "recommendations.event:write": "Record automatic recommendation evidence",
+              "recommendations.inspection:read": "Read protected technical inspection evidence"
+            }
+          }
+        }
+      }
+    },
+    "parameters": {
+      "RecommendationId": {
+        "name": "recommendationId",
+        "in": "path",
+        "required": true,
+        "schema": { "type": "string", "minLength": 1, "maxLength": 256 }
+      }
+    },
+    "responses": {
+      "Decision": {
+        "description": "Recommended, typed empty, or governed paused decision",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "./schemas/automatic-recommendation.schema.json#/$defs/RecommendationResponse"
+            }
+          }
+        }
+      },
+      "EventAccepted": {
+        "description": "Evidence committed or idempotently replayed"
+      },
+      "BadRequest": {
+        "description": "Malformed required fields",
+        "content": {
+          "application/problem+json": {
+            "schema": {
+              "$ref": "./schemas/automatic-recommendation.schema.json#/$defs/ProblemDetails"
+            }
+          }
+        }
+      },
+      "NotFound": {
+        "description": "Recommendation or event target not found",
+        "content": {
+          "application/problem+json": {
+            "schema": {
+              "$ref": "./schemas/automatic-recommendation.schema.json#/$defs/ProblemDetails"
+            }
+          }
+        }
+      },
+      "Conflict": {
+        "description": "Identity, cart revision, expiry, or action conflict",
+        "content": {
+          "application/problem+json": {
+            "schema": {
+              "$ref": "./schemas/automatic-recommendation.schema.json#/$defs/ProblemDetails"
+            }
+          }
+        }
+      },
+      "Unavailable": {
+        "description": "Retryable scorer, AWS, persistence, or saturation failure",
+        "headers": {
+          "Retry-After": { "schema": { "type": "integer", "minimum": 1 } }
+        },
+        "content": {
+          "application/problem+json": {
+            "schema": {
+              "$ref": "./schemas/automatic-recommendation.schema.json#/$defs/ProblemDetails"
+            }
+          }
+        }
+      },
+      "Unauthorized": {
+        "description": "Missing or invalid service identity",
+        "content": { "application/problem+json": { "schema": { "$ref": "./schemas/automatic-recommendation.schema.json#/$defs/ProblemDetails" } } }
+      },
+      "Forbidden": {
+        "description": "Service identity lacks the required scope",
+        "content": { "application/problem+json": { "schema": { "$ref": "./schemas/automatic-recommendation.schema.json#/$defs/ProblemDetails" } } }
+      }
+    }
+  }
+}

@@ -1,0 +1,3 @@
+{
+  "schemaVersion": "kfc-automatic-recommendation-event-v1", "eventId": "event-adversarial-001", "channel": "kiosk", "occurredAt": "2026-08-04T13:00:00Z", "orderingJourneyRef": "journey-adversarial-001", "opportunityRef": "opportunity-adversarial-001", "cartRevision": "cart-revision-local-001", "renderedActions": []
+}

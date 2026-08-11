@@ -999,6 +999,9 @@ export function createRouteAgentRuntime(
   }
 
   return {
+    runDirectAgentTurn: directTurnRunners.pvcfc?.run.bind(
+      directTurnRunners.pvcfc,
+    ),
     runDirectKfcTurn: kfcDirectTurnService?.run.bind(kfcDirectTurnService),
     kfcAgentResponse,
     pvcfcAgentResponse,

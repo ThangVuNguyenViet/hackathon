@@ -6,10 +6,16 @@ import type {
 } from '../clients/interfaces.js';
 import type {
   Address,
+  Cart,
   MenuItem,
   Order,
   ToolResult,
 } from '../domain/types.js';
+import type { AutomaticRecommendationHttpRuntime } from '../recommendations/serving/http-runtime.js';
+import type {
+  ChatRecommendationContext,
+  RecommendationJourneyStore,
+} from '../clients/catalogObservationClients.js';
 import type { FulfillmentMethod } from '../ordering/types.js';
 import type { MockedUpstreamApiProfile } from './mockedUpstreamProfile.js';
 
@@ -59,5 +65,14 @@ export interface MockClientOptions {
   ) =>
     | Promise<ToolResult<{ feeVnd: number; etaMinutes: number }>>
     | ToolResult<{ feeVnd: number; etaMinutes: number }>;
+  sessionId?: string;
+  automaticRecommendations?: AutomaticRecommendationHttpRuntime;
+  automaticRecommendationContext?: (
+    sessionId: string,
+    cart: Cart,
+  ) => ChatRecommendationContext | Promise<ChatRecommendationContext>;
+  automaticRecommendationJourney?: (
+    sessionId: string,
+  ) => RecommendationJourneyStore;
   mockedUpstreamApiProvider?: () => MockedUpstreamApiProfile | undefined;
 }

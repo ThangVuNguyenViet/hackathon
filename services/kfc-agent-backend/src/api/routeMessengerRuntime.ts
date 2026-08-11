@@ -184,6 +184,7 @@ export function createRouteMessengerRuntime(
     pauseIfHumanJoined,
     latestUnansweredCustomerTurn,
     replyToLatestUnansweredCustomerTurn,
+    runDirectAgentTurn,
     runDirectKfcTurn,
   } = input;
   async function processMessengerEventInternal(
@@ -651,29 +652,53 @@ export function createRouteMessengerRuntime(
         presentation = textOnlyPresentation(assistantTurn.text, run.channel);
         deliveryAssistantTurnId = assistantTurn.id;
       } else {
-        if (!options.openAiAgent || !runDirectKfcTurn) {
+        const pvcfcZaloRun = run.channel === 'zalo';
+        if (
+          (pvcfcZaloRun && (!options.pvcfcAgent || !runDirectAgentTurn)) ||
+          (!pvcfcZaloRun && (!options.openAiAgent || !runDirectKfcTurn))
+        ) {
           const failed = await updateExecutingRun({
             status: 'failed',
             deliveryStatus: 'failed',
-            errorCode: 'kfc_agent_not_configured',
-            errorMessage: 'Direct OpenAI Responses agent is not configured',
+            errorCode: pvcfcZaloRun
+              ? 'pvcfc_agent_not_configured'
+              : 'kfc_agent_not_configured',
+            errorMessage: pvcfcZaloRun
+              ? 'PVCFC AstraFlow agent is not configured'
+              : 'Direct OpenAI Responses agent is not configured',
             completedAt: new Date().toISOString(),
           });
           return failed.status === 'committed'
-            ? { status: 'failed', errorCode: 'kfc_agent_not_configured' }
+            ? {
+                status: 'failed',
+                errorCode: pvcfcZaloRun
+                  ? 'pvcfc_agent_not_configured'
+                  : 'kfc_agent_not_configured',
+              }
             : { status: 'skipped', errorCode: 'stale_agent_run' };
         }
-        const directOutput = await runDirectKfcTurn({
+        const directTurn = {
           sessionId: run.sessionId,
           customerId: run.externalUserId,
-          transport: run.channel,
           channel: run.channel,
+          transport: run.channel,
           text: run.coalescedInputText,
           externalMessageId: linkedTurns[0]!.externalMessageId,
           metadata: null,
           clients,
           fence: commitFence,
-        });
+        } as const;
+        const directOutput = pvcfcZaloRun
+          ? (
+              await runDirectAgentTurn!({
+                packId: 'pvcfc',
+                turn: {
+                  ...directTurn,
+                  transport: 'zalo',
+                },
+              })
+            ).result
+          : await runDirectKfcTurn!(directTurn);
         if (!(await isCurrentRun())) {
           await suppressRun('run_not_current_before_delivery');
           return { status: 'skipped', errorCode: 'stale_agent_run' };

@@ -33,7 +33,11 @@ import {
   normalizeMessengerWebhook,
   verifyMessengerChallenge,
 } from "../channels/messenger.js";
-import { createZaloClient, normalizeZaloWebhook } from "../channels/zalo.js";
+import {
+  createZaloClient,
+  normalizeZaloWebhook,
+  PVCFC_ZALO_OA_ID,
+} from "../channels/zalo.js";
 import { DashboardEventBus } from "../dashboard/eventBus.js";
 import { dashboardSessionTarget } from "../dashboard/sessionVisibility.js";
 import type { GeneratedFixtures } from "../fixtures/schema.js";
@@ -353,6 +357,7 @@ export async function checkFixtures(
 }
 
 export function checkMessengerConfig(options: RouteOptions): ReadinessCheckResult {
+  const required = options.readiness?.messengerRequired ?? true;
   const missing = [
     !options.messengerVerifyToken ? "MESSENGER_VERIFY_TOKEN" : undefined,
     !options.metaAppSecret ? "META_APP_SECRET" : undefined,
@@ -362,19 +367,34 @@ export function checkMessengerConfig(options: RouteOptions): ReadinessCheckResul
   ].filter((value): value is string => Boolean(value));
   const configured = missing.length === 0;
   return {
-    ok: configured,
+    ok: configured || !required,
     configured,
-    required: true,
-    message: configured ? undefined : `Missing ${missing.join(", ")}`,
+    required,
+    message: configured || !required ? undefined : `Missing ${missing.join(", ")}`,
   };
 }
 
 export function checkZaloConfig(options: RouteOptions): ReadinessCheckResult {
   const required = options.readiness?.zaloRequired ?? true;
+  const productionRefreshRequired = options.readiness?.zaloRequired === true;
   const missing = [
     !options.zaloOaId ? "ZALO_OA_ID" : undefined,
-    !options.zaloAccessToken ? "ZALO_ACCESS_TOKEN" : undefined,
+    productionRefreshRequired && options.zaloOaId !== PVCFC_ZALO_OA_ID
+      ? "ZALO_OA_ID_PVCFC_BINDING"
+      : undefined,
+    productionRefreshRequired && !options.zaloWebhookSecret
+      ? "ZALO_OA_SECRET"
+      : undefined,
+    !options.zaloAccessToken && !options.zaloAccessTokenProvider
+      ? "ZALO_ACCESS_TOKEN_OR_PROVIDER"
+      : undefined,
     !options.zaloInboxUrlTemplate ? "ZALO_INBOX_URL_TEMPLATE" : undefined,
+    productionRefreshRequired && !options.zaloPublicBaseUrl?.startsWith('https://')
+      ? "ZALO_PUBLIC_BASE_URL_HTTPS"
+      : undefined,
+    productionRefreshRequired && !options.zaloOAuth
+      ? "ZALO_OAUTH_REFRESH_CONFIG"
+      : undefined,
   ].filter((value): value is string => Boolean(value));
   const configured = missing.length === 0;
   return {

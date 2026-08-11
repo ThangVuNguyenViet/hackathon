@@ -1,0 +1,61 @@
+{
+  "schemaVersion": "kfc-automatic-scorer-v1",
+  "requestId": "request-local-001",
+  "recommendationType": "local_favorite",
+  "model": {
+    "bundleId": "qualified-bundle-001",
+    "bundleDigest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "modelRevision": "local-favorite-model-001",
+    "calibratorRevision": "local-favorite-calibrator-001",
+    "featureSchemaDigest": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+    "thresholdRevision": "local-favorite-threshold-001",
+    "composerContractDigest": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+    "qualificationRunId": "qualification-run-001",
+    "qualificationEvidenceDigest": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"
+  },
+  "candidates": [
+    {
+      "candidateId": "product:20732",
+      "eligibility": "eligible",
+      "priceImpactVnd": 89000,
+      "features": {
+        "featureSchemaVersion": "automatic-feature-v1",
+        "recommendationType": "local_favorite",
+        "storeId": "store-hcm-001",
+        "fulfilmentMode": "delivery",
+        "locale": "vi-VN",
+        "localHour": 12,
+        "daypart": "lunch",
+        "catalogRevision": "catalog-001",
+        "cartSubtotalVnd": 159000,
+        "cartLineCount": 1,
+        "cartDistinctCategoryCount": 1,
+        "candidateSellableItemId": "20732",
+        "candidateModifierOptionId": null,
+        "candidateCategoryId": "burgers",
+        "candidatePriceImpactVnd": 89000,
+        "candidateUnitPriceVnd": 99000,
+        "candidateDiscountAmountVnd": 10000,
+        "candidateDiscountActive": true,
+        "promotionActive": true,
+        "completedOrderCount": 3,
+        "priorItemOrderCount": 1,
+        "priorCategoryOrderCount": 2,
+        "historyRecencyDays": null,
+        "localDemandCount": 421,
+        "modifierParentCartLineId": null,
+        "modifierParentSellableItemId": null,
+        "modifierGroupPath": null,
+        "modifierSelectionMode": null,
+        "modifierOptionAvailable": null,
+        "modifierOptionSafe": null,
+        "modifierPriceRatio": null,
+        "remainingBudgetVnd": null,
+        "basketAssociationCount": null,
+        "basketComplementarityScore": null,
+        "basketRedundancyCount": null,
+        "basketCategoryDiversityCount": null
+      }
+    }
+  ]
+}

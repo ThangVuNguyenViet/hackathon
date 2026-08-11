@@ -19,13 +19,14 @@ export function buildServer(options: BuildServerOptions = {}): FastifyInstance {
   });
 
   server.addHook('onClose', async () => {
+    await options.automaticRecommendations?.close();
     await options.agentTracer?.flush();
   });
 
   server.addHook('onRequest', async (request, reply) => {
     reply.header('Access-Control-Allow-Origin', '*');
     reply.header('Access-Control-Allow-Methods', 'GET,POST,OPTIONS');
-    reply.header('Access-Control-Allow-Headers', 'Content-Type,Authorization');
+    reply.header('Access-Control-Allow-Headers', 'Content-Type,Authorization,X-KFC-Demo-Admin-Token');
 
     if (request.method === 'OPTIONS') {
       await reply.code(204).send();

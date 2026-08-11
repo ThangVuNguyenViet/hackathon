@@ -2,6 +2,7 @@ import { z } from "zod";
 
 const appEnvSchema = z.object({
   PORT: z.coerce.number().int().positive().default(18090),
+  HOST: z.string().default("127.0.0.1"),
   DATABASE_URL: z
     .string()
     .default("postgres://kfc_agent:kfc_agent@localhost:15432/kfc_agent"),
@@ -52,6 +53,8 @@ const appEnvSchema = z.object({
   RELEASE_DEPLOYMENT_ID: z.string().optional().default("unknown"),
   RELEASE_BUILT_AT: z.string().optional().default(""),
   RELEASE_DIRTY: z.string().optional().default(""),
+  RELEASE_DIGEST: z.string().regex(/^[a-f0-9]{64}$/u).optional(),
+  OTEL_EXPORTER_OTLP_ENDPOINT: z.string().url().optional(),
   MESSENGER_VERIFY_TOKEN: z.string().optional().default(""),
   META_PAGE_ID: z.string().optional().default(""),
   META_APP_SECRET: z.string().optional().default(""),
@@ -64,8 +67,13 @@ const appEnvSchema = z.object({
   ZALO_REFRESH_TOKEN: z.string().optional().default(""),
   ZALO_APP_ID: z.string().optional().default(""),
   ZALO_APP_SECRET: z.string().optional().default(""),
+  ZALO_OA_SECRET: z.string().optional().default(""),
+  ZALO_TOKEN_ENCRYPTION_KEY: z.string().optional().default(""),
+  ZALO_SETUP_TOKEN: z.string().optional().default(""),
+  ZALO_PUBLIC_BASE_URL: z.string().url().optional(),
+  ZALO_OAUTH_BASE_URL: z.string().url().optional(),
   ZALO_API_BASE_URL: z.string().optional().default(""),
-  KFC_COMMERCE_MODE: z.enum(["fixture", "gateway"]).default("gateway"),
+  KFC_COMMERCE_MODE: z.enum(["fixture", "gateway"]).default("fixture"),
   KFC_COMMERCE_ENVIRONMENT: z.enum(["production", "sandbox"]).optional(),
   KFC_MENU_API_URL: z.string().optional(),
   CATALOG_TTL_SECONDS: z.coerce.number().int().min(30).max(3600).optional(),
