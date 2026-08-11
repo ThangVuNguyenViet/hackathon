@@ -10,6 +10,7 @@ import {
   type DirectAgentTurnResult,
 } from '../../src/agent/kfcAgentPack.js';
 import { OpenAiKfcAgent } from '../../src/agent/openAiKfcAgent.js';
+import type { KfcGenUiAttachment } from '../../src/genui/kfcGenUi.js';
 import { createMockClients } from '../../src/mock/createMockClients.js';
 import { MemoryStore } from '../../src/persistence/memoryStore.js';
 import { createTestFixtures } from '../fixtures/testFixtures.js';
@@ -206,7 +207,16 @@ describe('AgentTurnRunner pack isolation', () => {
     const fixtures = createTestFixtures();
     const clients = createMockClients(fixtures);
     const createKfcClients = vi.fn(async () => clients);
-    const selectKfcGenUi = vi.fn(() => undefined);
+    const expectedGenUi: KfcGenUiAttachment = {
+      id: 'attachment_preserved_pack',
+      lifecycleStage: 'cart',
+      widgetKind: 'cartBuilder',
+      status: 'active',
+      title: 'Giỏ hàng đã cập nhật',
+      data: { itemCode: '20751' },
+      actions: [],
+    };
+    const selectKfcGenUi = vi.fn(() => expectedGenUi);
     const kfc = sequencedAgent([
       functionCall('updateCart', {
         changes: [
@@ -246,6 +256,7 @@ describe('AgentTurnRunner pack isolation', () => {
     expect(createKfcClients).toHaveBeenCalledOnce();
     expect(store.listEventCalls).toBeGreaterThan(0);
     expect(selectKfcGenUi).toHaveBeenCalledOnce();
+    expect(output.result.genUi).toEqual(expectedGenUi);
     expect(output.result.session?.cart.items).toEqual([
       expect.objectContaining({ itemCode: '20751', quantity: 1 }),
     ]);
