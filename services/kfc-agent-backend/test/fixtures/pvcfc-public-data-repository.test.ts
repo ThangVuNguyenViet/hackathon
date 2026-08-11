@@ -6,6 +6,7 @@ import {
   createPvcfcPublicDataProvider,
   loadBundledPvcfcPublicDataProvider,
 } from '../../src/businesses/pvcfc/public-data/bundledPvcfcPublicDataProvider.js';
+import { parsePvcfcPublicDataBundle } from '../../src/businesses/pvcfc/public-data/pvcfcPublicDataBundle.js';
 
 const mutableBundleSchema = z.object({ revision: z.string() }).passthrough();
 
@@ -54,8 +55,16 @@ describe('PVCFC public-data provider contract', () => {
     });
   });
 
-  it('enumerates every record locator, including discovery-only records, through bounded pages', async () => {
+  it('enumerates and exactly retrieves every record, including discovery-only records, through bounded pages', async () => {
     const provider = loadBundledPvcfcPublicDataProvider();
+    const fixture = parsePvcfcPublicDataBundle(await readBundledData());
+    const fixtureRecords = new Map<string, unknown>(
+      fixture.collections.flatMap((collection) =>
+        collection.records.map(
+          (record) => [`${collection.name}\0${record.id}`, record] as const,
+        ),
+      ),
+    );
     const listedCollections = await provider.listCollections({ limit: 20 });
     expect(listedCollections.ok).toBe(true);
     if (!listedCollections.ok) return;
@@ -78,11 +87,20 @@ describe('PVCFC public-data provider contract', () => {
           expect(locator.collection).toBe(collection.name);
           expect(locator.id.length).toBeGreaterThan(0);
           expect(locator.title.length).toBeGreaterThan(0);
-          locators.add(`${locator.collection}\0${locator.id}`);
+          const key = `${locator.collection}\0${locator.id}`;
+          locators.add(key);
           counts.set(
             locator.collection,
             (counts.get(locator.collection) ?? 0) + 1,
           );
+          const detail = await provider.getRecord({
+            collection: locator.collection,
+            id: locator.id,
+          });
+          expect(detail.ok, key).toBe(true);
+          if (!detail.ok) continue;
+          expect(detail.value.collection).toBe(locator.collection);
+          expect(detail.value.record, key).toEqual(fixtureRecords.get(key));
         }
         cursor = page.value.nextCursor;
       } while (cursor !== undefined);
@@ -91,6 +109,7 @@ describe('PVCFC public-data provider contract', () => {
     }
 
     expect(locators).toHaveLength(497);
+    expect(locators).toEqual(new Set(fixtureRecords.keys()));
     expect(counts.get('source_inventory')).toBe(79);
   });
 
