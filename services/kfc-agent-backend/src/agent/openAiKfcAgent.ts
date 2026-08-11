@@ -346,9 +346,10 @@ export class OpenAiKfcAgent {
       name: input.profile.name,
       model: this.model,
       instructions: (runContext) =>
-        [input.profile.instructions, ...runContext.context.developerMessages].join(
-          '\n\n',
-        ),
+        [
+          input.profile.instructions,
+          ...runContext.context.developerMessages,
+        ].join('\n\n'),
       modelSettings:
         input.requireEvidenceTool === true &&
         input.allowModelToolCalls !== false &&

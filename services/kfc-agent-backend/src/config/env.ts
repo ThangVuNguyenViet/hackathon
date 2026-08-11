@@ -32,6 +32,12 @@ const appEnvSchema = z.object({
   OPENAI_API_KEY: z.string().optional().default(""),
   GOOGLE_API_KEY: z.string().optional().default(""),
   OPENAI_BASE_URL: z.string().optional().default("https://api.openai.com/v1"),
+  PVCFC_ASTRAFLOW_API_KEY: z.string().optional().default(""),
+  PVCFC_ASTRAFLOW_BASE_URL: z
+    .string()
+    .url()
+    .default("https://api-sg.umodelverse.ai/v1"),
+  PVCFC_ASTRAFLOW_MODEL: z.literal("gpt-5.6-luna").default("gpt-5.6-luna"),
   OPENAI_DIAGNOSTIC_WORKER_RELEASE: z.string().optional().default(""),
   OPENAI_DIAGNOSTIC_EXECUTION_COLO: z.string().optional().default(""),
   OPENAI_DIAGNOSTIC_EDGE_COLO: z.string().optional().default(""),

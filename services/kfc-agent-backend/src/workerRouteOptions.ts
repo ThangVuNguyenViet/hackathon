@@ -58,6 +58,10 @@ function workerModelEnv(env: WorkerEnv) {
     OPENAI_API_KEY: env.OPENAI_API_KEY ?? '',
     GOOGLE_API_KEY: env.GOOGLE_API_KEY ?? '',
     OPENAI_BASE_URL: env.OPENAI_BASE_URL ?? 'https://api.openai.com/v1',
+    PVCFC_ASTRAFLOW_API_KEY: env.PVCFC_ASTRAFLOW_API_KEY ?? '',
+    PVCFC_ASTRAFLOW_BASE_URL:
+      env.PVCFC_ASTRAFLOW_BASE_URL ?? 'https://api-sg.umodelverse.ai/v1',
+    PVCFC_ASTRAFLOW_MODEL: env.PVCFC_ASTRAFLOW_MODEL ?? 'gpt-5.6-luna',
   } as const;
 }
 
