@@ -301,7 +301,6 @@ export function createRouteAgentRuntime(
     shouldEvaluateDashboardMonitorContext,
   } = createRouteMonitorRuntime({ options, store, dashboard });
   async function kfcAgentResponse(input: {
-    /** Selected by the trusted server route, never inferred from customer text. */
     businessId: 'kfc' | 'pvcfc';
     sessionId: string;
     customerId: string;
