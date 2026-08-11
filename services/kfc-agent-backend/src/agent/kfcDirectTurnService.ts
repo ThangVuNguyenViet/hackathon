@@ -1,235 +1,49 @@
-import type { ExternalClients } from '../clients/interfaces.js';
-import type {
-  Channel,
-  ConversationTurnMetadata,
-  CustomerAccessContext,
-} from '../domain/types.js';
-import type { GeneratedFixtures } from '../fixtures/schema.js';
-import type { KfcGenUiAttachment } from '../genui/kfcGenUi.js';
-import type {
-  ConversationStore,
-  RunCommitFence,
-} from '../persistence/contracts.js';
-import { createAgentTurnExternalCallScope } from './agentExternalCallScope.js';
+import { AgentTurnRunner } from './agentTurnRunner.js';
 import {
-  createKfcOpenAiAgentsTools,
-  createKfcOpenAiTools,
-  createKfcToolSession,
-  verifiedKfcToolSessionContext,
-  type KfcToolSession,
-  type KfcToolSessionState,
-} from './kfcOpenAiTools.js';
-import {
-  hydrateKfcOpenAiToolSession,
-  prepareKfcOpenAiToolSessionPublication,
-} from './kfcOpenAiToolSessionLifecycle.js';
-import {
-  OpenAiKfcAgent,
-  type OpenAiKfcAgentExecutionResult,
-  type OpenAiKfcAgentLifecycleObserver,
-  type OpenAiKfcAgentTurnResult,
-} from './openAiKfcAgent.js';
-import type { OpenAiCompactionEvent } from './observedOpenAiResponsesCompactionSession.js';
+  KfcAgentPack,
+  type DirectAgentTurnInput,
+  type DirectAgentTurnResult,
+  type KfcAgentPackOptions,
+  type PreparedDirectKfcTurn,
+} from './kfcAgentPack.js';
 
-export interface PreparedDirectKfcTurn {
-  session?: KfcToolSession;
-  requiredToolCalls?: Array<{
-    name: string;
-    arguments: Record<string, unknown>;
-  }>;
-  allowModelToolCalls?: boolean;
+export type {
+  KfcAgentPackOptions as KfcDirectTurnServiceOptions,
+  DirectAgentTurnInput as KfcDirectTurnInput,
+  PreparedDirectKfcTurn,
+};
+
+export interface KfcDirectTurnResult extends DirectAgentTurnResult {
+  session: NonNullable<DirectAgentTurnResult['session']>;
+  stateCommit: NonNullable<DirectAgentTurnResult['stateCommit']>;
 }
 
-export interface KfcDirectTurnServiceOptions {
-  store: ConversationStore;
-  openAiAgent: OpenAiKfcAgent;
-  getFixtures(): Promise<GeneratedFixtures>;
-  createClients(
-    sessionId: string,
-    metadata: ConversationTurnMetadata | null,
-  ): Promise<ExternalClients>;
-  getAccessContext(
-    sessionId: string,
-    customerId: string,
-  ): Promise<CustomerAccessContext | undefined>;
-}
-
-export interface KfcDirectTurnInput {
-  sessionId: string;
-  customerId: string;
-  channel: Channel;
-  text: string;
-  externalMessageId: string | null;
-  metadata: ConversationTurnMetadata | null;
-  clients?: ExternalClients;
-  prepareSession?(
-    session: KfcToolSession,
-  ): Promise<PreparedDirectKfcTurn> | PreparedDirectKfcTurn;
-  selectGenUi?: (
-    result: OpenAiKfcAgentExecutionResult,
-    session: KfcToolSession,
-  ) => KfcGenUiAttachment | undefined;
-  fence?: RunCommitFence;
-  lifecycle?: OpenAiKfcAgentLifecycleObserver;
-}
-
-export interface KfcDirectTurnResult extends OpenAiKfcAgentTurnResult {
-  session: KfcToolSession;
-  stateCommit: 'committed' | 'stale';
-}
-
+/** Compatibility facade for callers that are already trusted KFC routes. */
 export class KfcDirectTurnService {
-  constructor(private readonly options: KfcDirectTurnServiceOptions) {}
+  readonly #runner: AgentTurnRunner<
+    DirectAgentTurnInput,
+    DirectAgentTurnResult
+  >;
 
-  async run(input: KfcDirectTurnInput): Promise<KfcDirectTurnResult> {
-    const externalCalls = createAgentTurnExternalCallScope(120_000);
-    const serviceStartedAt = Date.now();
-    try {
-      const clients =
-        input.clients ??
-        (await this.options.createClients(input.sessionId, input.metadata));
-      const freshSession = await createKfcToolSession(
-        clients,
-        input.sessionId,
-        input.customerId,
-        input.channel,
-        externalCalls.context,
-      );
-      const hydratedSession = await hydrateKfcOpenAiToolSession({
-        store: this.options.store,
-        sessionId: input.sessionId,
-        freshSession,
-      });
-      const initialSession = {
-        ...hydratedSession,
-        externalCallContext: externalCalls.context,
-      };
-      const prepared = await input.prepareSession?.(initialSession);
-      const sessionState: KfcToolSessionState = {
-        current: prepared?.session ?? initialSession,
-      };
-      let runMetrics:
-        | {
-            status: 'success' | 'error';
-            latencyMs: number;
-            usage?: {
-              inputTokens: number;
-              outputTokens: number;
-              totalTokens: number;
-            };
-          }
-        | undefined;
-      let compactionMetrics: OpenAiCompactionEvent | undefined;
-      let directOutput: OpenAiKfcAgentTurnResult;
-      try {
-        directOutput = await this.options.openAiAgent.respond({
-          sessionId: input.sessionId,
-          customerId: input.customerId,
-          channel: input.channel,
-          text: input.text,
-          externalMessageId: input.externalMessageId,
-          metadata: input.metadata,
-          store: this.options.store,
-          verifiedBusinessContext: verifiedKfcToolSessionContext(
-            sessionState.current,
-          ),
-          tools: createKfcOpenAiAgentsTools(
-            createKfcOpenAiTools({
-              clients,
-              sessionState,
-              accessContext: await this.options.getAccessContext(
-                input.sessionId,
-                input.customerId,
-              ),
-              fixtures: await this.options.getFixtures(),
-            }),
-          ),
-          requiredToolCalls: prepared?.requiredToolCalls,
-          allowModelToolCalls: prepared?.allowModelToolCalls,
-          lifecycle: {
-            onRunStart: input.lifecycle?.onRunStart,
-            onToolEnd: input.lifecycle?.onToolEnd,
-            onCompactionEnd: async (event) => {
-              compactionMetrics = event;
-              await input.lifecycle?.onCompactionEnd?.(event);
-            },
-            onRunEnd: async (event) => {
-              runMetrics = event;
-              await input.lifecycle?.onRunEnd?.(event);
-            },
-          },
-          ...(input.selectGenUi
-            ? {
-                selectGenUi: (result) =>
-                  input.selectGenUi?.(result, sessionState.current),
-              }
-            : {}),
-        });
-      } catch (error) {
-        const payload = {
-          schemaVersion: 'openai-redacted-tool-trace-v1',
-          assistantTurnId: null,
-          run: runMetrics ?? {
-            status: 'error' as const,
-            latencyMs: Math.max(0, Date.now() - serviceStartedAt),
-          },
-          ...(compactionMetrics ? { compaction: compactionMetrics } : {}),
-          calls: [],
-        };
-        if (input.fence) {
-          await this.options.store.appendEventIfRunCurrent({
-            sessionId: input.sessionId,
-            sourceType: 'openai:tool_trace',
-            payload,
-            fence: input.fence,
-          });
-        } else {
-          await this.options.store.appendEvent(
-            input.sessionId,
-            'openai:tool_trace',
-            payload,
-          );
-        }
-        throw error;
-      }
-      const session = sessionState.current;
-      const publication = await prepareKfcOpenAiToolSessionPublication({
-        session,
-        latestUserMessage: input.text,
-        toolCalls: directOutput.toolCalls,
-        assistantTurnId: directOutput.assistantTurnId,
-        customerCommand: input.metadata?.customerCommand,
-        runMetrics,
-        compactionMetrics,
-      });
-      const commitInput = {
-        stateEvent: {
-          sessionId: input.sessionId,
-          sourceType: 'graph:verified_state',
-          payload: { verifiedState: publication.verifiedState },
-        },
-        assistantTurn: directOutput.assistantTurn,
-        sdkSessionMutation: directOutput.sdkSessionMutation,
-        ...(publication.auditPayload
-          ? {
-              auditEvent: {
-                sessionId: input.sessionId,
-                sourceType: 'openai:tool_trace',
-                payload: publication.auditPayload,
-              },
-            }
-          : {}),
-      };
-      const commit = input.fence
-        ? await this.options.store.commitAssistantTurnIfRunCurrent({
-            ...commitInput,
-            fence: input.fence,
-          })
-        : await this.options.store.commitAssistantTurn(commitInput);
-      const stateCommit = commit.status === 'stale' ? 'stale' : 'committed';
-      return { ...directOutput, session, stateCommit };
-    } finally {
-      externalCalls.dispose();
+  constructor(options: KfcAgentPackOptions) {
+    this.#runner = new AgentTurnRunner({
+      packs: [new KfcAgentPack(options)],
+      expectedPackIds: ['kfc'],
+    });
+  }
+
+  async run(input: DirectAgentTurnInput): Promise<KfcDirectTurnResult> {
+    if (input.businessId !== undefined && input.businessId !== 'kfc') {
+      throw new Error(`agent_pack_id_unknown:${input.businessId}`);
     }
+    const { result } = await this.#runner.run({ packId: 'kfc', turn: input });
+    if (!result.session || !result.stateCommit) {
+      throw new Error('kfc_agent_pack_result_incomplete');
+    }
+    return {
+      ...result,
+      session: result.session,
+      stateCommit: result.stateCommit,
+    };
   }
 }
