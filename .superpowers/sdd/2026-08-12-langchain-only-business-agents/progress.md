@@ -1,0 +1,17 @@
+# SDD ledger — plan: docs/superpowers/plans/2026-08-12-langchain-only-business-agents.md
+
+Branch base: 3008f6f210aae5aa4b75832e24193b21eed6fcf9
+Plan commit: a5825aa549a51b39b3308fafbd24aec854cd962c
+Execution worktree: /Users/vietthangvunguyen/Workspace/hackathon/.worktrees/codex-langchain-tinyfish-runtime
+
+Baseline: PVCFC web build passed on Node 24.14.0. Backend format, lint (540-warning preserved budget), SDK boundary, and focused maintained suites passed. Full CI was stopped after concurrent execution caused multiple 5-second timeout failures. The isolated gateway idempotency baseline also fails on unchanged main behavior at `gateway-provider-idempotency.test.ts:155` (`500` received, `503` expected). Treat this exact baseline defect as pre-existing; migration tasks may not modify it and final qualification must report it separately unless main fixes it first.
+
+Task 1: human ruling — no transitional compatibility commit. Task 1 now removes direct OpenAI SDK and explicit LangGraph production infrastructure first, then rebuilds minimum KFC/PVCFC LangChain execution to green before its accepted commit. Plan amendment: 6871c506.
+Task 1: fix round 1/5 opened — Critical legacy runtime remains; Important architecture guard is too narrow. Original implementer resumed against expanded brief.
+Task 1A: demolition complete (commit c7c10321). Architecture RED 86 artifacts -> GREEN 1/1; source-size architecture gate green. Intentional intermediate typecheck RED: 582 diagnostics grouped for replacement agents. No application-owned commerce/security/persistence contract removed.
+Task 1B: PVCFC LangChain rebuild complete (commit cc8e2ce1). Focused 21/21 green; architecture/scoped lint/format green; PVCFC production diagnostics 0. Remaining typecheck: KFC 341, confirmation/resume 40, obsolete downstream 176.
+Task 1C: KFC LangChain core verified for commit `refactor(kfc): rebuild execution core on LangChain`. Focused 95/95 green; architecture/scoped typecheck/lint/format green. Full typecheck is intentionally RED only at Task 1D route/confirmation/resume (16), obsolete scripts/evaluations (24), and obsolete tests (467); other production diagnostics 0.
+Task 1D: integration complete (commit 5f195cef). LangChain packs wired to supported routes/channels; application-owned confirmation resume/exactly-once execution restored; full check/build/Worker dry-run green; obsolete graph/SDK assets removed.
+Task 1 review fix: complete (commit 6c0fcafe). Added deployed Worker PVCFC dispatch, atomic pause+assistant+verified-ref commits across Memory/D1/Postgres with rollback/replay proof, restored compact maintained Worker/Zalo coverage, and cleaned stale runtime docs/config. Final independent re-review approved with no Critical/Important findings. Full check: 1,921 passed/1 skipped; Task 1 accepted.
+Plan execution note: original Tasks 2, 5, and 6 runtime-migration work was subsumed by the expanded Task 1 per the user's clean-cut ruling. Continue at original Task 3 (TinyFish adapter), then original Task 4 (PVCFC web tools), KFC-owned web tools, middleware/tracing audit, demo refresh, and qualification.
+Task 3 implementation: bounded infrastructure-only TinyFish adapter complete pending independent review. Exact SDK 0.3.0 installed; RED missing-module proof captured; focused security/normalization suite 15/15 green; typecheck, strict lint, format, architecture, build, and Worker dry-run green. No business pack policy or live credentialed call was added.
