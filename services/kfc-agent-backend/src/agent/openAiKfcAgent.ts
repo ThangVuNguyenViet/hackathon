@@ -20,25 +20,25 @@ import type {
 } from '../persistence/contracts.js';
 import type { KfcOpenAiAgentRunContext } from './kfcOpenAiTools.js';
 import type { KfcOpenAiFunctionTool } from './kfcOpenAiTools.js';
+import type {
+  DirectAgentExecutionResult as OpenAiKfcAgentExecutionResult,
+  DirectAgentLifecycleObserver as OpenAiKfcAgentLifecycleObserver,
+  DirectAgentToolCallTrace as OpenAiToolCallTrace,
+  DirectAgentTurnResult,
+  DirectAgentUsage as OpenAiUsage,
+} from './directAgentTurn.js';
 import { BufferedConversationStoreAgentSession } from './bufferedConversationStoreAgentSession.js';
 import {
   ObservedOpenAiResponsesCompactionSession,
   type OpenAiCompactionEvent,
 } from './observedOpenAiResponsesCompactionSession.js';
 
-export interface OpenAiToolCallTrace {
-  name: string;
-  arguments: Record<string, unknown>;
-  result: unknown;
-  status?: 'success' | 'error';
-  durationMs?: number;
-}
-
-export interface OpenAiUsage {
-  inputTokens: number;
-  outputTokens: number;
-  totalTokens: number;
-}
+export type {
+  OpenAiKfcAgentExecutionResult,
+  OpenAiKfcAgentLifecycleObserver,
+  OpenAiToolCallTrace,
+  OpenAiUsage,
+};
 
 export interface OpenAiKfcAgentOptions {
   client: OpenAIClient;
@@ -51,27 +51,6 @@ export interface OpenAiKfcAgentOptions {
     thresholdBytes: number;
     model?: string;
   };
-}
-
-export interface OpenAiKfcAgentLifecycleObserver {
-  onRunStart?(): Promise<void> | void;
-  onToolEnd?(event: {
-    name: string;
-    status: 'success' | 'error';
-    durationMs: number;
-  }): Promise<void> | void;
-  onCompactionEnd?(event: OpenAiCompactionEvent): Promise<void> | void;
-  onRunEnd?(event: {
-    status: 'success' | 'error';
-    latencyMs: number;
-    usage?: OpenAiUsage;
-  }): Promise<void> | void;
-}
-
-export interface OpenAiKfcAgentExecutionResult {
-  responseText: string;
-  toolCalls: OpenAiToolCallTrace[];
-  usage: OpenAiUsage;
 }
 
 export interface OpenAiKfcAgentTurnInput {
@@ -99,9 +78,7 @@ export interface OpenAiKfcAgentTurnInput {
   lifecycle?: OpenAiKfcAgentLifecycleObserver;
 }
 
-export interface OpenAiKfcAgentTurnResult extends OpenAiKfcAgentExecutionResult {
-  userTurnId: string;
-  assistantTurnId: string;
+export interface OpenAiKfcAgentTurnResult extends DirectAgentTurnResult {
   genUi?: KfcGenUiAttachment;
   assistantTurn: AppendConversationTurnInput;
   sdkSessionMutation: AgentSessionItemsMutation;
@@ -497,7 +474,7 @@ export class OpenAiKfcAgent {
           },
         );
         developerMessages.push(
-          `Verified trusted KFC action result: ${JSON.stringify(result)}`,
+          `Verified trusted action result: ${JSON.stringify(result)}`,
         );
       }
 

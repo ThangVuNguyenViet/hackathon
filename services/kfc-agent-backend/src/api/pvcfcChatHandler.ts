@@ -5,17 +5,7 @@ import {
   type HandlerResponse,
 } from './routeHandlerContracts.js';
 
-type AgentResponse = RouteAgentRuntime['kfcAgentResponse'];
-
-function responseProfile(metadata: Record<string, unknown> | undefined) {
-  const rawProfile =
-    metadata?.responseProfile ?? metadata?.showcaseResponseMode;
-  return rawProfile === 'text' || rawProfile === 'social'
-    ? ('social' as const)
-    : rawProfile === 'genui'
-      ? ('genui' as const)
-      : undefined;
-}
+type AgentResponse = RouteAgentRuntime['pvcfcAgentResponse'];
 
 export function createPvcfcChatHandler(
   agentResponse: AgentResponse,
@@ -36,13 +26,10 @@ export function createPvcfcChatHandler(
       string,
       unknown
     >;
-    const profile = responseProfile(auditMetadata);
     const metadata: ConversationTurnMetadata = {
       rawEvent: { ...auditMetadata, source: 'pvcfc_chat' },
-      ...(profile ? { responseProfile: profile } : {}),
     };
     return agentResponse({
-      businessId: 'pvcfc',
       sessionId: parsed.data.sessionId,
       customerId: parsed.data.customerId,
       clientMessageId: parsed.data.clientMessageId,

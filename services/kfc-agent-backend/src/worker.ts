@@ -211,6 +211,7 @@ export interface WorkerEnv {
   PVCFC_ASTRAFLOW_API_KEY?: string;
   PVCFC_ASTRAFLOW_BASE_URL?: string;
   PVCFC_ASTRAFLOW_MODEL?: "gpt-5.6-luna";
+  PVCFC_PUBLIC_DATA_MODE?: "fixture" | "api";
   OPENAI_GEO_CANARY_TOKEN?: string;
   LANGSMITH_API_KEY?: string;
   LANGSMITH_PROJECT?: string;

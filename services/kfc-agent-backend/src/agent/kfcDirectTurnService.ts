@@ -1,28 +1,28 @@
 import { AgentTurnRunner } from './agentTurnRunner.js';
 import {
   KfcAgentPack,
-  type DirectAgentTurnInput,
-  type DirectAgentTurnResult,
+  type KfcDirectAgentTurnInput,
+  type KfcDirectAgentTurnResult,
   type KfcAgentPackOptions,
   type PreparedDirectKfcTurn,
 } from './kfcAgentPack.js';
 
 export type {
   KfcAgentPackOptions as KfcDirectTurnServiceOptions,
-  DirectAgentTurnInput as KfcDirectTurnInput,
+  KfcDirectAgentTurnInput as KfcDirectTurnInput,
   PreparedDirectKfcTurn,
 };
 
-export interface KfcDirectTurnResult extends DirectAgentTurnResult {
-  session: NonNullable<DirectAgentTurnResult['session']>;
-  stateCommit: NonNullable<DirectAgentTurnResult['stateCommit']>;
+export interface KfcDirectTurnResult extends KfcDirectAgentTurnResult {
+  session: NonNullable<KfcDirectAgentTurnResult['session']>;
+  stateCommit: NonNullable<KfcDirectAgentTurnResult['stateCommit']>;
 }
 
 /** Compatibility facade for callers that are already trusted KFC routes. */
 export class KfcDirectTurnService {
   readonly #runner: AgentTurnRunner<
-    DirectAgentTurnInput,
-    DirectAgentTurnResult
+    KfcDirectAgentTurnInput,
+    KfcDirectAgentTurnResult
   >;
 
   constructor(options: KfcAgentPackOptions) {
@@ -32,7 +32,7 @@ export class KfcDirectTurnService {
     });
   }
 
-  async run(input: DirectAgentTurnInput): Promise<KfcDirectTurnResult> {
+  async run(input: KfcDirectAgentTurnInput): Promise<KfcDirectTurnResult> {
     if (input.businessId !== undefined && input.businessId !== 'kfc') {
       throw new Error(`agent_pack_id_unknown:${input.businessId}`);
     }

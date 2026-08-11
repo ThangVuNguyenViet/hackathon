@@ -51,11 +51,13 @@ describe('PVCFC chat handler', () => {
       text: 'PVCFC có những sản phẩm nào?',
       metadata: {
         businessId: 'kfc',
+        responseProfile: 'genui',
         verifiedBusinessContext: { products: ['untrusted'] },
       },
     });
 
-    expect(received?.businessId).toBe('pvcfc');
+    expect(received).not.toHaveProperty('businessId');
+    expect(received?.metadata.responseProfile).toBeUndefined();
     expect(received?.metadata.verifiedBusinessContext).toBeUndefined();
     expect(received?.metadata.rawEvent).toMatchObject({
       businessId: 'kfc',

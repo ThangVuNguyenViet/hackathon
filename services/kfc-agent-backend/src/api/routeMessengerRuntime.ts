@@ -666,6 +666,7 @@ export function createRouteMessengerRuntime(
         const directOutput = await runDirectKfcTurn({
           sessionId: run.sessionId,
           customerId: run.externalUserId,
+          transport: run.channel,
           channel: run.channel,
           text: run.coalescedInputText,
           externalMessageId: linkedTurns[0]!.externalMessageId,

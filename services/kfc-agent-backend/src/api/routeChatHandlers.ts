@@ -240,6 +240,7 @@ export function createChatRouteHandlers(context: RouteHandlerContext) {
     kfcProofAccessContext,
     latestKfcProofPreconditions,
     kfcAgentResponse,
+    pvcfcAgentResponse,
     deferAiMonitorRefinement,
     deliverAssistantReply,
     persistEventProfile,
@@ -260,7 +261,7 @@ export function createChatRouteHandlers(context: RouteHandlerContext) {
     recoverStaleMessengerDeliveriesInternal,
     processMessengerAgentRunInternal,
   } = context;
-  const chatPvcfcMessage = createPvcfcChatHandler(kfcAgentResponse);
+  const chatPvcfcMessage = createPvcfcChatHandler(pvcfcAgentResponse);
   return {
     async chatKfcMessage(body: unknown) {
       const parsed = kfcChatPayloadSchema.safeParse(body);

@@ -6,10 +6,7 @@ import type {
 } from '../domain/types.js';
 import type { GeneratedFixtures } from '../fixtures/schema.js';
 import type { KfcGenUiAttachment } from '../genui/kfcGenUi.js';
-import type {
-  ConversationStore,
-  RunCommitFence,
-} from '../persistence/contracts.js';
+import type { ConversationStore } from '../persistence/contracts.js';
 import type { PreparedTurnResources } from '../business/agentPack.js';
 import { createAgentTurnExternalCallScope } from './agentExternalCallScope.js';
 import type { ExecutableAgentPack } from './agentTurnRunner.js';
@@ -29,10 +26,10 @@ import {
 import {
   OpenAiKfcAgent,
   type OpenAiKfcAgentExecutionResult,
-  type OpenAiKfcAgentLifecycleObserver,
   type OpenAiKfcAgentTurnResult,
 } from './openAiKfcAgent.js';
 import type { OpenAiCompactionEvent } from './observedOpenAiResponsesCompactionSession.js';
+import type { DirectAgentTurnInput } from './directAgentTurn.js';
 
 export interface PreparedDirectKfcTurn {
   session?: KfcToolSession;
@@ -43,16 +40,12 @@ export interface PreparedDirectKfcTurn {
   allowModelToolCalls?: boolean;
 }
 
-export interface DirectAgentTurnInput {
-  /** Compatibility only; the runner's trusted pack ID is authoritative. */
+export interface KfcDirectAgentTurnInput extends DirectAgentTurnInput<
+  'web_chat' | Channel
+> {
+  /** Compatibility only; the trusted KFC facade still rejects other IDs. */
   businessId?: 'kfc' | 'pvcfc';
-  sessionId: string;
-  customerId: string;
   channel: Channel;
-  transport?: 'web_chat' | Channel;
-  text: string;
-  externalMessageId: string | null;
-  metadata: ConversationTurnMetadata | null;
   clients?: ExternalClients;
   prepareSession?(
     session: KfcToolSession,
@@ -61,11 +54,9 @@ export interface DirectAgentTurnInput {
     result: OpenAiKfcAgentExecutionResult,
     session: KfcToolSession,
   ) => KfcGenUiAttachment | undefined;
-  fence?: RunCommitFence;
-  lifecycle?: OpenAiKfcAgentLifecycleObserver;
 }
 
-export interface DirectAgentTurnResult extends OpenAiKfcAgentTurnResult {
+export interface KfcDirectAgentTurnResult extends OpenAiKfcAgentTurnResult {
   session?: KfcToolSession;
   stateCommit?: 'committed' | 'stale';
 }
@@ -95,7 +86,7 @@ interface RunMetrics {
 }
 
 interface KfcPreparedContext {
-  input: DirectAgentTurnInput;
+  input: KfcDirectAgentTurnInput;
   preparedInput: PreparedDirectKfcTurn | undefined;
   sessionState: KfcToolSessionState;
   dispose(): void;
@@ -123,15 +114,15 @@ function kfcContext(prepared: PreparedTurnResources): KfcPreparedContext {
 }
 
 export class KfcAgentPack implements ExecutableAgentPack<
-  DirectAgentTurnInput,
-  DirectAgentTurnResult
+  KfcDirectAgentTurnInput,
+  KfcDirectAgentTurnResult
 > {
   readonly id = 'kfc';
   readonly profile = KFC_AGENT_PROFILE;
   readonly lifecycle = {
     onRunSucceeded: async (input: {
       prepared: PreparedTurnResources;
-      result: DirectAgentTurnResult;
+      result: KfcDirectAgentTurnResult;
     }) => {
       const context = kfcContext(input.prepared);
       try {
@@ -217,7 +208,7 @@ export class KfcAgentPack implements ExecutableAgentPack<
   constructor(private readonly options: KfcAgentPackOptions) {}
 
   async prepareTurn(
-    input: DirectAgentTurnInput,
+    input: KfcDirectAgentTurnInput,
   ): Promise<PreparedTurnResources> {
     const externalCalls = createAgentTurnExternalCallScope(120_000);
     const serviceStartedAt = Date.now();
@@ -271,10 +262,10 @@ export class KfcAgentPack implements ExecutableAgentPack<
   }
 
   async execute(input: {
-    turn: DirectAgentTurnInput;
+    turn: KfcDirectAgentTurnInput;
     profile: typeof KFC_AGENT_PROFILE;
     prepared: PreparedTurnResources;
-  }): Promise<DirectAgentTurnResult> {
+  }): Promise<KfcDirectAgentTurnResult> {
     const context = kfcContext(input.prepared);
     return this.options.openAiAgent.respond({
       profile: input.profile,

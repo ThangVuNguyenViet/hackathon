@@ -89,6 +89,7 @@ describe('KfcDirectTurnService', () => {
         businessId: 'pvcfc',
         sessionId: 'pvcfc:trusted-route',
         customerId: 'trusted-route',
+        transport: 'web_chat',
         channel: 'kfc',
         text: 'Cho tôi thông tin sản phẩm Urê.',
         externalMessageId: 'pvcfc-1',
@@ -146,6 +147,7 @@ describe('KfcDirectTurnService', () => {
     await service.run({
       sessionId: 'kfc:compaction-metrics',
       customerId: 'compaction-metrics',
+      transport: 'web_chat',
       channel: 'kfc',
       text: 'Tiếp tục cuộc trò chuyện.',
       externalMessageId: 'web-compaction-1',
@@ -218,6 +220,7 @@ describe('KfcDirectTurnService', () => {
     await service.run({
       sessionId: 'kfc:shared-customer',
       customerId: 'shared-customer',
+      transport: 'web_chat',
       channel: 'kfc',
       text: 'Thêm Combo Hợp Gu 99K',
       externalMessageId: 'web-1',
@@ -226,6 +229,7 @@ describe('KfcDirectTurnService', () => {
     const messenger = await service.run({
       sessionId: 'kfc:shared-customer',
       customerId: 'shared-customer',
+      transport: 'messenger',
       channel: 'messenger',
       text: 'Giỏ của tôi còn gì?',
       externalMessageId: 'messenger-1',

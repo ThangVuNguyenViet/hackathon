@@ -19,6 +19,7 @@ describe('buildServerOptionsFromEnv', () => {
         PVCFC_ASTRAFLOW_API_KEY: 'pvcfc-astraflow-key',
         PVCFC_ASTRAFLOW_BASE_URL: 'https://api-sg.umodelverse.ai/v1',
         PVCFC_ASTRAFLOW_MODEL: 'gpt-5.6-luna',
+        PVCFC_PUBLIC_DATA_MODE: 'fixture',
       } as NodeJS.ProcessEnv),
     );
 

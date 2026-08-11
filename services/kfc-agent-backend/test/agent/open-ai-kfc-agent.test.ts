@@ -527,7 +527,7 @@ describe('OpenAiKfcAgent SDK Runner', () => {
     expect(result.toolCalls).toHaveLength(1);
     expect(requests[0]?.tools).toEqual([]);
     expect(requests[0]?.instructions).toContain(
-      'Verified trusted KFC action result',
+      'Verified trusted action result',
     );
     expect(result.sdkSessionMutation).toEqual({
       mode: 'append',

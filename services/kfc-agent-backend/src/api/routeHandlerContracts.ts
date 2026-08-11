@@ -5,6 +5,7 @@ import { z } from 'zod';
 import type { BaseChatModel } from '@langchain/core/language_models/chat_models';
 import type { BaseCheckpointSaver } from '@langchain/langgraph';
 import type { OpenAiKfcAgent } from '../agent/openAiKfcAgent.js';
+import type { PvcfcPublicDataProvider } from '../businesses/pvcfc/public-data/pvcfcPublicDataProvider.js';
 import type { ConfirmationApprovalKeyRing } from './confirmationApprovalCapability.js';
 import type { VerifiedMessengerGuestCheckoutIngress } from '../security/guestCheckoutAuthority.js';
 import type {
@@ -481,6 +482,7 @@ export interface RouteOptions {
   zaloFetchImpl?: typeof fetch;
   openAiAgent?: OpenAiKfcAgent;
   pvcfcAgent?: OpenAiKfcAgent;
+  pvcfcPublicDataProvider?: PvcfcPublicDataProvider;
   agent?: {
     model: BaseChatModel;
     identity: AgentModelIdentity;

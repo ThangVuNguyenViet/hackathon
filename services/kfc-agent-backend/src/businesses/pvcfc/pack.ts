@@ -1,10 +1,10 @@
 import type { PreparedTurnResources } from '../../business/agentPack.js';
 import type { ExecutableAgentPack } from '../../agent/agentTurnRunner.js';
+import type { DirectAgentTurnInput } from '../../agent/directAgentTurn.js';
 import type {
-  DirectAgentTurnInput,
-  DirectAgentTurnResult,
-} from '../../agent/kfcAgentPack.js';
-import type { OpenAiKfcAgent } from '../../agent/openAiKfcAgent.js';
+  OpenAiKfcAgent,
+  OpenAiKfcAgentTurnResult,
+} from '../../agent/openAiKfcAgent.js';
 import type { OpenAiCompactionEvent } from '../../agent/observedOpenAiResponsesCompactionSession.js';
 import type { ConversationStore } from '../../persistence/contracts.js';
 import type { Channel } from '../../domain/types.js';
@@ -17,6 +17,10 @@ export interface PvcfcAgentPackOptions {
   openAiAgent: OpenAiKfcAgent;
   provider: PvcfcPublicDataProvider;
 }
+
+export type PvcfcAgentTurnResult = Omit<OpenAiKfcAgentTurnResult, 'genUi'> & {
+  stateCommit?: 'committed' | 'stale';
+};
 
 interface PvcfcPreparedContext {
   input: DirectAgentTurnInput;
@@ -51,7 +55,7 @@ function contextFrom(prepared: PreparedTurnResources): PvcfcPreparedContext {
 }
 
 function auditPayload(input: {
-  result: DirectAgentTurnResult;
+  result: PvcfcAgentTurnResult;
   context: PvcfcPreparedContext;
 }) {
   return {
@@ -75,14 +79,14 @@ function auditPayload(input: {
 
 export class PvcfcAgentPack implements ExecutableAgentPack<
   DirectAgentTurnInput,
-  DirectAgentTurnResult
+  PvcfcAgentTurnResult
 > {
   readonly id = 'pvcfc';
   readonly profile = PVCFC_AGENT_PROFILE;
   readonly lifecycle = {
     onRunSucceeded: async (input: {
       prepared: PreparedTurnResources;
-      result: DirectAgentTurnResult;
+      result: PvcfcAgentTurnResult;
     }) => {
       const context = contextFrom(input.prepared);
       const commitInput = {
@@ -158,7 +162,7 @@ export class PvcfcAgentPack implements ExecutableAgentPack<
     turn: DirectAgentTurnInput;
     profile: typeof PVCFC_AGENT_PROFILE;
     prepared: PreparedTurnResources;
-  }): Promise<DirectAgentTurnResult> {
+  }): Promise<PvcfcAgentTurnResult> {
     const context = contextFrom(input.prepared);
     const publicData = await this.options.provider.listCollections({
       limit: 20,
@@ -176,7 +180,7 @@ export class PvcfcAgentPack implements ExecutableAgentPack<
       // The persisted transport remains web_chat without widening KFC's
       // business-channel domain at the shared route boundary.
       // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- adapter from the neutral web transport to the legacy persistence channel
-      channel: 'web_chat' as Channel,
+      channel: input.turn.transport as Channel,
       transport: input.turn.transport,
       text: input.turn.text,
       externalMessageId: input.turn.externalMessageId,
