@@ -12,6 +12,7 @@ import {
   type KfcStrictJsonObjectSchema,
 } from '../../src/agent/kfcOpenAiTools.js';
 import { OpenAiKfcAgent } from '../../src/agent/openAiKfcAgent.js';
+import { KFC_AGENT_PROFILE } from '../../src/agent/kfcAgentInstructions.js';
 import { MemoryStore } from '../../src/persistence/memoryStore.js';
 
 const strictObjectParameters: KfcStrictJsonObjectSchema = {
@@ -352,6 +353,7 @@ describe('KFC OpenAI Agents SDK tools', () => {
     });
 
     const result = await agent.respond({
+      profile: KFC_AGENT_PROFILE,
       sessionId: 'kfc:sdk_runner',
       customerId: 'sdk_runner',
       channel: 'kfc',

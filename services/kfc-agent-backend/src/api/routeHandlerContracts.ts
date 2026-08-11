@@ -480,6 +480,7 @@ export interface RouteOptions {
   zaloApiBaseUrl?: string;
   zaloFetchImpl?: typeof fetch;
   openAiAgent?: OpenAiKfcAgent;
+  pvcfcAgent?: OpenAiKfcAgent;
   agent?: {
     model: BaseChatModel;
     identity: AgentModelIdentity;

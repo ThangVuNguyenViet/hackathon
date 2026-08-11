@@ -21,11 +21,6 @@ export const KFC_GENUI_WIDGET_KINDS = [
   'orderTrackingStatus',
   'supportHandoff',
   'paymentMethodPicker',
-  'fertilizerSchedule',
-  'dosageCalculator',
-  'diagnosticProtocol',
-  'dealerLocator',
-  'capabilitiesOverview',
 ] as const;
 
 export type KfcGenUiWidgetKind = (typeof KFC_GENUI_WIDGET_KINDS)[number];

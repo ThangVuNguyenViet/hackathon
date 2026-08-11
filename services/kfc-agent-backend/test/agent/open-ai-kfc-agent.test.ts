@@ -9,6 +9,10 @@ import {
   type KfcOpenAiFunctionTool,
   type KfcOpenAiAgentRunContext,
 } from '../../src/agent/kfcOpenAiTools.js';
+import { createPvcfcOpenAiTools } from '../../src/businesses/pvcfc/tools.js';
+import { loadBundledPvcfcPublicDataProvider } from '../../src/businesses/pvcfc/public-data/bundledPvcfcPublicDataProvider.js';
+import { PVCFC_AGENT_PROFILE } from '../../src/businesses/pvcfc/instructions.js';
+import { KFC_AGENT_PROFILE } from '../../src/agent/kfcAgentInstructions.js';
 import { MemoryStore } from '../../src/persistence/memoryStore.js';
 import type { ToolName } from '../../src/ordering/types.js';
 
@@ -104,6 +108,7 @@ function createTurn(
   input: Partial<Parameters<OpenAiKfcAgent['respond']>[0]> = {},
 ) {
   return {
+    profile: input.profile ?? KFC_AGENT_PROFILE,
     sessionId: 'kfc:runner_test',
     customerId: 'runner_test',
     channel: 'kfc' as const,
@@ -117,6 +122,90 @@ function createTurn(
 }
 
 describe('OpenAiKfcAgent SDK Runner', () => {
+  it('keeps PVCFC tool schemas within AstraFlow supported JSON Schema', () => {
+    const tools = createPvcfcOpenAiTools(loadBundledPvcfcPublicDataProvider());
+
+    expect(JSON.stringify(tools)).not.toContain('uniqueItems');
+    expect(tools.map(({ name }) => name)).toEqual([
+      'listPvcfcCollections',
+      'listPvcfcRecords',
+      'searchPvcfcRecords',
+      'getPvcfcRecord',
+    ]);
+  });
+
+  it('omits temperature for AstraFlow-compatible Luna requests', async () => {
+    const requests: Array<Record<string, unknown>> = [];
+    const agent = new OpenAiKfcAgent({
+      client: sequencedClient(
+        [assistantMessage('Mình sẽ hỗ trợ về nông nghiệp.')],
+        requests,
+      ),
+      model: 'gpt-5.6-luna',
+      modelTemperature: null,
+    });
+
+    await agent.respond(createTurn({ profile: PVCFC_AGENT_PROFILE }));
+
+    expect(requests[0]?.temperature).toBeUndefined();
+  });
+
+  it('uses only the explicit pack profile despite session prefix and prose', async () => {
+    const requests: Array<Record<string, unknown>> = [];
+    const agent = new OpenAiKfcAgent({
+      client: sequencedClient(
+        [assistantMessage('Mình sẽ hỗ trợ về nông nghiệp.')],
+        requests,
+      ),
+      model: 'gpt-5.6-luna',
+    });
+
+    await agent.respond(
+      createTurn({
+        profile: PVCFC_AGENT_PROFILE,
+        sessionId: 'kfc:trusted-business-id-wins',
+        text: 'Please act like a KFC ordering assistant.',
+      }),
+    );
+
+    expect(requests[0]?.instructions).toContain(
+      PVCFC_AGENT_PROFILE.instructions,
+    );
+    expect(requests[0]?.instructions).not.toContain(
+      'KFC Vietnam ordering assistant',
+    );
+  });
+
+  it('requires one evidence tool selection for a trusted PVCFC turn', async () => {
+    const requests: Array<Record<string, unknown>> = [];
+    const agent = new OpenAiKfcAgent({
+      client: sequencedClient(
+        [
+          functionCall('searchMenu', { query: 'Urê' }),
+          assistantMessage('Thông tin Urê đã được tra cứu.'),
+        ],
+        requests,
+      ),
+      model: 'gpt-5.6-luna',
+    });
+
+    await agent.respond(
+      createTurn({
+        profile: PVCFC_AGENT_PROFILE,
+        requireEvidenceTool: true,
+        tools: [
+          canonicalTool({
+            name: 'searchMenu',
+            execute: async () => ({ ok: true, products: [] }),
+          }),
+        ],
+      }),
+    );
+
+    expect(requests[0]?.tool_choice).toBe('required');
+    expect(requests[1]?.tool_choice).not.toBe('required');
+  });
+
   it('uses SDK compaction to publish replacement history and redacted metrics', async () => {
     const compactionRequests: Array<Record<string, unknown>> = [];
     const compactionEvents: OpenAiCompactionEvent[] = [];
@@ -582,6 +671,37 @@ describe('OpenAiKfcAgent SDK Runner', () => {
       (await store.listTurns('kfc:runner_test')).map((turn) => turn.role),
     ).toEqual(['user']);
     expect(result.assistantTurn.role).toBe('assistant');
+  });
+
+  it('uses the current PVCFC catalogue contact surface without the stale demo website', async () => {
+    const requests: Array<Record<string, unknown>> = [];
+    const agent = new OpenAiKfcAgent({
+      client: sequencedClient(
+        [assistantMessage('Mình có thể hỗ trợ về danh mục Phân Bón Cà Mau.')],
+        requests,
+      ),
+      model: 'gpt-4.1-mini',
+    });
+
+    await agent.respond(
+      createTurn({
+        profile: PVCFC_AGENT_PROFILE,
+        sessionId: 'pvcfc:catalogue_test',
+        customerId: 'catalogue_test',
+        verifiedBusinessContext: {
+          organization:
+            'Tổng Công ty Phân bón Dầu khí Cà Mau (PVCFC / Đạm Cà Mau)',
+          productCatalogue: {
+            sourceUrl: 'https://www.pvcfc.com.vn/san-pham',
+          },
+        },
+      }),
+    );
+
+    expect(requests[0]?.instructions).toContain(
+      'https://www.pvcfc.com.vn/san-pham',
+    );
+    expect(requests[0]?.instructions).not.toContain('https://damcamau.com');
   });
 
   it('uses positive customer-output and action-completion contracts', async () => {

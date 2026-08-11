@@ -13,6 +13,7 @@ import type {
 import type { PreparedTurnResources } from '../business/agentPack.js';
 import { createAgentTurnExternalCallScope } from './agentExternalCallScope.js';
 import type { ExecutableAgentPack } from './agentTurnRunner.js';
+import { KFC_AGENT_PROFILE } from './kfcAgentInstructions.js';
 import {
   createKfcOpenAiAgentsTools,
   createKfcOpenAiTools,
@@ -48,6 +49,7 @@ export interface DirectAgentTurnInput {
   sessionId: string;
   customerId: string;
   channel: Channel;
+  transport?: 'web_chat' | Channel;
   text: string;
   externalMessageId: string | null;
   metadata: ConversationTurnMetadata | null;
@@ -125,10 +127,7 @@ export class KfcAgentPack implements ExecutableAgentPack<
   DirectAgentTurnResult
 > {
   readonly id = 'kfc';
-  readonly profile = {
-    name: 'KFC Vietnam ordering assistant',
-    instructions: 'Serve the trusted KFC ordering and commerce lifecycle.',
-  };
+  readonly profile = KFC_AGENT_PROFILE;
   readonly lifecycle = {
     onRunSucceeded: async (input: {
       prepared: PreparedTurnResources;
@@ -273,13 +272,16 @@ export class KfcAgentPack implements ExecutableAgentPack<
 
   async execute(input: {
     turn: DirectAgentTurnInput;
+    profile: typeof KFC_AGENT_PROFILE;
     prepared: PreparedTurnResources;
   }): Promise<DirectAgentTurnResult> {
     const context = kfcContext(input.prepared);
     return this.options.openAiAgent.respond({
+      profile: input.profile,
       sessionId: input.turn.sessionId,
       customerId: input.turn.customerId,
       channel: input.turn.channel,
+      transport: input.turn.transport,
       text: input.turn.text,
       externalMessageId: input.turn.externalMessageId,
       metadata: input.turn.metadata,
