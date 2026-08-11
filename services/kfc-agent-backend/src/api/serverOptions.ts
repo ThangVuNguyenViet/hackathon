@@ -1,4 +1,5 @@
 import type { BuildServerOptions } from './server.js';
+import { ChatOpenAI } from '@langchain/openai';
 import { z } from 'zod';
 import type { AppEnv } from '../config/env.js';
 import { createConfiguredPvcfcPublicDataProvider } from '../businesses/pvcfc/public-data/configuredPvcfcPublicDataProvider.js';
@@ -95,9 +96,22 @@ export function buildServerOptionsFromEnv(
   const openAiBaseUrl = optionalValue(env.OPENAI_BASE_URL);
   const pvcfcAstraFlowApiKey = optionalValue(env.PVCFC_ASTRAFLOW_API_KEY);
   const pvcfcPublicDataProvider = createConfiguredPvcfcPublicDataProvider({
-    enabled: pvcfcAstraFlowApiKey !== undefined,
+    enabled:
+      pvcfcAstraFlowApiKey !== undefined ||
+      env.PVCFC_PUBLIC_DATA_MODE !== undefined,
     mode: env.PVCFC_PUBLIC_DATA_MODE,
   });
+  const pvcfcAgentModel = pvcfcAstraFlowApiKey
+    ? new ChatOpenAI({
+        apiKey: pvcfcAstraFlowApiKey,
+        model: env.PVCFC_ASTRAFLOW_MODEL,
+        maxRetries: 0,
+        supportsStrictToolCalling: true,
+        configuration: {
+          baseURL: env.PVCFC_ASTRAFLOW_BASE_URL,
+        },
+      })
+    : undefined;
   const googleApiKey = optionalValue(env.GOOGLE_API_KEY);
   const agentIdentity = resolveRuntimeAgentIdentity({
     provider: env.KFC_AGENT_PROVIDER,
@@ -191,6 +205,7 @@ export function buildServerOptionsFromEnv(
     zaloApiBaseUrl: optionalValue(env.ZALO_API_BASE_URL),
     confirmationApprovalKeyRing: confirmationApprovalKeyRing(env),
     pvcfcPublicDataProvider,
+    pvcfcAgentModel,
     monitorJudge,
     agentTracer: langsmithApiKey
       ? new LangSmithAgentTracer({

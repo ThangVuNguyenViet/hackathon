@@ -4,6 +4,7 @@ import { fileURLToPath } from 'node:url';
 import { z } from 'zod';
 import type { ZaloOAuthRuntime } from '../channels/zaloOAuth.js';
 import type { PvcfcPublicDataProvider } from '../businesses/pvcfc/public-data/pvcfcPublicDataProvider.js';
+import type { BaseChatModel } from '@langchain/core/language_models/chat_models';
 import type { ConfirmationApprovalKeyRing } from './confirmationApprovalCapability.js';
 import type { VerifiedMessengerGuestCheckoutIngress } from '../security/guestCheckoutAuthority.js';
 import type {
@@ -503,6 +504,7 @@ export interface RouteOptions {
   zaloApiBaseUrl?: string;
   zaloFetchImpl?: typeof fetch;
   pvcfcPublicDataProvider?: PvcfcPublicDataProvider;
+  pvcfcAgentModel?: BaseChatModel;
   monitorJudge?: MonitorSessionIntelligenceJudge;
   agentTracer?: AgentTracer;
   confirmationApprovalKeyRing?: ConfirmationApprovalKeyRing;

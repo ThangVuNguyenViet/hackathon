@@ -1,6 +1,9 @@
-import type { OpenAiAgentProfile } from '../../agent/openAiResponsesExecutor.js';
+export interface PvcfcAgentProfile {
+  readonly name: string;
+  readonly instructions: string;
+}
 
-export const PVCFC_AGENT_PROFILE: OpenAiAgentProfile = Object.freeze({
+export const PVCFC_AGENT_PROFILE: PvcfcAgentProfile = Object.freeze({
   name: 'PVCFC Agricultural Information Assistant',
   instructions: [
     '# Role',
