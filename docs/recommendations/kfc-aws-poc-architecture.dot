@@ -1,0 +1,135 @@
+digraph KFCRecommendationArchitecture {
+  graph [
+    rankdir=TB,
+    newrank=true,
+    compound=true,
+    splines=ortho,
+    bgcolor="transparent",
+    pad=0.18,
+    nodesep=0.34,
+    ranksep=0.55,
+    fontname="Arial",
+    fontsize=18
+  ];
+
+  node [shape=plain, fontname="Arial", fontsize=17];
+  edge [fontname="Arial", fontsize=11, color="#232F3E", fontcolor="#232F3E", penwidth=1.8, arrowsize=0.75];
+
+  channels [label=<
+    <TABLE BORDER="1" COLOR="#232F3E" BGCOLOR="#232F3E" CELLBORDER="0" CELLPADDING="4" STYLE="ROUNDED">
+      <TR><TD><IMG SRC="docs/recommendations/assets/aws-icons/users.png" SCALE="TRUE"/></TD></TR>
+      <TR><TD><FONT COLOR="white"><B>KFC channels</B></FONT></TD></TR>
+      <TR><TD><FONT COLOR="white">Kiosk · Web</FONT></TD></TR>
+      <TR><TD><FONT COLOR="white">App · Zalo</FONT></TD></TR>
+    </TABLE>
+  >];
+
+  subgraph cluster_aws {
+    label=<<B>AWS Cloud</B>>;
+    labelloc="t";
+    labeljust="l";
+    color="#7D8998";
+    penwidth=1.4;
+    style="rounded";
+    margin=18;
+
+    api [label=<
+      <TABLE BORDER="1" COLOR="#8C4FFF" BGCOLOR="white" CELLBORDER="0" CELLPADDING="6" STYLE="ROUNDED">
+        <TR><TD><IMG SRC="docs/recommendations/assets/aws-icons/api-gateway.png" SCALE="TRUE"/></TD></TR>
+        <TR><TD><B>Amazon API Gateway</B></TD></TR>
+        <TR><TD><FONT POINT-SIZE="13">Managed API</FONT></TD></TR>
+      </TABLE>
+    >];
+    lambda [label=<
+      <TABLE BORDER="1" COLOR="#ED7100" BGCOLOR="white" CELLBORDER="0" CELLPADDING="6" STYLE="ROUNDED">
+        <TR><TD><IMG SRC="docs/recommendations/assets/aws-icons/lambda.png" SCALE="TRUE"/></TD></TR>
+        <TR><TD><B>AWS Lambda</B></TD></TR>
+        <TR><TD><FONT POINT-SIZE="13">Rules + orchestration</FONT></TD></TR>
+      </TABLE>
+    >];
+    personalize [label=<
+      <TABLE BORDER="1" COLOR="#01A88D" BGCOLOR="white" CELLBORDER="0" CELLPADDING="6" STYLE="ROUNDED">
+        <TR><TD><IMG SRC="docs/recommendations/assets/aws-icons/personalize.png" SCALE="TRUE"/></TD></TR>
+        <TR><TD><B>Amazon Personalize</B></TD></TR>
+        <TR><TD><FONT POINT-SIZE="13">Customer relevance</FONT></TD></TR>
+      </TABLE>
+    >];
+    sagemaker [label=<
+      <TABLE BORDER="1" COLOR="#01A88D" BGCOLOR="white" CELLBORDER="0" CELLPADDING="6" STYLE="ROUNDED">
+        <TR><TD><IMG SRC="docs/recommendations/assets/aws-icons/sagemaker.png" SCALE="TRUE"/></TD></TR>
+        <TR><TD><B>Amazon SageMaker</B></TD></TR>
+        <TR><TD><FONT POINT-SIZE="13">LightGBM ranking</FONT></TD></TR>
+      </TABLE>
+    >];
+    secrets [label=<
+      <TABLE BORDER="1" COLOR="#DD344C" BGCOLOR="white" CELLBORDER="0" CELLPADDING="5" STYLE="ROUNDED">
+        <TR><TD><IMG SRC="docs/recommendations/assets/aws-icons/secrets-manager.png" SCALE="TRUE"/></TD></TR>
+        <TR><TD><B>Secrets Manager</B></TD></TR>
+        <TR><TD><FONT POINT-SIZE="13">Supplies KFC API secrets</FONT></TD></TR>
+      </TABLE>
+    >];
+    dynamo [label=<
+      <TABLE BORDER="1" COLOR="#C925D1" BGCOLOR="white" CELLBORDER="0" CELLPADDING="5" STYLE="ROUNDED">
+        <TR><TD><IMG SRC="docs/recommendations/assets/aws-icons/dynamodb.png" SCALE="TRUE"/></TD></TR>
+        <TR><TD><B>Amazon DynamoDB</B></TD></TR>
+        <TR><TD><FONT POINT-SIZE="13">Menu serving view</FONT></TD></TR>
+      </TABLE>
+    >];
+    s3 [label=<
+      <TABLE BORDER="1" COLOR="#7AA116" BGCOLOR="white" CELLBORDER="0" CELLPADDING="5" STYLE="ROUNDED">
+        <TR><TD><IMG SRC="docs/recommendations/assets/aws-icons/s3.png" SCALE="TRUE"/></TD></TR>
+        <TR><TD><B>Amazon S3</B></TD></TR>
+        <TR><TD><FONT POINT-SIZE="13">Raw + curated data</FONT></TD></TR>
+      </TABLE>
+    >];
+    athena [label=<
+      <TABLE BORDER="1" COLOR="#8C4FFF" BGCOLOR="white" CELLBORDER="0" CELLPADDING="5" STYLE="ROUNDED">
+        <TR><TD><IMG SRC="docs/recommendations/assets/aws-icons/athena.png" SCALE="TRUE"/></TD></TR>
+        <TR><TD><B>Amazon Athena</B></TD></TR>
+        <TR><TD><FONT POINT-SIZE="13">SQL transformation</FONT></TD></TR>
+      </TABLE>
+    >];
+    ecr [label=<
+      <TABLE BORDER="1" COLOR="#ED7100" BGCOLOR="white" CELLBORDER="0" CELLPADDING="5" STYLE="ROUNDED">
+        <TR><TD><IMG SRC="docs/recommendations/assets/aws-icons/ecr.png" SCALE="TRUE"/></TD></TR>
+        <TR><TD><B>Amazon ECR</B></TD></TR>
+        <TR><TD><FONT POINT-SIZE="13">Supplies inference image</FONT></TD></TR>
+      </TABLE>
+    >];
+    cloudwatch [label=<
+      <TABLE BORDER="1" COLOR="#E7157B" BGCOLOR="white" CELLBORDER="0" CELLPADDING="5" STYLE="ROUNDED">
+        <TR><TD><IMG SRC="docs/recommendations/assets/aws-icons/cloudwatch.png" SCALE="TRUE"/></TD></TR>
+        <TR><TD><B>Amazon CloudWatch</B></TD></TR>
+        <TR><TD><FONT POINT-SIZE="13">Monitors API · Lambda · Personalize · SageMaker</FONT></TD></TR>
+      </TABLE>
+    >];
+
+    { rank=same; api; lambda; personalize; }
+    { rank=same; cloudwatch; secrets; dynamo; sagemaker; }
+    { rank=same; s3; athena; ecr; }
+
+    api -> lambda [xlabel="invokes", color="#E4002B", fontcolor="#E4002B", penwidth=2.8];
+    lambda -> personalize [dir=both, xlabel="calls →  ·  ← scores"];
+    lambda -> sagemaker [dir=both, xlabel="calls →  ·  ← ranks"];
+    secrets -> lambda [color="#DD344C", constraint=false];
+    lambda -> dynamo [dir=both, xlabel="syncs →  ·  ← serves", color="#C925D1", fontcolor="#C925D1", constraint=false];
+
+    s3 -> athena [dir=both, xlabel="feeds →  ·  ← curates", color="#7AA116", fontcolor="#7AA116", constraint=false];
+    s3 -> personalize [xlabel="feeds", color="#7AA116", fontcolor="#7AA116", constraint=false];
+    s3 -> sagemaker [xlabel="feeds", color="#7AA116", fontcolor="#7AA116", constraint=false];
+    ecr -> sagemaker [color="#ED7100", constraint=false];
+    cloudwatch -> api [style=dashed, color="#E7157B", constraint=false];
+    cloudwatch -> lambda [style=dashed, color="#E7157B", constraint=false];
+    cloudwatch -> personalize [style=dashed, color="#E7157B", constraint=false];
+    cloudwatch -> sagemaker [style=dashed, color="#E7157B", constraint=false];
+
+    cloudwatch -> secrets -> dynamo -> sagemaker [style=invis, weight=20];
+    s3 -> athena -> ecr [style=invis, weight=20];
+    api -> cloudwatch -> s3 [style=invis, weight=40];
+    lambda -> secrets -> athena [style=invis, weight=40];
+    personalize -> sagemaker -> ecr [style=invis, weight=40];
+  }
+
+  { rank=same; channels; api; lambda; personalize; }
+  channels -> api [xlabel="requests", color="#E4002B", fontcolor="#E4002B", penwidth=2.8];
+}

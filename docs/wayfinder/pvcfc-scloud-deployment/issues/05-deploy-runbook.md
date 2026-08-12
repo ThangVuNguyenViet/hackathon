@@ -14,18 +14,24 @@ RUNBOOK UPDATED — PACKAGED RELEASE NOT YET DEPLOYED
 
 ## Resolution
 
-The previous demo was verified on SCloud ULightHost on 2026-08-07. The commands below are updated for the next packaged React/backend release; this document does not claim that commit is deployed until the smoke tests are rerun.
+The original demo was verified on SCloud ULightHost on 2026-08-07 and the
+existing release was cut over to AstraFlow Luna behind HTTPS on 2026-08-11.
+The commands below are updated for the next packaged React/backend release;
+this document does not claim that the packaged release is deployed until its
+smoke tests are rerun.
 
 - **Resource:** `ulhost-1tregne0qp7u`
 - **Region:** VN(Ho Chi Minh City), Zone A
 - **Plan:** 1 vCPU / 2 GB RAM / 40 GB system disk / 30 Mbps / 400 GB traffic
 - **Cost:** `$7.22/month` prepaid monthly plan
 - **Public IP:** `165.154.229.65`
-- **Endpoint:** `http://165.154.229.65/chat/pvcfc/message`
+- **Current HTTPS endpoint:** `https://pvcfc-chatbot.165-154-229-65.sslip.io/chat/pvcfc/message`
+- **Current web app:** `https://pvcfc-ai-chatbot.pages.dev`
 - **Image:** Ubuntu 22.04
 - **Required next-release runtime:** Node.js `v24.14.0`, packaged backend plus React client, pm2
 - **Firewall:** web-service recommendation bound: TCP 22, 80, 443; ICMP; TCP 3389
-- **Process:** `pvcfc-backend`, online, listening on `0.0.0.0:80`
+- **Process:** `pvcfc-backend`, online behind nginx on `127.0.0.1:18090`
+- **Current PVCFC model:** AstraFlow `gpt-5.6-luna`
 
 ---
 
@@ -156,7 +162,7 @@ sudo /opt/node/bin/pm2 startup systemd -u root --hp /root
 Run from the local machine:
 
 ```bash
-curl -i -X POST "http://165.154.229.65/chat/pvcfc/message" \
+curl -i -X POST "https://pvcfc-chatbot.165-154-229-65.sslip.io/chat/pvcfc/message" \
   -H "Content-Type: application/json" \
   -H "Origin: http://localhost:3000" \
   -d '{
@@ -174,7 +180,11 @@ Expected:
 - no KFC mentions
 - CORS headers include `access-control-allow-origin: *`
 
-The older deployment was verified on 2026-08-07 with HTTP 200 and PVCFC response. Record a new date and release SHA here only after redeploying this packaged build and rerunning the UI/API smoke checks.
+The existing pre-packaged deployment was verified again on 2026-08-11 after
+the AstraFlow Luna and HTTPS cutover, including a function-call probe, an HTTP
+200 grounded PVCFC response, persisted conversation/evidence state, and a
+Cloudflare Pages proxy smoke test. Record a new date and release SHA here only
+after redeploying this packaged build and rerunning the UI/API smoke checks.
 
 ## Migration path to UHost later
 
@@ -191,6 +201,8 @@ The runtime now persists conversations and evidence in PostgreSQL. Migrate or re
 
 ## Open follow-ups
 
-- Add HTTPS/TLS before using the endpoint from an HTTPS-only client.
+- Deploy the packaged React/backend release and record its release SHA and
+  fresh UI/API smoke evidence.
 - Decide whether to retain or release the currently unbound EIP `165.154.229.126`.
-- Choose a stable domain/subdomain before sharing the endpoint broadly.
+- Decide whether the current `sslip.io` hostname should be replaced by an
+  owned stable domain.

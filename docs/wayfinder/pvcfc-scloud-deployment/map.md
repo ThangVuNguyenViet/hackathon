@@ -8,10 +8,13 @@
 
 - Runtime: packaged Node.js (`dist/src/index.js` plus `dist/client`) supervised by pm2; the service-only Dockerfile is an optional reproducibility path
 - Platform: SCloud ULightHost (`ulhost-1tregne0qp7u`), VN(Ho Chi Minh City), 1 vCPU / 2 GB RAM, 40 GB disk, 30 Mbps peak, 400 GB traffic, monthly $7.22
-- Public endpoint: `http://165.154.229.65/chat/pvcfc/message` (ULightHost public IP; port 80)
+- Current backend origin: `https://pvcfc-chatbot.165-154-229-65.sslip.io`
+- Current web app: `https://pvcfc-ai-chatbot.pages.dev`
+- Existing live process: `/home/ubuntu/pvcfc-backend-current/dist/src/index.js`, supervised by root pm2 behind nginx on `127.0.0.1:18090`
 - Existing EIP `165.154.229.126` remains unbound and is not needed by ULightHost; do not release it until the migration decision is explicit
 - AstraFlow uses the configured Modelverse-compatible endpoint and PVCFC-owned credential; the backend never reuses a KFC provider key
-- Domain/URL strategy: not yet decided (raw IP vs subdomain)
+- The current acceptance endpoint uses HTTPS on `sslip.io`; an owned stable
+  domain remains a later decision
 - Consult `services/kfc-agent-backend/`, `apps/pvcfc_chat_web/`, and the packaged-release runbook
 - Consult `CONTEXT.md` for domain language
 
@@ -24,13 +27,16 @@
 ## Current status
 
 - ✅ ULightHost provisioned and running: `ulhost-1tregne0qp7u`
-- ✅ Backend smoke test passed: HTTP 200 from `http://165.154.229.65/chat/pvcfc/message`
+- ✅ AstraFlow `gpt-5.6-luna` basic and function-call probes passed on 2026-08-11
+- ✅ Backend smoke test passed over HTTPS from `https://pvcfc-chatbot.165-154-229-65.sslip.io/chat/pvcfc/message`
 - ✅ Response contained PVCFC agricultural guidance with no KFC mentions
-- ✅ pm2 process `pvcfc-backend` online and listening on `0.0.0.0:80`
+- ✅ pm2 process `pvcfc-backend` online behind nginx on `127.0.0.1:18090`
 - ✅ Firewall bound: TCP 80/443 plus SSH 22 and RDP 3389
+- ✅ PVCFC uses its dedicated model credential and trusted business-pack route, with no KFC fallback
+- ✅ 497-record public-data provider, persisted conversation state, and redacted evidence trace verified
+- ✅ Cloudflare Pages proxy smoke passed with no KFC content
 - The packaged AstraFlow release still requires a new credentialed deployment smoke test
-- Domain/subdomain vs raw IP decision (cost: none now, needed before sharing a stable URL with anyone)
-- HTTPS / TLS termination — needed before AstraFlow makes HTTPS-only outbound calls to the backend
+- Owned stable domain decision remains open; the current HTTPS `sslip.io` endpoint is the acceptance origin
 - ✅ Process supervision: pm2 (decided in issue 04)
 - ✅ Secrets: `/etc/pvcfc-backend.env` (decided in issue 03)
 - PostgreSQL migration or repointing for durable PVCFC conversation and evidence state
