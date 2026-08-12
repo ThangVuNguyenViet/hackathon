@@ -105,4 +105,40 @@ describe('PVCFC LangChain evidence tools', () => {
       },
     });
   });
+
+  it('can expand one bounded collection page without requiring one model tool call per record', async () => {
+    const dataProvider = provider();
+    const tools = createPvcfcTools(dataProvider);
+
+    const listed = await tools[1]!.invoke({
+      collection: 'urban_agriculture',
+      limit: 15,
+      includeDetails: true,
+    });
+
+    expect(dataProvider.listRecords).toHaveBeenCalledWith({
+      collection: 'urban_agriculture',
+      limit: 15,
+    });
+    expect(dataProvider.getRecord).toHaveBeenCalledWith({
+      collection: 'urban_agriculture',
+      id: 'product-1',
+    });
+    expect(listed).toMatchObject({
+      ok: true,
+      value: {
+        collection: 'urban_agriculture',
+        details: [
+          {
+            ok: true,
+            value: {
+              record: {
+                providerExtension: { nested: ['kept', { exactly: true }] },
+              },
+            },
+          },
+        ],
+      },
+    });
+  });
 });

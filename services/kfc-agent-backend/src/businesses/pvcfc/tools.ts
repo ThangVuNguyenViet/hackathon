@@ -68,23 +68,35 @@ export function createPvcfcTools(
   );
 
   const listRecords = tool(
-    async ({ collection, limit, cursor }) =>
-      traced('listPvcfcRecords', trace, () =>
-        provider.listRecords({
+    async ({ collection, limit, cursor, includeDetails }) =>
+      traced('listPvcfcRecords', trace, async () => {
+        const listed = await provider.listRecords({
           collection,
           ...(limit === undefined ? {} : { limit }),
           ...(cursor === undefined ? {} : { cursor }),
-        }),
-      ),
+        });
+        if (!includeDetails || !listed.ok) return listed;
+
+        const details = await Promise.all(
+          listed.value.records.map(({ collection: recordCollection, id }) =>
+            provider.getRecord({ collection: recordCollection, id }),
+          ),
+        );
+        return {
+          ...listed,
+          value: { ...listed.value, details },
+        };
+      }),
     {
       name: 'listPvcfcRecords',
       description:
-        'List compact record locators from one official PVCFC collection, including discovery-only collections.',
+        'List one bounded page from an official PVCFC collection, including discovery-only collections. Set includeDetails=true when the user asks to summarize or compare the page so all complete records are returned in this single tool call.',
       schema: z
         .object({
           collection: z.string().min(1),
           limit: limitSchema,
           cursor: cursorSchema,
+          includeDetails: z.boolean().optional(),
         })
         .strict(),
     },
