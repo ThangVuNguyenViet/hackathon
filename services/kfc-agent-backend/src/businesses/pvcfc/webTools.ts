@@ -34,6 +34,14 @@ function requireRemainingTime(budget: PvcfcWebTurnBudget): void {
   }
 }
 
+function isOptionalWebFailure(error: unknown): boolean {
+  return (
+    error instanceof TinyFishClientError ||
+    (error instanceof Error &&
+      error.message === 'pvcfc_web_time_budget_exhausted')
+  );
+}
+
 function trace(
   receipts: PvcfcToolTrace[],
   input: Omit<PvcfcToolTrace, 'durationMs'> & { startedAt: number },
@@ -102,7 +110,7 @@ export function createPvcfcWebTools(input: {
           evidenceMode: 'live_web',
           startedAt,
         });
-        if (error instanceof TinyFishClientError) {
+        if (isOptionalWebFailure(error)) {
           return { available: false as const };
         }
         throw error;
@@ -169,7 +177,7 @@ export function createPvcfcWebTools(input: {
           evidenceMode: 'live_web',
           startedAt,
         });
-        if (error instanceof TinyFishClientError) {
+        if (isOptionalWebFailure(error)) {
           return { available: false as const };
         }
         throw error;

@@ -548,7 +548,7 @@ describe('PVCFC LangChain agent pack', () => {
     const sourceUrl = 'https://www.pvcfc.com.vn/npk-ca-mau-15-5-20';
     const live = webClient();
     live.fetch.mockRejectedValueOnce(
-      new TinyFishClientError('tinyfish_fetch_failed'),
+      new Error('unexpected_live_fetch_failure'),
     );
     const model = new ScriptedPvcfcChatModel({
       outputs: [
@@ -676,7 +676,7 @@ describe('PVCFC LangChain agent pack', () => {
     expect(model.calls[2]?.toolNames).not.toContain('fetchPvcfcPage');
   });
 
-  it('charges provider preflight time against the shared live-web deadline', async () => {
+  it('falls back to canonical evidence when the live-web deadline expires before search', async () => {
     let now = 0;
     const live = webClient();
     const provider = loadBundledPvcfcPublicDataProvider();
@@ -713,17 +713,85 @@ describe('PVCFC LangChain agent pack', () => {
       },
     });
 
-    await expect(
-      pack.runTurn({
-        sessionId: 'pvcfc:preflight-deadline',
-        customerId: 'preflight-deadline',
-        transport: 'web_chat',
-        text: 'Tin mới nhất của PVCFC?',
-        externalMessageId: 'preflight-deadline-1',
-        metadata: null,
-      }),
-    ).rejects.toThrow('pvcfc_web_time_budget_exhausted');
+    const result = await pack.runTurn({
+      sessionId: 'pvcfc:preflight-deadline',
+      customerId: 'preflight-deadline',
+      transport: 'web_chat',
+      text: 'Tin mới nhất của PVCFC?',
+      externalMessageId: 'preflight-deadline-1',
+      metadata: null,
+    });
+
+    expect(result.responseText).toBe(
+      'Thông tin hiện tại: https://www.pvcfc.com.vn/tin-tuc/cap-nhat-moi',
+    );
+    expect(result.toolCalls).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          name: 'searchPvcfcWeb',
+          status: 'error',
+          evidenceMode: 'live_web',
+        }),
+      ]),
+    );
     expect(live.search).not.toHaveBeenCalled();
+  });
+
+  it('falls back to canonical evidence when the live-web deadline expires before exact fetch', async () => {
+    let now = 0;
+    const live = webClient();
+    const sourceUrl = 'https://www.pvcfc.com.vn/npk-ca-mau-15-5-20';
+    const provider = loadBundledPvcfcPublicDataProvider();
+    const listCollections = provider.listCollections.bind(provider);
+    vi.spyOn(provider, 'listCollections').mockImplementation(async (input) => {
+      const result = await listCollections(input);
+      now = 18_001;
+      return result;
+    });
+    const model = new ScriptedPvcfcChatModel({
+      outputs: [
+        toolCall(
+          'searchPvcfcRecords',
+          { query: 'NPK Cà Mau 15-5-20', collections: ['products'], limit: 2 },
+          'deadline-canonical-1',
+        ),
+        toolCall('fetchPvcfcPage', { url: sourceUrl }, 'deadline-fetch-1'),
+        new AIMessage('Dùng dữ liệu PVCFC hiện có để tư vấn sản phẩm phù hợp.'),
+      ],
+    });
+    const pack = new PvcfcAgentPack({
+      store: new MemoryStore(),
+      model,
+      provider,
+      webEvidence: {
+        client: live.client,
+        now: () => now,
+      },
+    });
+
+    const result = await pack.runTurn({
+      sessionId: 'pvcfc:fetch-deadline',
+      customerId: 'fetch-deadline',
+      transport: 'zalo',
+      text: 'Tôi nên mua phân gì?',
+      externalMessageId: 'fetch-deadline-1',
+      metadata: null,
+    });
+
+    expect(result.responseText).toBe(
+      'Dùng dữ liệu PVCFC hiện có để tư vấn sản phẩm phù hợp.',
+    );
+    expect(live.fetch).not.toHaveBeenCalled();
+    expect(result.toolCalls).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          name: 'fetchPvcfcPage',
+          status: 'error',
+          evidenceMode: 'live_web',
+        }),
+      ]),
+    );
+    expect(model.calls[2]?.toolNames).not.toContain('fetchPvcfcPage');
   });
 
   it('unlocks Search then Fetch after a canonical lookup and preserves cited live sources in audit', async () => {

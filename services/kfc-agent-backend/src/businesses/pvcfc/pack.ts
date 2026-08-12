@@ -288,7 +288,25 @@ export class PvcfcAgentPack implements BusinessAgentPack<
             }
             return result;
           } catch (error) {
-            if (webToolNames.has(toolName)) liveWebUnavailable = true;
+            if (webToolNames.has(toolName)) {
+              // Live web is enrichment only. Any failure from the web handler,
+              // including an adapter error not classified by webTools yet, must
+              // leave the canonical PVCFC evidence path available.
+              liveWebUnavailable = true;
+              const toolCallId =
+                typeof request.toolCall.id === 'string'
+                  ? request.toolCall.id
+                  : 'pvcfc-live-unavailable';
+              return new ToolMessage({
+                content: JSON.stringify({
+                  ok: false,
+                  errorCode: 'pvcfc_web_live_unavailable',
+                }),
+                tool_call_id: toolCallId,
+                name: toolName,
+                status: 'error',
+              });
+            }
             throw error;
           }
         },
