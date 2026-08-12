@@ -122,7 +122,7 @@ export function createPvcfcWebTools(input: {
     {
       name: 'searchPvcfcWeb',
       description:
-        'Search current public information only on approved official PVCFC websites. Use after canonical PVCFC data was checked and was missing, stale, or insufficient.',
+        'Search approved official PVCFC websites for current context that enriches the canonical PVCFC public-data answer. Call this after the canonical tools when freshness or a missing detail matters.',
       schema: z.object({ query: z.string().trim().min(1).max(500) }).strict(),
     },
   );
