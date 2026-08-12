@@ -9,13 +9,12 @@ export const PVCFC_WEB_ALLOWED_HOSTNAMES = Object.freeze([
 ] as const);
 
 // Official PVCFC pages can take several seconds to render through TinyFish.
-// Keep the provider call bounded, but leave enough time for a normal fetch
-// while retaining the outer agent-turn deadline and canonical fallback.
-export const PVCFC_WEB_OPERATION_TIMEOUT_MS = 12_000;
-export const PVCFC_WEB_FETCH_TIMEOUT_MS = 10_000;
-export const PVCFC_WEB_TURN_BUDGET_MS = 24_000;
-export const PVCFC_WEB_MAX_SEARCH_CALLS = 1;
-export const PVCFC_WEB_MAX_FETCH_CALLS = 1;
+// Use the adapter's maximum provider timeout while leaving a small margin for
+// the outer 30-second agent-turn deadline. The LangChain run/tool limits still
+// bound the overall agent loop; these values only govern live-web time.
+export const PVCFC_WEB_OPERATION_TIMEOUT_MS = 15_000;
+export const PVCFC_WEB_FETCH_TIMEOUT_MS = 14_000;
+export const PVCFC_WEB_TURN_BUDGET_MS = 28_000;
 
 /** Applies the PVCFC-owned first-party policy to provider-supplied source data. */
 export function admittedPvcfcWebInventoryUrls(

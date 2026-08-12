@@ -9,8 +9,6 @@ import type { PvcfcToolTrace } from './tools.js';
 import {
   PVCFC_WEB_ALLOWED_HOSTNAMES,
   PVCFC_WEB_FETCH_TIMEOUT_MS,
-  PVCFC_WEB_MAX_FETCH_CALLS,
-  PVCFC_WEB_MAX_SEARCH_CALLS,
   PVCFC_WEB_OPERATION_TIMEOUT_MS,
   PVCFC_WEB_TURN_BUDGET_MS,
 } from './webPolicy.js';
@@ -70,15 +68,6 @@ export function createPvcfcWebTools(input: {
   const searchPvcfcWeb = tool(
     async ({ query }) => {
       const startedAt = Date.now();
-      if (input.budget.searchCalls >= PVCFC_WEB_MAX_SEARCH_CALLS) {
-        trace(input.receipts, {
-          name: 'searchPvcfcWeb',
-          status: 'error',
-          evidenceMode: 'live_web',
-          startedAt,
-        });
-        throw new Error('pvcfc_web_search_budget_exhausted');
-      }
       try {
         requireRemainingTime(input.budget);
         input.budget.searchCalls += 1;
@@ -122,7 +111,7 @@ export function createPvcfcWebTools(input: {
     {
       name: 'searchPvcfcWeb',
       description:
-        'Search current public information only on approved official PVCFC websites. Use after canonical PVCFC data was checked and was missing, stale, or insufficient.',
+        'Search approved official PVCFC websites for current context that enriches the canonical PVCFC public-data answer. Call this after the canonical tools when freshness or a missing detail matters.',
       schema: z.object({ query: z.string().trim().min(1).max(500) }).strict(),
     },
   );
@@ -130,15 +119,6 @@ export function createPvcfcWebTools(input: {
   const fetchPvcfcPage = tool(
     async ({ url }) => {
       const startedAt = Date.now();
-      if (input.budget.fetchCalls >= PVCFC_WEB_MAX_FETCH_CALLS) {
-        trace(input.receipts, {
-          name: 'fetchPvcfcPage',
-          status: 'error',
-          evidenceMode: 'live_web',
-          startedAt,
-        });
-        throw new Error('pvcfc_web_fetch_budget_exhausted');
-      }
       try {
         requireRemainingTime(input.budget);
         input.budget.fetchCalls += 1;

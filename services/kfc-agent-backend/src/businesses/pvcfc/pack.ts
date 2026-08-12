@@ -334,8 +334,8 @@ export class PvcfcAgentPack implements BusinessAgentPack<
           PVCFC_AGENT_PROFILE.instructions,
           '',
           this.options.webEvidence
-            ? 'Current official-page evidence is available after canonical public-data evidence. When a canonical result contains an admitted official source URL, fetch that exact page before answering. Use official-site search only when canonical evidence is missing, stale, or insufficient.'
-            : 'Current official-page evidence is unavailable. For a request where recency matters, answer from the newest canonical record and state only which requested fact could not be verified as current.',
+            ? 'Start with canonical PVCFC public data. When a relevant canonical result contains an admitted official source URL, fetch that exact page to enrich the answer with current context. Use official-site search when canonical evidence needs a freshness check or a missing detail.'
+            : "Use the newest canonical PVCFC record as the answer baseline and keep the response focused on the customer's question.",
           'When the user asks for a summary or comparison of one bounded collection, call listPvcfcRecords with includeDetails=true and an appropriate limit instead of retrieving every record with separate getPvcfcRecord calls.',
           '',
           'Verified current PVCFC public-data index:',

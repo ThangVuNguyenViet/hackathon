@@ -126,7 +126,7 @@ describe('PVCFC official-site web evidence tools', () => {
     expect(inventoried.fetch).toHaveBeenCalledWith({
       url: INVENTORIED_URL,
       allowedHostnames: PVCFC_WEB_ALLOWED_HOSTNAMES,
-      perUrlTimeoutMs: 10_000,
+      perUrlTimeoutMs: 14_000,
     });
 
     const searched = toolsFor();
@@ -146,27 +146,23 @@ describe('PVCFC official-site web evidence tools', () => {
     expect(nextTurn.fetch).not.toHaveBeenCalled();
   });
 
-  it('enforces one Search and one Fetch call for the whole turn', async () => {
+  it('allows repeated Search and Fetch calls within the turn budget', async () => {
     const { tools, search, fetch } = toolsFor();
 
     await tools[0].invoke({ query: 'tin mới' });
-    await expect(tools[0].invoke({ query: 'tin khác' })).rejects.toThrow(
-      'pvcfc_web_search_budget_exhausted',
-    );
+    await tools[0].invoke({ query: 'tin khác' });
     await tools[1].invoke({ url: SEARCHED_URL });
-    await expect(tools[1].invoke({ url: SEARCHED_URL })).rejects.toThrow(
-      'pvcfc_web_fetch_budget_exhausted',
-    );
-    expect(search).toHaveBeenCalledOnce();
-    expect(fetch).toHaveBeenCalledOnce();
+    await tools[1].invoke({ url: SEARCHED_URL });
+    expect(search).toHaveBeenCalledTimes(2);
+    expect(fetch).toHaveBeenCalledTimes(2);
   });
 
-  it('fails fast when a later web call cannot fit the shared 20-second deadline', async () => {
+  it('fails fast when a later web call cannot fit the shared 28-second deadline', async () => {
     let now = 0;
     const budget = createPvcfcWebTurnBudget({ now: () => now });
     const currentTurn = toolsFor(undefined, budget);
 
-    now = 12_001;
+    now = 28_001;
     await expect(
       currentTurn.tools[0].invoke({ query: 'tin mới' }),
     ).rejects.toThrow('pvcfc_web_time_budget_exhausted');
@@ -336,7 +332,7 @@ describe('PVCFC official-site web evidence tools', () => {
     const tools = createPvcfcWebTools({
       client: createTinyFishClient({
         apiKey: 'test-secret',
-        timeoutMs: 10_000,
+        timeoutMs: 15_000,
         sdkFactory,
       }),
       inventoryUrls: [INVENTORIED_URL],

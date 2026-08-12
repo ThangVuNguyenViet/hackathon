@@ -190,7 +190,7 @@ describe('PVCFC server composition', () => {
     expect(JSON.stringify(options.kfcWebEvidenceClient)).not.toContain(secret);
   });
 
-  it('constructs TinyFish with the measured twelve-second zero-retry adapter envelope', () => {
+  it('constructs TinyFish with the measured fifteen-second zero-retry adapter envelope', () => {
     const client: TinyFishClient = {
       search: vi.fn(async () => []),
       fetch: vi.fn(async ({ url }) => ({
@@ -213,7 +213,7 @@ describe('PVCFC server composition', () => {
 
     expect(tinyFishClientFactory).toHaveBeenCalledWith({
       apiKey: 'bounded-key',
-      timeoutMs: 12_000,
+      timeoutMs: 15_000,
     });
     expect(options.pvcfcWebEvidenceClient).toBe(client);
     expect(options.kfcWebEvidenceClient).toBe(client);
