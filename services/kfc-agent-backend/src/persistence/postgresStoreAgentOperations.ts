@@ -308,9 +308,18 @@ export class PostgresStoreAgentOperations extends PostgresStoreConversationOpera
       `
         SELECT *
         FROM session_agent_state
-        WHERE current_run_id IS NULL
+        WHERE (
+          current_run_id IS NULL
           AND debounce_deadline_at IS NOT NULL
           AND debounce_deadline_at <= $1
+        ) OR EXISTS (
+          SELECT 1
+          FROM agent_runs AS run
+          WHERE run.id = session_agent_state.current_run_id
+            AND run.status = 'running'
+            AND run.execution_lease_expires_at IS NOT NULL
+            AND run.execution_lease_expires_at <= $1
+        )
         ORDER BY debounce_deadline_at ASC, session_id ASC
         LIMIT $2
       `,

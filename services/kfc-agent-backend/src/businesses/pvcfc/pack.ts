@@ -22,6 +22,10 @@ import { createPvcfcTools, type PvcfcToolTrace } from './tools.js';
 import type { TinyFishClient } from '../../web/tinyFishClient.js';
 import { createPvcfcWebTools, createPvcfcWebTurnBudget } from './webTools.js';
 import { admittedPvcfcWebInventoryUrls } from './webPolicy.js';
+import {
+  createAgentTurnExternalCallScope,
+  defaultAgentTurnDeadlineMs,
+} from '../../agent/agentExternalCallScope.js';
 
 const MAX_HISTORY_TURNS = 12;
 const MAX_HISTORY_TEXT_LENGTH = 4_000;
@@ -67,6 +71,7 @@ export interface PvcfcAgentPackOptions {
     readonly client: TinyFishClient;
     readonly now?: () => number;
   };
+  readonly turnDeadlineMs?: number;
 }
 
 function textContent(message: BaseMessage): string {
@@ -308,13 +313,24 @@ export class PvcfcAgentPack implements BusinessAgentPack<
           }),
         ],
       });
-      const execution = await agent.invoke(
-        // LangChain's merged middleware state currently over-constrains this
-        // plain built-in messages input; createAgent accepts it at runtime.
-        // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion
-        { messages } as never,
-        { recursionLimit: RECURSION_LIMIT },
+      const externalCalls = createAgentTurnExternalCallScope(
+        this.options.turnDeadlineMs ?? defaultAgentTurnDeadlineMs,
       );
+      let execution: Awaited<ReturnType<typeof agent.invoke>>;
+      try {
+        execution = await agent.invoke(
+          // LangChain's merged middleware state currently over-constrains this
+          // plain built-in messages input; createAgent accepts it at runtime.
+          // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion
+          { messages } as never,
+          {
+            recursionLimit: RECURSION_LIMIT,
+            signal: externalCalls.context.signal,
+          },
+        );
+      } finally {
+        externalCalls.dispose();
+      }
       const responseMessage = [...execution.messages]
         .reverse()
         .find(

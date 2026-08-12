@@ -1,6 +1,9 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { AgentRunCoordinator } from '../../src/agentRuns/coordinator.js';
-import { agentRunExecutionFence } from '../../src/persistence/agentRunExecutionLease.js';
+import {
+  AGENT_RUN_EXECUTION_LEASE_TTL_MS,
+  agentRunExecutionFence,
+} from '../../src/persistence/agentRunExecutionLease.js';
 import { MemoryStore } from '../../src/persistence/memoryStore.js';
 
 describe('AgentRunCoordinator', () => {
@@ -270,6 +273,37 @@ describe('AgentRunCoordinator', () => {
       deliveryStatus: 'sent',
       deliveryExternalMessageId: 'provider-delivery-race-message',
     });
+  });
+
+  it('recovers an expired running lease even while the session still owns the run', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-07-25T00:00:00.000Z'));
+    const store = new MemoryStore();
+    const coordinator = new AgentRunCoordinator({
+      store,
+      options: { debounceWindowMs: 0 },
+    });
+    const wakeup = await coordinator.recordPendingTurn(
+      messengerEvent('message-expired-running-lease'),
+      'messenger:expired-running-lease',
+    );
+    const scheduled = await coordinator.claimWakeupRun(wakeup);
+    const run = (await store.getAgentRun(scheduled.runId!))!;
+    const claimed = await store.claimAgentRunExecution(executionClaim(run));
+    expect(claimed.status).toBe('claimed');
+
+    vi.advanceTimersByTime(AGENT_RUN_EXECUTION_LEASE_TTL_MS + 1);
+    await expect(
+      coordinator.claimDueRuns(new Date().toISOString()),
+    ).resolves.toEqual([
+      expect.objectContaining({
+        sessionId: 'messenger:expired-running-lease',
+        generation: 1,
+        dispatch: true,
+        runId: run.id,
+        reason: 'execution_lease_expired',
+      }),
+    ]);
   });
 });
 

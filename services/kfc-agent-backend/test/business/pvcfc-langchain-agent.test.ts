@@ -1,4 +1,9 @@
+import type { CallbackManagerForLLMRun } from '@langchain/core/callbacks/manager';
 import { AIMessage, HumanMessage } from '@langchain/core/messages';
+import { BaseChatModel } from '@langchain/core/language_models/chat_models';
+import type { BaseMessage } from '@langchain/core/messages';
+import type { ChatResult } from '@langchain/core/outputs';
+import type { StructuredTool } from '@langchain/core/tools';
 import { describe, expect, it, vi } from 'vitest';
 import { PvcfcAgentPack } from '../../src/businesses/pvcfc/pack.js';
 import { loadBundledPvcfcPublicDataProvider } from '../../src/businesses/pvcfc/public-data/bundledPvcfcPublicDataProvider.js';
@@ -8,6 +13,40 @@ import {
   TinyFishClientError,
   type TinyFishClient,
 } from '../../src/web/tinyFishClient.js';
+
+class AbortAwareHangingPvcfcChatModel extends BaseChatModel {
+  private tools: StructuredTool[] = [];
+
+  override _llmType(): string {
+    return 'abort-aware-hanging-pvcfc-chat-model';
+  }
+
+  override bindTools(tools: StructuredTool[]): AbortAwareHangingPvcfcChatModel {
+    const bound = new AbortAwareHangingPvcfcChatModel({});
+    bound.tools = tools;
+    return bound;
+  }
+
+  override async _generate(
+    _messages: BaseMessage[],
+    options: this['ParsedCallOptions'],
+    _runManager?: CallbackManagerForLLMRun,
+  ): Promise<ChatResult> {
+    void this.tools;
+    await new Promise<never>((_resolve, reject) => {
+      const signal = options.signal;
+      if (!signal) return;
+      if (signal.aborted) {
+        reject(signal.reason);
+        return;
+      }
+      signal.addEventListener('abort', () => reject(signal.reason), {
+        once: true,
+      });
+    });
+    throw new Error('hanging_model_completed_unexpectedly');
+  }
+}
 
 function evidenceCall() {
   return new AIMessage({
@@ -50,6 +89,38 @@ function toolCall(name: string, args: Record<string, unknown>, id: string) {
 }
 
 describe('PVCFC LangChain agent pack', () => {
+  it('bounds a hanging model invocation before a social run can remain stuck', async () => {
+    const store = new MemoryStore();
+    const pack = new PvcfcAgentPack({
+      store,
+      model: new AbortAwareHangingPvcfcChatModel({}),
+      provider: loadBundledPvcfcPublicDataProvider(),
+      turnDeadlineMs: 10,
+    });
+
+    const operation = pack.runTurn({
+      sessionId: 'pvcfc:hanging-model',
+      customerId: 'hanging-model',
+      transport: 'zalo',
+      text: 'tư vấn phân bón cho lúa',
+      externalMessageId: 'hanging-model-1',
+      metadata: null,
+    });
+    void operation.catch(() => undefined);
+
+    await expect(
+      Promise.race([
+        operation,
+        new Promise<never>((_resolve, reject) =>
+          setTimeout(() => reject(new Error('test_deadline_exceeded')), 200),
+        ),
+      ]),
+    ).rejects.toThrow('agent_turn_deadline_exceeded');
+    await expect(store.listTurns('pvcfc:hanging-model')).resolves.toHaveLength(
+      1,
+    );
+  });
+
   it('runs createAgent with canonical bounded history and requires provider evidence first', async () => {
     const store = new MemoryStore();
     await store.appendTurn({
