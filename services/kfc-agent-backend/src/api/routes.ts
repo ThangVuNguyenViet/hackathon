@@ -21,6 +21,19 @@ export type {
   RouteOptions,
 } from './routeHandlers.js';
 
+export function loadPvcfcWebsiteHtml(cwd = process.cwd()): string {
+  const candidatePaths = [
+    resolve(cwd, 'dist/client/index.html'),
+    resolve(cwd, 'client/index.html'),
+    resolve(cwd, '../../apps/pvcfc_chat_web/dist/index.html'),
+    resolve(cwd, '../pvcfc_chat_web/dist/index.html'),
+  ];
+  for (const path of candidatePaths) {
+    if (existsSync(path)) return readFileSync(path, 'utf8');
+  }
+  return '<h1>PVCFC Backend</h1>';
+}
+
 export function registerRoutes(
   server: FastifyInstance,
   options: RouteOptions = {},
@@ -49,22 +62,10 @@ export function registerRoutes(
         .send({ errorCode: decision.errorCode });
   });
 
-  const serveWebsite = (_request: unknown, reply: { type(ct: string): { send(content: string): unknown } }) => {
-    const candidatePaths = [
-      resolve(process.cwd(), 'dist/client/index.html'),
-      resolve(process.cwd(), 'client/index.html'),
-      resolve(process.cwd(), '../../apps/pvcfc_chat_web/dist/index.html'),
-      resolve(process.cwd(), '../pvcfc_chat_web/dist/index.html'),
-      resolve(process.cwd(), '../../pvcfc_website.html'),
-      resolve(process.cwd(), 'pvcfc_website.html'),
-    ];
-    for (const p of candidatePaths) {
-      if (existsSync(p)) {
-        return reply.type('text/html; charset=utf-8').send(readFileSync(p, 'utf8'));
-      }
-    }
-    return reply.type('text/html; charset=utf-8').send('<h1>PVCFC Backend</h1>');
-  };
+  const serveWebsite = (
+    _request: unknown,
+    reply: { type(ct: string): { send(content: string): unknown } },
+  ) => reply.type('text/html; charset=utf-8').send(loadPvcfcWebsiteHtml());
 
   server.get('/', serveWebsite);
   server.get('/demo', serveWebsite);
