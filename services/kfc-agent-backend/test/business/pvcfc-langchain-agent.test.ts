@@ -48,6 +48,86 @@ class AbortAwareHangingPvcfcChatModel extends BaseChatModel {
   }
 }
 
+class LiveFetchRetryingPvcfcChatModel extends BaseChatModel {
+  private tools: StructuredTool[] = [];
+  private shared = {
+    canonicalSearchIssued: false,
+    calls: [] as Array<{ toolNames: string[] }>,
+  };
+
+  get calls(): Array<{ toolNames: string[] }> {
+    return this.shared.calls;
+  }
+
+  override _llmType(): string {
+    return 'live-fetch-retrying-pvcfc-chat-model';
+  }
+
+  override bindTools(
+    tools: StructuredTool[],
+    _options?: Record<string, unknown>,
+  ): LiveFetchRetryingPvcfcChatModel {
+    const bound = new LiveFetchRetryingPvcfcChatModel({});
+    bound.tools = tools;
+    bound.shared = this.shared;
+    return bound;
+  }
+
+  override async _generate(
+    _messages: BaseMessage[],
+    _options: this['ParsedCallOptions'],
+    _runManager?: CallbackManagerForLLMRun,
+  ): Promise<ChatResult> {
+    this.shared.calls.push({ toolNames: this.tools.map(({ name }) => name) });
+    if (!this.shared.canonicalSearchIssued) {
+      this.shared.canonicalSearchIssued = true;
+      return {
+        generations: [
+          {
+            text: '',
+            message: toolCall(
+              'searchPvcfcRecords',
+              {
+                query: 'NPK Cà Mau 15-5-20',
+                collections: ['products'],
+                limit: 2,
+              },
+              'canonical-live-fallback-1',
+            ),
+          },
+        ],
+        llmOutput: {},
+      };
+    }
+    if (this.tools.some(({ name }) => name === 'fetchPvcfcPage')) {
+      return {
+        generations: [
+          {
+            text: '',
+            message: toolCall(
+              'fetchPvcfcPage',
+              { url: 'https://www.pvcfc.com.vn/npk-ca-mau-15-5-20' },
+              `fetch-${this.calls.length}`,
+            ),
+          },
+        ],
+        llmOutput: {},
+      };
+    }
+    return {
+      generations: [
+        {
+          text: '',
+          message: new AIMessage(
+            'NPK Cà Mau 15-5-20 là sản phẩm trong dữ liệu công khai của PVCFC.\nNguồn: https://www.pvcfc.com.vn/npk-ca-mau-15-5-20',
+          ),
+        },
+      ],
+      llmOutput: {},
+    };
+  }
+}
+
 function evidenceCall() {
   return new AIMessage({
     content: '',
@@ -579,6 +659,38 @@ describe('PVCFC LangChain agent pack', () => {
         }),
       ]),
     );
+  });
+
+  it('forces canonical fallback when the live model retries after a fetch outage', async () => {
+    const live = webClient();
+    live.fetch.mockRejectedValueOnce(
+      new TinyFishClientError('tinyfish_fetch_failed'),
+    );
+    const model = new LiveFetchRetryingPvcfcChatModel({});
+    const pack = new PvcfcAgentPack({
+      store: new MemoryStore(),
+      model,
+      provider: loadBundledPvcfcPublicDataProvider(),
+      webEvidence: { client: live.client },
+    });
+
+    const result = await pack.runTurn({
+      sessionId: 'pvcfc:force-canonical-fallback',
+      customerId: 'force-canonical-fallback',
+      transport: 'zalo',
+      text: 'Tra cứu NPK Cà Mau 15-5-20.',
+      externalMessageId: 'force-canonical-fallback-1',
+      metadata: null,
+    });
+
+    expect(result.responseText).toContain(
+      'https://www.pvcfc.com.vn/npk-ca-mau-15-5-20',
+    );
+    expect(live.fetch).toHaveBeenCalledOnce();
+    expect(
+      model.calls.some(({ toolNames }) => toolNames.includes('fetchPvcfcPage')),
+    ).toBe(true);
+    expect(model.calls.at(-1)?.toolNames).not.toContain('fetchPvcfcPage');
   });
 
   it('charges provider preflight time against the shared live-web deadline', async () => {

@@ -260,6 +260,9 @@ export class PvcfcAgentPack implements BusinessAgentPack<
           const providerAttempted = toolCalls.some(({ name }) =>
             providerToolNames.has(name),
           );
+          const liveWebUnavailable = toolCalls.some(
+            ({ name, status }) => webToolNames.has(name) && status === 'error',
+          );
           const requireCanonicalSourceFetch =
             this.options.webEvidence !== undefined &&
             pendingCanonicalSourceUrls().size > 0 &&
@@ -270,14 +273,19 @@ export class PvcfcAgentPack implements BusinessAgentPack<
               toolCalls.length === 0 || requireCanonicalSourceFetch
                 ? 'required'
                 : 'auto',
-            tools: requireCanonicalSourceFetch
-              ? request.tools.filter(({ name }) => name === 'fetchPvcfcPage')
-              : providerAttempted
-                ? request.tools
-                : request.tools.filter(
-                    ({ name }) =>
-                      typeof name !== 'string' || providerToolNames.has(name),
-                  ),
+            tools: liveWebUnavailable
+              ? request.tools.filter(
+                  ({ name }) =>
+                    typeof name !== 'string' || providerToolNames.has(name),
+                )
+              : requireCanonicalSourceFetch
+                ? request.tools.filter(({ name }) => name === 'fetchPvcfcPage')
+                : providerAttempted
+                  ? request.tools
+                  : request.tools.filter(
+                      ({ name }) =>
+                        typeof name !== 'string' || providerToolNames.has(name),
+                    ),
           });
         },
       });
