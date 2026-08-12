@@ -170,6 +170,77 @@ describe('PVCFC LangChain agent pack', () => {
     ).not.toContain('sdkSessionMutation');
   });
 
+  it('returns and persists readable plain text when the model emits Markdown', async () => {
+    const store = new MemoryStore();
+    const model = new ScriptedPvcfcChatModel({
+      outputs: [
+        evidenceCall(),
+        new AIMessage(
+          [
+            '## **Phân Bón Cà Mau**',
+            '',
+            '- **Sản phẩm:** `Urê Cà Mau`',
+            '- [Xem nguồn chính thức](https://www.pvcfc.com.vn/san-pham-dich-vu)',
+            '',
+            '> Thông tin công khai đã được kiểm chứng.',
+          ].join('\n'),
+        ),
+      ],
+    });
+    const pack = new PvcfcAgentPack({
+      store,
+      model,
+      provider: loadBundledPvcfcPublicDataProvider(),
+    });
+
+    const result = await pack.runTurn({
+      sessionId: 'pvcfc:plain-text',
+      customerId: 'plain-text',
+      transport: 'web_chat',
+      text: 'Giới thiệu ngắn gọn về sản phẩm PVCFC.',
+      externalMessageId: 'plain-text-1',
+      metadata: null,
+    });
+
+    const expected = [
+      'Phân Bón Cà Mau',
+      '',
+      '• Sản phẩm: Urê Cà Mau',
+      '• Xem nguồn chính thức: https://www.pvcfc.com.vn/san-pham-dich-vu',
+      '',
+      'Thông tin công khai đã được kiểm chứng.',
+    ].join('\n');
+    expect(result.responseText).toBe(expected);
+    expect((await store.listTurns('pvcfc:plain-text'))[1]?.text).toBe(expected);
+    expect(result.responseText).not.toMatch(/(?:\*\*|`|^#{1,6}\s|^>\s)/m);
+  });
+
+  it('fails closed instead of persisting an empty answer after formatting cleanup', async () => {
+    const store = new MemoryStore();
+    const model = new ScriptedPvcfcChatModel({
+      outputs: [evidenceCall(), new AIMessage('```markdown\n```')],
+    });
+    const pack = new PvcfcAgentPack({
+      store,
+      model,
+      provider: loadBundledPvcfcPublicDataProvider(),
+    });
+
+    await expect(
+      pack.runTurn({
+        sessionId: 'pvcfc:empty-cleaned-response',
+        customerId: 'empty-cleaned-response',
+        transport: 'web_chat',
+        text: 'Giới thiệu PVCFC.',
+        externalMessageId: 'empty-cleaned-response-1',
+        metadata: null,
+      }),
+    ).rejects.toThrow('pvcfc_response_text_required');
+    expect(await store.listTurns('pvcfc:empty-cleaned-response')).toHaveLength(
+      1,
+    );
+  });
+
   it('keeps web tools hidden until a provider attempt and lets a provider hit answer without web', async () => {
     const live = webClient();
     const model = new ScriptedPvcfcChatModel({
