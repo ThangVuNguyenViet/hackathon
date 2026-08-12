@@ -316,3 +316,121 @@ exit 0
 ```
 
 The final post-cleanup backend gate retained the same result: 201 test files passed with one skipped, and 2,009 tests passed with one skipped.
+
+## Third review fix: aligned deploy targets and restored safeguards
+
+### Cloud Run release target
+
+The old Cloud Run helper used `gcloud run deploy --source services/kfc-agent-backend`. That source directory contains the separately owned recommendation-service `Dockerfile`, whose qualified-bundle entrypoint is `dist/src/recommendations/serving/aws-main.js`. Source auto-detection could therefore deploy the wrong service.
+
+The corrected path is explicit:
+
+1. `cloudbuild.cloud-run.yaml` receives the repository-root context.
+2. It builds the dedicated multi-stage `Dockerfile.cloud-run`.
+3. The builder installs both lockfiles, compiles only `tsconfig.runtime.json`, and packages the React client.
+4. The runtime image contains production dependencies, fixtures, knowledge, `dist/src/index.js`, and `dist/client`.
+5. `deploy-backend-cloud-run.sh` submits that build and deploys the immutable `CLOUD_RUN_IMAGE_URI` with `--image`; it never uses `--source`.
+
+The recommendation-service `Dockerfile` remains unchanged. A fake-gcloud contract executes the full deploy helper and proves the exact Cloud Build config, image URI, and `gcloud run deploy --image` arguments.
+
+The shared Node entrypoint no longer overwrites KFC readiness identity with the optional PVCFC AstraFlow identity. PVCFC still has its own isolated pack and credential, while the shared KFC server reports the configured LangChain KFC model.
+
+### Worker direct-deploy target
+
+The checked-in sandbox `wrangler.toml`, which is also used by direct `npm run worker:deploy` and `worker:deploy:dry-run`, now declares:
+
+- `KFC_AGENT_PROVIDER = "google"`
+- `KFC_AGENT_MODEL = "gemini-3.1-flash-lite"`
+
+The direct Wrangler dry-run reported those exact bindings and no OpenAI default.
+
+### Safeguard coverage map from `a5825aa5`
+
+The second review fix had over-compressed the base deployment test. This round restored independent executable safeguards by subject:
+
+| Base safeguard | Current coverage | Treatment |
+| --- | --- | --- |
+| chatbot vs monitor Pages route separation | generate both `_worker.js` files and assert mutually exclusive route sets | restored |
+| shared Pages release identity and clean provenance | parse both generated `release.json` files; verify shared SHA/time, distinct project/origin, `dirty=false` | restored |
+| no committed/hard-coded Worker URL | scan generated proxies and Pages deploy script | restored |
+| qualification artifact/input digest | create, verify, mutate input, and require rejection | restored |
+| qualification and latency age/order | execute `verify-ages` with valid ordered evidence | restored |
+| secret artifact scanning | execute clean and leaking artifact scans | restored |
+| atomic failure evidence handling | execute failure finalization and prove stale checksum/bundle removal | restored |
+| publication identity, phase ordering, checksum, and release creation | focused static contracts over the maintained acceptance runner | restored |
+| direct OpenAI provider/model and secret expectations | no maintained deployment subject | retired |
+| deleted live-interruption/qualification producer modules | subject removed in LangChain migration | retired |
+| LangGraph runtime marker | replaced by `langchain-create-agent` | migrated |
+
+### Third-round TDD and runtime proof
+
+RED:
+
+```text
+bash tests/deployment/deploy_scripts.test.sh
+exit 1
+Missing Dockerfile.cloud-run/cloudbuild.cloud-run.yaml;
+wrangler.toml still selected openai/gpt-4.1-mini.
+
+docker build -f services/kfc-agent-backend/Dockerfile.cloud-run ...
+exit 1
+Full test TypeScript compilation referenced a repository-root contract absent from the image context.
+
+bash tests/deployment/deploy_scripts.test.sh
+exit 1
+Independent deployment_integrity.test.sh did not exist.
+```
+
+GREEN:
+
+```text
+bash tests/deployment/deploy_scripts.test.sh
+LangChain agent target tests passed.
+PVCFC packaged release contract passed.
+Deployment integrity safeguards passed.
+Maintained deployment contracts passed.
+
+npm run worker:deploy:dry-run
+KFC_AGENT_PROVIDER ("google")
+KFC_AGENT_MODEL ("gemini-3.1-flash-lite")
+exit 0
+
+docker build -f services/kfc-agent-backend/Dockerfile.cloud-run \
+  -t kfc-langchain-cloud-run:task7 .
+exit 0
+```
+
+The final image was started against an isolated PostgreSQL 16 container. Runtime proof:
+
+```text
+image CMD: ["node","dist/src/index.js"]
+GET /health: HTTP 200, ok=true
+GET /ready?deep=1: HTTP 200, ok=true
+database: ok
+agent: google / gemini-3.1-flash-lite
+monitor: google / gemini-3.1-flash-lite
+dist/src/index.js: present
+dist/client/index.html: present
+```
+
+The temporary application, database container, and Docker network were removed after verification. No Cloud Build, Cloud Run deployment, Worker deployment, Pages deployment, or SCloud deployment was performed.
+
+Final post-fix gates:
+
+```text
+apps/pvcfc_chat_web: 7 tests passed; Vite build passed
+services/kfc-agent-backend npm run check:
+  format passed
+  lint passed with the preserved warning budget
+  typecheck passed
+  201 test files passed, 1 skipped
+  2,009 tests passed, 1 skipped
+services/kfc-agent-backend npm run check:architecture:
+  465 files, 900-line ceiling, no baseline growth
+npm run worker:deploy:dry-run:
+  passed with Google / gemini-3.1-flash-lite bindings
+bash tests/deployment/deploy_scripts.test.sh:
+  all maintained deployment contracts passed
+git diff --check:
+  passed
+```

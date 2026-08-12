@@ -70,4 +70,37 @@ assert_fails_with_agent_target \
   "$tmp_dir/worker-invalid.out" \
   run_worker_preflight gpt-4.1-mini
 
+fake_bin="$tmp_dir/bin"
+mkdir -p "$fake_bin"
+cat >"$fake_bin/gcloud" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+printf '%s\n' "$*" >>"$GCLOUD_CAPTURE_FILE"
+if [[ "$*" == run\ services\ describe* ]]; then
+  printf '%s\n' 'https://kfc-langchain.example.test'
+fi
+EOF
+cat >"$fake_bin/curl" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+printf '{"ok":true}\n'
+EOF
+chmod +x "$fake_bin/gcloud" "$fake_bin/curl"
+
+GCLOUD_CAPTURE_FILE="$tmp_dir/gcloud-args.log" \
+PATH="$fake_bin:$PATH" \
+GCP_PROJECT_ID=test-project \
+META_PAGE_ID=test-page \
+KFC_AGENT_PROFILE_MODE=production \
+KFC_AGENT_PROVIDER=google \
+KFC_AGENT_MODEL=gemini-3.1-flash-lite \
+KFC_MONITOR_PROVIDER=google \
+KFC_MONITOR_MODEL=gemini-3.1-flash-lite \
+CLOUD_RUN_IMAGE_URI=asia-southeast1-docker.pkg.dev/test-project/hackathon/kfc-agent-backend:test-sha \
+"$ROOT_DIR/scripts/deploy-backend-cloud-run.sh" >"$tmp_dir/cloud-run-deploy.out"
+
+grep -Fq "builds submit $ROOT_DIR --project test-project --config $ROOT_DIR/services/kfc-agent-backend/cloudbuild.cloud-run.yaml --substitutions _IMAGE_URI=asia-southeast1-docker.pkg.dev/test-project/hackathon/kfc-agent-backend:test-sha" "$tmp_dir/gcloud-args.log"
+grep -Fq "run deploy kfc-agent-backend --project test-project --region asia-southeast1 --image asia-southeast1-docker.pkg.dev/test-project/hackathon/kfc-agent-backend:test-sha" "$tmp_dir/gcloud-args.log"
+! grep -Fq -- "--source" "$tmp_dir/gcloud-args.log"
+
 echo "LangChain agent target tests passed."

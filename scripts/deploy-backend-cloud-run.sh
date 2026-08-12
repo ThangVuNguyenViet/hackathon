@@ -3,10 +3,15 @@ set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 SERVICE_DIR="$ROOT_DIR/services/kfc-agent-backend"
+CLOUD_RUN_DOCKERFILE="$SERVICE_DIR/Dockerfile.cloud-run"
+CLOUD_RUN_BUILD_CONFIG="$SERVICE_DIR/cloudbuild.cloud-run.yaml"
 
 PROJECT_ID="${GCP_PROJECT_ID:-}"
 REGION="${GCP_REGION:-asia-southeast1}"
 SERVICE_NAME="${CLOUD_RUN_SERVICE:-kfc-agent-backend}"
+GIT_SHA="${RELEASE_GIT_SHA:-$(git -C "$ROOT_DIR" rev-parse HEAD)}"
+ARTIFACT_REPOSITORY="${CLOUD_RUN_ARTIFACT_REPOSITORY:-hackathon}"
+IMAGE_URI="${CLOUD_RUN_IMAGE_URI:-${REGION}-docker.pkg.dev/${PROJECT_ID}/${ARTIFACT_REPOSITORY}/${SERVICE_NAME}:${GIT_SHA}}"
 DASHBOARD_ORIGIN="${DASHBOARD_ORIGIN:-}"
 MAX_INSTANCES="${CLOUD_RUN_MAX_INSTANCES:-2}"
 MIN_INSTANCES="${CLOUD_RUN_MIN_INSTANCES:-0}"
@@ -72,16 +77,6 @@ if [[
   exit 64
 fi
 
-if [[ "${KFC_DEPLOY_PREFLIGHT_ONLY:-false}" == "true" ]]; then
-  echo "Cloud Run deployment profile preflight passed."
-  exit 0
-fi
-
-if ! command -v gcloud >/dev/null 2>&1; then
-  echo "ERROR: gcloud CLI is required. Install and authenticate it before deploying Cloud Run." >&2
-  exit 69
-fi
-
 if [[ ! -d "$SERVICE_DIR" ]]; then
   echo "ERROR: Backend service directory is missing: $SERVICE_DIR" >&2
   echo "Run the backend implementation plan before deploying Cloud Run." >&2
@@ -93,10 +88,19 @@ if [[ ! -f "$SERVICE_DIR/package.json" ]]; then
   exit 66
 fi
 
-if [[ ! -f "$SERVICE_DIR/Dockerfile" ]]; then
-  echo "ERROR: Missing $SERVICE_DIR/Dockerfile" >&2
-  echo "Add the backend Dockerfile before running this deploy script." >&2
+if [[ ! -f "$CLOUD_RUN_DOCKERFILE" || ! -f "$CLOUD_RUN_BUILD_CONFIG" ]]; then
+  echo "ERROR: Missing the dedicated LangChain Cloud Run image definition." >&2
   exit 66
+fi
+
+if [[ "${KFC_DEPLOY_PREFLIGHT_ONLY:-false}" == "true" ]]; then
+  echo "Cloud Run deployment profile preflight passed."
+  exit 0
+fi
+
+if ! command -v gcloud >/dev/null 2>&1; then
+  echo "ERROR: gcloud CLI is required. Install and authenticate it before deploying Cloud Run." >&2
+  exit 69
 fi
 
 env_vars=(
@@ -135,10 +139,15 @@ secret_arg="$(IFS=,; echo "${secret_vars[*]}")"
 echo "Deploying $SERVICE_NAME to Cloud Run project=$PROJECT_ID region=$REGION"
 echo "Expected Secret Manager bindings: $secret_arg"
 
+gcloud builds submit "$ROOT_DIR" \
+  --project "$PROJECT_ID" \
+  --config "$CLOUD_RUN_BUILD_CONFIG" \
+  --substitutions "_IMAGE_URI=$IMAGE_URI"
+
 gcloud run deploy "$SERVICE_NAME" \
   --project "$PROJECT_ID" \
   --region "$REGION" \
-  --source "$SERVICE_DIR" \
+  --image "$IMAGE_URI" \
   --allow-unauthenticated \
   --min-instances "$MIN_INSTANCES" \
   --max-instances "$MAX_INSTANCES" \

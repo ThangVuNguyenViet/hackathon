@@ -8,6 +8,10 @@ PAGES_DEPLOY="$ROOT_DIR/scripts/deploy-dashboard-cloudflare-pages.sh"
 FREE_DEPLOY_DOC="$ROOT_DIR/docs/deployment/hackathon-free-deploy.md"
 LANGCHAIN_TARGET_TEST="$ROOT_DIR/tests/deployment/langchain_agent_target.test.sh"
 PVCFC_RELEASE_TEST="$ROOT_DIR/tests/deployment/pvcfc_packaged_release.test.sh"
+DEPLOYMENT_INTEGRITY_TEST="$ROOT_DIR/tests/deployment/deployment_integrity.test.sh"
+CLOUD_RUN_DOCKERFILE="$ROOT_DIR/services/kfc-agent-backend/Dockerfile.cloud-run"
+CLOUD_RUN_BUILD_CONFIG="$ROOT_DIR/services/kfc-agent-backend/cloudbuild.cloud-run.yaml"
+WRANGLER_CONFIG="$ROOT_DIR/services/kfc-agent-backend/wrangler.toml"
 
 required_files=(
   "$WORKER_DEPLOY"
@@ -17,6 +21,9 @@ required_files=(
   "$ROOT_DIR/scripts/run-kfc-deployed-acceptance.sh"
   "$LANGCHAIN_TARGET_TEST"
   "$PVCFC_RELEASE_TEST"
+  "$DEPLOYMENT_INTEGRITY_TEST"
+  "$CLOUD_RUN_DOCKERFILE"
+  "$CLOUD_RUN_BUILD_CONFIG"
   "$FREE_DEPLOY_DOC"
   "$ROOT_DIR/services/kfc-agent-backend/wrangler.toml"
   "$ROOT_DIR/services/kfc-agent-backend/wrangler.production.toml.example"
@@ -34,7 +41,8 @@ for script in \
   "$ROOT_DIR/scripts/generate-pages-deployment-assets.sh" \
   "$ROOT_DIR/scripts/run-kfc-deployed-acceptance.sh" \
   "$LANGCHAIN_TARGET_TEST" \
-  "$PVCFC_RELEASE_TEST"; do
+  "$PVCFC_RELEASE_TEST" \
+  "$DEPLOYMENT_INTEGRITY_TEST"; do
   bash -n "$script"
 done
 
@@ -44,6 +52,7 @@ done
 
 bash "$LANGCHAIN_TARGET_TEST"
 bash "$PVCFC_RELEASE_TEST"
+bash "$DEPLOYMENT_INTEGRITY_TEST"
 
 grep -q "Cloudflare Worker" "$FREE_DEPLOY_DOC"
 grep -q "Cloudflare D1" "$FREE_DEPLOY_DOC"
@@ -56,6 +65,9 @@ grep -q "nodejs_compat" "$ROOT_DIR/services/kfc-agent-backend/wrangler.toml"
 grep -q 'binding = "DB"' "$ROOT_DIR/services/kfc-agent-backend/wrangler.toml"
 grep -q "CREATE TABLE IF NOT EXISTS webhook_deliveries" "$ROOT_DIR/services/kfc-agent-backend/migrations/0001_worker_runtime.sql"
 grep -q "worker:deploy:dry-run" "$ROOT_DIR/services/kfc-agent-backend/package.json"
+grep -q '^KFC_AGENT_PROVIDER = "google"$' "$WRANGLER_CONFIG"
+grep -q '^KFC_AGENT_MODEL = "gemini-3.1-flash-lite"$' "$WRANGLER_CONFIG"
+! grep -Eqi 'KFC_AGENT_(PROVIDER|MODEL).*(openai|gpt-)' "$WRANGLER_CONFIG"
 
 grep -Fq 'KFC_AGENT_PROVIDER="${KFC_AGENT_PROVIDER:-}"' "$WORKER_DEPLOY"
 grep -Fq 'KFC_AGENT_MODEL="${KFC_AGENT_MODEL:-}"' "$WORKER_DEPLOY"
@@ -79,6 +91,13 @@ grep -Fq 'KFC_CONFIRMATION_SIGNING_SECRET=$KFC_CONFIRMATION_SIGNING_SECRET_NAME:
 grep -q "CLOUD_RUN_MIN_INSTANCES" "$CLOUD_RUN_DEPLOY"
 grep -q "KFC_DEPLOY_PREFLIGHT_ONLY" "$CLOUD_RUN_DEPLOY"
 grep -q "/ready" "$CLOUD_RUN_DEPLOY"
+grep -Fq 'gcloud builds submit "$ROOT_DIR"' "$CLOUD_RUN_DEPLOY"
+grep -Fq -- '--config "$CLOUD_RUN_BUILD_CONFIG"' "$CLOUD_RUN_DEPLOY"
+grep -Fq -- '--image "$IMAGE_URI"' "$CLOUD_RUN_DEPLOY"
+! grep -Fq -- '--source "$SERVICE_DIR"' "$CLOUD_RUN_DEPLOY"
+grep -Fq 'services/kfc-agent-backend/Dockerfile.cloud-run' "$CLOUD_RUN_BUILD_CONFIG"
+grep -Fq 'CMD ["node", "dist/src/index.js"]' "$CLOUD_RUN_DOCKERFILE"
+! grep -Fq 'recommendations/serving/aws-main.js' "$CLOUD_RUN_DOCKERFILE"
 
 ! grep -Eqi '\bOpenAI\b|openai_api_key|langgraph|tool_planner|small_talk_router' \
   "$WORKER_DEPLOY" \

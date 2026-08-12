@@ -95,21 +95,10 @@ const serverOptions = {
     ...baseOptions.readiness,
     messengerRequired: false,
     zaloRequired: true,
-    agentConfigured: Boolean(env.PVCFC_ASTRAFLOW_API_KEY),
-    runtime: {
-      ...baseOptions.readiness?.runtime,
-      agent: {
-        provider: 'openai' as const,
-        model: env.PVCFC_ASTRAFLOW_MODEL,
-        profile: `pvcfc-astraflow-${env.PVCFC_ASTRAFLOW_MODEL}`,
-      },
-    },
     database: async () => {
       await persistence.pool.query("SELECT 1");
       return { ok: true };
     },
-    openAiConfigured: Boolean(env.OPENAI_API_KEY),
-    openAiRequired: false,
   },
 };
 const server = buildServer(serverOptions);
