@@ -56,7 +56,7 @@ deploy_surface() {
 
   flutter build web --release --pwa-strategy=none \
     --target "$target" \
-    --dart-define "KFC_AGENT_BACKEND_URL=/" >&2
+    --dart-define "KFC_AGENT_BACKEND_URL=$BACKEND_BASE_URL" >&2
   mkdir -p "$output_dir"
   cp -R build/web/. "$output_dir/"
   local build_id
