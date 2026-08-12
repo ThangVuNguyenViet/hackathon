@@ -232,6 +232,7 @@ export class PvcfcAgentPack implements BusinessAgentPack<
           this.options.webEvidence
             ? 'Live web evidence is available for this turn after canonical provider evidence is attempted.'
             : 'Live web evidence is unavailable for this turn. For latest or current requests, report the newest canonical record and clearly say that live status could not be verified; never claim that a live check was unnecessary or completed.',
+          'When the user asks for a summary or comparison of one bounded collection, call listPvcfcRecords with includeDetails=true and an appropriate limit instead of retrieving every record with separate getPvcfcRecord calls.',
           '',
           'Verified current PVCFC public-data index:',
           JSON.stringify(publicData.value),
