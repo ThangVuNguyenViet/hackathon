@@ -175,38 +175,7 @@ import type { RouteCommerceRuntime } from './routeCommerceRuntime.js';
 import type { RouteAgentRuntime } from './routeAgentRuntime.js';
 import type { VerifiedMessengerGuestCheckoutIngress } from '../security/guestCheckoutAuthority.js';
 import { messengerGuestAuthorityForClaimedRun } from './routeMessengerGuestAuthority.js';
-
-function runtimeErrorDetails(
-  error: unknown,
-  depth = 0,
-): Record<string, unknown> {
-  if (error instanceof Error) {
-    const cause = error.cause;
-    return {
-      name: error.name,
-      message: error.message,
-      ...(error.stack === undefined ? {} : { stack: error.stack }),
-      ...(cause === undefined
-        ? {}
-        : {
-            cause:
-              depth >= 4
-                ? String(cause)
-                : runtimeErrorDetails(cause, depth + 1),
-          }),
-    };
-  }
-  if (typeof error === 'string') return { name: 'Error', message: error };
-  try {
-    const serialized = JSON.stringify(error);
-    return {
-      name: typeof error,
-      message: serialized === undefined ? String(error) : serialized,
-    };
-  } catch {
-    return { name: typeof error, message: String(error) };
-  }
-}
+import { recordRetryableMessengerAgentRunError } from './routeMessengerRuntimeError.js';
 
 export function createRouteMessengerRuntime(
   input: {
@@ -911,57 +880,13 @@ export function createRouteMessengerRuntime(
             errorMessage: delivery.errorMessage,
           };
     } catch (error) {
-      const details = runtimeErrorDetails(error);
-      const errorCode = 'agent_run_processing_failed';
-      const errorMessage = String(details.message);
-      try {
-        await store.appendEventIfRunCurrent({
-          sessionId: run.sessionId,
-          sourceType: 'agent:runtime_error',
-          payload: {
-            schemaVersion: 'agent-runtime-error-v1',
-            runId: run.id,
-            errorCode,
-            error: details,
-          },
-          fence: commitFence,
-        });
-      } catch (recordingError) {
-        console.error('agent_run_error_recording_failed', {
-          runId: run.id,
-          error: details,
-          recordingError: runtimeErrorDetails(recordingError),
-        });
-      }
-      // Keep the durable run retryable. The customer turn remains pending so
-      // the next lease-recovery attempt can ask the AI agent again; a failed
-      // model/tool step must never convert the turn into silent ignored state.
-      const failed = await updateExecutingRun({
-        status: 'running',
-        deliveryStatus: 'pending',
-        errorCode,
-        errorMessage,
-        completedAt: null,
+      return recordRetryableMessengerAgentRunError({
+        store,
+        run,
+        commitFence,
+        linkedTurns,
+        error,
       });
-      if (failed.status !== 'committed') {
-        return { status: 'skipped', errorCode: 'stale_agent_run' };
-      }
-      for (const turn of linkedTurns) {
-        if (
-          await store.getWebhookDelivery(run.channel, turn.externalMessageId)
-        ) {
-          await store.markWebhookDeliveryFailed(
-            run.channel,
-            turn.externalMessageId,
-            errorCode,
-          );
-        }
-      }
-      return {
-        status: 'failed',
-        errorCode,
-        errorMessage,
-      };
     } finally {
       if (typingStarted && clients) {
         const state = await store.getSessionAgentState(run.sessionId);
