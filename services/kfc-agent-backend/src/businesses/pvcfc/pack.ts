@@ -2,6 +2,7 @@ import type { BaseChatModel } from '@langchain/core/language_models/chat_models'
 import {
   AIMessage,
   HumanMessage,
+  ToolMessage,
   type BaseMessage,
 } from '@langchain/core/messages';
 import {
@@ -212,6 +213,7 @@ export class PvcfcAgentPack implements BusinessAgentPack<
       const webToolNames = new Set<string>(webTools.map(({ name }) => name));
       const inventoriedUrls = new Set(inventoryUrls);
       const allTools = [...tools, ...webTools];
+      let liveWebUnavailable = false;
       const pendingCanonicalSourceUrls = () =>
         new Set(
           toolCalls
@@ -226,11 +228,26 @@ export class PvcfcAgentPack implements BusinessAgentPack<
         toolCalls.some(({ name }) => webToolNames.has(name));
       const requireEvidence = createMiddleware({
         name: 'pvcfcEvidenceRequirement',
-        wrapToolCall: (request, handler) => {
+        wrapToolCall: async (request, handler) => {
           const toolName =
             typeof request.tool?.name === 'string'
               ? request.tool.name
               : request.toolCall.name;
+          if (webToolNames.has(toolName) && liveWebUnavailable) {
+            const toolCallId =
+              typeof request.toolCall.id === 'string'
+                ? request.toolCall.id
+                : 'pvcfc-live-unavailable';
+            return new ToolMessage({
+              content: JSON.stringify({
+                ok: false,
+                errorCode: 'pvcfc_web_live_unavailable',
+              }),
+              tool_call_id: toolCallId,
+              name: toolName,
+              status: 'error',
+            });
+          }
           if (
             webToolNames.has(toolName) &&
             !toolCalls.some(({ name }) => providerToolNames.has(name))
@@ -254,7 +271,26 @@ export class PvcfcAgentPack implements BusinessAgentPack<
               throw new Error('pvcfc_web_canonical_source_required');
             }
           }
-          return handler(request);
+          const traceCountBefore = toolCalls.length;
+          try {
+            const result = await handler(request);
+            if (
+              webToolNames.has(toolName) &&
+              toolCalls
+                .slice(traceCountBefore)
+                .some(({ status }) => status === 'error')
+            ) {
+              // TinyFish failures are an optional evidence degradation, not a
+              // reason to keep retrying the same web tool until the turn dies.
+              // The next model call must answer from the canonical provider
+              // evidence already collected in this turn.
+              liveWebUnavailable = true;
+            }
+            return result;
+          } catch (error) {
+            if (webToolNames.has(toolName)) liveWebUnavailable = true;
+            throw error;
+          }
         },
         wrapModelCall: (request, handler) => {
           const providerAttempted = toolCalls.some(({ name }) =>
@@ -264,20 +300,29 @@ export class PvcfcAgentPack implements BusinessAgentPack<
             this.options.webEvidence !== undefined &&
             pendingCanonicalSourceUrls().size > 0 &&
             !webAttempted();
+          const availableTools = liveWebUnavailable
+            ? request.tools.filter(
+                ({ name }) =>
+                  typeof name !== 'string' || providerToolNames.has(name),
+              )
+            : request.tools;
           return handler({
             ...request,
-            toolChoice:
-              toolCalls.length === 0 || requireCanonicalSourceFetch
+            toolChoice: liveWebUnavailable
+              ? 'auto'
+              : toolCalls.length === 0 || requireCanonicalSourceFetch
                 ? 'required'
                 : 'auto',
-            tools: requireCanonicalSourceFetch
-              ? request.tools.filter(({ name }) => name === 'fetchPvcfcPage')
-              : providerAttempted
-                ? request.tools
-                : request.tools.filter(
-                    ({ name }) =>
-                      typeof name !== 'string' || providerToolNames.has(name),
-                  ),
+            tools: liveWebUnavailable
+              ? availableTools
+              : requireCanonicalSourceFetch
+                ? request.tools.filter(({ name }) => name === 'fetchPvcfcPage')
+                : providerAttempted
+                  ? request.tools
+                  : request.tools.filter(
+                      ({ name }) =>
+                        typeof name !== 'string' || providerToolNames.has(name),
+                    ),
           });
         },
       });

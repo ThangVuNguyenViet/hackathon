@@ -71,10 +71,14 @@ effects, idempotency, delivery, and run fences. LangChain supplies the
 model/tool loop only. There is no direct OpenAI Agents SDK runtime, authored
 LangGraph runtime, framework checkpoint transcript, or runtime selector.
 
-KFC web chat, Messenger, and Zalo use the KFC pack. The PVCFC web route uses
-the PVCFC pack and its public-data provider without constructing KFC cart,
-confirmation, human-pause, or GenUI state. Both HTTP deployments report
-`langchain-create-agent` as the agent runtime.
+KFC web chat is always KFC-owned. Messenger and Zalo are bound independently by
+the trusted `MESSENGER_BUSINESS_ID` and `ZALO_BUSINESS_ID` settings (each must be
+`kfc` or `pvcfc`); message text and available credentials never select a pack.
+When a social channel is bound to `pvcfc`, it uses the PVCFC pack and its
+public-data provider without constructing KFC cart, confirmation, human-pause,
+or GenUI state. An explicitly `kfc`-bound channel keeps the KFC commerce
+behavior. Both HTTP deployments report `langchain-create-agent` as the agent
+runtime.
 
 The packaged PVCFC React client calls `/chat/pvcfc/message` on its own origin.
 For split local development only, set `VITE_PVCFC_API_BASE_URL` while building
