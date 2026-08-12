@@ -10,6 +10,34 @@ export const KFC_WEB_OPERATION_TIMEOUT_MS = 4_000;
 export const KFC_WEB_FETCH_TIMEOUT_MS = 3_000;
 export const KFC_WEB_TURN_BUDGET_MS = 12_000;
 
+const blockedPathNamespace =
+  /^(?:api|newapi|invoice|static|uploads?|assets?|images?|img)(?:$|[-_.])/u;
+const blockedStaticOrBinaryExtension =
+  /\.(?:avif|bmp|css|csv|docx?|exe|gif|gz|ico|jpe?g|js|json|map|mov|mp3|mp4|otf|pdf|png|pptx?|rar|svg|tar|tiff?|ttf|wav|webm|webp|woff2?|xlsx?|xml|zip)$/u;
+
+export function validateKfcPublicWebUrl(candidate: string): string {
+  const normalized = validateBusinessWebUrl(
+    candidate,
+    KFC_WEB_ALLOWED_HOSTNAMES,
+  );
+  let pathname: string;
+  try {
+    pathname = decodeURIComponent(new URL(normalized).pathname)
+      .normalize('NFKC')
+      .toLowerCase();
+  } catch {
+    throw new Error('kfc_web_path_not_allowed');
+  }
+  const segments = pathname.split('/').filter(Boolean);
+  if (
+    segments.some((segment) => blockedPathNamespace.test(segment)) ||
+    blockedStaticOrBinaryExtension.test(segments.at(-1) ?? '')
+  ) {
+    throw new Error('kfc_web_path_not_allowed');
+  }
+  return normalized;
+}
+
 const inventoryCandidates = [
   'https://www.kfcvietnam.com.vn/',
   'https://www.kfcvietnam.com.vn/about-kfc',
@@ -25,7 +53,5 @@ const inventoryCandidates = [
 ] as const;
 
 export const KFC_WEB_INVENTORY_URLS = Object.freeze(
-  inventoryCandidates.map((url) =>
-    validateBusinessWebUrl(url, KFC_WEB_ALLOWED_HOSTNAMES),
-  ),
+  inventoryCandidates.map(validateKfcPublicWebUrl),
 );

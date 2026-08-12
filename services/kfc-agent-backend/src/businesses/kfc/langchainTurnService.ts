@@ -76,7 +76,7 @@ export interface KfcLangChainTurnOptions {
   readonly selectedActionResponse?: SelectedActionResponseReference;
   readonly webEvidence?: {
     readonly client: TinyFishClient;
-    readonly inventoryUrls: readonly string[];
+    readonly capability: 'enabled' | 'disabled';
     readonly budget?: KfcWebTurnBudget;
     readonly now?: () => number;
   };
@@ -214,9 +214,9 @@ export async function runKfcLangChainTurn(
   options: KfcLangChainTurnOptions,
   turn: KfcAgentTurnInput,
 ): Promise<KfcLangChainTurnResult> {
-  const webBudget = options.webEvidence
-    ? (options.webEvidence.budget ??
-      createKfcWebTurnBudget({ now: options.webEvidence.now }))
+  const webEvidence = options.webEvidence;
+  const webBudget = webEvidence
+    ? (webEvidence.budget ?? createKfcWebTurnBudget({ now: webEvidence.now }))
     : undefined;
   const { currentUserTurn, messages } = await canonicalHistory({
     store: options.store,
@@ -242,26 +242,27 @@ export async function runKfcLangChainTurn(
       pendingConfirmation = pending;
     },
   });
-  const webTools = options.webEvidence
+  const isWebCapabilityAllowed = () =>
+    webEvidence?.capability === 'enabled' &&
+    !options.selectedActionResponse &&
+    resolveCurrentToolNames().length > 0;
+  const webTools = webEvidence
     ? createKfcWebTools({
-        client: options.webEvidence.client,
-        inventoryUrls: options.webEvidence.inventoryUrls,
+        client: webEvidence.client,
         receipts,
         budget: webBudget!,
-        resolveAuthorizedToolNames: () =>
-          options.selectedActionResponse ||
-          resolveCurrentToolNames().length === 0
-            ? []
-            : ['searchKfcWeb', 'fetchKfcPage'],
+        isCapabilityAllowed: isWebCapabilityAllowed,
       })
     : [];
   const tools = [...coreTools, ...webTools];
   const webToolNames = new Set(webTools.map(({ name }) => name));
   const resolveAllToolNames = () => {
     const coreNames = resolveCurrentToolNames();
-    return options.selectedActionResponse || coreNames.length === 0
-      ? coreNames
-      : [...coreNames, ...webToolNames];
+    return webEvidence?.capability === 'enabled' &&
+      !options.selectedActionResponse &&
+      coreNames.length > 0
+      ? [...coreNames, ...webToolNames]
+      : coreNames;
   };
   const selectedActionMessage = options.selectedActionResponse
     ? new SystemMessage({

@@ -137,7 +137,7 @@ function groundedPublication(input: {
 function harness(input?: {
   readonly searchResults?: readonly TinyFishSearchResult[];
   readonly fetchResult?: TinyFishFetchResult;
-  readonly authorized?: () => readonly string[];
+  readonly capabilityAllowed?: () => boolean;
   readonly budget?: ReturnType<typeof createKfcWebTurnBudget>;
 }) {
   const search = vi.fn(
@@ -164,11 +164,9 @@ function harness(input?: {
   const receipts: KfcWebToolReceipt[] = [];
   const tools = createKfcWebTools({
     client: { search, fetch } as TinyFishClient,
-    inventoryUrls: KFC_WEB_INVENTORY_URLS,
     receipts,
     budget: input?.budget ?? createKfcWebTurnBudget(),
-    resolveAuthorizedToolNames:
-      input?.authorized ?? (() => ['searchKfcWeb', 'fetchKfcPage']),
+    isCapabilityAllowed: input?.capabilityAllowed ?? (() => true),
   });
   return { fetch, receipts, search, tools };
 }
@@ -183,6 +181,124 @@ describe('KFC supplemental official-site web evidence tools', () => {
     expect(Object.isFrozen(KFC_WEB_ALLOWED_HOSTNAMES)).toBe(true);
     expect(KFC_WEB_INVENTORY_URLS).toContain(INVENTORIED_URL);
     expect(KFC_WEB_INVENTORY_URLS.length).toBeLessThanOrEqual(12);
+  });
+
+  it('ignores a caller attempt to expand the KFC direct-fetch inventory', async () => {
+    const fetch = vi.fn(async ({ url }: { url: string }) => ({
+      sourceUrl: url,
+      finalUrl: url,
+      title: 'Caller-injected page',
+      text: 'This page must never become admitted by caller input.',
+      retrievedAt: RETRIEVED_AT,
+    }));
+    const attemptedExpansion = {
+      client: { search: vi.fn(), fetch } as TinyFishClient,
+      inventoryUrls: [
+        ...KFC_WEB_INVENTORY_URLS,
+        'https://www.kfcvietnam.com.vn/not-in-inventory',
+      ],
+      receipts: [] as KfcWebToolReceipt[],
+      budget: createKfcWebTurnBudget(),
+      isCapabilityAllowed: () => true,
+    };
+
+    const tools = createKfcWebTools(attemptedExpansion);
+
+    await expect(
+      tools[1].invoke({
+        url: 'https://www.kfcvietnam.com.vn/not-in-inventory',
+      }),
+    ).rejects.toThrow('kfc_web_url_not_admitted');
+    expect(fetch).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    'https://www.kfcvietnam.com.vn/newapi/menu',
+    'https://www.kfcvietnam.com.vn/invoice/123',
+    'https://www.kfcvietnam.com.vn/static/app.js',
+    'https://www.kfcvietnam.com.vn/upload/menu.pdf',
+    'https://www.kfcvietnam.com.vn/assets/logo.svg',
+    'https://www.kfcvietnam.com.vn/images/chicken.jpg',
+  ])(
+    'rejects a blocked public-page path before direct fetch admission: %s',
+    async (url) => {
+      const currentTurn = harness();
+
+      await expect(currentTurn.tools[1].invoke({ url })).rejects.toThrow(
+        'kfc_web_path_not_allowed',
+      );
+      expect(currentTurn.fetch).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each([
+    'https://www.kfcvietnam.com.vn/newapi/menu',
+    'https://www.kfcvietnam.com.vn/invoice/123',
+    'https://www.kfcvietnam.com.vn/static/app.js',
+    'https://www.kfcvietnam.com.vn/upload/menu.pdf',
+    'https://www.kfcvietnam.com.vn/assets/logo.svg',
+    'https://www.kfcvietnam.com.vn/images/chicken.jpg',
+  ])('rejects a blocked same-host Search result: %s', async (sourceUrl) => {
+    const currentTurn = harness({
+      searchResults: [
+        {
+          sourceUrl,
+          title: 'Unsafe endpoint',
+          snippet: 'Must not be admitted for Fetch.',
+          retrievedAt: RETRIEVED_AT,
+        },
+      ],
+    });
+
+    await expect(
+      currentTurn.tools[0].invoke({ query: 'unsafe endpoint' }),
+    ).rejects.toThrow('kfc_web_path_not_allowed');
+    expect(currentTurn.receipts.at(-1)).toMatchObject({
+      name: 'searchKfcWeb',
+      status: 'error',
+    });
+  });
+
+  it.each([
+    ['source', 'https://www.kfcvietnam.com.vn/newapi/page'],
+    ['final redirect', 'https://www.kfcvietnam.com.vn/static/page.html'],
+    ['image redirect', 'https://www.kfcvietnam.com.vn/assets/banner.webp'],
+  ])('rejects a blocked %s URL returned by Fetch', async (kind, blockedUrl) => {
+    const currentTurn = harness({
+      fetchResult: {
+        sourceUrl: kind === 'source' ? blockedUrl : INVENTORIED_URL,
+        finalUrl: kind === 'source' ? INVENTORIED_URL : blockedUrl,
+        title: 'Unsafe fetched page',
+        text: 'Must not cross the KFC evidence boundary.',
+        retrievedAt: RETRIEVED_AT,
+      },
+    });
+
+    await expect(
+      currentTurn.tools[1].invoke({ url: INVENTORIED_URL }),
+    ).rejects.toThrow('kfc_web_path_not_allowed');
+  });
+
+  it('keeps approved KFC public pages searchable and fetchable', async () => {
+    const currentTurn = harness({
+      searchResults: [
+        {
+          sourceUrl: `${SEARCHED_URL}?campaign=official`,
+          title: 'Tin KFC Việt Nam',
+          snippet: 'Trang nội dung công khai hợp lệ.',
+          retrievedAt: RETRIEVED_AT,
+        },
+      ],
+    });
+
+    const searchResult = await currentTurn.tools[0].invoke({
+      query: 'tin KFC',
+    });
+    expect(searchResult.results[0]?.sourceUrl).toBe(
+      `${SEARCHED_URL}?campaign=official`,
+    );
+    await currentTurn.tools[1].invoke({ url: INVENTORIED_URL });
+    expect(currentTurn.fetch).toHaveBeenCalledOnce();
   });
 
   it('searches in Vietnamese/Vietnam and returns compact cited evidence', async () => {
@@ -342,7 +458,7 @@ describe('KFC supplemental official-site web evidence tools', () => {
   });
 
   it('fails closed before TinyFish when the application does not authorize a forged hidden call', async () => {
-    const { search, tools } = harness({ authorized: () => [] });
+    const { search, tools } = harness({ capabilityAllowed: () => false });
     await expect(tools[0].invoke({ query: 'forged' })).rejects.toThrow(
       'kfc_web_tool_not_authorized',
     );
@@ -396,7 +512,7 @@ describe('KFC supplemental official-site web evidence tools', () => {
       resolveActiveToolNames: () => [...toolNames],
       webEvidence: {
         client: { search: tinyFish.search, fetch: tinyFish.fetch },
-        inventoryUrls: KFC_WEB_INVENTORY_URLS,
+        capability: 'enabled',
       },
     });
 
@@ -465,7 +581,7 @@ describe('KFC supplemental official-site web evidence tools', () => {
         resolveActiveToolNames: () => [...toolNames],
         webEvidence: {
           client: { search: tinyFish.search, fetch: tinyFish.fetch },
-          inventoryUrls: KFC_WEB_INVENTORY_URLS,
+          capability: 'enabled',
         },
       });
 
@@ -515,7 +631,7 @@ describe('KFC supplemental official-site web evidence tools', () => {
       resolveActiveToolNames: () => [...toolNames],
       webEvidence: {
         client: { search: tinyFish.search, fetch: tinyFish.fetch },
-        inventoryUrls: KFC_WEB_INVENTORY_URLS,
+        capability: 'enabled',
       },
     });
 
@@ -555,7 +671,7 @@ describe('KFC supplemental official-site web evidence tools', () => {
       resolveActiveToolNames: () => [],
       webEvidence: {
         client: { search: tinyFish.search, fetch: tinyFish.fetch },
-        inventoryUrls: KFC_WEB_INVENTORY_URLS,
+        capability: 'enabled',
       },
     });
 
@@ -567,6 +683,49 @@ describe('KFC supplemental official-site web evidence tools', () => {
         currentUserTurnId: turnId,
       }),
     ).rejects.toThrow('kfc_web_tool_not_authorized');
+    expect(tinyFish.search).not.toHaveBeenCalled();
+  });
+
+  it('denies advertised and forged web calls when trusted web capability is explicitly disabled despite commerce tools', async () => {
+    const { store, turnId } = await kfcStore();
+    const tinyFish = harness();
+    const model = new ScriptedKfcWebModel({
+      outputs: [
+        new AIMessage({
+          content: '',
+          tool_calls: [
+            {
+              id: 'explicitly-denied-web',
+              name: 'searchKfcWeb',
+              args: { query: 'forged despite denial' },
+              type: 'tool_call',
+            },
+          ],
+        }),
+      ],
+    });
+    const pack = new KfcAgentPack({
+      model,
+      store,
+      loadState: async () => kfcState(),
+      executeTool: vi.fn(),
+      resolveActiveToolNames: () => [...toolNames],
+      webEvidence: {
+        client: { search: tinyFish.search, fetch: tinyFish.fetch },
+        capability: 'disabled',
+      },
+    });
+
+    await expect(
+      pack.runTurn({
+        sessionId: 'kfc:web',
+        customerId: 'customer-1',
+        channel: 'kfc',
+        currentUserTurnId: turnId,
+      }),
+    ).rejects.toThrow('kfc_web_tool_not_authorized');
+    expect(model.calls[0]?.toolNames).not.toContain('searchKfcWeb');
+    expect(model.calls[0]?.toolNames).not.toContain('fetchKfcPage');
     expect(tinyFish.search).not.toHaveBeenCalled();
   });
 
@@ -611,7 +770,7 @@ describe('KFC supplemental official-site web evidence tools', () => {
       selectedActionResponse,
       webEvidence: {
         client: { search: tinyFish.search, fetch: tinyFish.fetch },
-        inventoryUrls: KFC_WEB_INVENTORY_URLS,
+        capability: 'enabled',
       },
     });
 
@@ -699,7 +858,7 @@ describe('KFC supplemental official-site web evidence tools', () => {
       resolveActiveToolNames: () => [...toolNames],
       webEvidence: {
         client: { search: tinyFish.search, fetch: tinyFish.fetch },
-        inventoryUrls: KFC_WEB_INVENTORY_URLS,
+        capability: 'enabled',
         now: () => now,
       },
     });

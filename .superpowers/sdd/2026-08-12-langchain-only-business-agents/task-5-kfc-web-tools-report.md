@@ -154,3 +154,89 @@ feat(kfc): add supplemental TinyFish evidence tools
 2. The web deadline is application-owned and deterministic, while in-flight cancellation remains the approved adapter's 4-second SDK timeout because TinyFish Search/Fetch do not accept caller abort signals.
 3. The 11-URL inventory is intentionally small and immutable. New KFC public origins or pages require a deliberate KFC policy change; they are never learned into future turns or persisted as canonical business data.
 4. The bundle increase is small because Task 4 already made the SDK reachable, but it should remain part of final release qualification.
+
+## Review fix — KFC web evidence policy enforcement
+
+The review findings were reproduced before production changes. The focused
+suite failed 17 cases while 21 existing cases remained green:
+
+```text
+Test Files  1 failed (1)
+Tests       17 failed | 21 passed (38)
+```
+
+The failures showed that a caller-provided inventory could admit an arbitrary
+same-host page, same-host API/static/binary paths crossed Search and Fetch
+boundaries, and an explicit web denial was ignored whenever commerce tools were
+nonempty.
+
+The KFC tool factory no longer accepts an inventory. It closes over the frozen
+KFC-owned `KFC_WEB_INVENTORY_URLS`, so an extra runtime `inventoryUrls` property
+cannot expand direct Fetch admission. The regression attempts to inject
+`/not-in-inventory`, receives `kfc_web_url_not_admitted`, and proves the injected
+Fetch client was not called.
+
+`validateKfcPublicWebUrl` now composes the existing HTTPS/exact-host URL check
+with KFC's public-page policy. It rejects API, `newapi`, invoice, static, upload,
+asset, image, and img path namespaces, plus binary/static document, image,
+script, data, archive, font, audio, and video extensions. The validator is
+applied independently to:
+
+- direct Fetch input before inventory/search admission;
+- every injected Search result before same-turn admission;
+- the Fetch result's source URL before equality validation;
+- the Fetch result's final URL after redirects.
+
+Tests cover `/newapi`, `/invoice`, `/static`, `/upload`, `/assets`, `/images`,
+JavaScript, PDF, SVG, JPEG, and WebP paths at those boundaries. Approved KFC
+policy and news pages, including query strings, remain searchable/fetchable.
+
+Web capability is now an explicit trusted `enabled`/`disabled` decision and is
+not inferred from `ToolName[]`. Server route composition enables it only when
+the TinyFish client is configured. Application composition explicitly disables
+it for a trusted selected-action turn or an explicit deny. The KFC pack then
+conjoins that decision with ordinary-turn policy and at least one active
+commerce tool. Both `wrapModelCall` advertisement and `wrapToolCall` execution
+use the result, while each web handler repeats the capability check. A scripted
+forged-call regression keeps nonempty commerce tools, explicitly denies web,
+proves neither web tool is advertised, receives
+`kfc_web_tool_not_authorized`, and proves TinyFish was untouched. Existing
+zero-tool and selected-action regressions remain green.
+
+No PVCFC policy, tool, prompt, or test was changed.
+
+### Review-fix verification
+
+```text
+npx vitest run test/business/kfc-web-tools.test.ts --reporter=verbose
+Test Files  1 passed (1)
+Tests       38 passed (38)
+
+focused integration
+Test Files  4 passed (4)
+Tests       55 passed (55)
+
+npm run check
+Test Files  201 passed | 1 skipped (202)
+Tests       2001 passed | 1 skipped (2002)
+
+npm run check:architecture
+Architecture size check passed (466 files, 900-line ceiling with no baseline growth).
+
+npm run build
+exit 0
+
+npm run worker:deploy:dry-run
+exit 0
+Total Upload: 12722.13 KiB / gzip: 1337.36 KiB
+```
+
+The review fix adds **+0.68 KiB raw / +0.49 KiB gzip** over the Task 5
+implementation result. The final Task 5 delta from accepted Task 4 is
+**+12.58 KiB raw / +3.33 KiB gzip**. No live TinyFish request was made.
+
+Required review-fix commit subject:
+
+```text
+fix(kfc): enforce web evidence policy
+```

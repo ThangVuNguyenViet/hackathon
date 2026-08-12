@@ -481,6 +481,7 @@ export function createRouteAgentRuntime(
         runGuard,
         agentModel: options.agent.model,
         webEvidenceClient: options.kfcWebEvidenceClient,
+        webEvidenceAllowed: options.kfcWebEvidenceClient !== undefined,
       });
 
       if (output.suppressed || !(await runGuard.isCurrent())) {

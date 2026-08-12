@@ -68,6 +68,7 @@ export interface AgentTurnInput {
   traceContext?: AgentTraceContext;
   agentModel?: BaseChatModel;
   webEvidenceClient?: TinyFishClient;
+  webEvidenceAllowed?: boolean;
   webEvidenceNow?: () => number;
   trustedCustomerAction?: TrustedCustomerActionEnvelope;
   runGuard?: {

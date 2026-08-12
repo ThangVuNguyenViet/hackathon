@@ -1,12 +1,13 @@
 import { tool } from 'langchain';
 import { z } from 'zod';
-import { validateBusinessWebUrl } from '../../web/businessWebEvidence.js';
 import type { TinyFishClient } from '../../web/tinyFishClient.js';
 import {
   KFC_WEB_ALLOWED_HOSTNAMES,
   KFC_WEB_FETCH_TIMEOUT_MS,
+  KFC_WEB_INVENTORY_URLS,
   KFC_WEB_OPERATION_TIMEOUT_MS,
   KFC_WEB_TURN_BUDGET_MS,
+  validateKfcPublicWebUrl,
 } from './webPolicy.js';
 import type { KfcTurnToolReceipt, KfcWebToolReceipt } from './toolReceipts.js';
 
@@ -42,11 +43,8 @@ function requireRemainingTime(budget: KfcWebTurnBudget): void {
   }
 }
 
-function requireAuthorized(
-  name: KfcWebToolName,
-  resolveAuthorizedToolNames: () => readonly string[],
-): void {
-  if (!resolveAuthorizedToolNames().includes(name)) {
+function requireAuthorized(isCapabilityAllowed: () => boolean): void {
+  if (!isCapabilityAllowed()) {
     throw new Error('kfc_web_tool_not_authorized');
   }
 }
@@ -85,10 +83,7 @@ function compactSearchResult(result: {
   readonly retrievedAt: string;
 }) {
   return {
-    sourceUrl: validateBusinessWebUrl(
-      result.sourceUrl,
-      KFC_WEB_ALLOWED_HOSTNAMES,
-    ),
+    sourceUrl: validateKfcPublicWebUrl(result.sourceUrl),
     title: result.title.trim().slice(0, 300),
     snippet: result.snippet.trim().slice(0, 800),
     ...(result.publishedDate
@@ -100,23 +95,18 @@ function compactSearchResult(result: {
 
 export function createKfcWebTools(input: {
   readonly client: TinyFishClient;
-  readonly inventoryUrls: readonly string[];
   readonly receipts: KfcTurnToolReceipt[];
   readonly budget: KfcWebTurnBudget;
-  readonly resolveAuthorizedToolNames: () => readonly string[];
+  readonly isCapabilityAllowed: () => boolean;
 }) {
-  const inventoryUrls = new Set(
-    input.inventoryUrls.map((url) =>
-      validateBusinessWebUrl(url, KFC_WEB_ALLOWED_HOSTNAMES),
-    ),
-  );
+  const inventoryUrls = new Set(KFC_WEB_INVENTORY_URLS);
   const currentTurnSearchUrls = new Set<string>();
 
   const searchKfcWeb = tool(
     async ({ query }) => {
       const startedAt = input.budget.now();
       try {
-        requireAuthorized('searchKfcWeb', input.resolveAuthorizedToolNames);
+        requireAuthorized(input.isCapabilityAllowed);
         if (input.budget.searchCalls >= 1) {
           throw new Error('kfc_web_search_budget_exhausted');
         }
@@ -172,16 +162,13 @@ export function createKfcWebTools(input: {
     async ({ url }) => {
       const startedAt = input.budget.now();
       try {
-        requireAuthorized('fetchKfcPage', input.resolveAuthorizedToolNames);
+        requireAuthorized(input.isCapabilityAllowed);
         if (input.budget.fetchCalls >= 2) {
           throw new Error('kfc_web_fetch_budget_exhausted');
         }
         requireRemainingTime(input.budget);
         input.budget.fetchCalls += 1;
-        const admittedUrl = validateBusinessWebUrl(
-          url,
-          KFC_WEB_ALLOWED_HOSTNAMES,
-        );
+        const admittedUrl = validateKfcPublicWebUrl(url);
         if (
           !inventoryUrls.has(admittedUrl) &&
           !currentTurnSearchUrls.has(admittedUrl)
@@ -193,17 +180,11 @@ export function createKfcWebTools(input: {
           allowedHostnames: KFC_WEB_ALLOWED_HOSTNAMES,
           perUrlTimeoutMs: KFC_WEB_FETCH_TIMEOUT_MS,
         });
-        const sourceUrl = validateBusinessWebUrl(
-          fetched.sourceUrl,
-          KFC_WEB_ALLOWED_HOSTNAMES,
-        );
+        const sourceUrl = validateKfcPublicWebUrl(fetched.sourceUrl);
         if (sourceUrl !== admittedUrl) {
           throw new Error('kfc_web_source_url_mismatch');
         }
-        const finalUrl = validateBusinessWebUrl(
-          fetched.finalUrl,
-          KFC_WEB_ALLOWED_HOSTNAMES,
-        );
+        const finalUrl = validateKfcPublicWebUrl(fetched.finalUrl);
         const page = {
           sourceUrl,
           finalUrl,

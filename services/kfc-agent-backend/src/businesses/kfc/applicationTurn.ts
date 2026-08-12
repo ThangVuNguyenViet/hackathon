@@ -36,7 +36,6 @@ import {
 } from '../../observability/agentTracing.js';
 import { KfcAgentPack } from './pack.js';
 import type { AgentTurnInput } from './turnContracts.js';
-import { KFC_WEB_INVENTORY_URLS } from './webPolicy.js';
 import { createKfcWebTurnBudget } from './webTools.js';
 import type { KfcTurnToolReceipt } from './toolReceipts.js';
 import type {
@@ -308,7 +307,11 @@ export async function runKfcApplicationTurn(
         ? {
             webEvidence: {
               client: turnInput.webEvidenceClient,
-              inventoryUrls: KFC_WEB_INVENTORY_URLS,
+              capability:
+                turnInput.webEvidenceAllowed === true &&
+                !turnInput.trustedCustomerAction
+                  ? 'enabled'
+                  : 'disabled',
               budget: webBudget,
             },
           }
