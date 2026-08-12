@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { RunTree } from 'langsmith';
 import { getCurrentRunTree } from 'langsmith/traceable';
 import type { Callbacks } from '@langchain/core/callbacks/manager';
@@ -169,6 +169,66 @@ describe('agent tracing', () => {
     ]);
   });
 
+  it('keeps the customer path alive when child, end, and failure transport operations fail', async () => {
+    const diagnostics: string[] = [];
+    const delegateSpan: AgentTraceSpan = {
+      async startSpan() {
+        throw new Error('child transport unavailable');
+      },
+      async end() {
+        throw new Error('end transport unavailable');
+      },
+      async fail() {
+        throw new Error('failure transport unavailable');
+      },
+    };
+    const safe = createSafeAgentTracer(
+      {
+        async startTurn() {
+          return delegateSpan;
+        },
+        async flush() {},
+      },
+      (code) => diagnostics.push(code),
+    );
+
+    const turn = await safe.startTurn({ name: 'agent_turn', inputs: {} });
+    const child = await turn.startSpan({
+      name: 'call_model',
+      runType: 'llm',
+      inputs: {},
+    });
+    await child.end({ ignored: true });
+    await turn.end({ customerTurn: 'completed' });
+    await turn.fail(new Error('customer turn failed independently'));
+
+    expect(diagnostics).toEqual([
+      'agent_trace_span_start_failed',
+      'agent_trace_end_failed',
+      'agent_trace_fail_failed',
+    ]);
+  });
+
+  it('emits only a bounded diagnostic code when no local diagnostic sink is injected', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+    const secret = 'PRIVATE-CUSTOMER-PAYLOAD-and-api-key';
+    const safe = createSafeAgentTracer({
+      async startTurn() {
+        throw new Error(secret);
+      },
+      async flush() {},
+    });
+
+    await safe.startTurn({ name: 'agent_turn', inputs: {} });
+
+    expect(warn).toHaveBeenCalledOnce();
+    expect(String(warn.mock.calls[0]?.[0])).toBe(
+      '{"event":"agent_trace_diagnostic","code":"agent_trace_start_failed"}',
+    );
+    expect(String(warn.mock.calls[0]?.[0])).not.toContain(secret);
+    warn.mockRestore();
+  });
+
   it('preserves native callbacks and active trace delegation through the safe wrapper', async () => {
     const callbacks: Callbacks = [];
     const events: string[] = [];
@@ -324,6 +384,37 @@ describe('agent tracing', () => {
     expect(diagnostics).toEqual(['agent_trace_active_context_failed']);
   });
 
+  it('returns one application execution when an active trace delegate invokes the callback more than once', async () => {
+    let applicationCalls = 0;
+    const delegateSpan: AgentTraceSpan = {
+      async startSpan() {
+        return this;
+      },
+      async end() {},
+      async fail() {},
+      async withActiveTrace<T>(fn: () => Promise<T>) {
+        const [first, second] = await Promise.all([fn(), fn()]);
+        expect(second).toBe(first);
+        return first;
+      },
+    };
+    const safe = createSafeAgentTracer({
+      async startTurn() {
+        return delegateSpan;
+      },
+      async flush() {},
+    });
+    const turn = await safe.startTurn({ name: 'agent_turn', inputs: {} });
+
+    await expect(
+      turn.withActiveTrace?.(async () => {
+        applicationCalls += 1;
+        return { status: 'completed' };
+      }),
+    ).resolves.toEqual({ status: 'completed' });
+    expect(applicationCalls).toBe(1);
+  });
+
   it('propagates an application failure swallowed by the active trace delegate', async () => {
     const diagnostics: string[] = [];
     const applicationError = new Error('application failed');
@@ -428,7 +519,7 @@ describe('agent tracing', () => {
     expect(process.env.LANGSMITH_PROJECT).toBe(beforeProject);
   });
 
-  it('passes ordinary metadata and failures through to custom run adapters', async () => {
+  it('keeps only bounded application metadata and tags out of customer-controlled payloads', async () => {
     const sentinel = 'CUSTOM-TRACE-SENTINEL-1d9f';
     let root: FakeLangSmithRun | undefined;
     const tracer = new LangSmithAgentTracer({
@@ -439,37 +530,45 @@ describe('agent tracing', () => {
       },
     });
     const metadata = {
-      session_id: 'safe-session',
       scenarioId: 'safe-scenario',
       probeRunId: 'safe-probe',
       canonicalScenarioTurnIndex: 15,
-      rawEvent: {
-        type: 'record',
-        count: 1,
-        digest: 'a'.repeat(64),
-        value: sentinel,
-      },
+      businessId: 'kfc',
+      apiKey: sentinel,
+      fetchedPage: sentinel,
+      customerPayload: sentinel,
       value: sentinel,
     };
     const turn = await tracer.startTurn({
       name: 'agent_turn',
       inputs: { value: sentinel },
       metadata,
+      tags: ['business:kfc', 'agent-tool', `customer:${sentinel}`],
     });
     const child = await turn.startSpan({
       name: 'native_child',
       runType: 'chain',
       inputs: { value: sentinel },
-      metadata: { value: sentinel },
+      metadata: { component: 'native_child', toolArguments: sentinel },
+      tags: ['model-attempt', `page:${sentinel}`],
     });
     await child.end({ value: sentinel });
     await turn.fail(new Error(sentinel));
     await tracer.flush();
 
     expect(root?.config.inputs).toEqual({ value: sentinel });
-    expect(root?.config.metadata).toEqual(metadata);
+    expect(root?.config.metadata).toEqual({
+      scenarioId: 'safe-scenario',
+      probeRunId: 'safe-probe',
+      canonicalScenarioTurnIndex: 15,
+      businessId: 'kfc',
+    });
+    expect(root?.config.tags).toEqual(['business:kfc', 'agent-tool']);
     expect(root?.children[0]?.config.inputs).toEqual({ value: sentinel });
-    expect(root?.children[0]?.config.metadata).toEqual({ value: sentinel });
+    expect(root?.children[0]?.config.metadata).toEqual({
+      component: 'native_child',
+    });
+    expect(root?.children[0]?.config.tags).toEqual(['model-attempt']);
     expect(root?.children[0]?.outputs).toEqual({ value: sentinel });
     expect(root?.error).toContain(sentinel);
   });

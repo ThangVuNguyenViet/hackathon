@@ -317,12 +317,16 @@ export async function runKfcApplicationTurn(
           }
         : {}),
     });
-    const result = await pack.runTurn({
-      sessionId: turnInput.sessionId,
-      customerId: turnInput.customerId,
-      channel: turnInput.channel,
-      currentUserTurnId: loaded.currentUserTurn.id,
-    });
+    const invokePack = () =>
+      pack.runTurn({
+        sessionId: turnInput.sessionId,
+        customerId: turnInput.customerId,
+        channel: turnInput.channel,
+        currentUserTurnId: loaded.currentUserTurn!.id,
+      });
+    const result = turnTrace.withActiveTrace
+      ? await turnTrace.withActiveTrace(invokePack)
+      : await invokePack();
     const confirmationPause = result.pendingConfirmation
       ? await canonicalConfirmationPause({
           turnInput,

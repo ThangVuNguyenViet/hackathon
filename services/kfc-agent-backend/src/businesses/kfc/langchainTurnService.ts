@@ -1,4 +1,5 @@
 import type { BaseChatModel } from '@langchain/core/language_models/chat_models';
+import type { Callbacks } from '@langchain/core/callbacks/manager';
 import {
   AIMessage,
   HumanMessage,
@@ -47,6 +48,8 @@ export interface KfcAgentTurnInput {
   readonly customerId: string;
   readonly channel: Channel;
   readonly currentUserTurnId: string;
+  /** Trusted application trace bridge; never populated from customer input. */
+  readonly traceCallbacks?: Callbacks;
 }
 
 export interface KfcStateLoaderInput extends KfcAgentTurnInput {
@@ -295,6 +298,12 @@ export async function runKfcLangChainTurn(
       // safety authority; this budget only lets an allowed eight-tool turn
       // reach its structured response.
       recursionLimit: 64,
+      callbacks: turn.traceCallbacks,
+      tags: ['business:kfc', 'runtime:langchain-create-agent'],
+      metadata: {
+        businessId: 'kfc',
+        runtime: 'langchain-create-agent',
+      },
     },
   );
   const parsed = kfcGroundedPublicationSchema.safeParse(

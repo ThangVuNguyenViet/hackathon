@@ -1,4 +1,6 @@
 import type { CallbackManagerForLLMRun } from '@langchain/core/callbacks/manager';
+import { CallbackManager } from '@langchain/core/callbacks/manager';
+import { BaseCallbackHandler } from '@langchain/core/callbacks/base';
 import { BaseChatModel } from '@langchain/core/language_models/chat_models';
 import {
   AIMessage,
@@ -318,5 +320,74 @@ describe('KFC LangChain business pack', () => {
     });
 
     expect(model.calls[0]?.toolNames).toEqual(['searchMenu']);
+  });
+
+  it('nests the createAgent and model runs under the application trace callback parent', async () => {
+    const { store, currentUserTurnId } = await canonicalStore();
+    const model = new ScriptedKfcChatModel({
+      outputs: [new AIMessage(JSON.stringify(publication))],
+    });
+    const applicationRunId = crypto.randomUUID();
+    const runs: Array<{
+      kind: 'chain' | 'model';
+      runId: string;
+      parentRunId?: string;
+    }> = [];
+    const handler = BaseCallbackHandler.fromMethods({
+      handleChainStart(
+        _chain: unknown,
+        _inputs: unknown,
+        runId: string,
+        parentRunId?: string,
+        _tags?: string[],
+        _metadata?: Record<string, unknown>,
+      ) {
+        runs.push({ kind: 'chain', runId, parentRunId });
+      },
+      handleChatModelStart(
+        _model: unknown,
+        _messages: unknown,
+        runId: string,
+        parentRunId?: string,
+      ) {
+        runs.push({ kind: 'model', runId, parentRunId });
+      },
+    });
+    const callbacks = new CallbackManager(applicationRunId);
+    callbacks.addHandler(handler, true);
+    const pack = new KfcAgentPack({
+      model,
+      store,
+      loadState: async () => state('Chỉ xem thực đơn.'),
+      executeTool: vi.fn(),
+      resolveActiveToolNames: () => ['searchMenu'],
+    });
+
+    await pack.runTurn({
+      sessionId: 'kfc:core',
+      customerId: 'customer-1',
+      channel: 'kfc',
+      currentUserTurnId,
+      traceCallbacks: callbacks,
+    });
+
+    const byId = new Map(runs.map((run) => [run.runId, run]));
+    const reachesApplicationTrace = (run: (typeof runs)[number]): boolean => {
+      let parentRunId = run.parentRunId;
+      const visited = new Set<string>();
+      while (parentRunId && !visited.has(parentRunId)) {
+        if (parentRunId === applicationRunId) return true;
+        visited.add(parentRunId);
+        parentRunId = byId.get(parentRunId)?.parentRunId;
+      }
+      return false;
+    };
+
+    expect(runs.some(({ kind }) => kind === 'chain')).toBe(true);
+    expect(runs.some(({ kind }) => kind === 'model')).toBe(true);
+    expect(
+      runs.every(reachesApplicationTrace),
+      JSON.stringify(runs, null, 2),
+    ).toBe(true);
   });
 });

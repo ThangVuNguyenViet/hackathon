@@ -149,7 +149,11 @@ function createSafeSpan(
 
 export function createSafeAgentTracer(
   delegate: AgentTracer,
-  onDiagnostic: (code: AgentTraceDiagnostic, error: unknown) => void = () => undefined,
+  onDiagnostic: (code: AgentTraceDiagnostic, error: unknown) => void = (
+    code,
+  ) => {
+    console.warn(JSON.stringify({ event: 'agent_trace_diagnostic', code }));
+  },
 ): AgentTracer {
   return {
     async startTurn(input) {

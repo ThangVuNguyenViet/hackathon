@@ -16,6 +16,14 @@ const forbiddenProductionRuntime = [
   ['application-authored StateGraph runtime', /\bStateGraph\b/u],
   ['legacy runtime selector', /KFC_AGENT_RUNTIME/u],
   ['legacy runtime name', /openai-responses/u],
+  [
+    'private LangChain tracer run creation',
+    /(?:\.|\[\s*['"])(_createRun(?:For[A-Za-z]+Start)?)(?:\b|['"]\s*\])/u,
+  ],
+  [
+    'private LangChain tracer run-map mutation',
+    /(?:\.|\[\s*['"])(_addRunToRunMap)(?:\b|['"]\s*\])/u,
+  ],
 ] as const;
 
 const skippedDirectories = new Set([
