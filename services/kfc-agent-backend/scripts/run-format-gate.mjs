@@ -26,7 +26,6 @@ const candidates = new Set([
   'tsconfig.json',
   'vitest.config.ts',
   '../../.github/workflows/kfc-genui.yml',
-  '../../.github/workflows/openai-geo-canary.yml',
 ]);
 const sourceExtensions = new Set(['.json', '.mjs', '.mts', '.ts']);
 
