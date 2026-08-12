@@ -14,7 +14,6 @@ import {
   type CustomerRun,
   type CustomerRunEvent,
 } from '../customerRuns/contracts.js';
-import type { AgentInputItem } from '@kfc/openai-agents-runtime';
 import type {
   AuthenticatedCommerceApprovalPrincipal,
   CommerceApprovalBinding,
@@ -134,7 +133,6 @@ export interface CommitAssistantTurnInput {
     payload: Record<string, unknown>;
   };
   assistantTurn: AppendConversationTurnInput;
-  sdkSessionMutation?: AgentSessionItemsMutation;
   auditEvent?: {
     sessionId: string;
     sourceType: string;
@@ -146,11 +144,6 @@ export interface CommitAssistantTurnInput {
    * them.
    */
   verifiedRefs?: readonly VerifiedRefRecord[];
-}
-
-export interface AgentSessionItemsMutation {
-  mode: 'append' | 'replace';
-  items: readonly AgentInputItem[];
 }
 
 export interface CommitAssistantTurnIfRunCurrentInput
@@ -191,20 +184,40 @@ export type CommitConfirmationPauseIfRunCurrentResult =
       pauseEvent: StoredEvent;
       record: ConfirmationPauseRecord;
     }
-  | { status: 'stale' | 'conflict' };
+  | { status: 'stale' }
+  | { status: 'conflict' };
+
+export interface CommitConfirmationTurnIfRunCurrentInput
+  extends CommitAssistantTurnInput {
+  fence: RunCommitFence;
+  pause: CreateConfirmationPauseInput;
+}
+
+export type CommitConfirmationTurnIfRunCurrentResult =
+  | {
+      status: 'created' | 'replay';
+      stateEvent: StoredEvent;
+      pauseEvent: StoredEvent;
+      turnEvent: StoredEvent;
+      turn: ConversationTurn;
+      record: ConfirmationPauseRecord;
+      verifiedRefs: VerifiedRefRecord[];
+    }
+  | { status: 'stale' }
+  | { status: 'conflict' };
 
 export interface ConfirmationPauseRecord {
   schemaVersion: 'kfc-confirmation-pause-v1';
   requestId: string;
-  checkpointThreadId: string;
-  checkpointNamespace: string;
-  /** Exact immutable LangGraph checkpoint containing the interrupt. */
-  checkpointId: string;
+  sourceTurnId: string;
+  actionScope: string;
+  /** Exact immutable application action selected by the source turn. */
+  actionId: string;
   sessionId: string;
   customerId: string;
   channel: ConversationTurn['channel'];
   action: ToolCallRequest;
-  /** Digest of the exact model-authored tool call and arguments. */
+  /** Digest of the exact canonical tool call and arguments. */
   actionDigest: string;
   /**
    * Server-enriched approval authority. Its actionDigest may additionally
@@ -228,9 +241,9 @@ export type CreateConfirmationPauseInput = Pick<
   ConfirmationPauseRecord,
   | 'schemaVersion'
   | 'requestId'
-  | 'checkpointThreadId'
-  | 'checkpointNamespace'
-  | 'checkpointId'
+  | 'sourceTurnId'
+  | 'actionScope'
+  | 'actionId'
   | 'sessionId'
   | 'customerId'
   | 'channel'
@@ -370,13 +383,6 @@ export interface WebhookDelivery {
   lastError: string | null;
   createdAt: string;
   updatedAt: string;
-}
-
-export interface CheckpointIdentifier {
-  checkpointThreadId: string;
-  checkpointNamespace: string;
-  checkpointId: string;
-  parentCheckpointId: string | null;
 }
 
 export interface SessionControl {
@@ -690,18 +696,6 @@ export type AppendConversationTurnInput = Omit<
 };
 
 export interface ConversationStore {
-  listAgentSessionItems(
-    sessionId: string,
-    limit?: number,
-  ): Promise<AgentInputItem[]>;
-  addAgentSessionItems(
-    sessionId: string,
-    items: AgentInputItem[],
-  ): Promise<void>;
-  popAgentSessionItem(
-    sessionId: string,
-  ): Promise<AgentInputItem | undefined>;
-  clearAgentSessionItems(sessionId: string): Promise<void>;
   resetSession(sessionId: string): Promise<SessionControl>;
   createCustomerRun(input: CreateCustomerRunInput): Promise<CustomerRun>;
   createCustomerRunWithEvent?(
@@ -825,7 +819,6 @@ export interface ConversationStore {
   listAgentRuns(sessionId: string): Promise<AgentRun[]>;
   linkAgentRunTurn(input: AgentRunTurn): Promise<AgentRunTurn>;
   listAgentRunTurns(runId: string): Promise<AgentRunTurn[]>;
-  listCheckpointIdentifiers(sessionId: string): Promise<CheckpointIdentifier[]>;
   getSessionAgentState(sessionId: string): Promise<SessionAgentState>;
   setSessionAgentState(
     input: SessionAgentStateInput,
@@ -900,6 +893,13 @@ export interface ConversationStore {
   commitConfirmationPauseIfRunCurrent(
     input: CommitConfirmationPauseIfRunCurrentInput,
   ): Promise<CommitConfirmationPauseIfRunCurrentResult>;
+  /**
+   * Atomically publishes one confirmation pause and the assistant turn that
+   * asks for it. Implementations must never expose only one side.
+   */
+  commitConfirmationTurnIfRunCurrent(
+    input: CommitConfirmationTurnIfRunCurrentInput,
+  ): Promise<CommitConfirmationTurnIfRunCurrentResult>;
   listEvents(sessionId: string): Promise<StoredEvent[]>;
   issueVerifiedRef(
     input: IssueVerifiedRefInput,

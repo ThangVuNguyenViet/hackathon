@@ -62,10 +62,10 @@ Create Worker secrets:
 ```bash
 npx wrangler secret put MESSENGER_VERIFY_TOKEN
 npx wrangler secret put META_PAGE_ACCESS_TOKEN
-npx wrangler secret put OPENAI_API_KEY
+npx wrangler secret put GOOGLE_API_KEY
 ```
 
-`OPENAI_API_KEY` is optional for `/ready`; without it, `/ready` reports OpenAI as not configured but does not block the demo boot check. Messenger verification and live replies require the Messenger secrets.
+`GOOGLE_API_KEY` configures the maintained LangChain KFC agent and monitor deployment. Messenger verification and live replies also require the Messenger secrets.
 
 ## Backend Deploy
 
@@ -213,7 +213,11 @@ curl -s 'http://localhost:8787/webhooks/messenger?hub.mode=subscribe&hub.verify_
 
 ## Optional Cloud Run Fallback
 
-Cloud Run + Neon is retained only as a fallback path for historical work. If Worker deploy is unavailable, use `scripts/deploy-backend-cloud-run.sh` and set the Messenger callback to `<CLOUD_RUN_URL>/webhooks/messenger`. Do not switch the hackathon submission to Cloud Run unless the Worker path is blocked.
+Cloud Run + PostgreSQL is retained as a fallback. If Worker deploy is unavailable, first provision the Artifact Registry repository named by `CLOUD_RUN_ARTIFACT_REPOSITORY` (default: `hackathon`), then run `scripts/deploy-backend-cloud-run.sh` and set the Messenger callback to `<CLOUD_RUN_URL>/webhooks/messenger`. Do not switch the hackathon submission to Cloud Run unless the Worker path is blocked.
+
+The helper does not use Cloud Run source auto-detection. It submits the repository root through `services/kfc-agent-backend/cloudbuild.cloud-run.yaml`, builds the dedicated `Dockerfile.cloud-run`, and deploys the resulting immutable image. That image compiles only the production TypeScript runtime, packages the PVCFC React client, and starts the shared LangChain server at `dist/src/index.js`. The separate recommendation-service `Dockerfile` and its qualified-bundle entrypoint are not used by this deployment.
+
+Override `CLOUD_RUN_IMAGE_URI` when the project uses a different registry layout. The script binds the maintained KFC model target—Google `gemini-3.1-flash-lite`—and refuses any non-Google provider selection.
 
 ## Cost Controls
 

@@ -2,12 +2,10 @@ import { existsSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { z } from 'zod';
-import type { BaseChatModel } from '@langchain/core/language_models/chat_models';
-import type { BaseCheckpointSaver } from '@langchain/langgraph';
 import type { ZaloOAuthRuntime } from '../channels/zaloOAuth.js';
-import type { OpenAiKfcAgent } from '../agent/openAiKfcAgent.js';
-import type { OpenAiResponsesExecutor } from '../agent/openAiResponsesExecutor.js';
 import type { PvcfcPublicDataProvider } from '../businesses/pvcfc/public-data/pvcfcPublicDataProvider.js';
+import type { BaseChatModel } from '@langchain/core/language_models/chat_models';
+import type { TinyFishClient } from '../web/tinyFishClient.js';
 import type { ConfirmationApprovalKeyRing } from './confirmationApprovalCapability.js';
 import type { VerifiedMessengerGuestCheckoutIngress } from '../security/guestCheckoutAuthority.js';
 import type {
@@ -61,7 +59,6 @@ import type {
 } from '../domain/types.js';
 import { customerCommandFromVerifiedAction } from '../domain/customerCommand.js';
 import { isKfcGenUiAttachment } from '../genui/kfcGenUi.js';
-import { runAgentTurn } from '../graph/buildGraph.js';
 import type { AgentGraphState } from '../graph/state.js';
 import {
   calculateMonitorSessionIntelligence,
@@ -435,6 +432,11 @@ export interface ReadinessOptions {
   agentConfigured?: boolean;
   agentGatesReadiness?: boolean;
   monitorConfigured?: boolean;
+  webSearch?: {
+    configured: boolean;
+    provider: 'tinyfish';
+    mode: 'search-fetch';
+  };
   zaloRequired?: boolean;
   langsmith?: {
     configured: boolean;
@@ -477,6 +479,10 @@ export interface ReadinessOptions {
 }
 
 export interface RouteOptions {
+  agent?: {
+    model: BaseChatModel;
+    identity: AgentModelIdentity;
+  };
   automaticRecommendations?: AutomaticRecommendationHttpRuntime;
   automaticRecommendationContext?: (
     sessionId: string,
@@ -506,16 +512,12 @@ export interface RouteOptions {
   zaloInboxUrlTemplate?: string;
   zaloApiBaseUrl?: string;
   zaloFetchImpl?: typeof fetch;
-  openAiAgent?: OpenAiKfcAgent;
-  pvcfcAgent?: OpenAiResponsesExecutor;
   pvcfcPublicDataProvider?: PvcfcPublicDataProvider;
-  agent?: {
-    model: BaseChatModel;
-    identity: AgentModelIdentity;
-  };
+  pvcfcAgentModel?: BaseChatModel;
+  pvcfcWebEvidenceClient?: TinyFishClient;
+  kfcWebEvidenceClient?: TinyFishClient;
   monitorJudge?: MonitorSessionIntelligenceJudge;
   agentTracer?: AgentTracer;
-  checkpointer?: BaseCheckpointSaver;
   confirmationApprovalKeyRing?: ConfirmationApprovalKeyRing;
   defer?: (task: () => Promise<void>) => void;
   customerRunPaceMs?: number;
@@ -592,14 +594,12 @@ export interface RouteHandlers {
   lifecycleGet(instanceId: string): Promise<HandlerResponse>;
   lifecycleEvent(instanceId: string, body: unknown): Promise<HandlerResponse>;
   messengerProofEnvelope(sessionId: string): Promise<HandlerResponse>;
-  kfcProofEnvelope(sessionId: string): Promise<HandlerResponse>;
   kfcProofPreconditions(
     sessionId: string,
     body: unknown,
   ): Promise<HandlerResponse>;
   confirmationResume(body: unknown): Promise<HandlerResponse>;
   chatKfcMessage(body: unknown): Promise<HandlerResponse>;
-  chatPvcfcMessage(body: unknown): Promise<HandlerResponse>;
   chatKfcGenUiAction(body: unknown): Promise<HandlerResponse>;
   chatKfcStartRun(body: unknown): Promise<HandlerResponse>;
   chatKfcCancelRun(runId: string): Promise<HandlerResponse>;

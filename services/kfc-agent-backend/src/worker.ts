@@ -36,7 +36,6 @@ import { DashboardEventBus } from "./dashboard/eventBus.js";
 import { dashboardSessionTarget } from "./dashboard/sessionVisibility.js";
 import type { AgentMode, DashboardEvent } from "./domain/types.js";
 import { D1Store, type D1DatabaseLike } from "./persistence/d1Store.js";
-import { D1CheckpointSaver } from "./persistence/d1CheckpointSaver.js";
 import type { ConversationStore } from "./persistence/memoryStore.js";
 import { sessionIdForConversationEvent } from "./session/sessionContext.js";
 import { fetchCatalogObservation } from "./catalog/catalogObservation.js";
@@ -49,6 +48,7 @@ import {
   lifecycleBinding,
 } from "./commerce/lifecycleProvider.js";
 import { buildWorkerRouteOptions } from './workerRouteOptions.js';
+import { createPvcfcRouteResponder } from './api/pvcfcRouteRuntime.js';
 import {
   WORKER_CUSTOMER_RUN_MAX_TEXT_EVENTS,
   WORKER_CUSTOMER_RUN_PACE_MS,
@@ -195,11 +195,7 @@ export interface WorkerEnv {
   DB: D1DatabaseLike;
   KFC_AGENT_PROFILE_MODE?: "production" | "qualification";
   KFC_AGENT_PROVIDER?: "openai" | "google";
-  KFC_AGENT_RUNTIME?: "stategraph" | "openai-responses";
   KFC_AGENT_MODEL?: string;
-  KFC_AGENT_COMPACTION_ENABLED?: "true" | "false";
-  KFC_AGENT_COMPACTION_THRESHOLD_BYTES?: string;
-  KFC_AGENT_COMPACTION_MODEL?: string;
   KFC_MONITOR_PROVIDER?: "openai" | "google";
   KFC_MONITOR_MODEL?: string;
   KFC_CONFIRMATION_SIGNING_KEY_ID?: string;
@@ -212,6 +208,7 @@ export interface WorkerEnv {
   PVCFC_ASTRAFLOW_BASE_URL?: string;
   PVCFC_ASTRAFLOW_MODEL?: "gpt-5.6-luna";
   PVCFC_PUBLIC_DATA_MODE?: "fixture" | "api";
+  TINYFISH_API_KEY?: string;
   OPENAI_GEO_CANARY_TOKEN?: string;
   LANGSMITH_API_KEY?: string;
   LANGSMITH_PROJECT?: string;
@@ -273,7 +270,6 @@ function workerAgentReadiness(env: WorkerEnv): WorkerAgentReadiness {
   let agentReadiness: WorkerAgentReadiness;
   try {
     const identity = resolveRuntimeAgentIdentity({
-      runtime: env.KFC_AGENT_RUNTIME ?? "stategraph",
       provider: agentProvider,
       model: env.KFC_AGENT_MODEL,
       mode: env.KFC_AGENT_PROFILE_MODE,
@@ -395,52 +391,6 @@ export default {
           env,
           store,
           context,
-          env.KFC_AGENT_RUNTIME === 'openai-responses'
-            ? (job, typingReady) => {
-                const fastPath = (async () => {
-                  await typingReady;
-                  const dashboard = new DashboardEventBus({
-                    persistEvent: (event) =>
-                      scheduleDashboardEvent(env, store, event, context),
-                  });
-                  const { routeOptions: options, deferredAgentTasks } =
-                    buildWorkerRouteOptions({
-                      env,
-                      store,
-                      dashboard,
-                      surface: { kind: 'queue' },
-                    });
-                  const handlers = createRouteHandlers(options);
-                  await dispatchMessengerAgentRunWakeup({
-                    job,
-                    env,
-                    coordinator: new AgentRunCoordinator({
-                      store,
-                      dashboard,
-                    }),
-                    processMessengerAgentRun:
-                      handlers.processMessengerAgentRun,
-                    typingAlreadyStarted: true,
-                  });
-                  scheduleAgentBackground(
-                    context,
-                    deferredAgentTasks,
-                    options.agentTracer,
-                  );
-                })().catch((error) => {
-                  console.error('agent_run_fast_path_failed', {
-                    sessionId: job.sessionId,
-                    generation: job.generation,
-                    message:
-                      error instanceof Error
-                        ? error.message
-                        : String(error),
-                  });
-                });
-                if (context) context.waitUntil(fastPath);
-                else void fastPath;
-              }
-            : undefined,
         ),
       );
     }
@@ -535,6 +485,7 @@ export default {
         },
       });
     const handlers = createRouteHandlers(options);
+    const respondToPvcfc = createPvcfcRouteResponder(options);
     const respondWithAgentBackground = (
       result: HandlerResponse,
     ): Response => {
@@ -564,12 +515,6 @@ export default {
       if (!sessionId.startsWith("messenger:")) return json({ errorCode: "invalid_messenger_session" }, 400);
       return toResponse(await handlers.messengerProofEnvelope(sessionId));
     }
-    const kfcProofMatch = url.pathname.match(/^\/admin\/proof\/kfc\/sessions\/([^/]+)\/envelope$/);
-    if (request.method === "GET" && kfcProofMatch) {
-      const sessionId = decodeURIComponent(kfcProofMatch[1]!);
-      if (!sessionId.startsWith("kfc:")) return json({ errorCode: "invalid_kfc_session" }, 400);
-      return toResponse(await handlers.kfcProofEnvelope(sessionId));
-    }
     const kfcProofPreconditionsMatch = url.pathname.match(/^\/admin\/proof\/kfc\/sessions\/([^/]+)\/preconditions$/);
     if (request.method === "POST" && kfcProofPreconditionsMatch) {
       const sessionId = decodeURIComponent(kfcProofPreconditionsMatch[1]!);
@@ -592,6 +537,9 @@ export default {
       return respondWithAgentBackground(
         await handlers.chatKfcMessage(body),
       );
+    }
+    if (request.method === 'POST' && url.pathname === '/chat/pvcfc/message') {
+      return toResponse(await respondToPvcfc(await readJson(request)));
     }
     if (
       request.method === "POST" &&

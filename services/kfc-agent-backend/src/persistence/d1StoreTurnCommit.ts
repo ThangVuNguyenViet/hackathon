@@ -126,36 +126,6 @@ async function commitD1AssistantTurnOperation(input: {
       input.eligibility,
     ));
   }
-  if (prepared.sdkSessionMutation.mode === 'replace') {
-    statements.push(
-      input.db.prepare(
-        `DELETE FROM agent_session_items
-         WHERE session_id = ?
-           AND EXISTS (
-             SELECT 1
-             WHERE ${input.eligibility.sql}
-           )`,
-      ).bind(
-        prepared.turn.sessionId,
-        ...input.eligibility.bindings,
-      ),
-    );
-  }
-  for (const item of prepared.sdkSessionMutation.items) {
-    requiredResultIndexes.push(statements.length);
-    statements.push(
-      input.db.prepare(
-        `INSERT INTO agent_session_items (session_id, item_json)
-         SELECT ?, ?
-         WHERE ${input.eligibility.sql}`,
-      ).bind(
-        prepared.turn.sessionId,
-        JSON.stringify(item),
-        ...input.eligibility.bindings,
-      ),
-    );
-  }
-
   const results = await input.db.batch(statements);
   const changes = requiredResultIndexes.map(
     (index) => Number(results[index]?.meta.changes ?? 0),

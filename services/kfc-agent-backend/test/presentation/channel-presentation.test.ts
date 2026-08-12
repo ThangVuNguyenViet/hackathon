@@ -40,10 +40,10 @@ const genUi: KfcGenUiAttachment = {
 describe('channel presentation profile isolation', () => {
   it.each<[Channel, string, boolean, boolean, boolean]>([
     ['kfc', 'structured_companion', true, false, false],
-    ['messenger', 'standalone_text', false, true, false],
-    ['zalo', 'standalone_text', false, true, false],
-    ['messenger_mock', 'standalone_text', false, true, false],
-    ['zalo_mock', 'standalone_text', false, true, false],
+    ['messenger', 'standalone_text', false, true, true],
+    ['zalo', 'standalone_text', false, true, true],
+    ['messenger_mock', 'standalone_text', false, true, true],
+    ['zalo_mock', 'standalone_text', false, true, true],
   ])(
     'returns immutable capabilities for %s',
     (
@@ -127,7 +127,7 @@ describe('channel presentation profile isolation', () => {
     },
   );
 
-  it('keeps social agent text mode text-only even when trusted media exists', () => {
+  it('projects trusted catalog media alongside standalone social text', () => {
     const presentation = buildSocialPresentation({
       channel: 'messenger',
       standaloneText: 'Combo Hợp Gu 99K có giá 99.000đ.',
@@ -152,6 +152,14 @@ describe('channel presentation profile isolation', () => {
     expect(presentation).toEqual({
       profile: 'social',
       text: 'Combo Hợp Gu 99K có giá 99.000đ.',
+      media: [
+        {
+          key: 'social:20751:0',
+          imageUrl:
+            'https://static.kfcvietnam.com.vn/images/items/lg/HOPGU.jpg',
+          title: 'Combo Hợp Gu 99K',
+        },
+      ],
     });
     expect(presentation.genUi).toBeUndefined();
   });

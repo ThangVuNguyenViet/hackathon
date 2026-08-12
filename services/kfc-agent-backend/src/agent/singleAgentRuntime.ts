@@ -42,7 +42,7 @@ import {
 } from '../graph/commerceExecution.js';
 import type {
   AgentTurnInput,
-} from '../graph/agentTurnState.js';
+} from '../businesses/kfc/turnContracts.js';
 import type { ConversationTurn, Order } from '../domain/types.js';
 import type { AgentGraphState } from '../graph/state.js';
 import {

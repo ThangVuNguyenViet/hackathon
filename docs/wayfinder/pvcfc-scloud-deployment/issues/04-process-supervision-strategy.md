@@ -2,7 +2,7 @@
 
 ## Question
 
-How should `serve-demo-agent-server.ts` be kept running after the SSH session ends?
+How should the packaged backend entrypoint `dist/src/index.js` be kept running after the SSH session ends?
 
 ## Type
 

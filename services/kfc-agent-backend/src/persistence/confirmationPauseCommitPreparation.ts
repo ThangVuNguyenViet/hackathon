@@ -43,9 +43,9 @@ export async function prepareConfirmationPauseCommit(
     sourceType: 'confirmation_pause_created',
     payload: {
       requestId: pause.requestId,
-      checkpointThreadId: pause.checkpointThreadId,
-      checkpointNamespace: pause.checkpointNamespace,
-      checkpointId: pause.checkpointId,
+      sourceTurnId: pause.sourceTurnId,
+      actionScope: pause.actionScope,
+      actionId: pause.actionId,
       customerId: pause.customerId,
       channel: pause.channel,
       actionDigest: pause.actionDigest,

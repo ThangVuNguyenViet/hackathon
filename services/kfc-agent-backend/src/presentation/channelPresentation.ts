@@ -59,7 +59,7 @@ const structuredCompanionCapabilities: ChannelCapabilities = {
 const standaloneTextCapabilities: ChannelCapabilities = {
   presentationMode: 'standalone_text',
   supportsGenUi: false,
-  supportsCatalogMedia: false,
+  supportsCatalogMedia: true,
   requiresStandaloneText: true,
 };
 

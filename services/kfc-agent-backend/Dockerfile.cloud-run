@@ -1,0 +1,34 @@
+FROM node:24-bookworm-slim AS builder
+
+WORKDIR /workspace
+
+COPY apps/pvcfc_chat_web/package.json apps/pvcfc_chat_web/package-lock.json ./apps/pvcfc_chat_web/
+COPY services/kfc-agent-backend/package.json services/kfc-agent-backend/package-lock.json ./services/kfc-agent-backend/
+RUN npm ci --prefix apps/pvcfc_chat_web \
+    && npm ci --prefix services/kfc-agent-backend
+
+COPY apps/pvcfc_chat_web ./apps/pvcfc_chat_web
+COPY services/kfc-agent-backend ./services/kfc-agent-backend
+RUN cd services/kfc-agent-backend \
+    && npm run clean:dist \
+    && npx tsc -p tsconfig.runtime.json \
+    && npm run package:pvcfc-client
+
+FROM node:24-bookworm-slim
+
+WORKDIR /app
+
+COPY services/kfc-agent-backend/package.json services/kfc-agent-backend/package-lock.json ./
+RUN npm ci --omit=dev
+
+COPY --from=builder /workspace/services/kfc-agent-backend/dist ./dist
+COPY --from=builder /workspace/services/kfc-agent-backend/fixtures ./fixtures
+COPY --from=builder /workspace/services/kfc-agent-backend/knowledge ./knowledge
+
+ENV NODE_ENV=production \
+    HOST=0.0.0.0 \
+    PORT=8080
+
+EXPOSE 8080
+
+CMD ["node", "dist/src/index.js"]

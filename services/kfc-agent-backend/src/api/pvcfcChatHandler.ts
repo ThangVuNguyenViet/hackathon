@@ -1,11 +1,14 @@
 import type { ConversationTurnMetadata } from '../domain/types.js';
-import type { RouteAgentRuntime } from './routeAgentRuntime.js';
-import {
-  pvcfcChatPayloadSchema,
-  type HandlerResponse,
-} from './routeHandlerContracts.js';
+import type { HandlerResponse } from './routeHandlerContracts.js';
+import { pvcfcChatPayloadSchema } from './pvcfcChatPayload.js';
 
-type AgentResponse = RouteAgentRuntime['pvcfcAgentResponse'];
+type AgentResponse = (input: {
+  sessionId: string;
+  customerId: string;
+  clientMessageId: string;
+  text: string;
+  metadata: ConversationTurnMetadata;
+}) => Promise<HandlerResponse>;
 
 export function createPvcfcChatHandler(
   agentResponse: AgentResponse,

@@ -41,7 +41,6 @@ import {
   type CustomerRun,
   type CustomerRunEvent,
 } from '../customerRuns/contracts.js';
-import { PostgresCheckpointSaver } from './postgresCheckpointSaver.js';
 
 export type Queryable = Pool | PoolClient;
 

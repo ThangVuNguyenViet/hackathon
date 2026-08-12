@@ -2,7 +2,6 @@ import { existsSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { z } from 'zod';
-import type { BaseCheckpointSaver } from '@langchain/langgraph';
 import { AgentRunCoordinator } from '../agentRuns/coordinator.js';
 import type {
   ChannelMediaDeliveryResult,
@@ -43,6 +42,7 @@ import type {
   AgentMode,
   Channel,
   ConversationProfile,
+  ConversationTurn,
   ConversationTurnMetadata,
   CustomerAccessContext,
   MonitorSessionIntelligence,
@@ -126,6 +126,31 @@ import {
   RouteHandlers,
   defaultFixturesRoot,
 } from './routeHandlerContracts.js';
+
+function persistedChannelPresentation(
+  turn: ConversationTurn,
+): ChannelPresentationPlan {
+  if (turn.channel === 'kfc') {
+    return textOnlyPresentation(turn.text, turn.channel);
+  }
+  const media = (turn.metadata?.attachments ?? []).flatMap(
+    (attachment, index) =>
+      attachment.type === 'image' &&
+      typeof attachment.url === 'string' &&
+      typeof attachment.title === 'string'
+        ? [{
+            key: `persisted:${turn.id}:${index}`,
+            imageUrl: attachment.url,
+            title: attachment.title,
+          }]
+        : [],
+  );
+  return {
+    profile: 'social',
+    text: turn.text,
+    ...(media.length > 0 ? { media } : {}),
+  };
+}
 import {
   eventFromMessengerDelivery,
   sendMessengerSenderAction,
@@ -147,6 +172,7 @@ import {
 import type { RouteCommerceRuntime } from './routeCommerceRuntime.js';
 import type { RouteAgentRuntime } from './routeAgentRuntime.js';
 import type { VerifiedMessengerGuestCheckoutIngress } from '../security/guestCheckoutAuthority.js';
+import { messengerGuestAuthorityForClaimedRun } from './routeMessengerGuestAuthority.js';
 
 export function createRouteMessengerRuntime(
   input: {
@@ -184,8 +210,6 @@ export function createRouteMessengerRuntime(
     pauseIfHumanJoined,
     latestUnansweredCustomerTurn,
     replyToLatestUnansweredCustomerTurn,
-    runDirectAgentTurn,
-    runDirectKfcTurn,
   } = input;
   async function processMessengerEventInternal(
     event: ConversationEvent,
@@ -374,7 +398,7 @@ export function createRouteMessengerRuntime(
 
   async function processMessengerAgentRunInternal(
     runId: string,
-    _verifiedIngress?: readonly VerifiedMessengerGuestCheckoutIngress[],
+    verifiedIngress?: readonly VerifiedMessengerGuestCheckoutIngress[],
     runOptions?: { typingAlreadyStarted?: boolean },
   ): Promise<MessengerWebhookEventProcessingResult> {
     const storedRun = await store.getAgentRun(runId);
@@ -584,8 +608,8 @@ export function createRouteMessengerRuntime(
         },
       };
       const resumableDelivery = await store.getAgentRunTextDelivery(run.id);
-      let presentation: ChannelPresentationPlan;
-      let deliveryAssistantTurnId: string;
+      let presentation: ChannelPresentationPlan | undefined;
+      let deliveryAssistantTurnId: string | undefined;
       if (
         resumableDelivery &&
         resumableDelivery.assistantTurnId !== run.assistantTurnId
@@ -649,93 +673,61 @@ export function createRouteMessengerRuntime(
                 : reconciled.record.outcomeCode,
           };
         }
-        presentation = textOnlyPresentation(assistantTurn.text, run.channel);
+        presentation = persistedChannelPresentation(assistantTurn);
         deliveryAssistantTurnId = assistantTurn.id;
       } else {
-        const pvcfcZaloRun = run.channel === 'zalo';
+        const guestCheckoutAuthority =
+          await messengerGuestAuthorityForClaimedRun({
+            run,
+            firstLinkedTurn: linkedTurns[0]!,
+            commitFence,
+            verifiedIngress,
+          });
+        const agentResponse = await kfcAgentResponse({
+          sessionId: run.sessionId,
+          customerId: run.externalUserId,
+          channel: run.channel,
+          clientMessageId: linkedTurns[0]!.externalMessageId,
+          text: run.coalescedInputText,
+          metadata: {},
+          clients,
+          ...(guestCheckoutAuthority ? { guestCheckoutAuthority } : {}),
+          runGuard,
+        });
         if (
-          (pvcfcZaloRun && (!options.pvcfcAgent || !runDirectAgentTurn)) ||
-          (!pvcfcZaloRun && (!options.openAiAgent || !runDirectKfcTurn))
+          agentResponse.status < 200 ||
+          agentResponse.status >= 300 ||
+          !isRecord(agentResponse.body) ||
+          typeof agentResponse.body.assistantTurnId !== 'string'
         ) {
           const failed = await updateExecutingRun({
             status: 'failed',
             deliveryStatus: 'failed',
-            errorCode: pvcfcZaloRun
-              ? 'pvcfc_agent_not_configured'
-              : 'kfc_agent_not_configured',
-            errorMessage: pvcfcZaloRun
-              ? 'PVCFC AstraFlow agent is not configured'
-              : 'Direct OpenAI Responses agent is not configured',
+            errorCode: 'agent_run_application_turn_failed',
+            errorMessage: 'LangChain business turn did not persist an assistant response',
             completedAt: new Date().toISOString(),
           });
           return failed.status === 'committed'
-            ? {
-                status: 'failed',
-                errorCode: pvcfcZaloRun
-                  ? 'pvcfc_agent_not_configured'
-                  : 'kfc_agent_not_configured',
-              }
+            ? { status: 'failed', errorCode: 'agent_run_application_turn_failed' }
             : { status: 'skipped', errorCode: 'stale_agent_run' };
         }
-        const directTurn = {
-          sessionId: run.sessionId,
-          customerId: run.externalUserId,
-          channel: run.channel,
-          transport: run.channel,
-          text: run.coalescedInputText,
-          externalMessageId: linkedTurns[0]!.externalMessageId,
-          metadata: null,
-          clients,
-          fence: commitFence,
-        } as const;
-        const directOutput = pvcfcZaloRun
-          ? (
-              await runDirectAgentTurn!({
-                packId: 'pvcfc',
-                turn: {
-                  ...directTurn,
-                  transport: 'zalo',
-                },
-              })
-            ).result
-          : await runDirectKfcTurn!(directTurn);
-        if (!(await isCurrentRun())) {
-          await suppressRun('run_not_current_before_delivery');
-          return { status: 'skipped', errorCode: 'stale_agent_run' };
-        }
-        if (directOutput.stateCommit === 'stale') {
-          await suppressRun('run_not_current_before_state_commit');
-          return { status: 'skipped', errorCode: 'stale_agent_run' };
-        }
-        presentation = textOnlyPresentation(
-          directOutput.responseText,
-          run.channel,
-        );
-        deliveryAssistantTurnId = directOutput.assistantTurnId;
+        const persistedAssistantTurnId = agentResponse.body.assistantTurnId;
         const assistantTurn = (await store.listTurns(run.sessionId)).find(
           (turn) =>
-            turn.id === deliveryAssistantTurnId &&
-            turn.sessionId === run.sessionId &&
+            turn.id === persistedAssistantTurnId &&
             turn.channel === run.channel &&
             turn.role === 'assistant',
         );
         if (!assistantTurn) {
-          const failed = await updateExecutingRun({
+          return {
             status: 'failed',
-            deliveryStatus: 'failed',
             errorCode: 'agent_run_assistant_turn_missing',
-            errorMessage: 'Agent run produced no valid durable assistant turn',
-            completedAt: new Date().toISOString(),
-          });
-          return failed.status === 'committed'
-            ? {
-                status: 'failed',
-                errorCode: 'agent_run_assistant_turn_missing',
-              }
-            : { status: 'skipped', errorCode: 'stale_agent_run' };
+          };
         }
+        deliveryAssistantTurnId = assistantTurn.id;
+        presentation = persistedChannelPresentation(assistantTurn);
       }
-      if (!deliveryAssistantTurnId) {
+      if (!deliveryAssistantTurnId || !presentation) {
         const failed = await updateExecutingRun({
           status: 'failed',
           deliveryStatus: 'failed',

@@ -4,7 +4,6 @@ import type {
   SessionAgentState,
 } from '../domain/types.js';
 import type { CustomerRun } from '../customerRuns/contracts.js';
-import type { AgentInputItem } from '@kfc/openai-agents-runtime';
 import type {
   AppendEventIfRunCurrentInput,
   AppendEventIfRunCurrentResult,
@@ -12,6 +11,8 @@ import type {
   CommitAssistantTurnResult,
   CommitAssistantTurnIfRunCurrentInput,
   CommitAssistantTurnIfRunCurrentResult,
+  CommitConfirmationTurnIfRunCurrentInput,
+  CommitConfirmationTurnIfRunCurrentResult,
   IrreversibleOperationInput,
   IsRunCommitFenceCurrentInput,
   SessionControl,
@@ -27,6 +28,11 @@ import {
 import {
   prepareAssistantTurnCommit,
 } from './runCommitPreparation.js';
+import { prepareConfirmationTurnCommit } from './confirmationTurnCommitPreparation.js';
+import {
+  immutableConfirmationPauseMatches,
+  parseConfirmationPauseRecord,
+} from './confirmationPause.js';
 
 interface MemoryRunCommitState {
   customerRuns: ReadonlyMap<string, CustomerRun>;
@@ -90,7 +96,6 @@ export function commitMemoryAssistantTurnIfRunCurrent(input: {
   verifiedRefs: Map<string, MemoryVerifiedRefStorageSnapshot>;
   turns: ConversationTurn[];
   events: StoredEvent[];
-  agentSessionItems: Map<string, AgentInputItem[]>;
   now?: () => number;
 }): CommitAssistantTurnIfRunCurrentResult {
   const now = input.now?.() ?? Date.now();
@@ -138,13 +143,6 @@ export function commitMemoryAssistantTurnIfRunCurrent(input: {
   input.turns.push(prepared.turn);
   input.events.push(prepared.turnEvent);
   if (prepared.auditEvent) input.events.push(prepared.auditEvent);
-  const sessionItems = prepared.sdkSessionMutation.mode === 'replace'
-    ? []
-    : input.agentSessionItems.get(prepared.turn.sessionId) ?? [];
-  sessionItems.push(
-    ...structuredClone(prepared.sdkSessionMutation.items),
-  );
-  input.agentSessionItems.set(prepared.turn.sessionId, sessionItems);
   return {
     status: 'committed',
     ...structuredClone(prepared),
@@ -157,7 +155,6 @@ export function commitMemoryAssistantTurn(input: {
   verifiedRefs: Map<string, MemoryVerifiedRefStorageSnapshot>;
   turns: ConversationTurn[];
   events: StoredEvent[];
-  agentSessionItems: Map<string, AgentInputItem[]>;
   now?: () => number;
 }): CommitAssistantTurnResult {
   const prepared = prepareAssistantTurnCommit(
@@ -181,14 +178,110 @@ export function commitMemoryAssistantTurn(input: {
   input.turns.push(prepared.turn);
   input.events.push(prepared.turnEvent);
   if (prepared.auditEvent) input.events.push(prepared.auditEvent);
-  const sessionItems = prepared.sdkSessionMutation.mode === 'replace'
-    ? []
-    : input.agentSessionItems.get(prepared.turn.sessionId) ?? [];
-  sessionItems.push(
-    ...structuredClone(prepared.sdkSessionMutation.items),
-  );
-  input.agentSessionItems.set(prepared.turn.sessionId, sessionItems);
   return { status: 'committed', ...structuredClone(prepared) };
+}
+
+export async function commitMemoryConfirmationTurnIfRunCurrent(input: {
+  operation: CommitConfirmationTurnIfRunCurrentInput;
+  state: MemoryRunCommitState;
+  confirmationPauseGenerations: ReadonlyMap<string, number>;
+  confirmationPauses: Map<string, unknown>;
+  confirmationPauseSessions: Map<string, string>;
+  confirmationPauseStoredGenerations: Map<string, number>;
+  confirmationPauseStoredAuthorityGenerations: Map<string, number>;
+  confirmationPauseIdentityDigests: Map<string, string>;
+  verifiedRefs: Map<string, MemoryVerifiedRefStorageSnapshot>;
+  turns: ConversationTurn[];
+  events: StoredEvent[];
+  now?: () => number;
+}): Promise<CommitConfirmationTurnIfRunCurrentResult> {
+  const now = input.now?.() ?? Date.now();
+  const prepared = await prepareConfirmationTurnCommit(input.operation);
+  if (
+    Date.parse(prepared.record.expiresAt) <= now ||
+    (input.operation.notAfter !== undefined &&
+      Date.parse(input.operation.notAfter) <= now) ||
+    !memoryRunCommitFenceIsCurrent({
+      guard: {
+        sessionId: prepared.record.sessionId,
+        fence: input.operation.fence,
+        notAfter: input.operation.notAfter ?? prepared.record.expiresAt,
+      },
+      ...input.state,
+      now,
+    })
+  ) {
+    return { status: 'stale' };
+  }
+  const generation =
+    input.confirmationPauseGenerations.get(prepared.record.sessionId) ?? 0;
+  const authorityGeneration = input.operation.fence.sessionAuthorityGeneration;
+  const existing = input.confirmationPauses.get(prepared.record.requestId);
+  if (existing !== undefined) {
+    const existingRecord = await parseConfirmationPauseRecord(existing);
+    const turn = input.turns.find(({ id }) => id === prepared.turn.id);
+    const stateEvent = input.events.find(({ id }) => id === prepared.stateEvent.id);
+    const pauseEvent = input.events.find(({ id }) => id === prepared.pauseEvent.id);
+    const turnEvent = input.events.find(({ id }) => id === prepared.turnEvent.id);
+    const exact =
+      input.confirmationPauseSessions.get(prepared.record.requestId) === prepared.record.sessionId &&
+      input.confirmationPauseStoredGenerations.get(prepared.record.requestId) === generation &&
+      input.confirmationPauseStoredAuthorityGenerations.get(prepared.record.requestId) === authorityGeneration &&
+      input.confirmationPauseIdentityDigests.get(prepared.record.requestId) === prepared.identityDigest &&
+      immutableConfirmationPauseMatches(existingRecord, prepared.record) &&
+      turn && stateEvent && pauseEvent && turnEvent &&
+      JSON.stringify(turn) === JSON.stringify(prepared.turn);
+    return exact
+      ? {
+          status: 'replay',
+          stateEvent: structuredClone(stateEvent),
+          pauseEvent: structuredClone(pauseEvent),
+          turnEvent: structuredClone(turnEvent),
+          turn: structuredClone(turn),
+          record: structuredClone(prepared.record),
+          verifiedRefs: structuredClone(prepared.verifiedRefs),
+        }
+      : { status: 'conflict' };
+  }
+  const ids = new Set([
+    prepared.stateEvent.id,
+    prepared.pauseEvent.id,
+    prepared.turnEvent.id,
+    prepared.turn.id,
+  ]);
+  if (
+    input.events.some(({ id }) => ids.has(id)) ||
+    input.turns.some(({ id }) => ids.has(id)) ||
+    prepared.verifiedRefs.some(({ ref }) => input.verifiedRefs.has(ref.id))
+  ) {
+    return { status: 'conflict' };
+  }
+  for (const record of prepared.verifiedRefs) {
+    input.verifiedRefs.set(
+      record.ref.id,
+      memoryVerifiedRefStorageSnapshot(record, generation),
+    );
+  }
+  input.confirmationPauses.set(
+    prepared.record.requestId,
+    structuredClone(prepared.record),
+  );
+  input.confirmationPauseSessions.set(prepared.record.requestId, prepared.record.sessionId);
+  input.confirmationPauseStoredGenerations.set(prepared.record.requestId, generation);
+  input.confirmationPauseStoredAuthorityGenerations.set(prepared.record.requestId, authorityGeneration);
+  input.confirmationPauseIdentityDigests.set(prepared.record.requestId, prepared.identityDigest);
+  input.turns.push(prepared.turn);
+  input.events.push(prepared.stateEvent, prepared.pauseEvent, prepared.turnEvent);
+  if (prepared.auditEvent) input.events.push(prepared.auditEvent);
+  return {
+    status: 'created',
+    stateEvent: structuredClone(prepared.stateEvent),
+    pauseEvent: structuredClone(prepared.pauseEvent),
+    turnEvent: structuredClone(prepared.turnEvent),
+    turn: structuredClone(prepared.turn),
+    record: structuredClone(prepared.record),
+    verifiedRefs: structuredClone(prepared.verifiedRefs),
+  };
 }
 
 export function memoryRunCommitFenceIsCurrent(

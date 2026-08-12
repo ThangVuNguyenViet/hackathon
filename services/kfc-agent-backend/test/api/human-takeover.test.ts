@@ -468,7 +468,7 @@ describe('human takeover session control', () => {
         expect(monitorJudge.judge).toHaveBeenCalledOnce();
       });
 
-      nowMs += 31_000;
+      nowMs += 61_000;
       await retryTasks[0]!();
 
       expect(monitorJudge.judge).toHaveBeenCalledTimes(2);

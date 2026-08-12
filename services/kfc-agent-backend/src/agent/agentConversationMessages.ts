@@ -4,7 +4,7 @@ import {
   HumanMessage,
 } from '@langchain/core/messages';
 import type { ConversationTurn } from '../domain/types.js';
-import type { AgentTurnInput } from '../graph/agentTurnState.js';
+import type { AgentTurnInput } from '../businesses/kfc/turnContracts.js';
 import type { AgentGraphState } from '../graph/state.js';
 import {
   semanticConversationTurns,

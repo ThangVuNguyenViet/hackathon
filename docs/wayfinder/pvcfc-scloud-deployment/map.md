@@ -2,17 +2,17 @@
 
 ## Destination
 
-`POST /chat/pvcfc/message` responds correctly from a public SCloud ULightHost running the compiled kfc-agent-backend Node.js server, reachable from the internet, with OpenAI API key wired, and the PVCFC agricultural persona working end-to-end.
+`POST /chat/pvcfc/message` responds correctly from a public SCloud ULightHost running the packaged kfc-agent-backend Node.js server, reachable from the internet, with the PVCFC AstraFlow credential wired and the PVCFC agricultural persona working end-to-end.
 
 ## Notes
 
-- Runtime: compiled Node.js (`dist/scripts/serve-demo-agent-server.js`) supervised by pm2, **not** Docker, **not** CF Workers
+- Runtime: packaged Node.js (`dist/src/index.js` plus `dist/client`) supervised by pm2; the service-only Dockerfile is an optional reproducibility path
 - Platform: SCloud ULightHost (`ulhost-1tregne0qp7u`), VN(Ho Chi Minh City), 1 vCPU / 2 GB RAM, 40 GB disk, 30 Mbps peak, 400 GB traffic, monthly $7.22
 - Public endpoint: `http://165.154.229.65/chat/pvcfc/message` (ULightHost public IP; port 80)
 - Existing EIP `165.154.229.126` remains unbound and is not needed by ULightHost; do not release it until the migration decision is explicit
-- AstraFlow (`astraflow.scloudsg.com`) — `umodel-1783649298` does not exist on this account; AstraFlow integration is deferred (no dependency on VM)
+- AstraFlow uses the configured Modelverse-compatible endpoint and PVCFC-owned credential; the backend never reuses a KFC provider key
 - Domain/URL strategy: not yet decided (raw IP vs subdomain)
-- Consult `services/kfc-agent-backend/` and `services/kfc-agent-backend/scripts/serve-demo-agent-server.ts`
+- Consult `services/kfc-agent-backend/`, `apps/pvcfc_chat_web/`, and the packaged-release runbook
 - Consult `CONTEXT.md` for domain language
 
 ## Decisions so far
@@ -28,12 +28,12 @@
 - ✅ Response contained PVCFC agricultural guidance with no KFC mentions
 - ✅ pm2 process `pvcfc-backend` online and listening on `0.0.0.0:80`
 - ✅ Firewall bound: TCP 80/443 plus SSH 22 and RDP 3389
-- ✅ `umodel-1783649298` does not exist — AstraFlow integration not needed for initial deploy
+- The packaged AstraFlow release still requires a new credentialed deployment smoke test
 - Domain/subdomain vs raw IP decision (cost: none now, needed before sharing a stable URL with anyone)
 - HTTPS / TLS termination — needed before AstraFlow makes HTTPS-only outbound calls to the backend
 - ✅ Process supervision: pm2 (decided in issue 04)
 - ✅ Secrets: `/etc/pvcfc-backend.env` (decided in issue 03)
-- Whether Postgres/D1 is needed for the PVCFC persona or if stateless mode suffices for the demo
+- PostgreSQL migration or repointing for durable PVCFC conversation and evidence state
 
 ## Out of scope
 

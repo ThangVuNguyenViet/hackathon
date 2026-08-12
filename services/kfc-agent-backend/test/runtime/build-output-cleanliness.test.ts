@@ -1,12 +1,19 @@
 import { spawnSync } from 'node:child_process';
 import {
+  cpSync,
   existsSync,
+  mkdtempSync,
   mkdirSync,
+  readFileSync,
   readdirSync,
+  rmSync,
   writeFileSync,
 } from 'node:fs';
+import { tmpdir } from 'node:os';
 import { dirname, join, relative, sep } from 'node:path';
+import Fastify from 'fastify';
 import { describe, expect, it } from 'vitest';
+import { registerPvcfcWebsiteRoutes } from '../../src/api/routes.js';
 
 const retiredBuildOutputs = [
   'src/llm/responseComposer.js',
@@ -41,7 +48,7 @@ function npmCommand(): string {
 }
 
 describe('backend build output', () => {
-  it('removes retired modules before compiling the current runtime', () => {
+  it('removes retired modules and packages the PVCFC React routes', async () => {
     const backendRoot = process.cwd();
     const distRoot = join(backendRoot, 'dist');
 
@@ -69,8 +76,11 @@ describe('backend build output', () => {
     }
 
     expect(existsSync(join(distRoot, 'src/index.js'))).toBe(true);
+    const pvcfcIndex = join(distRoot, 'client/index.html');
+    expect(existsSync(pvcfcIndex)).toBe(true);
+    expect(readFileSync(pvcfcIndex, 'utf8')).toContain('<div id="root"></div>');
     expect(existsSync(join(distRoot, 'src/agent/agentStateGraph.js'))).toBe(
-      true,
+      false,
     );
 
     const executableOutputs = listFiles(distRoot).filter((path) =>
@@ -83,5 +93,22 @@ describe('backend build output', () => {
           /^src\/llm\/toolPlanner[^/]*\.js$/u.test(path),
       ),
     ).toEqual([]);
+
+    const deployedBackend = mkdtempSync(join(tmpdir(), 'pvcfc-deploy-layout-'));
+    try {
+      cpSync(join(distRoot, 'client'), join(deployedBackend, 'dist/client'), {
+        recursive: true,
+      });
+      const server = Fastify();
+      registerPvcfcWebsiteRoutes(server, deployedBackend);
+      for (const url of ['/', '/demo', '/pvcfc']) {
+        const response = await server.inject({ method: 'GET', url });
+        expect(response.statusCode).toBe(200);
+        expect(response.body).toContain('<div id="root"></div>');
+      }
+      await server.close();
+    } finally {
+      rmSync(deployedBackend, { force: true, recursive: true });
+    }
   }, 120_000);
 });

@@ -62,14 +62,6 @@ async function commitPostgresAssistantTurnOperation(input: {
         await client.query('ROLLBACK');
         return { status: 'stale' };
       }
-    } else if (
-      prepared.sdkSessionMutation.mode === 'replace' ||
-      prepared.sdkSessionMutation.items.length > 0
-    ) {
-      await lockPostgresSessionAuthority(
-        client,
-        prepared.turn.sessionId,
-      );
     }
     const sessionGeneration =
       prepared.verifiedRefs.length > 0
@@ -79,13 +71,13 @@ async function commitPostgresAssistantTurnOperation(input: {
           )
         : undefined;
     for (const record of prepared.verifiedRefs) {
-      await insertVerifiedRef(
+      await insertPostgresVerifiedRef(
         client,
         record,
         sessionGeneration!,
       );
     }
-    await insertEvent(client, prepared.stateEvent);
+    await insertPostgresEvent(client, prepared.stateEvent);
     await client.query(
       `INSERT INTO conversation_turns (
          id, session_id, channel, role, text, external_message_id,
@@ -106,29 +98,8 @@ async function commitPostgresAssistantTurnOperation(input: {
         prepared.turn.createdAt,
       ],
     );
-    await insertEvent(client, prepared.turnEvent);
-    if (prepared.auditEvent) await insertEvent(client, prepared.auditEvent);
-    if (prepared.sdkSessionMutation.mode === 'replace') {
-      await client.query(
-        'DELETE FROM agent_session_items WHERE session_id = $1',
-        [prepared.turn.sessionId],
-      );
-    }
-    if (prepared.sdkSessionMutation.items.length > 0) {
-      await client.query(
-        `INSERT INTO agent_session_items (session_id, item_json)
-         SELECT $1, item::jsonb
-         FROM unnest($2::text[]) WITH ORDINALITY
-           AS values_to_insert(item, ordinal)
-         ORDER BY ordinal`,
-        [
-          prepared.turn.sessionId,
-          prepared.sdkSessionMutation.items.map((item) =>
-            JSON.stringify(item)
-          ),
-        ],
-      );
-    }
+    await insertPostgresEvent(client, prepared.turnEvent);
+    if (prepared.auditEvent) await insertPostgresEvent(client, prepared.auditEvent);
     await client.query('COMMIT');
     return { status: 'committed', ...structuredClone(prepared) };
   } catch (error) {
@@ -162,7 +133,7 @@ async function lockVerifiedRefGeneration(
   return generation;
 }
 
-async function insertVerifiedRef(
+export async function insertPostgresVerifiedRef(
   client: PoolClient,
   record: VerifiedRefRecord,
   sessionGeneration: number,
@@ -181,7 +152,7 @@ async function insertVerifiedRef(
   );
 }
 
-async function insertEvent(
+export async function insertPostgresEvent(
   client: PoolClient,
   event: {
     id: string;

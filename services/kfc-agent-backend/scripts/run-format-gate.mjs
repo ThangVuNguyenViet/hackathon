@@ -21,13 +21,11 @@ const candidates = new Set([
   '.prettierrc.json',
   'eslint-warning-baseline.json',
   'eslint.config.mjs',
-  'langgraph.json',
   'package-lock.json',
   'package.json',
   'tsconfig.json',
   'vitest.config.ts',
   '../../.github/workflows/kfc-genui.yml',
-  '../../.github/workflows/openai-geo-canary.yml',
 ]);
 const sourceExtensions = new Set(['.json', '.mjs', '.mts', '.ts']);
 

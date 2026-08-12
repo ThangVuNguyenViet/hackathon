@@ -1,5 +1,4 @@
 import { randomUUID } from 'node:crypto';
-import type { AgentInputItem } from '@kfc/openai-agents-runtime';
 import {
   commerceApprovalPrincipalStorageEvidenceRef,
   commerceApprovalPrincipalStorageSubject,
@@ -78,8 +77,6 @@ import {
   type CustomerRun,
   type CustomerRunEvent,
 } from '../customerRuns/contracts.js';
-import { agentCheckpointThreadPrefix } from '../session/sessionContext.js';
-import { PostgresCheckpointSaver } from './postgresCheckpointSaver.js';
 import {
   Queryable,
   ConversationTurnRow,
@@ -131,87 +128,6 @@ import {
 import { createPostgresConfirmationPause } from './postgresStoreConfirmationPauseCreation.js';
 
 export class PostgresStoreAgentOperations extends PostgresStoreConversationOperations {
-  async listAgentSessionItems(
-    sessionId: string,
-    limit?: number,
-  ): Promise<AgentInputItem[]> {
-    const result = limit === undefined
-      ? await this.db.query<{ item_json: AgentInputItem }>(
-        `SELECT item_json
-         FROM agent_session_items
-         WHERE session_id = $1
-         ORDER BY id ASC`,
-        [sessionId],
-      )
-      : await this.db.query<{ item_json: AgentInputItem }>(
-        `SELECT item_json
-         FROM (
-           SELECT id, item_json
-           FROM agent_session_items
-           WHERE session_id = $1
-           ORDER BY id DESC
-           LIMIT $2
-         ) recent_items
-         ORDER BY id ASC`,
-        [sessionId, limit],
-      );
-    return result.rows.map((row) =>
-      typeof row.item_json === 'string'
-        // Test doubles return JSON text; pg returns decoded jsonb.
-        // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion
-        ? JSON.parse(row.item_json) as AgentInputItem
-        : row.item_json,
-    );
-  }
-
-  async addAgentSessionItems(
-    sessionId: string,
-    items: AgentInputItem[],
-  ): Promise<void> {
-    if (items.length === 0) return;
-    await this.db.query(
-      `WITH session_lock AS (
-         SELECT pg_advisory_xact_lock(hashtextextended($1, 0))
-       )
-       INSERT INTO agent_session_items (session_id, item_json)
-       SELECT $1, item::jsonb
-       FROM unnest($2::text[]) WITH ORDINALITY AS values_to_insert(item, ordinal)
-       CROSS JOIN session_lock
-       ORDER BY ordinal`,
-      [sessionId, items.map((item) => JSON.stringify(item))],
-    );
-  }
-
-  async popAgentSessionItem(
-    sessionId: string,
-  ): Promise<AgentInputItem | undefined> {
-    const result = await this.db.query<{ item_json: AgentInputItem }>(
-      `DELETE FROM agent_session_items
-       WHERE id = (
-         SELECT id
-         FROM agent_session_items
-         WHERE session_id = $1
-         ORDER BY id DESC
-         LIMIT 1
-       )
-       RETURNING item_json`,
-      [sessionId],
-    );
-    const item = result.rows[0]?.item_json;
-    return typeof item === 'string'
-      // Test doubles return JSON text; pg returns decoded jsonb.
-      // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion
-      ? JSON.parse(item) as AgentInputItem
-      : item;
-  }
-
-  async clearAgentSessionItems(sessionId: string): Promise<void> {
-    await this.db.query(
-      'DELETE FROM agent_session_items WHERE session_id = $1',
-      [sessionId],
-    );
-  }
-
   async createAgentRun(input: CreateAgentRunInput): Promise<AgentRun> {
     return createPostgresAgentRun({ db: this.db, operation: input });
   }
@@ -316,29 +232,6 @@ export class PostgresStoreAgentOperations extends PostgresStoreConversationOpera
       [runId],
     );
     return result.rows.map(agentRunTurnFromRow);
-  }
-
-  async listCheckpointIdentifiers(sessionId: string) {
-    const agentPrefix = agentCheckpointThreadPrefix(sessionId);
-    const result = await this.db.query<{
-      thread_id: string;
-      checkpoint_ns: string;
-      checkpoint_id: string;
-      parent_checkpoint_id: string | null;
-    }>(
-      `SELECT thread_id, checkpoint_ns, checkpoint_id, parent_checkpoint_id
-       FROM langgraph_checkpoints
-       WHERE thread_id = $1
-          OR left(thread_id, length($2)) = $2
-       ORDER BY thread_id ASC, checkpoint_ns ASC, checkpoint_id ASC`,
-      [sessionId, agentPrefix],
-    );
-    return result.rows.map((row) => ({
-      checkpointThreadId: row.thread_id,
-      checkpointNamespace: row.checkpoint_ns,
-      checkpointId: row.checkpoint_id,
-      parentCheckpointId: row.parent_checkpoint_id,
-    }));
   }
 
   async getSessionAgentState(sessionId: string): Promise<SessionAgentState> {
@@ -580,9 +473,9 @@ export class PostgresStoreAgentOperations extends PostgresStoreConversationOpera
         [
           input.requestId,
           input.rejectedAt,
-          existing.record.checkpointThreadId,
-          existing.record.checkpointNamespace,
-          existing.record.checkpointId,
+          existing.record.sourceTurnId,
+          existing.record.actionScope,
+          existing.record.actionId,
           existing.record.createdAt,
           existing.record.expiresAt,
           existing.record.actionDigest,
@@ -668,9 +561,9 @@ export class PostgresStoreAgentOperations extends PostgresStoreConversationOpera
         input.principal.channel,
         commerceApprovalPrincipalStorageSubject(input.principal),
         commerceApprovalPrincipalStorageEvidenceRef(input.principal),
-        existing.record.checkpointThreadId,
-        existing.record.checkpointNamespace,
-        existing.record.checkpointId,
+        existing.record.sourceTurnId,
+        existing.record.actionScope,
+        existing.record.actionId,
         existing.record.createdAt,
         existing.record.expiresAt,
         existing.sessionGeneration,
@@ -772,9 +665,9 @@ export class PostgresStoreAgentOperations extends PostgresStoreConversationOpera
         completionError,
         input.completedAt,
         input.receiptId,
-        existing.record.checkpointThreadId,
-        existing.record.checkpointNamespace,
-        existing.record.checkpointId,
+        existing.record.sourceTurnId,
+        existing.record.actionScope,
+        existing.record.actionId,
         existing.record.createdAt,
         existing.record.expiresAt,
         existing.record.actionDigest,

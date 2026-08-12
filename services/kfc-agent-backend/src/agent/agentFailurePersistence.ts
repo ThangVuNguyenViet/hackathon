@@ -1,6 +1,6 @@
 import type {
   AgentTurnInput,
-} from '../graph/agentTurnState.js';
+} from '../businesses/kfc/turnContracts.js';
 
 export async function persistAgentFailedClosedEvent(input: {
   turnInput: AgentTurnInput;

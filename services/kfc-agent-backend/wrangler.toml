@@ -5,14 +5,12 @@ compatibility_flags = ["nodejs_compat"]
 
 [vars]
 META_INBOX_URL_TEMPLATE = "https://business.facebook.com/latest/inbox/all?asset_id={pageId}&selected_item_id={externalUserId}"
-KFC_AGENT_PROVIDER = "openai"
-KFC_AGENT_RUNTIME = "openai-responses"
-KFC_AGENT_MODEL = "gpt-4.1-mini"
-KFC_AGENT_COMPACTION_ENABLED = "true"
-KFC_AGENT_COMPACTION_THRESHOLD_BYTES = "98304"
+KFC_AGENT_PROVIDER = "google"
+KFC_AGENT_MODEL = "gemini-3.1-flash-lite"
 PVCFC_ASTRAFLOW_BASE_URL = "https://api-sg.umodelverse.ai/v1"
 PVCFC_ASTRAFLOW_MODEL = "gpt-5.6-luna"
 PVCFC_PUBLIC_DATA_MODE = "fixture"
+# Optional live evidence: configure with `wrangler secret put TINYFISH_API_KEY`.
 KFC_COMMERCE_MODE = "fixture"
 KFC_COMMERCE_ENVIRONMENT = "sandbox"
 KFC_CONFIRMATION_SIGNING_KEY_ID = "primary"

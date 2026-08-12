@@ -1,5 +1,6 @@
 import Fastify, { type FastifyInstance } from 'fastify';
-import { registerRoutes, type RouteOptions } from './routes.js';
+import type { RouteOptions } from './routeHandlerContracts.js';
+import { registerPvcfcRoutes } from './pvcfcRouteRuntime.js';
 
 declare module 'fastify' {
   interface FastifyRequest {
@@ -10,13 +11,20 @@ declare module 'fastify' {
 export type BuildServerOptions = RouteOptions;
 
 export function buildServer(options: BuildServerOptions = {}): FastifyInstance {
+  if (options.pvcfcAgentModel && !options.pvcfcPublicDataProvider) {
+    throw new Error('pvcfc_public_data_provider_not_configured');
+  }
   const server = Fastify({ logger: false });
   const parseJson = server.getDefaultJsonParser('error', 'error');
 
-  server.addContentTypeParser('application/json', { parseAs: 'buffer' }, (request, body, done) => {
-    request.rawBody = Buffer.isBuffer(body) ? body : Buffer.from(body);
-    parseJson(request, request.rawBody.toString('utf8'), done);
-  });
+  server.addContentTypeParser(
+    'application/json',
+    { parseAs: 'buffer' },
+    (request, body, done) => {
+      request.rawBody = Buffer.isBuffer(body) ? body : Buffer.from(body);
+      parseJson(request, request.rawBody.toString('utf8'), done);
+    },
+  );
 
   server.addHook('onClose', async () => {
     await options.automaticRecommendations?.close();
@@ -26,7 +34,10 @@ export function buildServer(options: BuildServerOptions = {}): FastifyInstance {
   server.addHook('onRequest', async (request, reply) => {
     reply.header('Access-Control-Allow-Origin', '*');
     reply.header('Access-Control-Allow-Methods', 'GET,POST,OPTIONS');
-    reply.header('Access-Control-Allow-Headers', 'Content-Type,Authorization,X-KFC-Demo-Admin-Token');
+    reply.header(
+      'Access-Control-Allow-Headers',
+      'Content-Type,Authorization,X-KFC-Demo-Admin-Token',
+    );
 
     if (request.method === 'OPTIONS') {
       await reply.code(204).send();
@@ -38,7 +49,13 @@ export function buildServer(options: BuildServerOptions = {}): FastifyInstance {
     service: 'kfc-agent-backend',
   }));
 
-  registerRoutes(server, options);
+  server.register(async (scopedServer) => {
+    const { registerRoutes } = await import('./routes.js');
+    registerRoutes(scopedServer, options);
+    if (options.pvcfcAgentModel || options.pvcfcPublicDataProvider) {
+      registerPvcfcRoutes(scopedServer, options);
+    }
+  });
 
   return server;
 }

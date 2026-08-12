@@ -1,6 +1,6 @@
 import { fakeModel } from '@langchain/core/testing';
 import { describe, expect, it, vi } from 'vitest';
-import { buildServer as createServer } from '../../src/api/server.js';
+import { buildDemoAdminServer as createServer } from '../fixtures/demoAdminServer.js';
 import { MemoryStore } from '../../src/persistence/memoryStore.js';
 import {
   groundedResponseModelReply,

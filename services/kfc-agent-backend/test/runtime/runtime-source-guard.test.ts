@@ -32,14 +32,14 @@ const runtimeSourceDirs = [
 ] as const;
 
 const deterministicResponseSources = [
-  'src/agent/agentStateGraph.ts',
   'src/agent/singleAgentRuntime.ts',
   'src/agent/structuredCustomerAction.ts',
   'src/agent/trustedActionConversation.ts',
   'src/api/routeAgentRuntime.ts',
   'src/api/routeChatHandlers.ts',
   'src/channels/zalo.ts',
-  'src/graph/buildGraph.ts',
+  'src/businesses/kfc/applicationTurn.ts',
+  'src/businesses/kfc/langchainTurnService.ts',
   'src/graph/turnSupport.ts',
   'src/presentation/channelPresentation.ts',
 ] as const;
@@ -105,6 +105,8 @@ const forbiddenRuntimePatterns = [
   /\blegacyRuntime\b/u,
   /normalizeGenUiActionToText/u,
   /llm:tool_plan/u,
+  /from\s+['"]@langchain\/langgraph['"]/u,
+  /from\s+['"]@openai\/agents['"]/u,
 ] as const;
 
 const retiredSemanticRuntimeSymbols = [
@@ -235,7 +237,10 @@ describe('runtime source boundary', () => {
     }
 
     expect(packageJson.dependencies.langchain).toBe('1.5.3');
-    expect(packageJson.dependencies['@langchain/langgraph']).toBe('1.4.8');
+    expect(packageJson.dependencies).not.toHaveProperty(
+      '@langchain/langgraph',
+    );
+    expect(packageJson.dependencies).not.toHaveProperty('@openai/agents');
   });
 
   it('keeps createAgent construction in one reviewed factory', () => {

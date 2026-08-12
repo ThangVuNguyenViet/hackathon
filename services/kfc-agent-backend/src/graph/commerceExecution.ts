@@ -4,7 +4,7 @@ import {
   externalCallIsCancelled,
 } from "../ordering/toolExecutor.js";
 import type { ToolCallRequest, ToolTraceEntry } from "../ordering/types.js";
-import type { AgentTurnInput } from "./agentTurnState.js";
+import type { AgentTurnInput } from "../businesses/kfc/turnContracts.js";
 import type { AgentGraphState } from "./state.js";
 import { pushEscalationReasons } from "./turnSupport.js";
 

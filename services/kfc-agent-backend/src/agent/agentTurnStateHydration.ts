@@ -2,7 +2,7 @@ import {
   selectedPaymentMethodAuthoritySchema,
 } from '../domain/opaqueProviderId.js';
 import type { ConversationTurn } from '../domain/types.js';
-import type { AgentTurnInput } from '../graph/agentTurnState.js';
+import type { AgentTurnInput } from '../businesses/kfc/turnContracts.js';
 import {
   agentStateWithCurrentOrderStatusEvidence,
 } from '../graph/orderStatusEvidenceProjection.js';

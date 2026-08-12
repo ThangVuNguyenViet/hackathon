@@ -1,5 +1,4 @@
 import { fetchCatalogObservation } from './catalog/catalogObservation.js';
-import { KFC_AGENT_RUNTIME_ID } from './agent/agentStateGraph.js';
 import type { AgentModelIdentity } from './config/agentModelProfile.js';
 import type { MonitorModelIdentity } from './config/monitorModelProfile.js';
 import { loadBundledGeneratedFixtures } from './fixtures/bundledFixtures.js';
@@ -47,6 +46,7 @@ export async function checkWorkerReadiness(
       provider?: string;
       model?: string;
       profile?: string;
+      mode?: string;
       langsmith?: {
         configured: boolean;
         project: string;
@@ -64,7 +64,6 @@ export async function checkWorkerReadiness(
   proof?: Record<string, unknown>;
   timestamp: string;
 }> {
-  const usesOpenAiResponses = env.KFC_AGENT_RUNTIME === "openai-responses";
   const database = await runWorkerReadinessCheck(async () => {
     await env.DB.prepare("SELECT 1").first();
     return { ok: true };
@@ -81,6 +80,13 @@ export async function checkWorkerReadiness(
     ok: true,
     required: false,
     configured: Boolean(env.OPENAI_API_KEY?.trim()),
+  };
+  const webSearch = {
+    ok: true,
+    required: false,
+    configured: Boolean(env.TINYFISH_API_KEY?.trim()),
+    provider: 'tinyfish',
+    mode: 'search-fetch',
   };
   const agentCheck = agent.configurationError
     ? {
@@ -159,6 +165,7 @@ export async function checkWorkerReadiness(
       provider?: string;
       model?: string;
       profile?: string;
+      mode?: string;
       langsmith?: {
         configured: boolean;
         project: string;
@@ -175,6 +182,7 @@ export async function checkWorkerReadiness(
     agent: agentCheck,
     monitor: monitorCheck,
     observability,
+    webSearch,
   };
   if (deep) {
     checks.messengerToken = await checkMessengerToken(env);
@@ -197,21 +205,12 @@ export async function checkWorkerReadiness(
     checks.catalog = catalogCheck;
   }
   if (deep) {
-    if (usesOpenAiResponses) {
-      checks.conversationState = await runWorkerReadinessCheck(async () => {
-        await env.DB.prepare(
-          "SELECT id FROM conversation_turns LIMIT 1",
-        ).first();
-        return { ok: true, configured: true };
-      });
-    } else {
-      checks.graphCheckpoint = await runWorkerReadinessCheck(async () => {
-        await env.DB.prepare(
-          "SELECT checkpoint_id FROM langgraph_checkpoints LIMIT 1",
-        ).first();
-        return { ok: true, configured: true };
-      });
-    }
+    checks.conversationState = await runWorkerReadinessCheck(async () => {
+      await env.DB.prepare(
+        "SELECT id FROM conversation_turns LIMIT 1",
+      ).first();
+      return { ok: true, configured: true };
+    });
     checks.lifecycle = env.KFC_COMMERCE_ENVIRONMENT === "sandbox"
       ? await runWorkerReadinessCheck(async () => {
           await env.DB.prepare("SELECT instance_id FROM commerce_lifecycle_instances LIMIT 1").first();
@@ -243,12 +242,6 @@ export async function checkWorkerReadiness(
           modifierTreeCount: catalogObservation.modifierTreeCount,
         } : null,
         lifecycle: { provider: env.KFC_COMMERCE_ENVIRONMENT === "sandbox" ? "d1" : null, controlsRegistered: env.KFC_COMMERCE_ENVIRONMENT === "sandbox" },
-        graph: usesOpenAiResponses
-          ? {
-              runtime: "openai-responses-v1",
-              checkpoint: "d1-conversation-v1",
-            }
-          : { runtime: KFC_AGENT_RUNTIME_ID, checkpoint: "d1-v1" },
         versions: {
           agent: agent.identity ?? null,
           monitor: agent.monitor?.identity ?? null,

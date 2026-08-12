@@ -8,7 +8,7 @@ import {
 import {
   createUnverifiedCustomerAccessContext
 } from '../security/customerAccessContext.js';
-import type { AgentTurnInput } from './agentTurnState.js';
+import type { AgentTurnInput } from '../businesses/kfc/turnContracts.js';
 import {
   agentTraceCanonicalScenarioTurnIndex,
   agentTraceProbeRunId,

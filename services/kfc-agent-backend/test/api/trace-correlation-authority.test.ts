@@ -19,9 +19,9 @@ interface CapturedTurn {
   metadata?: Record<string, unknown>;
 }
 
-function transportedAgentTurnMetadata(
+function transportedAgentTurn(
   requestBodies: string[],
-): Record<string, unknown> | undefined {
+): { id: string; metadata: Record<string, unknown> } | undefined {
   for (const body of requestBodies) {
     const value: unknown = JSON.parse(body);
     if (
@@ -29,7 +29,7 @@ function transportedAgentTurnMetadata(
       value === null ||
       Array.isArray(value) ||
       !('name' in value) ||
-      value.name !== 'agent_turn' ||
+      value.name !== 'kfc_langchain_turn' ||
       !('extra' in value) ||
       typeof value.extra !== 'object' ||
       value.extra === null ||
@@ -37,11 +37,16 @@ function transportedAgentTurnMetadata(
       !('metadata' in value.extra) ||
       typeof value.extra.metadata !== 'object' ||
       value.extra.metadata === null ||
-      Array.isArray(value.extra.metadata)
+      Array.isArray(value.extra.metadata) ||
+      !('id' in value) ||
+      typeof value.id !== 'string'
     ) {
       continue;
     }
-    return value.extra.metadata as Record<string, unknown>;
+    return {
+      id: value.id,
+      metadata: value.extra.metadata as Record<string, unknown>,
+    };
   }
   return undefined;
 }
@@ -99,7 +104,9 @@ describe('public trace correlation authority', () => {
     });
 
     expect(response.statusCode, response.body).toBe(200);
-    const agentTurn = turns.find(({ name }) => name === 'agent_turn');
+    const agentTurn = turns.find(
+      ({ name }) => name === 'kfc_langchain_turn',
+    );
     expect(agentTurn?.metadata).toMatchObject({
       scenarioId: 'live-agent',
       probeRunId: null,
@@ -173,9 +180,16 @@ describe('public trace correlation authority', () => {
 
     expect(requestBodies.length).toBeGreaterThan(0);
     expect(requestBodies.join('\n')).not.toContain(sentinel);
-    expect(transportedAgentTurnMetadata(requestBodies)).toMatchObject({
+    const applicationTurn = transportedAgentTurn(requestBodies);
+    expect(applicationTurn?.metadata).toMatchObject({
       scenarioId: 'live-agent',
       probeRunId: null,
     });
+    const transported = requestBodies.join('\n');
+    expect(transported).toContain(`"trace_id":"${applicationTurn?.id}"`);
+    expect(transported).toContain(
+      `"parent_run_id":"${applicationTurn?.id}"`,
+    );
+    expect(transported).toContain('"run_type":"llm"');
   });
 });

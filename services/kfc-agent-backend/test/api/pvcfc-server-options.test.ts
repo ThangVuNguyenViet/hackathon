@@ -1,93 +1,124 @@
+import { ChatOpenAI } from '@langchain/openai';
 import { describe, expect, it } from 'vitest';
-import { OpenAiKfcAgent } from '../../src/agent/openAiKfcAgent.js';
-import { OpenAiResponsesExecutor } from '../../src/agent/openAiResponsesExecutor.js';
+import { vi } from 'vitest';
+import type { TinyFishClient } from '../../src/web/tinyFishClient.js';
 import { buildServerOptionsFromEnv } from '../../src/api/serverOptions.js';
 import { loadEnv } from '../../src/config/env.js';
 
-function baseEnv() {
+function env(overrides: NodeJS.ProcessEnv = {}) {
   return loadEnv({
     PORT: '18090',
     KFC_COMMERCE_MODE: 'fixture',
-    KFC_AGENT_RUNTIME: 'openai-responses',
-    KFC_AGENT_PROVIDER: 'openai',
-    KFC_AGENT_MODEL: 'gpt-4.1-mini',
-    OPENAI_API_KEY: 'kfc-openai-key',
-    OPENAI_BASE_URL: 'https://api.openai.test/v1',
-  } as NodeJS.ProcessEnv);
+    ...overrides,
+  });
 }
 
-describe('PVCFC server model isolation', () => {
-  it('creates a dedicated AstraFlow-backed agent without reusing the KFC client', () => {
+describe('PVCFC server composition', () => {
+  it('creates ChatOpenAI against the configured AstraFlow-compatible endpoint', () => {
     const options = buildServerOptionsFromEnv(
-      loadEnv({
-        PORT: '18090',
-        KFC_COMMERCE_MODE: 'fixture',
-        KFC_AGENT_RUNTIME: 'openai-responses',
-        KFC_AGENT_PROVIDER: 'openai',
-        KFC_AGENT_MODEL: 'gpt-4.1-mini',
-        OPENAI_API_KEY: 'kfc-openai-key',
-        OPENAI_BASE_URL: 'https://api.openai.test/v1',
-        PVCFC_ASTRAFLOW_API_KEY: 'pvcfc-astraflow-key',
+      env({
+        PVCFC_ASTRAFLOW_API_KEY: 'pvcfc-key',
         PVCFC_ASTRAFLOW_BASE_URL: 'https://api-sg.umodelverse.ai/v1',
         PVCFC_ASTRAFLOW_MODEL: 'gpt-5.6-luna',
         PVCFC_PUBLIC_DATA_MODE: 'fixture',
-      } as NodeJS.ProcessEnv),
+      }),
     );
 
-    expect(options.openAiAgent).toBeInstanceOf(OpenAiKfcAgent);
-    expect(options.pvcfcAgent).toBeInstanceOf(OpenAiResponsesExecutor);
-    expect(options.pvcfcAgent).not.toBeInstanceOf(OpenAiKfcAgent);
+    expect(options.pvcfcAgentModel).toBeInstanceOf(ChatOpenAI);
+    expect(Reflect.get(options.pvcfcAgentModel!, 'model')).toBe('gpt-5.6-luna');
+    expect(Reflect.get(options.pvcfcAgentModel!, 'clientConfig')).toMatchObject(
+      {
+        apiKey: 'pvcfc-key',
+        baseURL: 'https://api-sg.umodelverse.ai/v1',
+      },
+    );
     expect(options.pvcfcPublicDataProvider).toBeDefined();
-    expect(Reflect.get(options.openAiAgent!, 'model')).toBe('gpt-4.1-mini');
-    expect(Reflect.get(options.pvcfcAgent!, 'model')).toBe('gpt-5.6-luna');
-    expect(Reflect.get(options.pvcfcAgent!, 'compaction')).toEqual({
-      enabled: false,
-      thresholdBytes: 98_304,
-    });
+  });
 
-    const kfcClient: unknown = Reflect.get(options.openAiAgent!, 'client');
-    const pvcfcClient: unknown = Reflect.get(options.pvcfcAgent!, 'client');
-    expect(kfcClient).not.toBe(pvcfcClient);
-    expect(kfcClient).toMatchObject({
-      baseURL: 'https://api.openai.test/v1',
-      apiKey: 'kfc-openai-key',
-    });
-    expect(pvcfcClient).toMatchObject({
-      baseURL: 'https://api-sg.umodelverse.ai/v1',
-      apiKey: 'pvcfc-astraflow-key',
+  it('composes fixture data independently of model credentials', () => {
+    const options = buildServerOptionsFromEnv(
+      env({ PVCFC_PUBLIC_DATA_MODE: 'fixture' }),
+    );
+
+    expect(options.pvcfcPublicDataProvider).toBeDefined();
+    expect(options.pvcfcAgentModel).toBeUndefined();
+    expect(options.pvcfcWebEvidenceClient).toBeUndefined();
+    expect(options.kfcWebEvidenceClient).toBeUndefined();
+    expect(options.readiness?.webSearch).toEqual({
+      configured: false,
+      provider: 'tinyfish',
+      mode: 'search-fetch',
     });
   });
 
-  it('does not create a PVCFC agent from the KFC OpenAI credential', () => {
-    const options = buildServerOptionsFromEnv(baseEnv());
+  it('optionally composes a bounded TinyFish client without exposing its secret', () => {
+    const secret = 'tinyfish-secret-that-must-not-leak';
+    const options = buildServerOptionsFromEnv(
+      env({
+        PVCFC_PUBLIC_DATA_MODE: 'fixture',
+        TINYFISH_API_KEY: secret,
+      }),
+    );
 
-    expect(options.openAiAgent).toBeInstanceOf(OpenAiKfcAgent);
-    expect(options.pvcfcAgent).toBeUndefined();
-    expect(options.pvcfcPublicDataProvider).toBeUndefined();
+    expect(options.pvcfcWebEvidenceClient).toBeDefined();
+    expect(options.kfcWebEvidenceClient).toBe(options.pvcfcWebEvidenceClient);
+    expect(options.readiness?.webSearch).toEqual({
+      configured: true,
+      provider: 'tinyfish',
+      mode: 'search-fetch',
+    });
+    expect(JSON.stringify(options.readiness)).not.toContain(secret);
+    expect(JSON.stringify(options.pvcfcWebEvidenceClient)).not.toContain(
+      secret,
+    );
+    expect(JSON.stringify(options.kfcWebEvidenceClient)).not.toContain(secret);
   });
 
-  it('fails closed when the PVCFC model has no explicit public-data mode', () => {
+  it('constructs TinyFish with a four-second zero-retry adapter envelope', () => {
+    const client: TinyFishClient = {
+      search: vi.fn(async () => []),
+      fetch: vi.fn(async ({ url }) => ({
+        sourceUrl: url,
+        finalUrl: url,
+        title: '',
+        text: '',
+        retrievedAt: '2026-08-12T00:00:00.000Z',
+      })),
+    };
+    const tinyFishClientFactory = vi.fn(() => client);
+
+    const options = buildServerOptionsFromEnv(
+      env({
+        PVCFC_PUBLIC_DATA_MODE: 'fixture',
+        TINYFISH_API_KEY: 'bounded-key',
+      }),
+      { tinyFishClientFactory },
+    );
+
+    expect(tinyFishClientFactory).toHaveBeenCalledWith({
+      apiKey: 'bounded-key',
+      timeoutMs: 4_000,
+    });
+    expect(options.pvcfcWebEvidenceClient).toBe(client);
+    expect(options.kfcWebEvidenceClient).toBe(client);
+  });
+
+  it('treats a blank TinyFish key as unavailable rather than constructing a client', () => {
+    const options = buildServerOptionsFromEnv(
+      env({ PVCFC_PUBLIC_DATA_MODE: 'fixture', TINYFISH_API_KEY: '   ' }),
+    );
+
+    expect(options.pvcfcWebEvidenceClient).toBeUndefined();
+    expect(options.kfcWebEvidenceClient).toBeUndefined();
+    expect(options.readiness?.webSearch?.configured).toBe(false);
+  });
+
+  it('fails closed for a model without provider mode and for unsupported API mode', () => {
     expect(() =>
-      buildServerOptionsFromEnv(
-        loadEnv({
-          PORT: '18090',
-          KFC_COMMERCE_MODE: 'fixture',
-          PVCFC_ASTRAFLOW_API_KEY: 'pvcfc-astraflow-key',
-        } as NodeJS.ProcessEnv),
-      ),
+      buildServerOptionsFromEnv(env({ PVCFC_ASTRAFLOW_API_KEY: 'pvcfc-key' })),
     ).toThrow('PVCFC_PUBLIC_DATA_MODE is required');
-  });
-
-  it('fails closed when API mode has no configured provider adapter', () => {
     expect(() =>
-      buildServerOptionsFromEnv(
-        loadEnv({
-          PORT: '18090',
-          KFC_COMMERCE_MODE: 'fixture',
-          PVCFC_ASTRAFLOW_API_KEY: 'pvcfc-astraflow-key',
-          PVCFC_PUBLIC_DATA_MODE: 'api',
-        } as NodeJS.ProcessEnv),
-      ),
+      buildServerOptionsFromEnv(env({ PVCFC_PUBLIC_DATA_MODE: 'api' })),
     ).toThrow('PVCFC public data API provider is not configured');
   });
 });

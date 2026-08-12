@@ -469,9 +469,9 @@ export interface VerifiedGuestApprovalResumeAuthority {
   readonly customerId: string;
   readonly channel: Extract<Channel, 'messenger' | 'messenger_mock'>;
   readonly sessionGeneration: number;
-  readonly checkpointThreadId: string;
-  readonly checkpointNamespace: string;
-  readonly checkpointId: string;
+  readonly sourceTurnId: string;
+  readonly actionScope: string;
+  readonly actionId: string;
   readonly toolName: CommerceApprovalCapability;
   readonly actionDigest: string;
   readonly approvalBindingDigest: string;

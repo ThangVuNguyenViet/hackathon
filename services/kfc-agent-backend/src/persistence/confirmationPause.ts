@@ -155,9 +155,9 @@ const actionSchema = z.object({
 const confirmationPauseCreateFields = {
   schemaVersion: z.literal('kfc-confirmation-pause-v1'),
   requestId: z.string().uuid(),
-  checkpointThreadId: z.string().min(1),
-  checkpointNamespace: z.string(),
-  checkpointId: z.string().min(1),
+  sourceTurnId: z.string().min(1),
+  actionScope: z.string(),
+  actionId: z.string().min(1),
   sessionId: z.string().min(1),
   customerId: z.string().min(1),
   channel: channelSchema,
@@ -464,9 +464,9 @@ export function confirmationPauseStorageValues(
   return [
     record.schemaVersion,
     record.requestId,
-    record.checkpointThreadId,
-    record.checkpointNamespace,
-    record.checkpointId,
+    record.sourceTurnId,
+    record.actionScope,
+    record.actionId,
     record.sessionId,
     sessionGeneration,
     sessionAuthorityGeneration,
@@ -502,9 +502,9 @@ export async function confirmationPauseSnapshotFromStorageRow(
   const record = await parseConfirmationPauseRecord({
     schemaVersion: row.schema_version,
     requestId: row.request_id,
-    checkpointThreadId: row.checkpoint_thread_id,
-    checkpointNamespace: row.checkpoint_namespace,
-    checkpointId: row.checkpoint_id,
+    sourceTurnId: row.checkpoint_thread_id,
+    actionScope: row.checkpoint_namespace,
+    actionId: row.checkpoint_id,
     sessionId: row.session_id,
     customerId: row.customer_id,
     channel: row.channel,
@@ -591,9 +591,9 @@ export function confirmationPauseCreateInput(
   return {
     schemaVersion: record.schemaVersion,
     requestId: record.requestId,
-    checkpointThreadId: record.checkpointThreadId,
-    checkpointNamespace: record.checkpointNamespace,
-    checkpointId: record.checkpointId,
+    sourceTurnId: record.sourceTurnId,
+    actionScope: record.actionScope,
+    actionId: record.actionId,
     sessionId: record.sessionId,
     customerId: record.customerId,
     channel: record.channel,
@@ -639,9 +639,9 @@ export async function confirmationResumeOperationBindingFingerprint(input: {
     schemaVersion: 'kfc-confirmation-resume-v1',
     pauseIdentityDigest: input.pauseIdentityDigest,
     checkpoint: {
-      threadId: input.pause.checkpointThreadId,
-      namespace: input.pause.checkpointNamespace,
-      id: input.pause.checkpointId,
+      threadId: input.pause.sourceTurnId,
+      namespace: input.pause.actionScope,
+      id: input.pause.actionId,
       sessionGeneration: input.expectedSessionGeneration,
     },
     actionDigest: input.pause.actionDigest,
@@ -728,9 +728,9 @@ export function immutableConfirmationPauseMatches(
   return (
     record.schemaVersion === input.schemaVersion &&
     record.requestId === input.requestId &&
-    record.checkpointThreadId === input.checkpointThreadId &&
-    record.checkpointNamespace === input.checkpointNamespace &&
-    record.checkpointId === input.checkpointId &&
+    record.sourceTurnId === input.sourceTurnId &&
+    record.actionScope === input.actionScope &&
+    record.actionId === input.actionId &&
     record.sessionId === input.sessionId &&
     record.customerId === input.customerId &&
     record.channel === input.channel &&

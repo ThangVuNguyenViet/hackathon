@@ -10,21 +10,7 @@ const appEnvSchema = z.object({
     .enum(["production", "qualification"])
     .default("production"),
   KFC_AGENT_PROVIDER: z.enum(["openai", "google"]).default("google"),
-  KFC_AGENT_RUNTIME: z
-    .enum(["stategraph", "openai-responses"])
-    .default("stategraph"),
   KFC_AGENT_MODEL: z.string().optional().default(""),
-  KFC_AGENT_COMPACTION_ENABLED: z
-    .enum(["true", "false"])
-    .transform((value) => value === "true")
-    .default("true"),
-  KFC_AGENT_COMPACTION_THRESHOLD_BYTES: z.coerce
-    .number()
-    .int()
-    .min(16_384)
-    .max(4_194_304)
-    .default(98_304),
-  KFC_AGENT_COMPACTION_MODEL: z.string().optional().default(""),
   KFC_MONITOR_PROVIDER: z.enum(["openai", "google"]).optional(),
   KFC_MONITOR_MODEL: z.string().optional().default(""),
   KFC_CONFIRMATION_SIGNING_KEY_ID: z.string().default("primary"),
@@ -40,6 +26,7 @@ const appEnvSchema = z.object({
     .default("https://api-sg.umodelverse.ai/v1"),
   PVCFC_ASTRAFLOW_MODEL: z.literal("gpt-5.6-luna").default("gpt-5.6-luna"),
   PVCFC_PUBLIC_DATA_MODE: z.enum(["fixture", "api"]).optional(),
+  TINYFISH_API_KEY: z.string().optional().default(""),
   OPENAI_DIAGNOSTIC_WORKER_RELEASE: z.string().optional().default(""),
   OPENAI_DIAGNOSTIC_EXECUTION_COLO: z.string().optional().default(""),
   OPENAI_DIAGNOSTIC_EDGE_COLO: z.string().optional().default(""),

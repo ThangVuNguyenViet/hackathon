@@ -28,7 +28,7 @@ import {
 import {
   type AgentTurnInput,
   type VerifiedStateSnapshot,
-} from './agentTurnState.js';
+} from '../businesses/kfc/turnContracts.js';
 import {
   contextPolicyIsActive,
   contextPolicyRequiresConfirmation,

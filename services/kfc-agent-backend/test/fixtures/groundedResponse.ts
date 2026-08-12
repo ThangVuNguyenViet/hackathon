@@ -120,16 +120,26 @@ function publicationSnapshot(
     const result = groundedResponsePublicationSchema.safeParse(publication);
     if (result.success) return result.data;
   }
-  throw new Error('test_model_publication_missing');
+  // The LangChain pack owns publication validation directly and therefore no
+  // longer injects the deleted graph publication snapshot into model history.
+  // Tests that do not need private evidence can still author a valid neutral
+  // publication with an opaque deterministic projection digest.
+  return {
+    projectionDigest: '0'.repeat(64),
+    evidence: [],
+  };
 }
 
 function evidenceReferences(
   input: EvidenceReferenceInput | undefined,
   publication: GroundedResponsePublication,
 ): EvidenceReference[] | undefined {
-  return typeof input === 'function'
+  const requested = typeof input === 'function'
     ? input(publication)
     : input;
+  if (!requested) return undefined;
+  const issued = new Set(publication.evidence.map(({ evidenceId }) => evidenceId));
+  return requested.filter(({ evidenceId }) => issued.has(evidenceId));
 }
 
 export function groundedResponseModelReply(input: {

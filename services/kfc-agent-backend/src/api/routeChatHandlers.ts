@@ -2,7 +2,6 @@ import { existsSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { z } from 'zod';
-import type { BaseCheckpointSaver } from '@langchain/langgraph';
 import type {
   ChannelMediaDeliveryResult,
   ExternalClients,
@@ -61,7 +60,6 @@ import {
   isKfcGenUiAttachment,
   kfcGenUiVerifiedStateRevision,
 } from '../genui/kfcGenUi.js';
-import { runAgentTurn } from '../graph/buildGraph.js';
 import type { AgentGraphState } from '../graph/state.js';
 import {
   calculateMonitorSessionIntelligence,
@@ -156,7 +154,6 @@ import {
 } from './routeHandlerSupport.js';
 
 import type { RouteHandlerContext } from './routeHandlerContext.js';
-import { createPvcfcChatHandler } from './pvcfcChatHandler.js';
 
 const clientItemSelectionSchema = z
   .object({
@@ -240,7 +237,6 @@ export function createChatRouteHandlers(context: RouteHandlerContext) {
     kfcProofAccessContext,
     latestKfcProofPreconditions,
     kfcAgentResponse,
-    pvcfcAgentResponse,
     deferAiMonitorRefinement,
     deliverAssistantReply,
     persistEventProfile,
@@ -261,7 +257,6 @@ export function createChatRouteHandlers(context: RouteHandlerContext) {
     recoverStaleMessengerDeliveriesInternal,
     processMessengerAgentRunInternal,
   } = context;
-  const chatPvcfcMessage = createPvcfcChatHandler(pvcfcAgentResponse);
   return {
     async chatKfcMessage(body: unknown) {
       const parsed = kfcChatPayloadSchema.safeParse(body);
@@ -299,7 +294,6 @@ export function createChatRouteHandlers(context: RouteHandlerContext) {
         },
       });
     },
-    chatPvcfcMessage,
     async chatKfcStartRun(body: unknown) {
       return customerRuns.start(body);
     },

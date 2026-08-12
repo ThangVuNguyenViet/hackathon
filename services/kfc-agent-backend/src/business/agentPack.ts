@@ -1,71 +1,10 @@
-import type { FunctionTool } from '@kfc/openai-agents-runtime';
-
-type MaybePromise<T> = Promise<T> | T;
-
-/** Official Agents SDK function tools are passed through without interpretation. */
-// The SDK itself uses these three `any` arguments for an opaque function tool.
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-export type OpaqueFunctionTool = FunctionTool<any, any, any>;
-
-export interface AgentProfile {
-  readonly name: string;
-  readonly instructions: string;
-}
-
-export interface PreparedTurnResources<
-  TContext = unknown,
-  TTool extends OpaqueFunctionTool = OpaqueFunctionTool,
-> {
-  readonly tools: readonly TTool[];
-  readonly context: TContext;
-}
-
-export interface AgentPackLifecycleHooks<
-  TPrepared extends PreparedTurnResources = PreparedTurnResources,
-  TResult = unknown,
-> {
-  onRunSucceeded?(input: {
-    readonly prepared: TPrepared;
-    readonly result: TResult;
-  }): MaybePromise<void>;
-  onRunFailed?(input: {
-    readonly prepared: TPrepared;
-    readonly error: unknown;
-  }): MaybePromise<void>;
-}
-
-export interface AgentPackPresentationHook<
-  TPrepared extends PreparedTurnResources = PreparedTurnResources,
-  TResult = unknown,
-  TPresentation = unknown,
-> {
-  present(input: {
-    readonly prepared: TPrepared;
-    readonly result: TResult;
-  }): MaybePromise<TPresentation | undefined>;
-}
-
-export interface AgentPack<
-  TTurnInput = unknown,
-  TContext = unknown,
-  TResult = unknown,
-  TPresentation = unknown,
-  TTool extends OpaqueFunctionTool = OpaqueFunctionTool,
-> {
+export interface BusinessAgentPack<TTurn, TResult> {
   readonly id: string;
-  readonly profile: AgentProfile;
-  prepareTurn(
-    input: TTurnInput,
-  ): MaybePromise<PreparedTurnResources<TContext, TTool>>;
-  readonly lifecycle?: AgentPackLifecycleHooks<
-    PreparedTurnResources<TContext, TTool>,
-    TResult
-  >;
-  readonly presentation?: AgentPackPresentationHook<
-    PreparedTurnResources<TContext, TTool>,
-    TResult,
-    TPresentation
-  >;
+  runTurn(turn: TTurn): Promise<TResult>;
+}
+
+export interface AgentPackIdentity {
+  readonly id: string;
 }
 
 export interface AgentPackRegistryOptions {
@@ -91,7 +30,9 @@ function validatedUniqueIds(ids: readonly string[]): readonly string[] {
   return Object.freeze([...unique]);
 }
 
-export class AgentPackRegistry<TPack extends AgentPack = AgentPack> {
+export class AgentPackRegistry<
+  TPack extends AgentPackIdentity = AgentPackIdentity,
+> {
   readonly #packsById: ReadonlyMap<string, TPack>;
   readonly ids: readonly string[];
 

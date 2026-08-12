@@ -1,41 +1,75 @@
 import type { BaseChatModel } from '@langchain/core/language_models/chat_models';
-import { createAgent, providerStrategy } from 'langchain';
-import { AGENT_SYSTEM_PROMPT } from './agentModelInvocation.js';
-import { createKfcCreateAgentMiddleware } from './kfcCreateAgentMiddleware.js';
-import { kfcCreateAgentContextSchema } from './kfcCreateAgentRuntime.js';
+import type { StructuredTool } from '@langchain/core/tools';
 import {
-  createKfcCreateAgentTools,
-  type KfcCreateAgentToolDependencies,
-} from './kfcCreateAgentTools.js';
+  createAgent,
+  createMiddleware,
+  modelCallLimitMiddleware,
+  providerStrategy,
+  toolCallLimitMiddleware,
+} from 'langchain';
+import { KFC_LANGCHAIN_SYSTEM_PROMPT } from '../businesses/kfc/instructions.js';
+import { kfcGroundedPublicationSchema } from '../businesses/kfc/publication.js';
 import { providerPortableToolSchema } from './providerPortableToolSchema.js';
-import { groundedResponseSchema } from './responseGrounding.js';
 
 export const KFC_CREATE_AGENT_RESPONSE_SCHEMA = providerPortableToolSchema(
-  groundedResponseSchema,
+  kfcGroundedPublicationSchema,
 );
 
-export const KFC_CREATE_AGENT_SYSTEM_PROMPT = AGENT_SYSTEM_PROMPT.replace(
-  /When ready to answer, call submitGroundedResponse exactly once instead of returning plain text\./u,
-  'When ready to answer, return the final response through the provider-native structured output schema.',
-);
+export const KFC_CREATE_AGENT_SYSTEM_PROMPT = KFC_LANGCHAIN_SYSTEM_PROMPT;
 
 export function createKfcAgent(input: {
   model: BaseChatModel;
-  toolDependencies?: KfcCreateAgentToolDependencies;
+  tools: readonly StructuredTool[];
+  resolveActiveToolNames?: () => readonly string[];
+  webToolNames?: ReadonlySet<string>;
 }) {
+  const applicationToolAuthorization = createMiddleware({
+    name: 'kfc-application-tool-authorization',
+    wrapModelCall(request, handler) {
+      const applicationTools = new Set(input.tools.map(({ name }) => name));
+      const allowed = new Set(
+        input.resolveActiveToolNames?.() ?? input.tools.map(({ name }) => name),
+      );
+      return handler({
+        ...request,
+        tools: request.tools.filter(
+          ({ name }) =>
+            typeof name !== 'string' ||
+            !applicationTools.has(name) ||
+            allowed.has(name),
+        ),
+      });
+    },
+    wrapToolCall(request, handler) {
+      const toolName =
+        typeof request.tool?.name === 'string'
+          ? request.tool.name
+          : request.toolCall.name;
+      const allowed = new Set(
+        input.resolveActiveToolNames?.() ?? input.tools.map(({ name }) => name),
+      );
+      if (!allowed.has(toolName) && input.webToolNames?.has(toolName)) {
+        throw new Error('kfc_web_tool_not_authorized');
+      }
+      return handler(request);
+    },
+  });
   return createAgent({
     model: input.model,
-    tools: createKfcCreateAgentTools(input.toolDependencies),
+    tools: [...input.tools],
     systemPrompt: KFC_CREATE_AGENT_SYSTEM_PROMPT,
-    contextSchema: kfcCreateAgentContextSchema,
     responseFormat: providerStrategy({
       // The portable JSON Schema is runtime-equivalent to this Zod schema,
       // but LangChain's overload does not preserve that relationship.
       schema:
-        KFC_CREATE_AGENT_RESPONSE_SCHEMA as unknown as typeof groundedResponseSchema,
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion
+        KFC_CREATE_AGENT_RESPONSE_SCHEMA as unknown as typeof kfcGroundedPublicationSchema,
       strict: true,
     }),
-    middleware: createKfcCreateAgentMiddleware(),
-    version: 'v1',
+    middleware: [
+      applicationToolAuthorization,
+      modelCallLimitMiddleware({ runLimit: 6, exitBehavior: 'error' }),
+      toolCallLimitMiddleware({ runLimit: 8, exitBehavior: 'error' }),
+    ],
   });
 }

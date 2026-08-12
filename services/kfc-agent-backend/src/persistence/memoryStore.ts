@@ -7,7 +7,6 @@ import type {
   PendingCustomerTurn,
   SessionAgentState,
 } from '../domain/types.js';
-import type { AgentInputItem } from '@kfc/openai-agents-runtime';
 import type {
   CustomerRun,
   CustomerRunEvent,
@@ -32,7 +31,6 @@ import {
   type WebhookDeliveryChannel,
   type WebhookDeliveryStatus,
   type WebhookDelivery,
-  type CheckpointIdentifier,
   type SessionControl,
   type TransitionSessionAuthorityInput,
   type TransitionSessionAuthorityResult,
@@ -69,6 +67,8 @@ import {
   type CommitAssistantTurnIfRunCurrentResult,
   type CommitConfirmationPauseIfRunCurrentInput,
   type CommitConfirmationPauseIfRunCurrentResult,
+  type CommitConfirmationTurnIfRunCurrentInput,
+  type CommitConfirmationTurnIfRunCurrentResult,
   type CommitPausedCustomerRunIntakeInput,
   type CommitPausedCustomerRunIntakeResult,
   type ConversationStore,
@@ -114,6 +114,7 @@ import {
   appendMemoryEventIfRunCurrent,
   commitMemoryAssistantTurn,
   commitMemoryAssistantTurnIfRunCurrent,
+  commitMemoryConfirmationTurnIfRunCurrent,
   memoryRunCommitFenceIsCurrent,
   memoryVerifiedRefFenceIsCurrent,
 } from './memoryStoreRunCommit.js';
@@ -152,7 +153,6 @@ export class MemoryStore
   private readonly customerRunRequestIndex = new Map<string, string>();
   private readonly customerRunEvents: CustomerRunEvent[] = [];
   private readonly events: StoredEvent[] = [];
-  private readonly agentSessionItems = new Map<string, AgentInputItem[]>();
   private readonly turns: ConversationTurn[] = [];
   private readonly profiles = new Map<string, ConversationProfile>();
   private readonly webhookDeliveries = new Map<string, WebhookDelivery>();
@@ -225,40 +225,8 @@ export class MemoryStore
         sessionResetHook: this.sessionResetHook,
       });
       this.clearOrphanedAgentRunTextDeliveries();
-      this.agentSessionItems.delete(sessionId);
       return control;
     });
-  }
-
-  async listAgentSessionItems(
-    sessionId: string,
-    limit?: number,
-  ): Promise<AgentInputItem[]> {
-    const items = this.agentSessionItems.get(sessionId) ?? [];
-    const selected =
-      limit === undefined ? items : items.slice(Math.max(0, items.length - limit));
-    return structuredClone(selected);
-  }
-
-  async addAgentSessionItems(
-    sessionId: string,
-    items: AgentInputItem[],
-  ): Promise<void> {
-    if (items.length === 0) return;
-    const existing = this.agentSessionItems.get(sessionId) ?? [];
-    existing.push(...structuredClone(items));
-    this.agentSessionItems.set(sessionId, existing);
-  }
-
-  async popAgentSessionItem(
-    sessionId: string,
-  ): Promise<AgentInputItem | undefined> {
-    const item = this.agentSessionItems.get(sessionId)?.pop();
-    return item === undefined ? undefined : structuredClone(item);
-  }
-
-  async clearAgentSessionItems(sessionId: string): Promise<void> {
-    this.agentSessionItems.delete(sessionId);
   }
 
   async reserveIrreversibleOperation(
@@ -734,12 +702,6 @@ export class MemoryStore
     return listMemoryAgentRunTurns(runId, this.memoryAgentRunState());
   }
 
-  async listCheckpointIdentifiers(
-    _sessionId: string,
-  ): Promise<CheckpointIdentifier[]> {
-    return [];
-  }
-
   async getSessionAgentState(sessionId: string): Promise<SessionAgentState> {
     return getMemorySessionAgentState(sessionId, this.sessionAgentStates);
   }
@@ -856,7 +818,6 @@ export class MemoryStore
         verifiedRefs: this.verifiedRefs,
         turns: this.turns,
         events: this.events,
-        agentSessionItems: this.agentSessionItems,
       }),
     );
   }
@@ -870,7 +831,6 @@ export class MemoryStore
         verifiedRefs: this.verifiedRefs,
         turns: this.turns,
         events: this.events,
-        agentSessionItems: this.agentSessionItems,
       }),
     );
   }
@@ -895,6 +855,32 @@ export class MemoryStore
       events: this.events,
       withLock: (operation) => this.withConfirmationPauseLock(operation),
     });
+  }
+  async commitConfirmationTurnIfRunCurrent(
+    input: CommitConfirmationTurnIfRunCurrentInput,
+  ): Promise<CommitConfirmationTurnIfRunCurrentResult> {
+    return this.withConfirmationPauseLock(async () =>
+      commitMemoryConfirmationTurnIfRunCurrent({
+        operation: input,
+        state: {
+          customerRuns: this.customerRuns,
+          agentRuns: this.agentRuns,
+          sessionAgentStates: this.sessionAgentStates,
+          irreversibleOperations: this.irreversibleOperations,
+          sessionControls: this.sessionControls,
+        },
+        confirmationPauseGenerations: this.confirmationPauseGenerations,
+        confirmationPauses: this.confirmationPauses,
+        confirmationPauseSessions: this.confirmationPauseSessions,
+        confirmationPauseStoredGenerations: this.confirmationPauseStoredGenerations,
+        confirmationPauseStoredAuthorityGenerations:
+          this.confirmationPauseStoredAuthorityGenerations,
+        confirmationPauseIdentityDigests: this.confirmationPauseIdentityDigests,
+        verifiedRefs: this.verifiedRefs,
+        turns: this.turns,
+        events: this.events,
+      }),
+    );
   }
   async listEvents(sessionId: string): Promise<StoredEvent[]> {
     return this.events.filter((event) => event.sessionId === sessionId);

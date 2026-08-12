@@ -10,11 +10,11 @@ Produce and verify the exact step-by-step commands to deploy and run the PVCFC c
 
 ## Status
 
-CLOSED ✅
+RUNBOOK UPDATED — PACKAGED RELEASE NOT YET DEPLOYED
 
 ## Resolution
 
-The demo is live on SCloud ULightHost.
+The previous demo was verified on SCloud ULightHost on 2026-08-07. The commands below are updated for the next packaged React/backend release; this document does not claim that commit is deployed until the smoke tests are rerun.
 
 - **Resource:** `ulhost-1tregne0qp7u`
 - **Region:** VN(Ho Chi Minh City), Zone A
@@ -23,7 +23,7 @@ The demo is live on SCloud ULightHost.
 - **Public IP:** `165.154.229.65`
 - **Endpoint:** `http://165.154.229.65/chat/pvcfc/message`
 - **Image:** Ubuntu 22.04
-- **Runtime:** Node.js `v22.13.0`, compiled JavaScript, pm2
+- **Required next-release runtime:** Node.js `v24.14.0`, packaged backend plus React client, pm2
 - **Firewall:** web-service recommendation bound: TCP 22, 80, 443; ICMP; TCP 3389
 - **Process:** `pvcfc-backend`, online, listening on `0.0.0.0:80`
 
@@ -31,7 +31,7 @@ The demo is live on SCloud ULightHost.
 
 # Deploy Runbook: PVCFC Backend on SCloud ULightHost
 
-> The repository declares Node.js `>=22.13.0`. The ULightHost image's Ubuntu package provides an older Node.js, so install the Node 22 binary explicitly.
+> The backend declares Node.js 24. The ULightHost image's Ubuntu package provides an older Node.js, so install the pinned Node 24 binary explicitly.
 
 ## Step 1 — SSH into the host
 
@@ -41,19 +41,19 @@ Use the configured SSH key:
 ssh -i ~/.ssh/id_ed25519 ubuntu@165.154.229.65
 ```
 
-## Step 2 — Install Node.js 22 and Git
+## Step 2 — Install Node.js 24 and Git
 
 ```bash
 sudo apt-get update
 sudo apt-get install -y ca-certificates curl git
 
-curl -fsSL https://nodejs.org/dist/v22.13.0/node-v22.13.0-linux-x64.tar.xz -o /tmp/node.tar.xz
+curl -fsSL https://nodejs.org/dist/v24.14.0/node-v24.14.0-linux-x64.tar.xz -o /tmp/node.tar.xz
 sudo mkdir -p /opt/node
 sudo tar -xJf /tmp/node.tar.xz -C /opt/node --strip-components=1
 sudo ln -sf /opt/node/bin/node /usr/local/bin/node
 sudo ln -sf /opt/node/bin/npm /usr/local/bin/npm
 sudo ln -sf /opt/node/bin/npx /usr/local/bin/npx
-node --version   # v22.13.0
+node --version   # v24.14.0
 npm --version
 ```
 
@@ -62,8 +62,10 @@ npm --version
 ```bash
 cd ~
 git clone https://github.com/ThangVuNguyenViet/hackathon.git
+cd ~/hackathon
+npm ci --prefix apps/pvcfc_chat_web
+npm ci --prefix services/kfc-agent-backend
 cd ~/hackathon/services/kfc-agent-backend
-npm install
 ```
 
 ## Step 4 — Build the compiled server
@@ -72,10 +74,20 @@ npm install
 npm run build
 ```
 
-The deployed entrypoint is:
+This command cleans and compiles the backend, builds the already lockfile-installed `apps/pvcfc_chat_web`, and copies that generated output into the backend release. Dependency installation remains an explicit release step; after it completes, the build itself does not contact the package registry. Verify both packaged entrypoints:
 
-```text
-dist/scripts/serve-demo-agent-server.js
+```bash
+test -s dist/src/index.js
+test -s dist/client/index.html
+grep -q '<div id="root"></div>' dist/client/index.html
+```
+
+The deployed server entrypoint is `dist/src/index.js`. The `/`, `/demo`, and `/pvcfc` routes serve `dist/client/index.html`; there is no standalone fallback UI.
+
+Optional container build from the service-only context uses the same packaged release and does not copy the React source:
+
+```bash
+docker build -f Dockerfile.pvcfc -t pvcfc-backend:local .
 ```
 
 ## Step 5 — Write the secrets file
@@ -84,10 +96,15 @@ Create `/etc/pvcfc-backend.env` with the real key. Do not commit it or print it 
 
 ```bash
 sudo tee /etc/pvcfc-backend.env >/dev/null <<'EOF'
-OPENAI_API_KEY=sk-YOUR_REAL_KEY_HERE
+PVCFC_ASTRAFLOW_API_KEY=YOUR_REAL_ASTRAFLOW_KEY
+PVCFC_ASTRAFLOW_BASE_URL=https://api-sg.umodelverse.ai/v1
+PVCFC_ASTRAFLOW_MODEL=gpt-5.6-luna
+PVCFC_PUBLIC_DATA_MODE=fixture
+# Optional live official-site evidence; omit when fixture-only operation is intended.
+TINYFISH_API_KEY=
+DATABASE_URL=postgres://USER:PASSWORD@HOST:5432/DATABASE
 HOST=0.0.0.0
 PORT=80
-KFC_AGENT_MODEL=gpt-4.1-mini
 EOF
 sudo chmod 600 /etc/pvcfc-backend.env
 sudo chown root:root /etc/pvcfc-backend.env
@@ -112,7 +129,7 @@ sudo bash -c '
   set +a
   cd /home/ubuntu/hackathon/services/kfc-agent-backend
   PATH=/opt/node/bin:$PATH \
-    /opt/node/bin/pm2 start dist/scripts/serve-demo-agent-server.js \
+    /opt/node/bin/pm2 start dist/src/index.js \
       --name pvcfc-backend \
       --interpreter /opt/node/bin/node
 '
@@ -124,7 +141,7 @@ sudo /opt/node/bin/pm2 logs pvcfc-backend --lines 20 --nostream
 The expected startup log includes:
 
 ```json
-{"ok":true,"port":80,"hasOpenAiKey":true}
+{"level":30,"msg":"Server listening"}
 ```
 
 ## Step 8 — Persist pm2 across reboots
@@ -146,19 +163,18 @@ curl -i -X POST "http://165.154.229.65/chat/pvcfc/message" \
     "sessionId": "pvcfc:scloud_smoketest",
     "customerId": "scloud_smoketest",
     "clientMessageId": "msg_smoketest_001",
-    "text": "bạn làm được gì?",
-    "metadata": { "responseProfile": "genui" }
+    "text": "Hãy giới thiệu dữ liệu PVCFC công khai và dẫn nguồn."
   }'
 ```
 
 Expected:
 
 - HTTP `200`
-- `responseText` contains PVCFC agricultural guidance
+- `responseText` contains cited PVCFC public-data evidence
 - no KFC mentions
 - CORS headers include `access-control-allow-origin: *`
 
-Verified on 2026-08-07: HTTP 200, PVCFC response, no KFC mentions.
+The older deployment was verified on 2026-08-07 with HTTP 200 and PVCFC response. Record a new date and release SHA here only after redeploying this packaged build and rerunning the UI/API smoke checks.
 
 ## Migration path to UHost later
 
@@ -171,7 +187,7 @@ ULightHost is not resized in place into UHost. The low-risk migration is:
 5. Update the client or DNS endpoint.
 6. Stop and delete ULightHost after cutover.
 
-The current demo is stateless, so this migration does not require database transfer.
+The runtime now persists conversations and evidence in PostgreSQL. Migrate or repoint `DATABASE_URL` before cutover and verify the new host against the same durable data; do not treat the deployment as stateless.
 
 ## Open follow-ups
 

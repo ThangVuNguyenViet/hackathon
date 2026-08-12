@@ -9,7 +9,7 @@ import {
   type VerifiedRefRecord,
 } from '../domain/verifiedRef.js';
 import { kfcGenUiVerifiedStateRevision } from '../genui/kfcGenUi.js';
-import type { AgentTurnInput } from '../graph/agentTurnState.js';
+import type { AgentTurnInput } from '../businesses/kfc/turnContracts.js';
 import type { AgentGraphState } from '../graph/state.js';
 import { parseAgentToolArguments } from '../ordering/toolCatalog.js';
 import type {

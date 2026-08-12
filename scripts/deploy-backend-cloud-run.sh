@@ -3,10 +3,15 @@ set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 SERVICE_DIR="$ROOT_DIR/services/kfc-agent-backend"
+CLOUD_RUN_DOCKERFILE="$SERVICE_DIR/Dockerfile.cloud-run"
+CLOUD_RUN_BUILD_CONFIG="$SERVICE_DIR/cloudbuild.cloud-run.yaml"
 
 PROJECT_ID="${GCP_PROJECT_ID:-}"
 REGION="${GCP_REGION:-asia-southeast1}"
 SERVICE_NAME="${CLOUD_RUN_SERVICE:-kfc-agent-backend}"
+GIT_SHA="${RELEASE_GIT_SHA:-$(git -C "$ROOT_DIR" rev-parse HEAD)}"
+ARTIFACT_REPOSITORY="${CLOUD_RUN_ARTIFACT_REPOSITORY:-hackathon}"
+IMAGE_URI="${CLOUD_RUN_IMAGE_URI:-${REGION}-docker.pkg.dev/${PROJECT_ID}/${ARTIFACT_REPOSITORY}/${SERVICE_NAME}:${GIT_SHA}}"
 DASHBOARD_ORIGIN="${DASHBOARD_ORIGIN:-}"
 MAX_INSTANCES="${CLOUD_RUN_MAX_INSTANCES:-2}"
 MIN_INSTANCES="${CLOUD_RUN_MIN_INSTANCES:-0}"
@@ -47,15 +52,11 @@ if [[ "$KFC_AGENT_PROFILE_MODE" != "production" && "$KFC_AGENT_PROFILE_MODE" != 
   exit 64
 fi
 
-if [[ "$KFC_AGENT_PROVIDER" != "google" && "$KFC_AGENT_PROVIDER" != "openai" ]]; then
-  echo "ERROR: KFC_AGENT_PROVIDER must be google or openai." >&2
+if [[ "$KFC_AGENT_PROVIDER" != "google" ]]; then
+  echo "ERROR: KFC_AGENT_PROVIDER must be google for the maintained LangChain deployment." >&2
   exit 64
 fi
-if [[ "$KFC_AGENT_PROVIDER" == "google" ]]; then
-  expected_agent_model="gemini-3.1-flash-lite"
-else
-  expected_agent_model="gpt-4.1-mini"
-fi
+expected_agent_model="gemini-3.1-flash-lite"
 if [[
   -n "$KFC_AGENT_MODEL" &&
   "$KFC_AGENT_MODEL" != "$expected_agent_model"
@@ -63,31 +64,17 @@ if [[
   echo "ERROR: KFC_AGENT_MODEL must be $expected_agent_model when KFC_AGENT_PROVIDER=$KFC_AGENT_PROVIDER." >&2
   exit 64
 fi
-if [[ "$KFC_MONITOR_PROVIDER" != "google" && "$KFC_MONITOR_PROVIDER" != "openai" ]]; then
-  echo "ERROR: KFC_MONITOR_PROVIDER must be google or openai." >&2
+if [[ "$KFC_MONITOR_PROVIDER" != "google" ]]; then
+  echo "ERROR: KFC_MONITOR_PROVIDER must be google for the maintained LangChain deployment." >&2
   exit 64
 fi
-if [[ "$KFC_MONITOR_PROVIDER" == "google" ]]; then
-  expected_monitor_model="gemini-3.1-flash-lite"
-else
-  expected_monitor_model="gpt-5-mini-2025-08-07"
-fi
+expected_monitor_model="gemini-3.1-flash-lite"
 if [[
   -n "$KFC_MONITOR_MODEL" &&
   "$KFC_MONITOR_MODEL" != "$expected_monitor_model"
 ]]; then
   echo "ERROR: KFC_MONITOR_MODEL must be $expected_monitor_model when KFC_MONITOR_PROVIDER=$KFC_MONITOR_PROVIDER." >&2
   exit 64
-fi
-
-if [[ "${KFC_DEPLOY_PREFLIGHT_ONLY:-false}" == "true" ]]; then
-  echo "Cloud Run deployment profile preflight passed."
-  exit 0
-fi
-
-if ! command -v gcloud >/dev/null 2>&1; then
-  echo "ERROR: gcloud CLI is required. Install and authenticate it before deploying Cloud Run." >&2
-  exit 69
 fi
 
 if [[ ! -d "$SERVICE_DIR" ]]; then
@@ -101,10 +88,19 @@ if [[ ! -f "$SERVICE_DIR/package.json" ]]; then
   exit 66
 fi
 
-if [[ ! -f "$SERVICE_DIR/Dockerfile" ]]; then
-  echo "ERROR: Missing $SERVICE_DIR/Dockerfile" >&2
-  echo "Add the backend Dockerfile before running this deploy script." >&2
+if [[ ! -f "$CLOUD_RUN_DOCKERFILE" || ! -f "$CLOUD_RUN_BUILD_CONFIG" ]]; then
+  echo "ERROR: Missing the dedicated LangChain Cloud Run image definition." >&2
   exit 66
+fi
+
+if [[ "${KFC_DEPLOY_PREFLIGHT_ONLY:-false}" == "true" ]]; then
+  echo "Cloud Run deployment profile preflight passed."
+  exit 0
+fi
+
+if ! command -v gcloud >/dev/null 2>&1; then
+  echo "ERROR: gcloud CLI is required. Install and authenticate it before deploying Cloud Run." >&2
+  exit 69
 fi
 
 env_vars=(
@@ -137,21 +133,21 @@ secret_vars=(
   "MESSENGER_VERIFY_TOKEN=MESSENGER_VERIFY_TOKEN:latest"
   "META_PAGE_ACCESS_TOKEN=META_PAGE_ACCESS_TOKEN:latest"
 )
-if [[ "$KFC_AGENT_PROVIDER" == "openai" || "$KFC_MONITOR_PROVIDER" == "openai" ]]; then
-  secret_vars+=("OPENAI_API_KEY=OPENAI_API_KEY:latest")
-fi
-if [[ "$KFC_AGENT_PROVIDER" == "google" || "$KFC_MONITOR_PROVIDER" == "google" ]]; then
-  secret_vars+=("GOOGLE_API_KEY=GOOGLE_API_KEY:latest")
-fi
+secret_vars+=("GOOGLE_API_KEY=GOOGLE_API_KEY:latest")
 secret_arg="$(IFS=,; echo "${secret_vars[*]}")"
 
 echo "Deploying $SERVICE_NAME to Cloud Run project=$PROJECT_ID region=$REGION"
 echo "Expected Secret Manager bindings: $secret_arg"
 
+gcloud builds submit "$ROOT_DIR" \
+  --project "$PROJECT_ID" \
+  --config "$CLOUD_RUN_BUILD_CONFIG" \
+  --substitutions "_IMAGE_URI=$IMAGE_URI"
+
 gcloud run deploy "$SERVICE_NAME" \
   --project "$PROJECT_ID" \
   --region "$REGION" \
-  --source "$SERVICE_DIR" \
+  --image "$IMAGE_URI" \
   --allow-unauthenticated \
   --min-instances "$MIN_INSTANCES" \
   --max-instances "$MAX_INSTANCES" \

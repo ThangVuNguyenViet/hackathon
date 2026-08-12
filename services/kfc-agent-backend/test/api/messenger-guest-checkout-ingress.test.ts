@@ -1,6 +1,5 @@
 import { createHmac } from 'node:crypto';
 import { fakeModel } from '@langchain/core/testing';
-import { MemorySaver } from '@langchain/langgraph';
 import { describe, expect, it, vi } from 'vitest';
 import {
   createConfirmationApprovalKeyRing,
@@ -179,7 +178,6 @@ function routeOptions(input: {
   return {
     store: input.store,
     fixtures: input.fixtures,
-    checkpointer: new MemorySaver(),
     confirmationApprovalKeyRing:
       createConfirmationApprovalKeyRing({
         active: {
@@ -225,10 +223,14 @@ describe('production Messenger guest checkout ingress', () => {
     const server = buildServer(routeOptions({
       store,
       fixtures,
-      model: fakeModel().respondWithTools([{
-        name: 'placeOrder',
-        args: {},
-      }]),
+      model: fakeModel()
+        .respondWithTools([{
+          name: 'placeOrder',
+          args: {},
+        }])
+        .respond(groundedResponseModelReply({
+          customerText: 'Please confirm this exact order.',
+        })),
     }));
 
     const response = await server.inject(
@@ -266,7 +268,10 @@ describe('production Messenger guest checkout ingress', () => {
       throw new Error('expected guest checkout pause');
     }
     expect(pause.principal.sourceRunRef).toMatch(/^run_/u);
-    expect(irreversibleReservation).not.toHaveBeenCalled();
+    expect(irreversibleReservation).toHaveBeenCalledOnce();
+    expect(irreversibleReservation.mock.calls[0]?.[0]).toMatchObject({
+      operation: 'kfc_synchronous_request',
+    });
   });
 
   it('rejects unsigned ingress before model or provider work', async () => {
@@ -352,7 +357,10 @@ describe('production Messenger guest checkout ingress', () => {
       status: 200,
       body: { received: 1, failed: 0 },
     });
-    expect(irreversibleReservation).not.toHaveBeenCalled();
+    expect(irreversibleReservation).toHaveBeenCalledOnce();
+    expect(irreversibleReservation.mock.calls[0]?.[0]).toMatchObject({
+      operation: 'kfc_synchronous_request',
+    });
     expect(
       await storedGuestPause(store, `messenger:${customerId}`),
     ).toBeUndefined();
@@ -395,7 +403,10 @@ describe('production Messenger guest checkout ingress', () => {
       processed: 1,
       failed: 0,
     });
-    expect(irreversibleReservation).not.toHaveBeenCalled();
+    expect(irreversibleReservation).toHaveBeenCalledOnce();
+    expect(irreversibleReservation.mock.calls[0]?.[0]).toMatchObject({
+      operation: 'kfc_synchronous_request',
+    });
     expect(
       await storedGuestPause(store, `messenger:${customerId}`),
     ).toBeUndefined();

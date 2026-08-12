@@ -116,13 +116,13 @@ for (const harness of harnesses) {
       await expect(
         store.createConfirmationPause({
           ...input,
-          checkpointNamespace: 'forged-namespace',
+          actionScope: 'forged-namespace',
         }),
       ).resolves.toEqual({ status: 'conflict' });
       await expect(
         store.createConfirmationPause({
           ...input,
-          checkpointId: 'checkpoint-advanced',
+          actionId: 'checkpoint-advanced',
         }),
       ).resolves.toEqual({ status: 'conflict' });
       const otherSession = await pauseInput(
@@ -645,12 +645,12 @@ async function pauseInput(
   const input: CreateConfirmationPauseInput = {
     schemaVersion: 'kfc-confirmation-pause-v1',
     requestId: '00000000-0000-4000-8000-000000000001',
-    checkpointThreadId: `agent:${JSON.stringify([
+    sourceTurnId: `agent:${JSON.stringify([
       principal.sessionId,
       'run:confirmation:message-1',
     ])}`,
-    checkpointNamespace: '',
-    checkpointId: 'checkpoint-paused-1',
+    actionScope: '',
+    actionId: 'checkpoint-paused-1',
     sessionId: principal.sessionId,
     customerId: principal.customerId,
     channel: principal.channel,
@@ -710,12 +710,12 @@ async function guestPauseInput(
   const input: CreateConfirmationPauseInput = {
     schemaVersion: 'kfc-confirmation-pause-v1',
     requestId: '00000000-0000-4000-8000-000000000034',
-    checkpointThreadId: `agent:${JSON.stringify([
+    sourceTurnId: `agent:${JSON.stringify([
       principal.sessionId,
       principal.sourceRunRef,
     ])}`,
-    checkpointNamespace: '',
-    checkpointId: 'checkpoint-guest-paused-1',
+    actionScope: '',
+    actionId: 'checkpoint-guest-paused-1',
     sessionId: principal.sessionId,
     customerId: principal.customerId,
     channel: principal.channel,
@@ -1306,7 +1306,7 @@ describe('Postgres confirmation pause reset snapshot fencing', () => {
 
     const replacement = {
       ...original,
-      checkpointId: 'checkpoint-after-reset',
+      actionId: 'checkpoint-after-reset',
     };
     await expect(store.createConfirmationPause(replacement)).resolves
       .toEqual({ status: 'conflict' });
@@ -1330,7 +1330,7 @@ async function expectResetRecreateConflict(
   });
   const replacement = {
     ...original,
-    checkpointId: `checkpoint-replacement-${mutation}`,
+    actionId: `checkpoint-replacement-${mutation}`,
   };
   await race.store.createConfirmationPause(original);
   const receipt = await rejectionReceipt(original);

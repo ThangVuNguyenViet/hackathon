@@ -8,7 +8,6 @@ import {
   type Queryable,
   type SessionControlRow,
 } from './postgresStoreSupport.js';
-import { agentCheckpointThreadPrefix } from '../session/sessionContext.js';
 import {
   lockPostgresSessionAuthority,
 } from './postgresStoreSessionAuthority.js';
@@ -28,8 +27,6 @@ export async function resetPostgresSession(input: {
     throw new Error('postgres_atomic_session_reset_unavailable');
   }
   const client = await input.db.connect();
-  const agentCheckpointPrefix =
-    agentCheckpointThreadPrefix(input.sessionId);
   let resetControl: SessionControl | undefined;
   try {
     await client.query('BEGIN');
@@ -144,21 +141,13 @@ export async function resetPostgresSession(input: {
          DELETE FROM conversation_turns WHERE session_id = $1
        ), deleted_events AS (
          DELETE FROM conversation_events WHERE session_id = $1
-       ), deleted_checkpoint_writes AS (
-         DELETE FROM langgraph_checkpoint_writes
-         WHERE thread_id = $1
-            OR left(thread_id, length($2)) = $2
-       ), deleted_checkpoints AS (
-         DELETE FROM langgraph_checkpoints
-         WHERE thread_id = $1
-            OR left(thread_id, length($2)) = $2
        ), deleted_irreversible_operations AS (
          DELETE FROM irreversible_operations
          WHERE session_id = $1
            AND operation <> 'confirmation_resume'
        )
        DELETE FROM dashboard_events WHERE session_id = $1`,
-      [input.sessionId, agentCheckpointPrefix],
+      [input.sessionId],
     );
     const control = await client.query<SessionControlRow>(
       `INSERT INTO session_controls (

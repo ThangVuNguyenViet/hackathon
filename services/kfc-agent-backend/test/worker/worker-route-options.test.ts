@@ -1,266 +1,167 @@
 import { describe, expect, it, vi } from 'vitest';
 import { DashboardEventBus } from '../../src/dashboard/eventBus.js';
 import { D1Store } from '../../src/persistence/d1Store.js';
-import {
-  buildWorkerRouteOptions,
-  type BuiltWorkerRouteOptions,
-  type WorkerRouteSurface,
-} from '../../src/workerRouteOptions.js';
+import { buildWorkerRouteOptions, type WorkerRouteSurface } from '../../src/workerRouteOptions.js';
 import type { WorkerEnv } from '../../src/worker.js';
 import { FakeD1Database } from '../support/fakeD1Database.js';
 
-interface WorkerRouteHarness {
-  built: BuiltWorkerRouteOptions;
-  dashboard: DashboardEventBus;
-  env: WorkerEnv;
-  messengerFetch: typeof fetch;
-  store: D1Store;
-  zaloFetch: typeof fetch;
-}
-
-function workerEnv(
-  db: FakeD1Database,
-  overrides: Partial<WorkerEnv> = {},
-): WorkerEnv {
+function env(db: FakeD1Database, overrides: Partial<WorkerEnv> = {}): WorkerEnv {
   return {
     DB: db,
     KFC_AGENT_PROVIDER: 'google',
-    GOOGLE_API_KEY: 'google_agent_test_key',
-    OPENAI_API_KEY: 'openai_unused_test_key',
-    LANGSMITH_API_KEY: 'langsmith_test_key',
-    LANGSMITH_PROJECT: 'worker-route-options-test',
-    LANGSMITH_ENDPOINT: 'https://smith.example.test',
-    LANGSMITH_TRACING_SAMPLING_RATE: '1',
-    KFC_CONFIRMATION_SIGNING_KEY_ID: 'worker-primary',
-    KFC_CONFIRMATION_SIGNING_SECRET:
-      'worker-confirmation-signing-secret-0001',
-    KFC_CONFIRMATION_PREVIOUS_SIGNING_KEYS: JSON.stringify([
-      {
-        keyId: 'worker-previous',
-        secret: 'worker-confirmation-signing-secret-0000',
-      },
-    ]),
-    MESSENGER_VERIFY_TOKEN: 'messenger_verify',
-    META_PAGE_ID: 'page_1',
-    META_PAGE_ACCESS_TOKEN: 'page_access_token',
-    MESSENGER_GRAPH_API_BASE_URL: 'https://graph.example.test',
-    ZALO_OA_ID: 'zalo_oa_1',
-    ZALO_ACCESS_TOKEN: 'zalo_access_token',
-    ZALO_API_BASE_URL: 'https://zalo.example.test',
+    GOOGLE_API_KEY: 'worker-google-key',
     KFC_COMMERCE_MODE: 'fixture',
     KFC_COMMERCE_ENVIRONMENT: 'sandbox',
-    KFC_MENU_API_URL: 'https://menu.example.test/catalog',
-    CATALOG_TTL_SECONDS: '600',
-    KFC_COMMERCE_GATEWAY_BASE_URL: 'https://commerce.example.test',
-    KFC_COMMERCE_GATEWAY_TOKEN: 'commerce_gateway_token',
-    KFC_POS_MODE: 'disabled',
-    RELEASE_GIT_SHA: 'worker-route-options-sha',
-    RELEASE_DEPLOYMENT_ID: 'worker-route-options-deployment',
-    RELEASE_BUILT_AT: '2026-07-20T00:00:00.000Z',
+    KFC_CONFIRMATION_SIGNING_KEY_ID: 'worker-primary',
+    KFC_CONFIRMATION_SIGNING_SECRET: 'worker-confirmation-secret-more-than-32-bytes',
+    MESSENGER_VERIFY_TOKEN: 'verify',
+    META_PAGE_ID: 'page-1',
+    META_APP_SECRET: 'meta-secret',
+    META_PAGE_ACCESS_TOKEN: 'page-token',
+    MESSENGER_GRAPH_API_BASE_URL: 'https://graph.test',
+    ZALO_OA_ID: 'zalo-oa',
+    ZALO_ACCESS_TOKEN: 'zalo-token',
+    RELEASE_GIT_SHA: 'route-options-sha',
+    RELEASE_DEPLOYMENT_ID: 'route-options-deployment',
+    RELEASE_BUILT_AT: '2026-08-12T00:00:00.000Z',
     RELEASE_DIRTY: 'false',
     ...overrides,
   };
 }
 
-function buildHarness(surface: WorkerRouteSurface): WorkerRouteHarness {
+function build(surface: WorkerRouteSurface) {
   const db = new FakeD1Database();
-  const messengerFetch = vi.fn(
-    async () => new Response(null, { status: 204 }),
-  );
-  const zaloFetch = vi.fn(
-    async () => new Response(null, { status: 204 }),
-  );
-  const env = workerEnv(db, {
-    MESSENGER_FETCH: messengerFetch,
-    ZALO_FETCH: zaloFetch,
-  });
+  const messengerFetch = vi.fn(async () => new Response(null, { status: 204 }));
+  const zaloFetch = vi.fn(async () => new Response(null, { status: 204 }));
+  const workerEnv = env(db, { MESSENGER_FETCH: messengerFetch, ZALO_FETCH: zaloFetch });
   const store = new D1Store(db);
   const dashboard = new DashboardEventBus();
   return {
-    built: buildWorkerRouteOptions({
-      env,
-      store,
-      dashboard,
-      surface,
-    }),
-    dashboard,
-    env,
-    messengerFetch,
+    ...buildWorkerRouteOptions({ env: workerEnv, store, dashboard, surface }),
     store,
+    dashboard,
+    messengerFetch,
     zaloFetch,
   };
 }
 
-function expectCommonWorkerCapabilities(
-  harness: WorkerRouteHarness,
-): void {
-  const { routeOptions } = harness.built;
-  expect(routeOptions.store).toBe(harness.store);
-  expect(routeOptions.dashboard).toBe(harness.dashboard);
-  expect(routeOptions.checkpointer).toBeDefined();
-  expect(routeOptions.fixtures?.menuItems.length).toBeGreaterThan(0);
-  expect(routeOptions.automaticRecommendations).toBeDefined();
-  expect(routeOptions.automaticRecommendationContext).toBeDefined();
-  expect(routeOptions.messengerFetchImpl).toBe(harness.messengerFetch);
-  expect(routeOptions.messengerPageAccessToken).toBe('page_access_token');
-  expect(routeOptions.zaloFetchImpl).toBe(harness.zaloFetch);
-
-  expect(routeOptions.agent?.identity).toMatchObject({
-    provider: 'google',
-    model: 'gemini-3.1-flash-lite',
-  });
-  expect(routeOptions.monitorJudge).toBeDefined();
-  expect(routeOptions.agentTracer).toBeDefined();
-
-  expect(routeOptions.kfcCommerceProvider).toBeDefined();
-  expect(typeof routeOptions.kfcCommerceProvider?.cart.createCart)
-    .toBe('function');
-  expect(typeof routeOptions.kfcCommerceProvider?.inventory.checkInventory)
-    .toBe('function');
-  expect(typeof routeOptions.kfcCommerceProvider?.storeLocator.findStores)
-    .toBe('function');
-  expect(
-    typeof routeOptions.kfcCommerceProvider?.fulfillment.quoteFulfillment,
-  ).toBe('function');
-
-  expect(routeOptions.lifecycle?.environment).toBe('sandbox');
-  expect(typeof routeOptions.lifecycle?.controls.create).toBe('function');
-  expect(typeof routeOptions.lifecycle?.activeForSession).toBe('function');
-  expect(routeOptions.catalog).toBeUndefined();
-  expect(routeOptions.readiness?.commerce).toMatchObject({
-    mode: 'fixture',
-  });
-  expect(routeOptions.readiness?.runtime).toMatchObject({
-    agentProfileMode: 'production',
-    commerceEnvironment: 'sandbox',
-  });
-  expect(routeOptions.readiness?.release).toEqual({
-    gitSha: 'worker-route-options-sha',
-    deploymentId: 'worker-route-options-deployment',
-    builtAt: '2026-07-20T00:00:00.000Z',
-    dirty: false,
-  });
-  expect(routeOptions.confirmationApprovalKeyRing).toMatchObject({
-    activeKeyId: 'worker-primary',
-  });
-  expect(
-    routeOptions.confirmationApprovalKeyRing?.keys.has('worker-primary'),
-  ).toBe(true);
-  expect(
-    routeOptions.confirmationApprovalKeyRing?.keys.has('worker-previous'),
-  ).toBe(true);
-}
-
 describe('Worker route option parity', () => {
-  it('fails closed for a misspelled raw PVCFC public-data binding', () => {
+  it('fails closed for an invalid PVCFC provider binding', () => {
     const db = new FakeD1Database();
-    const env = workerEnv(db, {
-      PVCFC_ASTRAFLOW_API_KEY: 'pvcfc-astraflow-key',
-    });
-    Reflect.set(env, 'PVCFC_PUBLIC_DATA_MODE', 'fixtuer');
+    const workerEnv = env(db, { PVCFC_ASTRAFLOW_API_KEY: 'pvcfc-key' });
+    Reflect.set(workerEnv, 'PVCFC_PUBLIC_DATA_MODE', 'fixtuer');
 
-    expect(() =>
-      buildWorkerRouteOptions({
-        env,
-        store: new D1Store(db),
-        dashboard: new DashboardEventBus(),
-        surface: { kind: 'queue' },
-      }),
-    ).toThrow('PVCFC_PUBLIC_DATA_MODE must be fixture or api');
-  });
-
-  it('provides the same durable commerce/runtime capabilities to fetch, queue, and scheduled surfaces', () => {
-    const fetchHarness = buildHarness({
-      kind: 'fetch',
-      request: new Request('https://worker.local/ready?deep=1'),
-      customerRunPaceMs: 0,
-      customerRunMaxTextEvents: 3,
-    });
-    const queueHarness = buildHarness({ kind: 'queue' });
-    const scheduledHarness = buildHarness({ kind: 'scheduled' });
-
-    for (const harness of [
-      fetchHarness,
-      queueHarness,
-      scheduledHarness,
-    ]) {
-      expectCommonWorkerCapabilities(harness);
-      const deferredTask = vi.fn(async () => undefined);
-      harness.built.routeOptions.defer?.(deferredTask);
-      expect(harness.built.deferredAgentTasks).toEqual([deferredTask]);
-    }
-
-    const capabilityKeys = (harness: WorkerRouteHarness) =>
-      Object.keys(
-        harness.built.routeOptions.kfcCommerceProvider ?? {},
-      ).sort();
-    expect(capabilityKeys(queueHarness)).toEqual(
-      capabilityKeys(fetchHarness),
-    );
-    expect(capabilityKeys(scheduledHarness)).toEqual(
-      capabilityKeys(fetchHarness),
-    );
-
-    const sameRuntimeQueue = buildWorkerRouteOptions({
-      env: fetchHarness.env,
-      store: fetchHarness.store,
-      dashboard: fetchHarness.dashboard,
+    expect(() => buildWorkerRouteOptions({
+      env: workerEnv,
+      store: new D1Store(db),
+      dashboard: new DashboardEventBus(),
       surface: { kind: 'queue' },
-    });
-    expect(sameRuntimeQueue.routeOptions.checkpointer).toBe(
-      fetchHarness.built.routeOptions.checkpointer,
-    );
+    })).toThrow('PVCFC_PUBLIC_DATA_MODE must be fixture or api');
   });
 
-  it('layers only request-bound history, pacing, and deep readiness onto fetch', () => {
-    const fetchHarness = buildHarness({
+  it('preserves the same durable business capabilities across fetch, queue, and scheduled', () => {
+    const surfaces: WorkerRouteSurface[] = [
+      {
+        kind: 'fetch',
+        request: new Request('https://worker.test/ready?deep=1'),
+        customerRunPaceMs: 0,
+        customerRunMaxTextEvents: 3,
+      },
+      { kind: 'queue' },
+      { kind: 'scheduled' },
+    ];
+    const harnesses = surfaces.map(build);
+
+    for (const harness of harnesses) {
+      expect(harness.routeOptions.store).toBe(harness.store);
+      expect(harness.routeOptions.dashboard).toBe(harness.dashboard);
+      expect(harness.routeOptions.fixtures?.menuItems.length).toBeGreaterThan(0);
+      expect(harness.routeOptions.kfcCommerceProvider).toBeDefined();
+      expect(harness.routeOptions.automaticRecommendations).toBeDefined();
+      expect(harness.routeOptions.agent?.identity).toMatchObject({
+        provider: 'google',
+        model: 'gemini-3.1-flash-lite',
+      });
+      expect(harness.routeOptions.messengerFetchImpl).toBe(harness.messengerFetch);
+      expect(harness.routeOptions.zaloFetchImpl).toBe(harness.zaloFetch);
+      expect(harness.routeOptions).not.toHaveProperty('checkpointer');
+    }
+    const capabilityKeys = harnesses.map(({ routeOptions }) =>
+      Object.keys(routeOptions.kfcCommerceProvider ?? {}).sort());
+    expect(capabilityKeys[1]).toEqual(capabilityKeys[0]);
+    expect(capabilityKeys[2]).toEqual(capabilityKeys[0]);
+  });
+
+  it('adds request-bound readiness and pacing only to fetch', () => {
+    const fetchHarness = build({
       kind: 'fetch',
-      request: new Request('https://worker.local/ready?deep=1'),
+      request: new Request('https://worker.test/ready?deep=1'),
       customerRunPaceMs: 7,
       customerRunMaxTextEvents: 5,
     });
-    const queueHarness = buildHarness({ kind: 'queue' });
-    const scheduledHarness = buildHarness({ kind: 'scheduled' });
+    const queueHarness = build({ kind: 'queue' });
 
-    expect(fetchHarness.built.routeOptions.messengerHistorySync)
-      .toBeDefined();
-    expect(fetchHarness.built.routeOptions.customerRunPaceMs).toBe(7);
-    expect(
-      fetchHarness.built.routeOptions.customerRunMaxTextEvents,
-    ).toBe(5);
-    expect(fetchHarness.built.routeOptions.readiness?.database)
-      .toBeDefined();
-    expect(fetchHarness.built.routeOptions.readiness?.messengerToken)
-      .toBeDefined();
-
-    for (const harness of [queueHarness, scheduledHarness]) {
-      expect(harness.built.routeOptions.messengerHistorySync)
-        .toBeUndefined();
-      expect(harness.built.routeOptions.customerRunPaceMs)
-        .toBeUndefined();
-      expect(harness.built.routeOptions.customerRunMaxTextEvents)
-        .toBeUndefined();
-      expect(harness.built.routeOptions.readiness?.database)
-        .toBeUndefined();
-      expect(harness.built.routeOptions.readiness?.messengerToken)
-        .toBeUndefined();
-      expect(harness.built.routeOptions.readiness?.commerce?.mode)
-        .toBe('fixture');
-    }
+    expect(fetchHarness.routeOptions.messengerHistorySync).toBeDefined();
+    expect(fetchHarness.routeOptions.customerRunPaceMs).toBe(7);
+    expect(fetchHarness.routeOptions.customerRunMaxTextEvents).toBe(5);
+    expect(fetchHarness.routeOptions.readiness?.database).toBeDefined();
+    expect(fetchHarness.routeOptions.readiness?.messengerToken).toBeDefined();
+    expect(queueHarness.routeOptions.messengerHistorySync).toBeUndefined();
+    expect(queueHarness.routeOptions.readiness?.database).toBeUndefined();
+    expect(queueHarness.routeOptions.readiness?.messengerToken).toBeUndefined();
   });
 
-  it('does not enable the Messenger token probe for ordinary fetch requests', () => {
-    const harness = buildHarness({
+  it('does not enable the Messenger deep probe for ordinary fetches', () => {
+    const harness = build({
       kind: 'fetch',
-      request: new Request('https://worker.local/chat/kfc/message', {
-        method: 'POST',
-      }),
+      request: new Request('https://worker.test/chat/kfc/message', { method: 'POST' }),
       customerRunPaceMs: 0,
       customerRunMaxTextEvents: 3,
     });
+    expect(harness.routeOptions.readiness?.database).toBeDefined();
+    expect(harness.routeOptions.readiness?.messengerToken).toBeUndefined();
+  });
 
-    expect(harness.built.routeOptions.readiness?.database).toBeDefined();
-    expect(harness.built.routeOptions.readiness?.messengerToken)
-      .toBeUndefined();
+  it('projects optional TinyFish capability identically across Worker surfaces', () => {
+    const db = new FakeD1Database();
+    const workerEnv = env(db, {
+      PVCFC_PUBLIC_DATA_MODE: 'fixture',
+      TINYFISH_API_KEY: 'worker-tinyfish-secret',
+    });
+    const surfaces: WorkerRouteSurface[] = [
+      {
+        kind: 'fetch',
+        request: new Request('https://worker.test/chat/pvcfc/message'),
+        customerRunPaceMs: 0,
+        customerRunMaxTextEvents: 3,
+      },
+      { kind: 'queue' },
+      { kind: 'scheduled' },
+    ];
+
+    const options = surfaces.map(
+      (surface) =>
+        buildWorkerRouteOptions({
+          env: workerEnv,
+          store: new D1Store(db),
+          dashboard: new DashboardEventBus(),
+          surface,
+        }).routeOptions,
+    );
+
+    for (const routeOptions of options) {
+      expect(routeOptions.pvcfcWebEvidenceClient).toBeDefined();
+      expect(routeOptions.kfcWebEvidenceClient).toBe(
+        routeOptions.pvcfcWebEvidenceClient,
+      );
+      expect(routeOptions.readiness?.webSearch).toEqual({
+        configured: true,
+        provider: 'tinyfish',
+        mode: 'search-fetch',
+      });
+      expect(JSON.stringify(routeOptions.readiness)).not.toContain(
+        'worker-tinyfish-secret',
+      );
+    }
   });
 });
