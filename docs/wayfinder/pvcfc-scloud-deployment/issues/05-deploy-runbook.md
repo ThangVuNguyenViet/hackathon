@@ -118,8 +118,9 @@ ZALO_ACCESS_TOKEN=
 # Optional live official-site evidence; omit when fixture-only operation is intended.
 TINYFISH_API_KEY=
 DATABASE_URL=postgres://USER:PASSWORD@HOST:5432/DATABASE
-HOST=0.0.0.0
-PORT=80
+# nginx owns the public listener and proxies to this unprivileged backend port.
+HOST=127.0.0.1
+PORT=18090
 EOF
 sudo chmod 600 /etc/pvcfc-backend.env
 sudo chown root:root /etc/pvcfc-backend.env
@@ -129,12 +130,15 @@ Do not commit the Page/OA credentials. A configured Messenger or Zalo account
 without its explicit business binding is rejected at startup; this prevents a
 PVCFC channel from silently falling through to KFC commerce behavior.
 
-## Step 6 — Allow Node.js to bind port 80
+## Step 6 — Verify the nginx backend listener
 
-The service runs as root under pm2 so it can use the ULightHost web-service firewall's public port 80:
+The public HTTP/HTTPS listeners belong to nginx. The application must not bind
+port 80 directly; nginx proxies the public hostname to `127.0.0.1:18090`:
 
 ```bash
-sudo setcap 'cap_net_bind_service=+ep' /opt/node/bin/node
+sudo nginx -t
+sudo systemctl reload nginx
+sudo ss -ltnp | grep ':18090'
 ```
 
 ## Step 7 — Install pm2 and start the compiled server
@@ -147,6 +151,7 @@ sudo bash -c '
   . /etc/pvcfc-backend.env
   set +a
   cd /home/ubuntu/hackathon/services/kfc-agent-backend
+  export HOST=127.0.0.1 PORT=18090
   PATH=/opt/node/bin:$PATH \
     /opt/node/bin/pm2 start dist/src/index.js \
       --name pvcfc-backend \

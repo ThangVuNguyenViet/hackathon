@@ -15,6 +15,34 @@ export interface PvcfcToolTrace {
 
 export type PvcfcToolTraceSink = (trace: PvcfcToolTrace) => void;
 
+function normalizeUrlValue(value: string): string {
+  try {
+    const url = new URL(value);
+    if (url.protocol === 'http:' || url.protocol === 'https:') {
+      return url.href;
+    }
+  } catch {
+    // Preserve non-URL strings in provider extensions and free text.
+  }
+  return value;
+}
+
+function normalizeUrlFields(value: unknown, fieldName = ''): unknown {
+  if (typeof value === 'string') {
+    return /urls?$/iu.test(fieldName) ? normalizeUrlValue(value) : value;
+  }
+  if (Array.isArray(value)) {
+    return value.map((child) => normalizeUrlFields(child, fieldName));
+  }
+  if (typeof value !== 'object' || value === null) return value;
+  return Object.fromEntries(
+    Object.entries(value).map(([key, child]) => [
+      key,
+      normalizeUrlFields(child, key),
+    ]),
+  );
+}
+
 function collectSourceUrls(value: unknown, sourceUrls: string[]): void {
   if (sourceUrls.length >= 5 || typeof value !== 'object' || value === null)
     return;
@@ -39,10 +67,15 @@ async function traced<T>(
   name: string,
   sink: PvcfcToolTraceSink | undefined,
   operation: () => Promise<T>,
-): Promise<T> {
+): Promise<T>;
+async function traced(
+  name: string,
+  sink: PvcfcToolTraceSink | undefined,
+  operation: () => Promise<unknown>,
+): Promise<unknown> {
   const startedAt = Date.now();
   try {
-    const result = await operation();
+    const result = normalizeUrlFields(await operation());
     const sourceUrls: string[] = [];
     collectSourceUrls(result, sourceUrls);
     sink?.({

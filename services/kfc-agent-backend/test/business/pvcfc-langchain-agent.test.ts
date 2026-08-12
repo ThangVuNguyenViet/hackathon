@@ -127,6 +127,8 @@ describe('PVCFC LangChain agent pack', () => {
     expect(prompt).not.toContain('Trạng thái nguồn');
     expect(prompt).toContain('Do not expose tool names');
     expect(prompt).toContain('plain text');
+    expect(prompt).toContain('Do not use Markdown headings, list markers');
+    expect(prompt).toContain('Do not use bullets or numbered lists');
     expect(prompt).toContain('buy, order, pay, debit money');
     expect(prompt).toContain('one or two direct sentences');
     expect(prompt).toContain('Do not cite evidence');

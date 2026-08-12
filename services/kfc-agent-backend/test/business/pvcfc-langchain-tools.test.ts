@@ -142,4 +142,35 @@ describe('PVCFC LangChain evidence tools', () => {
       },
     });
   });
+
+  it('canonicalizes URL-valued record fields before exposing them to the model', async () => {
+    const dataProvider = provider();
+    vi.mocked(dataProvider.getRecord).mockResolvedValueOnce({
+      ok: true as const,
+      value: {
+        revision: 'revision-1',
+        collection: 'certificates_documents',
+        record: {
+          id: 'certificate-1',
+          originRefs: ['source:certificate-1'],
+          documentUrls: ['https://www.pvcfc.com.vn/Data/file name.pdf'],
+          providerExtension: { nested: ['kept', { exactly: true }] },
+        },
+      },
+    });
+
+    const exact = await createPvcfcTools(dataProvider)[3]!.invoke({
+      collection: 'certificates_documents',
+      id: 'certificate-1',
+    });
+
+    expect(exact).toMatchObject({
+      value: {
+        record: {
+          documentUrls: ['https://www.pvcfc.com.vn/Data/file%20name.pdf'],
+          providerExtension: { nested: ['kept', { exactly: true }] },
+        },
+      },
+    });
+  });
 });
