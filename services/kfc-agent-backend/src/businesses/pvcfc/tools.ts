@@ -11,6 +11,48 @@ export interface PvcfcToolTrace {
   readonly durationMs: number;
   readonly sourceUrls?: readonly string[];
   readonly evidenceMode?: 'canonical' | 'live_web';
+  readonly error?: PvcfcErrorDetails;
+}
+
+export interface PvcfcErrorDetails {
+  readonly name: string;
+  readonly message: string;
+  readonly stack?: string;
+  readonly cause?: PvcfcErrorDetails | string;
+}
+
+export function serializePvcfcError(
+  error: unknown,
+  depth = 0,
+): PvcfcErrorDetails {
+  if (error instanceof Error) {
+    const cause = error.cause;
+    return {
+      name: error.name,
+      message: error.message,
+      ...(error.stack === undefined ? {} : { stack: error.stack }),
+      ...(cause === undefined
+        ? {}
+        : {
+            cause:
+              depth >= 4
+                ? String(cause)
+                : serializePvcfcError(cause, depth + 1),
+          }),
+    };
+  }
+  if (typeof error === 'string') {
+    return { name: 'Error', message: error };
+  }
+  try {
+    const serialized = JSON.stringify(error);
+    return {
+      name: typeof error,
+      message: serialized === undefined ? String(error) : serialized,
+    };
+  } catch {
+    return { name: typeof error, message: String(error) };
+  }
 }
 
 export type PvcfcToolTraceSink = (trace: PvcfcToolTrace) => void;
@@ -92,6 +134,7 @@ async function traced(
       status: 'error',
       durationMs: Math.max(0, Date.now() - startedAt),
       evidenceMode: 'canonical',
+      error: serializePvcfcError(error),
     });
     throw error;
   }

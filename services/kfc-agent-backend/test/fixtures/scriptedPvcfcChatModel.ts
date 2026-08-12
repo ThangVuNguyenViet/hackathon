@@ -10,22 +10,31 @@ export interface ScriptedPvcfcModelCall {
   toolChoice: unknown;
 }
 
+interface ScriptedPvcfcModelSharedState {
+  index: number;
+  failures: readonly (Error | undefined)[];
+}
+
 export class ScriptedPvcfcChatModel extends BaseChatModel {
   readonly calls: ScriptedPvcfcModelCall[];
   private readonly outputs: BaseMessage[];
-  private readonly shared: { index: number };
+  private readonly shared: ScriptedPvcfcModelSharedState;
   private tools: StructuredTool[] = [];
   private toolChoice: unknown;
 
   constructor(input: {
     outputs: BaseMessage[];
     calls?: ScriptedPvcfcModelCall[];
-    shared?: { index: number };
+    failures?: readonly (Error | undefined)[];
+    shared?: ScriptedPvcfcModelSharedState;
   }) {
     super({});
     this.outputs = input.outputs;
     this.calls = input.calls ?? [];
-    this.shared = input.shared ?? { index: 0 };
+    this.shared = input.shared ?? {
+      index: 0,
+      failures: input.failures ?? [],
+    };
   }
 
   override _llmType(): string {
@@ -56,7 +65,10 @@ export class ScriptedPvcfcChatModel extends BaseChatModel {
       toolNames: this.tools.map(({ name }) => name),
       toolChoice: this.toolChoice,
     });
-    const output = this.outputs[this.shared.index++];
+    const outputIndex = this.shared.index++;
+    const failure = this.shared.failures[outputIndex];
+    if (failure) throw failure;
+    const output = this.outputs[outputIndex];
     if (!output) throw new Error('script_exhausted');
     return {
       generations: [

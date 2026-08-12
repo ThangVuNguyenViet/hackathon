@@ -31,14 +31,17 @@ service worker so the browser does not keep an older bundle:
 flutter build web --dart-define=KFC_AGENT_BACKEND_URL=http://127.0.0.1:18090 --pwa-strategy=none
 ```
 
-For Cloudflare Pages, prefer same-origin backend mode:
+For Cloudflare Pages, pass the deployed Worker URL so the Flutter client uses
+the Worker directly:
 
 ```bash
-KFC_AGENT_BACKEND_URL=/ \
+export KFC_AGENT_BACKEND_URL='https://<worker-host>.workers.dev'
 ../../scripts/deploy-dashboard-cloudflare-pages.sh
 ```
 
-Pages forwards `/ready` and `/dashboard/*` to the Worker via `web/_worker.js`.
+Pages still forwards `/ready` and `/dashboard/*` to the Worker via
+`web/_worker.js`; the customer chat client uses the explicit Worker URL to
+avoid depending on a Pages proxy for POST and SSE requests.
 The dashboard reads `/dashboard/sessions`, `/dashboard/sessions/:sessionId/turns`, and `/dashboard/events/:sessionId` from the KFC agent backend.
 
 ## Channel Parity Proof

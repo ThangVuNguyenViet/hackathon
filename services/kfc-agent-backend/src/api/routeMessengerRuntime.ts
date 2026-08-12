@@ -138,11 +138,13 @@ function persistedChannelPresentation(
       attachment.type === 'image' &&
       typeof attachment.url === 'string' &&
       typeof attachment.title === 'string'
-        ? [{
-            key: `persisted:${turn.id}:${index}`,
-            imageUrl: attachment.url,
-            title: attachment.title,
-          }]
+        ? [
+            {
+              key: `persisted:${turn.id}:${index}`,
+              imageUrl: attachment.url,
+              title: attachment.title,
+            },
+          ]
         : [],
   );
   return {
@@ -173,6 +175,7 @@ import type { RouteCommerceRuntime } from './routeCommerceRuntime.js';
 import type { RouteAgentRuntime } from './routeAgentRuntime.js';
 import type { VerifiedMessengerGuestCheckoutIngress } from '../security/guestCheckoutAuthority.js';
 import { messengerGuestAuthorityForClaimedRun } from './routeMessengerGuestAuthority.js';
+import { recordRetryableMessengerAgentRunError } from './routeMessengerRuntimeError.js';
 
 export function createRouteMessengerRuntime(
   input: {
@@ -734,11 +737,15 @@ export function createRouteMessengerRuntime(
             status: 'failed',
             deliveryStatus: 'failed',
             errorCode: 'agent_run_application_turn_failed',
-            errorMessage: 'LangChain business turn did not persist an assistant response',
+            errorMessage:
+              'LangChain business turn did not persist an assistant response',
             completedAt: new Date().toISOString(),
           });
           return failed.status === 'committed'
-            ? { status: 'failed', errorCode: 'agent_run_application_turn_failed' }
+            ? {
+                status: 'failed',
+                errorCode: 'agent_run_application_turn_failed',
+              }
             : { status: 'skipped', errorCode: 'stale_agent_run' };
         }
         const persistedAssistantTurnId = agentResponse.body.assistantTurnId;
@@ -872,36 +879,14 @@ export function createRouteMessengerRuntime(
             errorCode: delivery.errorCode ?? 'assistant_reply_delivery_failed',
             errorMessage: delivery.errorMessage,
           };
-    } catch {
-      const errorCode = 'agent_run_processing_failed';
-      const errorMessage = 'Agent run processing failed';
-      const failed = await updateExecutingRun({
-        status: 'failed',
-        deliveryStatus: 'failed',
-        errorCode,
-        errorMessage,
-        completedAt: new Date().toISOString(),
+    } catch (error) {
+      return recordRetryableMessengerAgentRunError({
+        store,
+        run,
+        commitFence,
+        linkedTurns,
+        error,
       });
-      if (failed.status !== 'committed') {
-        return { status: 'skipped', errorCode: 'stale_agent_run' };
-      }
-      for (const turn of linkedTurns) {
-        await store.markPendingCustomerTurnIgnored(turn.turnId, run.id);
-        if (
-          await store.getWebhookDelivery(run.channel, turn.externalMessageId)
-        ) {
-          await store.markWebhookDeliveryFailed(
-            run.channel,
-            turn.externalMessageId,
-            errorCode,
-          );
-        }
-      }
-      return {
-        status: 'failed',
-        errorCode,
-        errorMessage,
-      };
     } finally {
       if (typingStarted && clients) {
         const state = await store.getSessionAgentState(run.sessionId);
@@ -927,4 +912,6 @@ export function createRouteMessengerRuntime(
   };
 }
 
-export type RouteMessengerRuntime = ReturnType<typeof createRouteMessengerRuntime>;
+export type RouteMessengerRuntime = ReturnType<
+  typeof createRouteMessengerRuntime
+>;

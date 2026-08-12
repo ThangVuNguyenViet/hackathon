@@ -19,7 +19,11 @@ import type {
 } from '../../persistence/contracts.js';
 import { PVCFC_AGENT_PROFILE } from './instructions.js';
 import type { PvcfcPublicDataProvider } from './public-data/pvcfcPublicDataProvider.js';
-import { createPvcfcTools, type PvcfcToolTrace } from './tools.js';
+import {
+  createPvcfcTools,
+  serializePvcfcError,
+  type PvcfcToolTrace,
+} from './tools.js';
 import type { TinyFishClient } from '../../web/tinyFishClient.js';
 import { createPvcfcWebTools, createPvcfcWebTurnBudget } from './webTools.js';
 import { admittedPvcfcWebInventoryUrls } from './webPolicy.js';
@@ -36,6 +40,7 @@ const MAX_MODEL_CALLS_PER_RUN = 6;
 // are read-only, so keep a bounded but collection-sized allowance.
 const MAX_TOOL_CALLS_PER_RUN = 20;
 const RECURSION_LIMIT = 64;
+const MAX_AGENT_RECOVERY_ATTEMPTS = 2;
 
 export interface PvcfcAgentTurnInput {
   readonly sessionId: string;
@@ -121,6 +126,7 @@ function auditPayload(input: {
   assistantTurnId: string | null;
   calls: readonly PvcfcToolTrace[];
   usage?: PvcfcAgentUsage;
+  errors?: readonly unknown[];
 }) {
   return {
     schemaVersion: 'business-tool-trace-v1',
@@ -129,13 +135,28 @@ function auditPayload(input: {
       status: input.status,
       latencyMs: Math.max(0, Date.now() - input.startedAt),
       ...(input.usage ? { usage: input.usage } : {}),
+      ...((input.errors?.length ?? 0) > 0 ||
+      input.calls.some(({ error }) => error !== undefined)
+        ? {
+            recoveredFromErrors: input.status === 'success',
+            errors: [
+              ...(input.errors ?? []).map((error) =>
+                serializePvcfcError(error),
+              ),
+              ...input.calls.flatMap(({ error }) =>
+                error === undefined ? [] : [error],
+              ),
+            ],
+          }
+        : {}),
     },
     calls: input.calls.map(
-      ({ name, status, durationMs, sourceUrls, evidenceMode }) => ({
+      ({ name, status, durationMs, sourceUrls, evidenceMode, error }) => ({
         name,
         status,
         durationMs,
         ...(evidenceMode === undefined ? {} : { evidenceMode }),
+        ...(error === undefined ? {} : { error }),
         ...(sourceUrls === undefined
           ? {}
           : {
@@ -146,6 +167,16 @@ function auditPayload(input: {
       }),
     ),
   };
+}
+
+function recoveryPrompt(error: unknown): string {
+  return [
+    'Continue the customer turn and produce the final answer now.',
+    'A previous agent step failed or produced an invalid final response.',
+    'Use the verified PVCFC evidence already available and call a canonical PVCFC read tool if evidence is still needed.',
+    'Do not mention internal errors, retries, tools, or infrastructure to the customer.',
+    `Internal recovery reason: ${serializePvcfcError(error).message}`,
+  ].join(' ');
 }
 
 export class PvcfcAgentPack implements BusinessAgentPack<
@@ -159,6 +190,7 @@ export class PvcfcAgentPack implements BusinessAgentPack<
   async runTurn(turn: PvcfcAgentTurnInput): Promise<PvcfcAgentTurnResult> {
     const startedAt = Date.now();
     const toolCalls: PvcfcToolTrace[] = [];
+    const agentErrors: unknown[] = [];
     const webBudget = this.options.webEvidence
       ? createPvcfcWebTurnBudget({ now: this.options.webEvidence.now })
       : undefined;
@@ -233,46 +265,34 @@ export class PvcfcAgentPack implements BusinessAgentPack<
             typeof request.tool?.name === 'string'
               ? request.tool.name
               : request.toolCall.name;
-          if (webToolNames.has(toolName) && liveWebUnavailable) {
-            const toolCallId =
-              typeof request.toolCall.id === 'string'
-                ? request.toolCall.id
-                : 'pvcfc-live-unavailable';
-            return new ToolMessage({
-              content: JSON.stringify({
-                ok: false,
-                errorCode: 'pvcfc_web_live_unavailable',
-              }),
-              tool_call_id: toolCallId,
-              name: toolName,
-              status: 'error',
-            });
-          }
-          if (
-            webToolNames.has(toolName) &&
-            !toolCalls.some(({ name }) => providerToolNames.has(name))
-          ) {
-            throw new Error('pvcfc_web_provider_evidence_required');
-          }
-          const requiredSourceUrls = pendingCanonicalSourceUrls();
-          if (
-            webToolNames.has(toolName) &&
-            requiredSourceUrls.size > 0 &&
-            !webAttempted()
-          ) {
-            if (toolName !== 'fetchPvcfcPage') {
-              throw new Error('pvcfc_web_exact_source_fetch_required');
-            }
-            const requestedUrl = Reflect.get(request.toolCall.args, 'url');
-            if (
-              typeof requestedUrl !== 'string' ||
-              !requiredSourceUrls.has(requestedUrl)
-            ) {
-              throw new Error('pvcfc_web_canonical_source_required');
-            }
-          }
           const traceCountBefore = toolCalls.length;
           try {
+            if (webToolNames.has(toolName) && liveWebUnavailable) {
+              throw new Error('pvcfc_web_live_unavailable');
+            }
+            if (
+              webToolNames.has(toolName) &&
+              !toolCalls.some(({ name }) => providerToolNames.has(name))
+            ) {
+              throw new Error('pvcfc_web_provider_evidence_required');
+            }
+            const requiredSourceUrls = pendingCanonicalSourceUrls();
+            if (
+              webToolNames.has(toolName) &&
+              requiredSourceUrls.size > 0 &&
+              !webAttempted()
+            ) {
+              if (toolName !== 'fetchPvcfcPage') {
+                throw new Error('pvcfc_web_exact_source_fetch_required');
+              }
+              const requestedUrl = Reflect.get(request.toolCall.args, 'url');
+              if (
+                typeof requestedUrl !== 'string' ||
+                !requiredSourceUrls.has(requestedUrl)
+              ) {
+                throw new Error('pvcfc_web_canonical_source_required');
+              }
+            }
             const result = await handler(request);
             if (
               webToolNames.has(toolName) &&
@@ -288,8 +308,47 @@ export class PvcfcAgentPack implements BusinessAgentPack<
             }
             return result;
           } catch (error) {
-            if (webToolNames.has(toolName)) liveWebUnavailable = true;
-            throw error;
+            const existingTraceIndex = toolCalls
+              .slice(traceCountBefore)
+              .findIndex(({ status }) => status === 'error');
+            if (existingTraceIndex >= 0) {
+              const traceIndex = traceCountBefore + existingTraceIndex;
+              toolCalls[traceIndex] = {
+                ...toolCalls[traceIndex]!,
+                error: serializePvcfcError(error),
+              };
+            } else {
+              toolCalls.push({
+                name: toolName,
+                status: 'error',
+                durationMs: 0,
+                ...(webToolNames.has(toolName)
+                  ? { evidenceMode: 'live_web' as const }
+                  : { evidenceMode: 'canonical' as const }),
+                error: serializePvcfcError(error),
+              });
+            }
+            if (webToolNames.has(toolName)) {
+              // Live web is enrichment only. Any failure from the web handler,
+              // including policy and adapter errors, leaves the canonical
+              // PVCFC evidence path available for the model.
+              liveWebUnavailable = true;
+            }
+            const toolCallId =
+              typeof request.toolCall.id === 'string'
+                ? request.toolCall.id
+                : `pvcfc-${toolName}-failed`;
+            return new ToolMessage({
+              content: JSON.stringify({
+                ok: false,
+                errorCode: webToolNames.has(toolName)
+                  ? 'pvcfc_web_live_unavailable'
+                  : 'pvcfc_tool_execution_failed',
+              }),
+              tool_call_id: toolCallId,
+              name: toolName,
+              status: 'error',
+            });
           }
         },
         wrapModelCall: (request, handler) => {
@@ -361,46 +420,96 @@ export class PvcfcAgentPack implements BusinessAgentPack<
       const externalCalls = createAgentTurnExternalCallScope(
         this.options.turnDeadlineMs ?? defaultAgentTurnDeadlineMs,
       );
-      let execution: Awaited<ReturnType<typeof agent.invoke>>;
+      let execution: Awaited<ReturnType<typeof agent.invoke>> | undefined;
+      let responseMessage: AIMessage | undefined;
+      let responseText = '';
       try {
-        execution = await agent.invoke(
-          // LangChain's merged middleware state currently over-constrains this
-          // plain built-in messages input; createAgent accepts it at runtime.
-          // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion
-          { messages } as never,
-          {
-            recursionLimit: RECURSION_LIMIT,
-            signal: externalCalls.context.signal,
-          },
-        );
+        let invocationMessages: BaseMessage[] = messages;
+        for (
+          let attempt = 0;
+          attempt < MAX_AGENT_RECOVERY_ATTEMPTS;
+          attempt += 1
+        ) {
+          try {
+            execution = await agent.invoke(
+              // LangChain's merged middleware state currently over-constrains this
+              // plain built-in messages input; createAgent accepts it at runtime.
+              // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion
+              { messages: invocationMessages } as never,
+              {
+                recursionLimit: RECURSION_LIMIT,
+                signal: externalCalls.context.signal,
+              },
+            );
+          } catch (error) {
+            agentErrors.push(error);
+            if (
+              attempt + 1 >= MAX_AGENT_RECOVERY_ATTEMPTS ||
+              externalCalls.context.signal.aborted
+            ) {
+              throw new Error('pvcfc_agent_recovery_failed', { cause: error });
+            }
+            invocationMessages = [
+              ...messages,
+              new HumanMessage(recoveryPrompt(error)),
+            ];
+            continue;
+          }
+
+          responseMessage = [...execution.messages]
+            .reverse()
+            .find(
+              (message): message is AIMessage =>
+                AIMessage.isInstance(message) &&
+                (message.tool_calls?.length ?? 0) === 0,
+            );
+          responseText = responseMessage
+            ? textContent(responseMessage).trim()
+            : '';
+          const liveSourceUrls = toolCalls
+            .filter(
+              ({ evidenceMode, status }) =>
+                evidenceMode === 'live_web' && status === 'success',
+            )
+            .flatMap(({ sourceUrls }) => sourceUrls ?? []);
+          const canonicalEvidenceSucceeded = toolCalls.some(
+            ({ evidenceMode, status }) =>
+              evidenceMode === 'canonical' && status === 'success',
+          );
+          const canonicalEvidenceFailed = toolCalls.some(
+            ({ evidenceMode, status }) =>
+              evidenceMode === 'canonical' && status === 'error',
+          );
+          const validationError =
+            !responseMessage ||
+            (!canonicalEvidenceSucceeded && !canonicalEvidenceFailed)
+              ? new Error('pvcfc_evidence_tool_required')
+              : responseText.length === 0
+                ? new Error('pvcfc_response_text_required')
+                : liveSourceUrls.length > 0 &&
+                    !liveSourceUrls.some((sourceUrl) =>
+                      responseText.includes(sourceUrl),
+                    )
+                  ? new Error('pvcfc_web_citation_required')
+                  : undefined;
+          if (validationError === undefined) break;
+          agentErrors.push(validationError);
+          if (
+            attempt + 1 >= MAX_AGENT_RECOVERY_ATTEMPTS ||
+            externalCalls.context.signal.aborted
+          ) {
+            throw validationError;
+          }
+          invocationMessages = [
+            ...messages,
+            new HumanMessage(recoveryPrompt(validationError)),
+          ];
+        }
       } finally {
         externalCalls.dispose();
       }
-      const responseMessage = [...execution.messages]
-        .reverse()
-        .find(
-          (message) =>
-            AIMessage.isInstance(message) &&
-            (message.tool_calls?.length ?? 0) === 0,
-        );
-      if (!responseMessage || toolCalls.length === 0) {
-        throw new Error('pvcfc_evidence_tool_required');
-      }
-      const responseText = textContent(responseMessage).trim();
-      if (responseText.length === 0) {
+      if (!execution || !responseMessage || responseText.length === 0) {
         throw new Error('pvcfc_response_text_required');
-      }
-      const liveSourceUrls = toolCalls
-        .filter(
-          ({ evidenceMode, status }) =>
-            evidenceMode === 'live_web' && status === 'success',
-        )
-        .flatMap(({ sourceUrls }) => sourceUrls ?? []);
-      if (
-        liveSourceUrls.length > 0 &&
-        !liveSourceUrls.some((sourceUrl) => responseText.includes(sourceUrl))
-      ) {
-        throw new Error('pvcfc_web_citation_required');
       }
       const usage = usageFrom(execution.messages);
       const assistantTurnId = `turn_${crypto.randomUUID()}`;
@@ -440,6 +549,7 @@ export class PvcfcAgentPack implements BusinessAgentPack<
             assistantTurnId,
             calls: toolCalls,
             usage,
+            errors: agentErrors,
           }),
         },
       };
@@ -464,6 +574,7 @@ export class PvcfcAgentPack implements BusinessAgentPack<
         startedAt,
         assistantTurnId: null,
         calls: toolCalls,
+        errors: [...agentErrors, error],
       });
       if (turn.fence) {
         await this.options.store.appendEventIfRunCurrent({

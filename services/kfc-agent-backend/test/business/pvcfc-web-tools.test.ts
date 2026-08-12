@@ -157,7 +157,7 @@ describe('PVCFC official-site web evidence tools', () => {
     expect(fetch).toHaveBeenCalledTimes(2);
   });
 
-  it('fails fast when a later web call cannot fit the shared 28-second deadline', async () => {
+  it('returns unavailable when a later web call cannot fit the shared 28-second deadline', async () => {
     let now = 0;
     const budget = createPvcfcWebTurnBudget({ now: () => now });
     const currentTurn = toolsFor(undefined, budget);
@@ -165,7 +165,7 @@ describe('PVCFC official-site web evidence tools', () => {
     now = 28_001;
     await expect(
       currentTurn.tools[0].invoke({ query: 'tin mới' }),
-    ).rejects.toThrow('pvcfc_web_time_budget_exhausted');
+    ).resolves.toEqual({ available: false });
 
     expect(currentTurn.search).not.toHaveBeenCalled();
     expect(currentTurn.fetch).not.toHaveBeenCalled();
