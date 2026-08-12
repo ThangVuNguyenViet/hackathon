@@ -126,7 +126,7 @@ describe('PVCFC official-site web evidence tools', () => {
     expect(inventoried.fetch).toHaveBeenCalledWith({
       url: INVENTORIED_URL,
       allowedHostnames: PVCFC_WEB_ALLOWED_HOSTNAMES,
-      perUrlTimeoutMs: 9_000,
+      perUrlTimeoutMs: 10_000,
     });
 
     const searched = toolsFor();
@@ -166,7 +166,7 @@ describe('PVCFC official-site web evidence tools', () => {
     const budget = createPvcfcWebTurnBudget({ now: () => now });
     const currentTurn = toolsFor(undefined, budget);
 
-    now = 10_001;
+    now = 12_001;
     await expect(
       currentTurn.tools[0].invoke({ query: 'tin mới' }),
     ).rejects.toThrow('pvcfc_web_time_budget_exhausted');

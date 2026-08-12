@@ -581,6 +581,88 @@ describe('PVCFC LangChain agent pack', () => {
     );
   });
 
+  it('removes live-web tools after a transient fetch failure so the model can answer from canonical evidence', async () => {
+    const sourceUrl = 'https://www.pvcfc.com.vn/npk-ca-mau-15-5-20';
+    const live = webClient();
+    live.fetch.mockRejectedValueOnce(
+      new TinyFishClientError('tinyfish_fetch_failed'),
+    );
+    const model = new ScriptedPvcfcChatModel({
+      outputs: [
+        toolCall(
+          'searchPvcfcRecords',
+          { query: 'NPK Cà Mau 15-5-20', collections: ['products'], limit: 2 },
+          'transient-provider-1',
+        ),
+        toolCall('fetchPvcfcPage', { url: sourceUrl }, 'transient-fetch-1'),
+        new AIMessage(
+          `NPK Cà Mau 15-5-20 là sản phẩm trong dữ liệu công khai của PVCFC.\nNguồn: ${sourceUrl}`,
+        ),
+      ],
+    });
+    const pack = new PvcfcAgentPack({
+      store: new MemoryStore(),
+      model,
+      provider: loadBundledPvcfcPublicDataProvider(),
+      webEvidence: { client: live.client },
+    });
+
+    const result = await pack.runTurn({
+      sessionId: 'pvcfc:transient-live-fetch',
+      customerId: 'transient-live-fetch',
+      transport: 'web_chat',
+      text: 'Tra cứu NPK Cà Mau 15-5-20.',
+      externalMessageId: 'transient-live-fetch-1',
+      metadata: null,
+    });
+
+    expect(result.responseText).toContain('dữ liệu công khai của PVCFC');
+    expect(live.fetch).toHaveBeenCalledOnce();
+    expect(model.calls[2]?.toolNames).not.toContain('searchPvcfcWeb');
+    expect(model.calls[2]?.toolNames).not.toContain('fetchPvcfcPage');
+  });
+
+  it('blocks a model retry of live fetch after the first transient failure', async () => {
+    const sourceUrl = 'https://www.pvcfc.com.vn/npk-ca-mau-15-5-20';
+    const live = webClient();
+    live.fetch.mockRejectedValueOnce(
+      new TinyFishClientError('tinyfish_fetch_failed'),
+    );
+    const model = new ScriptedPvcfcChatModel({
+      outputs: [
+        toolCall(
+          'searchPvcfcRecords',
+          { query: 'NPK Cà Mau 15-5-20', collections: ['products'], limit: 2 },
+          'retry-provider-1',
+        ),
+        toolCall('fetchPvcfcPage', { url: sourceUrl }, 'retry-fetch-1'),
+        toolCall('fetchPvcfcPage', { url: sourceUrl }, 'retry-fetch-2'),
+        new AIMessage(
+          `NPK Cà Mau 15-5-20 là sản phẩm trong dữ liệu công khai của PVCFC.\nNguồn: ${sourceUrl}`,
+        ),
+      ],
+    });
+    const pack = new PvcfcAgentPack({
+      store: new MemoryStore(),
+      model,
+      provider: loadBundledPvcfcPublicDataProvider(),
+      webEvidence: { client: live.client },
+    });
+
+    const result = await pack.runTurn({
+      sessionId: 'pvcfc:transient-live-retry',
+      customerId: 'transient-live-retry',
+      transport: 'web_chat',
+      text: 'Tra cứu NPK Cà Mau 15-5-20.',
+      externalMessageId: 'transient-live-retry-1',
+      metadata: null,
+    });
+
+    expect(result.responseText).toContain('dữ liệu công khai của PVCFC');
+    expect(live.fetch).toHaveBeenCalledOnce();
+    expect(model.calls[2]?.toolNames).not.toContain('fetchPvcfcPage');
+  });
+
   it('charges provider preflight time against the shared live-web deadline', async () => {
     let now = 0;
     const live = webClient();
@@ -592,7 +674,7 @@ describe('PVCFC LangChain agent pack', () => {
     const listCollections = provider.listCollections.bind(provider);
     vi.spyOn(provider, 'listCollections').mockImplementation(async (input) => {
       const result = await listCollections(input);
-      now = 10_001;
+      now = 12_001;
       return result;
     });
     const model = new ScriptedPvcfcChatModel({
