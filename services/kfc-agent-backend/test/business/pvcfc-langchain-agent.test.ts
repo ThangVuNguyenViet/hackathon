@@ -128,6 +128,9 @@ describe('PVCFC LangChain agent pack', () => {
     expect(prompt).toContain(
       'Historical TinyFish retrieval metadata describes fixture capture only',
     );
+    expect(prompt).toContain('buy, order, pay, debit money');
+    expect(prompt).toContain('one or two direct sentences');
+    expect(prompt).toContain('Do not cite evidence');
     expect(
       model.calls[0]!.messages.some((message) =>
         HumanMessage.isInstance(message),
@@ -244,6 +247,10 @@ describe('PVCFC LangChain agent pack', () => {
             '| --- | --- |',
             '| Đạm tổng | 46% |',
             '',
+            '*Khuyến nghị thực địa*',
+            '_Cần kiểm tra điều kiện ruộng_',
+            '~~Thông tin đã lỗi thời~~',
+            '',
             '> Thông tin công khai đã được kiểm chứng.',
           ].join('\n'),
         ),
@@ -276,12 +283,16 @@ describe('PVCFC LangChain agent pack', () => {
       '',
       'Đạm tổng — 46%',
       '',
+      'Khuyến nghị thực địa',
+      'Cần kiểm tra điều kiện ruộng',
+      'Thông tin đã lỗi thời',
+      '',
       'Thông tin công khai đã được kiểm chứng.',
     ].join('\n');
     expect(result.responseText).toBe(expected);
     expect((await store.listTurns('pvcfc:plain-text'))[1]?.text).toBe(expected);
     expect(result.responseText).not.toMatch(
-      /(?:\*\*|`|^#{1,6}\s|^>\s|^\s*\|.*\|\s*$|^\s*---\s*$)/m,
+      /(?:\*\*|(?<!\*)\*(?!\*)|(?<!_)_(?!_)|~~|`|^#{1,6}\s|^>\s|^\s*\|.*\|\s*$|^\s*---\s*$)/m,
     );
   });
 

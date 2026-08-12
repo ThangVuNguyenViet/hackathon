@@ -3,6 +3,7 @@ import { AgentTurnRunner } from '../agent/agentTurnRunner.js';
 import { PvcfcAgentPack } from '../businesses/pvcfc/pack.js';
 import type { ConversationTurnMetadata } from '../domain/types.js';
 import { MemoryStore } from '../persistence/memoryStore.js';
+import type { ConversationStore } from '../persistence/contracts.js';
 import { createPvcfcChatHandler } from './pvcfcChatHandler.js';
 import type { HandlerResponse, RouteOptions } from './routeHandlerContracts.js';
 import { bundledPvcfcWebInventoryUrls } from '../businesses/pvcfc/webPolicy.js';
@@ -18,32 +19,38 @@ export function registerPvcfcRoutes(
   });
 }
 
-export function createPvcfcRouteResponder(options: RouteOptions) {
-  const store = options.store ?? new MemoryStore();
+export function createPvcfcAgentTurnRunner(
+  options: RouteOptions,
+  store: ConversationStore,
+) {
   if (options.pvcfcAgentModel && !options.pvcfcPublicDataProvider) {
     throw new Error('pvcfc_public_data_provider_not_configured');
   }
-  const runner =
-    options.pvcfcAgentModel && options.pvcfcPublicDataProvider
-      ? new AgentTurnRunner({
-          packs: [
-            new PvcfcAgentPack({
-              store,
-              model: options.pvcfcAgentModel,
-              provider: options.pvcfcPublicDataProvider,
-              ...(options.pvcfcWebEvidenceClient
-                ? {
-                    webEvidence: {
-                      client: options.pvcfcWebEvidenceClient,
-                      inventoryUrls: bundledPvcfcWebInventoryUrls(),
-                    },
-                  }
-                : {}),
-            }),
-          ],
-          expectedPackIds: ['pvcfc'],
-        })
-      : undefined;
+  return options.pvcfcAgentModel && options.pvcfcPublicDataProvider
+    ? new AgentTurnRunner({
+        packs: [
+          new PvcfcAgentPack({
+            store,
+            model: options.pvcfcAgentModel,
+            provider: options.pvcfcPublicDataProvider,
+            ...(options.pvcfcWebEvidenceClient
+              ? {
+                  webEvidence: {
+                    client: options.pvcfcWebEvidenceClient,
+                    inventoryUrls: bundledPvcfcWebInventoryUrls(),
+                  },
+                }
+              : {}),
+          }),
+        ],
+        expectedPackIds: ['pvcfc'],
+      })
+    : undefined;
+}
+
+export function createPvcfcRouteResponder(options: RouteOptions) {
+  const store = options.store ?? new MemoryStore();
+  const runner = createPvcfcAgentTurnRunner(options, store);
   const inFlight = new Map<
     string,
     {

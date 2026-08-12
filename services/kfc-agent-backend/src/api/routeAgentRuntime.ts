@@ -149,6 +149,7 @@ import {
   type DeliverChannelAssistantReplyInput,
 } from './agentRunTextDeliveryRuntime.js';
 import type { GuestCheckoutAuthority } from '../security/guestCheckoutAuthority.js';
+import { createPvcfcAgentTurnRunner } from './pvcfcRouteRuntime.js';
 
 export interface StreamingRunObserver {
   observe: (observation: CustomerRunObservation) => Promise<void>;
@@ -271,6 +272,7 @@ export function createRouteAgentRuntime(
     kfcProofAccessContext,
     latestKfcProofPreconditions,
   } = input;
+  const pvcfcAgentRunner = createPvcfcAgentTurnRunner(options, store);
   const locallyActiveSynchronousRequests = new Set<string>();
   const {
     deferAiMonitorRefinement,
@@ -606,6 +608,88 @@ export function createRouteAgentRuntime(
     }
   }
 
+  async function channelAgentResponse(input: {
+    sessionId: string;
+    customerId: string;
+    clientMessageId: string;
+    existingUserTurnIds: readonly string[];
+    existingUserExternalMessageIds: readonly string[];
+    text: string;
+    metadata: ConversationTurnMetadata;
+    channel: 'messenger' | 'zalo';
+    clients?: ExternalClients;
+    guestCheckoutAuthority?: GuestCheckoutAuthority;
+    runGuard: {
+      isCurrent(): Promise<boolean>;
+      commitFence: RunCommitFence;
+    };
+  }): Promise<HandlerResponse> {
+    const businessId =
+      input.channel === 'messenger'
+        ? options.messengerBusinessId
+        : options.zaloBusinessId;
+    if (businessId === 'kfc') {
+      return kfcAgentResponse(input);
+    }
+    if (businessId !== 'pvcfc') {
+      return {
+        status: 503,
+        body: { errorCode: `${input.channel}_business_not_configured` },
+      };
+    }
+    if (!pvcfcAgentRunner) {
+      return {
+        status: 503,
+        body: { errorCode: 'pvcfc_agent_not_configured' },
+      };
+    }
+    if (!(await input.runGuard.isCurrent())) {
+      return {
+        status: 409,
+        body: { errorCode: 'agent_run_superseded', suppressed: true },
+      };
+    }
+    const result = await pvcfcAgentRunner.run({
+      packId: 'pvcfc',
+      turn: {
+        sessionId: input.sessionId,
+        customerId: input.customerId,
+        transport: input.channel,
+        text: input.text,
+        externalMessageId: input.clientMessageId,
+        existingUserTurnIds: input.existingUserTurnIds,
+        existingUserExternalMessageIds: input.existingUserExternalMessageIds,
+        metadata: {
+          ...input.metadata,
+          ...(options.readiness?.release
+            ? { release: options.readiness.release }
+            : {}),
+        },
+        fence: input.runGuard.commitFence,
+      },
+    });
+    if (result.stateCommit !== 'committed') {
+      return {
+        status: 409,
+        body: { errorCode: 'agent_run_superseded', suppressed: true },
+      };
+    }
+    return {
+      status: 200,
+      body: {
+        agentRuntime: 'langchain-create-agent',
+        status: 'completed',
+        sessionId: input.sessionId,
+        customerId: input.customerId,
+        userTurnId: result.userTurnId,
+        assistantTurnId: result.assistantTurnId,
+        responseText: result.responseText,
+        presentation: textOnlyPresentation(result.responseText, input.channel),
+        usage: result.usage,
+      },
+    };
+  }
+
   const deliverAssistantReply = (delivery: DeliverChannelAssistantReplyInput) =>
     deliverChannelAssistantReply({ store, dashboard, delivery });
 
@@ -811,6 +895,7 @@ export function createRouteAgentRuntime(
 
   return {
     kfcAgentResponse,
+    channelAgentResponse,
     deferAiMonitorRefinement,
     deliverAssistantReply,
     persistEventProfile,

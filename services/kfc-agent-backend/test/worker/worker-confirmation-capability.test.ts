@@ -27,10 +27,12 @@ function workerEnv(database: FakeD1Database): WorkerEnv {
   return {
     DB: database,
     MESSENGER_VERIFY_TOKEN: 'worker_verify',
+    MESSENGER_BUSINESS_ID: 'kfc',
     META_PAGE_ID: 'worker_page',
     META_APP_SECRET: 'worker_meta_secret',
     META_PAGE_ACCESS_TOKEN: 'worker_page_token',
     ZALO_OA_ID: 'worker_zalo',
+    ZALO_BUSINESS_ID: 'kfc',
     ZALO_ACCESS_TOKEN: 'worker_zalo_token',
     KFC_AGENT_PROVIDER: 'google',
     GOOGLE_API_KEY: 'worker_google_key',

@@ -106,6 +106,15 @@ PVCFC_ASTRAFLOW_API_KEY=YOUR_REAL_ASTRAFLOW_KEY
 PVCFC_ASTRAFLOW_BASE_URL=https://api-sg.umodelverse.ai/v1
 PVCFC_ASTRAFLOW_MODEL=gpt-5.6-luna
 PVCFC_PUBLIC_DATA_MODE=fixture
+MESSENGER_BUSINESS_ID=pvcfc
+ZALO_BUSINESS_ID=pvcfc
+# Configure the real PVCFC Page/OA credentials through this root-only file.
+MESSENGER_VERIFY_TOKEN=
+META_PAGE_ID=
+META_APP_SECRET=
+META_PAGE_ACCESS_TOKEN=
+ZALO_OA_ID=
+ZALO_ACCESS_TOKEN=
 # Optional live official-site evidence; omit when fixture-only operation is intended.
 TINYFISH_API_KEY=
 DATABASE_URL=postgres://USER:PASSWORD@HOST:5432/DATABASE
@@ -115,6 +124,10 @@ EOF
 sudo chmod 600 /etc/pvcfc-backend.env
 sudo chown root:root /etc/pvcfc-backend.env
 ```
+
+Do not commit the Page/OA credentials. A configured Messenger or Zalo account
+without its explicit business binding is rejected at startup; this prevents a
+PVCFC channel from silently falling through to KFC commerce behavior.
 
 ## Step 6 — Allow Node.js to bind port 80
 

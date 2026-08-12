@@ -37,11 +37,13 @@ const CANONICAL_ONLY_NOTICE =
 export interface PvcfcAgentTurnInput {
   readonly sessionId: string;
   readonly customerId: string;
-  readonly transport: 'web_chat';
+  readonly transport: 'web_chat' | 'messenger' | 'zalo';
   readonly text: string;
   readonly externalMessageId: string | null;
   readonly metadata: ConversationTurnMetadata | null;
   readonly fence?: RunCommitFence;
+  readonly existingUserTurnIds?: readonly string[];
+  readonly existingUserExternalMessageIds?: readonly string[];
 }
 
 export interface PvcfcAgentUsage {
@@ -157,19 +159,24 @@ export class PvcfcAgentPack implements BusinessAgentPack<
     const webBudget = this.options.webEvidence
       ? createPvcfcWebTurnBudget({ now: this.options.webEvidence.now })
       : undefined;
-    const userTurn = await this.options.store.appendTurn({
-      sessionId: turn.sessionId,
-      // The neutral application transport is intentionally not added to the
-      // KFC-owned Channel type while the old domain seam is being replaced.
-      // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion
-      channel: turn.transport as never,
-      role: 'user',
-      text: turn.text,
-      externalMessageId: turn.externalMessageId,
-      externalUserId: turn.customerId,
-      deliveryStatus: 'received',
-      metadata: turn.metadata,
-    });
+    const userTurns = turn.existingUserTurnIds
+      ? await this.existingUserTurns(turn)
+      : [
+          await this.options.store.appendTurn({
+            sessionId: turn.sessionId,
+            // The neutral application transport is intentionally not added to
+            // the KFC-owned Channel type while the old domain seam is replaced.
+            // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion
+            channel: turn.transport as never,
+            role: 'user',
+            text: turn.text,
+            externalMessageId: turn.externalMessageId,
+            externalUserId: turn.customerId,
+            deliveryStatus: 'received',
+            metadata: turn.metadata,
+          }),
+        ];
+    const userTurn = userTurns[0]!;
 
     try {
       const messages = await this.historyMessages(turn.sessionId);
@@ -314,6 +321,7 @@ export class PvcfcAgentPack implements BusinessAgentPack<
               : {}),
             rawEvent: {
               pvcfcRequestUserTurnId: userTurn.id,
+              pvcfcRequestUserTurnIds: userTurns.map(({ id }) => id),
               pvcfcClientMessageId: turn.externalMessageId,
             },
           },
@@ -368,6 +376,51 @@ export class PvcfcAgentPack implements BusinessAgentPack<
       }
       throw error;
     }
+  }
+
+  private async existingUserTurns(turn: PvcfcAgentTurnInput) {
+    const expectedIds = turn.existingUserTurnIds ?? [];
+    const expectedExternalMessageIds =
+      turn.existingUserExternalMessageIds ?? [];
+    if (
+      expectedIds.length === 0 ||
+      new Set(expectedIds).size !== expectedIds.length ||
+      expectedExternalMessageIds.length !== expectedIds.length
+    ) {
+      throw new Error('pvcfc_existing_user_turns_invalid');
+    }
+    const turns = await this.options.store.listTurns(turn.sessionId);
+    const selected = expectedIds.map((id) =>
+      turns.find((turn) => turn.id === id),
+    );
+    if (
+      selected.some(
+        (candidate, index) =>
+          candidate === undefined ||
+          candidate.role !== 'user' ||
+          candidate.sessionId !== turn.sessionId ||
+          candidate.channel !== turn.transport ||
+          candidate.externalUserId !== turn.customerId ||
+          candidate.externalMessageId !== expectedExternalMessageIds[index],
+      )
+    ) {
+      throw new Error('pvcfc_existing_user_turns_invalid');
+    }
+    const existing = selected.filter(
+      (candidate): candidate is NonNullable<typeof candidate> =>
+        candidate !== undefined,
+    );
+    const expectedText =
+      existing.length === 1
+        ? existing[0]!.text
+        : existing.map(({ text }, index) => `${index + 1}. ${text}`).join('\n');
+    if (
+      expectedText !== turn.text ||
+      expectedExternalMessageIds[0] !== turn.externalMessageId
+    ) {
+      throw new Error('pvcfc_existing_user_turns_invalid');
+    }
+    return existing;
   }
 
   private async historyMessages(sessionId: string): Promise<BaseMessage[]> {

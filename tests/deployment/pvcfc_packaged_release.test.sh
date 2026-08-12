@@ -12,6 +12,8 @@ grep -q 'npm run build' "$RUNBOOK"
 grep -q 'dist/client/index.html' "$RUNBOOK"
 grep -q 'Dockerfile.pvcfc' "$RUNBOOK"
 grep -q 'PVCFC_ASTRAFLOW_API_KEY' "$RUNBOOK"
+grep -q '^MESSENGER_BUSINESS_ID=pvcfc$' "$RUNBOOK"
+grep -q '^ZALO_BUSINESS_ID=pvcfc$' "$RUNBOOK"
 ! grep -q 'dist/scripts/serve-demo-agent-server.js' "$RUNBOOK"
 
 echo "PVCFC packaged release contract passed."

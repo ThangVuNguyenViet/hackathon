@@ -13,11 +13,13 @@ function env(database: FakeD1Database): WorkerEnv {
     KFC_CONFIRMATION_SIGNING_SECRET: 'worker-confirmation-secret-more-than-32-bytes',
     KFC_DEMO_ADMIN_TOKEN: 'worker-admin-token',
     MESSENGER_VERIFY_TOKEN: 'worker-verify',
+    MESSENGER_BUSINESS_ID: 'kfc',
     META_PAGE_ID: 'page-1',
     META_APP_SECRET: 'meta-secret',
     META_PAGE_ACCESS_TOKEN: 'page-token',
     META_INBOX_URL_TEMPLATE: 'https://business.facebook.test/{pageId}/{externalUserId}',
     ZALO_OA_ID: 'oa-worker',
+    ZALO_BUSINESS_ID: 'kfc',
     ZALO_ACCESS_TOKEN: 'zalo-token',
   };
 }

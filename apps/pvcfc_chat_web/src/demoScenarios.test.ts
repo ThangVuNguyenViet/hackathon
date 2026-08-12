@@ -20,6 +20,15 @@ const REQUIRED_LIVE_SCENARIOS = [
   "current-official-catalogue",
 ] as const;
 
+const CUSTOMER_FIRST_PILLS = [
+  "Lúa 7–10 ngày sau sạ nên bón NPK Cà Mau nào?",
+  "Lúa 40–45 ngày sau sạ nên dùng NPK Cà Mau 18-6-18 thế nào?",
+  "Đất phèn mặn nên chọn UREA BIO hay OM CÀ MAU ECO?",
+  "So sánh N46.PLUS Cà Mau và UREA BIO giúp tôi",
+  "Cửa hàng phân bón Khánh My ở Cà Mau có thông tin gì?",
+  "Kiểm tra Chứng thư chất lượng 0383/2026/SP giúp tôi",
+] as const;
+
 describe("PVCFC evidence-backed demo content", () => {
   it("maps the provider-backed demos to the real fixture collections", () => {
     const modesById = Object.fromEntries(
@@ -105,7 +114,7 @@ describe("PVCFC evidence-backed demo content", () => {
     ).toBe(true);
   });
 
-  it("asks for official citations and makes optional live-web use visible", () => {
+  it("keeps evidence mechanics in demo replays instead of customer pills", () => {
     for (const scenario of PVCFC_DEMO_SCENARIOS) {
       expect(scenario.turns.join(" ").toLowerCase()).toMatch(
         /dẫn nguồn|trích dẫn|url nguồn/,
@@ -117,15 +126,34 @@ describe("PVCFC evidence-backed demo content", () => {
       }
     }
 
-    for (const pill of PVCFC_SUGGESTION_PILLS) {
-      expect(pill.toLowerCase()).toMatch(/dẫn nguồn|trích dẫn|url nguồn/);
-    }
+    expect(PVCFC_SUGGESTION_PILLS).toEqual(CUSTOMER_FIRST_PILLS);
+    expect(PVCFC_SUGGESTION_PILLS.join(" ").toLowerCase()).not.toMatch(
+      /dẫn nguồn|trích dẫn|url nguồn|web trực tiếp|tinyfish|hồ sơ/,
+    );
+  });
 
-    expect(
-      PVCFC_SUGGESTION_PILLS.filter((pill) =>
-        pill.toLowerCase().includes("web trực tiếp"),
+  it("uses real farmer and buyer entities from the bundled provider", () => {
+    const fixtureText = readFileSync(
+      new URL(
+        "../../../services/kfc-agent-backend/fixtures/generated/pvcfc-public-data.json",
+        import.meta.url,
       ),
-    ).toHaveLength(2);
+      "utf8",
+    );
+
+    for (const entity of [
+      "NPK Cà Mau 20-10-10",
+      "NPK Cà Mau 18-6-18",
+      "UREA BIO",
+      "OM CA MAU ECO",
+      "N46.PLUS CÀ MAU",
+      "Cửa hàng phân bón Khánh My",
+      "0383/2026/SP",
+    ]) {
+      expect(fixtureText.toLocaleLowerCase("vi")).toContain(
+        entity.toLocaleLowerCase("vi"),
+      );
+    }
   });
 
   it("does not promise unsupported PVCFC actions or unverifiable live facts", () => {

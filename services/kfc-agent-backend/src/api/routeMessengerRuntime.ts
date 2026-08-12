@@ -194,7 +194,7 @@ export function createRouteMessengerRuntime(
     createFirstPartyKfcClients,
     kfcProofAccessContext,
     latestKfcProofPreconditions,
-    kfcAgentResponse,
+    channelAgentResponse,
     deliverAssistantReply,
     persistEventProfile,
     turnMetadataFor,
@@ -223,11 +223,11 @@ export function createRouteMessengerRuntime(
       return { status: 'skipped' };
     }
 
-    let clients: ExternalClients | undefined;
+    let clients: Pick<ExternalClients, 'messenger' | 'zalo'> | undefined;
     let typingStarted = false;
     try {
       await persistEventProfile(event);
-      clients = await createWebhookClients(sessionId);
+      clients = createDeliveryClients();
       await sendMessengerSenderAction(
         clients.messenger,
         event.externalUserId,
@@ -520,7 +520,8 @@ export function createRouteMessengerRuntime(
       },
       createdAt: new Date().toISOString(),
     });
-    let clients: ExternalClients | undefined;
+    let clients: Pick<ExternalClients, 'messenger' | 'zalo'> | undefined;
+    let kfcClients: ExternalClients | undefined;
     let typingStarted = false;
     try {
       await persistEventProfile({
@@ -571,7 +572,16 @@ export function createRouteMessengerRuntime(
         emitConversationTurnCreatedEvent(conversationTurn);
       }
 
-      clients = await createWebhookClients(run.sessionId);
+      const businessId =
+        run.channel === 'messenger'
+          ? options.messengerBusinessId
+          : options.zaloBusinessId;
+      if (businessId === 'kfc') {
+        kfcClients = await createWebhookClients(run.sessionId);
+        clients = kfcClients;
+      } else {
+        clients = createDeliveryClients();
+      }
       if (run.channel === 'messenger') {
         const profileResult = await clients.messenger.getProfile(
           run.externalUserId,
@@ -677,20 +687,40 @@ export function createRouteMessengerRuntime(
         deliveryAssistantTurnId = assistantTurn.id;
       } else {
         const guestCheckoutAuthority =
-          await messengerGuestAuthorityForClaimedRun({
-            run,
-            firstLinkedTurn: linkedTurns[0]!,
-            commitFence,
-            verifiedIngress,
-          });
-        const agentResponse = await kfcAgentResponse({
+          businessId === 'kfc'
+            ? await messengerGuestAuthorityForClaimedRun({
+                run,
+                firstLinkedTurn: linkedTurns[0]!,
+                commitFence,
+                verifiedIngress,
+              })
+            : undefined;
+        const persistedUserTurns = await Promise.all(
+          linkedTurns.map((turn) =>
+            store.findTurnByExternalMessage(
+              run.sessionId,
+              turn.externalMessageId,
+            ),
+          ),
+        );
+        if (persistedUserTurns.some((turn) => turn === undefined)) {
+          throw new Error('agent_run_user_turn_missing');
+        }
+        const agentResponse = await channelAgentResponse({
           sessionId: run.sessionId,
           customerId: run.externalUserId,
           channel: run.channel,
           clientMessageId: linkedTurns[0]!.externalMessageId,
-          text: run.coalescedInputText,
+          existingUserTurnIds: persistedUserTurns.map((turn) => turn!.id),
+          existingUserExternalMessageIds: linkedTurns.map(
+            ({ externalMessageId }) => externalMessageId,
+          ),
+          text:
+            linkedTurns.length === 1
+              ? linkedTurns[0]!.text
+              : run.coalescedInputText,
           metadata: {},
-          clients,
+          clients: kfcClients,
           ...(guestCheckoutAuthority ? { guestCheckoutAuthority } : {}),
           runGuard,
         });

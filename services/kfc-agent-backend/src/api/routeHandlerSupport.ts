@@ -356,7 +356,18 @@ export async function checkFixtures(
 
 export function checkMessengerConfig(options: RouteOptions): ReadinessCheckResult {
   const required = options.readiness?.messengerRequired ?? true;
+  const businessId = options.messengerBusinessId;
+  const agentConfigured =
+    businessId === 'pvcfc'
+      ? Boolean(options.pvcfcAgentModel && options.pvcfcPublicDataProvider)
+      : businessId === 'kfc'
+        ? Boolean(options.agent?.model)
+        : false;
   const missing = [
+    !businessId ? "MESSENGER_BUSINESS_ID" : undefined,
+    businessId && !agentConfigured
+      ? `${businessId.toUpperCase()}_AGENT`
+      : undefined,
     !options.messengerVerifyToken ? "MESSENGER_VERIFY_TOKEN" : undefined,
     !options.metaAppSecret ? "META_APP_SECRET" : undefined,
     !options.metaPageId ? "META_PAGE_ID" : undefined,
@@ -368,14 +379,27 @@ export function checkMessengerConfig(options: RouteOptions): ReadinessCheckResul
     ok: configured || !required,
     configured,
     required,
+    businessId: businessId ?? null,
+    agentConfigured,
     message: configured || !required ? undefined : `Missing ${missing.join(", ")}`,
   };
 }
 
 export function checkZaloConfig(options: RouteOptions): ReadinessCheckResult {
   const required = options.readiness?.zaloRequired ?? true;
+  const businessId = options.zaloBusinessId;
+  const agentConfigured =
+    businessId === 'pvcfc'
+      ? Boolean(options.pvcfcAgentModel && options.pvcfcPublicDataProvider)
+      : businessId === 'kfc'
+        ? Boolean(options.agent?.model)
+        : false;
   const productionRefreshRequired = options.readiness?.zaloRequired === true;
   const missing = [
+    !businessId ? "ZALO_BUSINESS_ID" : undefined,
+    businessId && !agentConfigured
+      ? `${businessId.toUpperCase()}_AGENT`
+      : undefined,
     !options.zaloOaId ? "ZALO_OA_ID" : undefined,
     productionRefreshRequired && options.zaloOaId !== PVCFC_ZALO_OA_ID
       ? "ZALO_OA_ID_PVCFC_BINDING"
@@ -399,6 +423,8 @@ export function checkZaloConfig(options: RouteOptions): ReadinessCheckResult {
     ok: configured || !required,
     configured,
     required,
+    businessId: businessId ?? null,
+    agentConfigured,
     message:
       configured || !required ? undefined : `Missing ${missing.join(", ")}`,
   };

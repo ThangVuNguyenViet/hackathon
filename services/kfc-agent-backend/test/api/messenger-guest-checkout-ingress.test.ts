@@ -186,6 +186,7 @@ function routeOptions(input: {
         },
       }),
     metaAppSecret: TEST_META_APP_SECRET,
+    messengerBusinessId: 'kfc' as const,
     metaPageId: pageId,
     messengerPageAccessToken: 'page-token',
     messengerGraphApiBaseUrl: 'https://graph.local',

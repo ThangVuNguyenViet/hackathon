@@ -20,6 +20,7 @@ import { LangSmithAgentTracer } from '../observability/langsmithAgentTracer.js';
 import { LangSmithShowcaseScenarioSource } from '../showcase/showcase.js';
 import { createOtelRuntimeProbe } from '../observability/runtimeProbe.js';
 import { createTinyFishClient } from '../web/tinyFishClient.js';
+import { requireConfiguredChannelBusinessId } from '../business/channelBusinessBinding.js';
 
 const WEB_EVIDENCE_CLIENT_TIMEOUT_MS = 4_000;
 
@@ -173,6 +174,30 @@ export function buildServerOptionsFromEnv(
   const posBaseUrl = optionalValue(env.KFC_POS_BASE_URL);
   const posToken = optionalValue(env.KFC_POS_TOKEN);
   const zaloOaId = optionalValue(env.ZALO_OA_ID);
+  const messengerBusinessId = requireConfiguredChannelBusinessId({
+    channel: 'messenger',
+    configuredValues: [
+      env.MESSENGER_VERIFY_TOKEN,
+      env.META_PAGE_ID,
+      env.META_APP_SECRET,
+      env.META_PAGE_ACCESS_TOKEN,
+      env.META_INBOX_URL_TEMPLATE,
+    ],
+    businessId: env.MESSENGER_BUSINESS_ID,
+  });
+  const zaloBusinessId = requireConfiguredChannelBusinessId({
+    channel: 'zalo',
+    configuredValues: [
+      env.ZALO_OA_ID,
+      env.ZALO_ACCESS_TOKEN,
+      env.ZALO_REFRESH_TOKEN,
+      env.ZALO_APP_ID,
+      env.ZALO_APP_SECRET,
+      env.ZALO_OA_SECRET,
+      env.ZALO_INBOX_URL_TEMPLATE,
+    ],
+    businessId: env.ZALO_BUSINESS_ID,
+  });
   if (
     env.KFC_COMMERCE_MODE === 'gateway' &&
     (!commerceBaseUrl ||
@@ -219,12 +244,14 @@ export function buildServerOptionsFromEnv(
       : {}),
     demoAdminToken: optionalValue(env.KFC_DEMO_ADMIN_TOKEN),
     messengerVerifyToken: optionalValue(env.MESSENGER_VERIFY_TOKEN),
+    messengerBusinessId,
     metaAppSecret: optionalValue(env.META_APP_SECRET),
     metaPageId: optionalValue(env.META_PAGE_ID),
     messengerPageAccessToken: optionalValue(env.META_PAGE_ACCESS_TOKEN),
     metaInboxUrlTemplate: optionalValue(env.META_INBOX_URL_TEMPLATE),
     messengerGraphApiBaseUrl: optionalValue(env.MESSENGER_GRAPH_API_BASE_URL),
     zaloOaId,
+    zaloBusinessId,
     zaloAppId: optionalValue(env.ZALO_APP_ID),
     zaloWebhookSecret: optionalValue(env.ZALO_OA_SECRET),
     zaloSetupToken: optionalValue(env.ZALO_SETUP_TOKEN),

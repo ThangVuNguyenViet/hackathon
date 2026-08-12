@@ -6,6 +6,7 @@ import type { ZaloOAuthRuntime } from '../channels/zaloOAuth.js';
 import type { PvcfcPublicDataProvider } from '../businesses/pvcfc/public-data/pvcfcPublicDataProvider.js';
 import type { BaseChatModel } from '@langchain/core/language_models/chat_models';
 import type { TinyFishClient } from '../web/tinyFishClient.js';
+import type { BusinessId } from '../business/channelBusinessBinding.js';
 import type { ConfirmationApprovalKeyRing } from './confirmationApprovalCapability.js';
 import type { VerifiedMessengerGuestCheckoutIngress } from '../security/guestCheckoutAuthority.js';
 import type {
@@ -410,6 +411,8 @@ export interface ReadinessCheckResult {
   message?: string;
   required?: boolean;
   configured?: boolean;
+  businessId?: BusinessId | null;
+  agentConfigured?: boolean;
   observation?: Pick<
     CatalogObservation,
     | 'id'
@@ -500,6 +503,7 @@ export interface RouteOptions {
   fixturesRoot?: string;
   demoAdminToken?: string;
   messengerVerifyToken?: string;
+  messengerBusinessId?: BusinessId;
   metaAppSecret?: string;
   metaPageId?: string;
   messengerPageAccessToken?: string;
@@ -507,6 +511,7 @@ export interface RouteOptions {
   messengerGraphApiBaseUrl?: string;
   messengerFetchImpl?: typeof fetch;
   zaloOaId?: string;
+  zaloBusinessId?: BusinessId;
   zaloAppId?: string;
   zaloWebhookSecret?: string;
   zaloSetupToken?: string;
