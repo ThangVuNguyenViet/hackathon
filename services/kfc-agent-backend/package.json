@@ -27,6 +27,7 @@
     "eval:outcomes": "tsx -- scripts/run-outcome-judgments.ts --env-file ../../.env",
     "showcase:seed": "set -a; [ ! -f ../../.env ] || . ../../.env; set +a; tsx scripts/seed-showcase.ts",
     "test:watch": "vitest",
+    "test:live:tinyfish": "tsx scripts/run-tinyfish-live-canary.ts",
     "fixtures:build": "tsx scripts/build-fixtures.ts",
     "fixtures:pvcfc:build": "tsx scripts/build-pvcfc-public-data.ts",
     "fixtures:pvcfc:check": "tsx scripts/build-pvcfc-public-data.ts --check",

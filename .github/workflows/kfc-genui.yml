@@ -59,3 +59,26 @@ jobs:
       - run: flutter analyze
       - name: Customer chat unit and widget tests
         run: flutter test test/features/customer_chat
+
+  tinyfish-live-canary:
+    if: github.event_name == 'workflow_dispatch'
+    needs: [backend, flutter]
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    defaults:
+      run:
+        working-directory: services/kfc-agent-backend
+    env:
+      RUN_LIVE_TINYFISH: "1"
+      TINYFISH_API_KEY: ${{ secrets.TINYFISH_API_KEY }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22.13.0
+          cache: npm
+          cache-dependency-path: services/kfc-agent-backend/package-lock.json
+      - run: npm ci
+      - name: Require TinyFish qualification credential
+        run: test -n "$TINYFISH_API_KEY" || { echo "TINYFISH_API_KEY is required"; exit 1; }
+      - run: npm run test:live:tinyfish

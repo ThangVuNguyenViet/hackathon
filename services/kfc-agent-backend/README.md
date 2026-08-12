@@ -125,13 +125,14 @@ wrangler secret put META_APP_SECRET
 wrangler secret put META_PAGE_ACCESS_TOKEN
 wrangler secret put OPENAI_API_KEY
 wrangler secret put GOOGLE_API_KEY
+wrangler secret put TINYFISH_API_KEY
 wrangler secret put KFC_DEMO_ADMIN_TOKEN
 ```
 
 Customer-facing operation requires credentials for the selected agent
-provider. The mandatory qualification matrix runs OpenAI and Google as
-separate agent executions, so the complete matrix requires both
-`OPENAI_API_KEY` and `GOOGLE_API_KEY`.
+provider. TinyFish is optional: without `TINYFISH_API_KEY`, both packs retain
+their canonical fixture/API tools and report current web evidence as
+unavailable.
 
 Meta access-token expiry cannot be extended in place after a token expires. Generate a new long-lived Page access token for Page ID `118976205445198`, confirm it in Meta's Access Token Debugger, then update `META_PAGE_ACCESS_TOKEN`.
 
@@ -254,23 +255,22 @@ phase boundaries: core scenarios 02, 03, 10, and 11 report nonblocking warnings
 until calibration approval; supporting scenarios 06 and 07 are evidence-only;
 provider or judge exhaustion is inconclusive rather than a product verdict.
 
-The mandatory live-text matrix currently executes all derived turns for OpenAI
-and Google across three repetitions. The OpenAI advisory canary reuses Text
-repetition 1 and is judged by OpenAI; Gemini advisory judgment is deferred. The
-24-example OpenAI advisory calibration fixture is draft/human-review-required
-and is rejected at qualification intake. Generated menu items, modifiers, and
-governed content remain the unified source of catalog facts; no separate
-advisory catalog fixture exists. Offline tests do not invoke a model or mutate
-LangSmith.
+Generated menu items, modifiers, and governed content remain the unified
+source of catalog facts. Offline tests do not invoke a model, TinyFish, or
+mutate LangSmith. The retired graph-era live-matrix commands are not a current
+release gate; a replacement credentialed model matrix must exercise the
+LangChain business packs directly before it becomes release-blocking.
 
-Worker interruption remains a separate boundary check. Small talk, catalog
-browsing, full-menu display, recommendation, and cart behavior are part of the
-same provider-neutral scenario matrix:
+TinyFish Search/Fetch qualification is separately gated and never runs in
+ordinary CI. It performs one allowlisted PVCFC search and one exact-page fetch,
+then prints only latency and a content SHA-256:
 
 ```bash
-npm run test:live:scenarios
-npm run test:live:interruption
+RUN_LIVE_TINYFISH=1 TINYFISH_API_KEY=... npm run test:live:tinyfish
 ```
+
+Without both gate and credential, the command exits successfully with an
+explicit skipped result.
 
 ## Messenger And Zalo
 
