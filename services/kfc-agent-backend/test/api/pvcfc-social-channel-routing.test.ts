@@ -8,6 +8,7 @@ import {
   TEST_META_APP_SECRET,
 } from '../fixtures/signedMessengerWebhook.js';
 import { ScriptedPvcfcChatModel } from '../fixtures/scriptedPvcfcChatModel.js';
+import { testAgent } from '../fixtures/testAgent.js';
 
 function evidenceCall(id: string) {
   return new AIMessage({
@@ -42,6 +43,10 @@ describe('PVCFC social-channel business routing', () => {
         ),
       ],
     });
+    // Keep an explicitly configured KFC model in the fixture so this test
+    // fails if a PVCFC-bound Messenger turn accidentally falls back to the
+    // KFC application runtime. The model has no scripted output on purpose.
+    const forbiddenKfcModel = new ScriptedPvcfcChatModel({ outputs: [] });
     const messengerBodies: string[] = [];
     const messengerFetchImpl = vi.fn(
       async (_url: unknown, init?: RequestInit) => {
@@ -77,6 +82,7 @@ describe('PVCFC social-channel business routing', () => {
     });
     const server = buildDemoAdminServer({
       store,
+      ...testAgent(forbiddenKfcModel),
       pvcfcAgentModel: model,
       pvcfcPublicDataProvider: loadBundledPvcfcPublicDataProvider(),
       messengerBusinessId: 'pvcfc',
@@ -156,6 +162,7 @@ describe('PVCFC social-channel business routing', () => {
     }
     expect(reserveIrreversibleOperation).not.toHaveBeenCalled();
     expect(model.calls).toHaveLength(4);
+    expect(forbiddenKfcModel.calls).toHaveLength(0);
     expect(JSON.stringify(model.calls)).not.toContain('KFC');
     expect(JSON.stringify(messengerBodies)).toContain('NPK Cà Mau 20-10-10');
     expect(JSON.stringify(zaloBodies)).toContain('NPK Cà Mau 18-6-18');
