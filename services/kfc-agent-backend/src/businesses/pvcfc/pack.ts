@@ -31,6 +31,8 @@ const MAX_MODEL_CALLS_PER_RUN = 6;
 // are read-only, so keep a bounded but collection-sized allowance.
 const MAX_TOOL_CALLS_PER_RUN = 20;
 const RECURSION_LIMIT = 64;
+const CANONICAL_ONLY_NOTICE =
+  'Trạng thái nguồn: Không có truy cập web trực tiếp trong lượt này; câu trả lời chỉ sử dụng dữ liệu PVCFC đã được kiểm kê.';
 
 export interface PvcfcAgentTurnInput {
   readonly sessionId: string;
@@ -231,7 +233,7 @@ export class PvcfcAgentPack implements BusinessAgentPack<
           '',
           this.options.webEvidence
             ? 'Live web evidence is available for this turn after canonical provider evidence is attempted.'
-            : 'Live web evidence is unavailable for this turn. For latest or current requests, report the newest canonical record and clearly say that live status could not be verified; never claim that a live check was unnecessary or completed.',
+            : 'Live web evidence is unavailable for this turn. Historical TinyFish retrieval metadata describes fixture capture only, not live access in this turn. For latest or current requests, report the newest canonical record and clearly say that live status could not be verified; never claim that TinyFish or another live check was used, unnecessary, or completed.',
           'When the user asks for a summary or comparison of one bounded collection, call listPvcfcRecords with includeDetails=true and an appropriate limit instead of retrieving every record with separate getPvcfcRecord calls.',
           '',
           'Verified current PVCFC public-data index:',
@@ -267,12 +269,15 @@ export class PvcfcAgentPack implements BusinessAgentPack<
       if (!responseMessage || toolCalls.length === 0) {
         throw new Error('pvcfc_evidence_tool_required');
       }
-      const responseText = normalizePvcfcCustomerText(
+      const normalizedResponseText = normalizePvcfcCustomerText(
         textContent(responseMessage),
       );
-      if (responseText.length === 0) {
+      if (normalizedResponseText.length === 0) {
         throw new Error('pvcfc_response_text_required');
       }
+      const responseText = this.options.webEvidence
+        ? normalizedResponseText
+        : `${CANONICAL_ONLY_NOTICE}\n\n${normalizedResponseText}`;
       const liveSourceUrls = toolCalls
         .filter(
           ({ evidenceMode, status }) =>

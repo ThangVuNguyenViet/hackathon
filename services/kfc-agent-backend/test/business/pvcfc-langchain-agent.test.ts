@@ -6,6 +6,9 @@ import { MemoryStore } from '../../src/persistence/memoryStore.js';
 import { ScriptedPvcfcChatModel } from '../fixtures/scriptedPvcfcChatModel.js';
 import type { TinyFishClient } from '../../src/web/tinyFishClient.js';
 
+const CANONICAL_ONLY_NOTICE =
+  'Trạng thái nguồn: Không có truy cập web trực tiếp trong lượt này; câu trả lời chỉ sử dụng dữ liệu PVCFC đã được kiểm kê.';
+
 function evidenceCall() {
   return new AIMessage({
     content: '',
@@ -99,7 +102,9 @@ describe('PVCFC LangChain agent pack', () => {
       },
     });
 
-    expect(result.responseText).toBe('Thông tin đã được kiểm chứng.');
+    expect(result.responseText).toBe(
+      `${CANONICAL_ONLY_NOTICE}\n\nThông tin đã được kiểm chứng.`,
+    );
     expect(model.calls).toHaveLength(2);
     expect(model.calls[0]?.toolChoice).toBe('required');
     expect(model.calls[1]?.toolChoice).not.toBe('required');
@@ -120,6 +125,9 @@ describe('PVCFC LangChain agent pack', () => {
     expect(prompt).not.toContain('Use KFC tools.');
     expect(prompt).not.toContain('cart_update');
     expect(prompt).toContain('Live web evidence is unavailable for this turn');
+    expect(prompt).toContain(
+      'Historical TinyFish retrieval metadata describes fixture capture only',
+    );
     expect(
       model.calls[0]!.messages.some((message) =>
         HumanMessage.isInstance(message),
@@ -169,7 +177,9 @@ describe('PVCFC LangChain agent pack', () => {
       metadata: null,
     });
 
-    expect(result.responseText).toBe('Đã kiểm tra đủ 17 hồ sơ công khai.');
+    expect(result.responseText).toBe(
+      `${CANONICAL_ONLY_NOTICE}\n\nĐã kiểm tra đủ 17 hồ sơ công khai.`,
+    );
     expect(result.toolCalls).toHaveLength(17);
   });
 
@@ -255,6 +265,8 @@ describe('PVCFC LangChain agent pack', () => {
     });
 
     const expected = [
+      CANONICAL_ONLY_NOTICE,
+      '',
       'Phân Bón Cà Mau',
       '',
       '• Sản phẩm: Urê Cà Mau',
