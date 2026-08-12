@@ -205,8 +205,13 @@ describe('PVCFC LangChain agent pack', () => {
       'Render text-mode replies as plain text; Markdown syntax is not part of text mode',
     );
     expect(prompt).toContain('Use literal citations');
-    expect(prompt).toContain('buying, ordering, payment');
-    expect(prompt).toContain('public-information boundary response');
+    expect(prompt).toContain('public purchase planning');
+    expect(prompt).toContain(
+      'product-selection, comparison, pack information, and public dealer guidance',
+    );
+    expect(prompt).toContain(
+      'transaction completion, payment, private inventory, and account actions',
+    );
     expect(prompt).toContain(
       'Use the canonical PVCFC public-data collection as the answer baseline',
     );

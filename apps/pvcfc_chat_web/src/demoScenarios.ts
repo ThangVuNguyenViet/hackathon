@@ -6,12 +6,12 @@ export interface PvcfcDemoScenario {
 }
 
 export const PVCFC_SUGGESTION_PILLS: readonly string[] = Object.freeze([
-  "Lúa 7–10 ngày sau sạ nên bón NPK Cà Mau nào?",
-  "Lúa 40–45 ngày sau sạ nên dùng NPK Cà Mau 18-6-18 thế nào?",
-  "Đất phèn mặn nên chọn UREA BIO hay OM CÀ MAU ECO?",
-  "So sánh N46.PLUS Cà Mau và UREA BIO giúp tôi",
-  "Cửa hàng phân bón Khánh My ở Cà Mau có thông tin gì?",
-  "Kiểm tra Chứng thư chất lượng 0383/2026/SP giúp tôi",
+  "Tư vấn phân bón xuống giống",
+  "Bón phân lúa theo giai đoạn",
+  "Phân bón cho đất phèn mặn",
+  "So sánh phân bón trước mua",
+  "Chọn phân bón cho cây trồng",
+  "Tìm đại lý phân bón",
 ]);
 
 export const PVCFC_DEMO_SCENARIOS: readonly PvcfcDemoScenario[] = Object.freeze(
