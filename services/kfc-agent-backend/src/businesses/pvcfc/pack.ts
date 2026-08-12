@@ -234,12 +234,16 @@ export class PvcfcAgentPack implements BusinessAgentPack<
               ? request.tool.name
               : request.toolCall.name;
           if (webToolNames.has(toolName) && liveWebUnavailable) {
+            const toolCallId =
+              typeof request.toolCall.id === 'string'
+                ? request.toolCall.id
+                : 'pvcfc-live-unavailable';
             return new ToolMessage({
               content: JSON.stringify({
                 ok: false,
                 errorCode: 'pvcfc_web_live_unavailable',
               }),
-              tool_call_id: request.toolCall.id,
+              tool_call_id: toolCallId,
               name: toolName,
               status: 'error',
             });
