@@ -196,13 +196,18 @@ describe('PVCFC LangChain agent pack', () => {
     expect(prompt).not.toContain('fixture');
     expect(prompt).not.toContain('TinyFish');
     expect(prompt).not.toContain('Trạng thái nguồn');
-    expect(prompt).toContain('Do not expose tool names');
-    expect(prompt).toContain('plain text');
-    expect(prompt).toContain('Do not use Markdown headings, list markers');
-    expect(prompt).toContain('Do not use bullets or numbered lists');
-    expect(prompt).toContain('buy, order, pay, debit money');
-    expect(prompt).toContain('one or two direct sentences');
-    expect(prompt).toContain('Do not cite evidence');
+    expect(prompt).toContain(
+      'keep implementation details behind the assistant',
+    );
+    expect(prompt).toContain('plain-text paragraphs');
+    expect(prompt).toContain('smoothly flowing plain-text paragraphs');
+    expect(prompt).toContain('Use literal citations');
+    expect(prompt).toContain('buying, ordering, payment');
+    expect(prompt).toContain('public-information boundary response');
+    expect(prompt).toContain(
+      'Use the canonical PVCFC public-data collection as the answer baseline',
+    );
+    expect(prompt).not.toMatch(/\b(?:Do not|Never|cannot)\b/iu);
     expect(
       model.calls[0]!.messages.some((message) =>
         HumanMessage.isInstance(message),
