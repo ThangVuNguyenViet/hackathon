@@ -21,6 +21,7 @@ import type { PvcfcPublicDataProvider } from './public-data/pvcfcPublicDataProvi
 import { createPvcfcTools, type PvcfcToolTrace } from './tools.js';
 import type { TinyFishClient } from '../../web/tinyFishClient.js';
 import { createPvcfcWebTools, createPvcfcWebTurnBudget } from './webTools.js';
+import { normalizePvcfcCustomerText } from './customerText.js';
 
 const MAX_HISTORY_TURNS = 12;
 const MAX_HISTORY_TEXT_LENGTH = 4_000;
@@ -258,7 +259,12 @@ export class PvcfcAgentPack implements BusinessAgentPack<
       if (!responseMessage || toolCalls.length === 0) {
         throw new Error('pvcfc_evidence_tool_required');
       }
-      const responseText = textContent(responseMessage).trim();
+      const responseText = normalizePvcfcCustomerText(
+        textContent(responseMessage),
+      );
+      if (responseText.length === 0) {
+        throw new Error('pvcfc_response_text_required');
+      }
       const liveSourceUrls = toolCalls
         .filter(
           ({ evidenceMode, status }) =>
