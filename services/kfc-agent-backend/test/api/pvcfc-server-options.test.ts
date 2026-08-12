@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { vi } from 'vitest';
 import type { TinyFishClient } from '../../src/web/tinyFishClient.js';
 import { buildServerOptionsFromEnv } from '../../src/api/serverOptions.js';
+import { buildServer } from '../../src/api/server.js';
 import { loadEnv } from '../../src/config/env.js';
 
 function env(overrides: NodeJS.ProcessEnv = {}) {
@@ -33,6 +34,36 @@ describe('PVCFC server composition', () => {
       },
     );
     expect(options.pvcfcPublicDataProvider).toBeDefined();
+  });
+
+  it('keeps PVCFC-only deployment readiness healthy without a KFC model key', async () => {
+    const options = buildServerOptionsFromEnv(
+      env({
+        PVCFC_ASTRAFLOW_API_KEY: 'pvcfc-key',
+        PVCFC_ASTRAFLOW_MODEL: 'gpt-5.6-luna',
+        PVCFC_PUBLIC_DATA_MODE: 'fixture',
+      }),
+    );
+    const server = buildServer({
+      ...options,
+      readiness: {
+        ...options.readiness,
+        database: async () => ({ ok: true }),
+        messengerRequired: false,
+        zaloRequired: false,
+      },
+    });
+
+    const response = await server.inject({ method: 'GET', url: '/ready' });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toMatchObject({
+      ok: true,
+      checks: {
+        agent: { ok: true, required: false, configured: false },
+      },
+    });
+    await server.close();
   });
 
   it('composes fixture data independently of model credentials', () => {
