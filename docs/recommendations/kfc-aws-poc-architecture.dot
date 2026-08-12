@@ -1,0 +1,188 @@
+digraph KFCRecommendationArchitecture {
+  graph [
+    rankdir=TB,
+    newrank=true,
+    compound=true,
+    splines=ortho,
+    bgcolor="transparent",
+    pad=0.16,
+    nodesep=0.38,
+    ranksep=0.46,
+    fontname="Arial",
+    fontsize=18
+  ];
+
+  node [shape=plain, fontname="Arial", fontsize=16];
+  edge [fontname="Arial", fontsize=10, color="#232F3E", fontcolor="#232F3E", penwidth=1.8, arrowsize=0.72];
+
+  channels [label=<
+    <TABLE BORDER="1" COLOR="#232F3E" BGCOLOR="#232F3E" CELLBORDER="0" CELLPADDING="4" STYLE="ROUNDED">
+      <TR><TD><IMG SRC="docs/recommendations/assets/aws-icons/users.png" SCALE="TRUE"/></TD></TR>
+      <TR><TD><FONT COLOR="white"><B>KFC channels</B></FONT></TD></TR>
+      <TR><TD><FONT COLOR="white" POINT-SIZE="12">Kiosk · Web</FONT></TD></TR>
+      <TR><TD><FONT COLOR="white" POINT-SIZE="12">App · Zalo</FONT></TD></TR>
+    </TABLE>
+  >];
+
+  poc_data [label=<
+    <TABLE BORDER="1" COLOR="#59636E" BGCOLOR="#F7F8FA" CELLBORDER="0" CELLPADDING="6" STYLE="ROUNDED">
+      <TR><TD><B>KFC-approved POC data</B></TD></TR>
+      <TR><TD><FONT POINT-SIZE="12">Orders · interactions · catalog</FONT></TD></TR>
+    </TABLE>
+  >];
+
+  subgraph cluster_aws {
+    label=<<B>AWS Cloud — KFC recommendation POC</B>>;
+    labelloc="t";
+    labeljust="l";
+    color="#7D8998";
+    bgcolor="#FAFBFC";
+    penwidth=1.5;
+    style="rounded";
+    margin=16;
+
+    subgraph cluster_online {
+      label=<<B>ONLINE SERVING</B><BR/><FONT POINT-SIZE="11">Synchronous recommendation path</FONT>>;
+      labelloc="t";
+      labeljust="l";
+      color="#E6A45C";
+      bgcolor="#FFF9F2";
+      penwidth=1.2;
+      style="rounded";
+      margin=14;
+
+      api [label=<
+        <TABLE BORDER="1" COLOR="#8C4FFF" BGCOLOR="white" CELLBORDER="0" CELLPADDING="5" STYLE="ROUNDED">
+          <TR><TD><IMG SRC="docs/recommendations/assets/aws-icons/api-gateway.png" SCALE="TRUE"/></TD></TR>
+          <TR><TD><B>Amazon API Gateway</B></TD></TR>
+          <TR><TD><FONT POINT-SIZE="12">Managed recommendation API</FONT></TD></TR>
+        </TABLE>
+      >];
+
+      lambda [label=<
+        <TABLE BORDER="1" COLOR="#ED7100" BGCOLOR="white" CELLBORDER="0" CELLPADDING="5" STYLE="ROUNDED">
+          <TR><TD><IMG SRC="docs/recommendations/assets/aws-icons/lambda.png" SCALE="TRUE"/></TD></TR>
+          <TR><TD><B>AWS Lambda</B></TD></TR>
+          <TR><TD><FONT POINT-SIZE="12">Rules + orchestration</FONT></TD></TR>
+        </TABLE>
+      >];
+
+      personalize [label=<
+        <TABLE BORDER="1" COLOR="#01A88D" BGCOLOR="white" CELLBORDER="0" CELLPADDING="5" STYLE="ROUNDED">
+          <TR><TD><IMG SRC="docs/recommendations/assets/aws-icons/personalize.png" SCALE="TRUE"/></TD></TR>
+          <TR><TD><B>Amazon Personalize</B></TD></TR>
+          <TR><TD><FONT POINT-SIZE="12">Relevance candidates + scores</FONT></TD></TR>
+        </TABLE>
+      >];
+
+      sagemaker [label=<
+        <TABLE BORDER="1" COLOR="#01A88D" BGCOLOR="white" CELLBORDER="0" CELLPADDING="5" STYLE="ROUNDED">
+          <TR><TD><IMG SRC="docs/recommendations/assets/aws-icons/sagemaker.png" SCALE="TRUE"/></TD></TR>
+          <TR><TD><B>Amazon SageMaker AI</B></TD></TR>
+          <TR><TD><FONT POINT-SIZE="12">LightGBM real-time endpoint</FONT></TD></TR>
+        </TABLE>
+      >];
+
+      dynamo [label=<
+        <TABLE BORDER="1" COLOR="#C925D1" BGCOLOR="white" CELLBORDER="0" CELLPADDING="5" STYLE="ROUNDED">
+          <TR><TD><IMG SRC="docs/recommendations/assets/aws-icons/dynamodb.png" SCALE="TRUE"/></TD></TR>
+          <TR><TD><B>Amazon DynamoDB</B></TD></TR>
+          <TR><TD><FONT POINT-SIZE="12">Menu · price · availability</FONT></TD></TR>
+        </TABLE>
+      >];
+
+      secrets [label=<
+        <TABLE BORDER="1" COLOR="#DD344C" BGCOLOR="white" CELLBORDER="0" CELLPADDING="5" STYLE="ROUNDED">
+          <TR><TD><IMG SRC="docs/recommendations/assets/aws-icons/secrets-manager.png" SCALE="TRUE"/></TD></TR>
+          <TR><TD><B>AWS Secrets Manager</B></TD></TR>
+          <TR><TD><FONT POINT-SIZE="12">KFC API credentials</FONT></TD></TR>
+        </TABLE>
+      >];
+
+      { rank=same; api; lambda; }
+      { rank=same; secrets; dynamo; personalize; sagemaker; }
+
+      api -> lambda [dir=both, arrowtail=normal, xlabel="2", color="#E4002B", fontcolor="#B80022", penwidth=2.7];
+      lambda -> dynamo [dir=both, arrowtail=normal, xlabel="3", color="#C925D1", fontcolor="#9D1FA8"];
+      lambda -> personalize [dir=both, arrowtail=normal, xlabel="4", color="#232F3E"];
+      lambda -> sagemaker [dir=both, arrowtail=normal, xlabel="5", color="#232F3E"];
+      lambda -> secrets [color="#DD344C"];
+
+      secrets -> dynamo -> personalize -> sagemaker [style=invis, weight=25];
+    }
+
+    subgraph cluster_data {
+      label=<<B>DATA &amp; MODEL PREPARATION</B><BR/><FONT POINT-SIZE="11">Approved batch data, training, and deployable assets</FONT>>;
+      labelloc="b";
+      labeljust="l";
+      color="#8CA84A";
+      bgcolor="#F7FAF1";
+      penwidth=1.2;
+      style="rounded";
+      margin=14;
+
+      s3 [label=<
+        <TABLE BORDER="1" COLOR="#7AA116" BGCOLOR="white" CELLBORDER="0" CELLPADDING="5" STYLE="ROUNDED">
+          <TR><TD><IMG SRC="docs/recommendations/assets/aws-icons/s3.png" SCALE="TRUE"/></TD></TR>
+          <TR><TD><B>Amazon S3</B></TD></TR>
+          <TR><TD><FONT POINT-SIZE="12">Raw · curated · model artifacts</FONT></TD></TR>
+        </TABLE>
+      >];
+
+      athena [label=<
+        <TABLE BORDER="1" COLOR="#8C4FFF" BGCOLOR="white" CELLBORDER="0" CELLPADDING="5" STYLE="ROUNDED">
+          <TR><TD><IMG SRC="docs/recommendations/assets/aws-icons/athena.png" SCALE="TRUE"/></TD></TR>
+          <TR><TD><B>Amazon Athena</B></TD></TR>
+          <TR><TD><FONT POINT-SIZE="12">Validate + transform with SQL</FONT></TD></TR>
+        </TABLE>
+      >];
+
+      ecr [label=<
+        <TABLE BORDER="1" COLOR="#ED7100" BGCOLOR="white" CELLBORDER="0" CELLPADDING="5" STYLE="ROUNDED">
+          <TR><TD><IMG SRC="docs/recommendations/assets/aws-icons/ecr.png" SCALE="TRUE"/></TD></TR>
+          <TR><TD><B>Amazon ECR</B></TD></TR>
+          <TR><TD><FONT POINT-SIZE="12">Custom inference image</FONT></TD></TR>
+        </TABLE>
+      >];
+
+      { rank=same; s3; athena; ecr; }
+      s3 -> athena [dir=both, arrowtail=normal, xlabel="SQL", color="#7AA116", fontcolor="#648C00"];
+    }
+
+    subgraph cluster_observability {
+      label=<<B>OBSERVABILITY</B>>;
+      labelloc="b";
+      labeljust="l";
+      color="#DE6FA7";
+      bgcolor="#FFF7FB";
+      penwidth=1.2;
+      style="rounded";
+      margin=12;
+
+      cloudwatch [label=<
+        <TABLE BORDER="1" COLOR="#E7157B" BGCOLOR="white" CELLBORDER="0" CELLPADDING="5" STYLE="ROUNDED">
+          <TR><TD><IMG SRC="docs/recommendations/assets/aws-icons/cloudwatch.png" SCALE="TRUE"/></TD></TR>
+          <TR><TD><B>Amazon CloudWatch</B></TD></TR>
+          <TR><TD><FONT POINT-SIZE="12">API · Lambda · Personalize · SageMaker</FONT></TD></TR>
+          <TR><TD><FONT POINT-SIZE="11">Metrics · logs · alarms</FONT></TD></TR>
+        </TABLE>
+      >];
+    }
+
+    s3 -> personalize [xlabel="dataset", color="#7AA116", fontcolor="#648C00", constraint=false];
+    s3 -> sagemaker [xlabel="training + artifacts", color="#7AA116", fontcolor="#648C00", constraint=false];
+    ecr -> sagemaker [xlabel="image", color="#ED7100", fontcolor="#C85D00", constraint=false];
+
+    lambda -> cloudwatch [style=dashed, xlabel="online telemetry", color="#E7157B", fontcolor="#C41169", constraint=false];
+
+    dynamo -> s3 [style=invis, weight=35];
+    personalize -> athena [style=invis, weight=35];
+    sagemaker -> ecr [style=invis, weight=35];
+    { rank=same; s3; athena; ecr; cloudwatch; }
+  }
+
+  { rank=same; channels; api; }
+  { rank=same; poc_data; s3; }
+  channels -> api [dir=both, arrowtail=normal, xlabel="1", color="#E4002B", fontcolor="#B80022", penwidth=2.8];
+  poc_data -> s3 [xlabel="batch", color="#7AA116", fontcolor="#648C00", penwidth=2.2];
+}

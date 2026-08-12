@@ -1,4 +1,5 @@
-const UPSTREAM_URL = 'http://165.154.229.65.nip.io/chat/pvcfc/message';
+const UPSTREAM_URL =
+  'https://pvcfc-chatbot.165-154-229-65.sslip.io/chat/pvcfc/message';
 
 export const onRequestPost = async ({ request }: { request: Request }) => {
   try {
