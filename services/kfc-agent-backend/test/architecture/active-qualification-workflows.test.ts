@@ -15,6 +15,7 @@ describe('active qualification workflows', () => {
     expect(workflow).toContain('backend:');
     expect(workflow).toContain('flutter:');
     expect(workflow.match(/apps\/pvcfc_chat_web\/\*\*/gu)).toHaveLength(2);
+    expect(workflow.match(/docs\/recommendations\/\*\*/gu)).toHaveLength(2);
     expect(workflow.match(/node-version: 24/gu)).toHaveLength(2);
     expect(workflow).toContain(
       'cache-dependency-path: |\n            services/kfc-agent-backend/package-lock.json\n            apps/pvcfc_chat_web/package-lock.json',
