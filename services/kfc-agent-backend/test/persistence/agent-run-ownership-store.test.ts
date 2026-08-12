@@ -84,6 +84,15 @@ describe('AgentRun ownership persistence', () => {
     expectD1BindingsMatch(db.firsts);
   });
 
+  it('includes expired running leases in D1 recovery candidates', async () => {
+    const db = new OwnershipD1Database();
+    const store = new D1Store(db);
+    await store.listDueSessionAgentStates(updatedAt, 20);
+    expect(db.alls).toHaveLength(1);
+    expect(db.alls[0]!.query).toMatch(/current_run_id IS NULL[\s\S]+OR EXISTS[\s\S]+run\.status = 'running'[\s\S]+execution_lease_expires_at <= \?/u);
+    expect(db.alls[0]!.bindings).toEqual([updatedAt, updatedAt, 20]);
+  });
+
   it('locks and advances PostgreSQL generation in one transaction', async () => {
     const db = new OwnershipPostgresDatabase();
     const store = new PostgresStore(db as never);
@@ -173,6 +182,16 @@ describe('AgentRun ownership persistence', () => {
         /FROM session_controls[\s\S]+FOR UPDATE/u.test(query)),
     ).toHaveLength(2);
   });
+
+  it('includes expired running leases in PostgreSQL recovery candidates', async () => {
+    const db = new OwnershipPostgresDatabase();
+    // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- lightweight PostgreSQL test double
+    const store = new PostgresStore(db as never);
+    await store.listDueSessionAgentStates(updatedAt, 20);
+    const query = db.queries.at(-1)!;
+    expect(query.query).toMatch(/current_run_id IS NULL[\s\S]+OR EXISTS[\s\S]+run\.status = 'running'[\s\S]+execution_lease_expires_at <= \$1/u);
+    expect(query.bindings).toEqual([updatedAt, 20]);
+  });
 });
 
 class OwnershipD1Statement implements D1PreparedStatement {
@@ -210,6 +229,7 @@ class OwnershipD1Statement implements D1PreparedStatement {
   }
 
   async all<Row>(): Promise<D1Result<Row>> {
+    this.owner.alls.push(this);
     return { success: true, meta: {}, results: [] };
   }
 }
@@ -217,6 +237,7 @@ class OwnershipD1Statement implements D1PreparedStatement {
 class OwnershipD1Database implements D1DatabaseLike {
   readonly batches: OwnershipD1Statement[][] = [];
   readonly firsts: OwnershipD1Statement[] = [];
+  readonly alls: OwnershipD1Statement[] = [];
 
   prepare(query: string): OwnershipD1Statement {
     return new OwnershipD1Statement(this, query);

@@ -735,7 +735,12 @@ export class MemoryStore
     now: string,
     limit: number,
   ): Promise<SessionAgentState[]> {
-    return listDueMemorySessionAgentStates(now, limit, this.sessionAgentStates);
+    return listDueMemorySessionAgentStates(
+      now,
+      limit,
+      this.sessionAgentStates,
+      this.agentRuns,
+    );
   }
   protected memoryAgentRunState() {
     return {

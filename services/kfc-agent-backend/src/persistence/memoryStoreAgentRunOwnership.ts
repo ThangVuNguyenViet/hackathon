@@ -64,12 +64,26 @@ export function listDueMemorySessionAgentStates(
   now: string,
   limit: number,
   sessionAgentStates: Map<string, SessionAgentState>,
+  agentRuns: Map<string, AgentRun>,
 ): SessionAgentState[] {
   return [...sessionAgentStates.values()]
-    .filter((state) =>
-      state.currentRunId === null &&
-      state.debounceDeadlineAt !== null &&
-      state.debounceDeadlineAt <= now)
+    .filter((state) => {
+      if (
+        state.currentRunId === null &&
+        state.debounceDeadlineAt !== null &&
+        state.debounceDeadlineAt <= now
+      ) {
+        return true;
+      }
+      const run = state.currentRunId
+        ? agentRuns.get(state.currentRunId)
+        : undefined;
+      return Boolean(
+        run?.status === 'running' &&
+          run.executionLeaseExpiresAt !== null &&
+          run.executionLeaseExpiresAt <= now,
+      );
+    })
     .sort((left, right) =>
       String(left.debounceDeadlineAt).localeCompare(
         String(right.debounceDeadlineAt),

@@ -70,14 +70,23 @@ export async function listDueD1SessionAgentStates(
   limit: number,
 ): Promise<SessionAgentState[]> {
   const rows = await db.prepare(
-    `SELECT *
-     FROM session_agent_state
-     WHERE current_run_id IS NULL
-       AND debounce_deadline_at IS NOT NULL
-       AND debounce_deadline_at <= ?
+    `SELECT state.*
+     FROM session_agent_state AS state
+     WHERE (
+       state.current_run_id IS NULL
+       AND state.debounce_deadline_at IS NOT NULL
+       AND state.debounce_deadline_at <= ?
+     ) OR EXISTS (
+       SELECT 1
+       FROM agent_runs AS run
+       WHERE run.id = state.current_run_id
+         AND run.status = 'running'
+         AND run.execution_lease_expires_at IS NOT NULL
+         AND run.execution_lease_expires_at <= ?
+     )
      ORDER BY debounce_deadline_at ASC, session_id ASC
      LIMIT ?`,
-  ).bind(now, limit).all<SessionAgentStateRow>();
+  ).bind(now, now, limit).all<SessionAgentStateRow>();
   return (rows.results ?? []).map(sessionAgentStateFromRow);
 }
 
