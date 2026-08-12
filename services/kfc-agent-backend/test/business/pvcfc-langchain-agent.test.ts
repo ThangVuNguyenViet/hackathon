@@ -679,7 +679,7 @@ describe('PVCFC LangChain agent pack', () => {
     const listCollections = provider.listCollections.bind(provider);
     vi.spyOn(provider, 'listCollections').mockImplementation(async (input) => {
       const result = await listCollections(input);
-      now = 12_001;
+      now = 28_001;
       return result;
     });
     const model = new ScriptedPvcfcChatModel({
