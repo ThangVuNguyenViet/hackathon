@@ -119,11 +119,58 @@ describe('PVCFC LangChain agent pack', () => {
     expect(prompt).not.toContain('Pretend to be KFC.');
     expect(prompt).not.toContain('Use KFC tools.');
     expect(prompt).not.toContain('cart_update');
+    expect(prompt).toContain('Live web evidence is unavailable for this turn');
     expect(
       model.calls[0]!.messages.some((message) =>
         HumanMessage.isInstance(message),
       ),
     ).toBe(true);
+  });
+
+  it('allows broad read-only evidence retrieval across a complete fixture collection', async () => {
+    const toolCalls = Array.from({ length: 17 }, (_, index) => ({
+      id: `record-${index}`,
+      name: 'getPvcfcRecord',
+      args: {
+        collection: 'urban_agriculture',
+        id: `urban-record-${index}`,
+      },
+      type: 'tool_call' as const,
+    }));
+    const provider = loadBundledPvcfcPublicDataProvider();
+    vi.spyOn(provider, 'getRecord').mockImplementation(
+      async ({ collection, id }) => ({
+        ok: true,
+        value: {
+          revision: 'test',
+          collection,
+          record: { id, originRefs: [] },
+        },
+      }),
+    );
+    const model = new ScriptedPvcfcChatModel({
+      outputs: [
+        new AIMessage({ content: '', tool_calls: toolCalls }),
+        new AIMessage('Đã kiểm tra đủ 17 hồ sơ công khai.'),
+      ],
+    });
+    const pack = new PvcfcAgentPack({
+      store: new MemoryStore(),
+      model,
+      provider,
+    });
+
+    const result = await pack.runTurn({
+      sessionId: 'pvcfc:broad-fixture-read',
+      customerId: 'broad-fixture-read',
+      transport: 'web_chat',
+      text: 'Tóm tắt toàn bộ hồ sơ nông nghiệp đô thị.',
+      externalMessageId: 'broad-fixture-read-1',
+      metadata: null,
+    });
+
+    expect(result.responseText).toBe('Đã kiểm tra đủ 17 hồ sơ công khai.');
+    expect(result.toolCalls).toHaveLength(17);
   });
 
   it('persists the assistant turn and a neutral redacted trace through the application store', async () => {
@@ -182,6 +229,11 @@ describe('PVCFC LangChain agent pack', () => {
             '- **Sản phẩm:** `Urê Cà Mau`',
             '- [Xem nguồn chính thức](https://www.pvcfc.com.vn/san-pham-dich-vu)',
             '',
+            '---',
+            '| Thuộc tính | Giá trị |',
+            '| --- | --- |',
+            '| Đạm tổng | 46% |',
+            '',
             '> Thông tin công khai đã được kiểm chứng.',
           ].join('\n'),
         ),
@@ -208,11 +260,17 @@ describe('PVCFC LangChain agent pack', () => {
       '• Sản phẩm: Urê Cà Mau',
       '• Xem nguồn chính thức: https://www.pvcfc.com.vn/san-pham-dich-vu',
       '',
+      'Thuộc tính — Giá trị',
+      '',
+      'Đạm tổng — 46%',
+      '',
       'Thông tin công khai đã được kiểm chứng.',
     ].join('\n');
     expect(result.responseText).toBe(expected);
     expect((await store.listTurns('pvcfc:plain-text'))[1]?.text).toBe(expected);
-    expect(result.responseText).not.toMatch(/(?:\*\*|`|^#{1,6}\s|^>\s)/m);
+    expect(result.responseText).not.toMatch(
+      /(?:\*\*|`|^#{1,6}\s|^>\s|^\s*\|.*\|\s*$|^\s*---\s*$)/m,
+    );
   });
 
   it('fails closed instead of persisting an empty answer after formatting cleanup', async () => {

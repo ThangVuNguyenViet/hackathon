@@ -285,6 +285,11 @@ export function buildServerOptionsFromEnv(
         provider: 'tinyfish',
         mode: 'search-fetch',
       },
+      pvcfcAgent: {
+        configured: pvcfcAgentModel !== undefined,
+        provider: 'astraflow',
+        model: env.PVCFC_ASTRAFLOW_MODEL,
+      },
       release: {
         gitSha: env.RELEASE_GIT_SHA.trim() || 'unknown',
         deploymentId: env.RELEASE_DEPLOYMENT_ID.trim() || 'unknown',

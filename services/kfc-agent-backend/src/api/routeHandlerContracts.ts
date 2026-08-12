@@ -437,6 +437,11 @@ export interface ReadinessOptions {
     provider: 'tinyfish';
     mode: 'search-fetch';
   };
+  pvcfcAgent?: {
+    configured: boolean;
+    provider: 'astraflow';
+    model: string;
+  };
   zaloRequired?: boolean;
   langsmith?: {
     configured: boolean;

@@ -210,6 +210,13 @@ export function createSystemRouteHandlers(context: RouteHandlerContext) {
         provider: 'tinyfish' as const,
         mode: 'search-fetch' as const,
       };
+      const pvcfcAgent = {
+        ok: true,
+        required: false,
+        configured: options.readiness?.pvcfcAgent?.configured ?? false,
+        provider: options.readiness?.pvcfcAgent?.provider ?? 'astraflow',
+        model: options.readiness?.pvcfcAgent?.model ?? 'unconfigured',
+      };
       const commerceEnvironment = options.readiness?.runtime?.commerceEnvironment;
       const commerceConfig = options.readiness?.commerce ?? (
         commerceEnvironment === "sandbox" || commerceEnvironment === "production"
@@ -293,6 +300,7 @@ export function createSystemRouteHandlers(context: RouteHandlerContext) {
             monitor,
             observability,
             webSearch,
+            pvcfcAgent,
             catalog,
             commerce,
             pos,
@@ -308,6 +316,7 @@ export function createSystemRouteHandlers(context: RouteHandlerContext) {
             monitor,
             observability,
             webSearch,
+            pvcfcAgent,
             catalog,
             commerce,
             pos,
