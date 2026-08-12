@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from "react";
 import { Loader2, MessageCircle, Play, Send, Sprout } from "lucide-react";
 import { resolvePvcfcMessageEndpoint } from "./apiEndpoint";
+import { createPvcfcChatPayload } from "./chatPayload";
 import { PVCFC_DEMO_SCENARIOS, PVCFC_SUGGESTION_PILLS } from "./demoScenarios";
 
 export interface ChatMessage {
@@ -27,7 +28,6 @@ export const App: React.FC = () => {
   );
   const [demoMessages, setDemoMessages] = useState<ChatMessage[]>([]);
   const [isReplaying, setIsReplaying] = useState(false);
-  const sessionIdRef = useRef<string>(`session_${Date.now()}`);
   const customerIdRef = useRef<string>(
     `cust_${Math.random().toString(36).slice(2, 9)}`,
   );
@@ -40,17 +40,12 @@ export const App: React.FC = () => {
     scrollToBottom();
   }, [messages, demoMessages, isLoading]);
 
-  const callBackend = async (
-    text: string,
-    currentSessionId: string,
-    currentCustId: string,
-  ) => {
-    const payload = {
-      sessionId: `pvcfc:${currentSessionId}`,
+  const callBackend = async (text: string, currentCustId: string) => {
+    const payload = createPvcfcChatPayload({
       customerId: currentCustId,
       clientMessageId: `msg_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
       text,
-    };
+    });
 
     const targetUrl = resolvePvcfcMessageEndpoint(
       import.meta.env.VITE_PVCFC_API_BASE_URL,
@@ -90,7 +85,6 @@ export const App: React.FC = () => {
     try {
       const responseText = await callBackend(
         text,
-        sessionIdRef.current,
         customerIdRef.current,
       );
       const botMsg: ChatMessage = {
@@ -127,7 +121,6 @@ export const App: React.FC = () => {
       setIsReplaying(false);
       return;
     }
-    const demoSession = `pvcfc_demo_${activeScenarioId}_${Date.now()}`;
     const demoCust = `demo_cust_${activeScenarioId}`;
 
     for (const turnText of scenario.turns) {
@@ -137,7 +130,7 @@ export const App: React.FC = () => {
       ]);
 
       try {
-        const responseText = await callBackend(turnText, demoSession, demoCust);
+        const responseText = await callBackend(turnText, demoCust);
         setDemoMessages((prev) => [
           ...prev,
           {
