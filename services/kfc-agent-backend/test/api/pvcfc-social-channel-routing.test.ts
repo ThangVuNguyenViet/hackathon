@@ -9,9 +9,6 @@ import {
 } from '../fixtures/signedMessengerWebhook.js';
 import { ScriptedPvcfcChatModel } from '../fixtures/scriptedPvcfcChatModel.js';
 
-const CANONICAL_ONLY_NOTICE =
-  'Trạng thái nguồn: Không có truy cập web trực tiếp trong lượt này; câu trả lời chỉ sử dụng dữ liệu PVCFC đã được kiểm kê.';
-
 function evidenceCall(id: string) {
   return new AIMessage({
     content: '',
@@ -37,11 +34,11 @@ describe('PVCFC social-channel business routing', () => {
       outputs: [
         evidenceCall('messenger-evidence'),
         new AIMessage(
-          '# Tư vấn\n\n**Lúa 7–10 ngày sau sạ** dùng NPK Cà Mau 20-10-10.\n\n[Nguồn](https://www.pvcfc.com.vn/npk-ca-mau-phu-hop-ca-vu-lua-thu-hoach-mua-vang)',
+          'Lúa 7–10 ngày sau sạ có thể tham khảo NPK Cà Mau 20-10-10. Cần kiểm tra tình trạng ruộng trước khi quyết định liều lượng.\nNguồn: https://www.pvcfc.com.vn/npk-ca-mau-phu-hop-ca-vu-lua-thu-hoach-mua-vang',
         ),
         evidenceCall('zalo-evidence'),
         new AIMessage(
-          '## Tư vấn\n\n**Lúa 40–45 ngày sau sạ** có thể tham khảo NPK Cà Mau 18-6-18.\n\n[Nguồn](https://www.pvcfc.com.vn/npk-ca-mau-phu-hop-ca-vu-lua-thu-hoach-mua-vang)',
+          'Lúa 40–45 ngày sau sạ có thể tham khảo NPK Cà Mau 18-6-18. Cần kiểm tra tình trạng ruộng trước khi quyết định liều lượng.\nNguồn: https://www.pvcfc.com.vn/npk-ca-mau-phu-hop-ca-vu-lua-thu-hoach-mua-vang',
         ),
       ],
     });
@@ -149,7 +146,7 @@ describe('PVCFC social-channel business routing', () => {
       const turns = await store.listTurns(sessionId);
       expect(turns).toHaveLength(2);
       expect(turns.map(({ role }) => role)).toEqual(['user', 'assistant']);
-      expect(turns[1]?.text).toContain(CANONICAL_ONLY_NOTICE);
+      expect(turns[1]?.text).not.toContain('Trạng thái nguồn');
       expect(turns[1]?.text).not.toMatch(/(^|\n)#{1,6}\s|\*\*|\[[^\]]+\]\(/u);
       expect(
         (await store.listEvents(sessionId)).some(

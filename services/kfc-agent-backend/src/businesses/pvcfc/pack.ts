@@ -21,7 +21,7 @@ import type { PvcfcPublicDataProvider } from './public-data/pvcfcPublicDataProvi
 import { createPvcfcTools, type PvcfcToolTrace } from './tools.js';
 import type { TinyFishClient } from '../../web/tinyFishClient.js';
 import { createPvcfcWebTools, createPvcfcWebTurnBudget } from './webTools.js';
-import { normalizePvcfcCustomerText } from './customerText.js';
+import { admittedPvcfcWebInventoryUrls } from './webPolicy.js';
 
 const MAX_HISTORY_TURNS = 12;
 const MAX_HISTORY_TEXT_LENGTH = 4_000;
@@ -31,8 +31,6 @@ const MAX_MODEL_CALLS_PER_RUN = 6;
 // are read-only, so keep a bounded but collection-sized allowance.
 const MAX_TOOL_CALLS_PER_RUN = 20;
 const RECURSION_LIMIT = 64;
-const CANONICAL_ONLY_NOTICE =
-  'Trạng thái nguồn: Không có truy cập web trực tiếp trong lượt này; câu trả lời chỉ sử dụng dữ liệu PVCFC đã được kiểm kê.';
 
 export interface PvcfcAgentTurnInput {
   readonly sessionId: string;
@@ -67,7 +65,6 @@ export interface PvcfcAgentPackOptions {
   readonly provider: PvcfcPublicDataProvider;
   readonly webEvidence?: {
     readonly client: TinyFishClient;
-    readonly inventoryUrls: readonly string[];
     readonly now?: () => number;
   };
 }
@@ -190,16 +187,38 @@ export class PvcfcAgentPack implements BusinessAgentPack<
         toolCalls.push(trace),
       );
       const providerToolNames = new Set<string>(tools.map(({ name }) => name));
+      const sourceInventory = this.options.webEvidence
+        ? await this.options.provider.listSourceUrls()
+        : undefined;
+      if (sourceInventory?.ok === false) {
+        throw new Error(`pvcfc_public_data_${sourceInventory.error.code}`);
+      }
+      const inventoryUrls = sourceInventory?.ok
+        ? admittedPvcfcWebInventoryUrls(sourceInventory.value)
+        : [];
       const webTools = this.options.webEvidence
         ? createPvcfcWebTools({
             client: this.options.webEvidence.client,
-            inventoryUrls: this.options.webEvidence.inventoryUrls,
+            inventoryUrls,
             receipts: toolCalls,
             budget: webBudget!,
           })
         : [];
       const webToolNames = new Set<string>(webTools.map(({ name }) => name));
+      const inventoriedUrls = new Set(inventoryUrls);
       const allTools = [...tools, ...webTools];
+      const pendingCanonicalSourceUrls = () =>
+        new Set(
+          toolCalls
+            .filter(
+              ({ evidenceMode, status }) =>
+                evidenceMode === 'canonical' && status === 'success',
+            )
+            .flatMap(({ sourceUrls }) => sourceUrls ?? [])
+            .filter((url) => inventoriedUrls.has(url)),
+        );
+      const webAttempted = () =>
+        toolCalls.some(({ name }) => webToolNames.has(name));
       const requireEvidence = createMiddleware({
         name: 'pvcfcEvidenceRequirement',
         wrapToolCall: (request, handler) => {
@@ -213,21 +232,47 @@ export class PvcfcAgentPack implements BusinessAgentPack<
           ) {
             throw new Error('pvcfc_web_provider_evidence_required');
           }
+          const requiredSourceUrls = pendingCanonicalSourceUrls();
+          if (
+            webToolNames.has(toolName) &&
+            requiredSourceUrls.size > 0 &&
+            !webAttempted()
+          ) {
+            if (toolName !== 'fetchPvcfcPage') {
+              throw new Error('pvcfc_web_exact_source_fetch_required');
+            }
+            const requestedUrl = Reflect.get(request.toolCall.args, 'url');
+            if (
+              typeof requestedUrl !== 'string' ||
+              !requiredSourceUrls.has(requestedUrl)
+            ) {
+              throw new Error('pvcfc_web_canonical_source_required');
+            }
+          }
           return handler(request);
         },
         wrapModelCall: (request, handler) => {
           const providerAttempted = toolCalls.some(({ name }) =>
             providerToolNames.has(name),
           );
+          const requireCanonicalSourceFetch =
+            this.options.webEvidence !== undefined &&
+            pendingCanonicalSourceUrls().size > 0 &&
+            !webAttempted();
           return handler({
             ...request,
-            toolChoice: toolCalls.length === 0 ? 'required' : 'auto',
-            tools: providerAttempted
-              ? request.tools
-              : request.tools.filter(
-                  ({ name }) =>
-                    typeof name !== 'string' || providerToolNames.has(name),
-                ),
+            toolChoice:
+              toolCalls.length === 0 || requireCanonicalSourceFetch
+                ? 'required'
+                : 'auto',
+            tools: requireCanonicalSourceFetch
+              ? request.tools.filter(({ name }) => name === 'fetchPvcfcPage')
+              : providerAttempted
+                ? request.tools
+                : request.tools.filter(
+                    ({ name }) =>
+                      typeof name !== 'string' || providerToolNames.has(name),
+                  ),
           });
         },
       });
@@ -239,12 +284,17 @@ export class PvcfcAgentPack implements BusinessAgentPack<
           PVCFC_AGENT_PROFILE.instructions,
           '',
           this.options.webEvidence
-            ? 'Live web evidence is available for this turn after canonical provider evidence is attempted.'
-            : 'Live web evidence is unavailable for this turn. Historical TinyFish retrieval metadata describes fixture capture only, not live access in this turn. For latest or current requests, report the newest canonical record and clearly say that live status could not be verified; never claim that TinyFish or another live check was used, unnecessary, or completed.',
+            ? 'Current official-page evidence is available after canonical public-data evidence. When a canonical result contains an admitted official source URL, fetch that exact page before answering. Use official-site search only when canonical evidence is missing, stale, or insufficient.'
+            : 'Current official-page evidence is unavailable. For a request where recency matters, answer from the newest canonical record and state only which requested fact could not be verified as current.',
           'When the user asks for a summary or comparison of one bounded collection, call listPvcfcRecords with includeDetails=true and an appropriate limit instead of retrieving every record with separate getPvcfcRecord calls.',
           '',
           'Verified current PVCFC public-data index:',
-          JSON.stringify(publicData.value),
+          JSON.stringify({
+            revision: publicData.value.revision,
+            capturedAt: publicData.value.capturedAt,
+            organization: { name: publicData.value.organization.name },
+            collections: publicData.value.collections,
+          }),
         ].join('\n'),
         middleware: [
           requireEvidence,
@@ -270,21 +320,15 @@ export class PvcfcAgentPack implements BusinessAgentPack<
         .find(
           (message) =>
             AIMessage.isInstance(message) &&
-            (message.tool_calls?.length ?? 0) === 0 &&
-            textContent(message).trim().length > 0,
+            (message.tool_calls?.length ?? 0) === 0,
         );
       if (!responseMessage || toolCalls.length === 0) {
         throw new Error('pvcfc_evidence_tool_required');
       }
-      const normalizedResponseText = normalizePvcfcCustomerText(
-        textContent(responseMessage),
-      );
-      if (normalizedResponseText.length === 0) {
+      const responseText = textContent(responseMessage).trim();
+      if (responseText.length === 0) {
         throw new Error('pvcfc_response_text_required');
       }
-      const responseText = this.options.webEvidence
-        ? normalizedResponseText
-        : `${CANONICAL_ONLY_NOTICE}\n\n${normalizedResponseText}`;
       const liveSourceUrls = toolCalls
         .filter(
           ({ evidenceMode, status }) =>

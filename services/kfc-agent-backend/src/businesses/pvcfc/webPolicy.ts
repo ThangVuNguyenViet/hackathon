@@ -1,6 +1,4 @@
-import bundledPublicData from '../../../fixtures/generated/pvcfc-public-data.json' with { type: 'json' };
 import { validateBusinessWebUrl } from '../../web/businessWebEvidence.js';
-import { parsePvcfcPublicDataBundle } from './public-data/pvcfcPublicDataBundle.js';
 
 export const PVCFC_WEB_ALLOWED_HOSTNAMES = Object.freeze([
   'pvcfc.com.vn',
@@ -10,45 +8,25 @@ export const PVCFC_WEB_ALLOWED_HOSTNAMES = Object.freeze([
   'muavangthanglon.pvcfc.com.vn',
 ] as const);
 
-export const PVCFC_WEB_OPERATION_TIMEOUT_MS = 4_000;
-export const PVCFC_WEB_FETCH_TIMEOUT_MS = 3_000;
-export const PVCFC_WEB_TURN_BUDGET_MS = 12_000;
+export const PVCFC_WEB_OPERATION_TIMEOUT_MS = 10_000;
+export const PVCFC_WEB_FETCH_TIMEOUT_MS = 9_000;
+export const PVCFC_WEB_TURN_BUDGET_MS = 20_000;
+export const PVCFC_WEB_MAX_SEARCH_CALLS = 1;
+export const PVCFC_WEB_MAX_FETCH_CALLS = 1;
 
-function recordSourceUrls(record: Record<string, unknown>): string[] {
-  const urls: string[] = [];
-  if (typeof record['sourceUrl'] === 'string') urls.push(record['sourceUrl']);
-  const provenance = record['provenance'];
-  if (
-    typeof provenance === 'object' &&
-    provenance !== null &&
-    !Array.isArray(provenance)
-  ) {
-    const sourceUrl = Reflect.get(provenance, 'sourceUrl');
-    if (typeof sourceUrl === 'string') urls.push(sourceUrl);
-  }
-  return urls;
-}
-
-let bundledInventory: readonly string[] | undefined;
-
-/** URLs already represented by canonical fixture records and their provenance. */
-export function bundledPvcfcWebInventoryUrls(): readonly string[] {
-  if (bundledInventory) return bundledInventory;
-  const bundle = parsePvcfcPublicDataBundle(bundledPublicData);
-  const normalized = new Set<string>();
-  for (const collection of bundle.collections) {
-    for (const record of collection.records) {
-      for (const sourceUrl of recordSourceUrls(record)) {
-        try {
-          normalized.add(
-            validateBusinessWebUrl(sourceUrl, PVCFC_WEB_ALLOWED_HOSTNAMES),
-          );
-        } catch {
-          // External/social/app-store provenance is intentionally not admitted.
-        }
-      }
+/** Applies the PVCFC-owned first-party policy to provider-supplied source data. */
+export function admittedPvcfcWebInventoryUrls(
+  sourceUrls: readonly string[],
+): readonly string[] {
+  const admitted = new Set<string>();
+  for (const sourceUrl of sourceUrls) {
+    try {
+      admitted.add(
+        validateBusinessWebUrl(sourceUrl, PVCFC_WEB_ALLOWED_HOSTNAMES),
+      );
+    } catch {
+      // External, app-store, and malformed provenance is not web evidence.
     }
   }
-  bundledInventory = Object.freeze([...normalized].sort());
-  return bundledInventory;
+  return Object.freeze([...admitted].sort());
 }

@@ -55,6 +55,19 @@ describe('PVCFC public-data provider contract', () => {
     });
   });
 
+  it('exposes source inventory through the provider contract for pack-owned live evidence', async () => {
+    const provider = loadBundledPvcfcPublicDataProvider();
+    const result = await provider.listSourceUrls();
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.value).toContain(
+      'https://www.pvcfc.com.vn/npk-ca-mau-15-5-20',
+    );
+    expect(new Set(result.value).size).toBe(result.value.length);
+    expect(Object.isFrozen(result.value)).toBe(true);
+  });
+
   it('enumerates and exactly retrieves every record, including discovery-only records, through bounded pages', async () => {
     const provider = loadBundledPvcfcPublicDataProvider();
     const fixture = parsePvcfcPublicDataBundle(await readBundledData());

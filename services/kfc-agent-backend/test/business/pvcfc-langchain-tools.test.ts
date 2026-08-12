@@ -4,6 +4,7 @@ import type { PvcfcPublicDataProvider } from '../../src/businesses/pvcfc/public-
 
 function provider(): PvcfcPublicDataProvider {
   return {
+    listSourceUrls: vi.fn(async () => ({ ok: true as const, value: [] })),
     listCollections: vi.fn(async () => ({
       ok: true as const,
       value: {

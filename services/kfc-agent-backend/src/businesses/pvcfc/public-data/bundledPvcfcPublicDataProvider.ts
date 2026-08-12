@@ -235,6 +235,25 @@ class BundledPvcfcPublicDataProvider implements PvcfcPublicDataProvider {
     this.#source = source;
   }
 
+  async listSourceUrls(): Promise<PvcfcPublicDataResult<readonly string[]>> {
+    const initialized = this.#initialize();
+    if (!initialized.ok) return initialized;
+    const sourceUrls = new Set<string>();
+    for (const collection of initialized.bundle.collections) {
+      for (const record of collection.records) {
+        if (typeof record.sourceUrl === 'string') {
+          sourceUrls.add(record.sourceUrl);
+        }
+        const provenance = record.provenance;
+        if (isUnknownRecord(provenance)) {
+          const sourceUrl = provenance.sourceUrl;
+          if (typeof sourceUrl === 'string') sourceUrls.add(sourceUrl);
+        }
+      }
+    }
+    return { ok: true, value: Object.freeze([...sourceUrls].sort()) };
+  }
+
   async listCollections(
     request: PvcfcListCollectionsRequest = {},
   ): Promise<PvcfcPublicDataResult<PvcfcCollectionPage>> {
