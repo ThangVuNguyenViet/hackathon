@@ -5,7 +5,7 @@ import {
   TinyFishClientError,
   type TinyFishClient,
 } from '../../web/tinyFishClient.js';
-import type { PvcfcToolTrace } from './tools.js';
+import { serializePvcfcError, type PvcfcToolTrace } from './tools.js';
 import {
   PVCFC_WEB_ALLOWED_HOSTNAMES,
   PVCFC_WEB_FETCH_TIMEOUT_MS,
@@ -44,11 +44,15 @@ function isOptionalWebFailure(error: unknown): boolean {
 
 function trace(
   receipts: PvcfcToolTrace[],
-  input: Omit<PvcfcToolTrace, 'durationMs'> & { startedAt: number },
+  input: Omit<PvcfcToolTrace, 'durationMs' | 'error'> & {
+    startedAt: number;
+    error?: unknown;
+  },
 ): void {
-  const { startedAt, ...receipt } = input;
+  const { startedAt, error, ...receipt } = input;
   receipts.push({
     ...receipt,
+    ...(error === undefined ? {} : { error: serializePvcfcError(error) }),
     ...(receipt.sourceUrls === undefined
       ? {}
       : {
@@ -108,6 +112,7 @@ export function createPvcfcWebTools(input: {
           name: 'searchPvcfcWeb',
           status: 'error',
           evidenceMode: 'live_web',
+          error,
           startedAt,
         });
         if (isOptionalWebFailure(error)) {
@@ -175,6 +180,7 @@ export function createPvcfcWebTools(input: {
           name: 'fetchPvcfcPage',
           status: 'error',
           evidenceMode: 'live_web',
+          error,
           startedAt,
         });
         if (isOptionalWebFailure(error)) {

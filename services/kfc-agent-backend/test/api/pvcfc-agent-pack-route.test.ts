@@ -229,7 +229,7 @@ describe('PVCFC trusted route pack integration', () => {
     expect(conflict.json()).toEqual({ errorCode: 'idempotency_conflict' });
   });
 
-  it('returns a stable public error without leaking internal agent failures', async () => {
+  it('returns the AI recovery answer instead of failing after an empty model response', async () => {
     const server = buildServer({
       pvcfcAgentModel: new ScriptedPvcfcChatModel({
         outputs: [
@@ -245,6 +245,7 @@ describe('PVCFC trusted route pack integration', () => {
             ],
           }),
           new AIMessage('   '),
+          new AIMessage('AI đã tạo lại câu trả lời cho khách hàng.'),
         ],
       }),
       pvcfcPublicDataProvider: loadBundledPvcfcPublicDataProvider(),
@@ -261,8 +262,9 @@ describe('PVCFC trusted route pack integration', () => {
       },
     });
 
-    expect(response.statusCode).toBe(503);
-    expect(response.json()).toEqual({ errorCode: 'pvcfc_agent_failed' });
-    expect(response.body).not.toContain('pvcfc_response_text_required');
+    expect(response.statusCode).toBe(200);
+    expect(response.json().responseText).toBe(
+      'AI đã tạo lại câu trả lời cho khách hàng.',
+    );
   });
 });

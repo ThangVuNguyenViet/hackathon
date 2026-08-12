@@ -232,4 +232,77 @@ describe('PVCFC social-channel business routing', () => {
     );
     await server.close();
   });
+
+  it('records a failed Zalo agent attempt without ignoring the customer turn', async () => {
+    const store = new MemoryStore();
+    const model = new ScriptedPvcfcChatModel({ outputs: [] });
+    const zaloFetchImpl = vi.fn(
+      async () =>
+        new Response(
+          JSON.stringify({ error: 0, message_id: 'zalo-should-not-send' }),
+          {
+            status: 200,
+            headers: { 'Content-Type': 'application/json' },
+          },
+        ),
+    );
+    const server = buildDemoAdminServer({
+      store,
+      pvcfcAgentModel: model,
+      pvcfcPublicDataProvider: loadBundledPvcfcPublicDataProvider(),
+      zaloBusinessId: 'pvcfc',
+      zaloOaId: 'oa-pvcfc',
+      zaloAccessToken: 'zalo-token',
+      zaloApiBaseUrl: 'https://zalo.local',
+      zaloFetchImpl,
+    });
+
+    const response = await server.inject({
+      method: 'POST',
+      url: '/webhooks/zalo',
+      payload: {
+        event_name: 'user_send_text',
+        sender: { id: 'farmer-zalo-retryable' },
+        recipient: { id: 'oa-pvcfc' },
+        message: {
+          msg_id: 'mid-pvcfc-zalo-retryable',
+          text: 'có bao nhiêu loại phân?',
+        },
+        timestamp: 1783323124611,
+      },
+    });
+
+    expect(response.json()).toMatchObject({ processed: 0, failed: 1 });
+    expect(model.calls).toHaveLength(2);
+    expect(zaloFetchImpl).not.toHaveBeenCalled();
+    await expect(
+      store.listPendingCustomerTurns('zalo:farmer-zalo-retryable'),
+    ).resolves.toMatchObject([
+      expect.objectContaining({ status: 'pending', steerMode: 'steering' }),
+    ]);
+    await expect(
+      store.listAgentRuns('zalo:farmer-zalo-retryable'),
+    ).resolves.toMatchObject([
+      expect.objectContaining({
+        status: 'running',
+        deliveryStatus: 'pending',
+        errorCode: 'agent_run_processing_failed',
+        errorMessage: 'pvcfc_agent_recovery_failed',
+      }),
+    ]);
+    const events = await store.listEvents('zalo:farmer-zalo-retryable');
+    expect(events).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          sourceType: 'agent:runtime_error',
+          payload: expect.objectContaining({
+            error: expect.objectContaining({
+              message: 'pvcfc_agent_recovery_failed',
+            }),
+          }),
+        }),
+      ]),
+    );
+    await server.close();
+  });
 });
