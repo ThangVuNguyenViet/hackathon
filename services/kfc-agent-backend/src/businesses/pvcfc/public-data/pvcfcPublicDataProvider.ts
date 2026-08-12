@@ -100,6 +100,7 @@ export type PvcfcPublicDataResult<T> =
   | { readonly ok: false; readonly error: PvcfcPublicDataError };
 
 export interface PvcfcPublicDataProvider {
+  listSourceUrls(): Promise<PvcfcPublicDataResult<readonly string[]>>;
   listCollections(
     request?: PvcfcListCollectionsRequest,
   ): Promise<PvcfcPublicDataResult<PvcfcCollectionPage>>;

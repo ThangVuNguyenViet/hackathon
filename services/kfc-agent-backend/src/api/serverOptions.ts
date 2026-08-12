@@ -21,8 +21,7 @@ import { LangSmithShowcaseScenarioSource } from '../showcase/showcase.js';
 import { createOtelRuntimeProbe } from '../observability/runtimeProbe.js';
 import { createTinyFishClient } from '../web/tinyFishClient.js';
 import { requireConfiguredChannelBusinessId } from '../business/channelBusinessBinding.js';
-
-const WEB_EVIDENCE_CLIENT_TIMEOUT_MS = 4_000;
+import { PVCFC_WEB_OPERATION_TIMEOUT_MS } from '../businesses/pvcfc/webPolicy.js';
 
 function optionalValue(value: string | undefined): string | undefined {
   const normalized = value?.trim();
@@ -126,7 +125,7 @@ export function buildServerOptionsFromEnv(
   const webEvidenceClient = tinyFishApiKey
     ? (dependencies.tinyFishClientFactory ?? createTinyFishClient)({
         apiKey: tinyFishApiKey,
-        timeoutMs: WEB_EVIDENCE_CLIENT_TIMEOUT_MS,
+        timeoutMs: PVCFC_WEB_OPERATION_TIMEOUT_MS,
       })
     : undefined;
   const googleApiKey = optionalValue(env.GOOGLE_API_KEY);

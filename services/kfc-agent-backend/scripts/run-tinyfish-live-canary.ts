@@ -1,6 +1,10 @@
 import { createHash } from 'node:crypto';
 import { pathToFileURL } from 'node:url';
-import { PVCFC_WEB_ALLOWED_HOSTNAMES } from '../src/businesses/pvcfc/webPolicy.js';
+import {
+  PVCFC_WEB_ALLOWED_HOSTNAMES,
+  PVCFC_WEB_FETCH_TIMEOUT_MS,
+  PVCFC_WEB_OPERATION_TIMEOUT_MS,
+} from '../src/businesses/pvcfc/webPolicy.js';
 import { validateBusinessWebUrl } from '../src/web/businessWebEvidence.js';
 import {
   createTinyFishClient,
@@ -8,8 +12,6 @@ import {
 } from '../src/web/tinyFishClient.js';
 
 const CANARY_SEARCH_HOSTNAME = 'www.pvcfc.com.vn';
-const CANARY_ADAPTER_TIMEOUT_MS = 4_000;
-const CANARY_FETCH_TIMEOUT_MS = 3_000;
 
 export type TinyFishLiveCanaryResult =
   | {
@@ -72,7 +74,7 @@ export async function runTinyFishLiveCanary(
     options.clientFactory?.(apiKey) ??
     createTinyFishClient({
       apiKey,
-      timeoutMs: CANARY_ADAPTER_TIMEOUT_MS,
+      timeoutMs: PVCFC_WEB_OPERATION_TIMEOUT_MS,
     });
 
   try {
@@ -95,7 +97,7 @@ export async function runTinyFishLiveCanary(
     const fetched = await client.fetch({
       url: sourceUrl,
       allowedHostnames: PVCFC_WEB_ALLOWED_HOSTNAMES,
-      perUrlTimeoutMs: CANARY_FETCH_TIMEOUT_MS,
+      perUrlTimeoutMs: PVCFC_WEB_FETCH_TIMEOUT_MS,
     });
     const fetchLatencyMs = Math.max(0, nowMs() - fetchStartedAt);
     validateBusinessWebUrl(fetched.finalUrl, PVCFC_WEB_ALLOWED_HOSTNAMES);

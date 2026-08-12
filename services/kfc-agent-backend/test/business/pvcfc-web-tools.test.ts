@@ -3,10 +3,7 @@ import {
   createPvcfcWebTools,
   createPvcfcWebTurnBudget,
 } from '../../src/businesses/pvcfc/webTools.js';
-import {
-  PVCFC_WEB_ALLOWED_HOSTNAMES,
-  bundledPvcfcWebInventoryUrls,
-} from '../../src/businesses/pvcfc/webPolicy.js';
+import { PVCFC_WEB_ALLOWED_HOSTNAMES } from '../../src/businesses/pvcfc/webPolicy.js';
 import type {
   TinyFishClient,
   TinyFishFetchResult,
@@ -14,6 +11,7 @@ import type {
 } from '../../src/web/tinyFishClient.js';
 import {
   createTinyFishClient,
+  TinyFishClientError,
   type TinyFishSdkFactory,
 } from '../../src/web/tinyFishClient.js';
 
@@ -70,7 +68,7 @@ function toolsFor(
   }> = [];
   const tools = createPvcfcWebTools({
     client: tinyFish.client,
-    inventoryUrls: bundledPvcfcWebInventoryUrls(),
+    inventoryUrls: [INVENTORIED_URL],
     receipts,
     budget,
   });
@@ -107,6 +105,7 @@ describe('PVCFC official-site web evidence tools', () => {
       location: 'Việt Nam',
     });
     expect(result).toHaveLength(5);
+    if (!Array.isArray(result)) return;
     expect(result[0]).toMatchObject({
       sourceUrl: 'https://www.pvcfc.com.vn/tin-tuc/0',
       retrievedAt: RETRIEVED_AT,
@@ -127,7 +126,7 @@ describe('PVCFC official-site web evidence tools', () => {
     expect(inventoried.fetch).toHaveBeenCalledWith({
       url: INVENTORIED_URL,
       allowedHostnames: PVCFC_WEB_ALLOWED_HOSTNAMES,
-      perUrlTimeoutMs: 3_000,
+      perUrlTimeoutMs: 9_000,
     });
 
     const searched = toolsFor();
@@ -147,7 +146,7 @@ describe('PVCFC official-site web evidence tools', () => {
     expect(nextTurn.fetch).not.toHaveBeenCalled();
   });
 
-  it('enforces one Search and two Fetch calls for the whole turn', async () => {
+  it('enforces one Search and one Fetch call for the whole turn', async () => {
     const { tools, search, fetch } = toolsFor();
 
     await tools[0].invoke({ query: 'tin mới' });
@@ -155,29 +154,25 @@ describe('PVCFC official-site web evidence tools', () => {
       'pvcfc_web_search_budget_exhausted',
     );
     await tools[1].invoke({ url: SEARCHED_URL });
-    await tools[1].invoke({ url: SEARCHED_URL });
     await expect(tools[1].invoke({ url: SEARCHED_URL })).rejects.toThrow(
       'pvcfc_web_fetch_budget_exhausted',
     );
     expect(search).toHaveBeenCalledOnce();
-    expect(fetch).toHaveBeenCalledTimes(2);
+    expect(fetch).toHaveBeenCalledOnce();
   });
 
-  it('fails fast when a later web call cannot fit the shared 12-second deadline', async () => {
+  it('fails fast when a later web call cannot fit the shared 20-second deadline', async () => {
     let now = 0;
     const budget = createPvcfcWebTurnBudget({ now: () => now });
     const currentTurn = toolsFor(undefined, budget);
 
-    await currentTurn.tools[0].invoke({ query: 'tin mới' });
-    now = 4_000;
-    await currentTurn.tools[1].invoke({ url: SEARCHED_URL });
-    now = 8_001;
+    now = 10_001;
     await expect(
-      currentTurn.tools[1].invoke({ url: SEARCHED_URL }),
+      currentTurn.tools[0].invoke({ query: 'tin mới' }),
     ).rejects.toThrow('pvcfc_web_time_budget_exhausted');
 
-    expect(currentTurn.search).toHaveBeenCalledOnce();
-    expect(currentTurn.fetch).toHaveBeenCalledOnce();
+    expect(currentTurn.search).not.toHaveBeenCalled();
+    expect(currentTurn.fetch).not.toHaveBeenCalled();
   });
 
   it('keeps citations in compact receipts without page content', async () => {
@@ -310,6 +305,8 @@ describe('PVCFC official-site web evidence tools', () => {
 
     const result = await tools[1].invoke({ url: INVENTORIED_URL });
 
+    expect(result).toHaveProperty('text');
+    if (!('text' in result)) return;
     expect(result.text).toHaveLength(8_000);
   });
 
@@ -339,7 +336,7 @@ describe('PVCFC official-site web evidence tools', () => {
     const tools = createPvcfcWebTools({
       client: createTinyFishClient({
         apiKey: 'test-secret',
-        timeoutMs: 8_000,
+        timeoutMs: 10_000,
         sdkFactory,
       }),
       inventoryUrls: [INVENTORIED_URL],
@@ -359,5 +356,30 @@ describe('PVCFC official-site web evidence tools', () => {
     ]);
     expect(JSON.stringify(receipts)).not.toContain('must not escape');
     expect(JSON.stringify(receipts)).not.toContain('test-secret');
+  });
+
+  it('degrades provider outages to a compact unavailable result', async () => {
+    const tinyFish = harness();
+    tinyFish.fetch.mockRejectedValueOnce(
+      new TinyFishClientError('tinyfish_fetch_failed'),
+    );
+    const receipts: Parameters<typeof createPvcfcWebTools>[0]['receipts'] = [];
+    const tools = createPvcfcWebTools({
+      client: tinyFish.client,
+      inventoryUrls: [INVENTORIED_URL],
+      receipts,
+      budget: createPvcfcWebTurnBudget(),
+    });
+
+    await expect(tools[1].invoke({ url: INVENTORIED_URL })).resolves.toEqual({
+      available: false,
+    });
+    expect(receipts).toEqual([
+      expect.objectContaining({
+        name: 'fetchPvcfcPage',
+        status: 'error',
+        evidenceMode: 'live_web',
+      }),
+    ]);
   });
 });

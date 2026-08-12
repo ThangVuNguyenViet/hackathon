@@ -158,22 +158,6 @@ export const kfcChatPayloadSchema = z
     path: ['sessionId'],
     message: 'KFC session must match the supplied customer ID',
   });
-export const pvcfcSessionIdSchema = z
-  .string()
-  .refine((value) => value.startsWith('pvcfc:'), {
-    message: 'PVCFC chat sessions must use the pvcfc: prefix',
-  });
-
-export const pvcfcChatPayloadSchema = z
-  .object({
-    sessionId: pvcfcSessionIdSchema,
-    customerId: z.string().min(1),
-    clientMessageId: z.string().min(1),
-    text: z.string().min(1),
-    metadata: z.record(z.unknown()).optional(),
-  })
-  .strict();
-
 export const kfcGenUiActionPayloadSchema = z
   .object({
     sessionId: kfcSessionIdSchema,

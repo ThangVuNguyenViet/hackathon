@@ -55,4 +55,23 @@ describe('PVCFC chat handler', () => {
       source: 'pvcfc_chat',
     });
   });
+
+  it('rejects a PVCFC session namespace that belongs to another customer', async () => {
+    const handler = createPvcfcChatHandler(async () => ({
+      status: 200,
+      body: { responseText: 'must-not-run' },
+    }));
+
+    const response = await handler({
+      sessionId: 'pvcfc:farmer-a',
+      customerId: 'farmer-b',
+      clientMessageId: 'message-cross-customer',
+      text: 'Tra cứu sản phẩm.',
+    });
+
+    expect(response.status).toBe(400);
+    expect(response.body).toMatchObject({
+      errorCode: 'invalid_pvcfc_chat_payload',
+    });
+  });
 });

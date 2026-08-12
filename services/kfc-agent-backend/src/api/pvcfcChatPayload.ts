@@ -8,4 +8,8 @@ export const pvcfcChatPayloadSchema = z
     text: z.string().min(1),
     metadata: z.record(z.unknown()).optional(),
   })
-  .strict();
+  .strict()
+  .refine(({ sessionId, customerId }) => sessionId === `pvcfc:${customerId}`, {
+    path: ['sessionId'],
+    message: 'PVCFC session must match the supplied customer ID',
+  });

@@ -1,11 +1,16 @@
 import { tool } from 'langchain';
 import { z } from 'zod';
 import { validateBusinessWebUrl } from '../../web/businessWebEvidence.js';
-import type { TinyFishClient } from '../../web/tinyFishClient.js';
+import {
+  TinyFishClientError,
+  type TinyFishClient,
+} from '../../web/tinyFishClient.js';
 import type { PvcfcToolTrace } from './tools.js';
 import {
   PVCFC_WEB_ALLOWED_HOSTNAMES,
   PVCFC_WEB_FETCH_TIMEOUT_MS,
+  PVCFC_WEB_MAX_FETCH_CALLS,
+  PVCFC_WEB_MAX_SEARCH_CALLS,
   PVCFC_WEB_OPERATION_TIMEOUT_MS,
   PVCFC_WEB_TURN_BUDGET_MS,
 } from './webPolicy.js';
@@ -65,7 +70,7 @@ export function createPvcfcWebTools(input: {
   const searchPvcfcWeb = tool(
     async ({ query }) => {
       const startedAt = Date.now();
-      if (input.budget.searchCalls >= 1) {
+      if (input.budget.searchCalls >= PVCFC_WEB_MAX_SEARCH_CALLS) {
         trace(input.receipts, {
           name: 'searchPvcfcWeb',
           status: 'error',
@@ -108,6 +113,9 @@ export function createPvcfcWebTools(input: {
           evidenceMode: 'live_web',
           startedAt,
         });
+        if (error instanceof TinyFishClientError) {
+          return { available: false as const };
+        }
         throw error;
       }
     },
@@ -122,7 +130,7 @@ export function createPvcfcWebTools(input: {
   const fetchPvcfcPage = tool(
     async ({ url }) => {
       const startedAt = Date.now();
-      if (input.budget.fetchCalls >= 2) {
+      if (input.budget.fetchCalls >= PVCFC_WEB_MAX_FETCH_CALLS) {
         trace(input.receipts, {
           name: 'fetchPvcfcPage',
           status: 'error',
@@ -181,6 +189,9 @@ export function createPvcfcWebTools(input: {
           evidenceMode: 'live_web',
           startedAt,
         });
+        if (error instanceof TinyFishClientError) {
+          return { available: false as const };
+        }
         throw error;
       }
     },

@@ -5,9 +5,6 @@ import { loadBundledPvcfcPublicDataProvider } from '../../src/businesses/pvcfc/p
 import { MemoryStore } from '../../src/persistence/memoryStore.js';
 import { ScriptedPvcfcChatModel } from '../fixtures/scriptedPvcfcChatModel.js';
 
-const CANONICAL_ONLY_NOTICE =
-  'Trạng thái nguồn: Không có truy cập web trực tiếp trong lượt này; câu trả lời chỉ sử dụng dữ liệu PVCFC đã được kiểm kê.';
-
 function evidenceThen(text: string) {
   return new ScriptedPvcfcChatModel({
     outputs: [
@@ -69,10 +66,10 @@ describe('PVCFC trusted route pack integration', () => {
     expect(response.json()).toMatchObject({
       agentRuntime: 'langchain-create-agent',
       status: 'completed',
-      responseText: `${CANONICAL_ONLY_NOTICE}\n\nThông tin PVCFC đã được kiểm chứng.`,
+      responseText: 'Thông tin PVCFC đã được kiểm chứng.',
       presentation: {
         profile: 'text',
-        text: `${CANONICAL_ONLY_NOTICE}\n\nThông tin PVCFC đã được kiểm chứng.`,
+        text: 'Thông tin PVCFC đã được kiểm chứng.',
       },
     });
     expect(response.json()).not.toHaveProperty('genUi');
@@ -114,9 +111,7 @@ describe('PVCFC trusted route pack integration', () => {
     });
 
     expect(response.statusCode).toBe(200);
-    expect(response.json().responseText).toBe(
-      `${CANONICAL_ONLY_NOTICE}\n\nVẫn trả lời từ PVCFC.`,
-    );
+    expect(response.json().responseText).toBe('Vẫn trả lời từ PVCFC.');
     expect(getSessionControl).not.toHaveBeenCalled();
   });
 
@@ -249,7 +244,7 @@ describe('PVCFC trusted route pack integration', () => {
               },
             ],
           }),
-          new AIMessage('```markdown\n```'),
+          new AIMessage('   '),
         ],
       }),
       pvcfcPublicDataProvider: loadBundledPvcfcPublicDataProvider(),

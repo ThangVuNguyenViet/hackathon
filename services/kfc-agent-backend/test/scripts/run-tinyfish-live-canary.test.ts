@@ -134,7 +134,7 @@ describe('TinyFish live qualification canary', () => {
             'thamquannhamay.pvcfc.com.vn',
             'muavangthanglon.pvcfc.com.vn',
           ],
-          perUrlTimeoutMs: 3_000,
+          perUrlTimeoutMs: 9_000,
         },
       },
     ]);

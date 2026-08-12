@@ -15,6 +15,26 @@ export interface PvcfcToolTrace {
 
 export type PvcfcToolTraceSink = (trace: PvcfcToolTrace) => void;
 
+function collectSourceUrls(value: unknown, sourceUrls: string[]): void {
+  if (sourceUrls.length >= 5 || typeof value !== 'object' || value === null)
+    return;
+  if (Array.isArray(value)) {
+    for (const child of value) collectSourceUrls(child, sourceUrls);
+    return;
+  }
+  for (const [key, child] of Object.entries(value)) {
+    if (
+      key === 'sourceUrl' &&
+      typeof child === 'string' &&
+      /^https:\/\//u.test(child)
+    ) {
+      if (!sourceUrls.includes(child)) sourceUrls.push(child);
+    } else {
+      collectSourceUrls(child, sourceUrls);
+    }
+  }
+}
+
 async function traced<T>(
   name: string,
   sink: PvcfcToolTraceSink | undefined,
@@ -23,11 +43,14 @@ async function traced<T>(
   const startedAt = Date.now();
   try {
     const result = await operation();
+    const sourceUrls: string[] = [];
+    collectSourceUrls(result, sourceUrls);
     sink?.({
       name,
       status: 'success',
       durationMs: Math.max(0, Date.now() - startedAt),
       evidenceMode: 'canonical',
+      ...(sourceUrls.length === 0 ? {} : { sourceUrls }),
     });
     return result;
   } catch (error) {

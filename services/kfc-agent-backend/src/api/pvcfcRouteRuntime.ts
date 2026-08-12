@@ -6,7 +6,6 @@ import { MemoryStore } from '../persistence/memoryStore.js';
 import type { ConversationStore } from '../persistence/contracts.js';
 import { createPvcfcChatHandler } from './pvcfcChatHandler.js';
 import type { HandlerResponse, RouteOptions } from './routeHandlerContracts.js';
-import { bundledPvcfcWebInventoryUrls } from '../businesses/pvcfc/webPolicy.js';
 
 export function registerPvcfcRoutes(
   server: FastifyInstance,
@@ -37,7 +36,6 @@ export function createPvcfcAgentTurnRunner(
               ? {
                   webEvidence: {
                     client: options.pvcfcWebEvidenceClient,
-                    inventoryUrls: bundledPvcfcWebInventoryUrls(),
                   },
                 }
               : {}),
