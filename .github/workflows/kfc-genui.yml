@@ -9,6 +9,7 @@ on:
       - "services/kfc-agent-backend/**"
       - "ai-talent-tracks/fnb/conversations/**"
       - ".github/workflows/kfc-genui.yml"
+      - "docs/recommendations/**"
       - "docs/superpowers/**"
       - "docs/wayfinder/**"
   push:
@@ -19,6 +20,7 @@ on:
       - "services/kfc-agent-backend/**"
       - "ai-talent-tracks/fnb/conversations/**"
       - ".github/workflows/kfc-genui.yml"
+      - "docs/recommendations/**"
       - "docs/superpowers/**"
       - "docs/wayfinder/**"
 
