@@ -216,6 +216,7 @@ export interface WorkerEnv {
   LANGSMITH_TRACING_SAMPLING_RATE?: string;
   KFC_SHOWCASE_DATASET?: string;
   MESSENGER_VERIFY_TOKEN?: string;
+  MESSENGER_BUSINESS_ID?: "kfc" | "pvcfc";
   META_PAGE_ID?: string;
   META_APP_SECRET?: string;
   META_PAGE_ACCESS_TOKEN?: string;
@@ -224,6 +225,7 @@ export interface WorkerEnv {
   MESSENGER_GRAPH_MOCK?: { fetch(request: Request): Promise<Response> };
   MESSENGER_WEBHOOK_QUEUE?: QueueBinding<WorkerWebhookJob>;
   ZALO_OA_ID?: string;
+  ZALO_BUSINESS_ID?: "kfc" | "pvcfc";
   ZALO_ACCESS_TOKEN?: string;
   ZALO_INBOX_URL_TEMPLATE?: string;
   ZALO_REFRESH_TOKEN?: string;

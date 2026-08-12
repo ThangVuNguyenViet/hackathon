@@ -5,6 +5,8 @@ compatibility_flags = ["nodejs_compat"]
 
 [vars]
 META_INBOX_URL_TEMPLATE = "https://business.facebook.com/latest/inbox/all?asset_id={pageId}&selected_item_id={externalUserId}"
+MESSENGER_BUSINESS_ID = "kfc"
+ZALO_BUSINESS_ID = "kfc"
 KFC_COMMERCE_ENVIRONMENT = "production"
 KFC_CONFIRMATION_SIGNING_KEY_ID = "primary"
 

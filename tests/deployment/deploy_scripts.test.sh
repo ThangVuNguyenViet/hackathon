@@ -67,6 +67,8 @@ grep -q "CREATE TABLE IF NOT EXISTS webhook_deliveries" "$ROOT_DIR/services/kfc-
 grep -q "worker:deploy:dry-run" "$ROOT_DIR/services/kfc-agent-backend/package.json"
 grep -q '^KFC_AGENT_PROVIDER = "google"$' "$WRANGLER_CONFIG"
 grep -q '^KFC_AGENT_MODEL = "gemini-3.1-flash-lite"$' "$WRANGLER_CONFIG"
+grep -q '^MESSENGER_BUSINESS_ID = "kfc"$' "$WRANGLER_CONFIG"
+grep -q '^ZALO_BUSINESS_ID = "kfc"$' "$WRANGLER_CONFIG"
 ! grep -Eqi 'KFC_AGENT_(PROVIDER|MODEL).*(openai|gpt-)' "$WRANGLER_CONFIG"
 
 grep -Fq 'KFC_AGENT_PROVIDER="${KFC_AGENT_PROVIDER:-}"' "$WORKER_DEPLOY"
@@ -88,6 +90,8 @@ grep -q "KFC_AGENT_PROVIDER must be google for the maintained LangChain deployme
 grep -q "KFC_MONITOR_PROVIDER must be google for the maintained LangChain deployment" "$CLOUD_RUN_DEPLOY"
 grep -Fq 'GOOGLE_API_KEY=GOOGLE_API_KEY:latest' "$CLOUD_RUN_DEPLOY"
 grep -Fq 'KFC_CONFIRMATION_SIGNING_SECRET=$KFC_CONFIRMATION_SIGNING_SECRET_NAME:latest' "$CLOUD_RUN_DEPLOY"
+grep -Fq '"MESSENGER_BUSINESS_ID=kfc"' "$CLOUD_RUN_DEPLOY"
+grep -Fq '"ZALO_BUSINESS_ID=kfc"' "$CLOUD_RUN_DEPLOY"
 grep -q "CLOUD_RUN_MIN_INSTANCES" "$CLOUD_RUN_DEPLOY"
 grep -q "KFC_DEPLOY_PREFLIGHT_ONLY" "$CLOUD_RUN_DEPLOY"
 grep -q "/ready" "$CLOUD_RUN_DEPLOY"

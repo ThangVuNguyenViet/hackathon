@@ -14,6 +14,8 @@ export function buildDemoAdminServer(options: BuildServerOptions = {}) {
   const server = buildServer({
     demoAdminToken: token,
     zaloWebhookSecret: zaloSecret,
+    messengerBusinessId: 'kfc',
+    zaloBusinessId: 'kfc',
     ...options,
   });
   const inject = server.inject.bind(server) as (input: any, callback?: any) => any;

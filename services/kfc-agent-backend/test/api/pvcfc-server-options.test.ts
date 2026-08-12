@@ -15,6 +15,84 @@ function env(overrides: NodeJS.ProcessEnv = {}) {
 }
 
 describe('PVCFC server composition', () => {
+  it('requires an explicit business binding for every configured social channel', () => {
+    expect(() =>
+      buildServerOptionsFromEnv(
+        env({ ZALO_OA_ID: 'oa-pvcfc', ZALO_ACCESS_TOKEN: 'token' }),
+      ),
+    ).toThrow('ZALO_BUSINESS_ID is required');
+    expect(() =>
+      buildServerOptionsFromEnv(
+        env({ META_PAGE_ID: 'page-pvcfc', META_PAGE_ACCESS_TOKEN: 'token' }),
+      ),
+    ).toThrow('MESSENGER_BUSINESS_ID is required');
+    expect(() => env({ ZALO_BUSINESS_ID: 'inferred' })).toThrow();
+  });
+
+  it('projects explicit PVCFC channel bindings without inferring from credentials', () => {
+    const options = buildServerOptionsFromEnv(
+      env({
+        PVCFC_ASTRAFLOW_API_KEY: 'pvcfc-key',
+        PVCFC_PUBLIC_DATA_MODE: 'fixture',
+        ZALO_OA_ID: 'oa-pvcfc',
+        ZALO_ACCESS_TOKEN: 'token',
+        ZALO_BUSINESS_ID: 'pvcfc',
+        META_PAGE_ID: 'page-pvcfc',
+        META_PAGE_ACCESS_TOKEN: 'token',
+        MESSENGER_BUSINESS_ID: 'pvcfc',
+      }),
+    );
+
+    expect(options.zaloBusinessId).toBe('pvcfc');
+    expect(options.messengerBusinessId).toBe('pvcfc');
+  });
+
+  it('reports the trusted business and target-agent readiness for each channel', async () => {
+    const options = buildServerOptionsFromEnv(
+      env({
+        PVCFC_ASTRAFLOW_API_KEY: 'pvcfc-key',
+        PVCFC_PUBLIC_DATA_MODE: 'fixture',
+        ZALO_BUSINESS_ID: 'pvcfc',
+        ZALO_OA_ID: 'oa-pvcfc',
+        ZALO_ACCESS_TOKEN: 'zalo-token',
+        ZALO_INBOX_URL_TEMPLATE: 'https://oa.zalo.me/{externalUserId}',
+        MESSENGER_BUSINESS_ID: 'pvcfc',
+        MESSENGER_VERIFY_TOKEN: 'verify',
+        META_APP_SECRET: 'app-secret',
+        META_PAGE_ID: 'page-pvcfc',
+        META_PAGE_ACCESS_TOKEN: 'page-token',
+        META_INBOX_URL_TEMPLATE:
+          'https://business.facebook.com/{externalUserId}',
+      }),
+    );
+    const server = buildServer({
+      ...options,
+      readiness: {
+        ...options.readiness,
+        database: async () => ({ ok: true }),
+        messengerRequired: false,
+        zaloRequired: false,
+      },
+    });
+
+    const response = await server.inject({ method: 'GET', url: '/ready' });
+
+    expect(response.statusCode, response.body).toBe(200);
+    expect(response.json()).toMatchObject({
+      checks: {
+        messenger: {
+          businessId: 'pvcfc',
+          agentConfigured: true,
+        },
+        zalo: {
+          businessId: 'pvcfc',
+          agentConfigured: true,
+        },
+      },
+    });
+    await server.close();
+  });
+
   it('creates ChatOpenAI against the configured AstraFlow-compatible endpoint', () => {
     const options = buildServerOptionsFromEnv(
       env({
