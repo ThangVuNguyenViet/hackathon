@@ -21,12 +21,12 @@ const REQUIRED_LIVE_SCENARIOS = [
 ] as const;
 
 const CUSTOMER_FIRST_PILLS = [
-  "Lúa 7–10 ngày sau sạ nên bón NPK Cà Mau nào?",
-  "Lúa 40–45 ngày sau sạ nên dùng NPK Cà Mau 18-6-18 thế nào?",
-  "Đất phèn mặn nên chọn UREA BIO hay OM CÀ MAU ECO?",
-  "So sánh N46.PLUS Cà Mau và UREA BIO giúp tôi",
-  "Cửa hàng phân bón Khánh My ở Cà Mau có thông tin gì?",
-  "Kiểm tra Chứng thư chất lượng 0383/2026/SP giúp tôi",
+  "Tư vấn phân bón xuống giống",
+  "Bón phân lúa theo giai đoạn",
+  "Phân bón cho đất phèn mặn",
+  "So sánh phân bón trước mua",
+  "Chọn phân bón cho cây trồng",
+  "Tìm đại lý phân bón",
 ] as const;
 
 describe("PVCFC evidence-backed demo content", () => {
@@ -130,6 +130,23 @@ describe("PVCFC evidence-backed demo content", () => {
     expect(PVCFC_SUGGESTION_PILLS.join(" ").toLowerCase()).not.toMatch(
       /dẫn nguồn|trích dẫn|url nguồn|web trực tiếp|tinyfish|hồ sơ/,
     );
+  });
+
+  it("keeps customer pills advisory rather than narrow lookup or transaction prompts", () => {
+    const pills = PVCFC_SUGGESTION_PILLS.join(" ").toLowerCase();
+
+    expect(pills).toMatch(/xuống giống|trồng lúa/);
+    expect(pills).toMatch(/đất phèn|đất mặn|giai đoạn/);
+    expect(pills).toMatch(/so sánh phân bón|chọn phân bón/);
+    expect(pills).toMatch(/trước mua|đại lý phân bón/);
+    expect(pills).not.toMatch(
+      /\b(?:7[–-]10|40[–-]45)\b|0383\/2026|tinyfish|dẫn nguồn|trích dẫn|web trực tiếp|đặt mua|thanh toán/,
+    );
+    expect(
+      PVCFC_SUGGESTION_PILLS.every(
+        (pill) => pill.trim().split(/\s+/u).length <= 6,
+      ),
+    ).toBe(true);
   });
 
   it("uses real farmer and buyer entities from the bundled provider", () => {
