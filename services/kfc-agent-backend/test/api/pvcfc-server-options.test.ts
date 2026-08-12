@@ -43,6 +43,7 @@ describe('PVCFC server composition', () => {
     expect(options.pvcfcPublicDataProvider).toBeDefined();
     expect(options.pvcfcAgentModel).toBeUndefined();
     expect(options.pvcfcWebEvidenceClient).toBeUndefined();
+    expect(options.kfcWebEvidenceClient).toBeUndefined();
     expect(options.readiness?.webSearch).toEqual({
       configured: false,
       provider: 'tinyfish',
@@ -60,6 +61,7 @@ describe('PVCFC server composition', () => {
     );
 
     expect(options.pvcfcWebEvidenceClient).toBeDefined();
+    expect(options.kfcWebEvidenceClient).toBe(options.pvcfcWebEvidenceClient);
     expect(options.readiness?.webSearch).toEqual({
       configured: true,
       provider: 'tinyfish',
@@ -69,6 +71,7 @@ describe('PVCFC server composition', () => {
     expect(JSON.stringify(options.pvcfcWebEvidenceClient)).not.toContain(
       secret,
     );
+    expect(JSON.stringify(options.kfcWebEvidenceClient)).not.toContain(secret);
   });
 
   it('constructs TinyFish with a four-second zero-retry adapter envelope', () => {
@@ -97,6 +100,7 @@ describe('PVCFC server composition', () => {
       timeoutMs: 4_000,
     });
     expect(options.pvcfcWebEvidenceClient).toBe(client);
+    expect(options.kfcWebEvidenceClient).toBe(client);
   });
 
   it('treats a blank TinyFish key as unavailable rather than constructing a client', () => {
@@ -105,6 +109,7 @@ describe('PVCFC server composition', () => {
     );
 
     expect(options.pvcfcWebEvidenceClient).toBeUndefined();
+    expect(options.kfcWebEvidenceClient).toBeUndefined();
     expect(options.readiness?.webSearch?.configured).toBe(false);
   });
 

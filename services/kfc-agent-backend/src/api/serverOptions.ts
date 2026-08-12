@@ -20,7 +20,8 @@ import { LangSmithAgentTracer } from '../observability/langsmithAgentTracer.js';
 import { LangSmithShowcaseScenarioSource } from '../showcase/showcase.js';
 import { createOtelRuntimeProbe } from '../observability/runtimeProbe.js';
 import { createTinyFishClient } from '../web/tinyFishClient.js';
-import { PVCFC_WEB_OPERATION_TIMEOUT_MS } from '../businesses/pvcfc/webPolicy.js';
+
+const WEB_EVIDENCE_CLIENT_TIMEOUT_MS = 4_000;
 
 function optionalValue(value: string | undefined): string | undefined {
   const normalized = value?.trim();
@@ -121,10 +122,10 @@ export function buildServerOptionsFromEnv(
       })
     : undefined;
   const tinyFishApiKey = optionalValue(env.TINYFISH_API_KEY);
-  const pvcfcWebEvidenceClient = tinyFishApiKey
+  const webEvidenceClient = tinyFishApiKey
     ? (dependencies.tinyFishClientFactory ?? createTinyFishClient)({
         apiKey: tinyFishApiKey,
-        timeoutMs: PVCFC_WEB_OPERATION_TIMEOUT_MS,
+        timeoutMs: WEB_EVIDENCE_CLIENT_TIMEOUT_MS,
       })
     : undefined;
   const googleApiKey = optionalValue(env.GOOGLE_API_KEY);
@@ -234,7 +235,8 @@ export function buildServerOptionsFromEnv(
     confirmationApprovalKeyRing: confirmationApprovalKeyRing(env),
     pvcfcPublicDataProvider,
     pvcfcAgentModel,
-    pvcfcWebEvidenceClient,
+    pvcfcWebEvidenceClient: webEvidenceClient,
+    kfcWebEvidenceClient: webEvidenceClient,
     monitorJudge,
     agentTracer: langsmithApiKey
       ? new LangSmithAgentTracer({
@@ -278,7 +280,7 @@ export function buildServerOptionsFromEnv(
       agentConfigured,
       monitorConfigured: monitorJudge !== undefined,
       webSearch: {
-        configured: pvcfcWebEvidenceClient !== undefined,
+        configured: webEvidenceClient !== undefined,
         provider: 'tinyfish',
         mode: 'search-fetch',
       },

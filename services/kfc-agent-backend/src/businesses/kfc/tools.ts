@@ -4,6 +4,9 @@ import type { AgentGraphState } from '../../graph/state.js';
 import { agentToolCallDisposition } from '../../ordering/toolCallDisposition.js';
 import { toolNames } from '../../ordering/toolCatalog.js';
 import type { ToolCallRequest, ToolName } from '../../ordering/types.js';
+import type { KfcTurnToolReceipt } from './toolReceipts.js';
+
+export type { KfcCoreToolReceipt } from './toolReceipts.js';
 
 export interface KfcTrustedToolExecution {
   readonly evidenceId?: string;
@@ -23,21 +26,12 @@ export interface KfcPendingConfirmation {
   readonly action: ToolCallRequest & { readonly id: string };
 }
 
-export interface KfcCoreToolReceipt {
-  readonly id: string;
-  readonly name: ToolName;
-  readonly effect:
-    'provider_read' | 'reversible_mutation' | 'irreversible_mutation';
-  readonly status: 'success' | 'error' | 'confirmation_required';
-  readonly evidenceId?: string;
-}
-
 export function createKfcLangChainTools(input: {
   readonly state: AgentGraphState;
   readonly activeToolNames?: readonly ToolName[];
   readonly resolveActiveToolNames?: () => readonly ToolName[];
   readonly executeTool: KfcTrustedToolExecutor;
-  readonly receipts: KfcCoreToolReceipt[];
+  readonly receipts: KfcTurnToolReceipt[];
   readonly setPendingConfirmation: (pending: KfcPendingConfirmation) => void;
 }) {
   const activeToolNames = input.activeToolNames ?? toolNames;

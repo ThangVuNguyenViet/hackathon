@@ -21,6 +21,7 @@ export function createKfcAgent(input: {
   model: BaseChatModel;
   tools: readonly StructuredTool[];
   resolveActiveToolNames?: () => readonly string[];
+  webToolNames?: ReadonlySet<string>;
 }) {
   const applicationToolAuthorization = createMiddleware({
     name: 'kfc-application-tool-authorization',
@@ -38,6 +39,19 @@ export function createKfcAgent(input: {
             allowed.has(name),
         ),
       });
+    },
+    wrapToolCall(request, handler) {
+      const toolName =
+        typeof request.tool?.name === 'string'
+          ? request.tool.name
+          : request.toolCall.name;
+      const allowed = new Set(
+        input.resolveActiveToolNames?.() ?? input.tools.map(({ name }) => name),
+      );
+      if (!allowed.has(toolName) && input.webToolNames?.has(toolName)) {
+        throw new Error('kfc_web_tool_not_authorized');
+      }
+      return handler(request);
     },
   });
   return createAgent({

@@ -151,6 +151,9 @@ describe('Worker route option parity', () => {
 
     for (const routeOptions of options) {
       expect(routeOptions.pvcfcWebEvidenceClient).toBeDefined();
+      expect(routeOptions.kfcWebEvidenceClient).toBe(
+        routeOptions.pvcfcWebEvidenceClient,
+      );
       expect(routeOptions.readiness?.webSearch).toEqual({
         configured: true,
         provider: 'tinyfish',

@@ -480,6 +480,7 @@ export function createRouteAgentRuntime(
         observeRun: input.observeRun ?? streamingObserver?.observe,
         runGuard,
         agentModel: options.agent.model,
+        webEvidenceClient: options.kfcWebEvidenceClient,
       });
 
       if (output.suppressed || !(await runGuard.isCurrent())) {

@@ -15,12 +15,18 @@ import type { AgentGraphState } from '../../graph/state.js';
 import { toolNames } from '../../ordering/toolCatalog.js';
 import type { ToolName } from '../../ordering/types.js';
 import type { ConversationStore } from '../../persistence/contracts.js';
+import type { TinyFishClient } from '../../web/tinyFishClient.js';
 import {
   createKfcLangChainTools,
-  type KfcCoreToolReceipt,
   type KfcPendingConfirmation,
   type KfcTrustedToolExecutor,
 } from './tools.js';
+import type { KfcTurnToolReceipt } from './toolReceipts.js';
+import {
+  createKfcWebTools,
+  createKfcWebTurnBudget,
+  type KfcWebTurnBudget,
+} from './webTools.js';
 import {
   kfcGroundedPublicationSchema,
   type KfcGroundedPublication,
@@ -28,6 +34,13 @@ import {
 
 const MAX_HISTORY_TURNS = 12;
 const MAX_HISTORY_TEXT_LENGTH = 4_000;
+const commerceToolNameSet = new Set<string>(toolNames);
+
+function isCommerceToolName(
+  name: KfcTurnToolReceipt['name'],
+): name is ToolName {
+  return commerceToolNameSet.has(name);
+}
 
 export interface KfcAgentTurnInput {
   readonly sessionId: string;
@@ -47,7 +60,7 @@ export type KfcStateLoader = (
 export type KfcPublicationValidator = (input: {
   readonly publication: KfcGroundedPublication;
   readonly state: AgentGraphState;
-  readonly toolCalls: readonly KfcCoreToolReceipt[];
+  readonly toolCalls: readonly KfcTurnToolReceipt[];
 }) => void | Promise<void>;
 
 export interface KfcLangChainTurnOptions {
@@ -61,6 +74,12 @@ export interface KfcLangChainTurnOptions {
   }) => readonly ToolName[];
   readonly validatePublication?: KfcPublicationValidator;
   readonly selectedActionResponse?: SelectedActionResponseReference;
+  readonly webEvidence?: {
+    readonly client: TinyFishClient;
+    readonly inventoryUrls: readonly string[];
+    readonly budget?: KfcWebTurnBudget;
+    readonly now?: () => number;
+  };
 }
 
 export interface KfcLangChainTurnResult {
@@ -68,7 +87,7 @@ export interface KfcLangChainTurnResult {
   readonly responseText: string;
   readonly publication: KfcGroundedPublication;
   readonly state: AgentGraphState;
-  readonly toolCalls: readonly KfcCoreToolReceipt[];
+  readonly toolCalls: readonly KfcTurnToolReceipt[];
   readonly genUi?: KfcGenUiAttachment;
   readonly pendingConfirmation?: KfcPendingConfirmation;
 }
@@ -133,7 +152,7 @@ function validateStateIdentity(
 
 function validatePublicationByDefault(input: {
   publication: KfcGroundedPublication;
-  toolCalls: readonly KfcCoreToolReceipt[];
+  toolCalls: readonly KfcTurnToolReceipt[];
   selectedActionResponse?: SelectedActionResponseReference;
 }): void {
   const selectedActionMatches = input.selectedActionResponse
@@ -162,24 +181,55 @@ function validatePublicationByDefault(input: {
   ) {
     throw new Error('kfc_publication_evidence_invalid');
   }
+  const webEvidence = new Map(
+    input.toolCalls.flatMap((receipt) =>
+      receipt.status === 'success' &&
+      receipt.evidenceMode === 'live_web' &&
+      receipt.evidenceId
+        ? [[receipt.evidenceId, receipt] as const]
+        : [],
+    ),
+  );
+  for (const reference of input.publication.factualClaims.evidenceReferences) {
+    const receipt = webEvidence.get(reference.evidenceId);
+    if (!receipt) continue;
+    if (
+      reference.claimKinds.some(
+        (claimKind) => claimKind !== 'source' && claimKind !== 'policy',
+      )
+    ) {
+      throw new Error('kfc_web_evidence_claim_invalid');
+    }
+    if (
+      !receipt.sourceUrls?.some((sourceUrl) =>
+        input.publication.customerText.includes(sourceUrl),
+      )
+    ) {
+      throw new Error('kfc_web_citation_required');
+    }
+  }
 }
 
 export async function runKfcLangChainTurn(
   options: KfcLangChainTurnOptions,
   turn: KfcAgentTurnInput,
 ): Promise<KfcLangChainTurnResult> {
+  const webBudget = options.webEvidence
+    ? (options.webEvidence.budget ??
+      createKfcWebTurnBudget({ now: options.webEvidence.now }))
+    : undefined;
   const { currentUserTurn, messages } = await canonicalHistory({
     store: options.store,
     turn,
   });
   const state = await options.loadState({ ...turn, currentUserTurn });
   validateStateIdentity(state, turn);
-  const receipts: KfcCoreToolReceipt[] = [];
+  const receipts: KfcTurnToolReceipt[] = [];
   let pendingConfirmation: KfcPendingConfirmation | undefined;
   const resolveCurrentToolNames = () => [
     ...new Set(options.resolveActiveToolNames({ state, turn })),
   ];
-  const tools = createKfcLangChainTools({
+  const coreTools = createKfcLangChainTools({
     state,
     activeToolNames: toolNames,
     resolveActiveToolNames: resolveCurrentToolNames,
@@ -192,6 +242,27 @@ export async function runKfcLangChainTurn(
       pendingConfirmation = pending;
     },
   });
+  const webTools = options.webEvidence
+    ? createKfcWebTools({
+        client: options.webEvidence.client,
+        inventoryUrls: options.webEvidence.inventoryUrls,
+        receipts,
+        budget: webBudget!,
+        resolveAuthorizedToolNames: () =>
+          options.selectedActionResponse ||
+          resolveCurrentToolNames().length === 0
+            ? []
+            : ['searchKfcWeb', 'fetchKfcPage'],
+      })
+    : [];
+  const tools = [...coreTools, ...webTools];
+  const webToolNames = new Set(webTools.map(({ name }) => name));
+  const resolveAllToolNames = () => {
+    const coreNames = resolveCurrentToolNames();
+    return options.selectedActionResponse || coreNames.length === 0
+      ? coreNames
+      : [...coreNames, ...webToolNames];
+  };
   const selectedActionMessage = options.selectedActionResponse
     ? new SystemMessage({
         id: STRUCTURED_RESPONSE_REFERENCE_MESSAGE_ID,
@@ -208,7 +279,8 @@ export async function runKfcLangChainTurn(
   const agent = createKfcAgent({
     model: options.model,
     tools,
-    resolveActiveToolNames: resolveCurrentToolNames,
+    resolveActiveToolNames: resolveAllToolNames,
+    webToolNames,
   });
   const execution = await agent.invoke(
     {
@@ -240,7 +312,7 @@ export async function runKfcLangChainTurn(
     toolCalls: receipts,
   });
   const successfulToolNames = receipts.flatMap(({ name, status }) =>
-    status === 'success' ? [name] : [],
+    status === 'success' && isCommerceToolName(name) ? [name] : [],
   );
   const genUi = selectKfcGenUiAttachment({
     state,

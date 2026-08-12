@@ -36,9 +36,61 @@ import {
 } from '../../observability/agentTracing.js';
 import { KfcAgentPack } from './pack.js';
 import type { AgentTurnInput } from './turnContracts.js';
+import { KFC_WEB_INVENTORY_URLS } from './webPolicy.js';
+import { createKfcWebTurnBudget } from './webTools.js';
+import type { KfcTurnToolReceipt } from './toolReceipts.js';
+import type {
+  ConversationStore,
+  RunCommitFence,
+} from '../../persistence/contracts.js';
 
 const resolveToolProfile = createAgentToolProfileResolver();
 const confirmationPauseTtlMs = 10 * 60_000;
+
+export async function persistKfcWebEvidenceAudit(input: {
+  readonly store: ConversationStore;
+  readonly sessionId: string;
+  readonly receipts: readonly KfcTurnToolReceipt[];
+  readonly fence?: RunCommitFence;
+}): Promise<void> {
+  const calls = input.receipts.flatMap((receipt) =>
+    receipt.evidenceMode === 'live_web'
+      ? [
+          {
+            name: receipt.name,
+            status: receipt.status,
+            durationMs: receipt.durationMs ?? 0,
+            evidenceMode: 'live_web' as const,
+            ...(receipt.sourceUrls
+              ? {
+                  sourceUrls: receipt.sourceUrls
+                    .slice(0, 5)
+                    .map((url) => url.slice(0, 2_048)),
+                }
+              : {}),
+          },
+        ]
+      : [],
+  );
+  if (calls.length === 0) return;
+  const event = {
+    sessionId: input.sessionId,
+    sourceType: 'agent:web_evidence_trace',
+    payload: {
+      schemaVersion: 'business-tool-trace-v1',
+      calls,
+    },
+  };
+  if (input.fence) {
+    await input.store.appendEventIfRunCurrent({ ...event, fence: input.fence });
+    return;
+  }
+  await input.store.appendEvent(
+    event.sessionId,
+    event.sourceType,
+    event.payload,
+  );
+}
 
 function approvalPrincipal(
   turnInput: AgentTurnInput,
@@ -137,6 +189,9 @@ async function canonicalConfirmationPause(input: {
 export async function runKfcApplicationTurn(
   turnInput: AgentTurnInput,
 ): Promise<AgentTurnOutput> {
+  const webBudget = turnInput.webEvidenceClient
+    ? createKfcWebTurnBudget({ now: turnInput.webEvidenceNow })
+    : undefined;
   if (!turnInput.agentModel) throw new Error('kfc_agent_not_configured');
   const tracer = createSafeAgentTracer(
     turnInput.tracer ?? createNoopAgentTracer(),
@@ -249,6 +304,15 @@ export async function runKfcApplicationTurn(
         };
       },
       selectedActionResponse,
+      ...(turnInput.webEvidenceClient
+        ? {
+            webEvidence: {
+              client: turnInput.webEvidenceClient,
+              inventoryUrls: KFC_WEB_INVENTORY_URLS,
+              budget: webBudget,
+            },
+          }
+        : {}),
     });
     const result = await pack.runTurn({
       sessionId: turnInput.sessionId,
@@ -265,6 +329,14 @@ export async function runKfcApplicationTurn(
           pendingAction: result.pendingConfirmation.action,
         })
       : undefined;
+    await persistKfcWebEvidenceAudit({
+      store: turnInput.store,
+      sessionId: turnInput.sessionId,
+      receipts: result.toolCalls,
+      ...(turnInput.runGuard?.commitFence
+        ? { fence: turnInput.runGuard.commitFence }
+        : {}),
+    });
     const output = await persistCompletedTurn({
       turnInput,
       turnTrace,

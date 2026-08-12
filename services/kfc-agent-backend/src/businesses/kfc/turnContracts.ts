@@ -29,6 +29,7 @@ import type {
 import type { ChannelPresentationPlan } from '../../presentation/channelPresentation.js';
 import type { ResponseProfile } from '../../presentation/responseProfile.js';
 import type { GuestCheckoutAuthority } from '../../security/guestCheckoutAuthority.js';
+import type { TinyFishClient } from '../../web/tinyFishClient.js';
 
 export type ReplyIntent =
   | 'ask_fulfillment_method'
@@ -66,6 +67,8 @@ export interface AgentTurnInput {
   metadata?: ConversationTurnMetadata | null;
   traceContext?: AgentTraceContext;
   agentModel?: BaseChatModel;
+  webEvidenceClient?: TinyFishClient;
+  webEvidenceNow?: () => number;
   trustedCustomerAction?: TrustedCustomerActionEnvelope;
   runGuard?: {
     isCurrent(): Promise<boolean>;

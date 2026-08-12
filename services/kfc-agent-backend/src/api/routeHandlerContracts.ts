@@ -515,6 +515,7 @@ export interface RouteOptions {
   pvcfcPublicDataProvider?: PvcfcPublicDataProvider;
   pvcfcAgentModel?: BaseChatModel;
   pvcfcWebEvidenceClient?: TinyFishClient;
+  kfcWebEvidenceClient?: TinyFishClient;
   monitorJudge?: MonitorSessionIntelligenceJudge;
   agentTracer?: AgentTracer;
   confirmationApprovalKeyRing?: ConfirmationApprovalKeyRing;
