@@ -278,6 +278,7 @@ export function buildServerOptionsFromEnv(
         : undefined,
     readiness: {
       agentConfigured,
+      agentGatesReadiness: pvcfcAgentModel === undefined,
       monitorConfigured: monitorJudge !== undefined,
       webSearch: {
         configured: webEvidenceClient !== undefined,
