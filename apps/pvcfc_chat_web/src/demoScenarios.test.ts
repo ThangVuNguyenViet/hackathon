@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import {
   PVCFC_DEMO_SCENARIOS,
@@ -57,6 +58,36 @@ describe("PVCFC evidence-backed demo content", () => {
     expect(promptsById["urban-agriculture"]).toContain("15 hồ sơ");
     expect(promptsById["corporate-facilities"]).toContain("7 hồ sơ");
     expect(promptsById["public-reports"]).toContain("3 báo cáo");
+  });
+
+  it("targets a dealer location that exists in the generated provider", () => {
+    const fixture = JSON.parse(
+      readFileSync(
+        new URL(
+          "../../../services/kfc-agent-backend/fixtures/generated/pvcfc-public-data.json",
+          import.meta.url,
+        ),
+        "utf8",
+      ),
+    ) as {
+      collections: Array<{
+        name: string;
+        records: Array<{ id: string; name: string; address?: string }>;
+      }>;
+    };
+    const dealer = fixture.collections
+      .find(({ name }) => name === "dealers_contacts")
+      ?.records.find(({ id }) => id === "dealer-khanh-my-ca-mau");
+    const prompt = PVCFC_DEMO_SCENARIOS.find(
+      ({ id }) => id === "dealer-contact-freshness",
+    )?.turns.join(" ");
+
+    expect(dealer).toMatchObject({
+      name: "Cửa hàng phân bón Khánh My",
+      address: "Xã Hòa Bình, Tỉnh Cà Mau",
+    });
+    expect(prompt).toContain("Cửa hàng phân bón Khánh My");
+    expect(prompt).toContain("Xã Hòa Bình, Tỉnh Cà Mau");
   });
 
   it("keeps IDs unique, titles concise, and every replay turn usable", () => {

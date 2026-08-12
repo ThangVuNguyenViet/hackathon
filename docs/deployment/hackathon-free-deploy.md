@@ -62,10 +62,10 @@ Create Worker secrets:
 ```bash
 npx wrangler secret put MESSENGER_VERIFY_TOKEN
 npx wrangler secret put META_PAGE_ACCESS_TOKEN
-npx wrangler secret put OPENAI_API_KEY
+npx wrangler secret put GOOGLE_API_KEY
 ```
 
-`OPENAI_API_KEY` is optional for `/ready`; without it, `/ready` reports OpenAI as not configured but does not block the demo boot check. Messenger verification and live replies require the Messenger secrets.
+`GOOGLE_API_KEY` configures the maintained LangChain KFC agent and monitor deployment. Messenger verification and live replies also require the Messenger secrets.
 
 ## Backend Deploy
 

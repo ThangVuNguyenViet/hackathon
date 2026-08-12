@@ -1,4 +1,4 @@
-const CURRENT_AGENT_RUNTIME = 'langgraph-create-agent-workflow-v1';
+const CURRENT_AGENT_RUNTIME = 'langchain-create-agent';
 const CURRENT_GRAPH_NODES = {
   callModel: 'model_request',
   executeTools: 'tools',
@@ -11,11 +11,6 @@ const CURRENT_TARGETS = Object.freeze({
   overallP95Ms: 10000,
 });
 const CURRENT_MODEL_IDENTITIES = {
-  openai: {
-    provider: 'openai',
-    model: 'gpt-5-mini-2025-08-07',
-    profile: 'openai-gpt-5-mini-2025-08-07-reasoning-low-verbosity-low',
-  },
   google: {
     provider: 'google',
     model: 'gemini-3.1-flash-lite',

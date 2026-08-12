@@ -187,3 +187,132 @@ Commit subject: `feat(pvcfc): refresh evidence-backed demo scenarios`
 3. No credentialed live TinyFish request was made in this task. Live provider latency, quotas, and result quality remain covered by the later gated canary.
 4. Dealer/contact records may age. The scenario asks the assistant to expose source dates and avoid confirming hours absent official evidence.
 5. The fixture layer is temporary. When the official PVCFC API replaces it, scenario IDs and evidence modes can remain stable while the provider implementation changes.
+
+## Review fix: packaged backend release
+
+The review correctly identified that the React source application was not yet a normal backend release artifact. The backend build now owns a deterministic final packaging step:
+
+1. `clean:dist` removes the prior backend output.
+2. TypeScript compiles the active backend into `dist/src`.
+3. `package:pvcfc-client` runs the existing PVCFC Vite build and copies its generated `dist` into backend-owned `dist/client`.
+
+Dependency installation remains explicit. The packaging script does not run `npm install` or `npm ci`, and `npm_config_offline=true npm run build` passed after the two lockfile installs. This keeps release builds deterministic and avoids hiding registry access in the build step.
+
+The backend resolver checks `dist/client/index.html` first. A deploy-layout integration test copies only that packaged client into a temporary backend release directory, with no `apps/pvcfc_chat_web/dist` source-tree fallback, then proves `/`, `/demo`, and `/pvcfc` all return the React root marker. Pages deployment remains unchanged because `apps/pvcfc_chat_web` still has its independent Vite build.
+
+The service-only `Dockerfile.pvcfc` consumes an already-built `dist`, fixtures, and knowledge corpus. A real Docker build from `services/kfc-agent-backend` succeeded, and an isolated container inspection found `dist/src/index.js`, `dist/client/index.html`, the React marker, and a JavaScript asset. The SCloud runbook now installs both lockfiles, builds the packaged backend, verifies both artifacts, starts `dist/src/index.js`, and explicitly labels the new packaged release as not yet deployed.
+
+## Review fix: fixture-backed dealer scenario
+
+The prior Kiên Giang wording was not supported by a matching generated dealer record. The scenario now targets `dealer-khanh-my-ca-mau`, and its test reads the generated provider fixture rather than duplicating an unverified claim. The asserted record is:
+
+- `Cửa hàng phân bón Khánh My`
+- `Xã Hòa Bình, Tỉnh Cà Mau`
+
+The test also proves the displayed prompt contains the exact fixture name and address.
+
+## Review-fix TDD evidence
+
+RED was captured before implementation:
+
+```text
+PVCFC web scenario test: 1 failed, 6 passed
+Expected the dealer prompt to target the fixture-backed Cà Mau record; it still named Kiên Giang.
+
+backend build-output test: failed
+Expected dist/client/index.html to exist after npm run build.
+
+deploy-layout route test: TypeScript failed
+registerPvcfcWebsiteRoutes was not exported.
+
+packaged-release shell contract: failed
+Dockerfile.pvcfc and its service-context contract did not exist.
+```
+
+GREEN after the review fix:
+
+```text
+apps/pvcfc_chat_web: npm test
+Test Files  1 passed (1)
+Tests       7 passed (7)
+
+apps/pvcfc_chat_web: npm run build
+1591 modules transformed
+dist/assets/index-*.js 212.34 kB, 66.53 kB gzip
+exit 0
+
+services/kfc-agent-backend: npm_config_offline=true npm run build
+TypeScript compiled; PVCFC client built and copied to dist/client
+exit 0
+
+focused backend route/build/architecture tests
+Test Files  3 passed (3)
+Tests       4 passed (4)
+
+services/kfc-agent-backend: npm run typecheck
+exit 0
+
+services/kfc-agent-backend: npm run check:architecture
+Architecture size check passed (465 files, 900-line ceiling with no baseline growth).
+
+services/kfc-agent-backend: npm run check
+format:check: passed
+lint: 0 errors, 383 warnings within the preserved warning budget
+typecheck: passed
+Test Files  201 passed | 1 skipped (202)
+Tests       2009 passed | 1 skipped (2010)
+exit 0
+
+bash tests/deployment/pvcfc_packaged_release.test.sh
+passed
+
+docker build -f Dockerfile.pvcfc -t pvcfc-backend:task7-review .
+exit 0
+
+container artifact inspection
+packaged-container-artifact-ok
+```
+
+## Review-fix caveats
+
+1. The runbook is updated, but this commit has not been deployed to SCloud and no live post-deploy smoke result is claimed.
+2. `npm audit --omit=dev` in the backend currently reports three existing high-severity production dependency advisories through `fast-uri`, `find-my-way`, and `js-yaml`. No unrelated forced dependency upgrade was included in this focused review fix.
+3. Docker verification inspected the packaged release without starting the network service, because a real runtime boot also requires deployment database and provider credentials.
+
+## Maintained deployment-contract cleanup
+
+The initially red `tests/deployment/deploy_scripts.test.sh` was not historical: `scripts/run-kfc-deployed-acceptance.sh` invokes it. Its first failure asserted a deleted direct-OpenAI live script, and its later executable section imported another deleted qualification module and identified the runtime as LangGraph.
+
+The active deployment contract now matches the approved runtime:
+
+- Cloudflare Worker and Cloud Run releases accept the maintained LangChain KFC target: Google with `gemini-3.1-flash-lite`.
+- Direct OpenAI provider validation and secret publication/binding were removed from these two deployment scripts.
+- Google provider authentication, LangSmith, main-branch/dirty-release checks, confirmation-secret handling, commerce-mode safety, D1, and Cloud Run authentication bindings remain covered.
+- The Worker script optionally publishes PVCFC-owned `PVCFC_ASTRAFLOW_API_KEY` and `TINYFISH_API_KEY` secrets without coupling them to KFC.
+- `openai_agent_target.test.sh` was replaced by `langchain_agent_target.test.sh`.
+- The obsolete 500-line deployment test was replaced with the maintained shell syntax, provider/model preflight, secret safety, Pages, and packaged-PVCFC release contracts.
+- The deployed latency proof marker now expects `langchain-create-agent`, not the retired LangGraph runtime name.
+- Free-deploy and PVCFC SCloud documentation no longer instruct operators to use the retired direct OpenAI/standalone-server paths.
+
+RED:
+
+```text
+bash tests/deployment/deploy_scripts.test.sh
+exit 1
+First failure: expected removed KFC_AGENT_PROVIDER=openai live-interruption script.
+After that assertion was removed, the executable check also failed importing deleted kfc-live-text-qualification.mjs.
+```
+
+GREEN:
+
+```text
+bash tests/deployment/deploy_scripts.test.sh
+Cloud Run deployment profile preflight passed.
+Cloudflare Worker deployment preflight passed.
+LangChain agent target tests passed.
+PVCFC packaged release contract passed.
+Maintained deployment contracts passed.
+exit 0
+```
+
+The final post-cleanup backend gate retained the same result: 201 test files passed with one skipped, and 2,009 tests passed with one skipped.

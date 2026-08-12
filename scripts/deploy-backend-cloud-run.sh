@@ -47,15 +47,11 @@ if [[ "$KFC_AGENT_PROFILE_MODE" != "production" && "$KFC_AGENT_PROFILE_MODE" != 
   exit 64
 fi
 
-if [[ "$KFC_AGENT_PROVIDER" != "google" && "$KFC_AGENT_PROVIDER" != "openai" ]]; then
-  echo "ERROR: KFC_AGENT_PROVIDER must be google or openai." >&2
+if [[ "$KFC_AGENT_PROVIDER" != "google" ]]; then
+  echo "ERROR: KFC_AGENT_PROVIDER must be google for the maintained LangChain deployment." >&2
   exit 64
 fi
-if [[ "$KFC_AGENT_PROVIDER" == "google" ]]; then
-  expected_agent_model="gemini-3.1-flash-lite"
-else
-  expected_agent_model="gpt-4.1-mini"
-fi
+expected_agent_model="gemini-3.1-flash-lite"
 if [[
   -n "$KFC_AGENT_MODEL" &&
   "$KFC_AGENT_MODEL" != "$expected_agent_model"
@@ -63,15 +59,11 @@ if [[
   echo "ERROR: KFC_AGENT_MODEL must be $expected_agent_model when KFC_AGENT_PROVIDER=$KFC_AGENT_PROVIDER." >&2
   exit 64
 fi
-if [[ "$KFC_MONITOR_PROVIDER" != "google" && "$KFC_MONITOR_PROVIDER" != "openai" ]]; then
-  echo "ERROR: KFC_MONITOR_PROVIDER must be google or openai." >&2
+if [[ "$KFC_MONITOR_PROVIDER" != "google" ]]; then
+  echo "ERROR: KFC_MONITOR_PROVIDER must be google for the maintained LangChain deployment." >&2
   exit 64
 fi
-if [[ "$KFC_MONITOR_PROVIDER" == "google" ]]; then
-  expected_monitor_model="gemini-3.1-flash-lite"
-else
-  expected_monitor_model="gpt-5-mini-2025-08-07"
-fi
+expected_monitor_model="gemini-3.1-flash-lite"
 if [[
   -n "$KFC_MONITOR_MODEL" &&
   "$KFC_MONITOR_MODEL" != "$expected_monitor_model"
@@ -137,12 +129,7 @@ secret_vars=(
   "MESSENGER_VERIFY_TOKEN=MESSENGER_VERIFY_TOKEN:latest"
   "META_PAGE_ACCESS_TOKEN=META_PAGE_ACCESS_TOKEN:latest"
 )
-if [[ "$KFC_AGENT_PROVIDER" == "openai" || "$KFC_MONITOR_PROVIDER" == "openai" ]]; then
-  secret_vars+=("OPENAI_API_KEY=OPENAI_API_KEY:latest")
-fi
-if [[ "$KFC_AGENT_PROVIDER" == "google" || "$KFC_MONITOR_PROVIDER" == "google" ]]; then
-  secret_vars+=("GOOGLE_API_KEY=GOOGLE_API_KEY:latest")
-fi
+secret_vars+=("GOOGLE_API_KEY=GOOGLE_API_KEY:latest")
 secret_arg="$(IFS=,; echo "${secret_vars[*]}")"
 
 echo "Deploying $SERVICE_NAME to Cloud Run project=$PROJECT_ID region=$REGION"

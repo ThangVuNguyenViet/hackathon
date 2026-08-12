@@ -15,7 +15,7 @@ assert_fails_with_agent_target() {
   set -e
 
   test "$exit_code" -eq 64
-  grep -Fq 'KFC_AGENT_MODEL must be gpt-4.1-mini' "$output_file"
+  grep -Fq 'KFC_AGENT_MODEL must be gemini-3.1-flash-lite' "$output_file"
 }
 
 run_cloud_run_preflight() {
@@ -23,10 +23,10 @@ run_cloud_run_preflight() {
     GCP_PROJECT_ID=test-project \
     META_PAGE_ID=test-page \
     KFC_AGENT_PROFILE_MODE=production \
-    KFC_AGENT_PROVIDER=openai \
+    KFC_AGENT_PROVIDER=google \
     KFC_AGENT_MODEL="$1" \
-    KFC_MONITOR_PROVIDER=openai \
-    KFC_MONITOR_MODEL=gpt-5-mini-2025-08-07 \
+    KFC_MONITOR_PROVIDER=google \
+    KFC_MONITOR_MODEL=gemini-3.1-flash-lite \
     "$ROOT_DIR/scripts/deploy-backend-cloud-run.sh"
 }
 
@@ -40,11 +40,11 @@ META_PAGE_ACCESS_TOKEN=test-page-access-token
 KFC_CONFIRMATION_SIGNING_KEY_ID=test-active
 KFC_CONFIRMATION_SIGNING_SECRET=test-confirmation-signing-secret-32-bytes-minimum
 KFC_CONFIRMATION_PREVIOUS_SIGNING_KEYS=[]
-KFC_AGENT_PROVIDER=openai
-KFC_AGENT_MODEL=gpt-4.1-mini
-KFC_MONITOR_PROVIDER=openai
-KFC_MONITOR_MODEL=gpt-5-mini-2025-08-07
-OPENAI_API_KEY=test-openai-key
+KFC_AGENT_PROVIDER=google
+KFC_AGENT_MODEL=gemini-3.1-flash-lite
+KFC_MONITOR_PROVIDER=google
+KFC_MONITOR_MODEL=gemini-3.1-flash-lite
+GOOGLE_API_KEY=test-google-key
 KFC_COMMERCE_MODE=fixture
 KFC_COMMERCE_ENVIRONMENT=sandbox
 EOF
@@ -60,14 +60,14 @@ run_worker_preflight() {
     "$ROOT_DIR/scripts/deploy-backend-cloudflare-worker.sh"
 }
 
-run_cloud_run_preflight gpt-4.1-mini
+run_cloud_run_preflight gemini-3.1-flash-lite
 assert_fails_with_agent_target \
   "$tmp_dir/cloud-run-invalid.out" \
-  run_cloud_run_preflight gpt-5-mini-2025-08-07
+  run_cloud_run_preflight gpt-4.1-mini
 
-run_worker_preflight gpt-4.1-mini
+run_worker_preflight gemini-3.1-flash-lite
 assert_fails_with_agent_target \
   "$tmp_dir/worker-invalid.out" \
-  run_worker_preflight gpt-5-mini-2025-08-07
+  run_worker_preflight gpt-4.1-mini
 
-echo "OpenAI agent target tests passed."
+echo "LangChain agent target tests passed."

@@ -6,7 +6,8 @@
   "scripts": {
     "dev": "tsx watch src/index.ts",
     "clean:dist": "node scripts/clean-dist.mjs",
-    "build": "npm run clean:dist && tsc -p tsconfig.json",
+    "build": "npm run clean:dist && tsc -p tsconfig.json && npm run package:pvcfc-client",
+    "package:pvcfc-client": "node scripts/package-pvcfc-client.mjs",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "format": "node scripts/run-format-gate.mjs --write",
     "format:check": "node scripts/run-format-gate.mjs --check",

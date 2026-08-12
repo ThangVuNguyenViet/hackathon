@@ -1,0 +1,20 @@
+FROM node:24-bookworm-slim
+
+WORKDIR /app
+
+COPY package.json package-lock.json ./
+RUN npm ci --omit=dev
+
+# `npm run build` packages the single React source into this release artifact
+# before Docker receives the service-only build context.
+COPY dist ./dist
+COPY fixtures ./fixtures
+COPY knowledge ./knowledge
+
+ENV NODE_ENV=production \
+    HOST=0.0.0.0 \
+    PORT=8080
+
+EXPOSE 8080
+
+CMD ["node", "dist/src/index.js"]

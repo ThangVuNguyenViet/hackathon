@@ -102,15 +102,11 @@ if [[ "$KFC_AGENT_PROFILE_MODE" != "production" && "$KFC_AGENT_PROFILE_MODE" != 
   echo "ERROR: KFC_AGENT_PROFILE_MODE must be production or qualification." >&2
   exit 64
 fi
-if [[ "$KFC_AGENT_PROVIDER" != "google" && "$KFC_AGENT_PROVIDER" != "openai" ]]; then
-  echo "ERROR: KFC_AGENT_PROVIDER must be google or openai." >&2
+if [[ "$KFC_AGENT_PROVIDER" != "google" ]]; then
+  echo "ERROR: KFC_AGENT_PROVIDER must be google for the maintained LangChain deployment." >&2
   exit 64
 fi
-if [[ "$KFC_AGENT_PROVIDER" == "google" ]]; then
-  expected_agent_model="gemini-3.1-flash-lite"
-else
-  expected_agent_model="gpt-4.1-mini"
-fi
+expected_agent_model="gemini-3.1-flash-lite"
 if [[
   -n "$KFC_AGENT_MODEL" &&
   "$KFC_AGENT_MODEL" != "$expected_agent_model"
@@ -118,15 +114,11 @@ if [[
   echo "ERROR: KFC_AGENT_MODEL must be $expected_agent_model when KFC_AGENT_PROVIDER=$KFC_AGENT_PROVIDER." >&2
   exit 64
 fi
-if [[ "$KFC_MONITOR_PROVIDER" != "google" && "$KFC_MONITOR_PROVIDER" != "openai" ]]; then
-  echo "ERROR: KFC_MONITOR_PROVIDER must be google or openai." >&2
+if [[ "$KFC_MONITOR_PROVIDER" != "google" ]]; then
+  echo "ERROR: KFC_MONITOR_PROVIDER must be google for the maintained LangChain deployment." >&2
   exit 64
 fi
-if [[ "$KFC_MONITOR_PROVIDER" == "google" ]]; then
-  expected_monitor_model="gemini-3.1-flash-lite"
-else
-  expected_monitor_model="gpt-5-mini-2025-08-07"
-fi
+expected_monitor_model="gemini-3.1-flash-lite"
 if [[
   -n "$KFC_MONITOR_MODEL" &&
   "$KFC_MONITOR_MODEL" != "$expected_monitor_model"
@@ -134,18 +126,8 @@ if [[
   echo "ERROR: KFC_MONITOR_MODEL must be $expected_monitor_model when KFC_MONITOR_PROVIDER=$KFC_MONITOR_PROVIDER." >&2
   exit 64
 fi
-if [[
-  ("$KFC_AGENT_PROVIDER" == "openai" || "$KFC_MONITOR_PROVIDER" == "openai") &&
-  -z "${OPENAI_API_KEY:-}"
-]]; then
-  echo "ERROR: OPENAI_API_KEY must be set for the selected agent or monitor provider." >&2
-  exit 64
-fi
-if [[
-  ("$KFC_AGENT_PROVIDER" == "google" || "$KFC_MONITOR_PROVIDER" == "google") &&
-  -z "${GOOGLE_API_KEY:-}"
-]]; then
-  echo "ERROR: GOOGLE_API_KEY must be set for the selected agent or monitor provider." >&2
+if [[ -z "${GOOGLE_API_KEY:-}" ]]; then
+  echo "ERROR: GOOGLE_API_KEY must be set for the maintained LangChain agent and monitor." >&2
   exit 64
 fi
 if [[ "$KFC_COMMERCE_MODE" == "fixture" && "${KFC_COMMERCE_ENVIRONMENT:-}" != "sandbox" ]]; then
@@ -197,7 +179,7 @@ if ! command -v npm >/dev/null 2>&1; then
 fi
 
 echo "Deploying Cloudflare Worker backend: $WORKER_NAME"
-echo "Expected Wrangler secrets: META_APP_SECRET, META_PAGE_ACCESS_TOKEN, LANGSMITH_API_KEY, confirmation signing material, selected provider API keys, KFC_COMMERCE_GATEWAY_TOKEN, optional KFC_DEMO_ADMIN_TOKEN"
+echo "Expected Wrangler secrets: META_APP_SECRET, META_PAGE_ACCESS_TOKEN, LANGSMITH_API_KEY, confirmation signing material, GOOGLE_API_KEY, KFC_COMMERCE_GATEWAY_TOKEN, optional PVCFC_ASTRAFLOW_API_KEY, TINYFISH_API_KEY, and KFC_DEMO_ADMIN_TOKEN"
 
 build_output_dir="$(mktemp -d)"
 deploy_log="$build_output_dir/wrangler-deploy.log"
@@ -213,11 +195,12 @@ mkdir -p "$(dirname "$DEPLOYMENT_OUTPUT_FILE")"
   printf '%s' "$LANGSMITH_API_KEY" | npx wrangler versions secret put LANGSMITH_API_KEY --name "$WORKER_NAME"
   printf '%s' "$KFC_CONFIRMATION_SIGNING_SECRET" | npx wrangler versions secret put KFC_CONFIRMATION_SIGNING_SECRET --name "$WORKER_NAME"
   printf '%s' "$KFC_CONFIRMATION_PREVIOUS_SIGNING_KEYS" | npx wrangler versions secret put KFC_CONFIRMATION_PREVIOUS_SIGNING_KEYS --name "$WORKER_NAME"
-  if [[ -n "${OPENAI_API_KEY:-}" ]]; then
-    printf '%s' "$OPENAI_API_KEY" | npx wrangler versions secret put OPENAI_API_KEY --name "$WORKER_NAME"
+  printf '%s' "$GOOGLE_API_KEY" | npx wrangler versions secret put GOOGLE_API_KEY --name "$WORKER_NAME"
+  if [[ -n "${PVCFC_ASTRAFLOW_API_KEY:-}" ]]; then
+    printf '%s' "$PVCFC_ASTRAFLOW_API_KEY" | npx wrangler versions secret put PVCFC_ASTRAFLOW_API_KEY --name "$WORKER_NAME"
   fi
-  if [[ -n "${GOOGLE_API_KEY:-}" ]]; then
-    printf '%s' "$GOOGLE_API_KEY" | npx wrangler versions secret put GOOGLE_API_KEY --name "$WORKER_NAME"
+  if [[ -n "${TINYFISH_API_KEY:-}" ]]; then
+    printf '%s' "$TINYFISH_API_KEY" | npx wrangler versions secret put TINYFISH_API_KEY --name "$WORKER_NAME"
   fi
   if [[ -n "${KFC_COMMERCE_GATEWAY_TOKEN:-}" ]]; then
     printf '%s' "$KFC_COMMERCE_GATEWAY_TOKEN" | npx wrangler versions secret put KFC_COMMERCE_GATEWAY_TOKEN --name "$WORKER_NAME"

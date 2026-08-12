@@ -48,7 +48,7 @@ export const PVCFC_DEMO_SCENARIOS: readonly PvcfcDemoScenario[] = Object.freeze(
       title: "Đại lý và độ mới dữ liệu",
       evidenceMode: "provider",
       turns: Object.freeze([
-        "Tra cứu trong 18 hồ sơ đại lý và liên hệ để tìm các điểm tại Kiên Giang; dẫn URL nguồn và ngày nguồn hoặc ngày thu thập nếu có.",
+        "Trong 18 hồ sơ đại lý và liên hệ, tra cứu Cửa hàng phân bón Khánh My tại Xã Hòa Bình, Tỉnh Cà Mau; dẫn URL nguồn và ngày nguồn hoặc ngày thu thập nếu có.",
         "Nêu rõ dữ liệu liên hệ có thể thay đổi và chưa thể xác nhận giờ hoạt động nếu nguồn không công bố.",
       ]),
     }),
