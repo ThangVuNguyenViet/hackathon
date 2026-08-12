@@ -10,6 +10,15 @@ export function normalizePvcfcCustomerText(value: string): string {
     .replace(/^[ \t]{0,3}#{1,6}[ \t]+/gm, '')
     .replace(/^[ \t]{0,3}>[ \t]?/gm, '')
     .replace(/^[ \t]*[-+*][ \t]+/gm, '• ')
+    .replace(/^[ \t]*(?:[-*_][ \t]*){3,}$/gm, '')
+    .replace(/^[ \t]*\|?(?:[ \t]*:?-{3,}:?[ \t]*\|)+[ \t]*$/gm, '')
+    .replace(/^[ \t]*\|(.+)\|[ \t]*$/gm, (_match, cells: string) =>
+      cells
+        .split('|')
+        .map((cell) => cell.trim())
+        .filter(Boolean)
+        .join(' — '),
+    )
     .replace(
       /!?\[([^\]\n]+)\]\((https?:\/\/[^\s)]+)\)/g,
       (_match, label: string, url: string) => `${label.trim()}: ${url}`,

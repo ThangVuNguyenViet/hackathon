@@ -26,8 +26,11 @@ import { normalizePvcfcCustomerText } from './customerText.js';
 const MAX_HISTORY_TURNS = 12;
 const MAX_HISTORY_TEXT_LENGTH = 4_000;
 const MAX_MODEL_CALLS_PER_RUN = 6;
-const MAX_TOOL_CALLS_PER_RUN = 8;
-const RECURSION_LIMIT = 32;
+// Broad public-data questions legitimately require one detail lookup per
+// record (the urban-agriculture demo currently has 15 records). These tools
+// are read-only, so keep a bounded but collection-sized allowance.
+const MAX_TOOL_CALLS_PER_RUN = 20;
+const RECURSION_LIMIT = 64;
 
 export interface PvcfcAgentTurnInput {
   readonly sessionId: string;
@@ -226,6 +229,10 @@ export class PvcfcAgentPack implements BusinessAgentPack<
           `# ${PVCFC_AGENT_PROFILE.name}`,
           PVCFC_AGENT_PROFILE.instructions,
           '',
+          this.options.webEvidence
+            ? 'Live web evidence is available for this turn after canonical provider evidence is attempted.'
+            : 'Live web evidence is unavailable for this turn. For latest or current requests, report the newest canonical record and clearly say that live status could not be verified; never claim that a live check was unnecessary or completed.',
+          '',
           'Verified current PVCFC public-data index:',
           JSON.stringify(publicData.value),
         ].join('\n'),
@@ -295,9 +302,15 @@ export class PvcfcAgentPack implements BusinessAgentPack<
           externalMessageId: null,
           externalUserId: turn.customerId,
           deliveryStatus: 'pending' as const,
-          metadata: turn.metadata?.release
-            ? { release: turn.metadata.release }
-            : null,
+          metadata: {
+            ...(turn.metadata?.release
+              ? { release: turn.metadata.release }
+              : {}),
+            rawEvent: {
+              pvcfcRequestUserTurnId: userTurn.id,
+              pvcfcClientMessageId: turn.externalMessageId,
+            },
+          },
         },
         auditEvent: {
           sessionId: turn.sessionId,

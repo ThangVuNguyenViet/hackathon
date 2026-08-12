@@ -61,6 +61,13 @@ describe('PVCFC server composition', () => {
       ok: true,
       checks: {
         agent: { ok: true, required: false, configured: false },
+        pvcfcAgent: {
+          ok: true,
+          required: false,
+          configured: true,
+          provider: 'astraflow',
+          model: 'gpt-5.6-luna',
+        },
       },
     });
     await server.close();
