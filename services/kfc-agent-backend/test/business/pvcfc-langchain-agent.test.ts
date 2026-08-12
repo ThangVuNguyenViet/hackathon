@@ -201,6 +201,9 @@ describe('PVCFC LangChain agent pack', () => {
     );
     expect(prompt).toContain('plain-text paragraphs');
     expect(prompt).toContain('smoothly flowing plain-text paragraphs');
+    expect(prompt).toContain(
+      'Render text-mode replies as plain text; Markdown syntax is not part of text mode',
+    );
     expect(prompt).toContain('Use literal citations');
     expect(prompt).toContain('buying, ordering, payment');
     expect(prompt).toContain('public-information boundary response');
