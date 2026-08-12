@@ -2,6 +2,9 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import worker, { type WorkerEnv } from '../../src/worker.js';
 import { FakeD1Database } from '../support/fakeD1Database.js';
 
+const CANONICAL_ONLY_NOTICE =
+  'Trạng thái nguồn: Không có truy cập web trực tiếp trong lượt này; câu trả lời chỉ sử dụng dữ liệu PVCFC đã được kiểm kê.';
+
 function env(database: FakeD1Database): WorkerEnv {
   return {
     DB: database,
@@ -92,10 +95,10 @@ describe('Worker PVCFC trusted route', () => {
     expect(await response.json()).toMatchObject({
       agentRuntime: 'langchain-create-agent',
       status: 'completed',
-      responseText: 'Thong tin PVCFC da duoc kiem chung.',
+      responseText: `${CANONICAL_ONLY_NOTICE}\n\nThong tin PVCFC da duoc kiem chung.`,
       presentation: {
         profile: 'text',
-        text: 'Thong tin PVCFC da duoc kiem chung.',
+        text: `${CANONICAL_ONLY_NOTICE}\n\nThong tin PVCFC da duoc kiem chung.`,
       },
     });
     expect(fetchImpl).toHaveBeenCalledTimes(2);
