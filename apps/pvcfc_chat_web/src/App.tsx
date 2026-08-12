@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState } from "react";
 import { Loader2, MessageCircle, Play, Send, Sprout } from "lucide-react";
+import { resolvePvcfcMessageEndpoint } from "./apiEndpoint";
 import { PVCFC_DEMO_SCENARIOS, PVCFC_SUGGESTION_PILLS } from "./demoScenarios";
 
 export interface ChatMessage {
@@ -51,12 +52,9 @@ export const App: React.FC = () => {
       text,
     };
 
-    const usesSameOriginApi =
-      window.location.hostname === "165.154.229.65" ||
-      window.location.hostname.endsWith(".pages.dev");
-    const targetUrl = usesSameOriginApi
-      ? "/chat/pvcfc/message"
-      : "http://165.154.229.65/chat/pvcfc/message";
+    const targetUrl = resolvePvcfcMessageEndpoint(
+      import.meta.env.VITE_PVCFC_API_BASE_URL,
+    );
 
     const res = await fetch(targetUrl, {
       method: "POST",

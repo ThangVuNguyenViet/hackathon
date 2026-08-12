@@ -76,6 +76,11 @@ the PVCFC pack and its public-data provider without constructing KFC cart,
 confirmation, human-pause, or GenUI state. Both HTTP deployments report
 `langchain-create-agent` as the agent runtime.
 
+The packaged PVCFC React client calls `/chat/pvcfc/message` on its own origin.
+For split local development only, set `VITE_PVCFC_API_BASE_URL` while building
+the web app; non-local HTTP overrides and base URLs containing a path,
+credentials, query, or fragment are rejected.
+
 ## Worker Runtime
 
 Cloudflare Worker is the primary stable webhook target:

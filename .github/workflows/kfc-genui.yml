@@ -5,6 +5,7 @@ on:
   pull_request:
     paths:
       - "apps/kfc_live_monitor_flutter/**"
+      - "apps/pvcfc_chat_web/**"
       - "services/kfc-agent-backend/**"
       - "ai-talent-tracks/fnb/conversations/**"
       - ".github/workflows/kfc-genui.yml"
@@ -14,6 +15,7 @@ on:
     branches: [main]
     paths:
       - "apps/kfc_live_monitor_flutter/**"
+      - "apps/pvcfc_chat_web/**"
       - "services/kfc-agent-backend/**"
       - "ai-talent-tracks/fnb/conversations/**"
       - ".github/workflows/kfc-genui.yml"
@@ -30,15 +32,26 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: 22.13.0
+          node-version: 24.14.0
           cache: npm
-          cache-dependency-path: services/kfc-agent-backend/package-lock.json
+          cache-dependency-path: |
+            services/kfc-agent-backend/package-lock.json
+            apps/pvcfc_chat_web/package-lock.json
       - uses: actions/setup-python@v5
         with:
           python-version: 3.11.14
       - run: python -m pip install --disable-pip-version-check -e services/kfc-recommendation-scorer
         working-directory: ${{ github.workspace }}
       - run: npm ci
+      - name: Install PVCFC client dependencies
+        working-directory: apps/pvcfc_chat_web
+        run: npm ci
+      - name: Test PVCFC client
+        working-directory: apps/pvcfc_chat_web
+        run: npm test -- --run
+      - name: Build PVCFC client
+        working-directory: apps/pvcfc_chat_web
+        run: npm run build
       - run: npm run check:architecture
       - run: npm run policies:check
       - run: npm run check
@@ -75,7 +88,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: 22.13.0
+          node-version: 24.14.0
           cache: npm
           cache-dependency-path: services/kfc-agent-backend/package-lock.json
       - run: npm ci

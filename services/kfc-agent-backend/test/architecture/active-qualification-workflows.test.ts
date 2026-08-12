@@ -14,6 +14,20 @@ describe('active qualification workflows', () => {
     expect(workflow).toContain('pull_request:');
     expect(workflow).toContain('backend:');
     expect(workflow).toContain('flutter:');
+    expect(workflow.match(/apps\/pvcfc_chat_web\/\*\*/gu)).toHaveLength(2);
+    expect(workflow.match(/node-version: 24/gu)).toHaveLength(2);
+    expect(workflow).toContain(
+      'cache-dependency-path: |\n            services/kfc-agent-backend/package-lock.json\n            apps/pvcfc_chat_web/package-lock.json',
+    );
+    expect(workflow).toContain(
+      'working-directory: apps/pvcfc_chat_web\n        run: npm ci',
+    );
+    expect(workflow).toContain(
+      'working-directory: apps/pvcfc_chat_web\n        run: npm test -- --run',
+    );
+    expect(workflow).toContain(
+      'working-directory: apps/pvcfc_chat_web\n        run: npm run build',
+    );
     expect(workflow).toContain('TINYFISH_API_KEY:');
     expect(workflow).toContain('RUN_LIVE_TINYFISH: "1"');
     expect(workflow).toContain('npm run test:live:tinyfish');

@@ -42,7 +42,9 @@ in ADR-0002.
 - `0dbfeecd`, `0ab53ade`, `0fa0fc6c` — PVCFC demo and deploy alignment
 - `5c6bada1` — active CI cleanup
 - `docs: qualify LangChain-only business agents` — canary, ADR, operations
-  documentation, and this report (current commit)
+  documentation, and this report
+- `fix(ci): qualify the packaged PVCFC client` — Node 24 clean-install web
+  qualification and same-origin packaged API endpoint (review fix)
 
 ## Deterministic qualification
 
@@ -55,8 +57,10 @@ All commands used Node 24.14.0.
 | Backend | `npm run check` | pass; format, lint budget (383 warnings), typecheck, 2,015 passed / 1 skipped |
 | Backend build | `npm run build` | pass; TypeScript plus packaged PVCFC client |
 | Worker | `npm run worker:deploy:dry-run` | pass; 12,718.07 KiB raw / 1,336.81 KiB gzip |
-| PVCFC web | `npm test -- --run` | pass; 7/7 |
+| PVCFC web | `npm test -- --run` | pass; 10/10 |
 | PVCFC web | `npm run build` | pass |
+| Clean installs | backend and PVCFC web `npm ci` | pass from both lockfiles |
+| Packaged route | `bash tests/deployment/pvcfc_packaged_release.test.sh` | pass |
 | Canary contracts | `npx vitest run test/scripts/run-tinyfish-live-canary.test.ts test/architecture/active-qualification-workflows.test.ts` | pass; 6/6 |
 | Canary disabled | `npm run test:live:tinyfish` | clean skip |
 | Canary missing key | `RUN_LIVE_TINYFISH=1 npm run test:live:tinyfish` | clean skip |
