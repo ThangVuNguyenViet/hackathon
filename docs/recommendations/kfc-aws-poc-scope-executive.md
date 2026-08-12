@@ -27,43 +27,17 @@ flowchart LR
     POCData["KFC-approved POC data<br/>Orders · interactions · catalog"]
 
     subgraph AWS["AWS Cloud — KFC recommendation POC"]
-        subgraph Online["Online serving"]
-            API[Amazon API Gateway]
-            Lambda[AWS Lambda]
-            DynamoDB[Amazon DynamoDB]
-            Secrets[AWS Secrets Manager]
-            Personalize[Amazon Personalize]
-            SageMaker[Amazon SageMaker AI]
-        end
-
-        subgraph Data["Data and model preparation"]
-            S3[Amazon S3]
-            Athena[Amazon Athena]
-            ECR[Amazon ECR]
-        end
-
-        subgraph Observe["Observability"]
-            CloudWatch[Amazon CloudWatch]
-        end
+        API["API and orchestration<br/>API Gateway · Lambda"]
+        Engine["Recommendation intelligence<br/>Personalize · SageMaker AI"]
+        Data["POC data foundation<br/>S3 · Athena · DynamoDB"]
+        Support["Supporting services<br/>Secrets Manager · CloudWatch · ECR"]
     end
 
-    Channels <-->|HTTPS request / recommendations| API
-    API <-->|invoke / response| Lambda
-    Lambda <-->|menu and serving context| DynamoDB
-    Lambda <-->|context and events / relevance scores| Personalize
-    Lambda <-->|candidates and business context / final ranking| SageMaker
-    Lambda -->|retrieve KFC API credentials| Secrets
-
-    POCData -->|land approved batch data| S3
-    S3 <-->|query / curate| Athena
-    S3 -->|historical dataset import| Personalize
-    S3 -->|training data and model artifacts| SageMaker
-    ECR -->|custom inference image| SageMaker
-
-    API -.->|metrics and logs| CloudWatch
-    Lambda -.->|metrics and logs| CloudWatch
-    Personalize -.->|service and event metrics| CloudWatch
-    SageMaker -.->|endpoint metrics and logs| CloudWatch
+    Channels <-->|request / recommendations| API
+    API <-->|recommendation request / ranked offers| Engine
+    POCData -->|approved batch data| Data
+    Data -->|menu context| API
+    Data -->|training data| Engine
 ```
 
 ## 3. Credit request and three-year roadmap
