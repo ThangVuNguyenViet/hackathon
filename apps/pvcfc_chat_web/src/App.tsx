@@ -1,19 +1,34 @@
 import React, { useEffect, useRef, useState } from "react";
-import { Loader2, MessageCircle, Play, Send, Sprout } from "lucide-react";
+import {
+  FileText,
+  Loader2,
+  MessageCircle,
+  Play,
+  Send,
+  Sparkles,
+  Sprout,
+} from "lucide-react";
 import { resolvePvcfcMessageEndpoint } from "./apiEndpoint";
 import { createPvcfcChatPayload } from "./chatPayload";
+import { PvcfcGenUiCard } from "./components/PvcfcGenUiCard";
 import { PVCFC_DEMO_SCENARIOS, PVCFC_SUGGESTION_PILLS } from "./demoScenarios";
+import {
+  createPvcfcGenUiModel,
+  type PvcfcGenUiModel,
+} from "./pvcfcGenUi";
 
 export interface ChatMessage {
   id: string;
   role: "user" | "bot";
   text: string;
+  genUi?: PvcfcGenUiModel;
 }
 
 export const App: React.FC = () => {
   const [route, setRoute] = useState<"chat" | "demo">(
     window.location.pathname === "/demo" ? "demo" : "chat",
   );
+  const [responseMode, setResponseMode] = useState<"genui" | "text">("genui");
   const [messages, setMessages] = useState<ChatMessage[]>([
     {
       id: "msg_welcome",
@@ -68,7 +83,14 @@ export const App: React.FC = () => {
       responseText?: string;
       presentation?: { text?: string };
     };
-    return data.responseText || data.presentation?.text || "";
+    const responseText = data.responseText || data.presentation?.text || "";
+    return {
+      text: responseText,
+      // The currently deployed PVCFC pack returns grounded text. Turn that
+      // same answer into a structured client presentation without changing
+      // the social-channel contract.
+      genUi: createPvcfcGenUiModel(responseText),
+    };
   };
 
   const handleSend = async (customText?: string) => {
@@ -83,14 +105,15 @@ export const App: React.FC = () => {
     setIsLoading(true);
 
     try {
-      const responseText = await callBackend(
+      const response = await callBackend(
         text,
         customerIdRef.current,
       );
       const botMsg: ChatMessage = {
         id: `bot_${Date.now()}`,
         role: "bot",
-        text: responseText,
+        text: response.text,
+        ...(responseMode === "genui" ? { genUi: response.genUi } : {}),
       };
       setMessages((prev) => [...prev, botMsg]);
     } catch (error: unknown) {
@@ -130,13 +153,14 @@ export const App: React.FC = () => {
       ]);
 
       try {
-        const responseText = await callBackend(turnText, demoCust);
+        const response = await callBackend(turnText, demoCust);
         setDemoMessages((prev) => [
           ...prev,
           {
             id: `demo_bot_${Date.now()}`,
             role: "bot",
-            text: responseText,
+            text: response.text,
+            ...(responseMode === "genui" ? { genUi: response.genUi } : {}),
           },
         ]);
       } catch (error: unknown) {
@@ -181,7 +205,33 @@ export const App: React.FC = () => {
             </div>
           </a>
 
-          <div className="flex items-center gap-3.5">
+          <div className="flex flex-wrap items-center justify-end gap-2.5">
+            <div className="flex items-center gap-0.5 rounded-lg bg-gray-100 p-1">
+              <button
+                type="button"
+                aria-pressed={responseMode === "genui"}
+                onClick={() => setResponseMode("genui")}
+                className={`flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-[11px] font-semibold transition sm:px-3.5 ${
+                  responseMode === "genui"
+                    ? "bg-[#0A6B41] text-white shadow-sm"
+                    : "text-gray-600 hover:text-gray-900"
+                }`}
+              >
+                <Sparkles className="h-3 w-3" /> GenUI
+              </button>
+              <button
+                type="button"
+                aria-pressed={responseMode === "text"}
+                onClick={() => setResponseMode("text")}
+                className={`flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-[11px] font-semibold transition sm:px-3.5 ${
+                  responseMode === "text"
+                    ? "bg-[#0A6B41] text-white shadow-sm"
+                    : "text-gray-600 hover:text-gray-900"
+                }`}
+              >
+                <FileText className="h-3 w-3" /> Text
+              </button>
+            </div>
             <div className="flex h-9 w-9 items-center justify-center rounded-full border border-gray-200 bg-white text-gray-500">
               <MessageCircle className="h-4 w-4" />
             </div>
@@ -247,14 +297,25 @@ export const App: React.FC = () => {
                 >
                   {msg.role === "user" ? "B" : <Sprout className="h-4 w-4" />}
                 </div>
-                <div
-                  className={`rounded-xl px-4 py-3 text-[13.5px] leading-relaxed whitespace-pre-line ${
-                    msg.role === "user"
-                      ? "bg-[#0A6B41] text-white"
-                      : "border border-gray-200 bg-white text-gray-900 shadow-xs"
-                  }`}
-                >
-                  {msg.text}
+                <div className="flex flex-col">
+                  {msg.text && (
+                    <div
+                      className={
+                        msg.role === "user"
+                          ? "rounded-xl bg-[#0A6B41] px-4 py-3 text-[13.5px] leading-relaxed whitespace-pre-line text-white"
+                          : "rounded-xl border border-gray-200 bg-white px-4 py-3 text-[13.5px] leading-relaxed whitespace-pre-line text-gray-900 shadow-xs"
+                      }
+                    >
+                      {msg.text}
+                    </div>
+                  )}
+                  {msg.role === "bot" && msg.genUi && (
+                    <PvcfcGenUiCard
+                      model={msg.genUi}
+                      onPrompt={handleSend}
+                      disabled={isLoading}
+                    />
+                  )}
                 </div>
               </div>
             ))}
@@ -379,14 +440,25 @@ export const App: React.FC = () => {
                         <Sprout className="h-4 w-4" />
                       )}
                     </div>
-                    <div
-                      className={`rounded-xl px-4 py-3 text-[13.5px] leading-relaxed whitespace-pre-line ${
-                        msg.role === "user"
-                          ? "bg-[#0A6B41] text-white"
-                          : "border border-gray-200 bg-white text-gray-900 shadow-xs"
-                      }`}
-                    >
-                      {msg.text}
+                    <div className="flex flex-col">
+                      {msg.text && (
+                        <div
+                          className={
+                            msg.role === "user"
+                              ? "rounded-xl bg-[#0A6B41] px-4 py-3 text-[13.5px] leading-relaxed whitespace-pre-line text-white"
+                              : "rounded-xl border border-gray-200 bg-white px-4 py-3 text-[13.5px] leading-relaxed whitespace-pre-line text-gray-900 shadow-xs"
+                          }
+                        >
+                          {msg.text}
+                        </div>
+                      )}
+                      {msg.role === "bot" && msg.genUi && (
+                        <PvcfcGenUiCard
+                          model={msg.genUi}
+                          onPrompt={handleSend}
+                          disabled={isReplaying}
+                        />
+                      )}
                     </div>
                   </div>
                 ))
